@@ -3481,3 +3481,144 @@ be a cousin of it or a cousin of the scaffold-misfire family, unclear
 without full text) remains the correct next target, needing the
 semantic-detector design work already scoped in iteration 28. Continue
 the standard health-check/judged-run loop per loop2.md.
+
+## ITERATION 40 (2026-07-19) — Fifth and final tracked family shipped: semantic answer-relevance guard for the free-form no-content hallucination family (commit `d49fab15`)
+
+Executed iteration 28's scoped design work end-to-end: designed,
+built, empirically tuned, wired, tested, adversarially reviewed, and
+shipped a semantic (not pattern-matching) guard for the one family
+that had resisted every phrase-based approach this campaign tried.
+User confirmed the approach via two design decisions: (1) build a live
+semantic check rather than defer or stop the loop, (2) respond to a
+flagged hallucination with one bounded regeneration attempt (not a
+static fallback), mirroring the existing profile-repair/doc-grounded-
+repair pattern already proven in this file.
+
+**Design**: `electron/llm/AnswerRelevanceChecker.ts` (new) —
+`checkAnswerRelevance(question, answer)` runs a local zero-shot NLI
+entailment check via `IntentClassifier.ts`'s already-warmed
+`Xenova/mobilebert-uncased-mnli` classifier/worker (no second model
+load), asking "does this response directly answer the specific
+question asked: {question}" as a single-label hypothesis. Threading a
+`hypothesisTemplate` passthrough into `intentClassifierWorker.ts` and a
+new `classifyZeroShotRaw` export in `IntentClassifier.ts` let this
+reuse the SAME production-proven worker/poison-sentinel/memory-gate
+machinery rather than duplicating it.
+
+**Empirical tuning**: 5 throwaway smoke-script iterations (v1-v6, not
+committed) tested different hypothesis-template framings against known-
+bad repros collected from this campaign's own run history —
+contrastive two-label framings and "specific vs vague content" framings
+both consistently missed one specific phrase ("I'm welcome, ready
+whenever you want to keep going.") regardless of wording; a single-
+label (non-contrastive) framing against a 16-example corpus (9 bad, 7
+good) gave the best separation: bad_max=0.224 vs good_min=0.169, a
+small unavoidable overlap. Landed on threshold=0.15 (below good_min)
+to deliberately bias toward false negatives over false positives — a
+wasted regeneration on a genuinely fine answer is strictly worse than
+missing one mild hallucination phrasing.
+
+**Wired into `IntelligenceEngine.ts`**: guard runs after
+`isNonAnswerSentinel`'s block, before the `isSpeculative` short-
+circuit. On a flagged answer: ONE bounded regeneration via the same
+`raceStreamWithDeadline` 7s-cloud/30s-local pattern as the sibling
+profile-repair block, re-checked for relevance before accepting, and
+the original answer is kept unchanged if the repair also fails or
+comes back empty.
+
+**Adversarial review (code-reviewer subagent) — real findings, all
+fixed**, following this session's established discipline of never
+shipping a guard on the live answer path without at least one review
+round:
+- **[HIGH, found+fixed by reviewer directly]** No re-check for leaked-
+  artifact regeneration shape. A synthetic repro of run-023 press A7's
+  fabricated resume-leak text scored `relevant: true` (0.76 confidence)
+  against a Datadog-protocol question — the repair prompt is itself the
+  same `<rewrite_instructions>` shape already proven to leak verbatim
+  elsewhere in this codebase (`isLeakedInternalTagBlock`), so a
+  regeneration is at least as exposed to that failure mode as the
+  original generation. Fixed via a new `isLeakedAnswerArtifact` export
+  in `answerPolish.ts` (composing `isLeakedSchemaStub` +
+  `isLeakedInternalTagBlock` + `isLeakedJsonEnvelope`), applied to
+  ALL THREE repair sites in this file (profile-repair, doc-grounded
+  repair, and this new guard) — a gap that existed in the two
+  pre-existing repair blocks too, not just the new one.
+- **[HIGH, found by reviewer, fixed by me]** Missing generation-id
+  supersession guard. Every other repair block in this method gates
+  entry on `this.currentGenerationId === generationId` and checks it
+  again inside `shouldAbort` — this new guard had neither. A second
+  button-press mid-repair could let a stale repair mutate `fullAnswer`
+  and reach `session.addAssistantMessage`/emit for an abandoned
+  generation. Fixed by mirroring the exact pattern from the doc-
+  grounded repair block.
+- **[HIGH, found by reviewer, fixed by me]** 1000-char head-only
+  truncation systematically penalizes real answers whose specific
+  content lands after a normal conversational preamble (a documented
+  MiniMax-M3 speaking pattern). Empirically confirmed: an answer with
+  generic scene-setting before its concrete facts scored below
+  threshold when only the head was checked, comfortably above when the
+  tail was checked instead. Fixed by scoring both head and tail chunks
+  for any answer exceeding the cap and taking the max score.
+- **[MEDIUM x2, found by reviewer, fixed by me]** Exclusion set gaps:
+  `document_absent_fact_refusal`/`list_answer`/`exact_numeric_answer`/
+  etc. (all `isDocGroundedAnswerType`-covered types) and
+  `ethical_usage_answer` are all deliberate short/declining answer
+  shapes by design — exactly what this classifier is built to flag as
+  non-answers. A correct doc-grounded refusal or safety decline would
+  have been wrongly regenerated into a "direct answer," undermining
+  the zero-fabrication and safety invariants those answer types exist
+  to enforce. Fixed by excluding both via `isDocGroundedAnswerType`
+  (already exported from `documentGroundedPrompt.ts`) and adding
+  `ethical_usage_answer` to the guard's own exclusion set.
+- **[LOW, test gaps]** Added tests the reviewer flagged as missing:
+  head+tail truncation correctness (asserting `relevant === true`, not
+  just no-throw), the `ethical_usage_answer` exclusion, and a
+  generation-supersession race test.
+
+**Verification**: unit tests (6/6,
+`electron/llm/__tests__/AnswerRelevanceChecker.test.mjs`, real
+compiled classifier, no mocking) and live-engine integration tests
+(8/8, `electron/services/__tests__/IntelligenceEngineAnswerRelevance.test.mjs`,
+real compiled `IntelligenceEngine.runWhatShouldISay`) all pass,
+covering: regeneration on hallucination, zero false positives on real
+answers (long and short), fallback-to-original on repeated repair
+failure, leaked-artifact rejection, ethical_usage_answer exclusion,
+generation-supersession safety, and speculative-path silence. All 5
+sibling guard test suites from this campaign's earlier fixes
+(isFalseNoContentClaim, isNonAnswerSentinel, JSON-envelope,
+scaffold-misfire, candidate-sanitizer-fallback) re-run clean with zero
+regressions.
+
+**Note on test-runner hygiene**: this is the first test file in the
+repo to actually complete a real end-to-end load of
+`IntentClassifier.ts`'s shared worker (sibling worker tests only
+exercise the missing-asset/poison-latch paths). The worker is
+intentionally not `unref()`'d (the live app keeps it warm for the
+whole session), so both new test files need an explicit
+`after(() => process.exit(0))` to avoid hanging `node --test` — this
+is pre-existing worker-lifecycle behavior, not something this fix
+introduced or should touch.
+
+**Honest scope note**: this is a genuinely open-ended fix (unlike the
+other 4 families, which had small, enumerable repro sets) — the
+16-example tuning corpus cannot claim to cover every hallucination
+phrasing this model might produce, and the review process itself
+surfaced how easily an unconstrained exclusion set can create new
+false-positive classes on answer types outside the original repro set.
+Full campaign success (G3/G5/G6 reaching L4 targets across two
+consecutive runs) is not guaranteed by this one guard alone. The
+shared workspace transitioned to a concurrent "Campaign 3" session mid-
+iteration (branch `fix/answer-policy-engine`, commit `3c0621f6`
+landing between this campaign's own commits) — this fix's 8 files were
+verified isolated via `git diff --stat` before staging/committing, no
+Campaign 3 files were touched.
+
+**NEXT ACTION**: launch a validation judged run
+(`test/harness-longsession/run-all.mjs`) to measure this guard's
+real-world fire rate, repair-success rate, and — most importantly —
+confirm zero new false-positive flags on previously-good presses via
+the new `answer_relevance_discard`/`answer_relevance_regenerated`/
+`answer_relevance_repair_rejected` trace markers. Continue the standard
+health-check/judged-run loop per loop2.md; task #4 ("run full 3-script
+benchmark + iterate to green") remains the campaign's still-open root
+task this fix is in service of.
