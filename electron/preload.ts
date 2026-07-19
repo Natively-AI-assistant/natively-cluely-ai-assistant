@@ -51,8 +51,21 @@ interface ElectronAPI {
 
   // LLM Model Management
   getCurrentLlmConfig: () => Promise<{
-    provider: 'ollama' | 'gemini';
+    provider: 'ollama' | 'gemini' | 'custom' | 'codex-cli';
+    /**
+     * @deprecated Use `modelId` for selection comparisons and `displayName`
+     * for UI labels. Kept as an alias of `modelId` for back-compat.
+     *
+     * **Behavior change**: prior to the display-name split, `model` returned
+     * the custom-provider *name* for custom providers and the *identifier*
+     * for everything else (an inconsistent surface). It now always returns
+     * the stable identifier — use `displayName` if you need the label.
+     */
     model: string;
+    /** Stable identifier suitable for equality checks and persistence. */
+    modelId: string;
+    /** Human-readable label suitable for UI rendering. */
+    displayName: string;
     isOllama: boolean;
   }>;
   getAvailableOllamaModels: () => Promise<string[]>;

@@ -7242,6 +7242,26 @@ const isMultimodal = !!(imagePaths?.length);
   }
 
   public getCurrentModel(): string {
+    return this.getCurrentModelDisplayName();
+  }
+
+  /**
+   * Always returns a stable identifier (model ID, ollama model name, or custom
+   * provider UUID) suitable for equality checks and persistence. Avoid using
+   * {@link getCurrentModel} / {@link getCurrentModelDisplayName} for selection
+   * comparisons — those return a display string that does not match option IDs.
+   */
+  public getCurrentModelId(): string {
+    if (this.customProvider) return this.customProvider.id;
+    if (this.activeCurlProvider) return this.activeCurlProvider.id;
+    return this.useOllama ? this.ollamaModel : this.currentModelId;
+  }
+
+  /**
+   * Human-readable label for the active model. Prefer this for UI rendering
+   * and never compare the result to option IDs (use {@link getCurrentModelId}).
+   */
+  public getCurrentModelDisplayName(): string {
     if (this.customProvider) return this.customProvider.name;
     if (this.activeCurlProvider) return this.activeCurlProvider.id;
     return this.useOllama ? this.ollamaModel : this.currentModelId;

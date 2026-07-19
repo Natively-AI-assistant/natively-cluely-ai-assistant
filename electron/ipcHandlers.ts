@@ -4814,7 +4814,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       const llmHelper = appState.processingHelper.getLLMHelper();
       return {
         provider: llmHelper.getCurrentProvider(),
-        model: llmHelper.getCurrentModel(),
+        model: llmHelper.getCurrentModelId(),
+        modelId: llmHelper.getCurrentModelId(),
+        displayName: llmHelper.getCurrentModelDisplayName(),
         isOllama: llmHelper.isUsingOllama(),
       };
     } catch (error: any) {

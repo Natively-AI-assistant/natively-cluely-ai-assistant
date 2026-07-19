@@ -1106,6 +1106,38 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   // Model Selection State
   const [currentModel, setCurrentModel] = useState<string>('gemini-3-flash-preview');
+  // Human-readable label for `currentModel`. Authoritative source is the
+  // `getCurrentLlmConfig.displayName` IPC field (always fresh, including for
+  // custom-provider UUIDs whose user-defined name can change while the
+  // overlay is open). Falls back to `currentModel` itself if the IPC has not
+  // resolved yet.
+  const [currentModelDisplayName, setCurrentModelDisplayName] = useState<string>('gemini-3-flash-preview');
+
+  const refreshCurrentModel = useCallback(async () => {
+    try {
+      const config = await window.electronAPI?.getCurrentLlmConfig?.();
+      if (!config) return;
+      // `modelId` is the stable identifier (UUID for custom providers).
+      setCurrentModel(config.modelId);
+      if (config.displayName) setCurrentModelDisplayName(config.displayName);
+    } catch {
+      // Non-fatal: keep last known values.
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshCurrentModel();
+  }, [refreshCurrentModel]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onModelChanged) return;
+    const unsubscribe = window.electronAPI.onModelChanged(() => {
+      // Re-fetch so displayName stays in sync with the active model — covers
+      // custom-provider renames that don't otherwise trigger a refresh.
+      refreshCurrentModel();
+    });
+    return () => unsubscribe();
+  }, [refreshCurrentModel]);
 
   // Dynamic Action Button Mode (Recap vs Brainstorm)
   const [actionButtonMode, setActionButtonMode] = useState<'recap' | 'brainstorm'>('recap');
@@ -1497,15 +1529,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       .setModel(modelId)
       .catch((err: any) => console.error('Failed to set model:', err));
   };
-
-  // Listen for default model changes from Settings
-  useEffect(() => {
-    if (!window.electronAPI?.onModelChanged) return;
-    const unsubscribe = window.electronAPI.onModelChanged((modelId: string) => {
-      setCurrentModel((prev) => (prev === modelId ? prev : modelId));
-    });
-    return () => unsubscribe();
-  }, []);
 
   // Global State Sync
   useEffect(() => {
@@ -6485,6 +6508,15 @@ Provide only the answer, nothing else.`;
                           const codexCliName = getCodexCliModelDisplayName(m);
                           if (codexCliName) return codexCliName;
                           if (m.startsWith('ollama-')) return m.replace('ollama-', '');
+                          // For everything else, prefer the authoritative
+                          // displayName from `getCurrentLlmConfig` (handles
+                          // custom-provider UUIDs and any future model aliases
+                          // without each consumer needing its own resolver).
+                          // Falls back to the raw identifier if the IPC has
+                          // not yet resolved.
+                          if (currentModelDisplayName && currentModelDisplayName !== m) {
+                            return currentModelDisplayName;
+                          }
                           if (m === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
                           if (m === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
                           if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
