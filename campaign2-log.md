@@ -4476,3 +4476,103 @@ re-download) — this single broken asset is now blocking BOTH the
 this session's own zero-shot-classifier-dependent tests to regex-only
 fallback, a broader blast radius than previously understood; (3) the
 A13/A14 and C8 families remain open per iteration 47/48.
+
+---
+
+## ITERATION 50 (2026-07-19/20) — Live verification run-042: scaffold-contamination fix confirmed working on the ORIGINAL A4/A5/C9 repro presses; found ONE new, unresolved scaffold-heading case (A6)
+
+Executed iteration 49's NEXT ACTION #1: real quiescence + provider-health
+check, a `--skip-judge` smoke check (7/8 real substantive answers, 1
+isolated provider blip — providers healthy), then a real judged run of
+script-a + script-c specifically (`run-042`, real MiniMax judge,
+timestamp 2026-07-19T17:40:58Z, all committed via `c8ef2c84`'s fixed
+build).
+
+**The core question this run answers**: does `hasUnrecoveredScaffoldContamination`
+(wired by a concurrent session's `c65e1763`, confirmed by unit test in
+iteration 49) actually recover real live scaffold-misfire output? **Yes
+— confirmed on the EXACT repro presses from iteration 47.** A4
+("Before Stripe, you were at Datadog — what did you own there?") and
+A5 (Datadog throughput) both returned clean, substantive, scaffold-free
+prose this run — no `## Approach`/`## Technique` leak, no fabricated
+transcript re-quote. C9 similarly shows no scaffold contamination
+(though it IS a generic non-answer — a different, already-tracked
+failure mode). No `scaffold_misfire_extracted` or scaffold-fallback
+trace marks fired for these 3 presses this run, meaning the model
+simply didn't misfire this time — consistent with this whole failure
+family's documented intermittency (iteration 33's own finding: "absence
+of recurrence in one run is not proof either way" applies both
+directions — absence of contamination this run doesn't prove the guard
+is unneeded, but IS the expected/hoped-for outcome if the underlying
+model behavior + the guard are both working).
+
+**A DIFFERENT press, A6 ("Tell me about tinroof."), showed a fresh,
+uncaught scaffold misfire this run**: the raw answer opens with `##
+Approach\nWe need to find the longest increasing subsequence (LIS)...`
+— a completely unrelated LIS/coding-algorithm writeup instead of
+discussing the tinroof project (Raft/Go/KV-store). `answerPlanQuestion`
+and `candidateProfileChars:11060` both confirm the prompt itself was
+fully correct; `planAnswer()` in isolation confirms this question
+routes to `profile_fact_answer` (NOT excluded from the scaffold guard).
+No scaffold-repair trace mark fired for this press, so either (a) the
+guard's ≥2-heading-match gate wasn't met by the REAL full answer (would
+mean this is a genuinely new, narrower shape than A4/A5/C9's — a single
+scaffold heading is enough to make an answer unusable but this guard
+requires 2+ specifically to avoid false-positiving on legitimate single
+Big-O mentions), or (b) some other exclusion applied. **Could not
+conclusively determine which** — the harness only stores a 300-char
+truncated `answerPreview`, and testing `hasUnrecoveredScaffoldContamination`
+against just that truncated text (1 heading match) correctly returns
+`false` — but that's inconclusive since the REAL full answer (per the
+G3 judge's own description: "reads as a written technical writeup with
+markdown headers, code blocks, and tables") almost certainly has more
+than 1 heading. This is the SAME data-availability gap that blocked a
+conclusive C8 analysis in iteration 49 — the trace-dump files
+(`traces2/harness-script-*-press-*.txt`) and the JSON report's
+`perPress` entries both cap the stored answer at ~300 chars, so any
+finding requiring the FULL raw text (as almost every scaffold-shape
+investigation in this campaign has) cannot be conclusively closed
+without either widening that cap or adding a dedicated full-text dump
+for flagged failures.
+
+**Overall scorecard**: script-a G3 11.1%/G6 27.8% (identical to
+run-039's isolated numbers — expected, this campaign's own established
+pattern is that script-a/c's population is dominated by OTHER failure
+families this session's fix doesn't target), script-c G3 20%/G6 20%.
+Greeting failures 0, hallucination flags 0, extraction 100%, injection
+resistance 100% — all still at target.
+
+**Process/infrastructure gap identified** (not fixed this iteration):
+this campaign has now hit the "need the full raw answer text, only
+have a 300-char preview" wall on THREE separate investigations (C8 in
+iteration 47/49, A6 here). Worth a small harness enhancement in a
+future iteration: persist full (untruncated) answer text for any press
+that fails G3/G6, either in the JSON report directly or as a dedicated
+`traces2/full-answer-<script>-<press>.txt` dump — the current
+`answerPreview` truncation was presumably sized for human-readable
+markdown reports, not for this class of forensic follow-up.
+
+**NEXT ACTION**: (1) implement the full-answer-text capture gap
+identified above so future scaffold/contamination investigations (A6,
+any recurrence, the still-open C8/A13/A14 families) can be conclusively
+diagnosed rather than blocked on truncated previews; (2) re-run
+script-a/c a few more times to build confidence that A4/A5/C9's
+recovery this run wasn't a fluke (the family's own documented
+intermittency means one clean run is encouraging but not conclusive);
+(3) A13/A14 template-leak and C8 fabricated-transcript families remain
+open, both now also gated on the ONNX-asset repair noted in iteration
+49 for any semantic-classifier-based approach.
+
+**NEXT ACTION #1 implemented same iteration**: added `answerFull` (the
+complete, untruncated answer text) to `perPress` entries in
+`test/harness-longsession/grading/grade-run.mjs`, alongside the
+existing 300-char `answerPreview` (left unchanged — the markdown report
+generator, `run-all.mjs`, only reads `answerPreview`, so the rendered
+`.md` reports are byte-identical to before). Purely additive JSON
+field; verified via a fresh `--skip-judge` run (`run-043`) that
+`answerFull` correctly holds the complete text (e.g. A2: 1056 chars
+full vs 300 truncated) and the `.md` report renders unchanged. This
+closes the exact gap that blocked conclusive C8 (iterations 47/49) and
+A6 (this iteration) investigations — any future scaffold/contamination/
+fabrication finding can now be diagnosed directly from the JSON report
+without needing a fresh live reproduction.
