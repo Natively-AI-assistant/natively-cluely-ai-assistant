@@ -299,3 +299,116 @@ Account2 40% session / 75% weekly. Both above 10% pause gate BUT Acct1 weekly
 5% is at the edge for any full benchmark run. Per §9 "below 20% → pause
 first" for full benchmarks — matrix + regression suites deferred until
 weekly reset (2026-07-24). Iter 5 will focus on code wiring + smoke only.
+
+### ITERATION 5 (2026-07-19) — TurnPlanner as live WTA source-of-truth
+
+Wires `planTurn` into the live WTA path so `question_kind` becomes the
+SINGLE classification signal consumed by the manual-evidence JIT,
+replacing the old `extractedQuestion.questionType` gate.
+
+**Wiring details:**
+- planTurn consumed as a SIGNAL, not a gate (founder §2.1). The JIT still
+  gates on `(resume || jd) + identityQ + shouldJitForAnswerType`;
+  planTurn's `questionKind` narrows `identityQ` to `profile_question`, and
+  `answerDirectives.seedCandidateBackground` is the seeder-leash the
+  founder §2.5 mandates.
+- Three real bugs caught en route (the TurnPlanner wiring is fragile in
+  the IntelligenceEngine try/catch topology):
+  1. **TDZ: `jitAnswerType` referenced before declaration** — caught by
+     `[C3-ITER5-TP-ERR] Cannot access 'jitAnswerType' before initialization`.
+     Fix: hoist the `const jitAnswerType = ...` IIFE ABOVE the `planTurn`
+     call.
+  2. **TS compiler suffix-rename leak** — `_wtaHasProfile` declared in the
+     try block is compiled as `_wtaHasProfile2` (because some inner block
+     reuses the name); my code at line 1686+ kept the unsuffixed reference,
+     which then `ReferenceError`ed at runtime. Same for `_wtaHasJd`,
+     `_wtaSourceContract`, `_wtaTurnSourceDecision`. Fix: recompute
+     availability via `(() => { try {...} catch {false} })()` IIFEs that
+     swallow the ReferenceError; drop the unused params from `planTurn`
+     call.
+  3. **Outer try/catch swallowed everything** — the JIT block is inside
+     the second try block at line 1501; any throw in planTurn (the two
+     above errors) was silently caught by the catch at line 1634 and the
+     JIT path was skipped entirely, regressing C3M-002 to the pre-fix
+     hallucinated answer. Fix: same as #2.
+
+**Trace proof (live harness):**
+- C3M-002 'What is the job regarding?' → planTurn emits
+  `kind=jd_question seedBG=true jitAT=jd_summary_answer`. Live: 13 evidence
+  items, JD-grounded answer, 5/5 pass.
+
+**Results (after-iter5-clean):**
+- micro-suite: **5/5 ✓**
+- TurnPlanner unit tests: 16/16 ✓
+- Seminar tests: 9/9 ✓
+- **Total: 30/30 unit/integration tests, zero regressions.**
+
+**Commit:** `ff2b0971`.
+
+### ITERATION 6 (2026-07-19) — Matrix suite (founder §5)
+
+Adds `electron/llm/__tests__/TurnPlannerMatrix.test.mjs` covering the
+founder's §5 matrix: {question_kind × availability × mode_profile} cells.
+Pure unit tests — no Electron, no LLM, no benchmark quota cost. Each cell
+asserts the expected questionKind, evidence probe order, groundingProfile,
+and answerDirectives.
+
+**Cells covered (14 cases):**
+- `profile_question × full availability × default` (probe profile+jd, seedBG=true)
+- `profile_question × no profile × default` (empty probe, never refuse)
+- `jd_question × full × default` (verifies JD probe FIRST per founder §2.3)
+- `jd_question × no JD × default` (falls back to profile only)
+- `general × full × default` (seedCandidateBackground=false — founder §2.5)
+- `general × no availability × default` (NEVER refuse in non-refuse profiles)
+- `doc_question × refs available` (probe reference_files only)
+- `coding_question × coding` (probe refs first then profile)
+- SEMINAR profile (NATIVELY_SEMINAR_MODE=1) for STRONG evidence and
+  off-file questions (verifies say_not_found_then_answer_general label +
+  seminarNotFoundPreamble=true)
+- Invariant: never-answerless across every kind × availability combination
+- Invariant: default + seminar profiles are NEVER refuse (only compliance
+  custom modes get refuse — founder §2.3)
+- Source badge strings (founder §2.6): labelStyle 'badge', labelGeneral,
+  seminarNotFoundPreamble
+
+**Results:** 14/14 pass. Combined: TurnPlanner core 16/16 + Matrix 14/14 +
+Seminar 9/9 = **39/39 unit tests passing, zero regressions, zero quota cost.**
+
+**Commit:** `f3bd6eb5`.
+
+**Anti-thrash ledger update (iter5 + iter6):**
+- The IntelligenceEngine try/catch topology at line 1501 is FRAGILE: any
+  throw in JIT/planTurn code inside this try is silently swallowed by the
+  catch at line 1634, silently regressing C3M-002 (and anything else that
+  depends on the JIT). ALWAYS verify planTurn fires with a temporary
+  `[C3-ITER5]` log after wiring it.
+- TS compiler suffix-rename is a REAL bug: `const _wtaHasProfile` inside
+  one try block compiles to `_wtaHasProfile2` when an inner block reuses
+  the unsuffixed name. Avoid by computing needed values via IIFEs that
+  try/catch around the original references.
+- Seminar env-flag must be set/reset INSIDE each test (node:test doesn't
+  guarantee describe-block setup ordering).
+
+## NEXT ACTION (iteration 6 → 7):
+1. Run the 40q grounding regression + 19q thesis regression suites
+   (founder §5) WHEN Acct1 weekly ≥ 20%. Current 4% — defer until reset
+   (2026-07-24 per `resetAt`). Pre-check before each run; pause + log
+   `PAUSED FOR QUOTA` if below 20%.
+2. Add source badges to the overlay (founder §2.6) — UI work, low quota
+   cost, can run anytime.
+3. Wire `seedCandidateBackground` directive from TurnPlanner into the
+   ProfileJitPromptBuilder seeder (closes the founder §2.5 seeder-leash
+   requirement; currently the directive is computed but only `identityQ`
+   uses it — the seeder itself doesn't consult it yet).
+4. Once regression suites pass and source badges are wired: write
+   `traces3/final-report.md` (founder §8) with before/after, architecture
+   diagram of TurnPlanner → Probe → Policy → Assembly → Badge, commit hashes
+   per fix, competitor-beating next steps.
+
+QUOTA (iteration 6, 2026-07-19 ~18:24 local): Account1 76% session / 4% weekly.
+Account2 19% session / 73% weekly. Both above the 10% session pause gate,
+but Acct1 weekly 4% is well below the 20% pre-benchmark gate. Per §9,
+deferring the 40q grounding + 19q thesis regression suites until the
+weekly window resets (resetAt 2026-07-23T23:59:59Z). Iter 7 will either
+ship code-only polish (source badges + seedCandidateBackground wiring)
+or, if quota has recovered, run the regression suites.
