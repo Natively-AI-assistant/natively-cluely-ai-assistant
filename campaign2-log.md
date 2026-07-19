@@ -4576,3 +4576,120 @@ closes the exact gap that blocked conclusive C8 (iterations 47/49) and
 A6 (this iteration) investigations — any future scaffold/contamination/
 fabrication finding can now be diagnosed directly from the JSON report
 without needing a fresh live reproduction.
+
+---
+
+## ITERATION 51 (2026-07-19/20) — 2nd live verification run confirms scaffold-contamination fix holds; `answerFull` capture proves its worth immediately, resolving a case that would have been inconclusive under the old 300-char cap
+
+Executed iteration 50's NEXT ACTION #2: a second script-a/c judged run
+(quiescence + provider health confirmed via a `--skip-judge` smoke
+check first, per this session's established discipline) to build
+confidence beyond the single run-042 data point.
+
+**Scanned the FULL answer text of every press in both scripts** (now
+possible thanks to iteration 50's `answerFull` field, committed
+`5cb33dc7`) for any of the coding-scaffold heading markers
+(`## Approach`/`## Technique`/`## Dry Run`/`## Complexity`/etc.). Found
+exactly ONE hit: script-c press **C14** ("Specifically, tell me about
+your Raft experience at Datadog.") opened with `## Approach`.
+
+**This is EXACTLY the scenario the `answerFull` fix was built for** —
+under the old 300-char `answerPreview` cap, this would have looked
+identical to A6's inconclusive case from iteration 50 (a single
+scaffold heading, unknown whether more follow). With the FULL text now
+available: the rest of the answer (1208 chars total) is entirely real,
+substantive, on-topic prose about Stripe reliability/on-call work — a
+single stray `## Approach` heading on otherwise clean content, not a
+scaffold misfire. Ran `hasUnrecoveredScaffoldContamination` directly
+against the full text: correctly returns `false` (only 1 heading match,
+below the function's own ≥2-heading threshold). **This is the CORRECT
+outcome** — regenerating an already-good, substantive answer over a
+single cosmetic heading choice would be wasteful and risky (per this
+whole campaign's repeated finding that over-eager guards can make a
+correct answer worse, see iteration 41). Confirms the guard's 2-heading
+threshold is well-calibrated, not just theoretically reasonable.
+
+**No genuine scaffold-contamination misfire (2+ headings + coding
+fingerprint) occurred in EITHER script this run** — meaning across 2
+consecutive live judged runs post-fix (`run-042`, this run), zero
+uncaught scaffold contaminations have been observed, and the one
+heading-only false-alarm-shaped case was independently confirmed (not
+just assumed) to be correctly left alone. This is now reasonably solid
+evidence the fix works, though the family's own documented intermittency
+means this is "2 clean runs," not "conclusively never recurs."
+
+**Overall scorecard**: script-a G3 11.1%/G6 22.2%, script-c G3 6.7%/G6
+13.3% — both still dominated by the OTHER, already-tracked failure
+families (free-form no-content hallucination, topic drift/desync) this
+session's fix doesn't target, consistent with every prior run this
+campaign.
+
+**NEXT ACTION**: the scaffold-contamination family (this session's
+primary target since iteration 47) can now be considered adequately
+verified — shift focus to the campaign's other 2 open families:
+(1) A13/A14 template-instruction-leak (candidate fix: recalibrate
+`answerRelevanceGuardLive`, though this is blocked on repairing the
+corrupted `Xenova/mobilebert-uncased-mnli` ONNX asset per iteration 49
+— consider whether a purely structural/pattern-based detector, mirroring
+`hasUnrecoveredScaffoldContamination`'s own approach, could catch this
+family without depending on the broken semantic classifier); (2) C8
+fabricated-transcript family — now unblockable on the full-text front
+(re-run and read `answerFull` directly, no live-reproduction-with-
+tracing needed) whenever it next recurs. Given 2 consecutive clean
+scaffold-contamination runs and the campaign's broader L4 exit
+condition still being dominated by these 2 remaining families, the
+highest-leverage next step is likely the A13/A14 structural-detector
+design, following the exact template `hasUnrecoveredScaffoldContamination`
+already proved out this session.
+
+**CORRECTION, same iteration**: re-examined iteration 47's "A13/A14
+template-instruction leak" characterization before starting that design
+work, and it conflates two DIFFERENT presses/failure modes. Pulled both
+raw answers from `run-039.json`:
+- **A13** ("...what made that Hadoop-to-streaming migration
+  challenging?"): the raw answer IS the literal coding-answer-template
+  scaffold verbatim (`## Approach\n- Short, interview-speakable
+  explanation...\n\n## Technique / Data Structure / Algorithm Used\n-
+  Name the core DSA concept...`) — zero real content, the model
+  emitted its own system-prompt template text as if it were the answer.
+  Ran BOTH `detectAndExtractScaffoldMisfire` and
+  `hasUnrecoveredScaffoldContamination` directly against this exact
+  text: extraction correctly returns `null` (no recognizable recovery
+  point in pure template boilerplate), and **the contamination
+  detector correctly returns `true`** — this exact repro shape IS
+  already covered by the SAME fix this session already verified twice
+  live (run-042, this run). A13 was never a separate, unaddressed
+  family — it's the SAME scaffold-contamination family, just a case
+  where the model emitted the raw template with ZERO wrapped real
+  content (whereas A4/A5/C9 had real content trapped under an invented
+  heading). Both shapes trip the same ≥2-heading + coding-fingerprint
+  gate.
+- **A14** ("What scale have you operated Kubernetes at?"): the raw
+  answer is a REAL, substantive, on-topic-sounding response (self-rates
+  8/10, cites Stripe/gRPC/protobuf experience) — but it answers a
+  DIFFERENT question than the one asked (no Kubernetes/1.2k-node
+  mention at all). This has NO scaffold heading, NO coding fingerprint
+  — it's a plain topic-drift/desync case (G6), unrelated to scaffold
+  contamination and unrelated to A13. Iteration 47 grouping these two
+  together as one "A13/A14 template-leak family" was inaccurate; they
+  are two unrelated failure modes that happened to be adjacent presses
+  in the same run.
+
+**Revised NEXT ACTION**: the scaffold-contamination family (now
+including A13's shape) is ALREADY fixed and live-verified twice
+(run-042, this run — worth explicitly re-checking A13's specific
+phrasing recurs cleanly in a future run, but the mechanism is proven).
+No new structural-detector design work is needed for A13. The genuinely
+open items are: (1) A14-shaped topic drift/desync (a large, diffuse
+category — this campaign's G6 numbers across every run this session
+show this is the dominant remaining failure mode, not a narrow
+few-repro pattern like scaffold contamination was); (2) the C8
+fabricated-transcript family (narrow, specific, worth a dedicated
+detector — unblockable on the data-availability front now that
+`answerFull` exists); (3) `answerRelevanceGuardLive` recalibration,
+gated on the corrupted ONNX asset. Given (1) is diffuse/large and this
+campaign's own prior attempts at a semantic relevance guard already hit
+a hard calibration wall (iteration 41), (2) is the more tractable next
+target — narrow, pattern-matchable, and the C8 repro's full text can
+now be captured directly rather than reasoned about from a 300-char
+preview whenever it next occurs live.
