@@ -465,7 +465,26 @@ export class OnboardingOrchestrator {
   private evaluateAndDispatch(): void {
     const ctx = this.buildCtx();
     let progressMade = false;
+    // DEFENSE-IN-DEPTH (2026-07-19): each queued stage can legitimately make
+    // progress at most once per drain (auto-skip → skipped set, or gate-complete
+    // → completed), so the number of passes is bounded by the queue length. A
+    // higher count means a stage is re-transitioning every pass — the signature
+    // of a mis-configured gate-only stage (e.g. isGateOnly without onceEver),
+    // which turns this into a synchronous infinite loop that pegs the renderer
+    // main thread and OOM-crashes it (the quiet_window regression). Bound the
+    // loop so a bad config degrades to "one toaster skipped" instead of a hang.
+    const maxPasses = this.state.queue.length + 2;
+    let passes = 0;
     do {
+      if (++passes > maxPasses) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[orchestrator] evaluateAndDispatch drain exceeded ${maxPasses} passes — ` +
+          `aborting to avoid a synchronous hang. A gate-only stage is likely ` +
+          `re-completing every pass (missing onceEver?). queue=${JSON.stringify(this.state.queue)}`,
+        );
+        break;
+      }
       progressMade = false;
       for (const id of this.state.queue) {
         const config = this.stageConfigs.find(c => c.id === id);

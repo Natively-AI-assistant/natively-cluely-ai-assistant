@@ -9,7 +9,28 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { shouldShowToaster } from '../orchestrator.mjs';
-import { STAGES } from '../stageCatalog.mjs';
+import { STAGES, QUIET_WINDOW_STAGE } from '../stageCatalog.mjs';
+
+// ─── Drain-loop safety invariant ────────────────────────────────────
+// A gate-only stage is auto-completed inside evaluateAndDispatch()'s
+// `do { … } while (progressMade && !activeToasterId)` loop. completeToaster()
+// records completion, but shouldShowToaster() only suppresses a completed stage
+// when `onceEver` is set. So a gate-only stage WITHOUT onceEver stays eligible
+// after completing, keeps setting progressMade=true, and the loop spins
+// synchronously forever — pegging the renderer main thread and OOM-crashing it
+// (the 2026-07-19 quiet_window regression: RSS → ~9 GB, exitCode-5 crash).
+// This invariant makes that misconfiguration a failing test, not a field crash.
+test('INVARIANT: every gate-only stage is onceEver (else the drain loop hangs)', () => {
+  const allStages = [...STAGES, QUIET_WINDOW_STAGE];
+  for (const s of allStages) {
+    if (s.isGateOnly) {
+      assert.equal(
+        s.onceEver, true,
+        `gate-only stage "${s.id}" must set onceEver:true or evaluateAndDispatch spins forever`,
+      );
+    }
+  }
+});
 
 // ─── Fixtures ──────────────────────────────────────────────────────
 
