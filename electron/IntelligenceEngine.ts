@@ -2290,14 +2290,12 @@ export class IntelligenceEngine extends EventEmitter {
             const TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION = new Set([
                 'technical_concept_answer', 'system_design_answer', 'debugging_question_answer',
             ]);
-            let scaffoldExtractionRecovered = false;
             if (!isCodingAnswerType(answerPlan.answerType)
                 && !TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION.has(answerPlan.answerType)) {
                 const extracted = detectAndExtractScaffoldMisfire(answerPlan.answerType, fullAnswer);
                 if (extracted) {
                     trace.mark('repair_used', { reason: 'scaffold_misfire_extracted', answerType: answerPlan.answerType });
                     fullAnswer = extracted;
-                    scaffoldExtractionRecovered = true;
                 }
             }
 
@@ -2325,10 +2323,6 @@ export class IntelligenceEngine extends EventEmitter {
             // accepting, fall through with the ORIGINAL fullAnswer unchanged on
             // repair failure — never guess, never ship a worse second attempt).
             //
-            // Gated on `!scaffoldExtractionRecovered` so this never re-examines
-            // text extraction JUST repaired (that text is real, extracted content
-            // by construction — it would trivially fail the fingerprint gate
-            // anyway, but the explicit skip keeps this block's intent legible).
             // Reuses the same TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_
             // EXTRACTION set as the sibling extraction block above (Big-O/
             // "Dry Run" vocabulary is legitimate content, not a scaffold leak,
@@ -2337,11 +2331,47 @@ export class IntelligenceEngine extends EventEmitter {
             // answers should never trigger a user-visible regeneration) and coding
             // answer types (validateAnswerStructure/repairCodingMarkdown already
             // own that surface).
+            //
+            // Code-review 2026-07-19 HIGH fix #1: doc-grounded answer types
+            // (lecture_answer, definitional_answer, list_answer, etc.) were
+            // NOT excluded here, unlike the sibling answer-relevance guard
+            // below (which added an isDocGroundedAnswerType exclusion one
+            // review round earlier in this same file, with the identical
+            // rationale — a correct, validated doc-grounded answer can look
+            // "wrong" to a generic structural/semantic check, and this
+            // guard's repair prompt sends ZERO document evidence, unlike the
+            // dedicated doc-grounded repair block a few lines below that
+            // builds a real docContextBlock). Reviewer live-reproduced a
+            // real doc-grounded answer legitimately echoing a source paper's
+            // own section names as headings (Approach/Complexity describing
+            // the paper's actual algorithm and Big-O bounds — exactly the
+            // false-positive shape detectAndExtractScaffoldMisfire's own doc
+            // comment already warns about) tripping this guard for every
+            // doc-grounded answer type, then regenerating from bare
+            // <question> with no retrieved evidence and no post-regen
+            // fabrication check — the one surface this codebase treats as
+            // zero-fabrication-sacred. Excluded via isDocGroundedAnswerType,
+            // mirroring the sibling guard's own precedent exactly.
+            //
+            // Code-review 2026-07-19 HIGH fix #2: `!scaffoldExtractionRecovered`
+            // alone assumed text detectAndExtractScaffoldMisfire just
+            // extracted "would trivially fail the fingerprint gate anyway" —
+            // reviewer disproved this: Pattern A's trailing-`---` extraction
+            // only checks the TAIL's first line isn't itself a scaffold
+            // heading, so a live model output where the recovered tail
+            // contains a SECOND scaffold block further down (plausible,
+            // given this whole campaign's premise is the model spontaneously
+            // re-emitting these headings) would ship untouched. Fixed by
+            // re-running hasUnrecoveredScaffoldContamination on
+            // fullAnswer even when extraction already fired — the fresh
+            // check naturally returns false for genuinely clean extracted
+            // text (no double-fire on the common case) and only fires this
+            // fallback when the extracted tail is ITSELF still contaminated.
             if (!isSpeculative
-                && !scaffoldExtractionRecovered
                 && fullAnswer
                 && !isCodingAnswerType(answerPlan.answerType)
                 && !TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION.has(answerPlan.answerType)
+                && !isDocGroundedAnswerType(answerPlan.answerType)
                 && hasUnrecoveredScaffoldContamination(answerPlan.answerType, fullAnswer)
                 && this.currentGenerationId === generationId) {
                 try {
@@ -2380,6 +2410,7 @@ export class IntelligenceEngine extends EventEmitter {
                         await raceStreamWithDeadline({
                             stream: this.llmHelper.streamChat(scaffoldRepairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
                             firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                            interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
                             isUsefulYet: () => scaffoldRepaired.length >= 5,
                             shouldAbort: () => scaffoldRepaired.length > 1800 || this.currentGenerationId !== generationId,
                             onToken: (tok: string) => { scaffoldRepaired += tok; },
