@@ -223,26 +223,79 @@ traces3/before-microsuite-iter1.md.
     re-running fixes.
 - Trace evidence: `traces3/before-microsuite-iter1.md` (3/5) → `traces3/after-microsuite-iter3.md` (5/5).
 
-## NEXT ACTION (iteration 3 → 4):
-Make the TurnPlanner the actual source of truth on the live path (currently
-its routing is shadowed by the manual-evidence JIT). Steps:
-  1. Have the WTA path call `planTurn(input)` first; consume `questionKind`
-     as the single classification (replacing `extractedQuestion.questionType`).
-  2. Use the TurnPlan's `evidenceSourcesToProbe` to gate the existing
-     Context OS evidence probe (for `profile_question`, ensure deterministic
-     identity card; for `jd_question`, ensure JD summary card; for
-     `general`, allow all sources).
-  3. Wire `seedCandidateBackground` to `ProfileJitPromptBuilder` (the seeder)
-     so a salary / negotiation question is NEVER bio-dumped.
-  4. Add the 8th mode "Seminar Mode" (templateType='seminar' + groundingProfile
-     = required / say_not_found_then_answer_general) to `modeSourceContract.ts`.
-  5. Run the campaign's full matrix suite (matrix.js in campaign3-log §5) and
-     confirm 100% behavior-correct for the {question_kind × probe_outcome ×
-     mode profile} cells.
-  6. Re-run the prior grounding + thesis regression suites to confirm no
-     regression at or above prior scores.
+### ITERATION 4 (2026-07-19) — Seminar Mode (8th built-in) + groundingProfile schema migration
 
-QUOTA (iteration 3, 2026-07-19 ~17:21 local): Account1 84% session / 6% weekly.
-Account2 50% session / 76% weekly. Both above 10% pause gate; Acct1 weekly
-tight but rolling. The harness session quota reset (5h rolling window) lifted
-Acct1 back to 84%. Continuing per §9.
+Implements founder §3 step 2 (groundingProfile on mode schema) and step 3
+(Seminar Mode as the 8th built-in). Existing 7 modes continue to use the
+default profile (preferred / answer_general_labeled) — backward compatible.
+
+**Schema migration** (modeSourceContract.ts):
+- New optional `groundingProfile` field on `ModeSourceContract`
+  (type `GroundingProfile`, also exported).
+- New optional `strictness` field (UI selector: flexible / prefer_my_files /
+  files_only).
+- New `GroundingProfile` interface (evidencePreference, onNoEvidence,
+  labelStyle).
+- Legacy contracts without the field keep working — readers default to
+  preferred / answer_general_labeled on absence.
+- `isContractTemplateType('seminar')` returns true (added to whitelist).
+
+**Seminar Mode wiring:**
+- `'seminar'` added to `ModeTemplateType` union in 3 declarations
+  (`ModesManager.ts`, `modeProfiles.ts`, `modeSourceContract.ts`).
+- `MODE_TEMPLATES` has a Seminar entry with label + strict grounding
+  description (explicit "never a refusal" language).
+- `TEMPLATE_NOTE_SECTIONS.seminar` has Question / Source / "If not in your
+  files" sections.
+- `TEMPLATE_SYSTEM_PROMPTS.seminar` (now exported) wired to `MODE_SEMINAR_PROMPT`.
+- `MODE_CONTEXT_PROFILES.seminar` routes to `lecture_answer` floor
+  (file-grounded). The strictness lives in `groundingProfile`, not in
+  a different answerType.
+- `MODE_SEMINAR_PROMPT` in `prompts.ts`: file-grounded Q&A prompt with
+  explicit "not from your reference files — from general knowledge:" preamble
+  for off-document questions; never-refuse; explicit citation requirement.
+
+**Tests:**
+- New `electron/services/__tests__/ModeSeminarGroundingProfile.test.mjs`
+  (9/9 pass): MODE_TEMPLATES, TEMPLATE_NOTE_SECTIONS, TEMPLATE_SYSTEM_PROMPTS,
+  MODE_CONTEXT_PROFILES wiring for seminar; MODE_SEMINAR_PROMPT exists;
+  SEMINAR_GROUNDING_PROFILE has strictest preset; DEFAULT differs from
+  SEMINAR (strict profile is the differentiator); `planTurn` with
+  `NATIVELY_SEMINAR_MODE=1` env flag emits SEMINAR groundingProfile;
+  `defaultSourceContractForNewMode('seminar')` seeds without throwing.
+- TurnPlanner unit tests: 16/16 pass (no regression).
+
+**Micro-suite regression check:**
+- 5/5 still pass (C3M-001..C3M-005). Saved to
+  `traces3/after-iter4-micro-suite.md`.
+
+**Commit:** `e4c93af4`.
+
+**Still TODO (deferred to iter 5+):**
+- Wire `planTurn` as the actual source-of-truth on the WTA path (currently
+  shadowed by `selectManualProfileEvidence` JIT).
+- Wire `seedCandidateBackground` to `ProfileJitPromptBuilder` (founder §2.5).
+- Add source badges in the overlay (founder §2.6).
+- Run matrix suite (founder §5) and grounding+thesis regression suites.
+
+## NEXT ACTION (iteration 4 → 5):
+1. Wire `planTurn` into the WTA path so `questionKind` becomes the SINGLE
+   classification signal consumed by the manual-evidence JIT and the
+   source-authority path (replace `extractedQuestion.questionType`).
+2. Wire `seedCandidateBackground` to `ProfileJitPromptBuilder` (the seeder)
+   so a salary / negotiation question is NEVER bio-dumped.
+3. Run the matrix suite (founder §5) — minimal set of {question_kind ×
+   probe_outcome × mode_profile} cells; 100% behavior-correct required.
+4. Run the 40q grounding + 19q thesis regression suites (founder §5) to
+   confirm scores at or above prior recorded values.
+5. Add source badges in the overlay (founder §2.6) — optional polish, lower
+   priority than the wiring.
+
+If quota is still tight (Acct1 weekly <10%), pause the matrix + regression
+suites until reset, and ship only steps 1-2 + a smaller smoke (5 cases).
+
+QUOTA (iteration 4, 2026-07-19 ~17:50 local): Account1 82% session / 5% weekly.
+Account2 40% session / 75% weekly. Both above 10% pause gate BUT Acct1 weekly
+5% is at the edge for any full benchmark run. Per §9 "below 20% → pause
+first" for full benchmarks — matrix + regression suites deferred until
+weekly reset (2026-07-24). Iter 5 will focus on code wiring + smoke only.
