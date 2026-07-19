@@ -80,7 +80,17 @@ export interface TurnPlanInput {
   /** From the canonical `resolveTurnSourceDecision(...)`. */
   turnSourceDecision?: TurnSourceDecision | null;
   /** Persisted mode source contract (carries `groundingProfile`). */
-  sourceContract?: Pick<ModeSourceContract, 'sourceAuthority'> | null;
+  sourceContract?: Pick<ModeSourceContract, 'sourceAuthority'> & {
+    /** Campaign-3 (2026-07-19): optional per-mode grounding profile. When
+     *  present, OVERRIDES the env-flag fallback in groundingProfileFor.
+     *  This is the durable path post iter4 schema migration. */
+    groundingProfile?: GroundingProfile;
+    /** Campaign-3 (2026-07-19): the mode's templateType. When 'seminar',
+     *  TurnPlanner emits the strictest profile (required / say_not_found...)
+     *  REGARDLESS of the env flag, so per-mode Seminar wiring lands
+     *  automatically once ModesManager populates the contract. */
+    templateType?: string;
+  } | null;
   availability: {
     hasReferenceFiles: boolean;
     hasProfileFacts: boolean;
@@ -276,10 +286,21 @@ function probeOrderFor(
 // ── Grounding profile resolution ────────────────────────────────────────────
 
 function groundingProfileFor(input: TurnPlanInput): GroundingProfile {
-  // Future: read `sourceContract.groundingProfile` once the schema migration
-  // (Campaign 3 §3 step 2) lands. Until then, fall back to the default for
-  // every built-in mode. Seminar Mode is gated by an env flag (see
-  // build step 3) which lets us flip it without a migration.
+  // Resolution order (Campaign 3 iter12, founder §2.3 + §3 step 2):
+  //   1. Explicit `sourceContract.groundingProfile` (the durable schema
+  //      field, shipped in iter4). Per-mode override — highest priority.
+  //   2. `sourceContract.templateType === 'seminar'` (per-mode signal;
+  //      Sets the strictest profile automatically without a migration).
+  //   3. NATIVELY_SEMINAR_MODE env flag (legacy / global toggle for the
+  //      Seminar strict profile, used during the migration window).
+  //   4. DEFAULT_GROUNDING_PROFILE (preferred / answer_general_labeled —
+  //      the right behavior for the 7 existing built-in modes).
+  if (input.sourceContract?.groundingProfile) {
+    return input.sourceContract.groundingProfile;
+  }
+  if (input.sourceContract?.templateType === 'seminar') {
+    return SEMINAR_GROUNDING_PROFILE;
+  }
   const seminarEnabled =
     typeof process !== 'undefined'
     && process.env?.NATIVELY_SEMINAR_MODE === '1';

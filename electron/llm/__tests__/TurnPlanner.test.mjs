@@ -138,6 +138,97 @@ describe('TurnPlanner: groundingProfile', () => {
   });
 });
 
+describe('TurnPlanner: groundingProfile resolution order (iter12)', () => {
+  // Campaign-3 (2026-07-19): founder §2.3 + §3 step 2 + iter12 polish.
+  // The groundingProfileFor() resolver consults four sources in priority
+  // order. The tests below pin each tier so a future regression cannot
+  // silently reorder them.
+
+  test('tier 1 — sourceContract.groundingProfile override beats everything (even env flag)', () => {
+    const prev = process.env.NATIVELY_SEMINAR_MODE;
+    process.env.NATIVELY_SEMINAR_MODE = '1'; // also try to flip via env
+    try {
+      const plan = planTurn({
+        question: 'any',
+        availability: { hasReferenceFiles: true, hasProfileFacts: true, hasJobDescription: true, hasLiveTranscript: true },
+        sourceContract: {
+          sourceAuthority: 'reference_files_only',
+          templateType: 'general', // would NOT auto-emit seminar
+          groundingProfile: {
+            evidencePreference: 'optional',
+            onNoEvidence: 'refuse',
+            labelStyle: 'paragraph',
+          },
+        },
+      });
+      assert.equal(plan.groundingProfile.evidencePreference, 'optional');
+      assert.equal(plan.groundingProfile.onNoEvidence, 'refuse',
+        'tier 1: sourceContract.groundingProfile MUST win over env flag (which would have given say_not_found...)');
+    } finally {
+      if (prev === undefined) delete process.env.NATIVELY_SEMINAR_MODE;
+      else process.env.NATIVELY_SEMINAR_MODE = prev;
+    }
+  });
+
+  test('tier 2 — sourceContract.templateType === "seminar" emits strict profile without env flag', () => {
+    const prev = process.env.NATIVELY_SEMINAR_MODE;
+    delete process.env.NATIVELY_SEMINAR_MODE; // ensure env is OFF
+    try {
+      const plan = planTurn({
+        question: 'any',
+        availability: { hasReferenceFiles: true, hasProfileFacts: true, hasJobDescription: true, hasLiveTranscript: true },
+        sourceContract: {
+          sourceAuthority: 'reference_files_primary',
+          templateType: 'seminar',
+          // no groundingProfile field — templateType alone is the trigger
+        },
+      });
+      assert.equal(plan.groundingProfile.evidencePreference, 'required');
+      assert.equal(plan.groundingProfile.onNoEvidence, 'say_not_found_then_answer_general',
+        'tier 2: per-mode templateType seminar must emit strict profile even without env flag');
+    } finally {
+      if (prev === undefined) delete process.env.NATIVELY_SEMINAR_MODE;
+      else process.env.NATIVELY_SEMINAR_MODE = prev;
+    }
+  });
+
+  test('tier 3 — env flag fires only when tiers 1+2 are absent', () => {
+    const prev = process.env.NATIVELY_SEMINAR_MODE;
+    process.env.NATIVELY_SEMINAR_MODE = '1';
+    try {
+      // sourceContract absent — both tiers 1+2 fall through.
+      const plan = planTurn({
+        question: 'any',
+        availability: { hasReferenceFiles: true, hasProfileFacts: true, hasJobDescription: true, hasLiveTranscript: true },
+        sourceContract: null,
+      });
+      assert.equal(plan.groundingProfile.evidencePreference, 'required',
+        'tier 3: env flag (legacy migration window) still works');
+    } finally {
+      if (prev === undefined) delete process.env.NATIVELY_SEMINAR_MODE;
+      else process.env.NATIVELY_SEMINAR_MODE = prev;
+    }
+  });
+
+  test('tier 4 — DEFAULT when nothing is set (the 7 built-in modes case)', () => {
+    const prev = process.env.NATIVELY_SEMINAR_MODE;
+    delete process.env.NATIVELY_SEMINAR_MODE;
+    try {
+      const plan = planTurn({
+        question: 'any',
+        availability: { hasReferenceFiles: true, hasProfileFacts: true, hasJobDescription: true, hasLiveTranscript: true },
+        sourceContract: { sourceAuthority: 'reference_files_primary' },
+        // templateType=undefined, groundingProfile=undefined → tier 4
+      });
+      assert.equal(plan.groundingProfile.evidencePreference, 'preferred');
+      assert.equal(plan.groundingProfile.onNoEvidence, 'answer_general_labeled');
+    } finally {
+      if (prev === undefined) delete process.env.NATIVELY_SEMINAR_MODE;
+      else process.env.NATIVELY_SEMINAR_MODE = prev;
+    }
+  });
+});
+
 describe('TurnPlanner: invariants', () => {
   test('empty question → general', () => {
     const plan = planTurn({ question: '', availability: FULL_AVAILABILITY });
