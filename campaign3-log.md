@@ -658,3 +658,52 @@ inputs.
 3. The campaign remains EXIT-CONDITIONAL per founder §8 for all items
    NOT blocked by quota. The 40q+19q regression suites are the only
    remaining deferred benchmark items.
+
+### ITERATION 12 (2026-07-19) — TurnPlanner groundingProfile 4-tier resolution
+
+Replaces the env-flag-only fallback with a deterministic 4-tier
+resolution order in `groundingProfileFor()`:
+
+  - **Tier 1:** `sourceContract.groundingProfile` (per-mode override)
+  - **Tier 2:** `sourceContract.templateType === 'seminar'`
+    (per-mode signal)
+  - **Tier 3:** `NATIVELY_SEMINAR_MODE` env flag (legacy / migration
+    window)
+  - **Tier 4:** `DEFAULT_GROUNDING_PROFILE` (the 7 built-in modes)
+
+The env flag is preserved as tier 3 for backward compatibility during
+the migration window. Per-mode `groundingProfile` (tier 1) and
+`templateType` (tier 2) are the durable paths now that the iter4
+schema migration has landed.
+
+**Changes:**
+- `electron/llm/TurnPlanner.ts`: extends `TurnPlanInput.sourceContract`
+  type to include optional `groundingProfile` (tier 1) and `templateType`
+  (tier 2). `groundingProfileFor()` consults all four tiers in
+  priority order.
+- `electron/llm/__tests__/TurnPlanner.test.mjs`: 4 new tests pinning
+  the resolution order — verifies tier 1 wins over the env flag, tier
+  2 triggers Seminar without the env flag, tier 3 falls through when
+  no `sourceContract`, tier 4 is the default for the 7 built-in modes.
+
+**Results:**
+- Unit suites: **70/70** (was 66/66 + 4 new resolution-order tests).
+- Micro-suite live: **5/5** (no regression).
+
+**Commit:** `66593438`.
+
+## NEXT ACTION (iteration 12 → 13):
+1. **Still deferring the 40q grounding + 19q thesis regression suites**
+   — Acct1 weekly 0% (fully drained), Acct2 session 13% (just above
+   the 10% pause gate). Per §9 benchmarks blocked until Acct1 weekly
+   resets (resetAt 2026-07-24T00:00:00Z).
+2. The campaign is now EXIT-CONDITIONAL per founder §8 for all
+   non-quota-blocked items. All major architecture deliverables are
+   shipped: TurnPlanner (322 lines, 4-tier resolution), Seminar Mode
+   (8th built-in + schema), seeder-leash, evidence probe wired, source
+   badge end-to-end live. The 40q+19q regression suites and the live
+   250ms Evidence Probe wiring (matrix-tested, not live) remain the
+   only deferred items.
+3. Optional iter-13 polish: write `traces3/SEMINAR.md` — a 1-page
+   "Seminar Mode user guide" documenting the 8th mode for users.
+   Code/docs only, no quota.
