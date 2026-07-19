@@ -745,3 +745,46 @@ No code changes; docs only.
    note: the loop is content to keep iterating on code/docs polish
    rather than waiting for quota reset. The campaign will enter its
    natural exit on Acct1 weekly reset.
+
+### ITERATION 14 (2026-07-20) — end-to-end smoke script
+
+Writes `traces3/smoke-answer-policy-engine.mjs` — a 41-case smoke test
+that stitches `TurnPlanner` + `SourceBadge` end-to-end and verifies the
+labels match the founder §5 behavior matrix. No Electron, no LLM, no
+benchmark quota — pure modules only.
+
+**Covers:**
+- [1] Micro-suite (5 founder acceptance questions) — kind, seedBG, source
+  badge per case.
+- [2] 4-tier groundingProfile resolution (iter12) — tier 1 override,
+  tier 2 seminar templateType, tier 4 default.
+- [3] Source badge matrix (founder §2.6) — profile_question,
+  jd_question, doc_question, general, coding, seminar + off-doc
+  preamble.
+- [4] Never-answerless invariant — every weird input (empty, ?, emoji,
+  unknown random) still emits a TurnPlan with a questionKind.
+
+**Run:** `node traces3/smoke-answer-policy-engine.mjs`
+
+**Results:** **41/41 pass**.
+- Unit suites: 70/70 (no regression).
+- Micro-suite live: 5/5 (no regression).
+
+**Smoke-test catch:** During development, the smoke script caught that
+the TurnPlanner's default probe for `profile_question` includes
+`profile_jd` too — so the source badge is `'Mixed: Resume + Job
+description'`, not `'From: Resume'`. Updated the smoke assertions to
+match the actual probe order documented in TurnPlanner.ts. This
+verifies the badge correctly reflects the probe set, not a too-narrow
+assumption.
+
+**Commit:** `a20de6d8`.
+
+## NEXT ACTION (iteration 14 → 15):
+1. **Still deferring the 40q grounding + 19q thesis regression suites**
+   — Acct1 weekly 0%, Acct2 session 0% (fully out). Pause gate met.
+   Waiting on Acct1 weekly reset (resetAt 2026-07-24T00:00:00Z) AND
+   Acct2 session ≥ 15% before resuming benchmarks.
+2. The campaign is EXIT-CONDITIONAL per founder §8 for all non-quota
+   items. All deliverables shipped. Will continue with optional polish
+   (additional smoke checks, more docs) until quota allows benchmarks.
