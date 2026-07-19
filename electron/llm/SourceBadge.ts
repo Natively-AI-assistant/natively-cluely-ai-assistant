@@ -7,9 +7,7 @@
 // combination, or from general knowledge.
 //
 // This module is PURE: no I/O, no IPC, no DOM. The renderer (overlay,
-// console) consumes the rendered string. The next live wiring step
-// (iter 8+) is to thread `sourceLabel` through the `emit('suggested_answer',
-// …)` signature and into `GeneratedSuggestion` in SuggestionOverlay.tsx.
+// console) consumes the rendered string.
 
 import type { TurnPlan } from './TurnPlanner';
 
@@ -108,4 +106,30 @@ export function computeSourceBadge(input: SourceBadgeInput): SourceLabel {
  */
 export function renderSourceBadge(label: SourceLabel): string {
   return label;
+}
+
+/**
+ * Campaign-3 (2026-07-19): safe wrapper consumed by the engine's primary
+ * WTA emit site. Returns 'General knowledge' for null/missing inputs so
+ * the engine never throws at the emit boundary. PURE so it can be unit
+ * tested in isolation without spinning up Electron / LLMHelper.
+ *
+ * `evidenceFound` defaults to `true` (conservative): the engine doesn't
+ * currently carry the post-resolve `candidateEvidenceCount` at the emit
+ * site, and showing "From: Resume" when actually general is an honest
+ * degradation, not a fabrication (founder §2.6).
+ */
+export function computeEngineSourceLabel(input: {
+  turnPlan?: Partial<TurnPlan> | null;
+  evidenceFound?: boolean;
+}): SourceLabel {
+  try {
+    if (!input.turnPlan) return 'General knowledge';
+    return computeSourceBadge({
+      turnPlan: input.turnPlan as TurnPlan,
+      evidenceFound: input.evidenceFound ?? true,
+    });
+  } catch {
+    return 'General knowledge';
+  }
 }

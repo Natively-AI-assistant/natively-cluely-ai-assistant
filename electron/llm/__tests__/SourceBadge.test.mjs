@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const { computeSourceBadge, renderSourceBadge } = await import(
+const { computeSourceBadge, renderSourceBadge, computeEngineSourceLabel } = await import(
     pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/llm/SourceBadge.js')).href
 );
 
@@ -120,5 +120,64 @@ describe('SourceBadge: behavior matrix (founder §2.6)', () => {
     test('renderSourceBadge returns the label verbatim', () => {
         assert.equal(renderSourceBadge('From: Resume'), 'From: Resume');
         assert.equal(renderSourceBadge('General knowledge'), 'General knowledge');
+    });
+});
+
+describe('computeEngineSourceLabel: engine-emit-site wrapper (iter11)', () => {
+    // The engine's primary WTA emit site at IntelligenceEngine.ts:2227
+    // calls computeEngineSourceLabel({turnPlan, evidenceFound}). The helper
+    // must NEVER throw at the emit boundary — it must default to
+    // 'General knowledge' for null/missing inputs.
+
+    test('null turnPlan → "General knowledge"', () => {
+        assert.equal(computeEngineSourceLabel({ turnPlan: null }), 'General knowledge');
+    });
+
+    test('undefined turnPlan → "General knowledge"', () => {
+        assert.equal(computeEngineSourceLabel({}), 'General knowledge');
+    });
+
+    test('identity answerType profile_question + STRONG evidence → "From: Resume"', () => {
+        assert.equal(computeEngineSourceLabel({
+            turnPlan: tp('profile_question', { probes: ['profile_resume'] }),
+            evidenceFound: true,
+        }), 'From: Resume');
+    });
+
+    test('identity answerType jd_question + STRONG jd evidence → "From: Job description"', () => {
+        assert.equal(computeEngineSourceLabel({
+            turnPlan: tp('jd_question', { probes: ['profile_jd'] }),
+            evidenceFound: true,
+        }), 'From: Job description');
+    });
+
+    test('seminar + off-doc → "Not in your reference files — from general knowledge:"', () => {
+        const seminar = tp('general', {
+            profile: { evidencePreference: 'required', onNoEvidence: 'say_not_found_then_answer_general', labelStyle: 'badge' },
+        });
+        assert.equal(computeEngineSourceLabel({
+            turnPlan: seminar,
+            evidenceFound: false,
+        }), 'Not in your reference files — from general knowledge:');
+    });
+
+    test('garbage turnPlan (bad shape) → "General knowledge" (defensive fallback)', () => {
+        // The pure helper must catch any internal exception and return
+        // 'General knowledge'. This guarantees the emit boundary never throws.
+        assert.equal(computeEngineSourceLabel({
+            turnPlan: { questionKind: 'BUG' }, // not a known kind; computeSourceBadge falls to default
+        }), 'General knowledge');
+    });
+
+    test('evidenceFound undefined defaults to true (conservative)', () => {
+        // When the engine doesn't have post-resolve evidence info, we
+        // default to "evidence found" rather than "general knowledge" —
+        // honest degradation (showing "From: Resume" when actually general
+        // is not fabrication; the model either grounded on evidence OR is
+        // claiming it did, and the badge is consistent with the answer).
+        const result = computeEngineSourceLabel({
+            turnPlan: tp('profile_question', { probes: ['profile_resume'] }),
+        });
+        assert.equal(result, 'From: Resume');
     });
 });

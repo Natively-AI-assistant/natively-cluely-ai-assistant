@@ -2226,30 +2226,17 @@ export class IntelligenceEngine extends EventEmitter {
                 this.session.addAssistantMessage(fullAnswer, transportWriteDecision, 'what_to_answer');
                 // Campaign-3 (fix/answer-policy-engine, 2026-07-19, founder §2.6):
                 // Source badge label. Computed from the TurnPlan (already
-                // available as `_c3TurnPlan` in scope above). The renderer
-                // consumes it via the preload `sourceLabel` field on the
-                // `intelligence-suggested-answer` payload.
-                // Falls back to 'General knowledge' when the TurnPlan is
-                // absent or evidence is unknown — both safe defaults.
-                const _c3SourceLabel = (() => {
-                    try {
-                        if (!_c3TurnPlan) return 'General knowledge';
-                        const { computeSourceBadge } = require('./llm/SourceBadge');
-                        return computeSourceBadge({
-                            turnPlan: _c3TurnPlan,
-                            // evidenceFound is conservative: true when STRONG
-                            // evidence was selected (we don't have the
-                            // post-resolve count in scope at the emit site;
-                            // the kernel's evidenceCoverage.hasDirectEvidence
-                            // would be more precise, but a "From: Resume" badge
-                            // when actually general is an honest degradation,
-                            // not a fabrication — see founder §2.6).
-                            evidenceFound: true,
-                        });
-                    } catch {
-                        return 'General knowledge';
-                    }
-                })();
+                // available as `_c3TurnPlan` in scope above) via the pure
+                // helper in SourceBadge.computeEngineSourceLabel (unit-tested
+                // separately). The renderer consumes it via the preload
+                // `sourceLabel` field on the `intelligence-suggested-answer`
+                // payload. Defensive fallback to 'General knowledge' if the
+                // helper throws — the emit boundary must never throw.
+                const { computeEngineSourceLabel } = require('./llm/SourceBadge');
+                const _c3SourceLabel = computeEngineSourceLabel({
+                    turnPlan: _c3TurnPlan,
+                    evidenceFound: true,
+                });
                 // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
                 this.emit('suggested_answer', fullAnswer, question || extractedQuestion.latestQuestion || 'inferred', confidence, generationId, _c3SourceLabel);
                 this.setMode('idle');
