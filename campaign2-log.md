@@ -4079,3 +4079,71 @@ stages to see whether an exception is now being thrown and silently
 swallowed somewhere between `getActiveModeInfo` and the LLM stream call.
 Continue the standard health-check/judged-run loop per loop2.md; task
 #4 remains open.
+
+## ITERATION 46 (2026-07-19) — Harness fix confirmed a decisive win: script-b 41-53% → 76.5% answer quality (commit `97ce9e7f`)
+
+Waited out the shared-workspace contention from iteration 45 (checked
+`git status`/`git diff --stat` on Campaign 3's `IntelligenceEngine.ts`/
+`manualProfileIntelligence.ts` every 10-15 minutes via `ScheduleWakeup`
+rather than repeatedly hammering the workspace) until Campaign 3
+committed their own work (`5d100318`, "micro-suite 3/5 → 5/5", their
+own root cause turned out to be an unrelated `const`/`var` scoping bug
+in their new JIT-gate code — NOT caused by anything from this campaign).
+Once both files showed clean `git status`, re-applied iteration 45's
+harness fix on the now-quiet workspace.
+
+**Fix**: `test/harness-longsession/lib/bootstrap.cjs` now assigns
+`engine.whatToAnswerLLM.modesManager = modesManager` right after the
+harness's own `ModesManager.getInstance()` is seeded + given the real
+Gemini embedding pipeline — using `WhatToAnswerLLM`'s existing (but
+previously never exercised by the harness) optional-`modesManager`
+constructor injection seam, bypassing the esbuild per-file-bundling
+singleton-duplication bug root-caused last iteration.
+
+**Result — a clean, isolated script-b-only run** (`run-038`):
+
+| Metric | Before (run-034) | After (run-038) |
+|---|---|---|
+| G3 Answer quality | 52.9% | **76.5%** |
+| G5 Long-range recall | 0% | **100%** (target MET) |
+| G6 Desync | — | **88.2%** |
+| `No shared EmbeddingPipeline` warnings | ~103/run | 2/run |
+
+Only 4/17 script-b presses still fail, and none of them are the
+infrastructure bug: B6 (model said 41.0, expected fact was 41.8 — a
+genuine near-miss numeric precision gap), B7 (retrieval correctly ran
+through the real governed path now — confirmed via `prompt_assembled`
+firing, which it NEVER did before this fix — but the specific "8 P100
+GPUs" sentence didn't make the retrieved-chunk cut this time; a
+retrieval-ranking tail case, not the infra bug), B13 (near-miss
+wording — the actual masking mechanism is explained correctly but omits
+the literal word "leftward"), B15 (a transient provider rate-limit,
+infrastructure noise unrelated to any of this session's code).
+
+**Committed** (`97ce9e7f`), isolated diff confirmed via
+`git status`/`git diff --stat` before staging (only
+`test/harness-longsession/lib/bootstrap.cjs`, 60 insertions, no other
+files touched).
+
+**Historical note on the false alarm**: iteration 45's SAME fix appeared
+to cause a catastrophic regression (all null answers, zero LLM calls) —
+that was NEVER this fix; it was Campaign 3's own in-progress,
+uncommitted code being compiled together with this session's code
+during a shared `npm run build:electron`. This is now doubly confirmed:
+the identical fix, applied to a clean workspace, works exactly as
+designed with no regression. Lesson reinforced for future campaigns
+sharing this workspace: NEVER attribute a build/test result to your own
+change without first confirming via `git status` that no other
+session's files were mid-edit during that build.
+
+**NEXT ACTION**: the full 3-script validation run is in flight as this
+entry is being written — check `test/harness-longsession/reports/`
+for the newest run once it completes and compare the OVERALL scorecard
+(not just script-b) against the L4 targets. Script-a/c's own failures
+remain a SEPARATE, still-uninvestigated population (per iteration 43's
+scope note) — this fix should not be expected to move their numbers,
+since their `prompt_assembled` trace already fired correctly even
+before this fix (they don't use the document-grounded `EvidenceResolver`
+path this fix touches). Continue the standard health-check/judged-run
+loop per loop2.md; task #4 remains the campaign's still-open root task,
+but is now meaningfully closer given script-b's confirmed recovery.
