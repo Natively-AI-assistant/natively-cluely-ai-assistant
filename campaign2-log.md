@@ -3886,3 +3886,87 @@ same `refuse_insufficient_evidence` early-return, cause not fully
 isolated" per the forensic trail above). Continue the standard
 health-check/judged-run loop per loop2.md; task #4 remains the
 campaign's still-open root task.
+
+## ITERATION 44 (2026-07-19, run-034) — Validation confirms fix #1 (B2 fully fixed); found a DEEPER, separate infra defect explaining why fix #2 alone didn't move B7
+
+Ran the validation. **Fix #1 (DSA-noun word-boundary) is a confirmed,
+verified win**: press B2 no longer appears anywhere in run-034's
+per-press failure list — it now passes both G3 and G6 outright (was
+failing in run-032/033 with the "intent: coding" misroute). Script-b's
+aggregate G3 rose 41.2% (run-033) → 52.9% (run-034), a real, attributable
+improvement.
+
+**Fix #2 (hardware_component GPU vocabulary) did NOT move press B7** —
+still fails with the identical "This is not directly mentioned in the
+uploaded material." refusal despite the evidence-vocabulary fix being
+independently re-verified correct in isolation
+(`textCanProveProperty('Eight NVIDIA P100 GPUs...', 'hardware_component')
+=== true` on the real compiled code, confirmed again this iteration).
+Investigated why and found a THIRD, deeper, and more serious defect: the
+harness's `[DatabaseManager] Initializing database at ...` log line fires
+**15 times across one 3-script run** — `DatabaseManager.getInstance()`,
+a singleton, is being torn down and RE-INITIALIZED mid-script, at least
+once per script and possibly more. Confirmed live: within script-b's own
+setup sequence, `[EmbeddingPipeline] Ready with provider: gemini (768d)`
+(a successful Gemini-backed embedding pipeline, correctly wired via
+`modesManager.setSharedEmbeddingPipeline()`) is immediately followed by
+a SECOND `[DatabaseManager] Initializing database at <same path>` — a
+full re-init of the very singleton the embedding pipeline was just built
+on top of. This is consistent with (though not yet pinned to a single
+line) `EvidenceResolver`'s own dedicated `hybridRetriever.retrieveHybrid`
+call landing on a DIFFERENT, freshly-re-initialized `DatabaseManager`/
+`ModeContextRetriever` state than the one the working lexical-fallback
+path (used by the POST-hoc `validateDocumentGroundedAnswer` repair,
+and by the log lines showing successful 12-18-chunk retrieval) consults
+— explaining why B7's evidence genuinely IS retrievable (proven: the
+lexical path finds it, `textCanProveProperty` proves it) yet
+`EvidenceResolver.resolveFromHybrid` still sees zero usable evidence and
+issues the early-return refusal at `WhatToAnswerLLM.ts:530-532` before
+`prompt_assembled` ever fires (still 0/17 script-b presses this run).
+
+**Also confirmed present**: all 6 Gemini API keys hit 429 rate-limits
+repeatedly throughout the run (`[GeminiEmbeddingProvider] key #N
+rate-limited`) — very likely from SHARING the account with the
+concurrent Campaign 3 session's own live embedding usage on this same
+workspace (the documented [[shared-workspace-branch-hazard-2026-07-11]]
+hazard, now confirmed to also apply to shared API quota, not just git
+state). This compounds the re-init issue: even where `DatabaseManager`
+doesn't re-init, a rate-limited embedding call degrades retrieval
+quality further.
+
+**Scope decision**: the DatabaseManager re-initialization defect is a
+genuinely new, real finding, but tracing it to an exact call site (is it
+harness-only, or does production code itself call
+`DatabaseManager.getInstance()` in a context that can trigger a
+re-init? is it a stale reference held across an async boundary? is it
+literally OK because `getInstance()` returns the cached singleton and
+the "re-init" log is merely from a code path that re-runs `init()`
+logic against an ALREADY-open db unnecessarily, which would be
+wasteful but not necessarily broken?) requires more investigation than
+this iteration's remaining budget supports, and a wrong fix to
+`DatabaseManager`'s singleton lifecycle is a HIGH-blast-radius change
+(every surface in the app depends on it) that must not be rushed.
+Logging honestly rather than attempting a same-iteration fix under time
+pressure — this is exactly the kind of finding that deserves its own
+dedicated Phase-0-style investigation (a live trace proving the exact
+re-init trigger) before any code change, per R1's own discipline.
+
+**Committed fixes retained** (both are independently correct and
+verified, regardless of this deeper finding): word-boundary fix (B2,
+confirmed working) and hardware evidence vocabulary (verified correct
+in isolation, blocked from having visible effect on B7 by this deeper
+issue — NOT reverted, since it's still needed once the deeper issue is
+fixed, and causes no harm on its own).
+
+**NEXT ACTION**: two independent threads, either is a reasonable next
+step: (a) root-cause the DatabaseManager re-initialization — start by
+grepping every `DatabaseManager.getInstance()` call site reached during
+a single WTA press and adding a one-line stack-trace log inside `init()`
+itself (temporary, R10-compliant) to catch the SECOND call red-handed;
+or (b) check whether this re-init is a HARNESS-ONLY artifact (e.g. the
+harness's per-script child-process bootstrap calling something twice)
+vs. a REAL production bug that would also affect the packaged app during
+a long real meeting — this distinction matters enormously for
+prioritization, since a harness-only artifact doesn't block the real
+product even if it blocks THIS benchmark's scores. Continue the standard
+health-check/judged-run loop per loop2.md; task #4 remains open.
