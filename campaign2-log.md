@@ -3786,3 +3786,103 @@ even invoking the classifier, or accept that some presses in this
 family may need a coarser LLM-as-judge-based verification at answer
 time rather than a lightweight NLI classifier). Continue the standard
 health-check/judged-run loop per loop2.md.
+
+## ITERATION 43 (2026-07-19) — Root-caused two confirmed defects behind the campaign's real bottleneck: G3/G6's persistently low scores (commit `74eadf2d`)
+
+User asked "is everything done?" — honest answer was no: L4's real blocker
+(answer quality 26-38% vs >=95% target, desync 32-44% vs =100% target)
+had never been root-caused across this entire campaign, only repeatedly
+observed and attributed to vague "grounding-fidelity gaps." Went looking
+for the ACTUAL mechanism rather than accepting that framing, using
+run-032/033's raw logs as forensic evidence (per R1's "no fix without a
+tagged trace from the live path" discipline).
+
+**Investigation method**: cross-referenced every script-b (technical
+deep-dive, doc-grounded) failing press's `[TRACE:LONGCTX]` lines against
+its harness trace-dump file, found the `prompt_assembled` trace (which
+fires for 100% of script-a/c presses) NEVER fires for ANY of script-b's
+17 presses — a clean, total split pointing at a structurally different
+code path for doc-grounded generation. Traced `WhatToAnswerLLM.ts`'s
+`governedWtaTurn` branch (Context OS H1 EvidencePack governance, default
+ON via `contextOsEvidencePackEnabled`) to its early-return at line 530-532:
+`if (pack.answerPolicy === 'refuse_insufficient_evidence') { yield
+buildInsufficientPropertyAnswer(...); return; }` — this fires BEFORE
+prompt assembly, explaining the missing trace and matching the exact
+observed refusal string "This is not directly mentioned in the uploaded
+material." verbatim (only one source of that string in the whole
+codebase — `propertyEvidenceValidator.ts:121`).
+
+**Root cause #1 (confirmed, fixed)**: `IntentClassifier.ts`'s WTA
+DSA/coding regex fast-path (`detectIntentByPattern`) had `stack`, `queue`,
+`heap`, `trie`, `graph`, `tree`, `recursion` as UN-anchored bare
+substrings — no `\b` word-boundary wrapping (unlike `\bdp\b`/`\bbfs\b`/
+`\bdfs\b` in the SAME regex, which already had it). "How many identical
+layers are **stack**ed in the encoder?" — press B2, a genuinely
+well-grounded Transformer-paper question with nothing to do with the
+data structure — matched bare `stack`, classified `coding` intent at
+0.95 confidence, routed to `coding_question_answer`
+(`AnswerPlanner.ts:2609`'s `intentResult?.intent === 'coding'`
+OR-check), which bypasses the ENTIRE doc-grounded validation/retry/
+repair pipeline (every doc-grounded guard in `IntelligenceEngine.ts`
+gates on `!isCoding`). Live-verified via `python3 re.search` against the
+exact regex: `stack` matches inside "stacked" with zero boundary
+enforcement. Fixed by wrapping the 7 affected terms in `\b...\b`;
+verified genuine whole-word DSA usage ("implement a queue using two
+stacks", "explain a min heap", etc.) is unaffected, and 6 constructed
+bare-substring-collision sentences ("enqueued", "heaped up", "graphs
+team", "agraphia", "treeatise", "recursively-generated") no longer
+misfire — 5 new tests in
+`IntentClassifierStackWordBoundary2026_07_19.test.mjs`, all pre-existing
+69 sibling routing-matrix tests still green.
+
+**Root cause #2 (confirmed, fixed)**: even for `unknown`-property
+questions (which should degrade leniently — `propertySatisfied =
+factual.length > 0`), some questions DO match a specific
+`RequestedProperty` via `requestedPropertyDetector.ts`'s pattern table —
+and `hardware_component`'s evidence-pattern vocabulary
+(`sensors/cameras/actuators/robots/devices/boards`) was written entirely
+for a robotics-thesis domain, with ZERO ML/compute-hardware terms. Press
+B7 ("what hardware did they train on?") correctly retrieved the exact
+answer-bearing chunk ("Eight NVIDIA P100 GPUs...") at 0.7+ confidence,
+but `itemSupportsProperty` found no evidence-pattern match for "GPU," so
+`deriveEvidenceSufficiency`'s `propertySatisfied` check failed
+(`reason: property_missing`) on a correctly-retrieved, high-confidence
+answer, producing a false refusal despite the fact being right there.
+Live-verified via direct `textCanProveProperty` calls against the real
+compiled code (`false` before fix, `true` after). Added
+`gpu/tpu/cpu/accelerator/nvidia/p100/v100/a100/h100` evidence vocabulary
+— same category of fix as `training_time`'s pre-existing "gpu hours"
+pattern a few rules below, generic vocabulary, no document-specific
+values. 1 new test case, all 59 pre-existing
+`ContextOsRequestedProperty.test.mjs` tests still green, plus 26
+`ContextOsEvidenceOrchestrator`/`ContextOsPropertyValidatorPromptRenderer`
+tests green.
+
+**What this does NOT explain (honest scope note)**: script-a/c's own
+G3/G6 failures (profile-grounded SWE interview / adversarial scripts) are
+a SEPARATE population from script-b's — their `prompt_assembled` trace
+DOES fire (prompt assembly succeeds), and their failure mode is mostly
+`G3_deterministic FAIL: missing facts` on answers that DO address the
+right topic but omit specific numbers/names the grader's exact-match
+gate expects (e.g. A1's self-intro correctly named Stripe + Staff
+Software Engineer but said "a few years" instead of the exact "10
+years") — this reads as a genuine grounding-fidelity/generation-quality
+gap in the live model's answers, not a pipeline bug of the kind found
+here. This iteration's two fixes should specifically move script-b's
+G3/G6 numbers (previously as low as 13-33% per-script); script-a/c's
+numbers are a different, still-open problem this iteration does not
+claim to solve.
+
+**NEXT ACTION**: validation run launched to measure real impact —
+compare script-b's G3/G6 specifically (not just the aggregate) against
+run-031/032/033's baseline. If script-b's numbers rise substantially,
+that confirms both root causes were real and load-bearing; if they
+don't move, the investigation needs to go one level deeper (there may be
+a THIRD mechanism still undiscovered, given only B2/B7 were
+individually confirmed root-caused out of B script's ~10 failing
+presses — B3/B9/B17's exact failure mechanism was investigated but not
+conclusively pinned to a single fixable line, only narrowed to "the
+same `refuse_insufficient_evidence` early-return, cause not fully
+isolated" per the forensic trail above). Continue the standard
+health-check/judged-run loop per loop2.md; task #4 remains the
+campaign's still-open root task.
