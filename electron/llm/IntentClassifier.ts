@@ -480,7 +480,28 @@ function detectIntentByPattern(lastInterviewerTurn: string): IntentResult | null
     // DSA/coding interview patterns. Keep this deterministic and run it
     // BEFORE behavioral/example matching so prompts like "give me an example
     // React component in TypeScript" still route to the coding contract.
-    if (/(two\s*sum|longest substring|reverse (a )?linked list|detect a cycle|binary search|sliding window|two pointers?|hash\s?(map|set|table)|stack|queue|heap|trie|union[- ]find|dynamic programming|\bdp\b|backtracking|recursion|graph|tree|\bbfs\b|\bdfs\b|time complexity|space complexity|big[- ]?o)/i.test(textNoStackUpIdiom)) {
+    //
+    // Campaign 2 longsession (2026-07-19, run-032/033 forensics): several of
+    // these data-structure nouns (stack, queue, heap, trie, graph, tree,
+    // recursion) were UN-anchored bare substrings — no `\b` word-boundary
+    // wrapping — so they matched inside ordinary English words that merely
+    // CONTAIN the substring. Live-confirmed root cause of script-b's near-
+    // total document-grounded answer-quality collapse: "how many identical
+    // layers are **stack**ed in the encoder?" (a real Transformer-paper
+    // question, nothing to do with the data structure) matched bare `stack`,
+    // classified as `coding` intent at 0.95 confidence, and routed to
+    // `coding_question_answer` — which bypasses the entire doc-grounded
+    // validation/retry/repair pipeline (`documentGroundedCustomModeActive`
+    // guards on `!isCoding` throughout IntelligenceEngine.ts), so a
+    // genuinely well-grounded question got a generic non-answer with none of
+    // that pipeline's safety nets. Wrapping the affected terms in `\b...\b`
+    // preserves every genuine DSA usage (a whole-word "stack"/"queue"/"tree"
+    // still matches) while excluding "stacked", "enqueued"/"queueing" past
+    // participles, "heaped", "retrieval" (contains no data-structure term but
+    // was never matched anyway), "subgraph"/"telegraph" style compounds, and
+    // "recursively"/"recursions" derivational forms that have nothing to do
+    // with a coding-interview ask.
+    if (/(two\s*sum|longest substring|reverse (a )?linked list|detect a cycle|binary search|sliding window|two pointers?|hash\s?(map|set|table)|\bstack\b|\bqueue\b|\bheap\b|\btrie\b|union[- ]find|dynamic programming|\bdp\b|backtracking|\brecursion\b|\bgraph\b|\btree\b|\bbfs\b|\bdfs\b|time complexity|space complexity|big[- ]?o)/i.test(textNoStackUpIdiom)) {
         return { intent: 'coding', confidence: 0.95, answerShape: INTENT_ANSWER_SHAPES.coding };
     }
 

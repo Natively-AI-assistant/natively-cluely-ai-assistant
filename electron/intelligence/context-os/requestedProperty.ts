@@ -366,6 +366,19 @@ export const PROPERTY_RULES: readonly PropertyRule[] = [
       /\bactuators?\b/i,
       /\bwhat\s+(?:robot|device|equipment)\b/i,
     ],
+    // Campaign 2 longsession (2026-07-19, run-032/033 forensics): this list
+    // was written for robotics-thesis hardware ("sensors", "actuators",
+    // "boards") and had ZERO ML/compute-hardware vocabulary — "what hardware
+    // did they train on?" against an ML paper whose evidence literally says
+    // "Eight NVIDIA P100 GPUs" matched none of these patterns, so
+    // itemSupportsProperty/deriveEvidenceSufficiency's propertySatisfied
+    // check failed even though the correct fact was retrieved with high
+    // confidence, producing a false "not directly mentioned" refusal
+    // (electron/intelligence/context-os/propertyEvidenceValidator.ts) on a
+    // genuinely well-grounded answer. Adding compute-hardware terms here is
+    // the same category of fix as training_time's existing "gpu hours"
+    // evidence pattern a few rules below — generic vocabulary, no
+    // document-specific values.
     evidencePatterns: [
       /\bhardware\b/i,
       /\bsensors?\b/i,
@@ -374,6 +387,12 @@ export const PROPERTY_RULES: readonly PropertyRule[] = [
       /\brobots?\b/i,
       /\bdevices?\b/i,
       /\bboards?\b/i,
+      /\bgpus?\b/i,
+      /\btpus?\b/i,
+      /\bcpus?\b/i,
+      /\baccelerators?\b/i,
+      /\bnvidia\b/i,
+      /\bp100s?\b|\bv100s?\b|\ba100s?\b|\bh100s?\b/i,
     ],
   },
   {

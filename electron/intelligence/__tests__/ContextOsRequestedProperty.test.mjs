@@ -147,6 +147,26 @@ test('physical measurement proof is field-specific and accepts ordinary spec pro
   assert.equal(textCanProveProperty('Working voltage: 24 V.', 'physical_weight'), false);
 });
 
+// Campaign 2 longsession (2026-07-19, run-032/033 forensics): hardware_
+// component's evidence vocabulary was written for robotics-thesis hardware
+// (sensors/actuators/boards) and had zero ML/compute-hardware terms. A real
+// "what hardware did they train on?" question against an ML paper whose
+// evidence says "Eight NVIDIA P100 GPUs" matched no evidence pattern,
+// causing deriveEvidenceSufficiency's propertySatisfied check to fail on a
+// correctly-retrieved, high-confidence answer — producing a false
+// "not directly mentioned" refusal in propertyEvidenceValidator.ts even
+// though the fact was right there.
+test('compute-hardware text (GPU/TPU/accelerator) CAN prove hardware_component', () => {
+  assert.equal(textCanProveProperty('Eight NVIDIA P100 GPUs, trained the base model for 100,000 steps.', 'hardware_component'), true);
+  assert.equal(textCanProveProperty('The model was trained on 8 V100 GPUs for 3.5 days.', 'hardware_component'), true);
+  assert.equal(textCanProveProperty('Training used a single TPU v3 pod.', 'hardware_component'), true);
+  assert.equal(textCanProveProperty('We used a custom hardware accelerator for inference.', 'hardware_component'), true);
+  // Sanity: the pre-existing robotics vocabulary is unaffected.
+  assert.equal(textCanProveProperty('Equipped with two RGB cameras and a lidar sensor.', 'hardware_component'), true);
+  // A topical mention with no hardware vocabulary at all still fails, as before.
+  assert.equal(textCanProveProperty('The paper evaluates the model on several benchmarks.', 'hardware_component'), false);
+});
+
 test('ambiguous ML measurement nouns remain unknown rather than physical facts', () => {
   assert.equal(detectRequestedProperty('What weight decay was used during training?'), 'unknown');
   assert.equal(detectRequestedProperty('What is the depth of the neural network?'), 'unknown');
