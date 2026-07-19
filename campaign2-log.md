@@ -4147,3 +4147,109 @@ before this fix (they don't use the document-grounded `EvidenceResolver`
 path this fix touches). Continue the standard health-check/judged-run
 loop per loop2.md; task #4 remains the campaign's still-open root task,
 but is now meaningfully closer given script-b's confirmed recovery.
+
+---
+
+## ITERATION 47 (2026-07-19) — script-a/c investigation: a 4th distinct scaffold-contamination shape, detector built (not yet wired)
+
+Per iteration 46's NEXT ACTION, the full `run-039` validation completed
+while script-a/c were still investigated as a separate population. Result
+confirmed the isolation held: script-b (the fixed path) scored G3 88.2%/G5
+100% within the full run — even better than its isolated `run-038` — while
+script-a (G3 11.1%, G5 50%) and script-c (G3 13.3%, G5 0%) remained
+essentially unmoved, as expected (their `prompt_assembled` trace already
+fired correctly before iteration 44-46's fix; they never touched the
+`EvidenceResolver` doc-grounded path that fix targeted).
+
+**Investigation**: read every script-a per-press failure in `run-039.md`
+and pulled full raw-answer trace dumps (`traces2/harness-script-a-press-*`)
+for the worst offenders. Two things stood out:
+
+1. **A13/A14 — literal template-instruction leak**: the raw answer is the
+   SYSTEM PROMPT's own coding-answer-template instructions, verbatim,
+   zero real content, for a question that isn't even a coding question
+   ("What made the Hadoop-to-streaming migration challenging?"). Confirmed
+   this already correctly trips the (flag-gated-OFF) `answerRelevanceGuardLive`
+   guard at confidence 0.057 — it's just inert because that flag defaults
+   off per iteration prior to this session's finding that its classifier
+   didn't separate real-vs-hallucinated answers well enough on live traffic
+   yet. Not re-enabled this iteration (out of scope — needs its own
+   recalibration pass per its own doc comment).
+
+2. **A4/A5/C9 — a 4th distinct scaffold-misfire shape `detectAndExtractScaffoldMisfire`
+   (shipped 2026-07-18) does not recover**: all three carry the same coding-
+   scaffold fingerprint (`## Technique / Data Structure / Algorithm Used`
+   heading and/or `O(...)`/complexity notation) every case that function
+   already handles has — but the REAL content sits under a heading the
+   model invented (`## STAR Story, Streaming Reconciliation at Stripe`,
+   `## STAR story, Long-Tail aggregation at Datadog`) that none of the
+   function's fixed extraction patterns (trailing `---`, a final
+   recognized-label heading, a bold `**Direct Answer:**` marker) match —
+   so extraction correctly, conservatively returns `null` rather than
+   guessing, but that means the raw scaffold-and-meta-commentary text ships
+   as-is. G3 judge on all three: `answersQuestion: false`, `noMetaTalk:
+   false`, reason explicitly cites `## Approach`/meta-commentary leakage as
+   the failure. Verified via a throwaway `node` script against the exact
+   `detectAndExtractScaffoldMisfire` compiled output that extraction
+   genuinely fails on all three (not a stale-build artifact).
+
+3. **C8 — a 5th, entirely different shape**: a FABRICATED multi-turn
+   `[INTERVIEWER]/[APPLICANT]/[ASSISTANT]` transcript, ending in the exact
+   `isNonAnswerSentinel` string ("Nothing actionable right now."). No
+   coding-scaffold fingerprint at all — a different failure family,
+   already partially covered by `isNonAnswerSentinel`'s own sentinel match
+   (needs its own investigation, deferred).
+
+**With only 5 real repros surfacing 3+ distinct shapes**, hand-rolling a
+4th/5th extraction pattern per new shape does not generalize — the exact
+same lesson already learned building the answer-relevance guard (see its
+own doc comment on phrase-matching not generalizing to new wording).
+
+**Fix built this iteration**: `hasUnrecoveredScaffoldContamination`
+(`electron/llm/AnswerValidator.ts`, exported via `electron/llm/index.ts`)
+— a detection-ONLY signal (no extraction attempt): true when the text has
+the coding-scaffold fingerprint AND ≥2 scaffold headings AND
+`detectAndExtractScaffoldMisfire` already tried and failed to extract. This
+lets a caller fall back to a bounded regeneration (the same repair
+mechanics the answer-relevance guard and profile-repair guard already use)
+instead of either shipping the raw contaminated text or attempting a
+brittle new per-shape regex. 9 new tests
+(`electron/llm/__tests__/UnrecoveredScaffoldContamination_2026_07_19.test.mjs`)
+cover: all 3 new repro shapes (A4/A5/C9) correctly flagged true; the
+existing C12 conservative-null case correctly flagged false (no coding
+fingerprint — same discipline `detectAndExtractScaffoldMisfire` already
+has); a real answer with only 1 legitimate `O(1)` mention (below the
+2-heading threshold) never flagged; a real answer with zero scaffold
+headings never flagged; both coding answerTypes excluded (that's
+`validateAnswerStructure`'s surface, not this); a case that DOES extract
+successfully (A10 shape) is never flagged as "unrecovered". All 9 pass;
+all 21 sibling `detectAndExtractScaffoldMisfire` tests still pass
+unchanged (shared-regex reuse confirmed non-regressive).
+
+**NOT yet wired into `IntelligenceEngine.ts`**: that file remains dirty
+from Campaign 3's concurrent, uncommitted work (`git status` confirmed
+`M electron/IntelligenceEngine.ts` at the time of this entry) — per this
+session's own hard-won lesson from iterations 45-46, building/testing
+against another session's mid-edit file produces contaminated,
+unattributable results, and this session must never edit that file. This
+commit is scoped entirely to `AnswerValidator.ts`/`index.ts`/the new test
+file — none of which Campaign 3 touches — and is safe to land standalone.
+
+**NEXT ACTION**: once `IntelligenceEngine.ts` shows a clean `git status`
+(fully committed, not mid-edit), wire `hasUnrecoveredScaffoldContamination`
+in immediately after the existing `detectAndExtractScaffoldMisfire` call
+(~line 2270-2277): when extraction returns `null` AND the new detector
+returns `true`, run ONE bounded regeneration attempt mirroring the
+answer-relevance guard's exact repair mechanics (`raceStreamWithDeadline`,
+7s/`LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS` deadline, re-check the repaired
+text isn't itself contaminated or a leaked artifact via
+`isLeakedAnswerArtifact`, fall through with the original answer unchanged
+on repair failure). Then re-run script-a/script-c in isolation to confirm
+A4/A5/C9-shaped presses recover, and separately investigate the A13/A14
+template-leak family (candidate: recalibrate and re-enable
+`answerRelevanceGuardLive`, since it already correctly catches that exact
+shape) and the C8 fabricated-transcript family (candidate: a stricter
+`isNonAnswerSentinel`/`isLeakedAnswerArtifact` check for embedded fake
+speaker tags) as separate, later iterations. loop2.md task #4 remains
+open; script-a/c's own failure population is now understood to be at
+least 3 further distinct sub-families, not one.
