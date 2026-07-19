@@ -412,3 +412,52 @@ deferring the 40q grounding + 19q thesis regression suites until the
 weekly window resets (resetAt 2026-07-23T23:59:59Z). Iter 7 will either
 ship code-only polish (source badges + seedCandidateBackground wiring)
 or, if quota has recovered, run the regression suites.
+
+### ITERATION 7 (2026-07-19) — seedCandidateBackground seeder-leash wired (founder §2.5)
+
+Closes the founder §2.5 seeder-leash requirement. The TurnPlanner's
+`seedCandidateBackground` directive is now passed through to the
+ProfileJitPromptBuilder, which emits a `<seeder_leash>` block when
+`seedCandidateBackground=false` (i.e. for general questions like
+salary / negotiation). This prevents the historical failure mode where
+an unroutable question would auto-open with a candidate self-introduction.
+
+**Changes:**
+- `electron/llm/ProfileJitPromptBuilder.ts`: new optional
+  `seedCandidateBackground` field on `BuildProfileJitPromptInput`
+  (default true, preserving legacy behavior). When false, emits a
+  `<seeder_leash>...</seeder_leash>` block in the user prompt that
+  explicitly tells the model NOT to open with a candidate
+  self-introduction or recite resume facts as background.
+- `electron/IntelligenceEngine.ts`: passes
+  `_c3TurnPlan?.answerDirectives?.seedCandidateBackground ?? true`
+  into the `buildProfileJitPrompt` call (already-computed in the same
+  try block; null-safe).
+- `electron/llm/__tests__/ProfileJitPromptBuilder.test.mjs`: 2 new
+  tests covering `seedCandidateBackground=true` (no leash block) and
+  `seedCandidateBackground=false` (leash block + directive text).
+
+**Results (45/45 unit, 5/5 micro-suite):**
+- TurnPlanner core: 16/16
+- TurnPlanner matrix: 14/14
+- ProfileJitPromptBuilder: 6/6 (was 4/4, +2 seeder-leash cases)
+- Seminar: 9/9
+- Micro-suite live: 5/5 (regression check post-wiring, all green)
+
+**Commit:** `f28c5860`.
+
+## NEXT ACTION (iteration 7 → 8):
+1. Run the 40q grounding regression + 19q thesis regression suites
+   (founder §5) WHEN Acct1 weekly ≥ 20%. Still 4% — defer until reset
+   (resetAt 2026-07-23T23:59:59Z).
+2. Add source badges to the overlay (founder §2.6) — UI work; can be
+   done anytime, no quota cost.
+3. Once source badges are wired + regression suites pass: write
+   `traces3/final-report.md` (founder §8) with before/after, architecture
+   diagram, commit hashes per fix, competitor-beating next steps.
+
+QUOTA (iteration 7, 2026-07-19 ~19:00 local): Account1 76% session / 4%
+weekly. Account2 19% session / 73% weekly. Acct1 weekly still well
+below the 20% benchmark gate; deferring the regression suites until
+reset. Iter 8 will ship source badges (UI polish) and write the final
+report scaffold.
