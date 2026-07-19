@@ -3095,6 +3095,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceSuggestedAnswer((data) => {
+        // Phase 4 defense-in-depth (forensic-report §6b): drop a final answer
+        // belonging to a generation that's already been superseded by a newer
+        // one — same supersession guard the streaming token path applies via
+        // resolveLiveAnswerBatch. Id-less final answers (legacy answerLLM,
+        // code-hint, brainstorm) are always accepted.
+        const decision = resolveLiveAnswerBatch(
+          liveAnswerGenIdRef.current,
+          (data as { generationId?: number }).generationId,
+        );
+        liveAnswerGenIdRef.current = decision.activeId;
+        if (!decision.accept) return;
         setIsProcessing(false);
         pinAnswerPanel();
         finalizeStreamingByIntent('what_to_answer', data.answer);

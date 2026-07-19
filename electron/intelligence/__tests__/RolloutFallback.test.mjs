@@ -57,6 +57,12 @@ const FLAG_ENV = {
   hindsightPostMeetingRetain: 'NATIVELY_HINDSIGHT_POST_MEETING_RETAIN',
   trace: 'NATIVELY_INTELLIGENCE_TRACE',
   durableMemoryWindow: 'NATIVELY_DURABLE_MEMORY_WINDOW',
+  contextOsEnabled: 'NATIVELY_CONTEXT_OS',
+  contextOsManualChatEnabled: 'NATIVELY_CONTEXT_OS_MANUAL_CHAT',
+  contextOsWtaEnabled: 'NATIVELY_CONTEXT_OS_WTA',
+  contextOsRecapFollowupEnabled: 'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP',
+  contextOsEvidencePackEnabled: 'NATIVELY_CONTEXT_OS_EVIDENCE_PACK',
+  contextOsMemorySafetyEnabled: 'NATIVELY_CONTEXT_OS_MEMORY_SAFETY',
 };
 
 const EXTRA_FLAG_ENV = [
@@ -103,16 +109,29 @@ describe('Rollout — enabled mode (per-flag, independent)', () => {
   beforeEach(clearAll);
   afterEach(clearAll);
 
-  test('each flag can be enabled independently via env without affecting others', () => {
+  test('each flag can be enabled independently via env without changing sibling defaults', () => {
     for (const [key, env] of Object.entries(FLAG_ENV)) {
       clearAll();
       process.env[env] = 'on';
       __resetIntelligenceFlagsCache();
       assert.equal(isIntelligenceFlagEnabled(key), true, `${key} should enable via ${env}`);
-      // No sibling leaked on.
       const others = Object.keys(FLAG_ENV).filter((k) => k !== key);
-      for (const o of others) assert.equal(isIntelligenceFlagEnabled(o), false, `${o} leaked on when only ${key} set`);
+      for (const other of others) {
+        assert.equal(
+          isIntelligenceFlagEnabled(other),
+          expectedDefault(other),
+          `${other} must retain its documented default when only ${key} is overridden`,
+        );
+      }
     }
+  });
+
+  test('the production-default Context OS core has an explicit per-surface kill switch', () => {
+    process.env.NATIVELY_CONTEXT_OS_MANUAL_CHAT = 'off';
+    __resetIntelligenceFlagsCache();
+    assert.equal(isIntelligenceFlagEnabled('contextOsEnabled'), true, 'umbrella default remains on');
+    assert.equal(isIntelligenceFlagEnabled('contextOsManualChatEnabled'), false, 'manual surface is disabled');
+    assert.equal(isIntelligenceFlagEnabled('contextOsWtaEnabled'), true, 'WTA surface default is unaffected');
   });
 
   test('the recommended rollout order is all independently gated (no hard coupling)', () => {

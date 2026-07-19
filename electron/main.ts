@@ -5626,10 +5626,14 @@ export class AppState {
       } catch { /* non-fatal */ }
     })
 
-    this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number) => {
+    this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number, generationId?: number) => {
+      // Phase 4 defense-in-depth (forensic-report §6b): forward the optional
+      // generationId the engine emits. Id-less emits (legacy answerLLM path,
+      // code-hint, brainstorm) continue to ship without it — the renderer
+      // treats them as always-accepted, same as id-less token batches today.
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      this.sendToWindow(win, 'intelligence-suggested-answer', { answer, question, confidence })
+      this.sendToWindow(win, 'intelligence-suggested-answer', { answer, question, confidence, generationId })
 
     })
 

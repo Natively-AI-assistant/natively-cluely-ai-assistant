@@ -96,7 +96,7 @@ function detectRefinementIntent(userText: string): { isRefinement: boolean; inte
 // Events emitted by IntelligenceEngine
 export interface IntelligenceModeEvents {
     'assist_update': (insight: string) => void;
-    'suggested_answer': (answer: string, question: string, confidence: number) => void;
+    'suggested_answer': (answer: string, question: string, confidence: number, generationId?: number) => void;
     // generationId (audit finding #3): stamped on every live token so the renderer
     // can drop a batch from an answer that was already superseded. Optional →
     // id-less emits still accepted downstream (backward-compatible).
@@ -1770,6 +1770,12 @@ export class IntelligenceEngine extends EventEmitter {
                             hasLiveTranscript: true, // WTA is always transcript-driven
                         });
                     this.session.addAssistantMessage(clarify, undefined, 'what_to_answer');
+                    // Note: emit stays id-less here because this early
+                    // clarification path runs BEFORE `generationId` is minted
+                    // for this turn (line ~1803). The renderer treats id-less
+                    // emits as always-accepted — same as id-less token
+                    // batches today. Phase 4 defense-in-depth is preserved on
+                    // the main WTA emit + the post-`generationId` fallbacks.
                     this.emit('suggested_answer', clarify, extractedQuestion.latestQuestion || question || 'inferred', 0.9);
                     trace.mark('repair_used', { reason: 'context_os_clarification' });
                     if (isIntelligenceFlagEnabled('trace')) {
@@ -2055,7 +2061,8 @@ export class IntelligenceEngine extends EventEmitter {
                 });
                 if (openedStreamRow) emitChunk(stubFallback);
                 this.session.addAssistantMessage(stubFallback, stubWriteDecision, 'what_to_answer');
-                this.emit('suggested_answer', stubFallback, question || extractedQuestion.latestQuestion || 'inferred', confidence);
+                // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
+                this.emit('suggested_answer', stubFallback, question || extractedQuestion.latestQuestion || 'inferred', confidence, generationId);
                 this.setMode('idle');
                 return stubFallback;
             }
@@ -2076,7 +2083,8 @@ export class IntelligenceEngine extends EventEmitter {
                 });
                 if (openedStreamRow) emitChunk(fullAnswer);
                 this.session.addAssistantMessage(fullAnswer, transportWriteDecision, 'what_to_answer');
-                this.emit('suggested_answer', fullAnswer, question || extractedQuestion.latestQuestion || 'inferred', confidence);
+                // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
+                this.emit('suggested_answer', fullAnswer, question || extractedQuestion.latestQuestion || 'inferred', confidence, generationId);
                 this.setMode('idle');
                 return fullAnswer;
             }
@@ -2114,7 +2122,8 @@ export class IntelligenceEngine extends EventEmitter {
                 });
                 if (openedStreamRow) emitChunk(tagLeakFallback);
                 this.session.addAssistantMessage(tagLeakFallback, tagLeakWriteDecision, 'what_to_answer');
-                this.emit('suggested_answer', tagLeakFallback, question || extractedQuestion.latestQuestion || 'inferred', confidence);
+                // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
+                this.emit('suggested_answer', tagLeakFallback, question || extractedQuestion.latestQuestion || 'inferred', confidence, generationId);
                 this.setMode('idle');
                 return tagLeakFallback;
             }
@@ -2610,7 +2619,8 @@ export class IntelligenceEngine extends EventEmitter {
                         emitChunk(honestFallback);
                     }
                     this.session.addAssistantMessage(honestFallback, undefined, 'what_to_answer');
-                    this.emit('suggested_answer', honestFallback, question || extractedQuestion.latestQuestion || 'inferred', 0.9);
+                    // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
+                    this.emit('suggested_answer', honestFallback, question || extractedQuestion.latestQuestion || 'inferred', 0.9, generationId);
                     this.setMode('idle');
                     return honestFallback;
                 }
@@ -2736,7 +2746,16 @@ export class IntelligenceEngine extends EventEmitter {
                 });
             }
 
-            this.emit('suggested_answer', finalWtaAnswer, question || 'What to Answer', confidence);
+            // Phase 4 defense-in-depth (forensic-report §6b): the final emit now
+            // carries the same generationId the streaming token path already
+            // carries, so the renderer can drop a final answer belonging to a
+            // generation that has ALREADY been superseded by a newer one
+            // (same supersession guard as resolveLiveAnswerBatch on token
+            // batches). Older emit sites without a generationId continue to
+            // emit id-less and are always accepted downstream — backward
+            // compatible with all existing consumers (code-hint, brainstorm,
+            // legacy answerLLM, etc.).
+            this.emit('suggested_answer', finalWtaAnswer, question || 'What to Answer', confidence, generationId);
             try {
                 wtaTrace.setRouting({ source: 'what_to_answer', answerType: answerPlan.answerType });
                 wtaTrace.noteContext({ source: 'live_transcript', trustLevel: 'low', requested: true, retrieved: true, included: true, reason: 'wta_window' });
