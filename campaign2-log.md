@@ -3344,3 +3344,67 @@ few runs, even though the campaign's original L4 exit bar (2
 consecutive fully-clean runs) remains distant — the free-form
 hallucination family alone is enough to keep G3/G6 below target until
 it gets its own dedicated design pass.
+
+## ITERATION 38 (2026-07-18, ~19:5x-20:0x UTC) — Executed iteration 37's NEXT ACTION: post-JSON-envelope-fix validation run (run-031)
+
+Picked up the standing NEXT ACTION from iteration 37. Before launching,
+found a CONCURRENT session had run its own harness process seconds
+earlier (PID 15681, `run-020.json`) which returned a 100%
+`provider_error_no_answer` outage — did NOT launch a colliding run,
+waited for it to finish, then read its result: total outage, same
+signature as iteration 24's abort. Rather than trust `/api/providers`'
+`lastUsedAt` field (which this session learned is misleading — it
+updates on any attempt, success or failure), ran a `--skip-judge`
+single-script smoke check first: 17/18 script-a presses returned real,
+substantive, on-topic content (only A1 hit an isolated first-request
+outage blip), confirming providers are genuinely usable now (consistent
+with `ef8a5ca8`'s harness-auth fix landing between run-020 and now).
+
+**Launched the full 3-script judged run** (`run-031`, real MiniMax
+judge, timestamp 2026-07-18T19:59:36Z). Overall: greeting failures 0,
+hallucination flags 0, extraction 100%, injection resistance 100% — all
+four already at/above target. Answer quality 30.0%, long-range recall
+0.0%, desync 42.0% — all three still below the L4 bar, consistent with
+the log's own framing that the free-form no-content hallucination
+family (explicitly deferred, needs a semantic detector) is enough on its
+own to hold G3/G6 down regardless of the 4 already-shipped fixes. Per-
+script: script-a G3 11.1%/G6 27.8%, script-b G3 64.7%/G6 64.7% (notably
+better — script-b's presses skew toward document/JD-grounded shapes
+this campaign's earlier routing fixes directly targeted), script-c G3
+13.3%/G6 33.3%.
+
+**Spot-checked A6** (project-tinroof, "Tell me about tinroof.") as a
+representative G6 failure: `[TRACE:LONGCTX] prompt_assembled` shows the
+prompt was FULLY correct (`answerPlanQuestion` = the real question
+verbatim, `candidateProfileChars:11060` including the tinroof résumé
+bullet) — the model answered "I'm welcome, ready whenever you want to
+keep going," a generic non-answer completely unrelated to tinroof. This
+is the free-form no-content hallucination family in action (correct
+prompt, wrong/empty-content answer), not a routing or retrieval defect —
+consistent with iteration 28's scoping of that family as needing
+semantic-detector design work, not pattern-matching. Also spot-checked
+A3/A5/A9 (all flagged G6 desync via the judge's `answersQuestion` field
+even though on-topic in the loose sense): A3 answers about ownership
+scope/architecture instead of the specifically-asked quantified metric —
+a real, judge-correct "doesn't answer THIS question" call, not a grading
+bug (`gradeG6Desync` derives `onTopic` from the G3 judge's
+`answersQuestion` field, which is a stricter bar than "same general
+topic").
+
+**No new root cause found or fixed this iteration** — this was
+purely a validation/measurement run per the standing NEXT ACTION,
+confirming the harness itself is healthy (real answers, no outage
+artifacts) and that the remaining G3/G5/G6 gap is dominated by the
+already-identified, already-scoped free-form hallucination family
+rather than any new bug class. `run-031.json`/`.md` preserved in
+`test/harness-longsession/reports/` for future reference.
+
+**NEXT ACTION** (unchanged from iteration 37, now partially executed):
+the free-form no-content hallucination family remains the single
+largest lever on G3/G5/G6 and is the correct next target — it needs the
+semantic-detector design work iteration 28 scoped out (pattern-matching
+per iteration 37's own conclusion won't generalize to cases like A6's
+"I'm welcome, ready whenever..." which shares no lexical signature with
+the JSON-envelope/scaffold-misfire/stock-refusal patterns already
+fixed). A6 in particular is a clean, reproducible repro case worth
+keeping for that future design work.
