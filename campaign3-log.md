@@ -575,3 +575,42 @@ appears immediately.
 QUOTA (iteration 9, 2026-07-19 ~21:00 local): Acct1 72% session / 4%
 weekly. **Acct2 5% session / 71% weekly** (session dropped below 10%
 pause gate). Per §9 paused.
+
+### ITERATION 10 (2026-07-19) — SourceBadge end-to-end live wire (founder §2.6 complete)
+
+Completes the source-badge wiring started in iter8 (helper + matrix tests)
+and iter9 (IPC types + overlay render). The badge now appears on every
+WTA answer in the overlay.
+
+**Changes:**
+- `electron/IntelligenceEngine.ts`: the primary WTA emit site computes
+  the source label from the TurnPlan via `SourceBadge.computeSourceBadge()`
+  and passes it as a 6th `emit` arg. Backward-compatible (older
+  fallback emits don't compute it; renderer falls back to 'General
+  knowledge').
+- `electron/main.ts`: the `IntelligenceManager.on('suggested_answer')`
+  listener receives the optional 5th `sourceLabel` arg and forwards it
+  in the `intelligence-suggested-answer` IPC payload. Legacy emitters
+  that don't carry the label default to 'General knowledge'.
+- `electron/preload.ts`: `onIntelligenceSuggestedAnswer` callback type
+  accepts `sourceLabel?: string` (extended in iter9).
+
+**Results (regression check):**
+- Unit suites: **59/59** (no regression).
+- Micro-suite live: **5/5** (verified post-end-to-end-wiring).
+
+**Commit:** `66064557`.
+
+## NEXT ACTION (iteration 10 → 11):
+1. **Still deferring 40q+19q regression suites** — Acct1 weekly 4%
+   (below the 20% benchmark gate). Acct2 session recovered to 96% at
+   the session reset, but Acct1 weekly is the binding constraint.
+2. Optional polish: add a unit test that exercises the engine's
+   sourceLabel emission (verify computeSourceBadge is called with the
+   right inputs at line 2204) — would require mocking the emit. Code
+   work, no quota.
+3. The campaign is now exit-conditional for all items NOT blocked by
+   quota. The only remaining deferred items are the 40q grounding + 19q
+   thesis regression suites (founder §5) and the live 250ms Evidence
+   Probe wiring (founder §2.2 — matrix-tested, not live). Both are
+   clear iter-11+ targets once Acct1 weekly resets.
