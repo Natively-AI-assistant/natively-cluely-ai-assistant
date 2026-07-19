@@ -54,7 +54,8 @@ const ALL_FLAG_KEYS = [
   // isInternalDevTestContext() (FALSE under this bare node harness); the two
   // blocking flags default OFF everywhere.
   'contextOsEnabled', 'contextOsManualChatEnabled', 'contextOsWtaEnabled',
-  'contextOsRecapFollowupEnabled', 'contextOsEvidencePackEnabled', 'contextOsMemorySafetyEnabled',
+  'contextOsRecapFollowupEnabled', 'contextOsEvidencePackEnabled', 'contextOsMultiFamilyEvidenceEnabled',
+  'contextOsMemorySafetyEnabled',
   'contextOsEnforceSourceCapabilities', 'contextOsPropertyValidation',
 ];
 

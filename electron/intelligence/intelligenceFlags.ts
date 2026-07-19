@@ -167,6 +167,11 @@ export type IntelligenceFlagKey =
   | 'contextOsRecapFollowupEnabled'
   // Build + trace the typed EvidencePack alongside legacy retrieval.
   | 'contextOsEvidencePackEnabled'
+  // Extend the governed EvidencePack path (TurnEvidenceCoordinator multi-family
+  // pack) to EVERY profile/JD-bearing manual-chat turn, not just doc-grounded
+  // custom modes. Narrower gate on top of contextOsEvidencePackEnabled because
+  // its blast radius is larger (see ipcHandlers.ts "CONTEXT OS 2026-07-17").
+  | 'contextOsMultiFamilyEvidenceEnabled'
   // Memory safety: assistant-claim extraction + validated-claim reuse gates.
   | 'contextOsMemorySafetyEnabled'
   // Enforce capability-scoped retrieval (block, not just log, forbidden fetches).
@@ -330,6 +335,13 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   contextOsWtaEnabled: { env: 'NATIVELY_CONTEXT_OS_WTA', setting: 'contextOsWtaEnabled', default: isInternalDevTestContext },
   contextOsRecapFollowupEnabled: { env: 'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP', setting: 'contextOsRecapFollowupEnabled', default: isInternalDevTestContext },
   contextOsEvidencePackEnabled: { env: 'NATIVELY_CONTEXT_OS_EVIDENCE_PACK', setting: 'contextOsEvidencePackEnabled', default: isInternalDevTestContext },
+  // Wired into ipcHandlers.ts's manual-chat path (2026-07-17) but the flag
+  // registration was never landed, which broke `typecheck:electron` (and thus
+  // the packaged build). Same dev/test-ON, prod-OFF convention as its siblings:
+  // the coordinator path only ever REPLACES a raw-text injection with an
+  // equal-or-stricter governed pack and falls through to legacy on any failure,
+  // so prod stays OFF until telemetry validates the wider blast radius.
+  contextOsMultiFamilyEvidenceEnabled: { env: 'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE', setting: 'contextOsMultiFamilyEvidenceEnabled', default: isInternalDevTestContext },
   contextOsMemorySafetyEnabled: { env: 'NATIVELY_CONTEXT_OS_MEMORY_SAFETY', setting: 'contextOsMemorySafetyEnabled', default: isInternalDevTestContext },
   // Real-custom-mode-repair (2026-07-11), Phase 7: these two flags gate the
   // ONLY code paths that actually ACT on the kernel's decision (the
