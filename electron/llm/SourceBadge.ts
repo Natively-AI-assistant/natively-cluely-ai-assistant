@@ -1,0 +1,111 @@
+// electron/llm/SourceBadge.ts
+//
+// Campaign-3 (fix/answer-policy-engine, 2026-07-19, founder §2.6):
+// Source badge helper for the overlay. Every answer carries a visible
+// source label so the user can tell at a glance whether the model is
+// reading from their reference files, from the resume/JD, from a
+// combination, or from general knowledge.
+//
+// This module is PURE: no I/O, no IPC, no DOM. The renderer (overlay,
+// console) consumes the rendered string. The next live wiring step
+// (iter 8+) is to thread `sourceLabel` through the `emit('suggested_answer',
+// …)` signature and into `GeneratedSuggestion` in SuggestionOverlay.tsx.
+
+import type { TurnPlan } from './TurnPlanner';
+
+/** The label-string categories the overlay understands. */
+export type SourceLabel =
+  | 'From: Resume'
+  | 'From: Job description'
+  | 'From: Reference files'
+  | 'Mixed: Resume + Job description'
+  | 'Mixed: Resume + Reference files'
+  | 'Mixed: Job description + Reference files'
+  | 'General knowledge'
+  // Seminar mode (founder §2.3): off-document questions get this preamble
+  // instead of a refusal.
+  | 'Not in your reference files — from general knowledge:';
+
+export interface SourceBadgeInput {
+  /** The TurnPlan produced by `planTurn` for this turn (the source-of-truth). */
+  turnPlan?: Pick<TurnPlan, 'questionKind' | 'evidenceSourcesToProbe' | 'groundingProfile' | 'answerDirectives'> | null;
+  /** Whether the live evidence probe actually returned items (turn-time fact). */
+  evidenceFound?: boolean;
+  /** Optional override: an explicit label to force (e.g. when the renderer
+   *  is composing a different presentation). */
+  forceLabel?: SourceLabel;
+}
+
+/**
+ * Compute the source badge for an answer, per the behavior matrix:
+ *
+ *   profile_question + STRONG profile evidence      → 'From: Resume'
+ *   profile_question + NO profile + Seminar profile → 'Not in your reference files — from general knowledge:'
+ *   profile_question + NO profile + default         → 'General knowledge'
+ *   jd_question      + STRONG jd evidence           → 'From: Job description'
+ *   jd_question      + profile + jd evidence        → 'Mixed: Resume + Job description'
+ *   doc_question     + STRONG reference evidence    → 'From: Reference files'
+ *   coding_question + ANY                         → 'General knowledge'
+ *   general         + ANY                         → 'General knowledge'
+ *   seminar + off-doc                              → 'Not in your reference files — from general knowledge:'
+ *
+ * Falls back to `forceLabel` if provided (UI override).
+ */
+export function computeSourceBadge(input: SourceBadgeInput): SourceLabel {
+  if (input.forceLabel) return input.forceLabel;
+  const tp = input.turnPlan;
+  if (!tp) return 'General knowledge';
+
+  const evidenceFound = input.evidenceFound ?? false;
+  const seminar =
+    tp.groundingProfile?.onNoEvidence === 'say_not_found_then_answer_general';
+
+  // Seminar profile: off-doc questions get the not-in-files preamble even
+  // if the user didn't load any reference files.
+  if (seminar && !evidenceFound) {
+    return 'Not in your reference files — from general knowledge:';
+  }
+
+  switch (tp.questionKind) {
+    case 'profile_question':
+      // Single source vs mixed based on what was probed AND found.
+      const probed = new Set(tp.evidenceSourcesToProbe ?? []);
+      if (probed.has('profile_resume') && probed.has('profile_jd')) {
+        return evidenceFound ? 'Mixed: Resume + Job description' : 'General knowledge';
+      }
+      if (probed.has('profile_resume')) {
+        return evidenceFound ? 'From: Resume' : 'General knowledge';
+      }
+      return 'General knowledge';
+
+    case 'jd_question':
+      const probedJ = new Set(tp.evidenceSourcesToProbe ?? []);
+      if (probedJ.has('profile_jd') && probedJ.has('profile_resume')) {
+        return evidenceFound ? 'Mixed: Resume + Job description' : 'General knowledge';
+      }
+      if (probedJ.has('profile_jd')) {
+        return evidenceFound ? 'From: Job description' : 'General knowledge';
+      }
+      if (probedJ.has('reference_files')) {
+        return 'From: Reference files';
+      }
+      return 'General knowledge';
+
+    case 'doc_question':
+      return evidenceFound ? 'From: Reference files' : 'General knowledge';
+
+    case 'coding_question':
+    case 'general':
+    default:
+      return 'General knowledge';
+  }
+}
+
+/**
+ * Render the badge string for display in the overlay. Currently returns
+ * the label verbatim; future work can add styling tokens (e.g. a
+ * `color: 'green' | 'amber'` discriminator for "grounded" vs "general").
+ */
+export function renderSourceBadge(label: SourceLabel): string {
+  return label;
+}
