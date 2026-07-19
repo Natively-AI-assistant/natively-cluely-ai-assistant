@@ -461,3 +461,73 @@ weekly. Account2 19% session / 73% weekly. Acct1 weekly still well
 below the 20% benchmark gate; deferring the regression suites until
 reset. Iter 8 will ship source badges (UI polish) and write the final
 report scaffold.
+
+### ITERATION 8 (2026-07-19) — SourceBadge helper (founder §2.6) + final report scaffold (founder §8)
+
+Adds the source-badge layer (founder §2.6) without touching the IPC UI
+plumbing (that's the next iter step). Also writes `traces3/final-report.md`
+per founder §8.
+
+**SourceBadge (electron/llm/SourceBadge.ts):**
+- Pure helper that consumes a TurnPlan + `evidenceFound` boolean and
+  emits one of 7 label strings:
+    - `From: Resume`
+    - `From: Job description`
+    - `From: Reference files`
+    - `Mixed: Resume + Job description` (+ reference-files variants)
+    - `General knowledge`
+    - `Not in your reference files — from general knowledge:` (Seminar)
+- Covers the full behavior matrix: profile/jd/doc/coding/general ×
+  evidence-found × seminar-vs-default profile.
+- UI rendering is the next iter step — the helper is the source-of-truth
+  for the labels.
+
+**Tests (14 new cases):**
+- profile_question × STRONG profile evidence → "From: Resume"
+- profile_question × NO evidence × default → "General knowledge"
+- profile_question × profile+jd evidence → "Mixed: Resume + Job description"
+- jd_question × STRONG jd evidence → "From: Job description"
+- jd_question × reference_files probe → "From: Reference files"
+- doc_question × STRONG → "From: Reference files"
+- doc_question × NO → "General knowledge"
+- coding_question × ANY → "General knowledge" (no file-source ad)
+- general × ANY → "General knowledge"
+- seminar + off-document → "Not in your reference files — from general knowledge:"
+- seminar + strong ref-file evidence → "From: Reference files"
+- forceLabel override
+- null turnPlan → "General knowledge"
+- renderSourceBadge returns label verbatim
+
+**Final state (verified):**
+- Unit tests: **59/59 across 5 suites** (16 TurnPlanner + 14 matrix +
+  6 PromptBuilder + 14 SourceBadge + 9 Seminar).
+- Micro-suite live: **5/5** (regression-tested twice consecutively).
+- Zero hallucination flags, zero false refusals.
+
+**traces3/final-report.md** (founder §8):
+- Architecture diagram (TurnPlanner → Probe → Policy → Assembly → Badge).
+- BEFORE → AFTER micro-suite results table.
+- Unit test inventory.
+- Commits per fix (13 commits on the campaign branch).
+- Anti-thrash ledger.
+- Competitor-beating next steps.
+- Exit checklist (deferred items enumerated: 40q+19q regression suites,
+  live 250ms Evidence Probe wiring, overlay badge rendering).
+- "Remaining work" closing.
+
+**Commit:** (iter8 4-file commit).
+
+## NEXT ACTION (iteration 8 → 9):
+1. **Pause for quota** — Acct1 weekly 4%, Acct2 session 17%. Both below
+   the 20% benchmark gate per §9. Per the quota guard, do NOT run the
+   40q grounding or 19q thesis regression suites until Acct1 weekly
+   resets (resetAt 2026-07-23T23:59:59Z) AND Acct2 session ≥ 20%.
+2. **Wire SourceBadge into the IPC** — add `sourceLabel` parameter to
+   the existing `emit('suggested_answer', answer, question, confidence)`
+   signature (backward-compatible: optional 4th arg). Extend
+   `GeneratedSuggestion` interface in `SuggestionOverlay.tsx` to
+   include the label. Render as a small badge under the suggestion
+   card.
+3. **Once regression suites pass**: re-run the matrix suite in live
+   mode (it already has a unit-test equivalent; the live version
+   exercises the full Electron + backend stack).
