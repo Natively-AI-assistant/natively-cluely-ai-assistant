@@ -4253,3 +4253,226 @@ shape) and the C8 fabricated-transcript family (candidate: a stricter
 speaker tags) as separate, later iterations. loop2.md task #4 remains
 open; script-a/c's own failure population is now understood to be at
 least 3 further distinct sub-families, not one.
+
+---
+
+## ITERATION 48 (2026-07-19/20) — Confirmed the wiring already landed (commit `c65e1763`); found a pre-existing TDZ/scope bug blocking `tsc`, deferred (file actively mid-edit by Campaign 3)
+
+Picked up iteration 47's NEXT ACTION. Before acting, checked
+`electron/IntelligenceEngine.ts`'s current state: `git log` showed a
+NEWER commit, `c65e1763` ("fix(intelligence): close 2 HIGH findings on
+scaffold contamination guard"), already wiring
+`hasUnrecoveredScaffoldContamination` in exactly the shape iteration
+47's NEXT ACTION specified — plus a self-review pass that caught and
+fixed 2 real HIGH-severity issues on its own first draft: (1) doc-
+grounded answer types weren't excluded (mirroring the sibling answer-
+relevance guard's own `isDocGroundedAnswerType` precedent — a correct
+doc-grounded answer citing a source paper's own Approach/Complexity
+section names was tripping the guard and triggering a bare-question
+regeneration with zero retrieved evidence); (2) the
+`!scaffoldExtractionRecovered` skip assumed extracted text "would
+trivially fail the fingerprint gate anyway" — disproven live: Pattern
+A's trailing-`---` extraction only checks the tail's FIRST line isn't a
+scaffold heading, so a SECOND scaffold block further down the extracted
+tail would ship untouched; fixed by re-running the detector on the
+final `fullAnswer` even after a successful extraction. This work is
+fully committed — the wiring itself is DONE, not something this
+iteration needed to do.
+
+**While confirming this**, ran `npx tsc -p electron/tsconfig.json` to
+validate the committed state and found 4 real, pre-existing type
+errors, none caused by `c65e1763` or by this session:
+```
+electron/IntelligenceEngine.ts(1682,65): error TS2552: Cannot find name '_wtaHasProfile'.
+electron/IntelligenceEngine.ts(1683,60): error TS2304: Cannot find name '_wtaHasJd'.
+electron/IntelligenceEngine.ts(2212,30): error TS2304: Cannot find name '_c3TurnPlan'.
+electron/IntelligenceEngine.ts(2215,39): error TS2304: Cannot find name '_c3TurnPlan'.
+```
+Root-caused via `git blame` + manual scope-tracing: `_wtaHasProfile`/
+`_wtaHasJd` are declared `const` inside a `try` block starting ~line
+1500 that CLOSES at line 1634 (commit `ff2b09712`, Campaign 3's own
+"TurnPlanner as live WTA source-of-truth" work) — but referenced again
+at lines 1682-1683 inside a SEPARATE, later `try` block (starting
+~1648), where they are genuinely out of scope. This is the textbook
+same bug class the file's OWN adjacent comment already fixed once for
+a sibling variable (`_wtaPlan` was deliberately redeclared with `var`
+specifically "so the reference survives the try/catch scope" after an
+earlier `const` version caused a silent-catch ReferenceError) — just
+not applied to these two variables. Confirmed via `git stash` bisection
+that this is NOT caused by Campaign 3's currently-uncommitted live edit
+(same 2 errors reproduce against the clean committed `c65e1763` state
+with the live diff stashed out) — it is a genuine defect already in
+the repository, most likely introduced by `ff2b09712` itself and never
+caught because whatever build/test path that iteration validated with
+didn't run a full `tsc` pass against this exact file.
+
+**Not fixed this iteration** — `electron/IntelligenceEngine.ts` showed
+`M` (actively modified, uncommitted) in `git status` at the time of
+this check: Campaign 3 is live-editing this exact file right now (their
+diff adds a `_c3SourceLabel` source-badge computation that itself
+references `_c3TurnPlan`, i.e. their current work is downstream of and
+depends on the very code containing this bug). Per this session's own
+standing rule (iterations 45-46: never edit `IntelligenceEngine.ts`
+while it's dirty from Campaign 3's concurrent work — doing so once
+already produced a contaminated, unattributable result that had to be
+reverted), did not touch the file. The TDZ/scope fix itself would be a
+minimal, mechanical change (redeclare `_wtaHasProfile`/`_wtaHasJd` with
+`var` instead of `const`, exactly mirroring the existing `_wtaPlan`
+precedent 5 lines above them) — flagging it here rather than
+attempting it blind against a moving target.
+
+**No harness run attempted this iteration** — a `tsc` failure this
+severe (4 compile errors in the exact file every WTA press routes
+through) means any dist build attempted right now would either fail
+outright or run against a stale/wrong compiled artifact, producing
+uninterpretable benchmark results. Fixing (or waiting for Campaign 3 to
+fix, since it's their in-progress edit) this TDZ bug is a hard
+prerequisite for any further live verification.
+
+**NEXT ACTION**: (1) once `IntelligenceEngine.ts` is clean again (fully
+committed by whichever session — Campaign 2 or Campaign 3 — gets there
+first), apply the minimal `const`→`var` fix for `_wtaHasProfile`/
+`_wtaHasJd` (mirroring the adjacent `_wtaPlan` precedent) and confirm
+`tsc -p electron/tsconfig.json` is clean; (2) THEN wire/verify
+`hasUnrecoveredScaffoldContamination`'s already-landed integration
+(`c65e1763`) actually recovers the A4/A5/C9 scaffold-contamination
+repro cases from iteration 47 via a fresh script-a/script-c run; (3)
+separately, the A13/A14 template-leak family and C8 fabricated-
+transcript family from iteration 47 remain open and un-investigated
+this iteration.
+
+---
+
+## ITERATION 49 (2026-07-19/20) — Fixed the TDZ/scope bug (commit pending); confirmed `hasUnrecoveredScaffoldContamination` wiring works; identified 2 pre-existing, unrelated environment failures
+
+`electron/IntelligenceEngine.ts` became clean (`git status`) after
+Campaign 3 committed `66064557`/`7ba95411` (SourceBadge end-to-end,
+then paused for quota). Executed iteration 48's NEXT ACTION exactly as
+planned.
+
+**Fix applied**: changed `_wtaHasProfile`, `_wtaHasJd` (line ~1507-1508)
+and `_c3TurnPlan` (line ~1685) from `const`/`let` to `var`, mirroring
+the file's own adjacent `_wtaPlan` precedent exactly (same bug class,
+same fix shape, already proven safe in this exact file). `tsc -p
+electron/tsconfig.json` now passes clean — all 4 prior errors (2×
+TS2552/TS2304 on `_wtaHasProfile`/`_wtaHasJd`, 2× TS2304 on
+`_c3TurnPlan`) resolved. This also means Campaign 3's SourceBadge
+feature (`_c3SourceLabel`, which reads `_c3TurnPlan`) now actually
+receives a real TurnPlan instead of silently falling back to 'General
+knowledge' every time — a real functional fix for their feature as a
+side effect, not just a type-error cleanup.
+
+**Verification — the actual target of iteration 48's NEXT ACTION**: ran
+`electron/services/__tests__/IntelligenceEngineScaffoldContaminationFallback.test.mjs`
+in isolation (10/10 pass): confirms `hasUnrecoveredScaffoldContamination`
+IS correctly wired and fires the bounded-regeneration repair exactly as
+designed — a scaffold-contaminated answer gets regenerated into a clean
+one, a real unscaffolded answer is never touched, the doc-grounded
+exclusion holds, a stale-generation repair never overwrites session
+history, and (the 2 HIGH review catches from `c65e1763`) both the doc-
+grounded false-positive guard and the "re-check after extraction"
+second-scaffold-block case pass. This closes out the "not yet wired"
+status from iteration 47 — it was already wired by a concurrent
+session between this session's iterations 47 and 48; this iteration
+independently confirmed it via the pre-existing test suite rather than
+taking the commit message's word for it.
+
+**Broader regression sweep**: ran all 49 test files across this
+repository that reference `IntelligenceEngine` (batched, bounded
+timeouts to work around a known Node `--test` + worker_threads process-
+exit hang — see below). Result: 219 real pass marks, 24 fail marks
+across 2 DISTINCT root causes, BOTH confirmed pre-existing (via git-
+stash bisection against the clean `var`-fixed state) and BOTH entirely
+unrelated to this iteration's fix:
+
+1. **22 failures — `electron/rag/__tests__/KnowledgeReembedIntegration.test.mjs`**:
+   `better-sqlite3`'s compiled native binary
+   (`node_modules/better-sqlite3/build/Release/better_sqlite3.node`) was
+   built against `NODE_MODULE_VERSION 148`, but the system `node`
+   (v25.9.0, `/opt/homebrew/bin/node`) used to run these tests requires
+   `NODE_MODULE_VERSION 141` — a classic Electron-vs-system-Node native-
+   module ABI mismatch, not a code defect. `ERR_DLOPEN_FAILED` on every
+   test in that file that touches the real DB. Confirmed pre-existing
+   and unrelated to this session's fix (the file doesn't even import
+   `IntelligenceEngine.ts`). Out of scope to fix here (would need
+   `npm run rebuild:native` from a matching Node/Electron ABI, a build-
+   tooling change, not a source fix).
+
+2. **1 real failure (+1 duplicate suite-level marker) —
+   `IntelligenceEngineAnswerRelevance.test.mjs`**: "a free-form no-
+   content hallucination with no shared vocabulary is regenerated into
+   a real answer" — the guard's regeneration never fires; the answer
+   stays as the raw hallucination. Iteration 41's log claims 10/10 for
+   this exact file, so this looked like a real regression at first.
+   Root-caused: this test explicitly runs the REAL compiled zero-shot
+   NLI classifier (`checkAnswerRelevance` → `IntentClassifier.ts`'s
+   `classifyZeroShotRaw` → the same `Xenova/mobilebert-uncased-mnli`
+   ONNX asset seen failing to load throughout this iteration's other
+   test runs: `[IntentClassifier] Failed to load zero-shot worker
+   model... Load model from .../onnx/model.onnx
+   failed:Protobuf parsing failed`, `[ProviderStatus] intent-classifier
+   missing_required_asset`). With the classifier unable to load, the
+   answer-relevance guard's confidence check falls through to the
+   regex-only fallback and the guard never scores this as a hallucination
+   to regenerate, so the raw text ships unchanged. Confirmed pre-
+   existing via stash-bisection (identical 9/10-pass/1-fail result with
+   the TDZ fix stashed out). The `.onnx` file itself is present
+   (57MB, genuine protobuf header bytes — not a git-lfs pointer stub)
+   but fails to parse — likely a corrupted/truncated local asset from a
+   prior download, unrelated to any code in this repo. Out of scope to
+   fix (an asset-repair/reinstall issue, exactly what the app's own
+   `[ProviderStatus]` message already tells a real user: "Natively local
+   classifier assets are missing or corrupted. Please reinstall
+   Natively.").
+
+**Process note**: the naive `node --test <49 files>` invocation with
+default (unlimited) concurrency appeared to hang indefinitely — root-
+caused to Node's `--test-isolation=process` spawning up to 58
+concurrent child processes, many independently trying to load the same
+large ONNX asset/worker thread, plausibly contending on shared
+resources. Splitting into small batches with `--test-concurrency=1` and
+an explicit outer bash-level timeout+kill resolved this; even then,
+several individual files (any test file that imports the real
+`IntentClassifier.ts`, e.g. `IntentClassifierStackWordBoundary2026_07_19.test.mjs`,
+`IntelligenceEngineScaffoldContaminationFallback.test.mjs`) print all
+their checkmarks correctly and then hang on process exit — a known
+Node `--test` + un-`unref`'d worker_threads interaction (the file
+`IntelligenceEngineAnswerRelevance.test.mjs` itself has a doc comment
+acknowledging this exact pattern and works around it with a manual
+`process.exit(0)` in an `after()` hook; other files lack that
+workaround). Verified this is a process-exit artifact, not a silent
+test failure, by re-running the affected files individually with a
+15-55s external timeout+kill and confirming every visible checkmark is
+green before the hang.
+
+**NOT investigated this iteration**: the A13/A14 template-leak family
+(candidate: re-enable/recalibrate `answerRelevanceGuardLive` — now
+additionally blocked by the SAME broken ONNX asset found above, so
+recalibration is impossible until that asset is repaired) and the C8
+fabricated-transcript family from iteration 47 remain open. Partial
+progress on C8: read its full `G3_judge` reason from `run-039.json`
+(cites `## Approach`/`## Technique`/dry-run-section leakage alongside
+fabricated `[APPLICANT]`/`[ASSISTANT]` stage directions) — this
+strongly suggests C8's run-039 sample DOES carry a real coding-scaffold
+fingerprint (matching `CODING_SCAFFOLD_UNIQUE_HEADING_RE` via "##
+Technique") and would likely already be caught by
+`hasUnrecoveredScaffoldContamination`, contradicting that function's
+own doc comment (which describes an EARLIER, different C8 repro with
+"no coding fingerprint at all"). Could not conclusively confirm without
+the full raw answer text — the trace dump file
+(`traces2/harness-script-c-press-C8.txt`) only stores a truncated
+~300-char preview, not the full answer. This should be re-checked with
+a fresh live run once the ONNX asset issue is resolved and a fresh C8
+repro (with full trace capture) is available.
+
+**NEXT ACTION**: (1) launch a fresh script-a/script-c run to confirm
+`hasUnrecoveredScaffoldContamination`'s wiring recovers real A4/A5/C9-
+shaped live repros (the isolated unit/integration test already proves
+the mechanism works; a live run proves it fires on real model output);
+(2) separately and lower-priority, investigate repairing the corrupted
+`Xenova/mobilebert-uncased-mnli` ONNX asset (`npm` script or model
+re-download) — this single broken asset is now blocking BOTH the
+`answerRelevanceGuardLive` recalibration path AND silently degrading
+this session's own zero-shot-classifier-dependent tests to regex-only
+fallback, a broader blast radius than previously understood; (3) the
+A13/A14 and C8 families remain open per iteration 47/48.

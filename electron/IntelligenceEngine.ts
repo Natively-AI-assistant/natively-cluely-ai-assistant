@@ -1504,8 +1504,20 @@ export class IntelligenceEngine extends EventEmitter {
                 const { buildTurnContractIfEnabled, allowsEvidence: coAllowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
                 const _wtaQ = extractedQuestion.latestQuestion || lastInterviewerTurn || '';
                 const _wtaOrchForAvail = this.llmHelper.getKnowledgeOrchestrator?.();
-                const _wtaHasProfile = Boolean((_wtaOrchForAvail as any)?.activeResume?.structured_data);
-                const _wtaHasJd = Boolean((_wtaOrchForAvail as any)?.activeJD?.structured_data);
+                // Grounding-campaign2 fix (2026-07-20): these two were `const`
+                // — block-scoped to THIS try block (closes below) — but are
+                // referenced again from a later, separate try block (~line
+                // 1682-1683's `_c3HasProfile`/`_c3HasJd` recompute) and that
+                // reference threw ReferenceError, silently caught by the
+                // (() => { try {...} catch { return false; } })() wrapper
+                // there, always resolving to `false`. Confirmed via `tsc`:
+                // TS2552/TS2304 on both names at their later use site. Same
+                // exact bug class the adjacent `_wtaPlan` comment below
+                // already fixed once (also originally `const`, causing an
+                // identical silent-catch failure) — applying the same `var`
+                // fix (function-scoped, survives past this try block) here.
+                var _wtaHasProfile = Boolean((_wtaOrchForAvail as any)?.activeResume?.structured_data);
+                var _wtaHasJd = Boolean((_wtaOrchForAvail as any)?.activeJD?.structured_data);
                 // Campaign-3 (2026-07-19): declared with `var` so the reference survives the
                 // try/catch scope (my JIT block at line ~1635 consults _wtaPlan.answerType
                 // to widen the manual-evidence gate to jd_summary / jd_fact / etc. — the
@@ -1682,7 +1694,19 @@ export class IntelligenceEngine extends EventEmitter {
                     const _c3HasProfile = (() => { try { return _wtaHasProfile; } catch { return false; } })();
                     const _c3HasJd = (() => { try { return _wtaHasJd; } catch { return false; } })();
                     const _c3HasRefFiles = (() => { try { return Boolean((snapshotModeInfo as any)?.hasReferenceFiles); } catch { return false; } })();
-                    let _c3TurnPlan: any = null;
+                    // Grounding-campaign2 fix (2026-07-20): was `let` — block-
+                    // scoped to this try block — but the SourceBadge emit site
+                    // ~500 lines below (`_c3SourceLabel`) references
+                    // `_c3TurnPlan` believing the comment there ("computed
+                    // above in the same try block") was accurate; it isn't —
+                    // that's a different try block entirely. `tsc` caught this
+                    // as TS2304 (undefined name) at the emit site, meaning the
+                    // SourceBadge feature always fell back to 'General
+                    // knowledge' regardless of the real TurnPlan. `var` makes
+                    // this function-scoped so both use sites see the same
+                    // value, mirroring the identical fix just applied to
+                    // `_wtaHasProfile`/`_wtaHasJd` above.
+                    var _c3TurnPlan: any = null;
                     try {
                         const { planTurn } = await import('./llm/TurnPlanner');
                         _c3TurnPlan = planTurn({
