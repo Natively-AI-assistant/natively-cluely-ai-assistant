@@ -174,7 +174,22 @@ export type IntelligenceFlagKey =
   // Property-aware evidence validation gates generation (refuse on mismatch).
   | 'contextOsPropertyValidation'
   // Coordinate evidence from multiple explicitly-authorized source families.
-  | 'contextOsMultiFamilyEvidenceEnabled';
+  | 'contextOsMultiFamilyEvidenceEnabled'
+  // ── Answer-relevance semantic guard (campaign2 longsession, 2026-07-19) ──
+  // Live-fires ONE bounded regeneration when a local zero-shot NLI check
+  // (AnswerRelevanceChecker.ts) flags an answer as not addressing the
+  // question — targets the free-form no-content-hallucination family. Default
+  // OFF (observe-only): validation run-032 found the classifier's confidence
+  // scores for REAL, on-topic answers in the live multi-turn transcript
+  // context (observed range ~0.0002-0.09) overlap almost entirely with the
+  // synthetic single-turn tuning corpus's known-bad range (~0.0-0.224) — no
+  // threshold separates them on real traffic, and a live-reproduced case
+  // (press A1, run-032) showed the guard actively made a correct answer
+  // WORSE by regenerating it. When OFF, `checkAnswerRelevance` still runs and
+  // its verdict is still traced (`answer_relevance_discard`/`_would_fire`)
+  // so real production score distributions can be collected before this is
+  // re-enabled — mirrors the `ragConfidenceGate` observe-only precedent.
+  | 'answerRelevanceGuardLive';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -367,6 +382,14 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   contextOsEnforceSourceCapabilities: { env: 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES', setting: 'contextOsEnforceSourceCapabilitiesEnabled', default: isInternalDevTestContext },
   contextOsPropertyValidation: { env: 'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION', setting: 'contextOsPropertyValidationEnabled', default: isInternalDevTestContext },
   contextOsMultiFamilyEvidenceEnabled: { env: 'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE', setting: 'contextOsMultiFamilyEvidenceEnabled', default: isInternalDevTestContext },
+  // Default false (not isInternalDevTestContext) even in dev/test — unlike
+  // the Context OS flags above, this one's live-fire behavior was PROVEN to
+  // regress real answers in run-032 (see the flag's doc comment). Dev/test
+  // should observe the same off-by-default state as production until the
+  // classifier is recalibrated against real traffic; it must not be
+  // silently exercised by every dev-context test run the way the Context OS
+  // rollout flags intentionally are.
+  answerRelevanceGuardLive: { env: 'NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE', setting: 'answerRelevanceGuardLiveEnabled', default: false },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);
