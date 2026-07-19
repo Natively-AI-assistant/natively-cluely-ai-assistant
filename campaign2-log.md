@@ -3622,3 +3622,106 @@ the new `answer_relevance_discard`/`answer_relevance_regenerated`/
 health-check/judged-run loop per loop2.md; task #4 ("run full 3-script
 benchmark + iterate to green") remains the campaign's still-open root
 task this fix is in service of.
+
+## ITERATION 41 (2026-07-19) — Validation run-032 caught a REAL regression from iteration 40's guard; flag-gated OFF (commit `b89cc1d9`)
+
+Executed iteration 40's own NEXT ACTION and, exactly as R5/L5 demand,
+did not conclude success without evidence. The validation run (real
+`natively-api`/MiniMax-M3 backend, full A/B/C harness) surfaced a
+genuine, live-reproduced defect in the guard shipped last iteration —
+this is the campaign's discipline working as intended, not a failure
+of process.
+
+**What the run showed**: run-032's overall scorecard (hallucination
+flags=2, answer quality=38.0%, desync=44.0%) looked WORSE than the
+prior baseline run-031 (hallucination flags=0, answer quality=30.0%,
+desync=42.0%) on the surface, but the real signal was in the guard's
+own trace lines: `answer_relevance_discard` fired 14 times, and
+cross-referencing before/after per-press G3 scores (via
+`test/harness-longsession/reports/run-031.json` vs `run-032.json`)
+found press **A1 (self-intro)** went from BEFORE `missing: ["10
+years"]` (2/3 required facts present) to AFTER `missing: ["Stripe",
+"Staff Software Engineer", "10 years"]` (0/3 — every fact lost). The
+guard flagged a genuinely correct answer ("I'm Marcus, a Staff
+Software Engineer (L6) at Stripe...") at confidence 0.037, regenerated
+it, and the regeneration was a strictly worse, generic answer.
+
+**Root cause #1 (fixed)**: the repair prompt built in
+`IntelligenceEngine.ts`'s answer-relevance guard had NO
+`candidate_facts` block at all — unlike the sibling profile-repair
+prompt (a few hundred lines above in the same file), which always
+includes `candidateProfile`. Without any facts to draw from, a
+regeneration has nothing to ground the answer in and produces a
+plausible-sounding but content-free rewrite. Fixed by threading
+`candidateProfile` into the repair prompt via the exact same
+`<candidate_facts trust="user_uploaded_data" data_only="true">` XML
+shape the profile-repair block already uses.
+
+**Root cause #2 (deeper, not fully fixable this iteration)**: pulled
+every `confidence` value logged during the run and found the
+classifier's score distribution for REAL, on-topic answers in the live
+multi-turn transcript context (observed range **0.0002 to 0.09**
+across 14 flagged presses, several of them genuinely good answers)
+overlaps almost entirely with iteration 40's own synthetic tuning
+corpus's KNOWN-BAD range (0.0 to 0.224). The 16-example isolated
+tuning corpus (single-turn Q&A pairs, no real transcript noise, no
+long conversational answers) does not transfer to the live path's
+actual traffic shape — extracted questions are longer/messier
+(`"to meet you. to start, could you give us a quick
+self-introduction?"` — a truncated mid-sentence fragment from
+`extractLatestQuestion`), and real answers are longer and more
+conversational than the synthetic corpus's answers. This is a
+transfer-gap problem in the classifier's calibration, not a threshold
+tuning issue — no single threshold in the 0-1 range can separate these
+overlapping live distributions with the current hypothesis-template
+framing.
+
+**Decision**: rather than attempt a rushed re-tuning against a still-
+incomplete picture of live traffic (this session's own established
+discipline: "no 'fixed/working/done' claims without a green run-NNN
+report," and a partial fix risks shipping ANOTHER live regression),
+flag-gated the guard's live-fire (regeneration/mutation) behavior
+behind a new `answerRelevanceGuardLive` intelligence flag, **default
+OFF everywhere including dev/test** — mirroring the existing
+`ragConfidenceGate` observe-only precedent in the same file
+(`intelligenceFlags.ts`). When OFF: `checkAnswerRelevance` still runs
+and its verdict is still traced (`answer_relevance_observe_only`) so
+real production score distributions keep accumulating for a future
+recalibration pass, but `fullAnswer`/session history are NEVER
+mutated. This is the honest, safe default until either (a) enough real
+telemetry justifies a properly-separated threshold, or (b) a different
+hypothesis-template/classifier design is found that transfers better
+to live multi-turn traffic.
+
+**Verification**: rewrote the integration test suite
+(`IntelligenceEngineAnswerRelevance.test.mjs`) into two `describe`
+blocks mirroring `ModeRetrievalConfidence.test.mjs`'s flag-testing
+pattern — flag OFF (2 tests: hallucination NOT regenerated, real
+answer untouched) and flag ON via `NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE=1`
+(8 tests: all of iteration 40's original regeneration/leak-rejection/
+generation-supersession/exclusion coverage, unchanged). 10/10 pass. Unit
+tests (`AnswerRelevanceChecker.test.mjs`, unaffected by the flag since
+it tests the pure function directly) 6/6 pass. Sibling guard suite
+(`IntelligenceEngineFalseNoContentClaim.test.mjs`) re-verified 10/10
+clean.
+
+**Anti-thrash note (R2)**: this is NOT a returning symptom of a
+previously-pinned root cause — it's a NEW defect in a fix shipped this
+same session, caught before the fix's own author (me) declared success,
+which is exactly what R5/L5 are designed to prevent from reaching a
+"done" claim. Logging honestly per this session's established
+reporting discipline rather than quietly re-tuning and re-claiming
+success without a second green run.
+
+**NEXT ACTION**: with the guard now safely observe-only, launch another
+full validation run to confirm (a) the overall scorecard returns to
+baseline parity with run-031 (hallucination flags=0, no new regressions
+from the observe-only telemetry path itself), and (b) collect a larger
+real-traffic sample of `answer_relevance_observe_only` trace lines
+across more presses to characterize the live score distribution before
+attempting any recalibration. The free-form no-content-hallucination
+family itself remains UNFIXED in production (the guard exists but is
+inert by default) — this is now the campaign's most honest open item:
+task #4 ("run full 3-script benchmark + iterate to green") is still
+blocked on either recalibrating this guard or finding a different
+approach to this family.
