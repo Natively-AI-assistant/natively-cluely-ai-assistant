@@ -520,6 +520,48 @@ export const detectAndExtractScaffoldMisfire = (answerType: AnswerType, answer: 
   return null;
 };
 
+/**
+ * Detection-only signal for scaffold contamination detectAndExtractScaffoldMisfire
+ * could not cleanly recover from (campaign2 longsession run-039 script-a/c
+ * investigation, 2026-07-19): presses A4/A5/C9 all carry the same coding-
+ * scaffold fingerprint (a "Technique / Data Structure / Algorithm Used"
+ * heading and/or O(...)/complexity notation) as every case
+ * detectAndExtractScaffoldMisfire already handles, but the real content sits
+ * under a heading NONE of that function's extraction patterns recognize
+ * (e.g. A5's "## STAR story, Long-Tail aggregation at Datadog" — a model-
+ * invented heading, not one of the fixed scaffold/answer labels) — so
+ * extraction returns null even though the contamination is real and severe
+ * (G3 judge on all three: answersQuestion=false, noMetaTalk=false, reason
+ * cites literal "## Approach" / meta-commentary leakage). A 5th sample from
+ * the same investigation (C8) is a different shape entirely — a fabricated
+ * multi-turn [INTERVIEWER]/[APPLICANT]/[ASSISTANT] transcript ending in the
+ * exact isNonAnswerSentinel string, with no coding fingerprint at all — NOT
+ * covered by this detector (that shape has no scaffold heading to key off
+ * of; it needs a different signal, and already partially has one: it ends in
+ * the sentinel string IntelligenceEngine.isNonAnswerSentinel independently
+ * catches).
+ *
+ * With only 5 real repros already surfacing 3+ distinct heading shapes,
+ * hand-rolling a 4th/5th/Nth extraction pattern per new shape does not
+ * generalize — the same lesson already learned building the answer-
+ * relevance guard (see its own doc comment on phrase-matching not
+ * generalizing). This function intentionally does NOT attempt extraction;
+ * it only answers "is this text scaffold-contaminated AND did surgical
+ * extraction already fail on it" so a caller can fall back to a bounded
+ * regeneration (the same repair mechanics the answer-relevance guard and
+ * profile-repair guard already use) instead of either shipping the raw
+ * scaffold-and-meta-commentary text or attempting a brittle new regex.
+ */
+export const hasUnrecoveredScaffoldContamination = (answerType: AnswerType, answer: string): boolean => {
+  if (isCodingType(answerType)) return false;
+  const text = String(answer || '');
+  if (!text.trim()) return false;
+  const headingMatches = [...text.matchAll(new RegExp(SCAFFOLD_MISFIRE_HEADING_RE.source, 'gim'))];
+  if (headingMatches.length < 2) return false;
+  if (!hasCodingScaffoldFingerprint(text)) return false;
+  return detectAndExtractScaffoldMisfire(answerType, text) === null;
+};
+
 export const validateAnswerStructure = (
   answerType: AnswerType,
   answer: string,
