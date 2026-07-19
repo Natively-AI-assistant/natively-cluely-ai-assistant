@@ -51,6 +51,7 @@ import { profileInterceptAllowedByRoute, modeAnswerType, type StreamRouteOptions
 import type { ActiveModeDocumentGroundingInfo } from "./services/ModesManager"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
 import { deepVariableReplacer, getByPath, injectImageIntoMessages } from './utils/curlUtils';
+import { getImageOptimizer } from './services/screen/ImageOptimizer';
 import curl2Json from "@bany/curl-to-json";
 import { CustomProvider, CurlProvider } from './services/CredentialsManager';
 import { TRIAL_SENTINEL_KEY } from './config/constants';
@@ -3331,13 +3332,33 @@ const isMultimodal = !!(imagePaths?.length);
     const requestConfig = curl2Json(curlCommand);
 
     // 2. Prepare Image (if any)
+    //
+    // 2026-07-19 Custom Provider HTTP 400 fix: route the screenshot through
+    // getImageOptimizer() so retina-sized PNGs (often 3-15 MB → 4-20 MB after
+    // base64) get resized to <=1280px and recompressed as JPEG q85 with a 3.5
+    // MB cap. Anthropic rejects images larger than 10 MB base64-encoded, and
+    // OpenRouter forwards that rejection as a 400. Falls back to the raw read
+    // on optimizer failure so a Sharp crash never blocks a vision request.
     let base64Image = "";
     if (imagePath) {
       try {
-        const imageData = await fs.promises.readFile(imagePath);
-        base64Image = imageData.toString("base64");
+        const optimized = await getImageOptimizer().optimize(imagePath, {
+          profile: 'balanced',
+          provider: 'custom',
+          cacheKey: imagePath,
+        });
+        base64Image = await getImageOptimizer().getBase64(optimized);
       } catch (e) {
-        console.warn("Failed to read image for Custom Provider:", e);
+        console.warn(
+          "[LLMHelper] executeCustomProvider: image optimization failed, falling back to raw read:",
+          e,
+        );
+        try {
+          const imageData = await fs.promises.readFile(imagePath);
+          base64Image = imageData.toString("base64");
+        } catch (e2) {
+          console.warn("Failed to read image for Custom Provider:", e2);
+        }
       }
     }
 
@@ -6806,10 +6827,27 @@ const isMultimodal = !!(imagePaths?.length);
     let base64Image = "";
     if (imagePaths?.length) {
       try {
-        // Use the first image for custom providers (they typically only support one)
-        const data = await fs.promises.readFile(imagePaths[0]);
-        base64Image = data.toString("base64");
-      } catch (e) { }
+        // 2026-07-19: same image-size fix as executeCustomProvider (see that
+        // method for the full rationale). Optimize before base64-encoding so the
+        // wire payload stays under the 10 MB Anthropic per-image limit.
+        // Use the first image for custom providers (they typically only support one).
+        const sourcePath = imagePaths[0];
+        const optimized = await getImageOptimizer().optimize(sourcePath, {
+          profile: 'balanced',
+          provider: 'custom',
+          cacheKey: sourcePath,
+        });
+        base64Image = await getImageOptimizer().getBase64(optimized);
+      } catch (e) {
+        console.warn(
+          "[LLMHelper] streamWithCustom: image optimization failed, falling back to raw read:",
+          e,
+        );
+        try {
+          const data = await fs.promises.readFile(imagePaths[0]);
+          base64Image = data.toString("base64");
+        } catch (e2) { /* keep empty */ }
+      }
     }
 
     const combinedMessage = context ? `${context}\n\n${message}` : message;
