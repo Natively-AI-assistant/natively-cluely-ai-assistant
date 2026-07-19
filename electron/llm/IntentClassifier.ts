@@ -390,6 +390,41 @@ class ZeroShotClassifier {
     }
 
     /**
+     * Campaign 2 longsession (2026-07-19): low-level raw zero-shot
+     * classification, reusing this SAME singleton's worker/ONNX session
+     * (and all its poison-sentinel/memory-gate/retry resilience machinery)
+     * for a DIFFERENT classification task than intent detection — a single
+     * arbitrary candidate label with a caller-supplied `hypothesisTemplate`.
+     * Used by AnswerRelevanceChecker to check "does this answer entail
+     * addressing this question" without spinning up a second ONNX session.
+     * Returns null (never throws, never blocks) exactly like `classify()`
+     * on any load/inference failure — the caller must treat null as
+     * "check unavailable, do not gate on it" the same way `classifyIntent`
+     * already falls through to its own next tier when this returns null.
+     */
+    async classifyRaw(text: string, labels: string[], hypothesisTemplate?: string): Promise<{ topLabel: string; topScore: number } | null> {
+        await this.ensureLoaded();
+        if (!this.loaded) return null;
+
+        try {
+            const result = await this.postToWorker<{ labels?: string[]; scores?: number[] }>({
+                type: 'classify',
+                text,
+                labels,
+                hypothesisTemplate,
+                ...this.workerConfig(),
+            });
+            const topLabel = result.labels?.[0];
+            const topScore = result.scores?.[0];
+            if (!topLabel || typeof topScore !== 'number') return null;
+            return { topLabel, topScore };
+        } catch (e) {
+            console.warn('[IntentClassifier] Raw zero-shot classification error:', e);
+            return null;
+        }
+    }
+
+    /**
      * Warm up the model in background (non-blocking).
      * Call this early in app lifecycle to avoid cold-start latency.
      */
@@ -626,4 +661,24 @@ export function clearIntentClassifierPoison(): void {
  */
 export function isIntentClassifierPoisoned(): boolean {
     return startupPoisoned;
+}
+
+/**
+ * Campaign 2 longsession (2026-07-19): public entry point for a raw
+ * zero-shot classification against the SAME shared worker/ONNX session
+ * this module already loads for intent classification, but for an
+ * arbitrary single label + custom hypothesis template rather than the
+ * fixed `ZERO_SHOT_LABEL_KEYS` intent set. See `AnswerRelevanceChecker.ts`
+ * for the concrete use (answer-relevance entailment checking). Returns
+ * null when the classifier isn't loaded/available or classification
+ * fails — callers MUST treat null as "skip this check", never as a
+ * negative/failing verdict.
+ */
+export async function classifyZeroShotRaw(
+    text: string,
+    labels: string[],
+    hypothesisTemplate?: string,
+): Promise<{ topLabel: string; topScore: number } | null> {
+    if (startupPoisoned) return null;
+    return ZeroShotClassifier.getInstance().classifyRaw(text, labels, hypothesisTemplate);
 }

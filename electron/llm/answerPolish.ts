@@ -195,6 +195,43 @@ export function isLeakedInternalTagBlock(text: string): boolean {
   return true;
 }
 
+/**
+ * Whole-answer artifact re-validation for a REGENERATED repair candidate.
+ *
+ * Found 2026-07-19 while independently reviewing the (uncommitted, in-flight
+ * at the time) answer-relevance guard: `IntelligenceEngine.ts` has THREE
+ * distinct repair sites (profile-repair, doc-grounded repair, answer-
+ * relevance repair) that each run ONE bounded LLM regeneration and accept
+ * `repairedTrim` into `fullAnswer` after checking ONLY their own domain-
+ * specific validator (`validateProfileEvidence`, `validateDocumentGroundedAnswer`,
+ * `checkAnswerRelevance` respectively) — none of them re-run the whole-answer
+ * artifact guards (`isLeakedSchemaStub`/`isLeakedJsonEnvelope`/
+ * `isLeakedInternalTagBlock`) that DO run on the ORIGINAL `fullAnswer` earlier
+ * in the same method. Live-reproduced the gap: a synthetic repro of run-023
+ * press A7's exact fabricated "Vaibhav Singh" resume-leak text scores
+ * `relevant: true` (confidence 0.76) from `checkAnswerRelevance` against a
+ * Datadog-protocol question — the leaked block happens to mention enough
+ * plausible technical-sounding content that the semantic relevance check
+ * cannot tell it apart from a real answer, even though
+ * `isLeakedInternalTagBlock` correctly flags it. Since a repair prompt is
+ * itself the SAME shape (`<rewrite_instructions>...</rewrite_instructions>`)
+ * that has ALREADY been observed leaking back verbatim in this exact
+ * codebase (see `isLeakedInternalTagBlock`'s own doc comment — the model has
+ * a demonstrated, live-proven tendency to echo instruction blocks it's told
+ * not to repeat), an answer-relevance regeneration is at LEAST as exposed to
+ * this failure mode as the original generation was, yet had zero coverage.
+ * Callers should reject a repair candidate that fails this check with the
+ * same discipline as `!stillCritical`/`.ok` from their own domain validator —
+ * treat it as a failed repair, not accept it.
+ */
+export function isLeakedAnswerArtifact(text: string, opts?: { allowJsonEnvelope?: boolean }): boolean {
+  if (!text) return false;
+  if (isLeakedSchemaStub(text)) return true;
+  if (isLeakedInternalTagBlock(text)) return true;
+  if (!opts?.allowJsonEnvelope && isLeakedJsonEnvelope(text)) return true;
+  return false;
+}
+
 /** The exact provider-transport-error message WhatToAnswerLLM.generateStream's
  *  catch block yields when the stream itself fails (expired key, 429 rate
  *  limit, billing) — see WhatToAnswerLLM.ts's `isProviderFailure` branch. This

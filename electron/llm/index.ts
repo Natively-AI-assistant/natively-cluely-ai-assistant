@@ -33,6 +33,8 @@ export {
     warmupIntentClassifier
 } from "./IntentClassifier";
 export type { ConversationIntent, IntentResult } from "./IntentClassifier";
+export { checkAnswerRelevance } from "./AnswerRelevanceChecker";
+export type { AnswerRelevanceResult } from "./AnswerRelevanceChecker";
 export { planNextAssistantAction } from "./PlannerDecision";
 export type { PlannerDecision, PlannerDecisionKind, PlannerInput } from "./PlannerDecision";
 export { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, shouldScaffold, isStealthEvasionQuestion, isJdFactualLookupNotNegotiationAdvice } from "./AnswerPlanner";
@@ -52,7 +54,7 @@ export {
 export type { SpeakabilityDecision, SpeakabilityClass, SpeakabilityTarget, ShortLengthBand, ShortBandTarget } from "./speakability";
 export { checkAnswerForCodeBugs, checkCodeCompleteness } from "./CodeSanityCheck";
 export type { CodeSanityResult, CodeSanityIssue } from "./CodeSanityCheck";
-export { AnswerDiversityGuard, cleanAnswerArtifacts, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope, isProviderTransportError, isLeakedInternalTagBlock, stripMetaPreamble, compressToSpeakable, varySpokenOpening, SCAFFOLD_LABEL_RE } from "./answerPolish";
+export { AnswerDiversityGuard, cleanAnswerArtifacts, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope, isProviderTransportError, isLeakedInternalTagBlock, isLeakedAnswerArtifact, stripMetaPreamble, compressToSpeakable, varySpokenOpening, SCAFFOLD_LABEL_RE } from "./answerPolish";
 export type { RepetitionVerdict, RepetitionReason, DiversityCheckOpts } from "./answerPolish";
 export type { AnswerPlan, AnswerSource, AnswerType, ContextLayer, OutputPerspective, SpeakerPerspective } from "./AnswerPlanner";
 export { applyModeFallback, MODE_CONTEXT_PROFILES } from "./modeProfiles";
