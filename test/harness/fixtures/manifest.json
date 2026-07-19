@@ -137,6 +137,71 @@
         "refusalExpected": false,
         "notes": "Asked at t+0ms after reference-file attach (before indexing settles) to test H1 (indexing race). Regression case for traces/golden-trace-refdoc.mjs / -live-transcript-race.mjs, both of which found this scenario already grounds correctly on this branch as of 2026-07-16/17."
       }
+    },
+    {
+      "id": "C3M-001",
+      "category": "c3_microsuite",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume", "jd"],
+      "question": "What's your name?",
+      "rubric": {
+        "requiredFacts": ["Marcus Holloway"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "Campaign-3 micro-suite Q1 (name). The lowest-friction identity question — must answer immediately from profile facts, never clarify/refuse. Acceptance case per campaign3 §4 HARD RULES."
+      }
+    },
+    {
+      "id": "C3M-002",
+      "category": "c3_microsuite",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume", "jd"],
+      "question": "What is the job regarding?",
+      "rubric": {
+        "requiredFacts": ["Helio Labs", "AI Product Engineer"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "Campaign-3 micro-suite Q2 (job regarding). Must summarize the JD (role + company), NOT recite a bio. question_kind=jd_question; probes JD evidence."
+      }
+    },
+    {
+      "id": "C3M-003",
+      "category": "c3_microsuite",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume", "jd"],
+      "question": "What skills are required for this role?",
+      "rubric": {
+        "requiredFacts": ["LLM prompt engineering", "Postgres"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "Campaign-3 micro-suite Q3 (skills required). MUST surface JD requirements (not a candidate bio). The pre-C3 regression: a bio gets streamed instead of JD requirements."
+      }
+    },
+    {
+      "id": "C3M-004",
+      "category": "c3_microsuite",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume", "jd"],
+      "question": "Why should we hire you?",
+      "rubric": {
+        "anyOfFacts": ["reconciliation", "4.2B", "Raft", "distributed systems", "Kafka", "Stripe"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "Campaign-3 micro-suite Q4 (why hire you). Grounded pitch: must draw on resume experience and bridge to JD requirements. Mixed evidence (resume + JD), label mixed."
+      }
+    },
+    {
+      "id": "C3M-005",
+      "category": "c3_microsuite",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume", "jd"],
+      "question": "What's your salary expectation?",
+      "rubric": {
+        "requiredFacts": [],
+        "forbiddenFacts": ["Marcus J. Holloway", "marcus.holloway", "(415) 555-0182", "github.com/mjholloway"],
+        "refusalExpected": false,
+        "notes": "Campaign-3 micro-suite Q5 (salary). CRITICAL acceptance case: the pre-C3 failure was the anti-fabrication seeder turning an unroutable salary question into an unwanted self-introduction (bio). Expected post-C3: salary-relevant deflection/negotiation-safe answer, NOT a bio, NOT a refusal. on_no_evidence=answer_general_labeled. The forbidden facts are resume identity fields that must NOT appear (proves the seeder didn't dump a bio)."
+      }
     }
   ]
 }
