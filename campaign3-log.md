@@ -707,3 +707,41 @@ schema migration has landed.
 3. Optional iter-13 polish: write `traces3/SEMINAR.md` — a 1-page
    "Seminar Mode user guide" documenting the 8th mode for users.
    Code/docs only, no quota.
+
+### ITERATION 13 (2026-07-20) — Seminar Mode user guide (docs only)
+
+Writes `traces3/SEMINAR.md` — a 1-page user-facing guide for the
+8th built-in mode.
+
+**Covers:**
+- What Seminar Mode is (strict file-grounded Q&A).
+- How it differs from the 7 other modes (source transparency,
+  never refuses, off-doc preamble).
+- When to use it / when not to (paper walkthrough, thesis defense,
+  lecture Q&A; not for open-ended creative work or interview coaching).
+- The 5/5 micro-suite acceptance gate (C3M-001..C3M-005).
+- Engineering notes (4-tier resolution order, source badge end-to-end,
+  70/70 unit tests).
+- Related files (TurnPlanner, SourceBadge, ProfileJitPromptBuilder,
+  ModesManager, prompts.ts, modeSourceContract, tests).
+- Deferred work (live 250ms Probe, coding cards, regression suites).
+
+No code changes; docs only.
+
+**Commit:** `02d825ab`.
+
+## NEXT ACTION (iteration 13 → 14):
+1. **Still deferring the 40q grounding + 19q thesis regression suites**
+   — Acct1 weekly 0%, Acct2 session 0% (fully out). The §9 pause
+   gate is now fully met (one account out, the other at the edge);
+   waiting on Acct1 weekly reset (resetAt 2026-07-24T00:00:00Z) AND
+   Acct2 session ≥ 15% before resuming benchmarks.
+2. The campaign is now EXIT-CONDITIONAL per founder §8 for all
+   non-quota-blocked items. All architecture, schema, seeder-leash,
+   source-badge (end-to-end live), 4-tier resolution, and the user
+   guide are shipped. The 40q+19q regression suites are the last
+   remaining deferred benchmark items.
+3. Per the user's earlier "thats fine dont mind the limit continue"
+   note: the loop is content to keep iterating on code/docs polish
+   rather than waiting for quota reset. The campaign will enter its
+   natural exit on Acct1 weekly reset.
