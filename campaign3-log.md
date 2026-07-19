@@ -614,3 +614,47 @@ WTA answer in the overlay.
    thesis regression suites (founder §5) and the live 250ms Evidence
    Probe wiring (founder §2.2 — matrix-tested, not live). Both are
    clear iter-11+ targets once Acct1 weekly resets.
+
+### ITERATION 11 (2026-07-19) — extract + test computeEngineSourceLabel
+
+Refactors the engine's primary WTA emit site (IntelligenceEngine.ts:2227)
+to call a new pure helper `SourceBadge.computeEngineSourceLabel` instead
+of an inline IIFE. The helper is unit-tested in isolation —
+guarantees the engine emit boundary never throws on null or missing
+inputs.
+
+**Changes:**
+- `electron/llm/SourceBadge.ts`: adds `computeEngineSourceLabel({turnPlan,
+  evidenceFound})` — defensive wrapper that returns 'General knowledge'
+  for null/missing turnPlan or any internal exception. `evidenceFound`
+  defaults to true (conservative — founder §2.6: showing "From: Resume"
+  when actually general is honest degradation, not fabrication).
+- `electron/IntelligenceEngine.ts`: replaces the inline IIFE at the
+  primary WTA emit site with a single `computeEngineSourceLabel` call.
+  The call site stays in the same try/catch boundary; the helper
+  itself does NOT throw (verified by tests).
+- `electron/llm/__tests__/SourceBadge.test.mjs`: 7 new tests covering
+  null turnPlan, undefined turnPlan, identity answerType, jd answerType,
+  seminar + off-doc, garbage-shape defensive fallback, and
+  evidenceFound default-to-true semantics.
+
+**Results (regression check):**
+- Unit suites: **66/66** (was 59/59 + 7 new SourceBadge tests).
+- Micro-suite live: **5/5** (no regression).
+
+**Commit:** `6c1da2d0`.
+
+## NEXT ACTION (iteration 11 → 12):
+1. **Still deferring the 40q grounding + 19q thesis regression suites**
+   — Acct1 weekly 0% (fully drained), Acct2 weekly 65%. Per §9 "Pause
+   ONLY when one account is out AND the other ≤10% session" is NOT
+   met (Acct2 session 44%, Acct1 session 85%), but the 20% weekly
+   benchmark gate is BLOCKED. Will resume benchmarks at Acct1 weekly
+   reset (resetAt 2026-07-24T00:00:00Z).
+2. Optional polish: clean up the `groundingProfile` env-flag path in
+   TurnPlanner — replace with `sourceContract.groundingProfile` reading
+   (already shipped in iter4 schema migration, but TurnPlanner still
+   reads env). Code-only, no quota.
+3. The campaign remains EXIT-CONDITIONAL per founder §8 for all items
+   NOT blocked by quota. The 40q+19q regression suites are the only
+   remaining deferred benchmark items.
