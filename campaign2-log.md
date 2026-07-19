@@ -3970,3 +3970,112 @@ a long real meeting — this distinction matters enormously for
 prioritization, since a harness-only artifact doesn't block the real
 product even if it blocks THIS benchmark's scores. Continue the standard
 health-check/judged-run loop per loop2.md; task #4 remains open.
+
+## ITERATION 45 (2026-07-19) — Deep-dived the DatabaseManager re-init defect; identified real root cause; attempted harness fix, reverted after contamination from concurrent Campaign 3 edits
+
+**Precisely root-caused the DatabaseManager/ModesManager re-init defect
+flagged in iteration 44** via a temporary stack-trace instrumentation in
+`DatabaseManager.getInstance()` (added, tested, then FULLY REVERTED —
+`git diff` confirmed clean before moving on). The actual mechanism:
+`scripts/build-electron.js` calls esbuild with `bundle: true` and ONE
+ENTRY POINT PER SOURCE FILE (via `findTs()` recursively listing every
+`.ts` file in `electron/`+`premium/electron/` as its own entryPoint,
+`format: 'cjs'`, no `splitting` — code-splitting requires `format:
+'esm'`). This means EVERY compiled `.js` file in `dist-electron/` is
+independently bundled with its OWN full copy of every class it
+transitively imports — confirmed via `grep -c "class _DatabaseManager"`
+across `dist-electron/electron/`: **31 separate files each contain their
+own private copy** of the `DatabaseManager` class (18 for `ModesManager`).
+Each copy has its own `private static instance` field, so
+`DatabaseManager.getInstance()` called from `IntelligenceEngine.js`'s
+bundle is a COMPLETELY DIFFERENT singleton than the one called from
+`ModesManager.js`'s bundle or from the harness's own top-level
+`bootstrap.cjs` — even though all three ultimately reference the SAME
+on-disk SQLite file (which is why the lexical-fallback retrieval path
+still "works" — that's real disk I/O, not in-memory singleton state; the
+IN-MEMORY `_sharedEmbeddingPipeline`/`_hybridRetriever` caches on
+`ModeContextRetriever` are what never propagate across the bundle
+boundary).
+
+**Confirmed this is a TEST-HARNESS-ONLY artifact, not a production bug**:
+the real packaged app has exactly ONE entry point
+(`package.json`'s `"main": "dist-electron/electron/main.js"`), and
+esbuild's `bundle: true` INLINES every transitively-resolvable `require()`
+call main.ts makes into that SAME single output file — confirmed via
+`grep "ModesManager.getInstance()" dist-electron/electron/main.js`
+showing esbuild's own shared `init_ModesManager()` lazy-init machinery
+correctly serving every call site WITHIN that one bundle consistently.
+The bug only manifests when SEPARATE top-level compiled files are
+`require()`d independently and expected to share static/singleton
+state — exactly what the harness's `bootstrap.cjs` does via its `req()`
+helper (`req('electron/db/DatabaseManager.js')` and
+`req('electron/services/ModesManager.js')` as two unrelated top-level
+requires, then separately `req('electron/IntelligenceEngine.js')` for
+the actual answer-driving engine, which has ITS OWN third copy).
+
+**Attempted fix**: patch `bootstrap.cjs` to directly assign
+`engine.whatToAnswerLLM.modesManager = modesManager` after construction
+(the officially-supported injection seam — `WhatToAnswerLLM`'s
+constructor already accepts an optional `modesManager` param for exactly
+this purpose per its own doc comment; `engine.initializeLLMs()` just
+doesn't pass one, so it self-resolves via
+`ModesManager.getInstance()` on its own bundle's copy).
+
+**Result — inconclusive, REVERTED**: the fix reduced
+`No shared EmbeddingPipeline injected yet` warnings for script-b from
+~103 occurrences (full campaign run) to just 2 (isolated script-b-only
+run) — the mechanism itself is confirmed correct. But the SAME
+isolated script-b run then returned `answer="(null)"` for ALL 17
+presses with ZERO `NativelyAPI` calls attempted (the LLM was never even
+invoked) — a much worse regression than the original defect. Reverted
+the bootstrap.cjs change immediately (`git diff` confirmed clean).
+**Re-ran the SAME script-b-only harness AGAIN after the full revert and
+the null-answer failure PERSISTED** — proving the null-answer
+regression was NOT caused by my bootstrap.cjs edit. Investigated `git
+status` and found the actual cause: **the concurrent Campaign 3 session
+(sharing this workspace, branch `fix/answer-policy-engine`) has
+substantial UNCOMMITTED, in-progress edits to
+`electron/IntelligenceEngine.ts` and
+`electron/llm/manualProfileIntelligence.ts`** (a new
+`shouldJitForAnswerType` gate-widening + several `[C3-*]`-prefixed debug
+`console.log` traces, visible via `git diff`), landed on disk WHILE my
+`npm run build:electron` calls were running. Every build I ran in this
+session's second half compiled a MIX of my own committed fixes plus
+Campaign 3's own half-finished, uncommitted work — so the null-answer
+result cannot be attributed to either party's code in isolation without
+first letting Campaign 3 either commit or the file settle.
+
+**This is the [[shared-workspace-branch-hazard-2026-07-11]] hazard
+materializing in its most damaging form yet** — not just branch/file
+overwrites, but two sessions' uncommitted, half-finished, ACTIVELY
+BEING EDITED source changes compiling and running TOGETHER in the same
+process, producing results attributable to neither. Per this session's
+own established discipline (verify file isolation via `git diff --stat`
+before every commit), the same discipline should extend to BUILDS, not
+just commits — a `npm run build:electron` run while another session has
+uncommitted, actively-changing source files open is not a trustworthy
+signal for either party's own work.
+
+**Committed state preserved**: both of iteration 43's fixes (word-
+boundary DSA regex, hardware evidence vocabulary — commit `74eadf2d`)
+remain committed, clean, and were independently verified correct BEFORE
+this contamination occurred (run-034's B2-now-passes result was
+measured cleanly, before Campaign 3's uncommitted edits existed on
+disk). The DatabaseManager re-init root-cause diagnosis
+(this iteration) is solid and independently reproducible — only the
+proposed FIX for it was inconclusive and is not being pursued further
+until the workspace is quieter.
+
+**NEXT ACTION**: do NOT attempt another validation build while
+Campaign 3's `IntelligenceEngine.ts`/`manualProfileIntelligence.ts`
+edits remain uncommitted — check `git status`/`git diff --stat` on
+those two files immediately before any future `npm run build:electron`
+and wait/reschedule if they show uncommitted changes. Once clean, retry
+the `engine.whatToAnswerLLM.modesManager = modesManager` fix in
+isolation (it is architecturally sound and the warning-reduction result
+was real) and diagnose the null-answer path specifically — likely by
+adding a temporary try/catch trace around `runWhatShouldISay`'s early
+stages to see whether an exception is now being thrown and silently
+swallowed somewhere between `getActiveModeInfo` and the LLM stream call.
+Continue the standard health-check/judged-run loop per loop2.md; task
+#4 remains open.
