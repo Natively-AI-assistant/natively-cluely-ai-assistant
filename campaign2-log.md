@@ -3408,3 +3408,76 @@ per iteration 37's own conclusion won't generalize to cases like A6's
 the JSON-envelope/scaffold-misfire/stock-refusal patterns already
 fixed). A6 in particular is a clean, reproducible repro case worth
 keeping for that future design work.
+
+## ITERATION 39 (2026-07-18) — run-028 (retroactively logged, predates 029-031): sentinel guard holding up clean, scaffold-misfire "full commitment" shape confirmed via judge, one new variant spotted
+
+Found via `test/harness-longsession/reports/run-028.json`
+(timestamp `2026-07-18T19:10:30Z` — chronologically the earliest of
+run-028/029/030/031, but never logged; adding now for completeness
+before it's lost to the "many concurrent runs, only some logged"
+pattern this campaign has repeatedly warned about). 0 provider errors,
+0 `scaffold_misfire_extracted`/`json_envelope_answer_recovered`
+guard fires. Overall: greetingFailures 0, hallucinationFlags 0,
+questionExtractionAccuracy 100%, answerQualityAccuracy 34%,
+longRangeRecallAccuracy 50%, desyncAccuracy 48% — notably higher
+across the board than the 023-027 range, consistent with (not proof
+of) the shipped fixes helping, but this campaign has repeatedly
+warned against over-reading single-run swings as trends.
+
+**No-content-hallucination family — 3 hits, ALL correctly guard-
+caught this run (A5, A14, C11)**: cross-referenced against
+`nonanswer_sentinel_discard` trace lines — all three show
+`rawAnswer: "Nothing actionable right now."`, the pre-existing
+`isNonAnswerSentinel` guard firing correctly. **Zero unguarded raw
+hallucinations from this family in this run** — first time this
+specific run showed a clean sweep on this family (though, per
+iteration 28's own methodology note, a clean run is not proof the
+fix generalizes; it only means this run's specific model outputs
+happened to land on the sentinel's exact matched phrase).
+
+**Scaffold-misfire family — 3 hits (A8, A12, C3), correctly
+unrecovered, confirmed via the grading judge's own verdict rather
+than guesswork**: initially flagged via a coarse grep on
+`answerPreview`, but a stale `traces2/` read (files get overwritten by
+later same-run presses sharing fixed filenames — a known hazard
+already documented in this session's memory) gave misleading raw
+text; corrected by reading the JSON report's `G3_judge.details.reason`
+field directly, which independently confirms the shape: A8's answer is
+"an entire technical walkthrough of the two-sum algorithm with code,
+dry run, and complexity analysis" that "does not address the interview
+question about why the candidate is interested in a Staff role" — a
+full-commitment, no-separable-real-answer case (same shape as run-026's
+A13/B13), correctly returns `null` from `detectAndExtractScaffoldMisfire`
+since there is no real content anywhere to extract. A12 is identical
+shape (off-topic distributed-systems architecture answering a
+"tell me about your degree" question). **C3 is a genuinely new
+variant**: opens with real conversational content ("Marcus Holloway
+here. Good to be with you.") then switches mid-answer into
+`## Approach` scaffold language that itself describes PLANNING
+("The idea is to walk through my time at Datadog...") rather than
+executing that plan — the judge's reason field explicitly calls out
+"meta-commentary about the suggested answer structure ('## Approach',
+'## What the answer should hit')," a heading phrasing (`## What the
+answer should hit`) not seen in any prior repro. Report's 300-char
+answerPreview cap prevented seeing whether C3 eventually resolves to a
+real answer after the meta-commentary — worth a full-text capture if
+this phrasing recurs.
+
+**Lesson reinforced**: `traces2/`'s fixed per-press filenames get
+silently overwritten across concurrent/sequential harness runs sharing
+the same script/press IDs — this is the SAME hazard this session's
+[[shared-workspace-branch-hazard-2026-07-11]] memory already documents
+for git state, now confirmed to also apply to trace-file reads. The
+JSON report's own fields (`answerPreview`, `G3_judge.details.reason`)
+are the more reliable source once a run is more than "the most recent"
+one — do not assume `traces2/harness-script-*-press-*.txt` reflects
+the run you're currently analyzing without checking the report's own
+timestamp against the file's mtime first.
+
+**NEXT ACTION**: unchanged from iterations 37/38 — the free-form
+no-content hallucination family (and now, potentially, this new
+"meta-commentary leaking as the visible answer" C3 variant, which may
+be a cousin of it or a cousin of the scaffold-misfire family, unclear
+without full text) remains the correct next target, needing the
+semantic-detector design work already scoped in iteration 28. Continue
+the standard health-check/judged-run loop per loop2.md.
