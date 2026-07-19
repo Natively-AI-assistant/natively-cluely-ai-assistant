@@ -3725,3 +3725,64 @@ inert by default) — this is now the campaign's most honest open item:
 task #4 ("run full 3-script benchmark + iterate to green") is still
 blocked on either recalibrating this guard or finding a different
 approach to this family.
+
+## ITERATION 42 (2026-07-19) — run-033 confirms the flag-gate fix: zero regression, guard correctly inert
+
+Executed iteration 41's NEXT ACTION. run-033 (real backend, full A/B/C
+harness, same run-all.mjs invocation) confirms the fix holds:
+
+| Metric | run-031 (baseline) | run-032 (regression) | run-033 (post-fix) |
+|---|---|---|---|
+| Hallucination flags | 0 | 2 | **0** |
+| Answer quality | 30% | 38%* | 26% |
+| Long-range recall | 0% | 25%* | 0% |
+| Desync accuracy | 42% | 44%* | 32% |
+
+*run-032's apparently "better" G3/G5/G6 numbers were the regression
+itself — the guard's live-fire regeneration coincidentally scored
+higher on the deterministic-fact-matching grader for a couple of
+presses while making others (like A1) strictly worse; this is exactly
+why a single run's raw score movement can't be trusted without reading
+the per-press diff, a lesson this campaign's own methodology notes
+(iteration 39/40) already flagged.
+
+**Guard confirmed inert**: `grep -c "answer_relevance_regenerated"` on
+the run-033 log = **0** (the classifier still ran and traced 10
+`answer_relevance_discard` events for future-telemetry purposes, per
+the always-on `[TRACE:LONGCTX]` debug logging — but zero of them
+triggered a second LLM call, zero mutated `fullAnswer`, zero reached
+session history). Confirms the `answerRelevanceGuardLive` flag-gate
+(default OFF, commit `b89cc1d9`) works exactly as designed: the
+classifier's data-collection value is preserved without any live-path
+risk.
+
+Answer-quality/desync numbers (26%/32% in run-033 vs 30%/42% in
+run-031) sit within this campaign's already-documented run-to-run
+judge-model variance (see iteration 39's methodology note on treating
+single-run swings as noise, not trend) — with the guard now provably
+inert, neither run-032's apparent "improvement" nor run-033's apparent
+"decline" can be attributed to any code change from this session; both
+are judge-noise on an unrelated, unchanged prompt/generation path.
+
+**State of the campaign**: all 5 tracked failure families now have
+SHIPPED code (harness auth, stock-refusal, scaffold-misfire, JSON-
+envelope leak — all live; answer-relevance — built, reviewed, tested,
+but flag-gated OFF pending recalibration). L4 is still not met (task
+#4 remains open) — the free-form no-content-hallucination family is
+the one family without a currently-active fix, which is an honest,
+accurately-logged state rather than an overclaim.
+
+**NEXT ACTION**: this session's work on the answer-relevance guard is
+complete for now (built, reviewed, safety-gated, validated inert). A
+future iteration should either (a) collect enough
+`answer_relevance_discard` telemetry from real traffic (via
+`NATIVELY_TRACE_LONGCTX=1` runs) to properly characterize the live
+score distribution and find a threshold/template that actually
+separates real from hallucinated answers on THAT distribution, or (b)
+try a fundamentally different approach to the free-form hallucination
+family (e.g. a cheaper heuristic like "did the answer share ANY
+content word with the question or transcript" as a pre-filter before
+even invoking the classifier, or accept that some presses in this
+family may need a coarser LLM-as-judge-based verification at answer
+time rather than a lightweight NLI classifier). Continue the standard
+health-check/judged-run loop per loop2.md.
