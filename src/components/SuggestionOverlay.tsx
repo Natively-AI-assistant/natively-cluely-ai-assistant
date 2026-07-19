@@ -14,6 +14,16 @@ interface GeneratedSuggestion {
     question: string;
     suggestion: string;
     confidence: number;
+    /**
+     * Campaign-3 (fix/answer-policy-engine, 2026-07-19, founder §2.6):
+     * Visible source label for the answer. One of:
+     *   "From: Resume" | "From: Job description" | "From: Reference files" |
+     *   "Mixed: Resume + Job description" | "Mixed: ..." | "General knowledge" |
+     *   "Not in your reference files — from general knowledge:"
+     * When absent, the renderer falls back to "General knowledge" so legacy
+     * emitters that don't carry the label still display something sensible.
+     */
+    sourceLabel?: string;
 }
 
 /**
@@ -134,6 +144,19 @@ export const SuggestionOverlay: React.FC<SuggestionOverlayProps> = ({ className 
                         </span>
                     </div>
                     <p className="text-sm text-gray-100 leading-relaxed">{suggestion.suggestion}</p>
+                    {/* Campaign-3 (fix/answer-policy-engine, 2026-07-19, founder §2.6):
+                        Source badge. Renders under the suggestion text in a small
+                        pill; falls back to "General knowledge" when the emitter
+                        doesn't carry sourceLabel (backward-compatible with legacy
+                        emitters). */}
+                    <div className="mt-2 flex items-center gap-2">
+                        <span
+                            className="inline-block px-2 py-0.5 text-[10px] font-medium rounded-full bg-indigo-700/40 text-indigo-200 border border-indigo-500/40"
+                            data-source-label={suggestion.sourceLabel ?? 'General knowledge'}
+                        >
+                            {suggestion.sourceLabel ?? 'General knowledge'}
+                        </span>
+                    </div>
                     <div className="mt-2 pt-2 border-t border-indigo-700/50">
                         <p className="text-xs text-gray-400 italic">
                             Re: "{suggestion.question.substring(0, 50)}..."

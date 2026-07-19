@@ -324,7 +324,7 @@ interface ElectronAPI {
   onNativeAudioConnected: (callback: () => void) => () => void;
   onNativeAudioDisconnected: (callback: () => void) => () => void;
   onSuggestionGenerated: (
-    callback: (data: { question: string; suggestion: string; confidence: number }) => void,
+    callback: (data: { question: string; suggestion: string; confidence: number; sourceLabel?: string }) => void,
   ) => () => void;
   onSuggestionProcessingStart: (callback: () => void) => () => void;
   onSuggestionError: (callback: (error: { error: string }) => void) => () => void;
@@ -1512,7 +1512,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   onSuggestionGenerated: (
-    callback: (data: { question: string; suggestion: string; confidence: number }) => void,
+    callback: (data: { question: string; suggestion: string; confidence: number; sourceLabel?: string }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('suggestion-generated', subscription);
