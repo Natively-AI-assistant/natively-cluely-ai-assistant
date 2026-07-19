@@ -203,6 +203,41 @@ export class IntelligenceEngine extends EventEmitter {
     private static readonly MANUAL_CONTEXT_ANSWER_CHAR_LIMIT = 2000;
     private static readonly TRANSCRIPT_CONTEXT_SUBSTANTIAL_CHARS = 80;
 
+    /**
+     * Campaign-3 fix (2026-07-19, fix/answer-policy-engine). Returns true
+     * when the AnswerPlanner's answerType signals a question the manual
+     * evidence JIT can serve — identity / profile / JD-source shapes. Used
+     * to widen the WTA-path gate that previously only fired on
+     * extractedQuestion.questionType ∈ {identity, profile_detail} (which
+     * missed jd_summary, jd_requirements, jd_fact, jd_fit, resume_jd_* —
+     * live-trace C3M-002). Conservative: only the answerTypes the manual
+     * evidence path actually has a builder for; everything else stays on
+     * the legacy gate.
+     */
+    private static shouldJitForAnswerType(answerType: string | null | undefined): boolean {
+        if (!answerType) return false;
+        switch (answerType) {
+            case 'identity_answer':
+            case 'profile_fact_answer':
+            case 'skills_answer':
+            case 'skill_experience_answer':
+            case 'experience_answer':
+            case 'project_answer':
+            case 'project_followup_answer':
+            case 'behavioral_interview_answer':
+            case 'jd_summary_answer':
+            case 'jd_requirements_answer':
+            case 'jd_fact_answer':
+            case 'jd_fit_answer':
+            case 'resume_jd_fit_answer':
+            case 'resume_jd_gap_answer':
+            case 'resume_jd_intro_answer':
+                return true;
+            default:
+                return false;
+        }
+    }
+
     private static isNonAnswerSentinel(answer: string): boolean {
         const normalized = answer.trim().toLowerCase().replace(/[.!?]+$/g, '');
         return normalized === 'nothing actionable right now'
@@ -1471,7 +1506,12 @@ export class IntelligenceEngine extends EventEmitter {
                 const _wtaOrchForAvail = this.llmHelper.getKnowledgeOrchestrator?.();
                 const _wtaHasProfile = Boolean((_wtaOrchForAvail as any)?.activeResume?.structured_data);
                 const _wtaHasJd = Boolean((_wtaOrchForAvail as any)?.activeJD?.structured_data);
-                const _wtaPlan = planAnswer({
+                // Campaign-3 (2026-07-19): declared with `var` so the reference survives the
+                // try/catch scope (my JIT block at line ~1635 consults _wtaPlan.answerType
+                // to widen the manual-evidence gate to jd_summary / jd_fact / etc. — the
+                // earlier `const` scoping caused a ReferenceError that silently disabled
+                // the JIT).
+                var _wtaPlan: any = planAnswer({
                     question: String(_wtaQ),
                     source: 'what_to_answer',
                     speakerPerspective: 'interviewer',
@@ -1592,18 +1632,46 @@ export class IntelligenceEngine extends EventEmitter {
                     wtaProfileAllowed = wtaProfileAllowed && contractAllowsCandidateProfileEarly;
                 }
             } catch { /* keep legacy doc-grounded guard */ }
-            if (!candidateProfile && wtaProfileAllowed && wtaDecisionAllowsCandidateProfile) {
+            // C3 trace (2026-07-19): unconditional log to verify which gate short-circuits the JIT path.
+            // Campaign-3 fix v3 (2026-07-19): `wtaProfileAllowed` is set false when the
+            // Context OS early contract does NOT grant profile_resume (true for jd_*
+            // questions in profile_only mode, where only profile_jd is allowed). The
+            // manual evidence JIT, however, can serve jd_summary / jd_fact /
+            // jd_requirements from the JD itself — no profile_resume needed. So
+            // bypass wtaProfileAllowed when the answerType is a JD shape; keep it as
+            // a hard gate for non-JD profile questions (which require resume facts).
+            const _jitAnswerType = (() => { try { return _wtaPlan?.answerType ?? null; } catch { return null; } })();
+            const _jdShapeAllowed = _jitAnswerType !== null && IntelligenceEngine.shouldJitForAnswerType(_jitAnswerType)
+                && /^jd_/.test(_jitAnswerType);
+            if (!candidateProfile && wtaDecisionAllowsCandidateProfile
+                && (wtaProfileAllowed || _jdShapeAllowed)) {
                 try {
                     const orch = this.llmHelper.getKnowledgeOrchestrator?.();
                     const resume = (orch as any)?.activeResume?.structured_data ?? null;
                     const jd = (orch as any)?.activeJD?.structured_data ?? null;
+                    // Campaign-3 fix (2026-07-19, fix/answer-policy-engine): the
+                    // original gate ONLY fired on questionType ∈ {identity,
+                    // profile_detail} — so a jd_summary_answer ("What is the job
+                    // regarding?") and jd_fact_answer ("does the JD mention
+                    // salary?") never reached the manual-evidence JIT and got
+                    // hallucinated answers (live-trace C3M-002). Widen the gate
+                    // to any answerType that the manual evidence path can serve
+                    // (identity / profile / jd_summary / jd_requirements /
+                    // jd_fact / jd_fit / resume_jd_*), gated on the orchestrator
+                    // actually having a profile to consult. Uses `_wtaPlan` which
+                    // was computed earlier (line 1474) — available in scope.
                     const identityQ = extractedQuestion.detectedSpeaker === 'interviewer'
-                        && (extractedQuestion.questionType === 'identity' || extractedQuestion.questionType === 'profile_detail');
-                    if (resume && identityQ) {
+                        && (
+                          extractedQuestion.questionType === 'identity'
+                          || extractedQuestion.questionType === 'profile_detail'
+                        );
+                    const jitAnswerType = _wtaPlan?.answerType ?? null;
+                    if ((resume || jd) && (identityQ || IntelligenceEngine.shouldJitForAnswerType(jitAnswerType))) {
                         const { selectManualProfileEvidence } = await import('./llm/manualProfileIntelligence');
                         const evidence = selectManualProfileEvidence({
                             question: extractedQuestion.latestQuestion || lastInterviewerTurn,
                             profile: resume, jobDescription: jd, source: 'what_to_answer',
+                            answerType: jitAnswerType,
                         });
                         if (evidence) {
                             const jit = buildProfileJitPrompt({
