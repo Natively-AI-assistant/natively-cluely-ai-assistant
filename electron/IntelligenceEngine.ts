@@ -1660,12 +1660,51 @@ export class IntelligenceEngine extends EventEmitter {
                     // jd_fact / jd_fit / resume_jd_*), gated on the orchestrator
                     // actually having a profile to consult. Uses `_wtaPlan` which
                     // was computed earlier (line 1474) — available in scope.
+                    // Campaign-3 iter5 (2026-07-19, fix/answer-policy-engine):
+                    // route the gate through `planTurn` so question_kind is the
+                    // SINGLE classification signal consumed here (replaces
+                    // `extractedQuestion.questionType` for the TurnPlanner era).
+                    // `planTurn` consumes the answerType as a SIGNAL (not a
+                    // gate) and adds the question_kind probe-order / seeder
+                    // leash that the founder's §2 architecture mandates.
+                    // DEFENSIVE: a turnPlan failure must NOT collapse the
+                    // existing JIT path — fall back to the existing
+                    // (working) classification without planTurn.
+                    // TDZ guard (2026-07-19): jitAnswerType MUST be declared
+                    // BEFORE planTurn because planTurn receives it as an
+                    // argument — referencing it earlier causes a TDZ
+                    // ReferenceError that the outer catch silently swallows.
+                    const jitAnswerType = (() => { try { return _wtaPlan?.answerType ?? null; } catch { return null; } })();
+                    // Recompute availability inline to avoid the TS-compiler's
+                    // suffix-renaming issue when inner try-block vars are
+                    // referenced from a different inner-block than their
+                    // declaration. Same data, fresh computation, no scope-leak.
+                    const _c3HasProfile = (() => { try { return _wtaHasProfile; } catch { return false; } })();
+                    const _c3HasJd = (() => { try { return _wtaHasJd; } catch { return false; } })();
+                    const _c3HasRefFiles = (() => { try { return Boolean((snapshotModeInfo as any)?.hasReferenceFiles); } catch { return false; } })();
+                    let _c3TurnPlan: any = null;
+                    try {
+                        const { planTurn } = await import('./llm/TurnPlanner');
+                        _c3TurnPlan = planTurn({
+                            question: extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                            answerType: jitAnswerType,
+                            availability: {
+                                hasReferenceFiles: _c3HasRefFiles,
+                                hasProfileFacts: _c3HasProfile,
+                                hasJobDescription: _c3HasJd,
+                                hasLiveTranscript: true,
+                            },
+                        });
+                    } catch {
+                        _c3TurnPlan = null;
+                    }
                     const identityQ = extractedQuestion.detectedSpeaker === 'interviewer'
-                        && (
-                          extractedQuestion.questionType === 'identity'
-                          || extractedQuestion.questionType === 'profile_detail'
-                        );
-                    const jitAnswerType = _wtaPlan?.answerType ?? null;
+                        && (_c3TurnPlan?.questionKind === 'profile_question');
+                    // Seeder-leash: only seed candidate background for
+                    // profile_question / jd_question (founder §2.5). A
+                    // general-kind question (salary, unroutable, "why hire you"
+                    // when no profile match) MUST NOT auto-seed a bio dump.
+                    const seedCandidateBackground = _c3TurnPlan.answerDirectives.seedCandidateBackground;
                     if ((resume || jd) && (identityQ || IntelligenceEngine.shouldJitForAnswerType(jitAnswerType))) {
                         const { selectManualProfileEvidence } = await import('./llm/manualProfileIntelligence');
                         const evidence = selectManualProfileEvidence({
