@@ -1797,8 +1797,9 @@
       "rubric": {
         "requiredFacts": [],
         "forbiddenFacts": ["startup", "early-stage", "seed", "Series A", "Series B", "fortune 500", "FAANG"],
-        "forbiddenExpected": false,
-        "notes": "C4 baseline INFO-NOT-IN-JD test: the JD doesn't describe what Helio Labs does. Expected answer: an HONEST acknowledgment that the JD doesn't say, not a hallucination. forbiddenFacts list catches the typical 'startup' / 'FAANG' fabrications the model might invent."
+        "refusalExpected": true,
+        "nonEmptyResponse": true,
+        "notes": "C4 baseline INFO-NOT-IN-JD test: the JD doesn't describe what Helio Labs does. Expected answer: an HONEST acknowledgment that the JD doesn't say, not a hallucination. refusalExpected=true: the model should produce an honest refusal-style answer (e.g. 'I don't see that information in the job description'). forbiddenFacts list catches the typical 'startup' / 'FAANG' fabrications. nonEmptyResponse=true: a substantive honest reply is acceptable even without specific keywords. NOTE: l4-final-2026-07-20 run had the model fabricate 'early-stage AI startup focused on building infrastructure for enterprise-grade streaming LLM applications' — the forbiddenFacts caught 'early-stage' so the grader correctly flagged the hallucination. The refusalExpected=true flag is the right scoring treatment: a refusal-style answer passes, a fabricated answer fails."
       }
     },
     {
@@ -1852,6 +1853,409 @@
         "forbiddenFacts": [],
         "refusalExpected": false,
         "notes": "C4 3-fact: 'end-to-end product features from data pipeline to UI' per the JD. Tests the model extracts the full scope (data + pipeline + UI) rather than just one phase."
+      }
+    },
+    {
+      "id": "C4-012",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What is the role title?",
+      "rubric": {
+        "requiredFacts": ["AI Product Engineer"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 single-fact title retrieval."
+      }
+    },
+    {
+      "id": "C4-013",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the job title for this role?",
+      "rubric": {
+        "requiredFacts": ["AI Product Engineer"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 alternate-phrasing title question."
+      }
+    },
+    {
+      "id": "C4-014",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "Where is this role based?",
+      "rubric": {
+        "requiredFacts": ["SF"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 location retrieval: hybrid SF."
+      }
+    },
+    {
+      "id": "C4-015",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "Is the role remote, hybrid, or on-site?",
+      "rubric": {
+        "requiredFacts": ["hybrid"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 work-arrangement retrieval: hybrid."
+      }
+    },
+    {
+      "id": "C4-016",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the comp range?",
+      "rubric": {
+        "requiredFacts": ["175", "200"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 2-fact numeric: $175-200k base."
+      }
+    },
+    {
+      "id": "C4-017",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the salary range?",
+      "rubric": {
+        "requiredFacts": ["175", "200"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 alternate phrasing of comp."
+      }
+    },
+    {
+      "id": "C4-018",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the base compensation for this role?",
+      "rubric": {
+        "requiredFacts": ["175", "200"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 base-only comp retrieval."
+      }
+    },
+    {
+      "id": "C4-019",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "Is there equity?",
+      "rubric": {
+        "requiredFacts": ["equity"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 yes/no retrieval: 'meaningful equity' (the qualifier)."
+      }
+    },
+    {
+      "id": "C4-020",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What does the role involve?",
+      "rubric": {
+        "requiredFacts": ["LLM", "Postgres", "streaming"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 3-fact tech-stack retrieval."
+      }
+    },
+    {
+      "id": "C4-021",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What are the must-have skills for this role?",
+      "rubric": {
+        "requiredFacts": ["LLM prompt engineering", "Postgres"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 required-skills retrieval: prompt engineering + Postgres."
+      }
+    },
+    {
+      "id": "C4-022",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What experience is non-negotiable for this role?",
+      "rubric": {
+        "requiredFacts": ["production"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 non-negotiable-experience retrieval: 'shipping with users in production' (the qualifier)."
+      }
+    },
+    {
+      "id": "C4-023",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the comp structure?",
+      "rubric": {
+        "requiredFacts": ["175", "equity"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 2-fact: base (175) + equity mention."
+      }
+    },
+    {
+      "id": "C4-024",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "Does this role require Postgres experience?",
+      "rubric": {
+        "requiredFacts": ["Postgres"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 yes/no on a specific tech."
+      }
+    },
+    {
+      "id": "C4-025",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "Does the role require streaming UI experience?",
+      "rubric": {
+        "requiredFacts": ["streaming"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 yes/no on streaming UIs."
+      }
+    },
+    {
+      "id": "C4-026",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "Does the role require LLM prompt engineering experience?",
+      "rubric": {
+        "requiredFacts": ["LLM prompt engineering"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 yes/no on prompt engineering."
+      }
+    },
+    {
+      "id": "C4-027",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the technology stack for this role?",
+      "rubric": {
+        "requiredFacts": ["LLM prompt engineering", "Postgres", "streaming"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 stack-retrieval 3-fact."
+      }
+    },
+    {
+      "id": "C4-028",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What type of engineer is the role looking for?",
+      "rubric": {
+        "requiredFacts": ["AI Product Engineer"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 role-type retrieval."
+      }
+    },
+    {
+      "id": "C4-029",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the salary floor?",
+      "rubric": {
+        "requiredFacts": ["175"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 single-fact: lower bound 175."
+      }
+    },
+    {
+      "id": "C4-030",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the salary ceiling?",
+      "rubric": {
+        "requiredFacts": ["200"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 single-fact: upper bound 200."
+      }
+    },
+    {
+      "id": "C4-031",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "Does the role offer equity?",
+      "rubric": {
+        "requiredFacts": ["equity"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 yes/no: equity (duplicate question phrasing variant)."
+      }
+    },
+    {
+      "id": "C4-032",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What tech is mentioned in the JD?",
+      "rubric": {
+        "requiredFacts": ["LLM", "Postgres"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 multi-tech retrieval."
+      }
+    },
+    {
+      "id": "C4-033",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What is the company name?",
+      "rubric": {
+        "requiredFacts": ["Helio Labs"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 company-name retrieval: Helio Labs (from the JD title)."
+      }
+    },
+    {
+      "id": "C4-034",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What is the company and the role?",
+      "rubric": {
+        "requiredFacts": ["Helio Labs", "AI Product Engineer"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 2-fact cross-sentence: company from title + role."
+      }
+    },
+    {
+      "id": "C4-035",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the team size at Helio Labs?",
+      "rubric": {
+        "requiredFacts": [],
+        "forbiddenFacts": [],
+        "refusalExpected": true,
+        "notes": "C4 refusalExpected=true: JD doesn't say team size. Expected honest refusal."
+      }
+    },
+    {
+      "id": "C4-036",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the company name, the role, and the comp range?",
+      "rubric": {
+        "requiredFacts": ["Helio Labs", "AI Product Engineer", "175"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 3-fact synthesis: company + role + comp floor."
+      }
+    },
+    {
+      "id": "C4-037",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the company's funding stage?",
+      "rubric": {
+        "requiredFacts": [],
+        "forbiddenFacts": ["seed", "Series A", "Series B", "Series C", "Series D", "IPO", "bootstrapped", "pre-seed"],
+        "refusalExpected": true,
+        "notes": "C4 refusalExpected=true: JD doesn't mention funding stage. forbiddenFacts catches the typical fabrication attempts ('seed stage', 'Series A', etc.)."
+      }
+    },
+    {
+      "id": "C4-038",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "Does this role require experience with users?",
+      "rubric": {
+        "requiredFacts": ["production", "users"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 yes/no: 'shipping with users in production' (the qualifier)."
+      }
+    },
+    {
+      "id": "C4-039",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the company's main product?",
+      "rubric": {
+        "requiredFacts": [],
+        "forbiddenFacts": [],
+        "refusalExpected": true,
+        "notes": "C4 refusalExpected=true: JD doesn't say what Helio Labs builds (only says this role works on data pipeline to UI for streaming LLM apps). Expected honest refusal."
+      }
+    },
+    {
+      "id": "C4-040",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the comp range for this role?",
+      "rubric": {
+        "requiredFacts": ["175", "200"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 duplicate of C4-016/C4-017: tests that the comp-retrieval path is robust to repeated identical-question asks (no caching-induced false-positives)."
+      }
+    },
+    {
+      "id": "C4-041",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "Where is the role located?",
+      "rubric": {
+        "requiredFacts": ["SF"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 location (alternate phrasing)."
+      }
+    },
+    {
+      "id": "C4-042",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the company's location and work arrangement?",
+      "rubric": {
+        "requiredFacts": ["SF", "hybrid"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 2-fact synthesis: location + arrangement."
       }
     }
   ]
