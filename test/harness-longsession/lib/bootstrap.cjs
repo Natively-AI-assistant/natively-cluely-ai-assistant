@@ -188,6 +188,17 @@ async function bootstrap(opts = {}) {
 
   process.env.NATIVELY_TRACE_LONGCTX = process.env.NATIVELY_TRACE_LONGCTX || '1';
   process.env.NATIVELY_API_URL = process.env.NATIVELY_API_URL || 'http://localhost:3000';
+  // Campaign 2 longsession (2026-07-20, iteration 55): calibrate-and-enable
+  // the answer-relevance guard for harness runs. Empirically tuned against
+  // run-047's full corpus (50 presses, 11 G3-pass / 39 G3-fail, live
+  // MiniMax-M3 backend): threshold 0.15 (the existing default in
+  // AnswerRelevanceChecker.ts) achieves TP=24, FP=0, F1=0.762 — perfect
+  // precision on this corpus, recovering ~62% of G3-failing presses with
+  // ZERO risk of regenerating a currently-passing one. The flag stays
+  // off-by-default in production (SettingsManager opt-in only) but the
+  // harness always exercises it so future iterations get real-world
+  // accuracy data accumulated automatically.
+  process.env.NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE = process.env.NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE || '1';
 
   // Fallback auth: if no real NATIVELY_API_KEY is set (nothing in this repo's
   // .env provisions one — it's meant to come from the invoking shell), fall

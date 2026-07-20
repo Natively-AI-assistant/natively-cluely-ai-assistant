@@ -229,6 +229,27 @@ export function isLeakedAnswerArtifact(text: string, opts?: { allowJsonEnvelope?
   if (isLeakedSchemaStub(text)) return true;
   if (isLeakedInternalTagBlock(text)) return true;
   if (!opts?.allowJsonEnvelope && isLeakedJsonEnvelope(text)) return true;
+  // Provider-transport-error literal (campaign2 iteration 55, run-053 finding):
+  // a repair regeneration that itself hit a transient provider failure
+  // (expired key, 429, billing) yields the EXACT string
+  // `isProviderTransportError` matches — a fixed, deterministic sentinel
+  // that is NEVER a real answer to the user's question. Live-reproduced
+  // regression in run-053: script-b B2 was G3-passing in run-047
+  // ("6 layers"); the answer-relevance guard fired its regeneration, the
+  // repair call hit a rate-limit, the resulting literal overwrote the
+  // passing original answer (judge flipped to FAIL because the literal
+  // obviously doesn't answer the question). Adding this check here means
+  // ANY repair site that calls `isLeakedAnswerArtifact` as its accept/
+  // reject gate (answer-relevance, profile-repair, doc-grounded-repair,
+  // answer-relevance-recheck, scaffold-contamination-recheck) now
+  // automatically rejects a provider-error repair and keeps the
+  // pre-existing original answer — mirroring the existing
+  // `isLeakedAnswerArtifact`-based rejection of bare schema-stub /
+  // internal-tag-block / json-envelope repair outputs. The check is
+  // exact-string (per `isProviderTransportError`'s own doc), so it can
+  // never false-positive on a real answer that happens to discuss API
+  // keys or rate limits.
+  if (isProviderTransportError(text)) return true;
   // Fabricated-transcript-only regeneration (campaign2 iteration 52,
   // 2026-07-19/20) — see isFabricatedTranscriptOnly's own doc comment
   // (defined below; function declarations hoist, so this forward reference
