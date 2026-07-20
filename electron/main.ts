@@ -5283,8 +5283,26 @@ export class AppState {
   // reset sharingType) and drive the dock to hidden, retrying against the OS
   // ground truth so a late ready-to-show dock re-show is corrected.
   public applyInitialUndetectableState(): void {
-    if (process.platform !== 'darwin') return;
     if (!this.isUndetectable) return;
+
+    // --- WINDOWS: hide all existing windows from the taskbar at startup ---
+    // The toggle path (setUndetectable) only fires at runtime. On a fresh
+    // launch the windows are created BEFORE this method runs, so
+    // setSkipTaskbar(true) was never applied and the app appeared in Task Manager.
+    // We fix that here by iterating all currently-open windows.
+    if (process.platform === 'win32') {
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) {
+          win.setSkipTaskbar(true);
+        }
+      });
+      // Re-assert content protection: the window show can reset sharingType.
+      this.reassertAllContentProtection();
+      console.log('[Stealth] Windows startup: setSkipTaskbar(true) applied to all existing windows.');
+      return;
+    }
+
+    if (process.platform !== 'darwin') return;
     this.reassertAllContentProtection();
     const focusWindow = this.windowHelper.getMainWindow();
     // Longer retry budget than the toggle path (~2.5s vs ~0.8s): at startup the
@@ -5696,6 +5714,26 @@ async function initializeApp() {
 
   // Initialize IPC handlers before window creation
   initializeIpcHandlers(appState)
+
+  // --- WINDOWS STEALTH: global hook to hide ALL future windows from taskbar ---
+  // setSkipTaskbar is applied at toggle-time (setUndetectable) and at startup
+  // (applyInitialUndetectableState), but any BrowserWindow created AFTER those
+  // two points — e.g. the file-picker dialog for docx/resume upload, the cropper,
+  // the model selector — would reappear in Task Manager. This app-level hook
+  // intercepts every new window the moment Electron creates it and immediately
+  // applies the current stealth policy, making stealth bullet-proof.
+  if (process.platform === 'win32') {
+    app.on('browser-window-created', (_, win) => {
+      try {
+        if (appState.getUndetectable() && !win.isDestroyed()) {
+          win.setSkipTaskbar(true);
+          console.log(`[Stealth] browser-window-created: setSkipTaskbar(true) on new window id=${win.id}`);
+        }
+      } catch (e) {
+        console.warn('[Stealth] browser-window-created hook failed:', e);
+      }
+    });
+  }
 
   // Apply the full disguise payload (names, dock icon, AUMID) early
   appState.applyInitialDisguise();

@@ -103,15 +103,24 @@ export class RateLimiter {
 
 /**
  * Pre-configured rate limiters for known providers.
- * These match documented free-tier limits.
+ *
+ * @param geminiTier - 'free' (default, 15 RPM) or 'paid' (1000 RPM for Flash).
+ *   Set GEMINI_PAID_TIER=1 in your .env to unlock paid-tier limits.
+ *   Free tier: 15 RPM → 14 tokens with 0.233 refill/s (10% safety margin).
+ *   Paid tier (Flash/Flash-Lite): ~1000 RPM → 900 tokens with 15 refill/s.
  */
-export function createProviderRateLimiters() {
+export function createProviderRateLimiters(geminiTier: 'free' | 'paid' = 'free') {
+    // Paid Flash tier: Google allows up to 1000 RPM. We use 900 (10% margin).
+    // Refill rate: 900 tokens / 60 s = 15 tokens/s.
+    const geminiMaxTokens = geminiTier === 'paid' ? 900 : 14;
+    const geminiRefillRate = geminiTier === 'paid' ? 15.0 : 0.233;
+
     return {
-        groq: new RateLimiter(6, 0.1),        // 6 req/min
-        gemini: new RateLimiter(120, 2.0),    // 120 req/min
-        openai: new RateLimiter(120, 2.0),    // 120 req/min
-        claude: new RateLimiter(120, 2.0),    // 120 req/min
-        deepseek: new RateLimiter(120, 2.0),  // OpenAI-compatible — conservative default
-        litellm: new RateLimiter(120, 2.0),   // OpenAI-compatible proxy — conservative default
+        groq: new RateLimiter(6, 0.1),                              // 6 req/min (free tier)
+        gemini: new RateLimiter(geminiMaxTokens, geminiRefillRate),  // 14/min free | 900/min paid
+        openai: new RateLimiter(120, 2.0),                          // 120 req/min
+        claude: new RateLimiter(120, 2.0),                          // 120 req/min
+        deepseek: new RateLimiter(120, 2.0),                        // OpenAI-compatible — conservative default
+        litellm: new RateLimiter(120, 2.0),                         // OpenAI-compatible proxy — conservative default
     };
 }
