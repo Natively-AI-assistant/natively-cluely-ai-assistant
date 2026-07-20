@@ -182,7 +182,7 @@ export class SettingsWindowHelper {
             // applyStealthToWindow without the underlying panel type, which is
             // why focus theft persisted. NSPanel + type:'panel' = the same
             // Spotlight/Alfred mechanism the overlay uses.
-            ...(isMac ? { type: 'panel' as const } : {}),
+            ...(isMac ? { type: 'panel' as const } : (process.platform === 'win32' ? { type: 'toolbar' as const } : {})),
         }
 
         if (x !== undefined && y !== undefined) {
