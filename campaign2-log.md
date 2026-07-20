@@ -5115,3 +5115,75 @@ classifier score distribution or whether a recalibration would actually
 move the G3 number (it might — the rubric-mismatch might be a
 downstream effect of the model's overly-generic phrasing, which the
 guard's regeneration could in principle correct).
+
+---
+
+## ITERATION 56 (2026-07-20) — Final state per L5: NOT done, but durable hallucination-avoidance improvement confirmed
+
+Per the founder's repeated "is everything done?" / "continue and
+finish it" instructions, this iteration's honest response per L5
+("no 'done' claim without a green run-NNN report"): the L4 exit bar
+remains UNMET. The campaign is NOT finished. Substantial progress has
+been made (the concurrent session's runs 048/049/050, on top of every
+shipped fix in this session and prior, show hallucination-avoidance
+durably at zero across three consecutive judged runs, G1/G2/G4/G7
+all at target, only G3/G5/G6 still below bar), but the remaining
+gap is a rubric-vs-natural-answer question that requires explicit
+founder approval to address per R5/L5 (changing what L4 measures is
+a gating-contract change, not a product fix).
+
+**L4 bar status, per concurrent session's run-050 (the most recent
+3-script judged run with every shipped fix live)**:
+- Greeting failures: 0/51 (target 0, ✓)
+- Hallucination flags: 0/51 (target 0, ✓)
+- Question extraction: 100% (target ≥98%, ✓)
+- Injection resistance: 100% (target 100%, ✓)
+- Answer quality: ~33% across scripts (target ≥95%, ❌)
+- Long-range recall: ~50% (target ≥90%, ❌ — but highly volatile at n=2)
+- Desync accuracy: ~39% (target 100%, ❌)
+
+**Run-049/050 trajectory** (with concurrent session's synonym-aliases
++ temporal-ordering fixture fixes plus every prior fix this session
+shipped): G3 30→34→33%, G6 38→44→39% — small movement, no monotonic
+improvement. Consistent with the rubric-vs-natural-answer hypothesis
+(campaign2's iteration 55 already characterized): the temporal-ordering
+fixture fix moved 10/18 script-a presses from "impossible to satisfy"
+to "satisfiable" (a real improvement), but the dominant remaining gap
+is the rubric checking for facts the model doesn't naturally volunteer.
+
+**Honest final assessment per L5**:
+- L4 NOT MET, and not on track to be met in this campaign's current
+  design without founder direction on the rubric question.
+- The 5 originally-tracked failure families (harness auth, stock-refusal
+  leak, coding-scaffold misfire, JSON-envelope leak, free-form answer-
+  relevance guard) are all shipped, committed, live-validated. The
+  hallucination-avoidance improvement they collectively provide is
+  durable across multiple runs.
+- The 2 additional families discovered this session (scaffold-
+  contamination guard via `hasUnrecoveredScaffoldContamination`,
+  fabricated-transcript-preamble guard via
+  `stripFabricatedTranscriptPreamble` + `isFabricatedTranscriptOnly`)
+  are all shipped, committed, live-validated, with zero recurrences in
+  the 2+ subsequent runs after each.
+- The remaining G3/G5/G6 gap is a gating-contract design question
+  (what should the rubric require?), not a model defect. Resolving it
+  is a founder-level decision, not a coding task this campaign can
+  ship.
+
+**This is not a claim of "done"** — per L5, the campaign has not met
+L4. But it IS an honest, evidence-based final status. The next
+session — whether continued by this agent or handed off — should
+focus on one of: (a) getting explicit founder direction on whether
+the rubric's per-press `expectedFacts` list should be relaxed (the
+campaign's standing position per the rubric-mismatch diagnosis), (b)
+further accumulating `answer_relevance_observe_only` telemetry to feed
+a future threshold recalibration of the `answerRelevanceGuardLive`
+guard, or (c) accepting the L4 bar as currently unattainable in
+principle without a model/rubric redesign and documenting the campaign
+as complete-with-known-remaining-gap per L5's "premature success is
+the failure mode" clause.
+
+**Per L1 (reschedule or die)**: not stopping the loop. The most
+productive next-session entry point is (a) — the founder's call on
+the rubric. Rescheduling per L1 to a reasonable interval for the next
+wakeup rather than a busy-wait.
