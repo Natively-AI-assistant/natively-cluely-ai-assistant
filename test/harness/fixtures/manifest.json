@@ -211,6 +211,110 @@
         "refusalExpected": false,
         "notes": "Campaign-3 micro-suite Q5 (salary). CRITICAL acceptance case: the pre-C3 failure was the anti-fabrication seeder turning an unroutable salary question into an unwanted self-introduction (bio). Expected post-C3: salary-relevant deflection/negotiation-safe answer, NOT a bio, NOT a refusal. on_no_evidence=answer_general_labeled. The forbidden facts are resume identity fields that must NOT appear (proves the seeder didn't dump a bio)."
       }
+    },
+    {
+      "id": "C3-005",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "Walk me through the reconciliation system you built at Stripe — what was the legacy stack, what did you replace it with, and what was the latency improvement?",
+      "rubric": {
+        "requiredFacts": ["Hadoop", "Kafka", "Flink", "38 minutes", "4.2B"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 follow-on: 5-fact synthesis across one specific project (reconciliation pipeline) — tests that the model can ground across the bullet points of a single job, not just identify the company name. The 5 facts together (Hadoop→Kafka+Flink, 4.2B/day, 38min p99) form a minimal coherent project description."
+      }
+    },
+    {
+      "id": "C3-006",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "Tell me about the failover protocol you designed at Datadog — what consensus algorithm and what was the improvement?",
+      "rubric": {
+        "requiredFacts": ["Raft", "gRPC", "19 seconds"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 synthesis test: 3-fact numerical+technical synthesis (Raft consensus, gRPC transport, 19-second regional failover). The model must surface both the technical name (Raft) AND the specific quantitative result (19 seconds) — these come from two separate bullets in the resume that the model must cross-reference to a single coherent answer."
+      }
+    },
+    {
+      "id": "C3-007",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What was the largest migration you led at Stripe, and how many microservices did it involve?",
+      "rubric": {
+        "requiredFacts": ["17", "Envoy", "service mesh"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 mid-specificity test: pulls 3 facts from 2 different bullets in the Stripe section (the 17-microservice migration and the Envoy service mesh). Tests that the model can correlate cross-bullet facts to a single coherent narrative."
+      }
+    },
+    {
+      "id": "C3-008",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "Tell me about the surge-pricing index you built at Uber — what technology did you switch to and what was the latency improvement?",
+      "rubric": {
+        "requiredFacts": ["H3", "2.4ms", "PostgreSQL", "quadtree"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 4-fact retrieval test: model must surface the OLD technology (quadtree/PostgreSQL), the NEW technology (H3), and the specific quantitative result (2.4ms p99) from a single bullet. Old-vs-new contrast is harder than a single-fact extraction because the model must NOT confuse the latency numbers from different projects (e.g. 38ms for reconciliation vs 2.4ms for surge-pricing)."
+      }
+    },
+    {
+      "id": "C3-009",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "How long have you been at Stripe, and what's your current title?",
+      "rubric": {
+        "requiredFacts": ["Staff Software Engineer", "March 2022"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 baseline fact-extraction test: pulls just 2 facts (title + start date) from the Stripe job header. Should be the easiest case in the cohort — tests that the basic parsing layer works when the question is a direct lookup, before testing the harder synthesis questions."
+      }
+    },
+    {
+      "id": "C3-010",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What's tinroof and what consensus algorithm does it implement?",
+      "rubric": {
+        "requiredFacts": ["Raft", "Go", "KV store"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 project-deep-dive test: asks about one specific named project (tinroof) which the model must locate in the projects section (not jobs section) and surface 3 specific facts. Distinguishes from a 'tell me about a project' question by being explicit about which project — tests the model's ability to handle project-named questions."
+      }
+    },
+    {
+      "id": "C3-011",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What languages are you strongest in, and how long have you been writing Go in production?",
+      "rubric": {
+        "requiredFacts": ["Go", "8"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 skills+experience cross-section test: pulls 2 facts from two different sections (SKILLS section says 'Go (primary, 8+ years production)' and SUMMARY says '10 years'). The '8' is the number of years specifically for Go, not the total 10 years — testing the model doesn't conflate these."
+      }
+    },
+    {
+      "id": "C3-012",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What observability tools do you have production experience with?",
+      "rubric": {
+        "requiredFacts": ["Prometheus", "Grafana", "OpenTelemetry", "Datadog"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 list-extraction test: 4 facts in a single category (observability tools), each from the SKILLS section list. Tests that the model can extract a multi-item list when each item is independent, not bound to a specific job or date."
+      }
     }
   ]
 }
