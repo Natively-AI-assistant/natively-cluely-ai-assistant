@@ -39,6 +39,8 @@ export interface StoredCredentials {
     deepseekApiKey?: string;
     litellmApiKey?: string;
     litellmBaseURL?: string;
+    /** Map of provider keys to boolean indicating if they are premium (paid) keys. */
+    providerIsPremium?: Record<string, boolean>;
     /** Manual output ceiling for LiteLLM-proxied models. Unset → Auto (per-model via /model/info). */
     litellmMaxTokens?: number;
     googleServiceAccountPath?: string;
@@ -225,6 +227,10 @@ export class CredentialsManager {
 
     public getNativelyApiKey(): string | undefined {
         return this.credentials.nativelyApiKey;
+    }
+
+    public getProviderIsPremium(providerId: string): boolean {
+        return !!this.credentials.providerIsPremium?.[providerId];
     }
 
     public getAllCredentials(): StoredCredentials {
@@ -509,11 +515,28 @@ export class CredentialsManager {
         console.log(`[CredentialsManager] Custom Provider '${id}' deleted`);
     }
 
+    public setCustomProviders(providers: CustomProvider[]): void {
+        this.credentials.customProviders = providers;
+        this.saveCredentials();
+    }
+
+    public setProviderIsPremium(providerId: string, isPremium: boolean): void {
+        if (!this.credentials.providerIsPremium) {
+            this.credentials.providerIsPremium = {};
+        }
+        this.credentials.providerIsPremium[providerId] = isPremium;
+        this.saveCredentials();
+    }
+
+    public getProviderIsPremium(providerId: string): boolean {
+        return !!this.credentials.providerIsPremium?.[providerId];
+    }
+
     public getCurlProviders(): CurlProvider[] {
         return this.credentials.curlProviders || [];
     }
 
-    public saveCurlProvider(provider: CurlProvider): void {
+    public setCurlProviders(providers: CurlProvider[]): void {
         if (!this.credentials.curlProviders) {
             this.credentials.curlProviders = [];
         }

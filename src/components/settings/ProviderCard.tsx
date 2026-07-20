@@ -23,6 +23,8 @@ interface ProviderCardProps {
     keyPlaceholder: string;
     keyUrl: string;
     onPreferredModelChange?: (modelId: string) => void;
+    isPremium?: boolean;
+    onPremiumChange?: (isPremium: boolean) => void;
 }
 
 export const ProviderCard: React.FC<ProviderCardProps> = ({
@@ -42,6 +44,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     keyPlaceholder,
     keyUrl,
     onPreferredModelChange,
+    isPremium,
+    onPremiumChange,
 }) => {
     const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
     const [isFetching, setIsFetching] = useState(false);
@@ -263,7 +267,20 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             {testError && <p className="text-[10px] text-red-400 mt-1.5 mb-2">{testError}</p>}
             {fetchError && <p className="text-[10px] text-red-400 mt-1.5 mb-2">Model fetch error: {fetchError}</p>}
 
-
+            {onPremiumChange && (
+                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border-subtle">
+                    <input 
+                        type="checkbox" 
+                        id={`premium-${providerId}`} 
+                        checked={isPremium || false}
+                        onChange={(e) => onPremiumChange(e.target.checked)}
+                        className="rounded border-border-subtle bg-bg-input text-accent-primary focus:ring-accent-primary cursor-pointer w-3.5 h-3.5"
+                    />
+                    <label htmlFor={`premium-${providerId}`} className="text-xs text-text-secondary cursor-pointer hover:text-text-primary transition-colors">
+                        This is a paid / premium key (unlocks higher rate limits)
+                    </label>
+                </div>
+            )}
         </div>
     );
 };

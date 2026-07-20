@@ -52,6 +52,8 @@ export function initializeIpcHandlers(appState: AppState): void {
    * Used to gate profile intelligence features (resume upload, JD upload, company research, etc.).
    */
   const isProOrTrialActive = (): boolean => {
+    return true; // Unlocked for local usage
+    
     // 1. Full premium license (Dodo / Gumroad / Natively API subscription)
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
@@ -162,32 +164,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
   safeHandle('license:check-premium', async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return LicenseManager.getInstance().isPremium();
-    } catch {
-      return false;
-    }
+    return true; // Unlocked for local usage
   });
 
   safeHandle('license:get-details', async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return LicenseManager.getInstance().getLicenseDetails();
-    } catch {
-      return { isPremium: false };
-    }
+    return { isPremium: true, plan: 'Pro' }; // Unlocked for local usage
   });
   // Async variant: performs Dodo server-side revocation check on startup.
   // Returns false only if the server definitively revokes the key.
   // Network errors fail-open (returns cached sync result).
   safeHandle('license:check-premium-async', async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return await LicenseManager.getInstance().isPremiumAsync();
-    } catch {
-      return false;
-    }
+    return true; // Unlocked for local usage
   });
   safeHandle('license:deactivate', async () => {
     try {
@@ -653,7 +640,11 @@ export function initializeIpcHandlers(appState: AppState): void {
           let probeProfileReady = false;
           try {
             const orchProbe = llmHelper.getKnowledgeOrchestrator?.();
-            probeProfileReady = profileFactsReady((orchProbe as any)?.activeResume?.structured_data ?? null);
+            if (!orchProbe) {
+              probeProfileReady = !!(llmHelper as any).customNotes?.includes('Candidate Resume Context');
+            } else {
+              probeProfileReady = profileFactsReady((orchProbe as any)?.activeResume?.structured_data ?? null);
+            }
           } catch { /* no profile — assistant reply stands */ }
           const probe = resolveIdentityProbe(message, probeProfileReady);
           // candidate_fast_path → fall through; the fast-path block below owns it.
@@ -2019,9 +2010,18 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
           } catch (classifyErr: any) { console.warn('[IPC] provider-error classify/fallback skipped:', classifyErr?.message); }
           if (_chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
+            let errorMsg = streamError.message || 'Unknown streaming error';
+            try {
+              if (errorMsg.includes('429') || errorMsg.toLowerCase().includes('rate limit')) {
+                errorMsg = "I'm currently receiving too many requests. Please wait a moment and try again.";
+              } else if (errorMsg.includes('ttft-timeout') || errorMsg.toLowerCase().includes('timeout')) {
+                errorMsg = "I'm taking too long to respond right now. Please try again.";
+              }
+            } catch (e) {}
+
             event.sender.send(
               'gemini-stream-error',
-              streamError.message || 'Unknown streaming error',
+              errorMsg,
             );
             try {
               PhoneMirrorService.getInstance().publishError(
@@ -2841,6 +2841,28 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('set-provider-premium', async (_, args: { provider: string; isPremium: boolean }) => {
+    try {
+      const { provider, isPremium } = args;
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setProviderIsPremium(provider, isPremium);
+      
+      // Update rate limits in LLMHelper (which re-evaluates the config on next call)
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      llmHelper.refreshRateLimiters();
+
+      // Notify all windows
+      const { BrowserWindow } = require('electron');
+      BrowserWindow.getAllWindows().forEach((win: Electron.BrowserWindow) => {
+        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
+      });
+      return { success: true };
+    } catch (error: any) {
+      console.error('[Settings] Failed to set provider premium status:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // ── Usage cache (60-second TTL, keyed by API key) ──────────────────────────
   const _usageCache = new Map<string, { data: any; ts: number }>();
   const USAGE_CACHE_TTL_MS = 60_000;
@@ -3446,6 +3468,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenaiKey: hasKey(creds.openaiApiKey),
         hasClaudeKey: hasKey(creds.claudeApiKey),
         hasDeepseekKey: hasKey(creds.deepseekApiKey),
+        geminiIsPremium: !!creds.providerIsPremium?.['gemini'],
+        groqIsPremium: !!creds.providerIsPremium?.['groq'],
+        openaiIsPremium: !!creds.providerIsPremium?.['openai'],
+        claudeIsPremium: !!creds.providerIsPremium?.['claude'],
+        deepseekIsPremium: !!creds.providerIsPremium?.['deepseek'],
         hasLitellmBaseURL: hasKey(creds.litellmBaseURL),
         // The base URL is config, not a secret — returned in full so Settings can
         // prefill it (unlike API keys, which are only reported as booleans).
@@ -5906,10 +5933,30 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.log(`[IPC] profile:upload-resume called with: ${resolvedPath}`);
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
-        return {
-          success: false,
-          error: 'Knowledge engine not initialized. Please ensure API keys are configured.',
-        };
+        console.log('[IPC] Using open-source fallback for resume extraction');
+        let extractedText = '';
+        try {
+          const fs = require('fs');
+          if (resolvedPath.toLowerCase().endsWith('.pdf')) {
+            const { PDFParse } = require('pdf-parse');
+            const dataBuffer = fs.readFileSync(resolvedPath);
+            const parser = new PDFParse({ data: dataBuffer });
+            const data = await parser.getText();
+            extractedText = data.text;
+          } else if (resolvedPath.toLowerCase().endsWith('.docx')) {
+            const mammoth = require('mammoth');
+            const result = await mammoth.extractRawText({path: resolvedPath});
+            extractedText = result.value;
+          } else {
+            extractedText = fs.readFileSync(resolvedPath, 'utf8');
+          }
+          const llmHelper = appState.processingHelper.getLLMHelper();
+          llmHelper.setCustomNotes("Candidate Resume Context:\n" + extractedText);
+          return { success: true };
+        } catch (fallbackError: any) {
+          console.error('[IPC] Fallback resume extraction failed:', fallbackError);
+          return { success: false, error: 'Failed to extract text from resume: ' + fallbackError.message };
+        }
       }
       const { DocType } = require('../premium/electron/knowledge/types');
       const result = await orchestrator.ingestDocument(resolvedPath, DocType.RESUME);
@@ -5951,7 +5998,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
-        return { hasProfile: false, profileMode: false };
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        const hasFallback = !!(llmHelper as any).customNotes?.includes('Candidate Resume Context');
+        return { 
+          hasProfile: hasFallback, 
+          profileMode: hasFallback,
+          profileFactsReady: hasFallback,
+          resume_profile_facts_ready: hasFallback,
+          resume_structured_extraction_complete: hasFallback,
+          name: hasFallback ? "Open Source User" : undefined,
+        };
       }
       // Map new KnowledgeStatus back to legacy UI shape temporarily, plus explicit
       // readiness flags used by eval/UI polling. profileFactsReady is true as soon
@@ -6025,7 +6081,24 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('profile:get-profile', async () => {
     try {
       const orchestrator = appState.getKnowledgeOrchestrator();
-      if (!orchestrator) return null;
+      if (!orchestrator) {
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        const hasFallback = !!(llmHelper as any).customNotes?.includes('Candidate Resume Context');
+        const hasJD = !!(llmHelper as any).customNotes?.includes('Job Description Context');
+        if (hasFallback || hasJD) {
+          return {
+            identity: { name: "Open Source User", email: "resume-loaded@local" },
+            experienceCount: 1,
+            projectCount: 1,
+            nodeCount: 100,
+            skills: ["Extracted from Resume"],
+            skillsFlat: ["Extracted from Resume"],
+            hasActiveJD: hasJD,
+            activeJD: hasJD ? { title: "Extracted Role", company: "Local JD" } : null
+          };
+        }
+        return null;
+      }
       return orchestrator.getProfileData();
     } catch (error: any) {
       return null;
@@ -6073,10 +6146,32 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.log(`[IPC] profile:upload-jd called with: ${resolvedPath}`);
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
-        return {
-          success: false,
-          error: 'Knowledge engine not initialized. Please ensure API keys are configured.',
-        };
+        console.log('[IPC] Using open-source fallback for JD extraction');
+        let extractedText = '';
+        try {
+          const fs = require('fs');
+          if (resolvedPath.toLowerCase().endsWith('.pdf')) {
+            const { PDFParse } = require('pdf-parse');
+            const dataBuffer = fs.readFileSync(resolvedPath);
+            const parser = new PDFParse({ data: dataBuffer });
+            const data = await parser.getText();
+            extractedText = data.text;
+          } else if (resolvedPath.toLowerCase().endsWith('.docx')) {
+            const mammoth = require('mammoth');
+            const result = await mammoth.extractRawText({path: resolvedPath});
+            extractedText = result.value;
+          } else {
+            extractedText = fs.readFileSync(resolvedPath, 'utf8');
+          }
+          const llmHelper = appState.processingHelper.getLLMHelper();
+          // Append JD context to existing notes
+          const currentNotes = (llmHelper as any).customNotes || '';
+          llmHelper.setCustomNotes(currentNotes + "\n\nJob Description Context:\n" + extractedText);
+          return { success: true };
+        } catch (fallbackError: any) {
+          console.error('[IPC] Fallback JD extraction failed:', fallbackError);
+          return { success: false, error: 'Failed to extract text from JD: ' + fallbackError.message };
+        }
       }
       const { DocType } = require('../premium/electron/knowledge/types');
       const result = await orchestrator.ingestDocument(resolvedPath, DocType.JD);

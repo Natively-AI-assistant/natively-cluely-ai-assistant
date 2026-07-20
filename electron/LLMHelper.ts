@@ -358,14 +358,9 @@ export class LLMHelper extends EventEmitter {
     super();
     this.useOllama = useOllama
 
-    // Initialize rate limiters — detect paid vs free Gemini tier.
-    // Set GEMINI_PAID_TIER=1 in .env when using a paid Google AI / Vertex API key.
+    // Initialize rate limiters — detect paid vs free Gemini tier from credentials.
     // Paid Flash tier allows ~1000 RPM; free tier is capped at 15 RPM.
-    const geminiTier = process.env.GEMINI_PAID_TIER === '1' ? 'paid' : 'free';
-    this.rateLimiters = createProviderRateLimiters(geminiTier);
-    if (geminiTier === 'paid') {
-      console.log('[LLMHelper] Gemini PAID tier detected — rate limiter set to 900 req/min.');
-    }
+    this.refreshRateLimiters();
 
     // Initialize policy-aware provider router
     this.providerRouter = new ProviderRouter();

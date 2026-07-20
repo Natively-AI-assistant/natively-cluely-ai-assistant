@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, AlertCircle, CheckCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, AlertCircle, CheckCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, Lightbulb } from 'lucide-react';
 import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
@@ -154,6 +154,7 @@ export const AIProvidersSettings: React.FC = () => {
     const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
     const [savingStatus, setSavingStatus] = useState<Record<string, boolean>>({});
     const [hasStoredKey, setHasStoredKey] = useState<Record<string, boolean>>({});
+    const [isPremium, setIsPremium] = useState<Record<string, boolean>>({});
     const [testStatus, setTestStatus] = useState<Record<string, 'idle' | 'testing' | 'success' | 'error'>>({});
     const [testError, setTestError] = useState<Record<string, string>>({});
 
@@ -214,6 +215,13 @@ export const AIProvidersSettings: React.FC = () => {
                         deepseek: creds.hasDeepseekKey || false,
                         litellm: creds.hasLitellmBaseURL || false,
                         natively: creds.hasNativelyKey || false
+                    });
+                    setIsPremium({
+                        gemini: !!creds.geminiIsPremium,
+                        groq: !!creds.groqIsPremium,
+                        openai: !!creds.openaiIsPremium,
+                        claude: !!creds.claudeIsPremium,
+                        deepseek: !!creds.deepseekIsPremium,
                     });
                     // Prefill stored LiteLLM config so re-saving doesn't silently reset it.
                     // (baseURL is config, not a secret; the key stays masked/blank = keep.)
@@ -458,6 +466,16 @@ export const AIProvidersSettings: React.FC = () => {
             console.error(`Failed to save ${provider} key:`, e);
         } finally {
             setSavingStatus(prev => ({ ...prev, [provider]: false }));
+        }
+    };
+
+    const handlePremiumChange = async (provider: string, premium: boolean) => {
+        setIsPremium(prev => ({ ...prev, [provider]: premium }));
+        try {
+            // @ts-ignore
+            await window.electronAPI.setProviderPremium(provider, premium);
+        } catch (e) {
+            console.error(`Failed to save premium status for ${provider}:`, e);
         }
     };
 
@@ -729,6 +747,37 @@ export const AIProvidersSettings: React.FC = () => {
                 </div>
             </div>
 
+            {/* Speed vs Accuracy Table */}
+            <div className="mb-6 bg-bg-item-surface border border-border-subtle rounded-xl p-4">
+                <h4 className="text-xs font-bold text-text-primary mb-2 flex items-center gap-2">
+                    <Lightbulb size={12} className="text-accent-primary" />
+                    Model Recommendation Guide
+                </h4>
+                <div className="overflow-hidden rounded border border-border-subtle">
+                    <table className="w-full text-[10px] text-left">
+                        <thead className="bg-bg-elevated border-b border-border-subtle">
+                            <tr>
+                                <th className="p-2 font-semibold text-text-primary">Interview Type</th>
+                                <th className="p-2 font-semibold text-text-primary">Recommended Model</th>
+                                <th className="p-2 font-semibold text-text-primary">Why?</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border-subtle text-text-secondary">
+                            <tr className="bg-bg-input/30">
+                                <td className="p-2 font-medium">Behavioral / Conversational</td>
+                                <td className="p-2 text-orange-500 font-medium">Groq (Llama 3.3)</td>
+                                <td className="p-2">100% Speed. Perfect for real-time conversational flow where instant latency matters most.</td>
+                            </tr>
+                            <tr className="bg-bg-input/30">
+                                <td className="p-2 font-medium">Coding / System Design</td>
+                                <td className="p-2 text-accent-primary font-medium">Gemini Pro / Claude 3.5</td>
+                                <td className="p-2">100% Accuracy. Better logic for complex code. Use the <strong className="text-violet-400">Brainstorm</strong> button during the interview to enable deep thinking.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             {/* Cloud Providers */}
             <div className="space-y-5">
                 <div>
@@ -756,6 +805,8 @@ export const AIProvidersSettings: React.FC = () => {
                         keyPlaceholder="AIzaSy..."
                         keyUrl="https://aistudio.google.com/app/apikey"
                         onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, gemini: model }))}
+                        isPremium={isPremium.gemini}
+                        onPremiumChange={(val) => handlePremiumChange('gemini', val)}
                     />
 
                     {/* Groq */}
@@ -776,6 +827,8 @@ export const AIProvidersSettings: React.FC = () => {
                         keyPlaceholder="gsk_..."
                         keyUrl="https://console.groq.com/keys"
                         onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, groq: model }))}
+                        isPremium={isPremium.groq}
+                        onPremiumChange={(val) => handlePremiumChange('groq', val)}
                     />
 
                     {/* OpenAI */}
@@ -796,6 +849,8 @@ export const AIProvidersSettings: React.FC = () => {
                         keyPlaceholder="sk-..."
                         keyUrl="https://platform.openai.com/api-keys"
                         onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, openai: model }))}
+                        isPremium={isPremium.openai}
+                        onPremiumChange={(val) => handlePremiumChange('openai', val)}
                     />
 
                     {/* Claude */}
@@ -816,6 +871,8 @@ export const AIProvidersSettings: React.FC = () => {
                         keyPlaceholder="sk-ant-..."
                         keyUrl="https://console.anthropic.com/settings/keys"
                         onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, claude: model }))}
+                        isPremium={isPremium.claude}
+                        onPremiumChange={(val) => handlePremiumChange('claude', val)}
                     />
 
                     {/* DeepSeek — text-only; intentionally not part of the screenshot/vision fallback chain. */}
@@ -836,6 +893,8 @@ export const AIProvidersSettings: React.FC = () => {
                         keyPlaceholder="sk-..."
                         keyUrl="https://platform.deepseek.com/api_keys"
                         onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, deepseek: model }))}
+                        isPremium={isPremium.deepseek}
+                        onPremiumChange={(val) => handlePremiumChange('deepseek', val)}
                     />
 
                     {/* LiteLLM — OpenAI-compatible AI gateway (100+ providers via one proxy).

@@ -1138,6 +1138,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setDeepseekApiKey: (apiKey: string) => ipcRenderer.invoke('set-deepseek-api-key', apiKey),
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => ipcRenderer.invoke('set-litellm-config', config),
   getAvailableLiteLLMModels: () => ipcRenderer.invoke('get-available-litellm-models'),
+  setProviderPremium: (provider: string, isPremium: boolean) => ipcRenderer.invoke('set-provider-premium', { provider, isPremium }),
   setNativelyApiKey: (apiKey: string) => ipcRenderer.invoke('set-natively-api-key', apiKey),
   getNativelyPricing: () => ipcRenderer.invoke('get-natively-pricing'),
   getNativelyUsage: () => ipcRenderer.invoke('get-natively-usage'),
