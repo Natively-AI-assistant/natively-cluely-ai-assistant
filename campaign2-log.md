@@ -4832,3 +4832,103 @@ session's own test suites that silently degrade to regex-only fallback
 without it; (3) run a full 3-script judged benchmark (not just A/C) to
 get a current, complete L4-exit-condition picture now that scaffold-
 contamination and fabricated-transcript are both addressed.
+
+---
+
+## ITERATION 53 (2026-07-20) — Root-caused and fixed the corrupted ONNX asset (iteration 49/52's NEXT ACTION #2): a stale, truncated build-output copy, not a real download/asset problem
+
+Investigated iteration 52's NEXT ACTION #2 before jumping to a full
+3-script run, since it was flagged as this campaign's actual highest-
+leverage remaining item (unblocks BOTH `answerRelevanceGuardLive`
+recalibration AND several test suites silently degrading to regex-only
+fallback).
+
+**Root cause, NOT what iteration 49 assumed**: iteration 49's framing
+("a corrupted/truncated local asset from a prior download... likely
+outside this repo's control") was WRONG. Compared the SOURCE tree
+(`resources/models/Xenova/mobilebert-uncased-mnli/onnx/`, tracked via
+git-lfs-style large-file storage, NOT gitignored) against the BUILD
+OUTPUT (`dist-electron/resources/models/...`, gitignored, a copy):
+- Source `model.onnx`: 99,027,471 bytes, dated Jul 19 21:23 (full fp32
+  precision — this is what `@huggingface/transformers`'s `pipeline()`
+  loads by default when no `dtype` is specified, confirmed via
+  `intentClassifierWorker.ts` passing no `dtype` option and the failing
+  logs' own "dtype not specified for 'model'. Using the default dtype
+  (fp32)" line).
+- dist-electron's stale copy: 57,384,896 bytes, dated Jul 19 20:01 —
+  visibly TRUNCATED (56% of the correct size) relative to the source,
+  and dated ~1h20m EARLIER than the source's own correctly-sized file.
+  This points to a straightforward timeline: at some point on 2026-07-19
+  the source `resources/models/` asset was itself incomplete/wrong (or
+  a different, smaller variant), got copied into `dist-electron/` at
+  20:01, and was subsequently corrected in the SOURCE tree at 21:23 by
+  some other process/session — but nothing ever re-synced the now-
+  stale `dist-electron/` copy. `dist-electron/` is a gitignored build
+  output, so this drift was invisible to any git-based diff or status
+  check.
+- Also found the SOURCE tree separately has a correctly-sized
+  `model_quantized.onnx` (26,967,165 bytes) that was NEVER copied into
+  `dist-electron/` at all — `download-models.js`'s own
+  `REQUIRED_MODEL_FILES` list expects this quantized variant, but the
+  actual runtime code path (`intentClassifierWorker.ts`, no `dtype`
+  override) loads the FULL-precision `model.onnx` instead — a latent
+  inconsistency between the packaging script's expectations and the
+  dev/test runtime's actual behavior, worth a follow-up but not
+  blocking (the full-precision file works fine once correctly copied).
+
+**Fix**: `cp` the correctly-sized `model.onnx` (and, defensively, the
+correctly-sized `model_quantized.onnx`) from `resources/models/` into
+`dist-electron/resources/models/`. This is a LOCAL BUILD-ARTIFACT
+REPAIR, not a source-code change — `dist-electron/` is gitignored
+(confirmed via `git check-ignore`), so there is nothing to commit for
+this fix. It only affects THIS machine's/session's local build output;
+any other machine (or a fresh `npm run build:electron`) would need the
+same copy step, or a build-process fix ensuring `dist-electron/` always
+gets a fresh, complete copy of `resources/models/` rather than assuming
+it's already correct.
+
+**Verification**: re-ran the two test files previously blocked by this
+asset:
+- `IntelligenceEngineAnswerRelevance.test.mjs`: **10/10 pass** (was
+  9/10 — the exact "free-form no-content hallucination... regenerated
+  into a real answer" test that iterations 41/49 could never get past
+  now passes, because `checkAnswerRelevance`'s real zero-shot NLI
+  classifier can finally load and score correctly instead of silently
+  falling back to a no-op).
+- `IntentClassifierStackWordBoundary2026_07_19.test.mjs`: all
+  checkmarks green, no more `missing_required_asset`/`Protobuf parsing
+  failed` in the log.
+
+**NOT done this iteration** (deliberately, to keep this fix narrowly
+scoped and immediately land the win): did not yet re-enable
+`answerRelevanceGuardLive` (default OFF) — the flag's own doc comment
+(iteration 41) documents a DEEPER, separate calibration-transfer-gap
+problem (the classifier's confidence distribution for real vs.
+hallucinated answers overlaps almost entirely on live multi-turn
+traffic) that a working model asset alone does not fix; recalibration
+against real production score distributions is still the correct next
+step for that flag specifically, now that it's at least POSSIBLE
+(previously it wasn't, since the classifier couldn't load at all). Also
+did not investigate/fix the `download-models.js` vs. runtime `dtype`
+mismatch noted above (quantized file downloaded but never used) — a
+real inefficiency (shipping an unused 27MB file, and the runtime
+loading the larger 99MB fp32 variant instead) but not correctness-
+affecting once both files are correctly present, and out of scope for
+this iteration's narrow "unblock the tests" goal.
+
+**Workspace note**: since `dist-electron/` is a local, gitignored build
+artifact, this fix is SESSION-LOCAL — it does not propagate to other
+concurrent sessions' checkouts of this same repo (each has its own
+`dist-electron/` from its own last build). Logging the root cause here
+in detail specifically so any other session hitting the same
+`missing_required_asset`/`Protobuf parsing failed` symptom can apply
+the same 2-file copy fix immediately rather than re-diagnosing it.
+
+**NEXT ACTION**: run the full 3-script judged benchmark (per iteration
+52's remaining item #3) to get a current, complete L4-exit-condition
+picture now that scaffold-contamination, fabricated-transcript, AND the
+ONNX asset are all addressed — this also now lets that run's own
+`answer_relevance_observe_only` trace lines (flag stays OFF, still
+traces) accumulate against a CORRECTLY-LOADED classifier for the first
+time this campaign, which is a prerequisite for the eventual
+recalibration work.
