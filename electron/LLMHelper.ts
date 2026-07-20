@@ -416,6 +416,14 @@ export class LLMHelper extends EventEmitter {
     }
   }
 
+  public refreshRateLimiters(): void {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const creds = CredentialsManager.getInstance();
+    const geminiTier = creds.getProviderIsPremium('gemini') ? 'paid' : 'free';
+    this.rateLimiters = createProviderRateLimiters(geminiTier);
+    console.log(`[LLMHelper] Rate limiters refreshed. Gemini tier: ${geminiTier}`);
+  }
+
   public setApiKey(apiKey: string) {
     this.apiKey = apiKey;
     this.client = new GoogleGenAI({

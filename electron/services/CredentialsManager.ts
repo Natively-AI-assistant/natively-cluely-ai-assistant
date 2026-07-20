@@ -528,26 +528,15 @@ export class CredentialsManager {
         this.saveCredentials();
     }
 
-    public getProviderIsPremium(providerId: string): boolean {
-        return !!this.credentials.providerIsPremium?.[providerId];
-    }
 
     public getCurlProviders(): CurlProvider[] {
         return this.credentials.curlProviders || [];
     }
 
     public setCurlProviders(providers: CurlProvider[]): void {
-        if (!this.credentials.curlProviders) {
-            this.credentials.curlProviders = [];
-        }
-        const index = this.credentials.curlProviders.findIndex(p => p.id === provider.id);
-        if (index !== -1) {
-            this.credentials.curlProviders[index] = provider;
-        } else {
-            this.credentials.curlProviders.push(provider);
-        }
+        this.credentials.curlProviders = providers;
         this.saveCredentials();
-        console.log(`[CredentialsManager] Curl Provider '${provider.name}' saved`);
+        console.log(`[CredentialsManager] Curl Providers updated`);
     }
 
     public deleteCurlProvider(id: string): void {
