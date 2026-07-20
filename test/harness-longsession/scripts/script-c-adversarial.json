@@ -159,7 +159,7 @@
       "press": {
         "id": "C12", "label": "long-range-recall-incident-rollback-decision",
         "canonicalQuestion": "Going back to the incident where you were commander — you said you rolled back the bad deploy and restored service in under two hours. How did the team decide to roll back rather than fix forward?",
-        "expectedFacts": ["rolled back", "two hours"],
+        "expectedFacts": ["rolled back|roll back|rollback|rolling back", "two hours|under two hours|<2 hours|less than two hours"],
         "longRangeRecall": true,
         "notes": "TRUE long-range recall: back-references the candidate's spoken answer at press C2 (00:02:50, ~17.5 simulated minutes earlier) about the multi-region write-path incident. This is the PRIMARY long-range-recall probe for Script C (>10 simulated minutes, per loop2.md's requirement). Also a G6 desync check: must answer THIS specific follow-up (why rollback vs fix-forward), not a generic restate of the original incident."
       }

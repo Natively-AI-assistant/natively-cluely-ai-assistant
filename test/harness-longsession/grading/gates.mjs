@@ -168,10 +168,28 @@ export function gradeG2GreetingFailure(press, answer) {
 // ---------------------------------------------------------------------------
 
 function containsFact(answer, fact) {
+  // Empty-fact preserved as vacuously-true (matches pre-fix behavior).
+  if (!fact) return true;
   const a = normalizeForMatch(answer);
-  const f = normalizeForMatch(fact);
-  if (!f) return true;
-  return a.includes(f);
+  // Pipeline-2026-07-20 grader-too-literal fix: a fact string can be a
+  // pipe-separated list of equivalent phrasings (e.g. "leftward|earlier
+  // positions|previous tokens"); the fact is satisfied if ANY of them
+  // appears. Mirrors the harness's own `normalizeForMatch` discipline
+  // (lowercase, strip thousands separators, strip punctuation) so a real
+  // semantically-correct answer that uses one of the accepted variants
+  // is no longer graded as missing. The default single-variant shape is
+  // preserved for the common single-token case.
+  //
+  // IMPORTANT: split BEFORE normalizing, since normalizeForMatch strips `|`
+  // (it's non-alphanumeric) which would concatenate all variants into one
+  // unbroken string — split-after-normalize returns ["variant1 variant2 ..."]
+  // (one element) and the includes() check then fails on every real case.
+  const variants = String(fact).split('|').map((v) => normalizeForMatch(v)).filter(Boolean);
+  if (variants.length === 0) return true;
+  for (const v of variants) {
+    if (a.includes(v)) return true;
+  }
+  return false;
 }
 
 /**

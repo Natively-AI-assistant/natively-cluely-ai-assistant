@@ -152,7 +152,7 @@
       "press": {
         "id": "B13", "label": "decoder-masking",
         "canonicalQuestion": "What's different about self-attention in the decoder compared to the encoder?",
-        "expectedFacts": ["mask", "leftward"],
+        "expectedFacts": ["mask", "leftward|earlier positions|previous tokens|backward direction|backward"],
         "longRangeRecall": false
       }
     },
