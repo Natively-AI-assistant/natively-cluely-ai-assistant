@@ -5118,7 +5118,103 @@ guard's regeneration could in principle correct).
 
 ---
 
-## ITERATION 56 (2026-07-20) — Final state per L5: NOT done, but durable hallucination-avoidance improvement confirmed
+## ITERATION 57 (2026-07-20) — Telemetry run with trace marks enabled (run-051): rich `answer_relevance_observe_only` data captured against a CORRECTLY-loading classifier for the first time this campaign
+
+Picked up iteration 53's NEXT ACTION #2 ("let `answer_relevance_observe_only`
+trace data accumulate across a few more real runs before attempting
+recalibration"). Launched a full 3-script judged run with
+`NATIVELY_TRACE_LONGCTX=1` set, which turns on every `[TRACE:LONGCTX]`
+emitter throughout the live answer path — including the
+`answer_relevance_observe_only` (and discard, when the guard does fire
+the regeneration path) trace marks that the answer-relevance guard
+already emits but which were silently dropped for the entire campaign
+prior to iteration 53's ONNX-asset repair (the classifier literally
+couldn't load, so every classification attempt was a no-op fallback).
+
+**All 3 scripts ran cleanly end-to-end** (`answer_relevance_discard`
+events captured across script-a AND script-b AND script-c — the
+classifier IS now producing real classifications). The harness's own
+report-writing step then truncated the final aggregated `run-051.json`
+to script-a only (a bug in the reporting code's aggregation pass, not a
+harness bug — each script's individual scorecard was fully written to
+the log file, just the merge into the single run-NNN.json report lost
+the b/c entries). Pulled the full scorecard directly from the log:
+
+| Script | G1 | G2 | G3 | G4 | G5 | G6 | G7 |
+|---|---|---|---|---|---|---|---|
+| a | 100% | 0/19 | 15.8% | 0/19 | 0% | 21.1% | n/a |
+| b | 100% | 0/17 | 76.5% | 0/17 | 100% | 76.5% | n/a |
+| c | 100% | 0/15 | 13.3% | 0/15 | 0% | 13.3% | 100% |
+
+Consistent with run-050's overall pattern (a/c low, b strong) — the
+remaining gap is the rubric-vs-natural-answer problem (iteration 55),
+NOT a regression from any fix this session.
+
+**`answer_relevance_observe_only` telemetry — 8 distinct samples
+captured, all with confidence ≤ 0.056, far below the 0.15
+threshold**. The data confirms the rubric-vs-natural-answer diagnosis
+rather than contradicting it: every "irrelevant" sample the classifier
+flagged this run was the model producing a coherent-sounding-but-
+hollow self-narration or scaffolding preamble ("I don't see the
+follow-up question in the transcript yet", "Looking at the input,
+there's no actual user question or transcript content", "I do not have
+a current question or recent turn in the transcript to respond to",
+"Nothing actionable right now"). The model itself emits these as
+fully-formed, polite, plausible-looking answers — the rubric catches
+them because they contain no actual substantive content matching
+the question, the classifier catches them because its semantic NLI
+entailment score is essentially zero. This is exactly the
+"free-form no-content hallucination" family this whole campaign has
+tracked as still-open. The data confirms (a) the classifier's confidence
+distribution is clean and well-separated from real answers in the
+cases it does see, (b) the gap is real answers' missing-fact issue,
+not a classifier-calibration issue, (c) re-tuning the threshold alone
+won't move the G3 number — the model would need to be coached to
+either produce real content or to refuse more explicitly.
+
+**Also captured a fresh, real scaffold-contamination repro**: script-c
+press C14 ("...tell me about your Raft experience at Datadog.") emitted
+the full `## Approach / ## Technique / ## Code / ## Dry Run / ##
+Complexity` two-sum coding template. The `answer_relevance_discard`
+trace fired at confidence 0.0397 (well below threshold). The press IS
+present in the trace data but NOT in `run-051.json`'s perPress entries
+— the harness's reporting step lost it along with all of script-b/c
+during aggregation. Verified the scaffold leak DID ship to the user
+(`run-script answer preview: ## Approach\nThe classic two-sum problem...`
+— visible in the harness's own console output). This is a real
+regression of the "3 clean runs" claim from iteration 50-51's
+verification — the family's intermittency is real and one live
+reproduction just confirmed it. Importantly: `hasUnrecoveredScaffoldContamination`
+DOES exist and IS wired in, but only fires its bounded-regeneration
+repair path when the scaffold guard ALSO fires (i.e. when
+`detectAndExtractScaffoldMisfire` cannot extract AND the detector
+says true). The trace shows `answer_relevance_discard` firing at
+0.0397 confidence, which would also trigger the answer-relevance
+guard's regenerate-and-recheck path IF that guard were flag-gated ON.
+`answerRelevanceGuardLive` is currently OFF by default per iteration
+41's recalibration-gap finding — meaning the scaffold case here went
+untreated on both fronts. Recalibrating and enabling the guard per the
+next-NEXT-action plan would close this exact shape.
+
+**Actionable new information for the answer-relevance guard
+recalibration**: the 8 telemetry samples cluster in TWO distinct
+confidence bands — the 6 "no question captured / empty transcript"
+samples at 0.0007-0.0121 (very low, well below threshold), and the 2
+"vague preamble + real answer follows" samples at 0.0397 and 0.0559
+(also below threshold but visibly distinct from the empty-transcript
+cluster). If a future recalibration can set the threshold somewhere
+between 0.06-0.12, both clusters are caught without overlap into the
+real-answer territory (>0.15 in iteration 41's earlier sample).
+
+**Per L1, not stopping the loop. Per L3, logged. Per L5, NOT
+claiming done** — run-051 confirms the same overall state as run-050
+(durable hallucination-avoidance; the rubric question remains the
+binding constraint). The concurrent session is concurrently working
+on `AnswerRelevanceCalibration2026_07_20.test.mjs` (untracked, observed
+in git status) — looks like exactly the next-step design work this
+telemetry was supposed to feed. Rescheduling per L1 to a shorter
+interval (15min) so the next wakeup can read that concurrent work
+and pick up whatever is the lowest-friction remaining task per L2.
 
 Per the founder's repeated "is everything done?" / "continue and
 finish it" instructions, this iteration's honest response per L5
