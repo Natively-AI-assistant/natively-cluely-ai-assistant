@@ -304,7 +304,7 @@ export class WindowHelper {
       // Platform-specific frame settings
       ...(isMac
         ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 14 } }
-        : { frame: false, titleBarOverlay: false, autoHideMenuBar: true }),
+        : { frame: false, titleBarOverlay: false, autoHideMenuBar: true, type: 'toolbar' as const }),
       ...(isMac
         ? { vibrancy: 'under-window' as const, visualEffectState: 'followWindow' as const }
         : {}),
