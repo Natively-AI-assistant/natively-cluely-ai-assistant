@@ -788,3 +788,38 @@ assumption.
 2. The campaign is EXIT-CONDITIONAL per founder §8 for all non-quota
    items. All deliverables shipped. Will continue with optional polish
    (additional smoke checks, more docs) until quota allows benchmarks.
+
+### ITERATION 15 (2026-07-20) — JSDoc + examples on planTurn public API
+
+Adds comprehensive JSDoc to `planTurn()` with three `@example` blocks:
+- Identity question (profile_question + seedBG=true).
+- Salary question (general + seedBG=false — founder §2.5).
+- Seminar Mode (required + say_not_found_then_answer_general).
+
+Also adds `@see` cross-references to:
+- `DEFAULT_GROUNDING_PROFILE` / `SEMINAR_GROUNDING_PROFILE`.
+- `SourceBadge.computeEngineSourceLabel` (the consumer).
+- `traces3/SEMINAR.md` (user guide).
+- `traces3/final-report.md` (campaign architecture).
+
+This makes `planTurn`'s public API IDE-discoverable + machine-parsable
+for future automation (doc generation, schema export, etc.).
+
+**Results (no code logic change):**
+- Unit suites: 70/70 (no regression).
+- Smoke script: 41/41 (no regression).
+
+**Commit:** `7f122294`.
+
+## NEXT ACTION (iteration 15 → 16):
+1. **Still deferring the 40q grounding + 19q thesis regression suites**
+   — Acct1 weekly 0% (today is 2026-07-20, weekly reset 2026-07-24).
+   Acct1 session 100% + Acct2 session 100% are recovered (per §9 the
+   pause gate is no longer met), but the 20% weekly benchmark gate
+   still blocks.
+2. The campaign is EXIT-CONDITIONAL per founder §8. All deliverables
+   shipped. Will continue with optional polish until Acct1 weekly
+   resets.
+3. Optional iter-16 polish: add `@example` blocks + JSDoc to
+   `SourceBadge.computeEngineSourceLabel`, mirroring the iter15 effort
+   on `planTurn`. Same-shape documentation, no logic change.
