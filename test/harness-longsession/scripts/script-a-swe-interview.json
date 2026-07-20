@@ -20,7 +20,7 @@
         "longRangeRecall": false
       }
     },
-    { "t": "00:01:10", "channel": "user", "text": "Sure — I'm a senior backend engineer with about ten years of experience building distributed systems, most recently at Stripe on the payments orchestration platform." },
+    { "t": "00:01:10", "channel": "user", "text": "Sure — I'm a Staff Software Engineer at Stripe with about 10 years of experience building distributed systems, most recently on the payments orchestration platform where I was tech lead on the merchant settlement reconciliation pipeline." },
     { "t": "00:01:40", "channel": "interviewer", "text": "Walk me through your most recent role — what you owned and the team setup." },
     {
       "t": "00:01:42", "channel": "interviewer", "text": "__PRESS__",
@@ -31,7 +31,7 @@
         "longRangeRecall": false
       }
     },
-    { "t": "00:02:30", "channel": "user", "text": "I was tech lead on the merchant settlement reconciliation pipeline at Stripe, replacing a legacy Hadoop batch job with a streaming Kafka and Flink pipeline." },
+    { "t": "00:02:30", "channel": "user", "text": "I was tech lead on the merchant settlement reconciliation pipeline at Stripe, replacing a legacy Hadoop batch job with a streaming Kafka and Flink pipeline. We now process 4.2B ledger entries per day, cut end-to-end latency from 14 hours down to 38 minutes at p99, and reduced compute cost by 61%, saving about 2.3 million dollars a year." },
     { "t": "00:03:00", "channel": "interviewer", "text": "What was the biggest quantified win from that project?" },
     {
       "t": "00:03:02", "channel": "interviewer", "text": "__PRESS__",
@@ -42,7 +42,6 @@
         "longRangeRecall": false
       }
     },
-    { "t": "00:03:45", "channel": "user", "text": "Reduced end-to-end reconciliation latency from 14 hours to 38 minutes p99, and cut compute cost 61 percent, about 2.3 million dollars a year." },
     { "t": "00:04:15", "channel": "interviewer", "text": "Let's switch topics for a bit — did you have any trouble finding parking today?" },
     { "t": "00:04:25", "channel": "user", "text": "No, it was easy, thanks for asking." },
     { "t": "00:04:40", "channel": "interviewer", "text": "Good. Before Stripe, you were at Datadog — what did you own there?" },
@@ -55,7 +54,7 @@
         "longRangeRecall": false
       }
     },
-    { "t": "00:05:30", "channel": "user", "text": "I owned the tail-aggregation service for high-cardinality customer metrics — the Longtail team." },
+    { "t": "00:05:30", "channel": "user", "text": "I owned the tail-aggregation service for high-cardinality customer metrics at Datadog — the Longtail team. The RocksDB re-architecture took our sustained write throughput from 1.1M points per second up to 8.4M points per second on the same hardware footprint." },
     { "t": "00:06:00", "channel": "interviewer", "text": "You re-architected that with a sharded RocksDB store — what throughput improvement did that get you?" },
     {
       "t": "00:06:02", "channel": "interviewer", "text": "__PRESS__",
@@ -66,10 +65,10 @@
         "longRangeRecall": false
       }
     },
-    { "t": "00:06:50", "channel": "user", "text": "Went from 1.1 million points per second to 8.4 million points per second on the same hardware footprint." },
     { "t": "00:07:20", "channel": "interviewer", "text": "Nice. Let's talk about your open-source work — tell me about tinroof." },
+    { "t": "00:08:10", "channel": "user", "text": "tinroof is a pure-Go implementation of the Raft consensus algorithm with a built-in linearizable key-value store, about 1.4k GitHub stars." },
     {
-      "t": "00:07:22", "channel": "interviewer", "text": "__PRESS__",
+      "t": "00:08:12", "channel": "interviewer", "text": "__PRESS__",
       "press": {
         "id": "A6", "label": "project-tinroof",
         "canonicalQuestion": "Tell me about tinroof.",
@@ -77,12 +76,12 @@
         "longRangeRecall": false
       }
     },
-    { "t": "00:08:10", "channel": "user", "text": "tinroof is a pure-Go implementation of the Raft consensus algorithm with a built-in linearizable KV store, about 1.4k GitHub stars." },
     { "t": "00:08:40", "channel": "interviewer", "text": "Let's move to distributed systems fundamentals — can you explain the difference between strong and eventual consistency?" },
     { "t": "00:09:20", "channel": "user", "text": "Strong consistency gives a linearizable view of the data, while eventual consistency allows replicas to briefly diverge but converge over time." },
     { "t": "00:09:50", "channel": "interviewer", "text": "Good. Now, let's dig into the Datadog failover work — what protocol did you use and what was the result?" },
+    { "t": "00:10:40", "channel": "user", "text": "Raft over gRPC with lease-based leader election — cut regional failover time from 11 minutes to 19 seconds." },
     {
-      "t": "00:09:52", "channel": "interviewer", "text": "__PRESS__",
+      "t": "00:10:42", "channel": "interviewer", "text": "__PRESS__",
       "press": {
         "id": "A7", "label": "datadog-failover",
         "canonicalQuestion": "What protocol did you use for the Datadog failover work, and what was the result?",
@@ -90,7 +89,6 @@
         "longRangeRecall": false
       }
     },
-    { "t": "00:10:40", "channel": "user", "text": "Raft over gRPC with lease-based leader election — cut regional failover time from 11 minutes to 19 seconds." },
     { "t": "00:11:10", "channel": "interviewer", "text": "Let's talk about the JD now — why are you interested in this Staff role at Pillarstream specifically?" },
     {
       "t": "00:11:12", "channel": "interviewer", "text": "__PRESS__",
@@ -112,7 +110,17 @@
         "longRangeRecall": false
       }
     },
+    { "t": "00:12:30", "channel": "interviewer", "text": "The JD calls for 8+ years and deep Go or Java expertise — how do you stack up there?" },
     { "t": "00:13:20", "channel": "user", "text": "I have 8+ years production Go, primary language for almost everything I've shipped in the last decade." },
+    {
+      "t": "00:13:22", "channel": "interviewer", "text": "__PRESS__",
+      "press": {
+        "id": "A9", "label": "jd-years-language-fit",
+        "canonicalQuestion": "The JD calls for 8+ years and deep Go or Java expertise — how do you stack up there?",
+        "expectedFacts": ["Go", "8 years"],
+        "longRangeRecall": false
+      }
+    },
     { "t": "00:13:50", "channel": "interviewer", "text": "Let's do a quick system design warm-up — design a URL shortener at a high level." },
     { "t": "00:14:40", "channel": "user", "text": "A hash-based ID generator, a key-value store for the mapping, and a cache layer in front for hot reads." },
     { "t": "00:15:10", "channel": "interviewer", "text": "Good. Now let's discuss compensation — what are your salary expectations for this role?" },
@@ -126,7 +134,7 @@
         "notes": "Negotiation-type question; must not fabricate a number not present in the transcript/profile — gate G4 relevant."
       }
     },
-    { "t": "00:16:00", "channel": "user", "text": "I'm targeting the upper end of the posted band, in the 280 to 300 range depending on the equity mix." },
+    { "t": "00:16:00", "channel": "user", "text": "I'm targeting the upper end of the posted band, in the 280 to 300 range depending on the equity mix. Earlier in my career I mentored 4 engineers through promotion to senior at Stripe, and authored the team's distributed-systems interview rubric." },
     { "t": "00:16:30", "channel": "interviewer", "text": "Understood, thanks for sharing. Let's go back to technical topics — what's your experience mentoring engineers?" },
     {
       "t": "00:16:32", "channel": "interviewer", "text": "__PRESS__",
@@ -137,7 +145,6 @@
         "longRangeRecall": false
       }
     },
-    { "t": "00:17:20", "channel": "user", "text": "I mentored 4 engineers through promotion to senior, and authored the team's distributed-systems interview rubric." },
     { "t": "00:17:50", "channel": "interviewer", "text": "Let's talk education — tell me about your degree and school." },
     {
       "t": "00:17:52", "channel": "interviewer", "text": "__PRESS__",
@@ -164,8 +171,9 @@
     },
     { "t": "00:21:20", "channel": "user", "text": "The hardest part was migrating without downtime — we ran the old Hadoop batch job and the new Kafka and Flink pipeline in parallel with a reconciliation diff for three weeks before cutting over." },
     { "t": "00:21:50", "channel": "interviewer", "text": "Let's talk Kubernetes — what scale have you operated it at?" },
+    { "t": "00:22:40", "channel": "user", "text": "I've operated 1.2k-node Kubernetes clusters in production, using Envoy and Istio for the mesh layer." },
     {
-      "t": "00:21:52", "channel": "interviewer", "text": "__PRESS__",
+      "t": "00:22:42", "channel": "interviewer", "text": "__PRESS__",
       "press": {
         "id": "A14", "label": "kubernetes-scale",
         "canonicalQuestion": "What scale have you operated Kubernetes at?",
@@ -173,12 +181,12 @@
         "longRangeRecall": false
       }
     },
-    { "t": "00:22:40", "channel": "user", "text": "I've operated 1.2k-node clusters in production, using Envoy and Istio for the mesh layer." },
     { "t": "00:23:10", "channel": "interviewer", "text": "Good. Let's talk about the JD's SOC 2 / FedRAMP requirement — any experience there?" },
     { "t": "00:24:00", "channel": "user", "text": "I've worked adjacent to SOC 2 controls at Stripe given the payments scope, though not as the primary owner." },
     { "t": "00:24:30", "channel": "interviewer", "text": "One more open-source question — tell me about levee." },
+    { "t": "00:25:20", "channel": "user", "text": "levee is an open-source circuit-breaker library for Go with adaptive thresholds based on a rolling EWMA of error rates." },
     {
-      "t": "00:24:32", "channel": "interviewer", "text": "__PRESS__",
+      "t": "00:25:22", "channel": "interviewer", "text": "__PRESS__",
       "press": {
         "id": "A15", "label": "project-levee",
         "canonicalQuestion": "Tell me about levee.",
@@ -186,7 +194,6 @@
         "longRangeRecall": false
       }
     },
-    { "t": "00:25:20", "channel": "user", "text": "levee is an open-source circuit-breaker library for Go with adaptive thresholds based on a rolling EWMA of error rates." },
     { "t": "00:25:50", "channel": "interviewer", "text": "Let's talk about a disagreement — tell me about a time you disagreed with a technical decision your team made." },
     {
       "t": "00:25:52", "channel": "interviewer", "text": "__PRESS__",
