@@ -310,6 +310,59 @@ function groundingProfileFor(input: TurnPlanInput): GroundingProfile {
 
 // ── Main planner ────────────────────────────────────────────────────────────
 
+/**
+ * The single, pure, deterministic per-turn decision site consumed by every
+ * answer surface (manual chat, WTA, phone mirror, recap/follow-up,
+ * meeting summary). Replaces the dual-brains routing where
+ * `ProfileIntelligence.answerType` and `KnowledgeOrchestrator.intent`
+ * each independently gated sources — they are now SIGNALS consumed
+ * by `planTurn`, never gates.
+ *
+ * Campaign 3 (fix/answer-policy-engine, 2026-07-20).
+ *
+ * @example
+ *   // Identity question: profile_facts path, seedBG=true
+ *   const p = planTurn({
+ *       question: "What's your name?",
+ *       answerType: 'identity_answer',
+ *       availability: { hasReferenceFiles: true, hasProfileFacts: true, hasJobDescription: true, hasLiveTranscript: true },
+ *   });
+ *   // p.questionKind === 'profile_question'
+ *   // p.answerDirectives.seedCandidateBackground === true
+ *
+ * @example
+ *   // Salary question: general path, seedBG=false (seeder-leash)
+ *   const p = planTurn({
+ *       question: "What's your salary expectation?",
+ *       answerType: 'negotiation_answer',
+ *       availability: { hasReferenceFiles: true, hasProfileFacts: true, hasJobDescription: true, hasLiveTranscript: true },
+ *   });
+ *   // p.questionKind === 'general'
+ *   // p.answerDirectives.seedCandidateBackground === false  ← founder §2.5
+ *
+ * @example
+ *   // Seminar Mode (8th built-in) — strict profile, off-doc preamble
+ *   const p = planTurn({
+ *       question: "what does the paper say about X?",
+ *       availability: { hasReferenceFiles: true, hasProfileFacts: false, hasJobDescription: false, hasLiveTranscript: true },
+ *       sourceContract: { sourceAuthority: 'reference_files_primary', templateType: 'seminar' },
+ *   });
+ *   // p.groundingProfile.evidencePreference === 'required'
+ *   // p.groundingProfile.onNoEvidence === 'say_not_found_then_answer_general'
+ *
+ * @see {@link DEFAULT_GROUNDING_PROFILE} — the 7 built-in modes' preset
+ * @see {@link SEMINAR_GROUNDING_PROFILE} — the 8th mode (Seminar) preset
+ * @see {@link SourceBadge.computeEngineSourceLabel} — consumes the TurnPlan
+ *      to render the visible source badge in the overlay
+ * @see traces3/SEMINAR.md — user guide for Seminar Mode
+ * @see traces3/final-report.md — campaign-final architecture + commit inventory
+ *
+ * @param input - The per-turn inputs (question, optional answerType/intent
+ *   signal from existing routers, availability flags, optional sourceContract).
+ * @returns A {@link TurnPlan} containing questionKind, evidenceSourcesToProbe,
+ *   groundingProfile, answerDirectives, and sourceAuthoritySignal. Never null
+ *   (the "never answerless" invariant).
+ */
 export function planTurn(input: TurnPlanInput): TurnPlan {
   const { kind, reason } = deriveQuestionKind(input);
   const probeOrder = probeOrderFor(kind, input.availability);
