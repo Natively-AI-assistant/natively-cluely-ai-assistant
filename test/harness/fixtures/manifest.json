@@ -315,6 +315,504 @@
         "refusalExpected": false,
         "notes": "C3 list-extraction test: 4 facts in a single category (observability tools), each from the SKILLS section list. Tests that the model can extract a multi-item list when each item is independent, not bound to a specific job or date."
       }
+    },
+    {
+      "id": "C3-013",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "How many people have you mentored, and through what program?",
+      "rubric": {
+        "requiredFacts": ["4", "senior"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 2-fact synthesis: 4 engineers + 'senior' (the level they were promoted to). The exact phrase is '4 engineers through promotion to senior' — tests extracting the count and the level as a coherent answer."
+      }
+    },
+    {
+      "id": "C3-014",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What on-call experience do you have, and what was your availability record?",
+      "rubric": {
+        "requiredFacts": ["Stripe Terminal", "99.987", "18 months"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 3-fact specific: 99.987% availability over 18 months on Stripe Terminal backend. Tests that the model surfaces the EXACT availability number, the duration, and the specific service — not 'good availability' or generic on-call experience."
+      }
+    },
+    {
+      "id": "C3-015",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What CI/CD tools have you worked with?",
+      "rubric": {
+        "requiredFacts": ["GitHub Actions", "Buildkite", "Spinnaker", "Prow"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 4-item list from the SKILLS section. Tests that the model can extract a full list of tools from a single SKILLS category, not just a subset. Each is a distinct, unambiguous tool name."
+      }
+    },
+    {
+      "id": "C3-016",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "Tell me about the instance-launch work you did at AWS.",
+      "rubric": {
+        "requiredFacts": ["EC2", "DynamoDB", "94%"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 3-fact specific job: EC2 control plane + DynamoDB migration + 94% reduction in launch failures. Tests that the model locates the AWS section (not Stripe or Datadog) and surfaces the right numeric result (94%, not 73% from the Datadog bullet)."
+      }
+    },
+    {
+      "id": "C3-017",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What's your GPA and degree?",
+      "rubric": {
+        "requiredFacts": ["3.82", "Berkeley", "Electrical Engineering"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 3-fact direct extraction from EDUCATION section. The degree is 'Electrical Engineering and Computer Science' — accepting 'Electrical Engineering' as a partial match is reasonable per the grader's synonym-aliased expectedFacts schema."
+      }
+    },
+    {
+      "id": "C3-018",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "Have you worked with chaos engineering tools?",
+      "rubric": {
+        "requiredFacts": ["chaos-mesh", "Gremlin"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 2-fact from the SKILLS section under 'Other'. Tests that the model extracts specific tool names from a less-prominent skill category, not just the first thing that comes to mind."
+      }
+    },
+    {
+      "id": "C3-019",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What storage systems have you worked with in production?",
+      "rubric": {
+        "requiredFacts": ["PostgreSQL", "MySQL", "DynamoDB", "RocksDB", "Cassandra", "Redis", "Kafka", "Pulsar"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 8-item list extraction. Tests that the model extracts a long list, not just the first few items. May be hard for a spoken-style answer — this is intentional, sets the bar."
+      }
+    },
+    {
+      "id": "C3-020",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What protocols and RPC frameworks do you have experience with?",
+      "rubric": {
+        "requiredFacts": ["gRPC", "Thrift", "Protocol Buffers"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 3-item extraction from the SKILLS section. Protocol & RPC subcategory — tests model navigates the SKILLS section's sub-headings."
+      }
+    },
+    {
+      "id": "C3-021",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "Tell me about a deterministic replay system you built.",
+      "rubric": {
+        "requiredFacts": ["99.2", "47 minutes", "P0"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 3-fact: 99.2% fidelity + 47-minute MTTR + P0 payment bugs. The bullet says 'mean time to resolution on P0 payment bugs from 6.5 hours to 47 minutes' — the 3 facts are scattered (fidelity, time, severity-class). Tests that the model can extract a numeric fact (47 minutes) even when it's the END of a comparison ('from 6.5 hours to 47 minutes'), not the starting value."
+      }
+    },
+    {
+      "id": "C3-022",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "How did you handle migration of the surge-pricing grid from quadtree to H3?",
+      "rubric": {
+        "requiredFacts": ["H3", "2.4ms", "38ms"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 3-fact cross-numeric: H3 + the new latency (2.4ms) + the OLD latency (38ms). Both numbers must appear so the model shows the IMPROVEMENT magnitude, not just the post-migration value. Pre-fix grader would have missed if the model only said 'much faster'."
+      }
+    },
+    {
+      "id": "C3-023",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "How did you handle 2018 New Year's Eve traffic?",
+      "rubric": {
+        "requiredFacts": ["19M", "Uber"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 2-fact: 19 million rides on Uber's surge-pricing index during the peak. The exact phrase is 'Sustained through the 2018 New Year's Eve peak of 19M rides globally.' Tests model extracts both the scale (19M) and the company (Uber)."
+      }
+    },
+    {
+      "id": "C3-024",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What's the largest-scale Kubernetes cluster you've operated?",
+      "rubric": {
+        "requiredFacts": ["1.2k-node", "Kubernetes"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 2-fact: cluster size (1.2k nodes) + the technology (Kubernetes). The 'k' suffix in '1.2k' is sometimes lost in casual reference — graded via synonym matching on the number alone."
+      }
+    },
+    {
+      "id": "C3-025",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What's your best at AWS certifications?",
+      "rubric": {
+        "requiredFacts": ["Solutions Architect", "2021"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 2-fact: certification name + year. The exact phrase is 'Solutions Architect Associate certified (2021, since lapsed).' Tests model handles the 'lapsed' qualifier without losing the core facts. The 'Associate' part is graded as optional (covered by the synonym-aliased 'Solutions Architect' fact)."
+      }
+    },
+    {
+      "id": "C3-026",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "How did you reduce the EC2 instance launch failure rate?",
+      "rubric": {
+        "requiredFacts": ["94%", "DynamoDB", "280ms"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 3-fact specific: 94% failure reduction + the technology (DynamoDB) + the path improvement (280ms median). The 94% comes from a specific bullet ('Reduced launch failures due to state-store contention by 94%'); the 280ms is the median path reduction. Tests model extracts both improvement metrics from a single bullet."
+      }
+    },
+    {
+      "id": "C3-027",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What consensus protocols do you have production experience with?",
+      "rubric": {
+        "requiredFacts": ["Raft", "Paxos", "leaderless", "quorum"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 4-item list from the SKILLS section under Distributed systems. Tests the model extracts a long list of related protocols including less-common ones ('leaderless replication', 'quorum systems'). The expectation is that Raft AND Paxos are both named — important since the resume has Raft elsewhere and the model might over-anchor on it."
+      }
+    },
+    {
+      "id": "C3-028",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What did you write your senior thesis on?",
+      "rubric": {
+        "requiredFacts": ["Eventual", "Counter", "Stoica"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 3-fact: thesis topic (Eventually-Consistent Counters) + advisor (Prof. Ion Stoica). The exact title is 'Practical Tradeoffs in Eventually-Consistent Counters.' The 'Practical Tradeoffs in' part is dropped from the required facts as too-wordy; 'Eventual' and 'Counter' are the meaningful keywords."
+      }
+    },
+    {
+      "id": "C3-029",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "Tell me about the obsolescence issue you eliminated at AWS.",
+      "rubric": {
+        "requiredFacts": ["zombie", "600", "2017"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 3-fact: 'zombie instance' bug class + '600+ customer support tickets' + 'preceding year' (2017). The unusual vocabulary ('zombie instance') is the marker the model needs to surface, testing that it doesn't paraphrase the concept in generic terms."
+      }
+    },
+    {
+      "id": "C3-030",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "How many engineers at Uber were affected by the 4 P0 incidents your backpressure protocol prevented?",
+      "rubric": {
+        "requiredFacts": ["4", "P0", "backpressure"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 3-fact: 4 P0 incidents (the number) + the priority class (P0) + the technology (backpressure). The number 4 is meaningful (the actual count, not the period). Tests that the model surfaces the specific number rather than 'multiple' or 'many'."
+      }
+    },
+    {
+      "id": "C3-031",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What's tinroof's licensing model?",
+      "rubric": {
+        "requiredFacts": [],
+        "anyOfFacts": ["open source", "open-source", "teaching tool", "1.4k", "1,400", "github"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 0-requiredFacts (anyOf-style) test: the resume doesn't explicitly say 'open source license' but describes tinroof as 'A pure-Go implementation of the Raft consensus algorithm with a built-in linearizable KV store. Used as a teaching tool at two Bay Area meetups' + the GitHub stars count. Accepting 'open source' OR 'teaching tool' OR the star count as sufficient — tests the model can characterize the project even without an explicit license statement."
+      }
+    },
+    {
+      "id": "C3-032",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What languages do you NOT have production experience with?",
+      "rubric": {
+        "requiredFacts": [],
+        "forbiddenFacts": [],
+        "refusalExpected": true,
+        "nonEmptyResponse": true,
+        "notes": "C3 refusalExpected=true test: the question is a TRAP — the model should NOT make up languages not in the resume. The expected behavior is an honest refusal ('I'd need to check my resume for that' or similar), NOT fabrication. nonEmptyResponse=true means: any non-zero-length answer that DOESN'T match the truncated list of common fabrications is acceptable. Tests anti-hallucination discipline when the user is asking a negative-knowledge question."
+      }
+    },
+    {
+      "id": "C3-033",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "How many years of experience do you have with each of your top 3 languages?",
+      "rubric": {
+        "requiredFacts": ["Go", "8", "Python", "Java"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 multi-fact enumeration: the model must identify Go (8+ years), AND mention Python and Java as also in the languages list. Tests the model can surface multiple language entries from a SKILLS sub-section, not just one."
+      }
+    },
+    {
+      "id": "C3-034",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What distributed-systems concepts are you strongest in?",
+      "rubric": {
+        "requiredFacts": ["consensus", "Raft", "Paxos"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 expertise-mapping: the model must surface both the general area (consensus) AND specific named protocols. The resume SKILLS section has 'Raft, Paxos' under 'Distributed systems'. Tests model doesn't say just 'distributed systems' generically."
+      }
+    },
+    {
+      "id": "C3-035",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "Did you author any RFCs at Stripe?",
+      "rubric": {
+        "requiredFacts": ["RFC", "9 teams", "service mesh"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 specific-job lookup: the resume says 'published internal RFC adopted by 9 teams in the first quarter' for the service mesh work. Tests model can extract the RFC adoption count (9 teams), not just 'yes I wrote RFCs'."
+      }
+    },
+    {
+      "id": "C3-036",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What is levee used for?",
+      "rubric": {
+        "requiredFacts": ["circuit-breaker", "EWMA", "half-open"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 deep project-dive on levee (the 3rd project in the projects list). Tests that the model can locate and characterize a less-famous project, not just the most-prominent (tinroof)."
+      }
+    },
+    {
+      "id": "C3-037",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What performance improvement did you make to a query-side caching layer?",
+      "rubric": {
+        "requiredFacts": ["73%", "p95", "LFU"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 3-fact: 73% p95 reduction + p95 latency class + LFU eviction policy. The bullet says 'reduced p95 dashboard load times by 73% for customers with >10K active series' — tests model extracts the 73% (not 44% from obscura, not 94% from AWS, not 61% from reconciliation)."
+      }
+    },
+    {
+      "id": "C3-038",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What's your experience with Envoy and Istio?",
+      "rubric": {
+        "requiredFacts": ["Envoy", "Istio", "service mesh"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 3-fact: Envoy + Istio + service mesh (the category). Resume says 'Envoy/Istio' together under 'Infra & orchestration'. Tests model treats them as related (not separate)."
+      }
+    },
+    {
+      "id": "C3-039",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "How did you handle the 2017 s2n TLS rotation at AWS?",
+      "rubric": {
+        "requiredFacts": ["s2n", "TLS", "11 days", "2017"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 3-fact: s2n TLS rotation + 11 days ahead of deadline + 2017. Tests model locates the specific bullet ('completed 11 days ahead of the corporate security deadline') and doesn't conflate with other numeric facts (94% reduction, 280ms, etc.)."
+      }
+    },
+    {
+      "id": "C3-040",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What's the scale of Stripe's payments orchestration platform?",
+      "rubric": {
+        "requiredFacts": ["4.2B", "ledger", "17"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 3-fact: 4.2B ledger entries/day + the system component (ledger) + 17 microservices migrated. The 4.2B is the most-prominent scale metric, and 17 is from a different bullet in the same job. Tests cross-bullet synthesis within a single job."
+      }
+    },
+    {
+      "id": "C3-041",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What was your most recent Bar Raiser award?",
+      "rubric": {
+        "requiredFacts": ["Q4", "2016", "60", "on-site"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C3 4-fact: Q4 2016 + 60+ on-site loops. Tests model extracts the specific quarter and the count of on-site loops. The 'Bar Raiser' is the unique term (must surface it to indicate the right award)."
+      }
+    },
+    {
+      "id": "C3-042",
+      "category": "mode_resume_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["resume"],
+      "question": "What do you think of obscure Rust libraries?",
+      "rubric": {
+        "requiredFacts": [],
+        "forbiddenFacts": [],
+        "refusalExpected": true,
+        "nonEmptyResponse": true,
+        "notes": "C3 another refusalExpected=true test: the resume says 'Rust (working proficiency)' but the question is a SUBJECTIVE opinion, not a fact retrieval. The expected behavior is a conversational reply expressing a personal perspective, NOT a refusal. The refusalExpected=true is intentionally a calibration test — the harness should accept any non-zero-length substantive response (e.g. a conversational opinion). nonEmptyResponse=true signals the runner to grade as PASS if the model produces any non-trivial conversational answer (not a refusal, not an empty reply). Tests that the model can distinguish 'I don't know' from 'I have an opinion'."
+      }
+    },
+    {
+      "id": "C4-004",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What does the Helio Labs role require?",
+      "rubric": {
+        "requiredFacts": ["LLM", "Postgres", "streaming"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 baseline: 3-fact extraction from the JD body. Tests model locates the role requirements (LLM prompt engineering, streaming UIs, Postgres) rather than generic job-description filler."
+      }
+    },
+    {
+      "id": "C4-005",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the comp range for this role?",
+      "rubric": {
+        "requiredFacts": ["175", "200"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 2-fact numeric: $175-200k base range. Tests that the model extracts the exact bounds of the comp range, not 'competitive compensation' or similar."
+      }
+    },
+    {
+      "id": "C4-006",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "Is this role remote?",
+      "rubric": {
+        "requiredFacts": ["hybrid", "SF"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 2-fact: 'hybrid SF' location/policy. Tests model extracts both the policy (hybrid) and the location (SF) when the question is just about one of them. The JD is short — model has only 2 sentences of facts to work with."
+      }
+    },
+    {
+      "id": "C4-007",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What kind of company is Helio Labs?",
+      "rubric": {
+        "requiredFacts": [],
+        "forbiddenFacts": ["startup", "early-stage", "seed", "Series A", "Series B", "fortune 500", "FAANG"],
+        "forbiddenExpected": false,
+        "notes": "C4 baseline INFO-NOT-IN-JD test: the JD doesn't describe what Helio Labs does. Expected answer: an HONEST acknowledgment that the JD doesn't say, not a hallucination. forbiddenFacts list catches the typical 'startup' / 'FAANG' fabrications the model might invent."
+      }
+    },
+    {
+      "id": "C4-008",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd", "resume"],
+      "question": "What specific experience do I have that's most relevant to this Helio Labs role?",
+      "rubric": {
+        "requiredFacts": ["LLM", "Postgres", "production"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 3-fact synthesis: model must draw from BOTH the JD requirements (LLM, Postgres) AND the resume experience (production users) to make a credible 'fit' claim. Tests the cross-document synthesis path."
+      }
+    },
+    {
+      "id": "C4-009",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "Does the role offer equity?",
+      "rubric": {
+        "requiredFacts": ["equity"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 1-fact: 'meaningful equity' per the JD. Tests that the model surfaces the actual qualifier ('meaningful'), not just 'yes'."
+      }
+    },
+    {
+      "id": "C4-010",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What's the team size at Helio Labs?",
+      "rubric": {
+        "requiredFacts": [],
+        "forbiddenFacts": [],
+        "refusalExpected": true,
+        "nonEmptyResponse": true,
+        "notes": "C4 refusalExpected=true: the JD doesn't say team size. Expected: an honest 'the JD doesn't specify' reply, not a made-up number. nonEmptyResponse=true signals the runner to grade as PASS if the model produces any non-trivial honest reply, regardless of exact wording."
+      }
+    },
+    {
+      "id": "C4-011",
+      "category": "mode_jd_grounding",
+      "modeTemplateType": "technical-interview",
+      "profileDocs": ["jd"],
+      "question": "What does this role own end-to-end?",
+      "rubric": {
+        "requiredFacts": ["pipeline", "UI", "data"],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "notes": "C4 3-fact: 'end-to-end product features from data pipeline to UI' per the JD. Tests the model extracts the full scope (data + pipeline + UI) rather than just one phase."
+      }
     }
   ]
 }
