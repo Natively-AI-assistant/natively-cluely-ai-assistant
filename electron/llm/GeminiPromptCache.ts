@@ -177,6 +177,23 @@ export class GeminiPromptCache {
     return this.entries.size;
   }
 
+  private evictStale(): void {
+    const now = Date.now();
+    for (const [k, v] of this.entries) {
+      if (v.expiresAt <= now) {
+        this.entries.delete(k);
+      }
+    }
+    if (this.entries.size > 15) {
+      const toDelete = this.entries.size - 10;
+      let count = 0;
+      for (const k of this.entries.keys()) {
+        this.entries.delete(k);
+        if (++count >= toDelete) break;
+      }
+    }
+  }
+
   private async create(
     client: GoogleGenAI,
     model: string,
@@ -201,6 +218,7 @@ export class GeminiPromptCache {
         console.warn('[GeminiPromptCache] caches.create returned no name; skipping cache');
         return null;
       }
+      this.evictStale();
       this.entries.set(key, {
         name,
         expiresAt: Date.now() + CACHE_TTL_SECONDS * 1000,

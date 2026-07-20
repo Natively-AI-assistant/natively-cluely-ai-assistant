@@ -294,8 +294,8 @@ export class CircuitBreaker {
 export class ProviderRouter {
     private circuitBreakers: Map<string, CircuitBreaker> = new Map();
     private readonly defaultCircuitConfig: CircuitBreakerConfig = {
-        threshold: 5,
-        resetTimeout: 30000,
+        threshold: 3,
+        resetTimeout: 10000,
         halfOpenMaxCalls: 1
     };
 

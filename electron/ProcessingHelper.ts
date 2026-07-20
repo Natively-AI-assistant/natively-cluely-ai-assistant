@@ -46,6 +46,11 @@ export class ProcessingHelper {
 
       this.llmHelper = new LLMHelper(apiKey, false, undefined, undefined, groqApiKey, openaiApiKey, claudeApiKey, deepseekApiKey)
     }
+    
+    // Wire up the auto-fallback UI broadcast
+    this.llmHelper.on('model-auto-changed', (newModel: string) => {
+      this.appState.broadcast('model-changed', newModel);
+    });
   }
 
   /**

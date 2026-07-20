@@ -844,72 +844,15 @@ const App: React.FC = () => {
 
       <UpdateBanner />
       <SupportToaster />
-      <NativelyQuotaBanner />
 
-
-
-      {/* Free trial countdown banner — only in launcher window while trial is active */}
-      {(isLauncherWindow || isDefault) && activeTrial && (
-        <FreeTrialBanner
-          expiresAt={activeTrial.expiresAt}
-          usage={activeTrial.usage}
-          onUpgrade={() => openSettingsExclusive('api')}
-        />
-      )}
-
-      {/* Permissions toaster — first ever launch */}
       <PermissionsToaster
         isOpen={showPermissionsToaster}
         onDismiss={() => {
           localStorage.setItem('natively_perms_shown_v1', '1');
           window.electronAPI?.onboardingSetFlag?.('permsShown', true).catch(() => {});
           setShowPermissionsToaster(false);
-          // Show the trial promo immediately after permissions setup (with a 1.5s transition delay)
-          setTimeout(() => {
-            setShowTrialPromo(true);
-          }, 1500);
         }}
       />
-
-      {/* Trial promo toaster — 5s after restart (self-gates via localStorage + conditions) */}
-      <TrialPromoToaster
-        isOpen={showTrialPromo}
-        hasNativelyKey={hasNativelyApi}
-        hasTrialToken={!!activeTrial}
-        onDismiss={() => setShowTrialPromo(false)}
-        onStartTrial={async () => {
-          const res = await window.electronAPI?.startTrial?.();
-          if (!res?.ok) throw new Error(res?.error || 'Could not start trial');
-          if (res.expires_at) {
-            setActiveTrial({ expiresAt: res.expires_at, usage: res.usage ?? { ai: 0, stt_seconds: 0, search: 0 } });
-          }
-          setShowTrialPromo(false);
-        }}
-        onManualSetup={() => {
-          setShowTrialPromo(false);
-          openSettingsExclusive('api');
-        }}
-      />
-
-      {/* Post-trial upgrade modal — shown when trial expires */}
-      {(isLauncherWindow || isDefault) && showTrialExpiredModal && (
-        <FreeTrialModal
-          usage={activeTrial?.usage ?? { ai: 0, stt_seconds: 0, search: 0 }}
-          onByok={async () => {
-            await window.electronAPI?.endTrialByok?.();
-          }}
-          onStandard={async () => {
-            // Wipe resume + JD (orchestrator caches + SQLite) before checkout opens
-            await window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
-            // Revert active mode to none — Standard plan has no modes access
-            await window.electronAPI?.modesSetActive?.(null).catch(() => {});
-          }}
-          onDone={() => {
-            setShowTrialExpiredModal(false);
-            setActiveTrial(null);
-          }}
-        />
-      )}
       {/* Ad toasters */}
       {isLauncherMainView && !isSettingsOpen && (
         <NativelyApiPromoToaster

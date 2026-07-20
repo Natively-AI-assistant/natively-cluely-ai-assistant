@@ -3,7 +3,7 @@ import {
     X, RefreshCw, Upload, Briefcase, Trash2, Pencil, Check, Globe,
     Building2, Search, AlertCircle, Gift, Info, Star, Sparkles, User, CheckCircle, ArrowUpRight
 } from 'lucide-react';
-import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
+import { ProfileVisualizer } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -537,13 +537,11 @@ const writePremiumCache = (isPremium: boolean, plan: string) => {
 
 export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }) {
     // Premium Status — seed from cache so the header CTA paints correctly
-    // before licenseGetDetails() resolves.
-    const cachedPremium = readPremiumCache();
-    const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
-    const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
+    const [isPremium, setIsPremium] = useState(true);
+    const [premiumPlan, setPremiumPlan] = useState<string>('Pro');
     const [isTrialActive, setIsTrialActive] = useState(false);
     const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
-    const hasProfileAccess = isPremium || isTrialActive;
+    const hasProfileAccess = true;
     const isLight = useResolvedTheme() === 'light';
 
     // Profile Engine State
@@ -681,20 +679,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => setIsPremiumModalOpen(true)}
-                        className={`pi-cta-group${isTrialActive && !isPremium ? ' pi-cta-group--trial' : ''}`}
-                        aria-label={isPremium ? 'Manage Pro' : isTrialActive ? 'Upgrade trial' : 'Unlock Pro'}
-                    >
-                        <span>{isPremium ? 'Manage Pro' : isTrialActive ? 'Upgrade' : 'Unlock Pro'}</span>
-                        <span className="pi-cta-icon-ring">
-                            {isPremium
-                                ? <CheckCircle size={14} strokeWidth={2.5} />
-                                : isTrialActive
-                                ? <Sparkles size={14} strokeWidth={2.5} />
-                                : <ArrowUpRight size={14} strokeWidth={2.5} />}
-                        </span>
-                    </button>
                     <button
                         onClick={onClose}
                         className="pi-close-btn"
@@ -1303,7 +1287,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         <span className="shrink-0 mt-[1px]">⚠</span>
                                                         <span>
                                                             Web search credits exhausted for this month — showing AI-only research instead.
-                                                            Resets next billing cycle or <span className="underline cursor-pointer" onClick={() => (window.electronAPI as any)?.openExternal?.('https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl')}>upgrade your plan</span>.
+                                                            Resets next billing cycle.
                                                         </span>
                                                     </div>
                                                 )}
@@ -1736,33 +1720,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                 </div>
             </div>
 
-            <PremiumUpgradeModal
-                isOpen={isPremiumModalOpen}
-                onClose={() => setIsPremiumModalOpen(false)}
-                isPremium={isPremium}
-                onActivated={async () => {
-                    setIsPremium(true);
-                    // Refresh plan + cache from the canonical source so the
-                    // header reflects the new state on every subsequent mount.
-                    try {
-                        const details = await window.electronAPI?.licenseGetDetails?.();
-                        const plan = details?.plan ?? '';
-                        if (plan) setPremiumPlan(plan);
-                        writePremiumCache(true, plan);
-                    } catch {
-                        writePremiumCache(true, premiumPlan);
-                    }
-                    const status = await window.electronAPI?.profileGetStatus?.();
-                    if (status) setProfileStatus(status);
-                }}
-                onDeactivated={() => {
-                    setIsPremium(false);
-                    setPremiumPlan('');
-                    writePremiumCache(false, '');
-                    // Auto-disable profile mode in UI when license is removed
-                    setProfileStatus(prev => ({ ...prev, profileMode: false }));
-                }}
-            />
+
         </div>
     );
 }

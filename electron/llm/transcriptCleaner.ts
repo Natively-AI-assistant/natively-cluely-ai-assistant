@@ -1,6 +1,7 @@
 // electron/llm/transcriptCleaner.ts
 // Deterministic transcript cleaner - NO LLM calls
 // Fast string-based processing for interview copilot
+import { compressConversation } from './ConversationSummarizer';
 
 export interface TranscriptTurn {
     role: 'interviewer' | 'user' | 'assistant';
@@ -169,13 +170,29 @@ export function formatTranscriptForLLM(turns: TranscriptTurn[]): string {
 }
 
 /**
- * Full pipeline: clean, sparsify, format
+ * Full pipeline: clean, compress older history, and format recent turns
  */
 export function prepareTranscriptForWhatToAnswer(
     turns: TranscriptTurn[],
     maxTurns: number = 12
 ): string {
     const cleaned = cleanTranscript(turns);
-    const sparsified = sparsifyTranscript(cleaned, maxTurns);
-    return formatTranscriptForLLM(sparsified);
+    
+    // Separate into older history (to compress) and recent (to keep raw)
+    const recentTurnsCount = Math.min(cleaned.length, maxTurns);
+    const olderTurns = cleaned.slice(0, cleaned.length - recentTurnsCount);
+    // Use sparsify logic ONLY on the recent turns to ensure we get the best 12
+    const sparsifiedRecent = sparsifyTranscript(cleaned.slice(-recentTurnsCount), maxTurns);
+
+    let summaryBlock = '';
+    if (olderTurns.length > 0) {
+        const { compressed } = compressConversation(olderTurns, olderTurns.length);
+        summaryBlock = `[EARLIER CONTEXT SUMMARY]\n` +
+            `Topics: ${compressed.topicsDiscussed.join(', ')}\n` +
+            `Decisions/Facts: ${compressed.keyDecisions.concat(compressed.importantFacts).join('; ')}\n` +
+            `Narrative: ${compressed.summaryText}\n\n`;
+    }
+
+    const formattedRecent = formatTranscriptForLLM(sparsifiedRecent);
+    return summaryBlock + formattedRecent;
 }

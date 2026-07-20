@@ -160,7 +160,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
                 encoding: 'linear16',
                 sample_rate: this.sampleRate,
                 channels: this.numChannels,
-                endpointing: 300,
+                endpointing: 200,
                 utterance_end_ms: 1000,
                 vad_events: true,
             });

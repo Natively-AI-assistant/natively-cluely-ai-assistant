@@ -34,13 +34,13 @@ export const LIVE_FIRST_USEFUL_BUDGET_MS = {
  * takes 3.5-7s AND aborting to the next fallback would have been faster — rare, since
  * MiniMax IS the next strong fallback.
  */
-export const LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS = 7000;
+export const LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS = 12000;
 /**
  * First-useful cap for genuinely complex answers (coding/system-design). Equal to the
  * standard cap now that both must clear MiniMax's 4-6s first-token; kept as a separate
  * symbol so the two can diverge again without touching call sites.
  */
-export const LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS = 7000;
+export const LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS = 12000;
 /**
  * First-useful cap for a LOCAL provider (Ollama). The 7s cloud cap is wrong for a
  * local model: a cold model must load its weights into RAM before the first token,
@@ -59,7 +59,7 @@ export const LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS = 30000;
  * Sits just above the 7s first-useful cap so a MiniMax stream about to deliver at
  * ~6.5s isn't guillotined by this ceiling.
  */
-export const LIVE_TOTAL_HARD_TIMEOUT_MS = 8000;
+export const LIVE_TOTAL_HARD_TIMEOUT_MS = 13000;
 /**
  * Local-provider counterpart to LIVE_TOTAL_HARD_TIMEOUT_MS: the no-fallback ceiling
  * when there is no deterministic fallback to swap in. Matches the local first-useful

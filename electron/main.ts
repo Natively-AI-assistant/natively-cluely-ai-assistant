@@ -5480,6 +5480,16 @@ export class AppState {
     // 1. Update process title (affects Activity Monitor / Task Manager)
     process.title = appName;
 
+    // 1b. Force update document.title for all windows so Windows Task Manager groups them under the disguised name instead of "Natively"
+    import('electron').then(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) {
+          win.setTitle(appName);
+          win.webContents.executeJavaScript(`document.title = "${appName}";`).catch(()=>{});
+        }
+      });
+    });
+
     // 2. Update app name (affects macOS Menu / Dock)
     // Skip when undetectable — app.setName() causes macOS to re-register
     // the app and re-show the dock icon even after dock.hide()
@@ -5729,6 +5739,16 @@ async function initializeApp() {
           win.setSkipTaskbar(true);
           console.log(`[Stealth] browser-window-created: setSkipTaskbar(true) on new window id=${win.id}`);
         }
+        
+        // Enforce the disguise title on load so Task Manager groups it by the stealth name instead of "Natively"
+        const stealthName = process.title || 'Windows Audio Device Graph Isolation';
+        win.setTitle(stealthName);
+        win.webContents.on('did-finish-load', () => {
+          if (!win.isDestroyed()) {
+            win.setTitle(process.title);
+            win.webContents.executeJavaScript(`document.title = "${process.title}";`).catch(()=>{});
+          }
+        });
       } catch (e) {
         console.warn('[Stealth] browser-window-created hook failed:', e);
       }

@@ -234,26 +234,53 @@ export class AppleVisionOcrAdapter implements OcrProviderAdapter {
 }
 
 // Windows OCR adapter — Windows native
-// TODO: Implement when native Windows OCR bridge is available
+import { exec } from 'child_process';
+import { promisify } from 'util';
+const execAsync = promisify(exec);
+
 export class WindowsOcrAdapter implements OcrProviderAdapter {
   readonly type: OcrProviderType = 'windows_ocr';
   readonly name = 'Windows OCR';
 
   isAvailable(): boolean {
-    // Only available on Windows
-    if (process.platform !== 'win32') {
-      return false;
-    }
-    // TODO: Check for Windows OCR availability
-    return false; // Stub until native bridge is implemented
+    return process.platform === 'win32';
   }
 
   async recognize(imagePath: string, options?: OcrOptions): Promise<OcrResult> {
-    throw new Error('Windows OCR not yet implemented. Use Tesseract.js fallback.');
+    const psCommand = `
+[Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime] | Out-Null
+[Windows.Storage.StorageFile, Windows.Foundation, ContentType = WindowsRuntime] | Out-Null
+[Windows.Graphics.Imaging.BitmapDecoder, Windows.Foundation, ContentType = WindowsRuntime] | Out-Null
+$path = [System.IO.Path]::GetFullPath('${imagePath.replace(/'/g, "''")}')
+$file = [Windows.Storage.StorageFile]::GetFileFromPathAsync($path).GetAwaiter().GetResult()
+$stream = $file.OpenAsync([Windows.Storage.FileAccessMode]::Read).GetAwaiter().GetResult()
+$decoder = [Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream).GetAwaiter().GetResult()
+$softwareBitmap = $decoder.GetSoftwareBitmapAsync().GetAwaiter().GetResult()
+$engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
+$result = $engine.RecognizeAsync($softwareBitmap).GetAwaiter().GetResult()
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$result.Text
+`;
+    const startTime = Date.now();
+    try {
+      const { stdout } = await execAsync(`powershell -NoProfile -NonInteractive -Command "${psCommand.replace(/\n/g, ';')}"`, { maxBuffer: 10 * 1024 * 1024 });
+      return { text: stdout.trim(), confidence: 1.0, lines: [], provider: 'windows_ocr', durationMs: Date.now() - startTime };
+    } catch (e) {
+      console.error('[WindowsOcr] PowerShell OCR failed:', e);
+      throw e;
+    }
   }
 
   async recognizeBuffer(buffer: Buffer, options?: OcrOptions): Promise<OcrResult> {
-    throw new Error('Windows OCR not yet implemented. Use Tesseract.js fallback.');
+    const tempPath = path.join(os.tmpdir(), `ocr_${Date.now()}_${Math.random().toString(36).substring(7)}.png`);
+    await fs.promises.writeFile(tempPath, buffer);
+    try {
+      return await this.recognize(tempPath, options);
+    } finally {
+      try {
+        await fs.promises.unlink(tempPath);
+      } catch {}
+    }
   }
 }
 

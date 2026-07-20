@@ -18,7 +18,7 @@ export class BrainstormLLM {
         try {
             const promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_BRAINSTORM_PROMPT : BRAINSTORM_MODE_PROMPT;
             const fittedContext = context ? this.llmHelper.fitContextForCurrentModel(context) : context;
-            yield* this.llmHelper.streamChat(fittedContext, imagePaths, undefined, promptOverride);
+            yield* this.llmHelper.streamChat(fittedContext, imagePaths, undefined, promptOverride, false, false, [], undefined, 1024);
         } catch (error) {
             console.error("[BrainstormLLM] Stream failed:", error);
             yield "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.";

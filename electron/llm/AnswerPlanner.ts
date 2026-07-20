@@ -1717,7 +1717,10 @@ const normalizeSms = (s: string): string => {
 
 export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   const rawQuestion = input.question || input.extractedQuestion?.latestQuestion || '';
-  const question = rawQuestion.trim();
+  // Bound to the most recent 3000 chars to prevent massive Regex alternations
+  // (like STEALTH_INTENT_RE) from blocking the Node main event loop on long transcripts.
+  // 3000 chars is ~500 words, plenty of context for intent routing.
+  const question = rawQuestion.trim().slice(-3000);
   const text = normalizeSms(question.toLowerCase());
   // "tech stack" / "technology stack" is a phrase, not the DSA `stack` data
   // structure — neutralize it so the project-followup DSA-exclusion guard below

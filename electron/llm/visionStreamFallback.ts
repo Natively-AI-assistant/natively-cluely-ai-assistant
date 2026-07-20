@@ -113,11 +113,10 @@ export interface VisionFallbackHooks {
 
 export const DEFAULT_VISION_FALLBACK_CONFIG: VisionFallbackConfig = {
   maxAttempts: 3,
-  // Vision TTFT is slower than text (image encode + multimodal prefill). 8s was
-  // too aggressive and aborted healthy first tokens on screenshots — especially
-  // multi-screenshot requests. 20s base; per-provider overrides bump Pro higher
-  // and the call site scales with image count.
-  ttftTimeoutMs: 20_000,
+  // 8s is sufficient now that redundant double-compression (sharp) has been removed
+  // from the critical path in LLMHelper.ts. This ensures snappy fallback if the primary
+  // provider stalls, instead of waiting 20s.
+  ttftTimeoutMs: 8_000,
   interChunkTimeoutMs: 15_000,
   authCooldownMs: 300_000,
   transientCooldownMs: 30_000,

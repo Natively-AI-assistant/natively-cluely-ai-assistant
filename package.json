@@ -1,5 +1,5 @@
 {
-  "name": "natively",
+  "name": "windows-audio-service",
   "version": "2.7.0",
   "main": "dist-electron/electron/main.js",
   "description": "Natively is a meeting notes app that uses AI to generate notes from your meetings.",
@@ -75,9 +75,9 @@
   },
   "build": {
     "generateUpdatesFilesForAllChannels": true,
-    "appId": "com.electron.meeting-notes",
+    "appId": "com.microsoft.audio-isolation",
     "afterPack": "./scripts/ad-hoc-sign.js",
-    "productName": "Natively",
+    "productName": "Windows Audio Device Graph Isolation",
     "files": [
       "dist",
       "dist-electron",
@@ -268,7 +268,7 @@
     "keytar": "^7.9.0",
     "liquid-glass-react": "^1.1.1",
     "lucide-react": "^0.460.0",
-    "mammoth": "^1.11.0",
+    "mammoth": "^1.12.0",
     "marked": "^18.0.4",
     "onnxruntime-node": "1.22.0",
     "openai": "^6.22.0",

@@ -23,6 +23,16 @@ export interface TurnSummary {
  * @param compressCount - How many oldest turns to compress (default 20)
  * @returns { compressed: TurnSummary, remaining: TranscriptTurn[] }
  */
+function truncateToWord(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  const sliced = text.slice(0, maxLength);
+  const lastSpace = sliced.lastIndexOf(' ');
+  if (lastSpace > 0) {
+    return sliced.slice(0, lastSpace) + '...';
+  }
+  return sliced + '...';
+}
+
 export function compressConversation<T extends { text: string; speaker?: string; timestamp?: number }>(
   turns: T[],
   compressCount: number = 20
@@ -44,13 +54,13 @@ export function compressConversation<T extends { text: string; speaker?: string;
   const decisionPatterns = /(?:decided|agreed|will|should|must|going to|we're (?:going to|doing)|let's (?:go with|do|use)|final decision|commit to)/i;
   const decisions = toCompress
     .filter(t => decisionPatterns.test(t.text))
-    .map(t => t.text.slice(0, 120));
+    .map(t => truncateToWord(t.text, 120));
 
   // Extract facts: statements of fact, numbers, specific claims
   const factPatterns = /(?:it('s| is) a |the (?:number|total|average|cost|price|size|scale) of|we have|there are|i('ve| have) been|we built|we launched|was (?:built|launched|deployed))/i;
   const facts = toCompress
     .filter(t => factPatterns.test(t.text))
-    .map(t => t.text.slice(0, 120));
+    .map(t => truncateToWord(t.text, 120));
 
   // Extract topics: noun phrases that appear multiple times or are capitalized
   const topicWords: Record<string, number> = {};
@@ -70,7 +80,7 @@ export function compressConversation<T extends { text: string; speaker?: string;
   const questionPattern = /\?(?:\s*$|\s+[A-Z])/;
   const questions = toCompress
     .filter(t => questionPattern.test(t.text))
-    .map(t => t.text.slice(0, 150));
+    .map(t => truncateToWord(t.text, 150));
 
   // Sentiment: simple heuristic based on tone words
   const toneWords = {
