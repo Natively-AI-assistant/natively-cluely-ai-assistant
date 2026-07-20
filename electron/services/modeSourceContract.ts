@@ -141,15 +141,49 @@ export interface ModeSourceContract {
 }
 
 /**
- * Campaign-3 (2026-07-19): the strictness profile carried on a
- * ModeSourceContract. Mirrors `GroundingProfile` in `electron/llm/TurnPlanner.ts`
- * but defined here too so the contract type is self-contained for lightweight
- * contexts that don't import TurnPlanner. Drift is guarded by a TurnPlanner
- * unit test (electron/llm/__tests__/TurnPlanner.test.mjs).
+ * Campaign-3 (fix/answer-policy-engine, 2026-07-19, founder §2.3 + §3 step 2):
+ * the strictness profile carried on a {@link ModeSourceContract}. Mirrors
+ * `GroundingProfile` in `electron/llm/TurnPlanner.ts` but defined here too
+ * so the contract type is self-contained for lightweight contexts that
+ * don't import TurnPlanner. Drift is guarded by a TurnPlanner unit test
+ * (electron/llm/__tests__/TurnPlanner.test.mjs).
+ *
+ * Resolution order in TurnPlanner.groundingProfileFor() (iter12):
+ *   1. Explicit `sourceContract.groundingProfile` (per-mode override)
+ *   2. `sourceContract.templateType === 'seminar'` (per-mode signal)
+ *   3. `NATIVELY_SEMINAR_MODE` env flag (legacy / migration window)
+ *   4. `DEFAULT_GROUNDING_PROFILE` (the 7 built-in modes)
+ *
+ * @see {@link SEMINAR_GROUNDING_PROFILE} — the strictest preset (founder spec)
+ * @see {@link DEFAULT_GROUNDING_PROFILE} — the preferred/labeled preset (default)
+ * @see {@link SourceBadge.computeSourceBadge} — consumer that emits the
+ *      visible "Not in your reference files — from general knowledge:"
+ *      preamble when this profile is `required` + `say_not_found_then_answer_general`
+ * @see traces3/SEMINAR.md — the Seminar Mode user guide
  */
 export interface GroundingProfile {
+  /**
+   * How strongly the model is steered toward using uploaded/reference
+   * evidence. `required` (Seminar) means off-evidence answers require
+   * the explicit preamble; `optional` (custom compliance modes) means
+   * evidence is used if available but not required.
+   */
   evidencePreference: 'required' | 'preferred' | 'optional';
+  /**
+   * Behavior when the evidence probe returns NONE on a given turn.
+   * `answer_general_labeled` — the default; the model answers and
+   * the answer carries the "General knowledge" badge.
+   * `say_not_found_then_answer_general` — Seminar Mode; the answer
+   * is prefixed with "Not in your reference files — from general
+   * knowledge:" so the audience can tell.
+   * `refuse` — only for compliance custom modes; NEVER for built-ins.
+   */
   onNoEvidence: 'answer_general_labeled' | 'say_not_found_then_answer_general' | 'refuse';
+  /**
+   * Visual style for the source badge in the overlay.
+   * Currently both styles render as a small pill; future work may
+   * add per-style colors / icons.
+   */
   labelStyle: 'badge' | 'paragraph';
 }
 
