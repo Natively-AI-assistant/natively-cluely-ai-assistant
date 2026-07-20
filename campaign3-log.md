@@ -855,3 +855,48 @@ Both link to `traces3/SEMINAR.md` and to each other via `@see`.
 3. Optional iter-17 polish: JSDoc on `modeSourceContract.ts` —
    `GroundingProfile` interface + `strictness` field. Same shape as
    the iter15/16 effort. Closes out the public-surface documentation.
+
+### ITERATION 17 (2026-07-20) — 5-case thesis regression smoke + GroundingProfile JSDoc
+
+Two-part iter17 (the user said "dont mind the quota, continue now"):
+
+#### Part 1: 5-case thesis regression smoke
+
+Ran `CTXOS_BENCHMARK_CASE_IDS=THESIS-001..005` against the real
+natively-api backend + MiniMax-M3 provider. All 5 cases returned
+`deterministic=true, policy=answer` (no contamination, no refusal, no
+timeout) in ~7 seconds total.
+
+This is the **first successful thesis regression** under Acct1 weekly
+budget pressure — the 40q+19q regression suites were deferred in
+iter4-iter16 because Acct1 weekly was 0%. The 5-case smoke proves
+the manual-chat document-grounded path still works. The full 200q
+benchmark can resume now (Acct2 session 76% + weekly 59% are
+healthy; Acct1 has the admin-permissions response per §9 which is
+`UNKNOWN-healthy while it serves requests`).
+
+Saved to `traces3/iter17-thesis-smoke-5case/` (full summary.json +
+results.jsonl + run-metadata.json + checkpoint.json).
+
+#### Part 2: GroundingProfile JSDoc (mirrors iter15/iter16)
+
+- Type-level docs on `evidencePreference` / `onNoEvidence` /
+  `labelStyle` fields (explaining the semantics for each, including
+  the `'refuse' = compliance-only` invariant from founder §2.3).
+- Module-level docs link to TurnPlanner.groundingProfileFor resolution
+  order, SourceBadge consumer, and the SEMINAR.md user guide.
+
+**Results:**
+- Unit suites: 70/70 (no regression).
+- Smoke script: 41/41 (no regression).
+- Thesis 5-case: 5/5 deterministic-true.
+
+**Commit:** `60df07bb`.
+
+## NEXT ACTION (iteration 17 → 18):
+1. **Resume full benchmarks** — try the 40q grounding split (`grounding`)
+   next. The 5-case smoke showed the path works with ~1.5s/case × 40 = 1
+   minute. This is now in scope thanks to Acct2 weekly 59%.
+2. The campaign is EXIT-CONDITIONAL per founder §8 for all
+   non-quota-blocked items except the full regression suites, which
+   iter18 begins to address.
