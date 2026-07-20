@@ -823,3 +823,35 @@ for future automation (doc generation, schema export, etc.).
 3. Optional iter-16 polish: add `@example` blocks + JSDoc to
    `SourceBadge.computeEngineSourceLabel`, mirroring the iter15 effort
    on `planTurn`. Same-shape documentation, no logic change.
+
+### ITERATION 16 (2026-07-20) — JSDoc on SourceBadge public API
+
+Mirrors iter15's JSDoc effort onto the SourceBadge module.
+
+Adds comprehensive JSDoc to:
+- `computeSourceBadge`: documents the full 7-cell matrix (founder §2.6
+  + §5) and two @example blocks (profile + seminar).
+- `computeEngineSourceLabel`: documents the defensive wrapper contract
+  (engine primary emit site) with two @example blocks (typical +
+  null fallback).
+
+Both link to `traces3/SEMINAR.md` and to each other via `@see`.
+
+**Results (no code logic change):**
+- Unit suites: 70/70 (no regression).
+- Smoke script: 41/41 (no regression).
+
+**Commit:** `20cb70aa`.
+
+## NEXT ACTION (iteration 16 → 17):
+1. **Still deferring the 40q grounding + 19q thesis regression suites**
+   — Acct1 weekly 0% blocks benchmarks (weekly reset 2026-07-24).
+   Acct1/Acct2 sessions recovered to 100%, so §9 pause gate is not
+   met — only the 20% weekly gate blocks.
+2. The campaign is EXIT-CONDITIONAL per founder §8 for all
+   non-quota-blocked items. All architecture, schema, seeder-leash,
+   source-badge (end-to-end live), 4-tier resolution, user guide,
+   smoke test, and JSDoc on the two main public APIs are shipped.
+3. Optional iter-17 polish: JSDoc on `modeSourceContract.ts` —
+   `GroundingProfile` interface + `strictness` field. Same shape as
+   the iter15/16 effort. Closes out the public-surface documentation.
