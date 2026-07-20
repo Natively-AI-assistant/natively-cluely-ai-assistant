@@ -4693,3 +4693,142 @@ a hard calibration wall (iteration 41), (2) is the more tractable next
 target — narrow, pattern-matchable, and the C8 repro's full text can
 now be captured directly rather than reasoned about from a 300-char
 preview whenever it next occurs live.
+
+---
+
+## ITERATION 52 (2026-07-19/20) — Fabricated-transcript-preamble family fixed and live-verified (the C8 family from iteration 47, now with 6 confirmed repros across the whole campaign)
+
+Picked up iteration 51's revised NEXT ACTION #2 (C8 fabricated-
+transcript family). Before designing anything, re-collected every
+historical repro of this shape across every run report this campaign
+has produced (not just C8) — found the SAME shape recurring 6 times,
+undetected until now because each occurrence looked like an isolated
+G6/G3 miss rather than a distinct, nameable pattern: run-006 B13,
+run-012 C10, run-028 A13, run-039 C8, run-044 A13, run-044 A17. The
+shape: the model echoes back a bracket-labeled speaker line
+(`[INTERVIEWER]: ...`, `[ME]: ...`, `[ASSISTANT]: ...`, occasionally an
+invented label like `[APPLICANT]:`) reproducing the app's OWN live
+transcript-formatting convention (`ipcHandlers.ts`'s real `[ME]:`/
+`[INTERVIEWER]:` turns) — sometimes as a re-quote of the actual
+question, sometimes as an entirely fabricated prior exchange that never
+happened — before either (a) a genuine, substantive real answer, or (b)
+nothing at all (run-012 C10's bare `[ASSISTANT]: what would you like
+help with?`).
+
+**Live-captured 2 fresh, FULL-TEXT repros this iteration** (`run-044`,
+`--skip-judge`, using iteration 50's new `answerFull` field): press A13
+("...what made that Hadoop-to-streaming migration challenging?")
+opened with a fabricated `[INTERVIEWER]:` re-quote followed by a
+fabricated `[ASSISTANT]:` label wrapping a genuinely real, substantive
+answer about exactly-once semantics during the cutover; press A17
+opened with a fabricated `[earlier_context note="..."]` tag PLUS a full
+fabricated multi-turn `[ME]/[INTERVIEWER]/[ASSISTANT]` exchange before
+a real answer about Levee's adaptive-threshold circuit breaker. Having
+the FULL text (not a 300-char preview) was essential here — the earlier
+C8 investigations (iterations 47/49) could only guess at the shape from
+truncated previews; these two fresh repros gave a conclusive, complete
+picture of exactly where the fabricated block ends and real content
+begins.
+
+**Fix**: two new functions in `electron/llm/answerPolish.ts` —
+`stripFabricatedTranscriptPreamble` (strips leading fabricated
+`[SPEAKER]:` blocks when real content follows, keeping everything after
+an `[ASSISTANT]:` marker byte-for-byte) and `isFabricatedTranscriptOnly`
+(the whole-answer version — true when NOTHING but fabricated speaker
+lines remain, i.e. run-012 C10's shape). Both share one scanning
+function (`scanFabricatedTranscriptPrefix`) so they can never disagree
+about where "real content" starts, bounded to 6 leading blocks (this
+shape has never been observed nesting deeper), and gated on the same
+60-char minimum threshold `stripMetaPreamble` already uses for "is this
+actually a real answer" — deliberate consistency with that sibling
+function's own discipline, not a new arbitrary number. Wired into
+`cleanAnswerArtifacts` (the always-on WTA cleanup path, confirmed
+already live at `IntelligenceEngine.ts:3191` — no new call site needed)
+BEFORE the existing meta-preamble strip, since a fabricated speaker tag
+is structurally distinct from narrating-the-task prose and the two can
+legitimately stack. `isFabricatedTranscriptOnly` also wired into
+`isLeakedAnswerArtifact` (mirroring how that function already rejects a
+bare leaked schema-stub/tag-block) so a BOUNDED-REGENERATION repair that
+produces only a fabricated re-quote with no real content is correctly
+rejected, not shipped.
+
+**Verification**:
+- 16 new unit/integration tests
+  (`FabricatedTranscriptPreamble2026_07_20.test.mjs`) covering all 6
+  historical repro shapes by name, the whole-answer-fabricated case
+  (left unchanged, not silently blanked), 3 false-positive guards (a
+  bracketed mid-sentence aside, a bracketed citation with no colon, a
+  clean unbracketed answer), the too-short-remaining-content guard, and
+  integration with both `isLeakedAnswerArtifact` and
+  `cleanAnswerArtifacts` including the interaction with the SIBLING
+  scaffold-contamination guard (a coding-scaffold answer with a
+  fabricated preamble gets ONLY the preamble stripped, correctly
+  leaving the scaffold itself for `hasUnrecoveredScaffoldContamination`
+  to handle — confirms the two guards compose correctly rather than
+  fighting over the same text). All 16 pass.
+- Manually verified against A13's REAL, full captured text from
+  `run-044.json`: `cleanAnswerArtifacts()` correctly strips the
+  fabricated `[INTERVIEWER]:`/`[ASSISTANT]:` wrapper (986 chars raw →
+  777 chars cleaned) and recovers exactly the real Hadoop-migration
+  answer underneath.
+- Sibling suites unaffected: `MetaPreambleStrip2026_07_03.test.mjs`
+  (5/5), `IntelligenceEngineScaffoldMisfireExtraction.test.mjs` (3/3,
+  confirmed via bounded-timeout isolation per this session's established
+  process-hang workaround). `tsc -p electron/tsconfig.json` clean.
+- **Live-verified in production conditions**: `run-045` (real MiniMax
+  judge, script-a + script-c, timestamp 2026-07-19T17:56:19Z, run
+  AFTER this fix was live in the compiled build) — scanned every press's
+  full `answerFull` text for a leading bracket-speaker pattern: ZERO
+  matches found. Either the model didn't misfire this way this
+  particular run (this family's own documented pattern — every failure
+  family in this campaign is intermittent), or the fix correctly
+  stripped it before it reached the stored answer. Cannot fully
+  distinguish those two without a dedicated trace mark (the scaffold-
+  contamination guard has one; this fix currently doesn't) — logged as
+  a small follow-up gap, not blocking.
+
+**Overall run-045 scorecard**: G1 100%, G2/G4 clean, G7 100%, G3 9.1%,
+G5 0%, G6 18.2% — still dominated by the diffuse topic-drift/no-content
+family (item (1) from iteration 51's revised NEXT ACTION), consistent
+with every run this whole session.
+
+**This closes out iteration 47's originally-identified "3+ distinct
+sub-families"**: A4/A5/C9 (scaffold contamination, fixed iteration 47/
+48/49, verified twice live iterations 50-51), A13 (re-examined iteration
+51 — actually the SAME scaffold-contamination family, not separate),
+and now C8/the broader fabricated-transcript-preamble family (fixed and
+verified this iteration). loop2.md task #4's script-a/c investigation
+from iteration 47 is now substantively complete — the 3 originally-
+identified narrow, nameable failure shapes are all addressed. What
+remains (G3/G5/G6 still well below target) is the diffuse, harder
+free-form-hallucination/topic-drift family this campaign has repeatedly
+found does NOT respond to narrow pattern-matching (iteration 41's own
+hard-won lesson).
+
+**NEXT ACTION #1 implemented same iteration**: added a
+`[TRACE:LONGCTX] fabricated_transcript_preamble_stripped` mark at the
+`cleanAnswerArtifacts` call site (`IntelligenceEngine.ts:~3189`),
+gated behind the existing `NATIVELY_TRACE_LONGCTX=1` flag (zero-cost
+otherwise) — fires only when `cleaned !== finalWtaAnswer` AND the raw
+answer matched the leading bracket-speaker-label shape, logging
+before/after char counts. A cheap heuristic re-check rather than
+threading the exact strip boundary through as a return value — good
+enough to positively confirm "the fix fired" in a future run's trace
+output, closing this iteration's own verification gap (a clean run and
+a working-but-unexercised fix looked identical without it). `tsc`
+clean; the 16-test `FabricatedTranscriptPreamble2026_07_20.test.mjs`
+suite (which tests `answerPolish.ts` directly, not
+`IntelligenceEngine.ts`) re-confirmed unaffected/still 16/16.
+
+**NEXT ACTION** (remaining): (2) the campaign's remaining, largest
+lever is now squarely the diffuse topic-drift/no-content-hallucination
+family — `answerRelevanceGuardLive` is the existing (if currently
+inert) mechanism for this, gated on repairing the corrupted
+`Xenova/mobilebert-uncased-mnli` ONNX asset (iteration 49) before any
+recalibration is even possible; worth prioritizing that asset repair as
+the actual highest-leverage next step, since it unblocks BOTH this
+guard's recalibration AND (per iteration 49's finding) several of this
+session's own test suites that silently degrade to regex-only fallback
+without it; (3) run a full 3-script judged benchmark (not just A/C) to
+get a current, complete L4-exit-condition picture now that scaffold-
+contamination and fabricated-transcript are both addressed.

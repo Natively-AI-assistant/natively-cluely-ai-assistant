@@ -54,7 +54,7 @@ export {
 export type { SpeakabilityDecision, SpeakabilityClass, SpeakabilityTarget, ShortLengthBand, ShortBandTarget } from "./speakability";
 export { checkAnswerForCodeBugs, checkCodeCompleteness } from "./CodeSanityCheck";
 export type { CodeSanityResult, CodeSanityIssue } from "./CodeSanityCheck";
-export { AnswerDiversityGuard, cleanAnswerArtifacts, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope, isProviderTransportError, isLeakedInternalTagBlock, isLeakedAnswerArtifact, stripMetaPreamble, compressToSpeakable, varySpokenOpening, SCAFFOLD_LABEL_RE } from "./answerPolish";
+export { AnswerDiversityGuard, cleanAnswerArtifacts, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope, isProviderTransportError, isLeakedInternalTagBlock, isLeakedAnswerArtifact, stripMetaPreamble, stripFabricatedTranscriptPreamble, isFabricatedTranscriptOnly, compressToSpeakable, varySpokenOpening, SCAFFOLD_LABEL_RE } from "./answerPolish";
 export type { RepetitionVerdict, RepetitionReason, DiversityCheckOpts } from "./answerPolish";
 export type { AnswerPlan, AnswerSource, AnswerType, ContextLayer, OutputPerspective, SpeakerPerspective } from "./AnswerPlanner";
 export { applyModeFallback, MODE_CONTEXT_PROFILES } from "./modeProfiles";

@@ -3189,6 +3189,23 @@ export class IntelligenceEngine extends EventEmitter {
             if (!isCoding && finalWtaAnswer) {
                 try {
                     let cleaned = cleanAnswerArtifacts(finalWtaAnswer); // strips meta-preamble + schema stub + bullets
+                    // Grounding-campaign2 (2026-07-19/20, iteration 52's own
+                    // NEXT ACTION): a positive trace mark so a future run can
+                    // CONFIRM the fabricated-transcript-preamble strip fired,
+                    // rather than inferring it from the absence of the shape
+                    // in a run's output (iteration 52's own verification gap
+                    // — a clean run and a working-but-unexercised fix look
+                    // identical without this). Cheap heuristic (leading
+                    // bracket-speaker-label shape) rather than re-deriving
+                    // the exact stripFabricatedTranscriptPreamble boundary
+                    // here — good enough for a telemetry signal, not a gate.
+                    if (process.env.NATIVELY_TRACE_LONGCTX === '1'
+                        && cleaned !== finalWtaAnswer
+                        && /^\s*\[[A-Za-z][A-Za-z ]{0,30}\]\s*:/.test(finalWtaAnswer)) {
+                        console.log('[TRACE:LONGCTX] fabricated_transcript_preamble_stripped', JSON.stringify({
+                            rawChars: finalWtaAnswer.length, cleanedChars: cleaned.length,
+                        }));
+                    }
                     SCAFFOLD_LABEL_RE.lastIndex = 0;
                     if (SCAFFOLD_LABEL_RE.test(cleaned)) {
                         const speakable = compressToSpeakable(cleaned);

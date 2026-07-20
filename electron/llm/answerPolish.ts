@@ -229,6 +229,13 @@ export function isLeakedAnswerArtifact(text: string, opts?: { allowJsonEnvelope?
   if (isLeakedSchemaStub(text)) return true;
   if (isLeakedInternalTagBlock(text)) return true;
   if (!opts?.allowJsonEnvelope && isLeakedJsonEnvelope(text)) return true;
+  // Fabricated-transcript-only regeneration (campaign2 iteration 52,
+  // 2026-07-19/20) — see isFabricatedTranscriptOnly's own doc comment
+  // (defined below; function declarations hoist, so this forward reference
+  // is safe). A repair that produces ONLY a fabricated "[SPEAKER]: ..."
+  // line with no real content (run-012 C10's exact shape) must be rejected
+  // the same way a bare leaked schema-stub/tag-block already is.
+  if (isFabricatedTranscriptOnly(text)) return true;
   return false;
 }
 
@@ -279,11 +286,159 @@ export function stripMetaPreamble(text: string): string {
   return text;
 }
 
+/** A leading FABRICATED-TRANSCRIPT preamble — the model echoes back a
+ *  bracket-labeled speaker line ("[INTERVIEWER]: ...", "[ME]: ...",
+ *  "[ASSISTANT]: ...") as if continuing the app's own transcript-formatting
+ *  convention (this exact `[SPEAKER]: text` shape is real, live prompt
+ *  formatting — see ipcHandlers.ts's `[ME]:`/`[INTERVIEWER]:` transcript
+ *  turns) instead of producing a plain spoken answer. Campaign 2 longsession
+ *  (2026-07-19/20, iteration 52): confirmed live across 6 separate runs
+ *  spanning the whole campaign (run-006 B13, run-012 C10, run-028 A13,
+ *  run-039 C8, run-044 A13/A17) — the model re-quotes the interviewer's
+ *  question back as a fabricated `[INTERVIEWER]:` line, sometimes invents an
+ *  entirely fictional prior exchange (`[ME]: ...` / `[ASSISTANT]: ...` turns
+ *  that never happened, occasionally using a label that ISN'T one of the
+ *  app's real ones, e.g. `[APPLICANT]:` — the model reproducing the SHAPE of
+ *  its own transcript formatting even when it invents the exact label),
+ *  then — in the cases with real content following — a genuine, substantive
+ *  answer. Distinct from `isLeakedInternalTagBlock` (that one matches
+ *  snake_case/camelCase pseudo-XML tags like `<injected_context>`; this is
+ *  bracket-bare-word speaker labels, a different shape entirely) and from
+ *  `META_PREAMBLE_RE` above (that one matches narrating-the-task prose, not
+ *  a literal transcript-formatted line). Strip ONE OR MORE leading bracket-
+ *  speaker lines/paragraphs ONLY when real, substantive content clearly
+ *  follows (mirrors `stripMetaPreamble`'s own "never touch a genuinely
+ *  fabricated-but-otherwise-real answer's real content" discipline) — if
+ *  the fabricated block is the WHOLE answer (e.g. run-012 C10's bare
+ *  `[ASSISTANT]: what would you like help with?`), leave it untouched here;
+ *  `isLeakedAnswerArtifact` below catches that whole-answer case instead so
+ *  the caller's empty-answer/regeneration path takes over rather than this
+ *  cleanup silently blanking a non-empty string. */
+// Matches ONE leading "[LABEL]:" or "[LABEL ...]:" tag (the label itself
+// only — up to and including the colon and any immediately-following
+// spaces — NOT the rest of the line/paragraph, since a real answer's
+// content can legitimately span multiple lines with no early newline and
+// must never be swallowed as if it were "part of the label's line"; a
+// first, over-eager draft of this function did exactly that and silently
+// discarded real paragraphs, caught by this file's own test suite before
+// shipping). SPEAKER is a short bare word/phrase, optionally with a
+// parenthetical (e.g. "[ASSISTANT (PREVIOUS SUGGESTION)]:") — deliberately
+// excludes anything that reads like a real prompt-structure XML/snake_case
+// tag (that's `isLeakedInternalTagBlock`'s job) by requiring plain
+// letters/spaces only inside the brackets.
+const FABRICATED_SPEAKER_LABEL_RE = /^\s*\[([A-Za-z][A-Za-z ]{0,30})(?:\([^)]{0,60}\))?\]\s*:\s*/;
+// A label that marks the START of the model's own answer, once found —
+// everything after it (however long, however many paragraphs) is kept
+// verbatim as real content; only the label itself is removed.
+const ANSWER_MARKER_LABEL_RE = /^assistant$/i;
+
+/** Strip a leading run of fabricated `[SPEAKER]:` transcript blocks.
+ *
+ *  Two distinct behaviors depending on the label found, applied in a
+ *  bounded loop (max 6 leading blocks — this shape has never been observed
+ *  with more than 2-3 fabricated turns):
+ *    - A non-answer label (`[INTERVIEWER]:`, `[ME]:`, `[APPLICANT]:`, or
+ *      anything else that isn't recognized as the answer marker) is a
+ *      fabricated re-quoted question or fabricated prior turn — discard
+ *      the WHOLE paragraph it opens (up to the next blank line or the next
+ *      bracket-label line), then keep scanning for more leading blocks.
+ *    - An answer-marker label (`[ASSISTANT]:`) means everything AFTER the
+ *      label — however long, spanning any number of paragraphs — is kept
+ *      byte-for-byte as the real answer; only the label prefix itself is
+ *      removed, and scanning stops immediately (this is where the real
+ *      content is presumed to start).
+ *
+ *  Campaign 2 longsession (2026-07-19/20, iteration 52): confirmed live
+ *  across 6 separate runs spanning the whole campaign (run-006 B13,
+ *  run-012 C10, run-028 A13, run-039 C8, run-044 A13/A17) — the model
+ *  re-quotes the interviewer's question as a fabricated `[INTERVIEWER]:`
+ *  line (this exact `[SPEAKER]: text` shape is real, live prompt
+ *  formatting — see ipcHandlers.ts's `[ME]:`/`[INTERVIEWER]:` transcript
+ *  turns — the model is reproducing its own prompt's formatting
+ *  convention), sometimes invents an entirely fictional prior exchange,
+ *  then — in the cases with real content following — a genuine,
+ *  substantive answer, frequently itself opened with a fabricated
+ *  `[ASSISTANT]:` label (run-044 A13's exact shape). Distinct from
+ *  `isLeakedInternalTagBlock` (matches snake_case/camelCase pseudo-XML
+ *  tags like `<injected_context>`; this is bracket-bare-word speaker
+ *  labels, a different shape) and from `META_PREAMBLE_RE` above (matches
+ *  narrating-the-task prose, not a literal transcript-formatted line).
+ *
+ *  Returns the ORIGINAL text unchanged if, after discarding every
+ *  non-answer block found, no answer-marker was seen AND the remaining
+ *  text is too short to be a real answer (mirrors `stripMetaPreamble`'s
+ *  own length gate — the SAME 60-char threshold, so `stripFabricated
+ *  TranscriptPreamble`/`isFabricatedTranscriptOnly` never disagree on
+ *  where "real content" begins) — the whole-answer fabricated-only case
+ *  (no real content at all, e.g. run-012 C10's bare `[ASSISTANT]: what
+ *  would you like help with?` — 31 chars after the label, below the
+ *  threshold) is intentionally left for `isLeakedAnswerArtifact`/
+ *  `isFabricatedTranscriptOnly` to catch instead, so this cleanup never
+ *  silently blanks a non-empty string down to nothing. */
+const MIN_REAL_ANSWER_CHARS_AFTER_STRIP = 60;
+
+/** Shared scan: strips leading fabricated `[SPEAKER]:` blocks per the rules
+ *  documented on `stripFabricatedTranscriptPreamble` above, and reports
+ *  whether anything was stripped alongside the remaining text — the single
+ *  source of truth both public functions below build on, so they can never
+ *  disagree about where the "real answer" boundary is. */
+function scanFabricatedTranscriptPrefix(text: string): { strippedAny: boolean; rest: string } {
+  let rest = text;
+  let strippedAny = false;
+  for (let i = 0; i < 6; i++) {
+    const m = rest.match(FABRICATED_SPEAKER_LABEL_RE);
+    if (!m) break;
+    strippedAny = true;
+    const label = m[1].trim();
+    if (ANSWER_MARKER_LABEL_RE.test(label)) {
+      // Answer marker found — strip ONLY the label, keep every remaining
+      // byte (however long) as the real answer, stop scanning.
+      rest = rest.slice(m[0].length);
+      break;
+    }
+    // Non-answer label — discard the whole paragraph it opens (up to the
+    // next blank line, or immediately if the very next char starts a new
+    // bracket-label line with no separating blank line, as in A17's
+    // stacked-turns shape).
+    const afterLabel = rest.slice(m[0].length);
+    const paraEnd = afterLabel.search(/\n\s*\n|\n(?=\s*\[)/);
+    rest = paraEnd === -1 ? '' : afterLabel.slice(paraEnd).replace(/^\s*\n+/, '');
+  }
+  return { strippedAny, rest };
+}
+
+export function stripFabricatedTranscriptPreamble(text: string): string {
+  if (!text) return text;
+  const { strippedAny, rest } = scanFabricatedTranscriptPrefix(text);
+  if (!strippedAny) return text;
+  const trimmedRest = rest.trim();
+  if (trimmedRest.length >= MIN_REAL_ANSWER_CHARS_AFTER_STRIP) return trimmedRest;
+  return text;
+}
+
+/** Whole-answer version of the above: true when the ENTIRE answer (after
+ *  trimming) is nothing but fabricated `[SPEAKER]:` transcript line(s) with
+ *  no real content following — e.g. run-012 C10's bare `[ASSISTANT]: what
+ *  would you like help with?`. Used by `isLeakedAnswerArtifact` so a
+ *  regeneration that produces only this shape is rejected, mirroring how
+ *  that function already rejects a bare leaked schema-stub/tag-block. */
+export function isFabricatedTranscriptOnly(text: string): boolean {
+  if (!text) return false;
+  const { strippedAny, rest } = scanFabricatedTranscriptPrefix(text.trim());
+  return strippedAny && rest.trim().length < MIN_REAL_ANSWER_CHARS_AFTER_STRIP;
+}
+
 export function cleanAnswerArtifacts(text: string): string {
   if (!text) return text;
   // A leaked JSON-schema stub carries no answer — blank it so the empty-answer
   // retry/fallback path handles it rather than showing "{"type":"object"}".
   if (isLeakedSchemaStub(text)) return '';
+  // Strip a leading fabricated-transcript preamble (e.g. "[INTERVIEWER]: ...")
+  // when a real answer follows — BEFORE the meta-preamble strip, since a
+  // fabricated speaker tag is a structurally distinct leak from narrating-
+  // the-task prose and the two can legitimately stack (a fabricated
+  // "[INTERVIEWER]: ..." line followed by "The interviewer is asking...").
+  text = stripFabricatedTranscriptPreamble(text);
   // Strip a leading meta-commentary preamble when a real answer follows.
   text = stripMetaPreamble(text);
   const fences: string[] = [];
