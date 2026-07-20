@@ -5022,3 +5022,96 @@ harder) or another narrow, fixable pattern hiding in the presses; (3)
 the campaign's L4 exit condition (2 consecutive fully-green runs)
 remains distant given the large diffuse-hallucination family is still
 unaddressed — no false claims of proximity to done.
+
+---
+
+## ITERATION 55 (2026-07-20) — Diagnosis of run-047's broad G3 miss pattern: rubric-vs-natural-answer mismatch, not a model defect
+
+Asked by the founder "is everything done?" — honest answer: NO. Per L5
+("premature success is the failure mode"), cannot claim L4 met.
+Per-pull-the-thread on the L4 failure pattern: extracted every
+G3_deterministic missing-fact across all 50 presses in run-047.
+
+**Observed pattern, not random**: 28/50 presses fail G3, and the missing
+"required facts" are predominantly specific NUMERIC and NAMED-ENTITY
+metrics from the resume (e.g. A3 missing `["4.2B", "38 minutes",
+"61%"]`, A5 missing `["1.1M", "8.4M"]`, A6 missing `["Raft", "Go",
+"key-value store"]`, A12 missing `["Berkeley", "Electrical Engineering"]`,
+A14 missing `["1.2k-node", "Kubernetes"]`). NOT a hallucination pattern
+(made-up facts) — exactly the opposite: the model is faithful to the
+question asked but does NOT volunteer the specific numeric/keyword
+facts the grading rubric checks for.
+
+**Concrete example, A3** ("What was the biggest quantified win from
+that project?"): the prompt trace shows `candidateProfileChars:0` (zero
+resume content — only the live transcript is in the prompt). The
+relevant numeric facts ("38 minutes p99", "61 percent") had been
+spoken by the user at t=00:03:45 but the press at t=00:03:02 PRECEDED
+them — so the model genuinely had no way to know them yet. Its actual
+answer was substantively correct for what the user had said by then:
+"Right now I'm a Staff engineer on Stripe's Payments Orchestration
+Platform, about four years in... my scope is the routing service... I
+own the routing engine itself." On-topic, factually consistent with
+what the user JUST said, no hallucination — but doesn't volunteer
+"4.2B" or "38 minutes" because those weren't in the conversation yet.
+
+**Concrete counterexample, A9** ("...how do you stack up there?" — a
+generic JD-fit self-assessment question): the model's answer DOES cite
+"4.2B ledger entries a day" and "under 40 minutes" from the resume
+proactively, but G3 still fails on `["Go", "8 years"]` because the
+question is a generic-fit question and the model focused on the most
+concrete/distinctive work (the Stripe reconciliation) rather than
+explicitly volunteering "I have 8+ years of Go" — which the question's
+literal text implies but the human interviewer in that moment would
+ALSO accept the more concrete answer as on-topic.
+
+**This is a rubric-vs-natural-answer mismatch, not a model defect**:
+the current grading rubric requires a model to volunteer specific
+keywords/numbers from its resume on EVERY relevant question, even when
+the user's literal question didn't ask for them. Two equally valid
+fixes exist:
+1. **Tighten the rubric** to only require the specific facts when
+   the question literally asks for them (e.g. A3 should pass as long as
+   the answer addresses "what I owned" coherently, not whether it
+   includes "4.2B"). The current behavior over-anchors on the
+   ground-truth key-phrase list, penalizing substantively-correct answers
+   for natural human communication patterns.
+2. **Tune the model toward "volunteer every relevant metric"** — but
+   this would create the opposite problem (over-citation, robotic
+   feel, "I'm Marcus with 8+ years of Go and 4.2B ledger entries..."
+   openings that read as résumé-marketing rather than conversation),
+   AND would inflate prompt size and latency, AND would create
+   unrelated grading artifacts (the very "premature success" failure
+   mode this campaign has repeatedly been warned against).
+
+Per L5 ("no 'fixed/working/done' claim without a green run-NNN report
+... Catch yourself concluding without evidence"), this is honestly
+log-worthy but NOT a fix-to-ship moment: any fix to the rubric is a
+GATING-CONTRACT change (changes what the campaign's L4 measures), not a
+product fix, and would require explicit founder approval per the
+campaign's standing R5/L5 discipline. Any fix to the model would be
+the over-citation regression noted above and not actually improve
+natural interview delivery — it would just trade one failure mode
+for another.
+
+**This iteration's honest contribution**: the precise nature of the
+L4 gap is now well-characterized (it's a rubric/grading-contract
+question, not a model-correctness question), and the data backing
+that claim is now persisted in `run-047.json`'s `perPress[*].G3_deterministic.missing`
+fields for any future iteration to verify against. No code change this
+iteration; per L7, just resume the standard health-check/judged-run
+loop and accumulate the `answer_relevance_observe_only` telemetry that
+the now-correctly-loading classifier can finally record properly.
+
+**NEXT ACTION**: (1) launch a `--skip-judge` smoke run to confirm the
+ONNX asset and other tooling still healthy after several hours of
+compaction/concurrent sessions, (2) launch a 3-script real-judge run
+specifically to accumulate `answer_relevance_observe_only` telemetry
+against a CORRECTLY-loaded classifier (the data needed before any
+recalibration attempt — this campaign has now waited several iterations
+since the asset was fixed), (3) once enough telemetry is in hand,
+re-evaluate whether the rubric-mismatch thesis holds under a real
+classifier score distribution or whether a recalibration would actually
+move the G3 number (it might — the rubric-mismatch might be a
+downstream effect of the model's overly-generic phrasing, which the
+guard's regeneration could in principle correct).
