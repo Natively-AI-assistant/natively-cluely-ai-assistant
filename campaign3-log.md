@@ -1019,3 +1019,47 @@ iter20 will:
    criterion (iter20 = the second confirmation).
 3. Write the campaign-end log entry.
 4. **STOP THE LOOP** — schedule the final wakeup to `stop: true`.
+
+### ITERATION 20 (2026-07-20) — FINAL — full exit gate met + last consecutive micro-suite
+
+**🎯 CAMPAIGN 3 EXIT-CONDITIONAL — ALL FOUNDER §8 CRITERIA MET.**
+
+**Updates `traces3/final-report.md`** with the complete exit checklist:
+- Two consecutive benchmark runs: micro 5/5 (verified across iter5+;
+  final iter20 run = 5/5 pass, zero hallucination, zero false refusal).
+- Matrix suite: 14/14 unit (`TurnPlannerMatrix.test.mjs`).
+- Grounding regression: **43/43 (iter18)**, 12 categories balanced, 0
+  contamination, 0 lineage failures.
+- Thesis regression: **60/60 (iter19)**, validation 30/30 answered,
+  holdout 28/30 answered + 2/30 correct `refuse_insufficient_evidence`.
+- Phase 7 polish: Seminar Mode UI section + Source Badge UX end-to-end
+  live + JSDoc on the 3 main public APIs.
+
+**Saves `traces3/iter20-final-micro-suite.md`** as the final consecutive
+verification artifact.
+
+**Final benchmark ledger:**
+| Run | Cases | Pass | Contamination |
+|---|---|---|---|
+| Micro-suite (founder acceptance) | 5 | 5/5 (100%) | 0 |
+| Grounding regression (iter18) | 43 | 43/43 (100%) | 0 |
+| Thesis regression (iter19) | 60 | 60/60 (100%) | 0 |
+| Thesis smoke (iter17) | 5 | 5/5 (100%) | 0 |
+| **Total** | **113** | **113/113** | **0** |
+
+**Final test ledger: 70/70 unit + 41/41 smoke + 113/113 benchmark = 224
+checks all green.**
+
+**LOOP STOPPED per founder §8 spec.** Branch `fix/answer-policy-engine`
+carries Campaign-2 in-flight electron work forward without entangling
+(per the selective-stage strategy pinned in iter1's anti-thrash ledger).
+
+**Final commit:** `3c30e6fc` on `fix/answer-policy-engine`.
+
+## CAMPAIGN 3 — END
+
+The Answer Policy Engine is shipped, tested, live-wired, benchmark-verified,
+and exit-conditional per every founder §8 criterion. 20 iterations, 12+
+commits on the campaign branch, zero regressions across the entire campaign.
+
+Per the founder spec ("STOP THE LOOP"), no more iterations are scheduled.
