@@ -5511,3 +5511,30 @@ conditions, then evaluate whether the C3 anyOf conversion actually
 moved the scorecard (the rubric-mismatch hypothesis predicts it should
 move C3's pass rate by 10-20 percentage points; the prior 18/42
 baseline is the comparison).
+
+---
+
+## ITERATION 61 (2026-07-21) — Second "L4 final" run (l4-final3): same provider-error pattern (51%), same conclusion: not informative, fix work still unverified but preserved
+
+Per L2 wakeup, found a THIRD L4 run from the concurrent session
+(`l4-final3-2026-07-20`, 103 cases). Result: 27/103 (26.2%), 0
+hallucination. Even worse than the previous "final" run (33/104).
+Identical pattern: 53/103 (51%) provider-error fallback answers,
+48/103 (47%) judge HTTP 503 errors. This is the SAME provider-
+saturation pattern as iteration 60, NOT a new regression.
+
+Confirmation that the rubric-vs-natural-answer fix work
+(`aad7daf5`/`9a1feb90`/`a032c648`) needs a clean re-verification run
+to be evaluable, which requires the provider pool to recover from
+its current saturated state. Per L1, continuing the standard
+health-check/loop cycle until providers recover.
+
+The system is now in a known-stable state with clear documentation:
+all technical fixes shipped, all rubric-vs-natural-answer fix work
+landed, all hallucination-avoidance durable at 0/138 across the
+last clean run, all injection-safety cases (C6) at 100% pass
+across the same clean run. The remaining gap (L4 at 76.8% in the
+last clean run, vs the 95% target) is dominated by the rubric-vs-
+natural-answer problem which a founder-level decision is required to
+resolve per R5/L5. Per L5, NOT claiming done. Per L1, continuing to
+reschedule rather than stop.
