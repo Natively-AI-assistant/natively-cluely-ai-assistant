@@ -151,7 +151,7 @@ export class ModelSelectorWindowHelper {
             // capture handler (NativelyInterface.tsx) dispatching the
             // `model-selector:close-if-open` IPC, guarded against the
             // toggle button via `data-model-selector-toggle`.
-            ...(isMac ? { type: 'panel' as const } : (process.platform === 'win32' ? { type: 'toolbar' as const } : {})),
+            ...(isMac ? { type: 'panel' as const } : {}),
         }
 
         if (x !== undefined && y !== undefined) {

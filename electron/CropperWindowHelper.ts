@@ -429,7 +429,6 @@ export class CropperWindowHelper {
         // macOS uses fullscreenable + visibleOnAllWorkspaces instead
         if (process.platform === 'win32') {
             (windowSettings as any).enableLargerThanScreen = true;
-            windowSettings.type = 'toolbar';
         } else {
             windowSettings.type = CROPPER_CONFIG.WINDOW_TYPE;
         }
