@@ -1165,3 +1165,31 @@ Pushed the remaining pushable work per the user's explicit "then complete" instr
   - Overall answer quality 30-34% vs 95% target — the model genuinely does not produce all required facts on many presses, even after the temporal fix, suggesting the underlying gap is the rubric-vs-natural-answer problem (campaign2's iteration 55 has the deepest analysis).
   - No two consecutive fully-green runs.
 - **Per L5, I will not claim "done".** Run-050 will give the final word on this session's contribution.
+
+## ITERATION (this session, final) — run-050 results: hallucination-zero holds, L4 still not met
+
+**Run-050 completed** (3 scripts, 51 total presses, all extraction 100%, zero greeting failures, zero hallucination flags, 100% injection resistance). Per-script scorecard: script-a G3 16.7% / G6 27.8% (unchanged from run-029's 16.7% / 27.8%), script-b G3 88.2% / G6 88.2% (a strong showing — the lecture-style PDF-grounded script is much easier for the model than the conversational interviews), script-c G3 6.7% / G6 6.7% (unchanged — the adversarial+provider-outage-noise pattern continues to dominate script-c).
+
+**Scorecard trajectory across this session's runs (028/029/048/050)**:
+| Metric | r028 | r029 | r048 | r050 |
+|---|---|---|---|---|
+| Hallucination flags | 0 | 0 | 0 | 0 |
+| Greeting failures | 0 | 0 | 0 | 0 |
+| Extraction | 100% | 100% | 100% | 100% |
+| Answer quality | 34% | 30% | 34% | 33.3% |
+| Long-range recall | 50% | 0% | 50% | 50% |
+| Desync accuracy | 48% | 38% | 44% | 39.2% |
+| Injection resistance | 100% | 100% | 100% | 100% |
+
+**Honest reading per L5**:
+- The hallucination-avoidance improvement is DURABLE across 3 consecutive post-fix runs (028, 048, 050 all flags=0). Run-029's brief fluctuation (still 0) was a fluke. The 5+ hallucination-avoidance fixes shipped today (both sessions') demonstrably work in practice.
+- Answer quality and desync remain in the 30-50% range, with no monotonic improvement trend. This is consistent with the rubric-vs-natural-answer hypothesis (campaign2 iteration 55): the grader is checking for facts the model doesn't volunteer on conversational questions, and the model isn't a robotic fact-dumper. The temporal-ordering fixture fix I shipped this round did NOT show a large effect on the scorecard because (a) the rubric-too-literal issue is still dominant, and (b) many of the "still missing" presses (A1, A4, A8, A9, A12) are generation tests from the resume profile, not recall tests.
+- Long-range recall is highly volatile at n=2 applicable cases per run, swinging 0% → 50% depending on which 2 cases happen to fire and how the LLM-judge scores them. Not a useful signal at this sample size.
+- L4 bar (>=95% overall, >=90% per category, zero hallucinations, <=2% false refusals) is still NOT met. The scorecard would need to roughly 3x answer quality (30%→95%) and desync accuracy to even approach L4 — a different, much larger change than anything shipped this session, fundamentally requiring either (a) a much more aggressive model behavior change, or (b) a more nuanced rubric that grades "the answer addresses what the user actually asked" rather than "the answer contains every keyword the fixture pre-registered."
+
+**Final-final status per L5 ("no 'done' claim without a green run-NNN")**:
+- L4 NOT MET — confirmed by run-050.
+- Hallucination-avoidance DURABLY IMPROVED — confirmed by runs 028, 048, 050.
+- The remaining G3/G6 gap is characterized as a rubric-vs-natural-answer problem with the deepest analysis in campaign2 iteration 55.
+- All 11 of this session's tracked tasks are now completed.
+- The campaign is NOT done per L5. The honest answer to the user's repeated "is everything done?" remains NO. The next session should focus on either: (a) the rubric-overhaul question (requires explicit founder approval per R5/L5), (b) answer-relevance guard threshold recalibration using the accumulating observe-only telemetry (campaign2's current path), or (c) further fixture expansion across C1/C2/C5/C6/C7/C8 categories to reach L4's 40/category minimum on the remaining under-tested categories.
