@@ -1038,9 +1038,16 @@ let KnowledgeDatabaseManagerClass: any = null;
 // Phase 1: shared comp-evidence detector for transcript-aware intent routing.
 let textHasCompEvidence: ((text: string) => boolean) | null = null;
 try {
-    KnowledgeOrchestratorClass = require('../premium/electron/knowledge/KnowledgeOrchestrator').KnowledgeOrchestrator;
-    KnowledgeDatabaseManagerClass = require('../premium/electron/knowledge/KnowledgeDatabaseManager').KnowledgeDatabaseManager;
-    textHasCompEvidence = require('../premium/electron/knowledge/NegotiationConversationTracker').textHasCompEvidence;
+    KnowledgeOrchestratorClass = require('./knowledge/KnowledgeOrchestrator').KnowledgeOrchestrator;
+    KnowledgeDatabaseManagerClass = require('./knowledge/KnowledgeDatabaseManager').KnowledgeDatabaseManager;
+    // Transcript-aware comp-evidence detector is a premium-only surface; in the
+    // OSS build it stays null and setConversationContextProvider degrades to
+    // returning no hint (the negotiation feature is inert here anyway).
+    try {
+        textHasCompEvidence = require('../premium/electron/knowledge/NegotiationConversationTracker').textHasCompEvidence;
+    } catch {
+        textHasCompEvidence = null;
+    }
 } catch {
     console.log('[Main] Knowledge modules not available — profile intelligence disabled.');
 }

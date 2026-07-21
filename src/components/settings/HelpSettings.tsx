@@ -1630,7 +1630,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li>Click the <strong>grid icon</strong> in the Launcher header</li>
                                         <li>Or click the grid icon in the main interface toolbar</li>
-                                        <li>Requires a Natively Pro license</li>
+                                        <li>Available to everyone — no license required</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
@@ -1665,10 +1665,10 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
                             <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
-                                <Star size={14} /> Pro Feature
+                                <Star size={14} /> All Modes Included
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Modes are locked behind Natively Pro. Free and trial users see only the General mode. Activate a license via <strong>Settings → Natively API</strong> to unlock all seven modes.
+                                Every mode is available to all users — no license required. Create unlimited custom modes and switch between all seven templates freely.
                             </p>
                         </div>
                     </div>

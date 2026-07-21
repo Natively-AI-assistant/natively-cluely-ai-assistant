@@ -36,6 +36,7 @@ const FLAG_META: Record<string, { label: string; desc: string; group: string; ti
   conversationMemoryV2: { label: 'Conversation follow-ups', desc: 'Understands short follow-ups like "make that shorter" by looking back at what was just said.', group: 'Memory', tier: 'advanced' },
   profileTreeV2: { label: 'Stronger candidate voice', desc: 'Keeps answers sounding like you — first person, your own experience, no generic AI phrasing.', group: 'Answer quality', tier: 'advanced' },
   answerDiversityGuard: { label: 'Polished phrasing', desc: 'Reduces repeated or templated wording so answers sound more natural.', group: 'Answer quality', tier: 'advanced' },
+  speakerDiarizationV1: { label: 'Separate remote speakers', desc: 'Uses Deepgram to tell apart multiple people on the other end of the call, so the transcript labels who said what. Applies to a meeting started after this is turned on.', group: 'Speakers', tier: 'advanced' },
   globalSearchV2: { label: 'Search past meetings', desc: 'Search by keyword across all your saved meetings and jump to relevant moments.', group: 'Search', tier: 'advanced' },
   inMeetingSearchV2: { label: 'Search current meeting', desc: 'Search the live transcript of the meeting you’re in, with timestamps.', group: 'Search', tier: 'advanced' },
   lectureIntelligenceV2: { label: 'Lecture notes', desc: 'Turns a lecture into structured notes, flashcards, and practice questions.', group: 'Lecture & diagrams', tier: 'advanced' },
@@ -54,7 +55,7 @@ const FLAG_META: Record<string, { label: string; desc: string; group: string; ti
 const HINDSIGHT_FLAG_KEYS = new Set(['hindsightMemory', 'hindsightPostMeetingRetain', 'hindsightLiveRecall']);
 
 // Order for the per-group rendering inside the "Customize" disclosure (advanced tier).
-const ADVANCED_GROUP_ORDER = ['Memory', 'Answer quality', 'Search', 'Lecture & diagrams'];
+const ADVANCED_GROUP_ORDER = ['Memory', 'Answer quality', 'Search', 'Speakers', 'Lecture & diagrams'];
 
 // Single source of truth for what the master "Smart features" switch controls: every
 // core-tier flag. Derived from FLAG_META so it can't drift.

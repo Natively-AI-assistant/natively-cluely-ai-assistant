@@ -186,7 +186,7 @@ import {
   getOverlayAppearance,
   OVERLAY_OPACITY_DEFAULT,
 } from '../lib/overlayAppearance';
-import { NegotiationCoachingCard } from '../premium';
+import NegotiationCoachingCard from './NegotiationCoachingCard';
 import type { DynamicActionPayload } from '../types/electron';
 import { getCodexCliModelDisplayName } from '../utils/modelUtils';
 import { getModifierSymbol, isMac } from '../utils/platformUtils';

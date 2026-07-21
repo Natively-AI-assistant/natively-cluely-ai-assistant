@@ -421,6 +421,37 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 }
             }
 
+            // ── SYSTEM-DESIGN LESSON GROUNDING (ticket 08) ────────────────────
+            // On a system-design turn, ground the Deep Dives in the persistent
+            // hellointerview LESSON corpus (ingested via knowledge:ingest-lesson).
+            // Retrieval is SCOPED to doc_type='lesson' so this content can never
+            // reach a profile/behavioral answer, and appended to modeContextBlock
+            // as a <reference_file> block — the SAME mechanism the technical-
+            // interview prompt's <injected_context> already consumes (no new
+            // injection path). Bounded like the hybrid retrieval above so a cold
+            // embedder can't stall first-token; a miss just leaves the framework
+            // skeleton (ticket 07) ungrounded rather than blocking the answer.
+            if (answerPlan?.answerType === 'system_design_answer') {
+                try {
+                    const orchestrator = this.llmHelper.getKnowledgeOrchestrator?.();
+                    if (orchestrator?.queryRelevantChunks) {
+                        const { DocType } = require('../knowledge/types') as typeof import('../knowledge/types');
+                        const lessonQuery = answerPlan?.question?.trim() || cleanedTranscript;
+                        const { value: lessonChunks } = await raceWithBudget(
+                            orchestrator.queryRelevantChunks(lessonQuery, DocType.LESSON, 5) as Promise<Array<{ text: string }>>,
+                            HYBRID_RETRIEVAL_BUDGET_MS,
+                            [] as Array<{ text: string }>,
+                        );
+                        if (Array.isArray(lessonChunks) && lessonChunks.length > 0) {
+                            const lessonBlock = `<reference_file name="hellointerview-system-design.md">\n${lessonChunks.map((c) => c.text).join('\n\n')}\n</reference_file>`;
+                            modeContextBlock = modeContextBlock ? `${modeContextBlock}\n\n${lessonBlock}` : lessonBlock;
+                        }
+                    }
+                } catch (lessonErr: any) {
+                    console.warn('[WhatToAnswerLLM] system-design lesson grounding skipped (non-fatal):', lessonErr?.message);
+                }
+            }
+
             // ── PINNED MODE INSTRUCTIONS (PI v3, W2) ──────────────────────────
             // The mode's user-authored "Real-time prompt" (customContext) must
             // apply on EVERY answer, not only when retrieval happens to score it.
