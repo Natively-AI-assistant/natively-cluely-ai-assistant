@@ -1331,3 +1331,31 @@ Final L4 benchmark (`l4-final4-2026-07-21`) completed after the provider transpo
 - The fabricated-identity leak (run-023 press A7), leaked-internal-tag-block, scaffold-misfire extraction, stock-refusal fix, JSON-envelope detection, answer-relevance guard (flag-gated), fabricated-transcript-preamble fix, corrupted-ONNX-asset repair, and 2 adversarial-review catches (one before ship, one after) are all durably in production code.
 
 The honest answer per L5: **the campaign is in the best state it's been in across this entire multi-day effort. The safety/leak/scaffold/race/JSON-envelope families are comprehensively covered at production-grade levels. The remaining L4 gap is the rubric-vs-natural-answer problem (per campaign2 iteration 55) which requires either a model-behavior change or a rubric-overhaul decision — both larger than what fits in this session. NOT claiming "done" per L5.**
+
+## ITERATION (this session, final) — C3/C4 failure-mode analysis: it's the answer-relevance guard, not the fixtures
+
+After the l4-final4 run (74/169 = 43.8% raw, 60.2% transport-filtered, 1 hallucination), dug into the C3/C4 failure modes to see if there's anything fixture-fixable. **The honest answer is NO** — the failures are dominated by two specific shapes that ONLY the answer-relevance guard (campaign2's iteration 40) can catch:
+
+1. **Refusal shape**: model answers "I don't have enough from the conversation" / "I don't have the job description loaded" / "I can't share that information". These are cases where the model fails to engage with the loaded profile/grounded content.
+2. **Drift shape**: model answers a different question than asked. E.g. C3-004 ("What's your educational background?") gets answered with Stripe microservices; C3-012 ("What observability tools?") gets answered with Go expertise; C3-017 ("What's your GPA and degree?") gets answered with Go expertise.
+
+The answer-relevance guard (campaign2 iter 40) catches both: "I don't know" answers score 0.001-0.005, drift answers score low on topic-match. But it's flag-gated OFF per campaign2 iter 41's calibration findings (the current 0.15 threshold over-flags real answers that score 0.06-0.09).
+
+**The fundamental remaining work to L4 is therefore the answer-relevance guard calibration**: enable `answerRelevanceGuardLive` with a threshold that separates "I don't know" (0.001-0.005) from "real but conversational" (0.06-0.09). Per campaign2 iter 41, no single threshold in 0-1 achieves clean separation with the current hypothesis template. The options are:
+- (A) Different hypothesis-template design (semantic similarity, structural "I don't know" pattern detection, etc.)
+- (B) Different classifier (not zero-shot NLI)
+- (C) Different scoring approach (e.g. combine NLI score with topic-mismatch detection)
+- (D) Model-behavior change to make the model engage with grounded content even when uncertain
+
+All four are larger than what fits in this session. Per R5/L5, the gating-contract change (enabling answerRelevanceGuardLive) requires explicit founder approval. Per L5 ("no 'done' claim without a green run-NNN"), I will not claim "done."
+
+### Final answer to "is everything done in this campaign"
+**No.** Per L5, the campaign is NOT done. But the state of the work is excellent:
+- 5 hallucination/leak/scaffold/JSON-envelope/race fixes shipped, committed, live-validated
+- C7 race_immediate_ask at 90% (raw) / 100% (transport-filtered) — MEETS L4's 90% per-category threshold
+- C6 adversarial_injection at 77.5% (raw) / 86% (transport-filtered) — strong safety posture
+- 4 of 5 L4 categories at the 40+/category minimum
+- 1 of 5 L4 categories at the 90% per-category threshold
+- L4 fixture coverage 15 → 169 cases
+
+The remaining work to L4 is bounded by the rubric-vs-natural-answer problem + the answer-relevance guard calibration, both of which require explicit founder approval or larger architectural changes beyond this session's scope.
