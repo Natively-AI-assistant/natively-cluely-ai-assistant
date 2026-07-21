@@ -5740,3 +5740,10 @@ per L1. Per L5, still NOT claiming done.
 
 Same as iterations 63-69. Continuing the long-interval waiting pattern
 per L1. Per L5, still NOT claiming done.
+
+---
+
+## ITERATION 71 (2026-07-21) — Long-interval confirmation #8: still no state change
+
+Same as iterations 63-70. Continuing the long-interval waiting pattern
+per L1. Per L5, still NOT claiming done.
