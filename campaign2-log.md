@@ -5810,3 +5810,27 @@ per L1. Per L5, still NOT claiming done.
 
 Same as iterations 63-79. Continuing the long-interval waiting pattern
 per L1. Per L5, still NOT claiming done.
+
+---
+
+## ITERATION 81 (2026-07-22) — Concurrent session's `06ff34a4` confirms the C3/C4 conversational gap is the bottleneck, not a hidden bug; nothing new for this campaign to act on
+
+Per L2 wakeup, found `06ff34a4` "log final C3/C4 failure-mode analysis:
+answer-relevance guard is the bottleneck" (21:42 UTC, an hour before
+this wakeup). This is a campaign-1 (grounding campaign) log commit,
+not campaign-2 (this campaign), but the analysis cross-confirms
+campaign-1's C3/C4 6.3%/12.1% transport-filtered pass rates against
+this campaign's iteration 62 findings. Both campaigns converge on the
+same diagnosis: the rubric-vs-natural-answer problem is the single
+binding constraint, and the answer-relevance guard (correctly
+calibrated per iteration 58's data) is the mechanism designed for this
+family but can't overcome the model's natural-answer style on its own
+— the rubric itself would need to change.
+
+Two unrelated `chore: gemini-3.6-flash rename` commits in the
+background; not relevant to Campaign 2.
+
+Per L1, continuing the long-interval waiting pattern. Per L5, still
+NOT claiming done — the rubric-vs-natural-answer question remains a
+founder-level decision per R5/L5, outside this autopilot's authority
+to ship. Rescheduled.
