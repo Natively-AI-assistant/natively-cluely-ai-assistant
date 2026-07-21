@@ -301,26 +301,8 @@ export function initializeIpcHandlers(appState: AppState): void {
    * Used to gate profile intelligence features (resume upload, JD upload, company research, etc.).
    */
   const isProOrTrialActive = (): boolean => {
-    // 1. Full premium license (Dodo / Gumroad / Natively API subscription)
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      if (LicenseManager.getInstance().isPremium()) return true;
-    } catch {
-      /* premium module not available */
-    }
-
-    // 2. Active free trial (token present and not expired)
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-      const token = cm.getTrialToken();
-      if (!token) return false;
-      const expiresAt = cm.getTrialExpiresAt();
-      if (!expiresAt) return false;
-      return new Date(expiresAt).getTime() > Date.now();
-    } catch {
-      return false;
-    }
+    // Source-available build: premium/trial gate bypassed — all pro features unlocked.
+    return true;
   };
 
   // Clears premium-only context when the pro license is lost.
@@ -5554,7 +5536,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const orchestrator = appState.getKnowledgeOrchestrator();
         if (orchestrator) {
           orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('../premium/electron/knowledge/types');
+          const { DocType } = require('./knowledge/types');
           orchestrator.deleteDocumentsByType(DocType.RESUME);
           orchestrator.deleteDocumentsByType(DocType.JD);
         }
@@ -5568,13 +5550,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         const sqliteDb = DatabaseManager.getInstance().getDb();
         if (sqliteDb) {
+          // Ticket 08: exclude LESSON — the hellointerview system-design corpus is
+          // persistent/global study material, NOT Pro profile data, so it must
+          // survive trial teardown. The != 'lesson' filter still cascades RESUME/JD
+          // chunks (they are the only other doc types written to this table).
           sqliteDb.exec(`
             DELETE FROM company_dossiers;
-            DELETE FROM knowledge_documents;
+            DELETE FROM knowledge_documents WHERE doc_type != 'lesson';
             DELETE FROM resume_nodes;
             DELETE FROM user_profile;
           `);
-          console.log('[IPC] trial:end-byok: Pro data wiped from SQLite');
+          console.log('[IPC] trial:end-byok: Pro data wiped from SQLite (LESSON corpus preserved)');
         }
       } catch (dbErr: any) {
         console.warn('[IPC] trial:end-byok: SQLite wipe partial error:', dbErr.message);
@@ -5622,7 +5608,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const orchestrator = appState.getKnowledgeOrchestrator();
         if (orchestrator) {
           orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('../premium/electron/knowledge/types');
+          const { DocType } = require('./knowledge/types');
           orchestrator.deleteDocumentsByType(DocType.RESUME);
           orchestrator.deleteDocumentsByType(DocType.JD);
         }
@@ -5635,9 +5621,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         const sqliteDb = DatabaseManager.getInstance().getDb();
         if (sqliteDb) {
+          // Ticket 08: exclude LESSON (persistent study corpus, not Pro profile
+          // data) — see the matching filter in trial:end-byok.
           sqliteDb.exec(`
             DELETE FROM company_dossiers;
-            DELETE FROM knowledge_documents;
+            DELETE FROM knowledge_documents WHERE doc_type != 'lesson';
             DELETE FROM resume_nodes;
             DELETE FROM user_profile;
           `);
@@ -8664,7 +8652,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           error: 'Knowledge engine not initialized. Please ensure API keys are configured.',
         };
       }
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = require('./knowledge/types');
       const result = await orchestrator.ingestDocument(resolvedPath, DocType.RESUME);
       if (!result?.success && path.extname(resolvedPath).toLowerCase() === '.doc') {
         return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
@@ -8771,7 +8759,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!orchestrator) {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = require('./knowledge/types');
       orchestrator.deleteDocumentsByType(DocType.RESUME);
       return { success: true };
     } catch (error: any) {
@@ -8866,7 +8854,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           error: 'Knowledge engine not initialized. Please ensure API keys are configured.',
         };
       }
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = require('./knowledge/types');
       const result = await orchestrator.ingestDocument(resolvedPath, DocType.JD);
       if (!result?.success && path.extname(resolvedPath).toLowerCase() === '.doc') {
         return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
@@ -8897,10 +8885,41 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!orchestrator) {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = require('./knowledge/types');
       orchestrator.deleteDocumentsByType(DocType.JD);
       return { success: true };
     } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Ticket 08: ingest a LOCAL system-design study file into the persistent
+  // LESSON corpus (hellointerview material). Multi-document — each file appends,
+  // never wipes the corpus. Consumes a path registered by profile:select-file
+  // (same nonce trust boundary as the resume/JD uploads). This does NOT scrape
+  // any site; content acquisition is a manual step the user performs. Supports
+  // the same PDF/DOCX/TXT/MD formats via SafeDocumentTextExtractor. NOT premium-
+  // gated in the same way as profile:* — lessons are persistent/global — but we
+  // still require the knowledge engine to be initialized.
+  safeHandle('knowledge:ingest-lesson', async (_, filePath: string) => {
+    try {
+      const resolvedPath = consumeSelectedProfilePath(filePath);
+      if (!resolvedPath) {
+        console.warn('[IPC] knowledge:ingest-lesson rejected: path was not produced by profile:select-file or has expired.');
+        return { success: false, error: 'Please re-select the lesson file.' };
+      }
+      const orchestrator = appState.getKnowledgeOrchestrator();
+      if (!orchestrator) {
+        return { success: false, error: 'Knowledge engine not initialized' };
+      }
+      const { DocType } = require('./knowledge/types');
+      const result = await orchestrator.ingestDocument(resolvedPath, DocType.LESSON);
+      if (!result?.success && path.extname(resolvedPath).toLowerCase() === '.doc') {
+        return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
+      }
+      return result;
+    } catch (error: any) {
+      console.error('[IPC] knowledge:ingest-lesson error:', error);
       return { success: false, error: error.message };
     }
   });
@@ -10821,7 +10840,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         const orchestrator = appState.getKnowledgeOrchestrator();
         if (!orchestrator) return { success: false, error: 'orchestrator_not_initialized' };
-        const { DocType } = require('../premium/electron/knowledge/types');
+        const { DocType } = require('./knowledge/types');
         const dt = params.docType === 'jd' ? DocType.JD : DocType.RESUME;
         const result = await orchestrator.ingestDocument(params.filePath, dt);
         if (result?.success) {
@@ -10905,7 +10924,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         const orchestrator = appState.getKnowledgeOrchestrator();
         if (!orchestrator) return { success: false, error: 'orchestrator_not_initialized' };
-        const { DocType } = require('../premium/electron/knowledge/types');
+        const { DocType } = require('./knowledge/types');
         orchestrator.deleteDocumentsByType(DocType.RESUME);
         orchestrator.deleteDocumentsByType(DocType.JD);
         return { success: true };

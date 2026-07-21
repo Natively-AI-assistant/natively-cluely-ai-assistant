@@ -1330,6 +1330,50 @@ export class DatabaseManager {
             this.db.pragma('user_version = 25');
         }
 
+        // Version 25 → 26: Knowledge-document base (ticket 05). Separate from the
+        // OKF knowledge_* card family (v20/v21/v23) — this is a plain document +
+        // chunk + vector store for ingested resume / JD / reference files (and
+        // later lesson content), reusing the meeting-RAG vector infra patterns.
+        // knowledge_chunks carries its own embedding space/provider/dims because,
+        // unlike meeting chunks (which read the space off the parent meetings row),
+        // a knowledge chunk has no meeting parent — so the composite space key
+        // lives on the chunk itself and the re-index sweep filters on it directly.
+        if (version < 26) {
+            console.log('[DatabaseManager] Applying migration v25 → v26: Add knowledge_documents + knowledge_chunks + vec_knowledge_chunks');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS knowledge_documents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    doc_type TEXT NOT NULL,
+                    file_path TEXT,
+                    file_name TEXT,
+                    raw_text TEXT NOT NULL DEFAULT '',
+                    structured_data TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_knowledge_documents_doc_type ON knowledge_documents(doc_type);
+
+                CREATE TABLE IF NOT EXISTS knowledge_chunks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    document_id INTEGER NOT NULL,
+                    chunk_index INTEGER NOT NULL,
+                    text TEXT NOT NULL,
+                    embedding BLOB,
+                    embedding_provider TEXT,
+                    embedding_dimensions INTEGER,
+                    embedding_space TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_document ON knowledge_chunks(document_id);
+                CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_embedding_space ON knowledge_chunks(embedding_space);
+            `);
+            for (const dim of DatabaseManager.KNOWN_DIMS) {
+                this.ensureVecTableForDim(dim);
+            }
+            this.db.pragma('user_version = 26');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -2099,6 +2143,12 @@ export class DatabaseManager {
             this.db.exec(`
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries_${dim} USING vec0(
                     summary_id INTEGER PRIMARY KEY,
+                    embedding float[${dim}]
+                );
+            `);
+            this.db.exec(`
+                CREATE VIRTUAL TABLE IF NOT EXISTS vec_knowledge_chunks_${dim} USING vec0(
+                    chunk_id INTEGER PRIMARY KEY,
                     embedding float[${dim}]
                 );
             `);

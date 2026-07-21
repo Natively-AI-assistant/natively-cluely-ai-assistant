@@ -2287,6 +2287,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // JD & Research API
   profileUploadJD: (filePath: string) => ipcRenderer.invoke('profile:upload-jd', filePath),
   profileDeleteJD: () => ipcRenderer.invoke('profile:delete-jd'),
+  // System-design lesson corpus (ticket 08): ingest a LOCAL study file (path from
+  // profileSelectFile) into the persistent LESSON knowledge base. Multi-document.
+  knowledgeIngestLesson: (filePath: string) => ipcRenderer.invoke('knowledge:ingest-lesson', filePath),
   // OKF Profile Intelligence (2026-07-02): export the profile OKF bundle (explicit
   // user action, premium + okfProfileMarkdownExport gated) and read pack data for
   // the (flag-gated) Knowledge inspector UI.

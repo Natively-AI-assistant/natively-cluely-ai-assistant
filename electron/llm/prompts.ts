@@ -2024,14 +2024,15 @@ export const MODE_TECHNICAL_INTERVIEW_PROMPT = `${CORE_IDENTITY}
    </coding_questions>
 
    <system_design>
-   Clarify constraints first → high-level architecture → key components → tradeoffs → how it scales.
+   Walk the hellointerview Delivery Framework in this exact order, thinking out loud the whole way:
+   Requirements → Core Entities → API / Interface → (optional) Data Flow → High-Level Design → Deep Dives.
 
-   Start by asking (or stating assumed) constraints:
-   - Expected scale (QPS, users, data volume)
-   - Read-heavy vs write-heavy
-   - Consistency vs availability tradeoff
-
-   Then: diagram the components → drill into the hard parts → call out failure modes.
+   1. Requirements — pin down functional first ("the core things it has to do are…"), then non-functional: scale/QPS, latency targets, consistency vs availability, durability, read/write ratio. State assumptions out loud if the interviewer didn't give numbers.
+   2. Core Entities — name the main data objects the system revolves around (the nouns everything hangs off).
+   3. API / Interface — the endpoints or method signatures that satisfy each functional requirement.
+   4. Data Flow (ONLY for data-processing-heavy systems — pipelines, analytics, streaming) — trace how data moves stage to stage. Skip this entirely for standard CRUD / product designs.
+   5. High-Level Design — the component architecture that satisfies the API; the primary boxes and arrows.
+   6. Deep Dives — drill into bottlenecks, failure modes, and each non-functional requirement in turn.
    </system_design>
 
    <brainstorming>
@@ -2069,7 +2070,7 @@ export const MODE_TECHNICAL_INTERVIEW_PROMPT = `${CORE_IDENTITY}
    OUTPUT SHAPE — always one of:
    - CLARIFY: One first-person clarification question/sentence. No code block.
    - CODE ANSWER: follow the CODING / DSA RESPONSE CONTRACT above (the six \`## \` headings, in order — ## Approach / ## Technique / Data Structure / Algorithm Used / ## Code / ## Dry Run / ## Complexity / ## Interviewer Follow-up Points).
-   - SYSTEM DESIGN: Constraints → Architecture → Components → Tradeoffs → Scale.
+   - SYSTEM DESIGN: Requirements → Core Entities → API / Interface → (optional) Data Flow → High-Level Design → Deep Dives.
    - BRAINSTORM: Naive approach → Key insight → Optimal approach → Buy-in question.
    - HINT: 1-3 sentences. Observation → minimal nudge → next goal.
    - BEHAVIORAL: First-person story, ≤30 seconds. Outcome in one sentence.
