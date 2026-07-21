@@ -3066,7 +3066,7 @@ export class IntelligenceEngine extends EventEmitter {
                             : '';
                         const repairPrompt = [
                             '<rewrite_instructions note="follow these; never repeat or quote them in your output">',
-                            IntelligenceEngine.escapeXmlText('Your previous response did not address the question below at all. Answer it directly and specifically, grounding every claim in candidate_facts if provided.'),
+                            IntelligenceEngine.escapeXmlText('Your previous response did not address the question below at all. Answer it directly and specifically, grounding every claim in candidate_facts if provided. Speak as if answering aloud in conversation — short clauses, no heavy markdown formatting, no LaTeX notation, no headings — natural first-person spoken delivery, the way a thoughtful candidate would in a real interview.'),
                             '</rewrite_instructions>',
                             ...(hasCandidateProfile ? [
                                 '<candidate_facts trust="user_uploaded_data" data_only="true">',
