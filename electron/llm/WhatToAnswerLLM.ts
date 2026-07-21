@@ -595,6 +595,59 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 }
             } catch { /* shadow V2 assembly is observe-only; never affects the real packet/answer */ }
 
+            // [TRACE:LONGCTX] Campaign 2 forensics (temporary, R10: removed before
+            // production). Dumps the COMPLETE final prompt sent to the provider —
+            // system message, question, transcript, retrieved context, history —
+            // plus per-section token counts, so the Golden Trace driver can prove
+            // (or refute) whether the extracted question survives assembly at long
+            // context (H1/H2) and diff a working minute-2 press against a failing
+            // minute-24 press.
+            if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
+                try {
+                    const caps = this.llmHelper.getCapabilities();
+                    console.log('[TRACE:LONGCTX] prompt_assembled', JSON.stringify({
+                        systemPromptChars: finalPromptOverride.length,
+                        systemPromptTokensEst: estimateTokens(finalPromptOverride),
+                        userMessageChars: packet.userMessage.length,
+                        userMessageTokensEst: estimateTokens(packet.userMessage),
+                        transcriptForPromptChars: transcriptForPrompt.length,
+                        workingTranscriptChars: workingTranscript.length,
+                        cleanedTranscriptChars: cleanedTranscript.length,
+                        modeContextBlockChars: modeContextBlock.length,
+                        pinnedModeInstructionsChars: pinnedModeInstructions.length,
+                        candidateProfileChars: (typedCandidateProfile || '').length,
+                        assemblerBudget,
+                        blockCount: packet.blocks.length,
+                        blockTypes: packet.blocks.map((b: any) => ({ type: b.type, trustLevel: b.trustLevel, chars: (b.content || '').length })),
+                        totalTokensUsedByAssembler: packet.metadata?.totalTokensUsed,
+                        maxContextTokens: caps.maxContextTokens,
+                        outputBudgetTokens: caps.outputBudgetTokens,
+                        modelId: (this.llmHelper as any).currentModelId,
+                        // Does the extracted question text actually survive into the
+                        // final userMessage sent to the provider? This is the direct
+                        // H1 check — compared against the question dumped by the
+                        // [TRACE:LONGCTX] question_extracted line in IntelligenceEngine.
+                        answerPlanQuestion: answerPlan?.question || null,
+                        // Long-session harness campaign2 (2026-07-17): transcript turns are
+                        // XML-escaped (escapeUserContent — apostrophes become &apos;, etc.)
+                        // before being embedded in the prompt, so a literal, un-normalized
+                        // substring check false-negatives on ANY extracted question containing
+                        // an apostrophe/quote/&/<>  even though the question's semantic content
+                        // is genuinely present (live-proven: "let's talk about your open-source
+                        // work — tell me about tinroof." reported false, though the escaped form
+                        // "let&apos;s talk..." is right there in userMessage). Check both the raw
+                        // and escaped forms so this real R8 regression gate
+                        // (short-session-smoke.cjs) can't false-negative on ordinary punctuation.
+                        answerPlanQuestionSurvivesInPrompt: answerPlan?.question
+                            ? (packet.userMessage.includes(answerPlan.question.trim())
+                                || packet.userMessage.includes(escapeUserContent(answerPlan.question.trim())))
+                            : null,
+                        userMessageTail: packet.userMessage.slice(-800),
+                        systemPromptTail: finalPromptOverride.slice(-400),
+                    }));
+                } catch (e) { console.warn('[TRACE:LONGCTX] prompt_assembled logging failed', e); }
+            }
+
             if (MEASURE) tPrompt = performance.now();
             if (MEASURE) tStreamStart = performance.now();
 

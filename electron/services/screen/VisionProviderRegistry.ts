@@ -306,10 +306,17 @@ async function callOllamaVision(baseUrl: string, model: string, params: VisionIn
     stream: false,
   };
 
+  const serializedBody = JSON.stringify(body);
+  require('../../llm/providerPayloadCapture').captureProviderPayload({
+    provider: 'ollama_vision',
+    classification: 'exact_serialized_provider_payload',
+    payload: body,
+    serializedPayload: serializedBody,
+  });
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: serializedBody,
     signal,
   });
 

@@ -114,12 +114,25 @@ const CATEGORY_SUBJECT_ACRONYM_RE = /^(?:What|Which|Whose)\s+([A-Z]{2,5})\s+(\w+
 // are category questions whose answer is a specific value/instance, so their
 // acronym is soft. Generic grammar; no document terms.
 const CATEGORY_SUBJECT_COPULA_RE = /^(?:is|are|means?|stands?|stood|refers?|denotes?)$/i;
+const DEFINITIONAL_ACRONYM_RE = /^(?:What|Which)\s+(?:is|does)\s+([A-Z]{2,6})\b/i;
 
 function extractSoftCategoryEntities(question: string): string[] {
-  const m = question.match(CATEGORY_SUBJECT_ACRONYM_RE);
-  if (!m) return [];
-  if (CATEGORY_SUBJECT_COPULA_RE.test(m[2])) return [];
-  return [m[1]];
+  const soft = new Set<string>();
+  const subject = question.match(CATEGORY_SUBJECT_ACRONYM_RE);
+  if (subject && !CATEGORY_SUBJECT_COPULA_RE.test(subject[2])) soft.add(subject[1]);
+  const definitionalAcronym = question.match(DEFINITIONAL_ACRONYM_RE)?.[1];
+
+  // A bare acronym used as a lowercase-noun modifier is a category/descriptor,
+  // not a named subject that evidence must repeat. "USB camera views", "GPU
+  // memory", and "CPU model" ask about the thing after the acronym; treating
+  // the modifier as a hard entity makes an unrelated chunk with a matching field
+  // name outrank the answer-bearing chunk. Definitional uses remain hard because
+  // they are not followed by a lowercase noun (e.g. "What is ROS?").
+  const modifierRe = /\b([A-Z]{2,6})\s+([a-z][a-z-]*)\b/g;
+  for (const match of question.matchAll(modifierRe)) {
+    if (match[1] !== definitionalAcronym) soft.add(match[1]);
+  }
+  return [...soft];
 }
 
 function extractTargetEntities(question: string, softEntities: string[] = []): string[] {

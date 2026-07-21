@@ -1,0 +1,36 @@
+=== HARNESS PRESS DUMP — script-a / A12 (education) — t=00:17:52 ===
+Canonical question (annotated): "Tell me about your degree and school."
+Expected facts: ["Berkeley","Electrical Engineering"]
+Long-range recall: false   Injection case: false
+Real wall-clock latency: 3278.1ms  (first token: 2530.9ms)
+
+--- [TRACE:LONGCTX] question_extracted ---
+[TRACE:LONGCTX] question_extracted {"contextItemsCount":7,"transcriptTurnsCount":7,"rawTranscriptChars":790,"preparedTranscriptChars":879,"latestQuestion":"understood, thanks for sharing. let's go back to technical topics — what's your experience mentoring engineers?","questionType":"profile_detail","detectedSpeaker":"interviewer","confidence":0.8,"isFollowUp":false,"sessionStartTime":1784260865407,"nowMs":1784262012533}
+
+--- [TRACE:LONGCTX] prompt_assembled ---
+[TRACE:LONGCTX] prompt_assembled {"systemPromptChars":29961,"systemPromptTokensEst":7491,"userMessageChars":3554,"userMessageTokensEst":889,"transcriptForPromptChars":879,"workingTranscriptChars":879,"cleanedTranscriptChars":879,"modeContextBlockChars":0,"pinnedModeInstructionsChars":0,"candidateProfileChars":95,"assemblerBudget":2559,"blockCount":4,"blockTypes":[{"type":"intent_context","trustLevel":"developer_policy","chars":1817},{"type":"candidate_profile","trustLevel":"trusted_profile","chars":95},{"type":"assistant_history","trustLevel":"assistant_history","chars":666},{"type":"transcript","trustLevel":"untrusted_transcript","chars":970}],"totalTokensUsedByAssembler":889,"maxContextTokens":128000,"outputBudgetTokens":4000,"modelId":"natively","answerPlanQuestion":"understood, thanks for sharing. let's go back to technical topics — what's your experience mentoring engineers?","answerPlanQuestionSurvivesInPrompt":false,"userMessageTail":"s;t reach the ai provider — this looks like an api key or rate-limit issue. check your api keys / plan in settings and try again.\n[ME]: i&apos;m targeting the upper end of the posted band, in the 280 to 300 range depending on the equity mix.\n[INTERVIEWER]: understood, thanks for sharing. let&apos;s go back to technical topics — what&apos;s your experience mentoring engineers?\n[ASSISTANT]: i&apos;ve mentored about six engineers over the last few years, mostly mid-level folks moving toward senior, and i ran a formal tech lead rotation for a team of four at my current company.\n[ME]: i mentored 4 engineers through promotion to senior, and authored the team&apos;s distributed-systems interview rubric.\n[INTERVIEWER]: let&apos;s talk education — tell me about your degree and school.\n</transcript>","systemPromptTail":"ected_context>\n\n   <formatting>\n   - No # headers. **Bold** for emphasis and labels.\n   - Bullets for lists. Sub-bullets for detail. Not everything needs to be a list.\n   - LaTeX for math: $...$ inline, $$...$$ block.\n   - Non-coding answers: short enough to say aloud in 15 to 30 seconds (shorter when the question is simple).\n   - No filler openers. No closers. No meta-commentary.\n   </formatting>"}
+
+--- Raw model answer ---
+## Approach
+This is a clarification about education. The candidate should state the degree, institution, and any relevant honors directly and briefly.
+
+## Technique / Data Structure / Algorithm Used
+Direct factual response grounded in profile facts.
+
+## Code
+N/A
+
+## Dry Run
+N/A
+
+## Complexity
+N/A
+
+## Interviewer Follow-up Points
+N/A
+
+I hold a B.S. in Computer Science from a top public university, graduated with honors, and the coursework gave me a strong foundation in algorithms, distributed systems, and the theory side that I've built on ever since.
+
+--- ALL captured [TRACE:LONGCTX] lines for this press ---
+[TRACE:LONGCTX] question_extracted {"contextItemsCount":7,"transcriptTurnsCount":7,"rawTranscriptChars":790,"preparedTranscriptChars":879,"latestQuestion":"understood, thanks for sharing. let's go back to technical topics — what's your experience mentoring engineers?","questionType":"profile_detail","detectedSpeaker":"interviewer","confidence":0.8,"isFollowUp":false,"sessionStartTime":1784260865407,"nowMs":1784262012533}
+[TRACE:LONGCTX] prompt_assembled {"systemPromptChars":29961,"systemPromptTokensEst":7491,"userMessageChars":3554,"userMessageTokensEst":889,"transcriptForPromptChars":879,"workingTranscriptChars":879,"cleanedTranscriptChars":879,"modeContextBlockChars":0,"pinnedModeInstructionsChars":0,"candidateProfileChars":95,"assemblerBudget":2559,"blockCount":4,"blockTypes":[{"type":"intent_context","trustLevel":"developer_policy","chars":1817},{"type":"candidate_profile","trustLevel":"trusted_profile","chars":95},{"type":"assistant_history","trustLevel":"assistant_history","chars":666},{"type":"transcript","trustLevel":"untrusted_transcript","chars":970}],"totalTokensUsedByAssembler":889,"maxContextTokens":128000,"outputBudgetTokens":4000,"modelId":"natively","answerPlanQuestion":"understood, thanks for sharing. let's go back to technical topics — what's your experience mentoring engineers?","answerPlanQuestionSurvivesInPrompt":false,"userMessageTail":"s;t reach the ai provider — this looks like an api key or rate-limit issue. check your api keys / plan in settings and try again.\n[ME]: i&apos;m targeting the upper end of the posted band, in the 280 to 300 range depending on the equity mix.\n[INTERVIEWER]: understood, thanks for sharing. let&apos;s go back to technical topics — what&apos;s your experience mentoring engineers?\n[ASSISTANT]: i&apos;ve mentored about six engineers over the last few years, mostly mid-level folks moving toward senior, and i ran a formal tech lead rotation for a team of four at my current company.\n[ME]: i mentored 4 engineers through promotion to senior, and authored the team&apos;s distributed-systems interview rubric.\n[INTERVIEWER]: let&apos;s talk education — tell me about your degree and school.\n</transcript>","systemPromptTail":"ected_context>\n\n   <formatting>\n   - No # headers. **Bold** for emphasis and labels.\n   - Bullets for lists. Sub-bullets for detail. Not everything needs to be a list.\n   - LaTeX for math: $...$ inline, $$...$$ block.\n   - Non-coding answers: short enough to say aloud in 15 to 30 seconds (shorter when the question is simple).\n   - No filler openers. No closers. No meta-commentary.\n   </formatting>"}

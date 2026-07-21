@@ -217,13 +217,59 @@ process.on('uncaughtException', (err) => {
   logToFile('[CRITICAL] Uncaught Exception: ' + redactArgsForLog([err]));
 });
 
+// Crash-loop guard for unhandledRejection, mirroring the render-process-gone
+// recovery pattern above (RENDERER_RELOAD_MAX / RENDERER_RELOAD_WINDOW_MS).
+//
+// REGRESSION FIX (2026-07-11): unlike uncaughtException / SIGTERM / SIGINT /
+// render-process-gone (all of which either exit the process or are already
+// gated to only close the DB on a genuinely TERMINAL path), this handler used
+// to call emergencyCloseDatabase() unconditionally on EVERY unhandled
+// rejection — and emergencyCloseDatabase() is irreversible (it nulls the
+// DatabaseManager singleton with no reopen path; see its own docstring).
+// Node does NOT terminate the process after 'unhandledRejection' when a
+// listener is registered (this handler never calls process.exit()), so the
+// app kept running for the rest of the session with a permanently dead
+// database after the FIRST stray unhandled rejection ANYWHERE in the
+// codebase — a missing .catch() on any fire-and-forget promise, in this file
+// or any IPC handler. Every meeting save / transcript persist / credential
+// lookup silently no-ops from that point on, with no user-facing signal
+// (DatabaseManager.isAvailable() is never surfaced to the renderer). This is
+// silent, permanent, session-wide data loss triggered by a routine, commonly
+// non-fatal JS error class.
+//
+// Fix: treat an ISOLATED unhandled rejection as recoverable (log it, keep the
+// DB open — main's DatabaseManager instance is unaffected by a rejected
+// promise elsewhere in the process). Only escalate to the terminal,
+// DB-closing path if rejections repeat rapidly within a short window — that
+// pattern (not a single stray rejection) is the actual signal of systemic
+// failure the original code was trying to protect against.
+const unhandledRejectionHistory: number[] = [];
+const UNHANDLED_REJECTION_MAX = 5;            // max unhandled rejections ...
+const UNHANDLED_REJECTION_WINDOW_MS = 60_000; // ... within this rolling window before treating it as terminal
+
 process.on('unhandledRejection', (reason, promise) => {
   logCrashEvent('unhandledRejection', {
     reason: formatCrashError(reason),
     promise: String(promise),
   });
   logToFile('[CRITICAL] Unhandled Rejection: ' + redactArgsForLog([reason]));
-  emergencyCloseDatabase('unhandledRejection');
+
+  const now = Date.now();
+  while (unhandledRejectionHistory.length > 0 && now - unhandledRejectionHistory[0] >= UNHANDLED_REJECTION_WINDOW_MS) {
+    unhandledRejectionHistory.shift();
+  }
+  unhandledRejectionHistory.push(now);
+
+  if (unhandledRejectionHistory.length >= UNHANDLED_REJECTION_MAX) {
+    // Rapid-fire unhandled rejections in a short window is a genuine signal
+    // of systemic failure (not a single stray missing .catch()) — treat it
+    // as terminal, matching the render-process-gone-loop-giveup path.
+    logCrashConsole('unhandledRejection-loop-giveup', {
+      rejectionsInWindow: unhandledRejectionHistory.length,
+      windowMs: UNHANDLED_REJECTION_WINDOW_MS,
+    });
+    emergencyCloseDatabase('unhandledRejection-loop-giveup');
+  }
 });
 
 // OS-level shutdown signals. macOS / Linux ship SIGTERM to apps before

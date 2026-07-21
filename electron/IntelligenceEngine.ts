@@ -10,7 +10,7 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCodingAnswerType, resolveFollowUp, resolveFollowUpOrClarify,
+    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
@@ -18,6 +18,7 @@ import {
     detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES,
     raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, LIVE_TOTAL_HARD_TIMEOUT_MS,
     LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub,
+    isProviderTransportError,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE,
     buildProfileJitPrompt, decideSessionWritePolicy
 } from './llm';
@@ -863,7 +864,7 @@ export class IntelligenceEngine extends EventEmitter {
                 timestamp: item.timestamp
             }));
 
-            const preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns, 12);
+            let preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns, 12);
 
             const temporalContext = buildTemporalContext(
                 contextItems,
@@ -928,6 +929,28 @@ export class IntelligenceEngine extends EventEmitter {
                     } catch { return ''; }
                 })();
             const extractedQuestion = extractLatestQuestion(transcriptTurns);
+
+            // [TRACE:LONGCTX] Campaign 2 forensics (temporary, R10: removed before
+            // production). Dumps transcript-window size + extraction result at every
+            // WTA press so the Golden Trace driver can diff minute-2 vs minute-24.
+            if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
+                try {
+                    const rawCharLen = transcriptTurns.reduce((n, t) => n + (t.text?.length || 0), 0);
+                    console.log('[TRACE:LONGCTX] question_extracted', JSON.stringify({
+                        contextItemsCount: contextItems.length,
+                        transcriptTurnsCount: transcriptTurns.length,
+                        rawTranscriptChars: rawCharLen,
+                        preparedTranscriptChars: preparedTranscript.length,
+                        latestQuestion: extractedQuestion.latestQuestion,
+                        questionType: extractedQuestion.questionType,
+                        detectedSpeaker: extractedQuestion.detectedSpeaker,
+                        confidence: extractedQuestion.confidence,
+                        isFollowUp: extractedQuestion.isFollowUp,
+                        sessionStartTime: this.session.getSessionStartTime(),
+                        nowMs: Date.now(),
+                    }));
+                } catch (e) { console.warn('[TRACE:LONGCTX] question_extracted logging failed', e); }
+            }
 
             // LIVE TRANSCRIPT BRAIN (Phase 6 wiring, SHADOW/PARITY behind live_transcript_brain_enabled):
             // the WTA path already builds the hot window inline (getContext(180) + interim
@@ -1052,6 +1075,73 @@ export class IntelligenceEngine extends EventEmitter {
                             reason: fr.reason,
                         });
                     }
+                    // LONG-RANGE LEXICAL RECALL FALLBACK (Campaign 2, H6 fix,
+                    // 2026-07-16): SessionMemory/resolveLiveFollowup above only
+                    // recall EXPLICITLY-NOTED proper-noun entities (projects,
+                    // companies, skills, a small fixed algorithm/CS topic list) —
+                    // a free-text incident/story mentioned once in prose ("a
+                    // memory leak in a long-running consumer process") is never
+                    // captured there, so a later paraphrased callback
+                    // ("the memory leak you mentioned earlier") finds nothing to
+                    // recall even though the extractor correctly flagged
+                    // isFollowUp=true (fix#2, H3). Live-proven on the real
+                    // backend (traces2/forensic-report.md H6): the model either
+                    // honestly said the transcript doesn't contain the story, or
+                    // (pre fix#1) emitted the "nothing actionable" sentinel.
+                    // Fire ONLY when: the extractor already thinks this is a
+                    // follow-up, AND entity-based recall did NOT already resolve
+                    // it (never runs redundantly, never overrides a real entity
+                    // match), AND we're not already just answering a typed
+                    // question. Bounded, deterministic, no LLM — real transcript
+                    // text only, so zero fabrication risk (R5): either the
+                    // model gets the ACTUAL earlier turn or nothing changes.
+                    const entityRecallSucceeded = Boolean(fr && !fr.isClarification && fr.confidence >= 0.7 && (fr as any).recalledEntity);
+                    if (!question && extractedQuestion.isFollowUp && !entityRecallSucceeded) {
+                        try {
+                            const { recallLongRangeContext } = require('./llm/longRangeTranscriptRecall') as typeof import('./llm/longRangeTranscriptRecall');
+                            const durableWindow = this.session.getDurableContext(this.LIVE_MEMORY_WINDOW_SECONDS);
+                            const recentWindowCutoffMs = transcriptTurns.length > 0 ? transcriptTurns[0].timestamp : Date.now();
+                            // Mode-boundary gate (skeptic-pass finding, 2026-07-16): mirror
+                            // effectiveMemoryMode's own "is this turn's INTENT a comp
+                            // question" derivation (line ~1029 above) so a comp figure
+                            // discussed earlier can only ever be recalled back into another
+                            // comp/negotiation question — never leaked into an unrelated
+                            // technical/coding/general follow-up via this lexical fallback.
+                            let isNegotiationTurn = false;
+                            try {
+                                isNegotiationTurn = planAnswer({
+                                    question: extractedQuestion.latestQuestion,
+                                    source: 'what_to_answer',
+                                    speakerPerspective: 'interviewer',
+                                    activeMode: snapshotModeInfo,
+                                }).answerType === 'negotiation_answer';
+                            } catch { /* default: not negotiation → comp stays gated */ }
+                            const recall = recallLongRangeContext(
+                                extractedQuestion.latestQuestion,
+                                durableWindow,
+                                recentWindowCutoffMs,
+                                Date.now(),
+                                isNegotiationTurn,
+                            );
+                            if (recall.block) {
+                                preparedTranscript = `${recall.block}\n\n${preparedTranscript}`;
+                                trace.mark('repair_used', { reason: 'long_range_lexical_recall', matchCount: recall.matchCount });
+                                piTelemetry.emit('session_memory_recall_attempted', {
+                                    via: 'lexical_transcript_fallback',
+                                    matchCount: recall.matchCount,
+                                    ageBucket: ageBucket(recall.bestAgeSeconds ?? undefined),
+                                });
+                                if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
+                                    console.log('[TRACE:LONGCTX] long_range_recall_fired', JSON.stringify({
+                                        question: extractedQuestion.latestQuestion,
+                                        matchCount: recall.matchCount,
+                                        bestAgeSeconds: recall.bestAgeSeconds,
+                                        blockChars: recall.block.length,
+                                    }));
+                                }
+                            }
+                        } catch { /* fallback is best-effort; never blocks the answer */ }
+                    }
                 } catch { /* keep extractor result */ }
             }
             trace.mark('latest_question_extracted', {
@@ -1112,9 +1202,23 @@ export class IntelligenceEngine extends EventEmitter {
                 wtaDecisionAllowsCandidateProfile = _wtaTurnSourceDecision.outcome === 'default'
                     || _wtaTurnSourceDecision.outcome === 'explicit_granted';
                 if (_wtaTurnSourceDecision.allowedEvidenceKinds.length > 0) {
+                    // Grounding-campaign fix (2026-07-16): this check previously
+                    // omitted 'profile_jd', so a JD-only-granted turn (e.g.
+                    // jd_requirements_answer, outcome='explicit_granted',
+                    // allowedEvidenceKinds=['profile_jd']) always computed false
+                    // here, even though the canonical decision explicitly granted
+                    // JD access. That blocked orchestrator.processQuestion() from
+                    // ever running, so the model received the answer contract
+                    // (requiredContextLayers: jd) with ZERO grounding evidence and
+                    // confidently fabricated plausible-sounding requirements absent
+                    // from the real JD — a live hallucination on the WTA/meeting-
+                    // overlay path. Mirrors the identical fix already applied to
+                    // the manual-chat path's equivalent gate in ipcHandlers.ts's
+                    // _contractAllowsProfile (Evidence-execution-repair, 2026-07-11).
                     wtaDecisionAllowsCandidateProfile = wtaDecisionAllowsCandidateProfile
                         && (_wtaTurnSourceDecision.allowedEvidenceKinds.includes('profile_resume')
-                            || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('projects'));
+                            || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('projects')
+                            || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('profile_jd'));
                 }
             }
 
@@ -1145,6 +1249,25 @@ export class IntelligenceEngine extends EventEmitter {
                     // non-profile (e.g. negotiation) results, so widening the type
                     // set here only ADDS legitimate candidate grounding; it cannot
                     // pull salary/coaching into a plain answer.
+                    // Grounding-campaign fix (2026-07-17): 'negotiation' is normally
+                    // excluded here so genuine salary-coaching questions never pull
+                    // résumé/JD facts into a coaching answer (coaching has its own
+                    // gated channel). But transcriptQuestionExtractor.classifyType's
+                    // negotiation match is a bare keyword scan ("compensation",
+                    // "salary") with no JD-frame awareness — it also fires on a pure
+                    // FACTUAL lookup like "what's the compensation range for THIS
+                    // ROLE?", which AnswerPlanner's own (more precise) classifier
+                    // correctly resolves to jd_fact_answer, not negotiation_answer.
+                    // Confirmed live (test/harness case C4-002): excluding this
+                    // question from grounding entirely left the model with no real
+                    // JD evidence, so it falsely claimed the JD "does not specify"
+                    // facts that were literally present. isJdFactualLookupNotNegotiationAdvice
+                    // reuses the exact JD-reference + negotiation-advice cues
+                    // AnswerPlanner's resolveJdSourceType already relies on, so a
+                    // genuine "how should I negotiate my salary" ask still routes
+                    // through the existing negotiation-exclusion, untouched.
+                    const isNegotiationButActuallyJdFact = extracted.questionType === 'negotiation'
+                        && isJdFactualLookupNotNegotiationAdvice(extracted.latestQuestion || '');
                     const groundable = extracted.detectedSpeaker === 'interviewer'
                         && extracted.confidence >= 0.6
                         && (extracted.questionType === 'identity'
@@ -1152,7 +1275,8 @@ export class IntelligenceEngine extends EventEmitter {
                             || extracted.questionType === 'behavioral'
                             || extracted.questionType === 'jd_alignment'
                             || extracted.questionType === 'general'
-                            || extracted.questionType === 'follow_up');
+                            || extracted.questionType === 'follow_up'
+                            || isNegotiationButActuallyJdFact);
                     // Grounding runs when NO explicit typed question was supplied
                     // (pure transcript-driven), OR when the supplied `question` IS
                     // the transcript's latest interviewer question — i.e. the LIVE
@@ -1816,6 +1940,61 @@ export class IntelligenceEngine extends EventEmitter {
                 fullAnswer = buildGracefulRetry(question || extractedQuestion.latestQuestion || lastInterviewerTurn);
             }
 
+            // LEAKED-SCHEMA-STUB GUARD + PROVIDER-TRANSPORT-ERROR GUARD — MUST run
+            // here, BEFORE validateAnswerStructure/repairCodingMarkdown and every
+            // other post-stream repair pass below, as a full EARLY RETURN (not just
+            // an earlier check). Campaign 2 skeptic-pass finding (longsession,
+            // 2026-07-17): a first draft moved the CHECK earlier but let fullAnswer
+            // keep flowing through validateAnswerStructure/repairCodingMarkdown —
+            // for a CODING-type answer (dsa_question_answer/coding_question_answer)
+            // that pipeline unconditionally wraps whatever fullAnswer holds (the
+            // raw stub/error text, OR a short replacement string) into a
+            // six-section markdown scaffold, since neither is valid coding
+            // structure. The scaffold then reached persistence with the original
+            // bug intact — reproduced live in the fix's own regression test before
+            // this early-return version was written. Mirrors the exact early-return
+            // shape `isNonAnswerSentinel` already uses a bit further down in this
+            // same method (fix#1 of this campaign) — same precedent, applied
+            // consistently rather than threading a skip-flag through every
+            // downstream repair site (fragile, easy to miss one).
+            if (fullAnswer && isLeakedSchemaStub(fullAnswer)) {
+                const stubFallback = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
+                    ? "I don't have enough context from the conversation to answer that yet."
+                    : "The model produced an invalid answer artifact, so I won't guess from your profile. Please try again.";
+                trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, reason: 'leaked_schema_stub', finalGenerationMode: 'provider_error_no_answer' });
+                const stubWriteDecision = decideSessionWritePolicy({
+                    finalGenerationMode: 'provider_error_no_answer',
+                    validationOk: false,
+                    criticalViolations: ['leaked_schema_stub'],
+                });
+                if (openedStreamRow) emitChunk(stubFallback);
+                this.session.addAssistantMessage(stubFallback, stubWriteDecision, 'what_to_answer');
+                this.emit('suggested_answer', stubFallback, question || extractedQuestion.latestQuestion || 'inferred', confidence);
+                this.setMode('idle');
+                return stubFallback;
+            }
+            if (fullAnswer && isProviderTransportError(fullAnswer)) {
+                // Unlike the schema-stub guard, we do NOT rewrite fullAnswer here —
+                // the transport-error text itself is exactly what the user should
+                // see right now (it's actionable: check API keys/plan). Only its
+                // PERSISTENCE into session history is the bug (live-proven:
+                // traces2/harness-script-a-press-A12.txt — a poisoned
+                // `[ASSISTANT]: I couldn't reach the AI provider...` turn from an
+                // earlier press caused a LATER, unrelated press to answer as if
+                // resuming mid error-recovery instead of the fresh question).
+                trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, reason: 'provider_transport_error', finalGenerationMode: 'provider_error_no_answer' });
+                const transportWriteDecision = decideSessionWritePolicy({
+                    finalGenerationMode: 'provider_error_no_answer',
+                    validationOk: false,
+                    criticalViolations: ['provider_transport_error'],
+                });
+                if (openedStreamRow) emitChunk(fullAnswer);
+                this.session.addAssistantMessage(fullAnswer, transportWriteDecision, 'what_to_answer');
+                this.emit('suggested_answer', fullAnswer, question || extractedQuestion.latestQuestion || 'inferred', confidence);
+                this.setMode('idle');
+                return fullAnswer;
+            }
+
             trace.mark('validation_started', { answerType: answerPlan.answerType });
             const structureValidation = validateAnswerStructure(answerPlan.answerType, fullAnswer);
             if (!structureValidation.ok && structureValidation.repaired) {
@@ -1987,7 +2166,13 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!wtaTurnContract) return true;
                     try {
                         const { allowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-                        return allowsEvidence(wtaTurnContract, 'profile_resume') || allowsEvidence(wtaTurnContract, 'profile_project');
+                        // Grounding-campaign fix (2026-07-16): same missing-profile_jd
+                        // gap as wtaDecisionAllowsCandidateProfile above — kept in sync
+                        // so a JD-only-granted turn isn't treated inconsistently by the
+                        // repair gate vs the initial fetch gate.
+                        return allowsEvidence(wtaTurnContract, 'profile_resume')
+                            || allowsEvidence(wtaTurnContract, 'profile_project')
+                            || allowsEvidence(wtaTurnContract, 'profile_jd');
                     } catch { return true; }
                 })();
                 if (profileLoaded && contractPermitsProfileRepair && answerPlan.voicePerspective === 'first_person_candidate') {
@@ -2036,7 +2221,23 @@ export class IntelligenceEngine extends EventEmitter {
                         // builder doesn't know about).
                         const repairInstruction = pv.repairInstruction || buildProfileRepairInstruction(pv as any);
                         const safeCandidateProfile = IntelligenceEngine.sanitizeManualContextText(candidateProfile, 8000);
-                        const safeQuestion = IntelligenceEngine.sanitizeManualContextText(question || '', 1000);
+                        // Long-session harness campaign2 (2026-07-17): this used to read
+                        // ONLY the raw `question` parameter, which is undefined for the
+                        // auto-trigger/WTA path (the button press passes no question — the
+                        // engine derives it internally via extractLatestQuestion). The
+                        // repair prompt's <question> block therefore rendered EMPTY, so the
+                        // regeneration had no idea what was actually asked and could drift
+                        // to an unrelated topic (live-proven: press A12 "tell me about your
+                        // degree and school" repaired into a "Two Sum" coding-algorithm
+                        // answer — traces2/run-002 G6 desync). Mirrors the same fallback
+                        // chain already used for the doc-grounded repair's `docQuestion`
+                        // just above (line ~1970): answerPlan.question is already resolved
+                        // from question||extractedQuestion.latestQuestion||lastInterviewerTurn
+                        // at plan-build time, so reading it here restores the real question.
+                        const safeQuestion = IntelligenceEngine.sanitizeManualContextText(
+                            answerPlan.question || question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                            1000,
+                        );
                         // Wrap the repair directive in an explicit instruction block and
                         // put the OUTPUT command LAST. Previously the bare instruction
                         // led the prompt and MiniMax sometimes ECHOED it verbatim as the
@@ -2155,16 +2356,54 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {
+                // [TRACE:LONGCTX] Campaign 2, F-longsession-1 (2026-07-16): the
+                // "Nothing actionable right now." escape hatch in the WTA prompts is
+                // meant for the SPECULATIVE/auto-trigger path (ambient chatter, small
+                // talk — nothing should interrupt the user). Golden-Trace forensics
+                // (traces2/forensic-report.md, pinned amplifier #3) proved this same
+                // sentinel also fires on a MANUAL button press against a REAL
+                // interviewer question the model genuinely lacks grounding for (e.g.
+                // a long-range follow-up referencing content evicted from the
+                // transcript window — H6). Previously that silently returned null
+                // with no visible message — a real question, a well-formed prompt,
+                // and zero user-facing output: the same SHAPE as the greeting-failure
+                // defect class, even though the literal text differs. A manual press
+                // is explicit user intent; the user must always see SOMETHING. The
+                // speculative path is unaffected — small talk still shows nothing.
+                if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
+                    try {
+                        console.log('[TRACE:LONGCTX] nonanswer_sentinel_discard', JSON.stringify({
+                            question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || null,
+                            rawAnswer: fullAnswer,
+                            answerType: answerPlan?.answerType,
+                            isSpeculative,
+                        }));
+                    } catch (e) { console.warn('[TRACE:LONGCTX] nonanswer_sentinel_discard logging failed', e); }
+                }
+                if (!isSpeculative) {
+                    const honestFallback = "I don't have enough from the conversation to answer that specific point yet.";
+                    fullAnswer = honestFallback;
+                    console.log('[FIX:longsession-nonanswer-fallback]', JSON.stringify({
+                        answerType: answerPlan?.answerType,
+                        reason: 'manual_press_nonanswer_sentinel',
+                    }));
+                    trace.mark('fallback_answer_used', { answerType: answerPlan?.answerType, finalGenerationMode: 'nonanswer_sentinel_fallback' });
+                    if (openedStreamRow) {
+                        emitChunk(honestFallback);
+                    }
+                    this.session.addAssistantMessage(honestFallback, undefined, 'what_to_answer');
+                    this.emit('suggested_answer', honestFallback, question || extractedQuestion.latestQuestion || 'inferred', 0.9);
+                    this.setMode('idle');
+                    return honestFallback;
+                }
                 // Declined as a non-answer. Discard any open streaming row so it
                 // isn't left as an orphaned partial on the auto path (the manual
                 // path also resolves null via the renderer, but the discard is
                 // idempotent and covers the auto-trigger path too).
                 if (openedStreamRow) this.emit('suggested_answer_discard', 'no_answer');
-                if (isSpeculative) {
-                    this.speculativeText = null;
-                    this.speculativeTextExpiry = Infinity;
-                    this.lastTriggerTime = Date.now();
-                }
+                this.speculativeText = null;
+                this.speculativeTextExpiry = Infinity;
+                this.lastTriggerTime = Date.now();
                 this.setMode('idle');
                 return null;
             }
@@ -2209,23 +2448,13 @@ export class IntelligenceEngine extends EventEmitter {
                     this.emit('suggested_answer_token', fullAnswer, question || 'inferred', confidence, generationId);
                 }
             }
-            // LEAKED-SCHEMA-STUB GUARD (E2E MiniMax campaign, p08 Q3): the model
-            // sometimes returns ONLY a JSON-schema stub (```json {"type":"object"}```)
-            // instead of an answer — a generation artifact, not a real answer. Never
-            // surface it: substitute the grounded deterministic fallback if we have
-            // one, else the honest insufficient-context line. Narrow check (whole
-            // answer must BE the stub), so real answers containing JSON are untouched.
-            if (fullAnswer && isLeakedSchemaStub(fullAnswer)) {
-                trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, reason: 'leaked_schema_stub', finalGenerationMode: 'provider_error_no_answer' });
-                fullAnswer = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
-                    ? "I don't have enough context from the conversation to answer that yet."
-                    : "The model produced an invalid answer artifact, so I won't guess from your profile. Please try again.";
-                wtaWriteDecision = decideSessionWritePolicy({
-                    finalGenerationMode: 'provider_error_no_answer',
-                    validationOk: false,
-                    criticalViolations: ['leaked_schema_stub'],
-                });
-            }
+            // (leaked-schema-stub / provider-transport-error guards now run much
+            // earlier — see the "MUST run here, BEFORE validateAnswerStructure"
+            // block above, right after the stream completes. Moved there per a
+            // Campaign 2 skeptic-pass finding: running them this late let the
+            // coding-repair pipeline (validateAnswerStructure/repairCodingMarkdown)
+            // mutate fullAnswer first, so the exact-match checks silently missed
+            // the mutated text for coding-type answers.)
             // OUTPUT SHAPE NORMALIZER (Phase 4 wiring, behind answer_diversity_guard_enabled):
             // the WTA path applies NO answer polish today (unlike the manual path), so empty
             // "*" bullets and visible scaffold labels in a default-style answer reach the UI

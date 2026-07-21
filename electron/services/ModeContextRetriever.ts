@@ -162,13 +162,16 @@ const DOC_GROUNDED_STOPWORDS = new Set([
     'was', 'were', 'are', 'is', 'the', 'for', 'and', 'with',
     'this', 'that', 'these', 'those', 'have', 'has', 'had',
     'can', 'could', 'would', 'should', 'about', 'role', 'main',
-    // Document-context words: ubiquitous in any uploaded document so they
-    // match every chunk equally and add noise without signal.
-    'thesis', 'seminar', 'paper', 'study', 'research',
     // Generic storage verbs — substring-stem "store" matches "stores", "storage",
     // "datastore" in chunk bodies, producing false contentWordBonus hits that
     // push structural-data chunks above the RLDS-format chunk for Q39.
     'stored', 'store', 'stores',
+    // NOTE: 'thesis', 'seminar', 'paper', 'study', 'research' were previously
+    // listed here. Removed 2026-07-17: legitimate user queries like "what's the
+    // thesis about" had every signal word stripped before lexical scoring,
+    // producing zero matches against any uploaded thesis/PDF. The "ubiquitous
+    // in any uploaded document" justification was wrong — academic-style
+    // questions hinge on these exact terms.
 ]);
 
 function wordsOf(text: string): string[] {
@@ -187,6 +190,46 @@ function wordsOf(text: string): string[] {
         .replace(/[^a-z0-9\s-]/g, ' ')
         .split(/\s+/)
         .filter(word => word.length > 2);
+}
+
+/**
+ * Levenshtein distance with early exit when distance > maxDist.
+ * Returns the edit distance between `a` and `b`, or `maxDist + 1` if it exceeds
+ * `maxDist`. Used to detect 1-character typos in lexical retrieval — e.g. a
+ * query "theisis" should still match a chunk word "thesis".
+ *
+ * Length pre-check: if |len(a) - len(b)| > 1, distance is at least 2, so we
+ * can return 2 immediately without doing the dynamic-programming loop.
+ */
+function levenshteinBounded(a: string, b: string, maxDist: number): number {
+    const la = a.length;
+    const lb = b.length;
+    if (Math.abs(la - lb) > maxDist) return maxDist + 1;
+    // Standard 2-row DP bounded at maxDist+1 for early termination
+    let prev = new Array(lb + 1).fill(0);
+    let curr = new Array(lb + 1).fill(0);
+    for (let j = 0; j <= lb; j++) prev[j] = j;
+    for (let i = 1; i <= la; i++) {
+        curr[0] = i;
+        let rowMin = curr[0];
+        for (let j = 1; j <= lb; j++) {
+            const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
+            curr[j] = Math.min(
+                prev[j] + 1,        // deletion
+                curr[j - 1] + 1,    // insertion
+                prev[j - 1] + cost, // substitution
+            );
+            if (curr[j] < rowMin) rowMin = curr[j];
+        }
+        if (rowMin > maxDist) return maxDist + 1;
+        [prev, curr] = [curr, prev];
+    }
+    return prev[lb];
+}
+
+/** Convenience wrapper: returns true iff Levenshtein(a, b) === 1. */
+function levenshtein1(a: string, b: string): boolean {
+    return levenshteinBounded(a, b, 1) === 1;
 }
 
 function chunkText(content: string, fineChunk: boolean = false): string[] {
@@ -414,11 +457,34 @@ function scoreChunk(
     const chunkWords = wordsOf(chunk);
     if (chunkWords.length === 0) return 0;
 
+    // Build a fuzzy match set for the query. Only words >= 4 chars are eligible
+    // for Levenshtein-1 fuzzy matching (short words have too many false positives).
+    // This rescues typo'd queries like "whats the theisis about" → "thesis".
+    const fuzzyQueryWords = new Map<string, string>(); // chunkWord → matchedQueryWord
+    for (const qWord of queryWords) {
+        if (qWord.length < 4) continue;
+        for (const cWord of chunkWords) {
+            if (cWord.length < 4) continue;
+            if (qWord === cWord) continue; // exact match handled below
+            const dist = levenshtein1(qWord, cWord);
+            if (dist) {
+                fuzzyQueryWords.set(cWord, qWord);
+            }
+        }
+    }
+
     let matches = 0;
     const seen = new Set<string>();
     for (const word of chunkWords) {
-        if (queryWords.has(word) && !seen.has(word)) {
+        if (seen.has(word)) continue;
+        if (queryWords.has(word)) {
+            // Exact match — full weight
             matches++;
+            seen.add(word);
+        } else if (fuzzyQueryWords.has(word)) {
+            // Typo'd query word (e.g. "theisis") matches a chunk word ("thesis").
+            // Half-weight so an exact match still beats a fuzzy one when both exist.
+            matches += 0.5;
             seen.add(word);
         }
     }
@@ -766,6 +832,8 @@ function buildDocumentIdentityBlock(mode: Mode, identities: DocumentIdentity[]):
 }
 
 export class ModeContextRetriever {
+    // Expose helpers for unit testing the fuzzy-matching layer in isolation.
+    static __test__ = { levenshtein1, levenshteinBounded };
     private _hybridRetriever: ModeHybridRetriever | null = null;
     private _sharedEmbeddingPipeline: EmbeddingPipeline | null = null;
 
@@ -921,9 +989,22 @@ export class ModeContextRetriever {
         // (transcript present) are unaffected. See FINDING-001 in
         // docs/testing/MODES_PROFILE_INTELLIGENCE_BUGFIX_LOG.md.
         const hasTranscript = !forceDocumentGrounding && !!options.transcript && options.transcript.trim().length > 0;
+        // Broad-query rescue (2026-07-17): when the user asks a broad-overview
+        // question against a document-grounded mode (e.g. "what's the thesis
+        // about?"), the query often collapses to ≤2 effective tokens after
+        // stopword filtering — even with typo tolerance added, the threshold
+        // filter would still reject most chunks. For these queries, drop the
+        // threshold to 0 so the document identity block + any surviving
+        // candidate can surface, and let the LLM synthesize from what is
+        // available rather than answering blind.
+        const broadQueryNeedsRescue = forceDocumentGrounding && (
+            broadQuery || queryWords.size <= 2
+        );
         const adaptiveThreshold = hasTranscript
             ? MIN_RELEVANCE_SCORE
-            : MIN_RELEVANCE_SCORE * Math.min(1, queryWords.size / 5);
+            : (broadQueryNeedsRescue
+                ? 0
+                : MIN_RELEVANCE_SCORE * Math.min(1, queryWords.size / 5));
 
         // Chunk a source the right way: a STRUCTURED reference file (real ToC +
         // numbered sections, e.g. a thesis PDF) is chunked by SECTION via the

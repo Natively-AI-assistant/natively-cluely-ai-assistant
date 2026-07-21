@@ -2104,6 +2104,197 @@ export function initializeIpcHandlers(appState: AppState): void {
         // decision (narrowing only — see _contractAllowsProfile above).
         const ownershipAllowsProfileEvidence = (manualOwnership ? manualOwnership.profileAllowed : true)
           && _contractAllowsProfile;
+
+        // ── CONTEXT OS (2026-07-17): TurnEvidenceCoordinator multi-family pack ──
+        // Extends the H1 typed-EvidencePack path — previously built ONLY for a
+        // document-grounded custom mode (see `manualContextOsGeneration` below,
+        // `documentGroundedCustomModeActive === true`) — to EVERY manual-chat
+        // turn whose canonical decision requires ANY evidence family: profile-
+        // only, JD-only, résumé+JD, reference+résumé, reference+JD, and
+        // reference+résumé+JD. Those cases previously injected evidence as raw
+        // prepended text via `OkfProfileRetriever`/`buildManualProfileEvidenceRoute`
+        // with NO coordinator, NO manifest, and NO final-prompt validator. When
+        // the coordinator resolves a pack here, `coordinatorGovernedProfileEvidence`
+        // is set to true and BOTH the OKF-card block below (2091-2114 originally)
+        // and the raw JIT profile block above are suppressed for this turn — the
+        // SAME governed pack becomes `manualContextOsGeneration.evidencePack`
+        // and feeds the identical `contextOsGeneration` field threaded into
+        // `llmHelper.streamChat(...)` a document-grounded turn already uses, so
+        // downstream (rendering, final-prompt validation, claim persistence)
+        // is unchanged code — only the population of the pack differs.
+        //
+        // STRICTLY MORE RESTRICTIVE than legacy: this path only ever REPLACES a
+        // raw-text injection with an equal-or-stricter governed one, and any
+        // failure (contract missing, coordinator throw, decision absent) falls
+        // through to the pre-existing legacy raw-text paths untouched — a
+        // Context OS error can narrow behavior, but it can never break chat or
+        // permit something the legacy gates would have denied.
+        //
+        // Gated on `contextOsEvidencePackEnabled` (existing pack-construction
+        // flag) AND the narrower `contextOsMultiFamilyEvidenceEnabled` (new —
+        // see intelligenceFlags.ts) because this path's blast radius (every
+        // profile/JD-bearing manual turn) is strictly larger than the doc-
+        // grounded-only path that flag has already been validated against.
+        // Scope (per task): profile-only, JD-only, résumé+JD, reference+résumé,
+        // reference+JD, reference+résumé+JD. A pure reference-files-only decision
+        // is already fully governed by the existing doc-grounded typed-pack path
+        // below (`documentGroundedCustomModeActive === true`) — this coordinator
+        // is additive for turns that ALSO (or only) require profile/JD evidence.
+        // live_transcript/meeting_rag-required decisions are explicitly OUT of
+        // scope for this pass (WTA/IntelligenceEngine.ts follow-up task) — the
+        // known-kind check below keeps this path from firing on them, so a
+        // transcript-required turn keeps its existing (unmodified) behavior.
+        const KNOWN_COORDINATOR_KINDS = new Set(['reference_files', 'profile_resume', 'projects', 'profile_jd']);
+        const coordinatorInScopeKinds = Boolean(manualTurnSourceDecision)
+          && manualTurnSourceDecision!.requiredEvidenceKinds.length > 0
+          && manualTurnSourceDecision!.requiredEvidenceKinds.every((k) => KNOWN_COORDINATOR_KINDS.has(k))
+          && manualTurnSourceDecision!.requiredEvidenceKinds.some((k) => (
+            k === 'profile_resume' || k === 'projects' || k === 'profile_jd'
+          ));
+        let coordinatorGovernedProfileEvidence = false;
+        if (!isCodingChat
+            && !selectedProfileEvidence
+            && !isStealthChat
+            && answerPlan.answerType !== 'ethical_usage_answer'
+            && turnContract
+            && manualTurnSourceDecision
+            && coordinatorInScopeKinds
+            && ownershipAllowsProfileEvidence
+            && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
+            && isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled')) {
+          try {
+            const { TurnEvidenceCoordinator, ProfileEvidenceService } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            const { ModesManager } = require('./services/ModesManager');
+            const modesMgr = ModesManager.getInstance();
+            const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
+            const activeResumeStructured = (orchestrator as any)?.activeResume?.structured_data ?? null;
+            const activeJdStructured = (orchestrator as any)?.activeJD?.structured_data ?? null;
+            const _tc = turnContract;
+
+            const needsReference = manualTurnSourceDecision.requiredEvidenceKinds.includes('reference_files');
+            // Reuse the EXACT reference-retrieval path the doc-grounded pack
+            // uses (EvidenceResolver, wired to modesMgr.retrieveHybridRaw — see
+            // LLMHelper.ts ~4661-4696) so reference-only and reference+profile/
+            // JD turns share IDENTICAL reference retrieval, not a second one.
+            const retrieveReferenceEvidence = needsReference
+              ? async () => {
+                  const { EvidenceResolver } = require('./intelligence/context-os/EvidenceResolver') as typeof import('./intelligence/context-os/EvidenceResolver');
+                  const { classifyQuestion } = require('./services/knowledge/QuestionClassifier');
+                  const { queryOkfCards } = require('./services/knowledge/OkfRetriever');
+                  const { KnowledgeManager } = require('./services/knowledge/KnowledgeManager');
+                  const activeModeRow = modesMgr.getActiveMode?.();
+                  if (!activeModeRow) {
+                    const { emptyEvidencePack } = require('./intelligence/context-os/evidencePack') as typeof import('./intelligence/context-os/evidencePack');
+                    return emptyEvidencePack({
+                      turnId: _tc.turnId, sourceOwner: _tc.sourceOwner, requestedProperty: _tc.requestedProperty,
+                      answerPolicy: 'refuse_insufficient_evidence',
+                    });
+                  }
+                  const resolver = new EvidenceResolver({
+                    getModeSnapshot: () => activeModeRow,
+                    getReferenceFiles: (modeId: string) => modesMgr.getReferenceFiles(modeId),
+                    hybridRetriever: { retrieveHybrid: (m: any, files: any, opts: any) => modesMgr.retrieveHybridRaw(m, files, opts) },
+                    knowledgeManager: { getPackForFile: (fileId: string) => KnowledgeManager.getInstance().getPackForFile(fileId) },
+                    classifyQuestion,
+                    queryOkfCards,
+                  });
+                  const resolution = await resolver.resolve({
+                    turnId: _tc.turnId,
+                    question: message,
+                    sourceContract: _tc,
+                    activeMode: { modeId: activeModeRow.id, modeUniqueId: activeModeRow.id },
+                    requestedProperty: _tc.requestedProperty,
+                    transcript: context,
+                  });
+                  return resolution.pack;
+                }
+              : undefined;
+
+            // Adapts the EXISTING ProfileEvidenceService facade (itself a
+            // contract-gated wrapper around selectManualProfileEvidence — see
+            // ProfileEvidenceService.ts) into the EvidencePack shape the
+            // coordinator expects. Not a re-implementation of résumé/JD
+            // selection: the facade already does that; this closure only
+            // supplies its inputs and returns its typed output.
+            const needsProfile = manualTurnSourceDecision.requiredEvidenceKinds.some((k) => (
+              k === 'profile_resume' || k === 'projects' || k === 'profile_jd'
+            ));
+            const profileSvc = new ProfileEvidenceService();
+            const retrieveProfileEvidenceForCoordinator = needsProfile
+              ? () => profileSvc.retrieveEvidence({
+                  question: message,
+                  contract: _tc,
+                  profile: activeResumeStructured,
+                  jobDescription: activeJdStructured,
+                  answerType: answerPlan.answerType,
+                })
+              : undefined;
+
+            // DEADLINE (invariant: streaming must not wait on slow retrieval
+            // longer than existing deadlines). This resolve() runs SYNCHRONOUSLY
+            // before `llmHelper.streamChat(...)` is even invoked below — unlike
+            // the doc-grounded EvidenceResolver call inside LLMHelper, which is
+            // lazily evaluated on the generator's first pull (i.e. already inside
+            // the raceStreamWithDeadline budget). Bound it with the SAME
+            // COORDINATOR_BUDGET_MS the doc-grounded hybrid retrieval race in
+            // LLMHelper.ts uses (HYBRID_BUDGET_MS, forceDocumentGrounding ?
+            // 2000 : 1000) so a cold embedder cannot stall the pre-stream
+            // handler past the existing first-useful budget. On timeout, fall
+            // through to the legacy raw-text path exactly as a coordinator
+            // throw would — never block the chat waiting on retrieval.
+            const COORDINATOR_BUDGET_MS = manualActiveMode?.documentGroundedCustomModeActive === true ? 2000 : 1000;
+            const coordinator = new TurnEvidenceCoordinator();
+            const coordinatorResult = await Promise.race([
+              coordinator.resolve({
+                decision: manualTurnSourceDecision,
+                contract: turnContract,
+                retrieveReferenceEvidence,
+                retrieveProfileEvidence: retrieveProfileEvidenceForCoordinator,
+              }),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), COORDINATOR_BUDGET_MS)),
+            ]);
+            if (!coordinatorResult) {
+              throw new Error(`TurnEvidenceCoordinator exceeded ${COORDINATOR_BUDGET_MS}ms budget`);
+            }
+
+            manualContextOsGeneration = {
+              contract: turnContract,
+              turnQuestion: message,
+              evidencePack: coordinatorResult.pack,
+              modeSnapshot: {
+                modeId: manualActiveMode?.id ?? null,
+                modeName: manualActiveMode?.name ?? null,
+                sourceAuthority: manualSourceContract?.sourceAuthority ?? 'ask_if_ambiguous',
+              },
+              turnSourceDecision: manualTurnSourceDecision,
+              govern: true,
+            };
+            coordinatorGovernedProfileEvidence = true;
+            iTrace.noteContext({
+              source: 'context_os_turn_evidence_coordinator',
+              trustLevel: 'high',
+              requested: true,
+              retrieved: coordinatorResult.pack.items.length > 0,
+              included: coordinatorResult.pack.answerPolicy === 'answer' || coordinatorResult.pack.answerPolicy === 'answer_with_uncertainty',
+              reason: coordinatorResult.failures.length > 0
+                ? `coordinator_failures:${coordinatorResult.failures.map((f) => `${f.family}:${f.reason}`).join(',')}`
+                : 'coordinator_multi_family_pack',
+            });
+            piTelemetry.emit('pi_context_policy_applied', {
+              answerType: answerPlan.answerType,
+              via: 'context_os_turn_evidence_coordinator',
+              profilePolicy: answerPlan.profileContextPolicy,
+            });
+          } catch (coordinatorErr: any) {
+            // Context OS is additive — a coordinator failure MUST NOT break
+            // chat. Fall through to the legacy raw-text paths below exactly as
+            // if the coordinator had never been consulted.
+            coordinatorGovernedProfileEvidence = false;
+            manualContextOsGeneration = null;
+            console.warn('[CONTEXT-OS] TurnEvidenceCoordinator skipped (non-fatal):', coordinatorErr?.message || coordinatorErr);
+          }
+        }
+
         // Mutual exclusion with the JIT profile route: when selectManualProfileEvidence
         // already supplied a compact, source-labelled allowed_evidence block (and the
         // system prompt told the model to answer ONLY from it), skip the OKF profile
@@ -2111,7 +2302,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // the JIT "answer only from allowed_evidence" instruction and the OKF generic
         // CONTEXT header contradict, wasting tokens/latency. Not a leak (both are
         // owner-gated), but the double-injection is redundant.
-        if (!isCodingChat && !selectedProfileEvidence && answerPlan.profileContextPolicy !== 'forbidden' && !docGroundedOrUnknown && ownershipAllowsProfileEvidence) {
+        // The coordinator path above is a THIRD mutually-exclusive source of
+        // profile evidence for the SAME turn — when it governed, this raw-text
+        // OKF-card injection is suppressed so the same evidence never ships
+        // twice (once as prepended CONTEXT text, once as governed XML).
+        if (!isCodingChat && !selectedProfileEvidence && !coordinatorGovernedProfileEvidence && answerPlan.profileContextPolicy !== 'forbidden' && !docGroundedOrUnknown && ownershipAllowsProfileEvidence) {
           try {
             const { retrieveProfileEvidence } = require('./services/knowledge/OkfProfileRetriever') as typeof import('./services/knowledge/OkfProfileRetriever');
             const profileEvidence = retrieveProfileEvidence({
@@ -2213,7 +2408,17 @@ export function initializeIpcHandlers(appState: AppState): void {
               // The pack is built there from the already-retrieved block (no
               // double retrieval) and surfaced back on this object for the
               // post-stream validator/claims to reuse (Phase 9 identity).
-              ...(turnContract
+              //
+              // CONTEXT OS (2026-07-17): when TurnEvidenceCoordinator already
+              // governed this turn above (`coordinatorGovernedProfileEvidence`),
+              // `manualContextOsGeneration` already holds a REAL, non-null,
+              // multi-family pack — this branch must NOT rebuild it with a
+              // fresh `evidencePack: null` object, which would discard the
+              // coordinator's resolved pack and force a second, redundant
+              // reference-file retrieval inside LLMHelper.
+              ...(coordinatorGovernedProfileEvidence && manualContextOsGeneration
+                ? { contextOsGeneration: manualContextOsGeneration }
+                : turnContract
                   && manualActiveMode?.documentGroundedCustomModeActive === true
                   && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
                 ? {
@@ -3334,19 +3539,22 @@ export function initializeIpcHandlers(appState: AppState): void {
                       ].join('\n')
                     : reason === 'false_refusal'
                     ? [
-                        'You are synthesizing an answer from the document excerpts below.',
-                        'IMPORTANT: The excerpts DO contain relevant information for this question.',
-                        'The content may be phrased differently from the question — read carefully.',
-                        'Synthesize the answer directly from the excerpts. Do NOT say "not mentioned" — the information IS there.',
-                        'If multiple excerpts cover different parts of the answer, combine them.',
-                        'Answer in 2-4 natural sentences. Do not restate the question.',
+                        'You are re-checking a refusal by trying to synthesize an answer from the document excerpts below.',
+                        'This question is about a real topic in this document, so read carefully — the content may be phrased differently than the question',
+                        '(e.g. a different unit, a table row, or a synonym for the term the question uses).',
+                        'If the SPECIFIC fact asked for is genuinely present (even if phrased differently), synthesize it directly in 2-4 natural sentences.',
+                        'If, after a careful re-read, the specific fact asked for is still NOT actually present in these excerpts — even though the excerpts are',
+                        'from the right document/topic — say so honestly (e.g. "I could not find that specific detail in the retrieved sections").',
+                        'Do NOT invent, guess, or borrow a similar-sounding fact from an unrelated part of the excerpts (e.g. a different subsystem, model, or dataset)',
+                        'to avoid saying it is absent — an honest "not found" is always better than an unrelated or fabricated answer.',
+                        'Do not restate the question.',
                         '',
                         '## DOCUMENT EXCERPTS',
                         docContextBlock || '(no retrieved material)',
                         '',
                         `QUESTION: ${message}`,
                         '',
-                        'ANSWER (synthesize from the excerpts above):',
+                        'ANSWER (only from facts literally in the excerpts above; honest refusal if genuinely absent):',
                       ].join('\n')
                     : [
                         'You are answering a question strictly from the uploaded reference material below.',
@@ -3977,6 +4185,28 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('set-verbose-logging', async (_, enabled: boolean) => {
     appState.setVerboseLogging(enabled);
+    return { success: true };
+  });
+
+  safeHandle('get-code-verification', async () => {
+    // Default OFF: code verification is currently disabled. Only true when the
+    // user has explicitly opted in via Settings → General or env override.
+    const v = SettingsManager.getInstance().get('codeVerificationEnabled');
+    return v === true;
+  });
+
+  safeHandle('set-code-verification', async (_, enabled: boolean) => {
+    if (typeof enabled !== 'boolean') {
+      return { success: false, error: 'invalid_type' };
+    }
+    SettingsManager.getInstance().set('codeVerificationEnabled', enabled);
+    try {
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) {
+          win.webContents.send('code-verification-changed', enabled);
+        }
+      });
+    } catch { /* broadcasting is best-effort */ }
     return { success: true };
   });
 
@@ -8632,6 +8862,33 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // Standalone dossier hydration — reads the cached company-research dossier
+  // directly off disk for the active JD's company, independent of getProfileData().
+  // Used on app startup to rehydrate the Company Intel panel without relying
+  // on the orchestrator's full profile-data assembly path.
+  safeHandle('profile:get-company-dossier', async () => {
+    try {
+      const orchestrator = appState.getKnowledgeOrchestrator();
+      if (!orchestrator) {
+        console.log('[CompanyIntel-hydrate] no orchestrator');
+        return null;
+      }
+      const profileData = orchestrator.getProfileData();
+      const company = profileData?.activeJD?.company?.trim?.();
+      console.log(`[CompanyIntel-hydrate] activeJD.company="${company}" hasActiveJD=${!!profileData?.hasActiveJD}`);
+      if (!company) {
+        console.log('[CompanyIntel-hydrate] no company on active JD, returning null');
+        return null;
+      }
+      const dossier = orchestrator.getCompanyResearchEngine().getCachedDossier(company);
+      console.log(`[CompanyIntel-hydrate] getCachedDossier("${company}") → ${dossier ? `${dossier.hiring_strategy?.length || 0}b hiring + ${dossier.culture_ratings?.overall || 'n/a'}/5 culture` : 'null'}`);
+      return dossier;
+    } catch (error: any) {
+      console.error('[IPC] profile:get-company-dossier error:', error);
+      return null;
+    }
+  });
+
   safeHandle('profile:select-file', async () => {
     try {
       const extensions = [...SAFE_DOCUMENT_EXTENSIONS].map(extension => extension.slice(1));
@@ -8819,6 +9076,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:research-company', async (_, companyName: string) => {
     try {
+      console.log(`[CompanyIntel-research] invoked for companyName="${companyName}"`);
       // Premium gate
       if (!isProOrTrialActive()) {
         return {
@@ -8876,6 +9134,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         : {};
       const dossier = await engine.researchCompany(companyName, jdCtx, true);
+      console.log(`[CompanyIntel-research] engine returned dossier=${dossier ? 'YES (' + (dossier.hiring_strategy?.length || 0) + 'b)' : 'NULL'}`);
       const searchQuotaExhausted = (engine.searchProvider as any)?.quotaExhausted === true;
       return { success: true, dossier, searchQuotaExhausted };
     } catch (error: any) {
@@ -8918,6 +9177,44 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true, script };
     } catch (error: any) {
       console.error('[IPC] profile:generate-negotiation error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('profile:generate-cover-letter', async (_, force: boolean = false) => {
+    try {
+      // Premium gate
+      if (!isProOrTrialActive()) {
+        return {
+          success: false,
+          error:
+            'Pro license required. Please activate a license key to use Profile Intelligence features.',
+        };
+      }
+      const orchestrator = appState.getKnowledgeOrchestrator();
+      if (!orchestrator) {
+        return { success: false, error: 'Knowledge engine not initialized' };
+      }
+      const status = orchestrator.getStatus();
+      if (!status.hasResume) {
+        return { success: false, error: 'No resume loaded' };
+      }
+
+      // Use cache unless force-regenerating
+      let letter = force ? null : orchestrator.getCoverLetter();
+      if (!letter) {
+        letter = await orchestrator.generateCoverLetterOnDemand();
+      }
+      if (!letter) {
+        return {
+          success: false,
+          error:
+            'Could not generate cover letter. Ensure a resume and job description are uploaded.',
+        };
+      }
+      return { success: true, letter };
+    } catch (error: any) {
+      console.error('[IPC] profile:generate-cover-letter error:', error);
       return { success: false, error: error.message };
     }
   });
@@ -10446,6 +10743,38 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         const { ModesManager } = require('./services/ModesManager');
         return { success: true, statuses: ModesManager.getInstance().getReferenceFileIndexStatuses?.(modeId) ?? [] };
+      } catch (e: any) {
+        return { success: false, error: e.message };
+      }
+    });
+
+    // Dump OKF card titles/types/bodies for a mode's reference files — used to
+    // diagnose card-selection false refusals/hallucinations where the OKF
+    // extractor lossily compressed or misfiled a fact (see forensic-report.md
+    // §6f finding B, THESIS-129/131). Filter with `grepBody` or `titles` to
+    // avoid returning every card body by default.
+    safeHandle('__e2e__:dump-okf-cards', async (_, params: { modeId: string; grepBody?: string; titles?: string[] }) => {
+      try {
+        const modeId = typeof params === 'string' ? params : params.modeId;
+        const grep = typeof params === 'object' ? params.grepBody : undefined;
+        const titles = typeof params === 'object' && Array.isArray(params.titles) ? params.titles.map((t) => t.toLowerCase()) : undefined;
+        const { ModesManager } = require('./services/ModesManager');
+        const { KnowledgeManager } = require('./services/knowledge/KnowledgeManager');
+        const mm = ModesManager.getInstance();
+        const files = mm.getReferenceFiles(modeId);
+        const km = KnowledgeManager.getInstance();
+        const out: any[] = [];
+        for (const f of files) {
+          const pack = km.getPackForFile(f.id);
+          if (!pack) continue;
+          for (const c of pack.cards) {
+            const matchesGrep = grep ? c.body.toLowerCase().includes(grep.toLowerCase()) : false;
+            const matchesTitle = titles ? titles.includes(c.title.toLowerCase()) : false;
+            const matches = grep || titles ? (matchesGrep || matchesTitle) : true;
+            out.push({ title: c.title, type: c.type, confidence: c.confidence, entities: c.entities, tags: c.tags, sourceSections: c.sourceSections, bodyLen: c.body.length, matchesGrep: matches, body: matches ? c.body : undefined });
+          }
+        }
+        return { success: true, cards: out };
       } catch (e: any) {
         return { success: false, error: e.message };
       }

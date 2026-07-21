@@ -1,0 +1,2569 @@
+{
+  "source": {
+    "fileName": "institutional_thesis.pdf",
+    "binarySha256": "67e8206533b425d63cda1627ed9f6c2cbbcb2506051bf6c415c650026a28afb3",
+    "parser": "pdf-parse/PDFParse.getText",
+    "physicalPageCount": 66,
+    "extractedCharCount": 127403
+  },
+  "facts": [
+    {
+      "id": "fact:meta-author",
+      "entity": null,
+      "property": "metadata",
+      "value": [
+        "Alberto Dian"
+      ],
+      "sourcePages": [
+        1
+      ],
+      "excerpt": "Master’s Programme in ICT Innovation Towards Connected Intelligence: Empowering Robotic Applications with Agentic AI Frameworks Alberto Dian Master’s Thesis 2025",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:meta-title",
+      "entity": null,
+      "property": "metadata",
+      "value": [
+        "Towards Connected Intelligence"
+      ],
+      "sourcePages": [
+        1
+      ],
+      "excerpt": "Master’s Programme in ICT Innovation Towards Connected Intelligence: Empowering Robotic Applications with Agentic AI Frameworks Alberto Dian Master’s Thesis 2025",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:meta-programme",
+      "entity": null,
+      "property": "metadata",
+      "value": [
+        "ICT Innovation"
+      ],
+      "sourcePages": [
+        3
+      ],
+      "excerpt": "Author Alberto Dian Title Towards Connected Intelligence: Empowering Robotic Applications with Agentic AI Frameworks Degree programme ICT Innovation Major Autonomous systems and Intelligent Robots Supervisor Prof. Ville Kyrki Advisors Dr. Massimiliano Maule, Prof. Davide Brunelli Collaborative partner Huawei Munich Research Center Date 21 June 2025 Number of pages ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:meta-major",
+      "entity": null,
+      "property": "metadata",
+      "value": [
+        "Autonomous systems and Intelligent Robots"
+      ],
+      "sourcePages": [
+        3
+      ],
+      "excerpt": " Dian Title Towards Connected Intelligence: Empowering Robotic Applications with Agentic AI Frameworks Degree programme ICT Innovation Major Autonomous systems and Intelligent Robots Supervisor Prof. Ville Kyrki Advisors Dr. Massimiliano Maule, Prof. Davide Brunelli Collaborative partner Huawei Munich Research Center Date 21 June 2025 Number of pages 67 Language English Abstract This thesis explore",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:meta-supervisor",
+      "entity": null,
+      "property": "metadata",
+      "value": [
+        "Ville Kyrki"
+      ],
+      "sourcePages": [
+        3
+      ],
+      "excerpt": "otic Applications with Agentic AI Frameworks Degree programme ICT Innovation Major Autonomous systems and Intelligent Robots Supervisor Prof. Ville Kyrki Advisors Dr. Massimiliano Maule, Prof. Davide Brunelli Collaborative partner Huawei Munich Research Center Date 21 June 2025 Number of pages 67 Language English Abstract This thesis explores the integration of Agentic",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:meta-advisor-one",
+      "entity": null,
+      "property": "metadata",
+      "value": [
+        "Massimiliano Maule"
+      ],
+      "sourcePages": [
+        3
+      ],
+      "excerpt": "gentic AI Frameworks Degree programme ICT Innovation Major Autonomous systems and Intelligent Robots Supervisor Prof. Ville Kyrki Advisors Dr. Massimiliano Maule, Prof. Davide Brunelli Collaborative partner Huawei Munich Research Center Date 21 June 2025 Number of pages 67 Language English Abstract This thesis explores the integration of Agentic Artificial Intelligence (Agent",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:meta-advisor-two",
+      "entity": null,
+      "property": "metadata",
+      "value": [
+        "Davide Brunelli"
+      ],
+      "sourcePages": [
+        3
+      ],
+      "excerpt": "ree programme ICT Innovation Major Autonomous systems and Intelligent Robots Supervisor Prof. Ville Kyrki Advisors Dr. Massimiliano Maule, Prof. Davide Brunelli Collaborative partner Huawei Munich Research Center Date 21 June 2025 Number of pages 67 Language English Abstract This thesis explores the integration of Agentic Artificial Intelligence (Agentic-AI) frameworks wit",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:meta-partner",
+      "entity": null,
+      "property": "metadata",
+      "value": [
+        "Huawei Munich Research Center"
+      ],
+      "sourcePages": [
+        3
+      ],
+      "excerpt": "onomous systems and Intelligent Robots Supervisor Prof. Ville Kyrki Advisors Dr. Massimiliano Maule, Prof. Davide Brunelli Collaborative partner Huawei Munich Research Center Date 21 June 2025 Number of pages 67 Language English Abstract This thesis explores the integration of Agentic Artificial Intelligence (Agentic-AI) frameworks with Vision-Language-Action (VLA) models to advance the",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:meta-date",
+      "entity": null,
+      "property": "metadata",
+      "value": [
+        "21 June 2025"
+      ],
+      "sourcePages": [
+        3
+      ],
+      "excerpt": "ots Supervisor Prof. Ville Kyrki Advisors Dr. Massimiliano Maule, Prof. Davide Brunelli Collaborative partner Huawei Munich Research Center Date 21 June 2025 Number of pages 67 Language English Abstract This thesis explores the integration of Agentic Artificial Intelligence (Agentic-AI) frameworks with Vision-Language-Action (VLA) models to advance the development of in",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:meta-language",
+      "entity": null,
+      "property": "metadata",
+      "value": [
+        "English"
+      ],
+      "sourcePages": [
+        3
+      ],
+      "excerpt": " Dr. Massimiliano Maule, Prof. Davide Brunelli Collaborative partner Huawei Munich Research Center Date 21 June 2025 Number of pages 67 Language English Abstract This thesis explores the integration of Agentic Artificial Intelligence (Agentic-AI) frameworks with Vision-Language-Action (VLA) models to advance the development of intelligent, embodied robotic systems.",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:meta-license",
+      "entity": null,
+      "property": "metadata",
+      "value": [
+        "Attribution-NonCommercial-ShareAlike",
+        "4.0 Interna"
+      ],
+      "sourcePages": [
+        2
+      ],
+      "excerpt": "© 2025 This work is licensed under a Creative Commons “Attribution-NonCommercial-ShareAlike 4.0 International” license.",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:meta-keywords",
+      "entity": null,
+      "property": "metadata",
+      "value": [
+        "Embodied AI",
+        "Robotics"
+      ],
+      "sourcePages": [
+        3
+      ],
+      "excerpt": "modular agent cooperation, indicating that combining VLA models with agentic frameworks can improve flexibility and responsiveness in robotic task execution. Keywords Embodied AI, Robotics, VLAs, AI Agents, 6G",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:meta-robot-abstract",
+      "entity": null,
+      "property": "metadata",
+      "value": [
+        "Mercury X1"
+      ],
+      "sourcePages": [
+        3
+      ],
+      "excerpt": "proposes the AgenticVLA system, which combines a pretrained and finetuned VLA model with an open-source agent-based framework. The system is deployed on the Mercury X1 humanoid robot and is capable of both natural language dialogue and environment-aware task execution. A custom Virtual Reality (VR) teleoperation platform was developed to collect a high-quality dual-ar",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:toc-chapter-one",
+      "entity": null,
+      "property": "structure",
+      "value": [
+        "Introduction"
+      ],
+      "sourcePages": [
+        5
+      ],
+      "excerpt": "Contents Abstract 3 Acknowledgements 4 Contents 5 1 Introduction 7 1.1 Research Questions . . . . . . . . . . . . . . . . . . . . . . . . . . 8 1.2 Thesis Objectives . . . . . . . . . . . . . . . . . . . . . . . . . . . 8 1.3 Thesis Structure . . . . . . . . . . . . . . . . . . . . .",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:toc-chapter-two",
+      "entity": null,
+      "property": "structure",
+      "value": [
+        "State of The Art and Background Overview"
+      ],
+      "sourcePages": [
+        5
+      ],
+      "excerpt": "ontents Abstract 3 Acknowledgements 4 Contents 5 1 Introduction 7 1.1 Research Questions . . . . . . . . . . . . . . . . . . . . . . . . . . 8 1.2 Thesis Objectives . . . . . . . . . . . . . . . . . . . . . . . . . . . 8 1.3 Thesis Structure . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9 2 State of The Art and Background Overview 10 2.1 Visual-Language-Action Models . . . . . . . . . . ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:toc-chapter-three",
+      "entity": null,
+      "property": "structure",
+      "value": [
+        "Research Methodology"
+      ],
+      "sourcePages": [
+        5
+      ],
+      "excerpt": " OpenVLA . . . . . . . . . . . . . . . . . . . . . . . . . . . 12 2.1.2 OpenVLA-OFT . . . . . . . . . . . . . . . . . . . . . . . . 13 2.2 Agentic AI . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13 2.3 Mercury X1 Robot . . . . . . . . . . . . . . . . . . . . . . . . . . 16 2.3.1 Design and Structure . . . . . . . . . . . . . . . . . . . . . 17 2.3.2 Technical S",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:toc-chapter-four",
+      "entity": null,
+      "property": "structure",
+      "value": [
+        "Experiments and Results"
+      ],
+      "sourcePages": [
+        6
+      ],
+      "excerpt": "4 Experiments and Results 43 4.1 Evaluation metrics . . . . . . . . . . . . . . . . . . . . . . . . . . 44 4.2 Experiment benchmarks . . . . . . . . . . . . . . . . . . . . . . . 44 4.2.1 Semantic relationship understanding . . . . . . . . . . .",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:toc-chapter-five",
+      "entity": null,
+      "property": "structure",
+      "value": [
+        "Conclusions"
+      ],
+      "sourcePages": [
+        6
+      ],
+      "excerpt": "omplexity analysis . . . . . . . . . . . . . . . . . 47 4.2.3 Self-awareness capabilities . . . . . . . . . . . . . . . . . . 52 4.3 Discussion . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 54 4.3.1 Reliability and Internal Validity . . . . . . . . . . . . . . . 54 4.3.2 External Validity and Generalizability . . . . . . . . . . . . 54 4.3.3 Evaluation ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:toc-vla-page",
+      "entity": null,
+      "property": "structure",
+      "value": [
+        "10"
+      ],
+      "sourcePages": [
+        5
+      ],
+      "excerpt": "tents 5 1 Introduction 7 1.1 Research Questions . . . . . . . . . . . . . . . . . . . . . . . . . . 8 1.2 Thesis Objectives . . . . . . . . . . . . . . . . . . . . . . . . . . . 8 1.3 Thesis Structure . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9 2 State of The Art and Background Overview 10 2.1 Visual-Language-Action Models . . . . . . . . . . . .",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:toc-conversational-page",
+      "entity": null,
+      "property": "structure",
+      "value": [
+        "38"
+      ],
+      "sourcePages": [
+        5
+      ],
+      "excerpt": "c Teleoperation Design . . . . . . . . . . . . . . . . . . . . . 18 2.4.1 Virtual Reality Frameworks . . . . . . . . . . . . . . . . . 19 2.4.2 ROS# . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20 2.4.3 Unity . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20 2.5 The role of 6G powered systems . . . . . . . . . . . . . . . . . . . 21 2.6",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:toc-self-awareness-page",
+      "entity": null,
+      "property": "structure",
+      "value": [
+        "52"
+      ],
+      "sourcePages": [
+        6
+      ],
+      "excerpt": " . . . . . . . . . . . . . . . . . . . . . . 44 4.2 Experiment benchmarks . . . . . . . . . . . . . . . . . . . . . . . 44 4.2.1 Semantic relationship understanding . . . . . . . . . . . . . 45 4.2.2 Prompt complexity analysis . . . . . . . . . . . . . . . . . 47 4.2.3 Self-awareness capabilities . . . . . . . . . . . . . . . . . . 52 4.3 Discussion . . . . . ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:intro-embodied-origin",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "Cognitive science",
+        "philosophy of mind"
+      ],
+      "sourcePages": [
+        7
+      ],
+      "excerpt": "1 Introduction In cognitive science and philosophy of mind, embodied cognition highlights the critical role of the body’s interaction with its environment in shaping thought processes. This idea extends to Artificial Intelligence (AI) embodiment, which in",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:intro-vla-models",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "Octo",
+        "OpenVLA"
+      ],
+      "sourcePages": [
+        7
+      ],
+      "excerpt": "ls integrate visual perception, language understanding, and action generation to enable robots to perform tasks in diverse, real-world environments. Notable contributions include models like Octo [2], OpenVLA [3], 𝜋0 [4], and Magma [5], which demonstrate the potential of VLA models in training embodied AI to adapt to unseen scenarios. Despite their promise, cur",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:intro-open-x",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "Open X-Embodiment"
+      ],
+      "sourcePages": [
+        7
+      ],
+      "excerpt": "een scenarios. Despite their promise, current VLA systems face various limitations. First of all, only a limited number of open-source datasets are specifically designed for robotics manipulation purposes (i.e., Open X-Embodiment [6]). In these datasets, most of the trajectories were performed using single-arm robots, making it almost impossible to just take this model and d",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:intro-rq1",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "towards achieving AGI"
+      ],
+      "sourcePages": [
+        8
+      ],
+      "excerpt": " interacting with the environment in multiple ways, such as speaking with a human or picking up an object. This could lead to better autonomous systems, a step towards achieving AGI. 1.1 Research Questions RQ1: Can an Agentic AI Framework be combined with Visual-Language-ActionModel towards achieving AGI? This question examines whether mixing an Agentic AI Framework with VLA mod",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:intro-rq2",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "perception and decision-making"
+      ],
+      "sourcePages": [
+        8
+      ],
+      "excerpt": "prove reasoning capabilities, multimodal perception, and adaptive action, thereby achieving a higher level of intelligence. RQ2: Can a network of AI Agents improve the perception and decision-making capabilities of autonomous robots in a collaborative task setting? If so, how? This question investigates whether a network of AI agents can enhance the perceptual accuracy and decision-makin",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:intro-duration",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "six-month"
+      ],
+      "sourcePages": [
+        9
+      ],
+      "excerpt": "utomation, and human-AI interaction. 1.3 Thesis Structure This thesis is organized to follow the chronological development of the project over a six-month period. After the background chapter, which provides the theoretical foundation necessary to understand the approach and results, the methodology chapter outlines the steps taken to set up the experimental environm",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:intro-phases",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "Teleoperation",
+        "Data collection",
+        "Training the VLA",
+        "Agentic AI integration"
+      ],
+      "sourcePages": [
+        9
+      ],
+      "excerpt": " results, the methodology chapter outlines the steps taken to set up the experimental environment. The project is structured into four main phases: 1. Teleoperation: A custom teleoperation system was developed to control the Mercury X1 [10] humanoid robot using the Meta Quest 3 headset [11]. This setup enabled immersive, real-time control of the robot for data generation",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:intro-headset",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "Meta Quest 3"
+      ],
+      "sourcePages": [
+        9
+      ],
+      "excerpt": "s structured into four main phases: 1. Teleoperation: A custom teleoperation system was developed to control the Mercury X1 [10] humanoid robot using the Meta Quest 3 headset [11]. This setup enabled immersive, real-time control of the robot for data generation purposes. 2. Data collection: In this phase, a balanced dataset of robotic trajectories was collected using th",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:intro-framework",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "AutoGen"
+      ],
+      "sourcePages": [
+        9
+      ],
+      "excerpt": "ry testing in real-world scenarios to assess performance. 4. Agentic AI integration: Finally, the VLA model was integrated into an Agentic AI framework, combining it with the AutoGen [13] architecture. This phase focused on studying the behavior of the resulting system, referred to as the AgenticVLA, by analyzing its ability to reason, adapt, and interact more auto",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:intro-metric",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "Success Rate"
+      ],
+      "sourcePages": [
+        9
+      ],
+      "excerpt": "del, the finetuned OpenVLA-OFT model and the proposed AgenticVLA system. These experiments examine how each system responds to variations in task phrasing and context, using metrics such as Success Rate (SR) to quantify improvements in reasoning, adaptability, and overall task performance.",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:vla-components",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "visual encoder",
+        "projector",
+        "LLM backbone"
+      ],
+      "sourcePages": [
+        12
+      ],
+      "excerpt": "ecture. Source: [3] The architecture of OpenVLA, as it is possible to observe from Figure 1, builds on the standard design of recent VLMs, which generally consist of three parts: (1) a visual encoder that processes image inputs into image patch embeddings, (2) a projector that maps these visual embeddings into the input space of a language model, and (3) a LLM backbone. D",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:openvla-params",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "7B"
+      ],
+      "sourcePages": [
+        12
+      ],
+      "excerpt": "odels, aligning well with the objectives of this thesis in studying scalable, efficient, and generalizable robot control policies. 2.1.1 OpenVLA OpenVLA [3] is a 7B-parameter open-source VLA that pushes the boundaries of generalist robot manipulation. It is built on a pretrained, visually-conditioned language model backbone that captures visual features at var",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:openvla-trajectories",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "970k"
+      ],
+      "sourcePages": [
+        12
+      ],
+      "excerpt": "ed, visually-conditioned language model backbone that captures visual features at various granularities, and it has been finetuned on a large and diverse dataset of 970k robot manipulation trajectories from the Open X-Embodiment dataset. One of the key contributions of OpenVLA is its finetuning strategy, which has not been extensively explored in previous work. ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:openvla-rt2",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "55B-parameter RT-2-X"
+      ],
+      "sourcePages": [
+        12
+      ],
+      "excerpt": "key contributions of OpenVLA is its finetuning strategy, which has not been extensively explored in previous work. The model outperforms even larger models, such as the 55B-parameter RT-2-X, and shows significant improvement over other finetuned policies like Octo, as well as from-scratch imitation learning using diffusion policies. In particular, OpenVLA excels at tasks that i",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:openvla-vlm",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "Prismatic-7B"
+      ],
+      "sourcePages": [
+        13
+      ],
+      "excerpt": "from various online sources. OpenVLA specifically extends the Prismatic-7B VLM, which uses a 600M-parameter visual encoder, a two-layer Multi-Layer Perceptron (MLP) projector, and a 7B-parameter Llama 2 language model backbone. The visual encoder is a two-part system, combining pretrained Sig",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:openvla-encoder",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "SigLIP",
+        "DinoV2"
+      ],
+      "sourcePages": [
+        13
+      ],
+      "excerpt": "Layer Perceptron (MLP) projector, and a 7B-parameter Llama 2 language model backbone. The visual encoder is a two-part system, combining pretrained SigLIP and DinoV2 models. This combination of visual features helps improve spatial reasoning, which is critical for tasks like robot control. For training OpenVLA, the action prediction problem is framed as a vision-l",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:openvla-bins",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "256"
+      ],
+      "sourcePages": [
+        13
+      ],
+      "excerpt": "s. The continuous robot actions are discretized into discrete tokens, which the language model can predict. Each action dimension is quantized into one of 256 bins, with bin widths based on the quantiles of the training data rather than the min-max range, which helps avoid issues with outlier actions that could affect discretization quality. Finally, the resolu",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:openvla-image",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "224x224"
+      ],
+      "sourcePages": [
+        13
+      ],
+      "excerpt": "solution images, while providing more tokens and longer context lengths, also demand more computational power, with little performance gain when compared to using 224x224px images, even though the latter is more efficient during training. 2.1.2 OpenVLA-OFT OpenVLA-OFT [12] is an improved version of OpenVLA, developed by the same research team, that focuses on impro",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:oft-decoding",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "Parallel decoding"
+      ],
+      "sourcePages": [
+        13
+      ],
+      "excerpt": " that focuses on improving the finetuning and inference performaces of the VLA (see Figure 2). They replaced the autoregressive decoding technique from the base model to a parallel decoding approach, which leverages bidirectional attention and generates all actions in a single forward pass. This approach naturally extends to action chunking, predicting the next K actions at ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:oft-throughput",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "43x"
+      ],
+      "sourcePages": [
+        13
+      ],
+      "excerpt": "nal attention and generates all actions in a single forward pass. This approach naturally extends to action chunking, predicting the next K actions at each timestep, achieving 43x faster throughput than base OpenVLA. Additionally, OpenVLA-OFT is capable of processing multiple camera views and low-dimensional robot state inputs, such as joint angles and gripper ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:oft-robot",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "ALOHA"
+      ],
+      "sourcePages": [
+        13
+      ],
+      "excerpt": "the available information. This architecture can efficiently digest multimodal inputs and work with dual-arms robots, as the researchers show successful experiments conducted with the ALOHA robot [20]. 2.2 Agentic AI An AI Agent is an autonomous system capable of interacting with the environment, take decisions and execute actions to achieve a specific goal [7]. ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-core",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "Model",
+        "Tools",
+        "Instructions"
+      ],
+      "sourcePages": [
+        15
+      ],
+      "excerpt": "it to interact with the real world, retrieve up-to-date information, or carry out complex computations that the model alone cannot handle. 3. Instructions: Instructions are the explicit rules, objectives, and behavioral guidelines that shape how the agent operates. This includes its role, tone, permissible actions, and safety constra",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:autogen-company",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "Microsoft"
+      ],
+      "sourcePages": [
+        15
+      ],
+      "excerpt": "ions using multi-agent conversations [13] AutoGen [13] is an open-source framework designed to help developers to build AI Agents and applications, developed by Microsoft. Its generic design, leveraging LLMs, human inputs or tools, enables developers to create agents with different roles and skills, by selecting a subset of already built-in functions or creating cust",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-frameworks",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "LangChain",
+        "CrewAI"
+      ],
+      "sourcePages": [
+        14
+      ],
+      "excerpt": "loping agentic AI is critical to ensure scalability, completeness and alignment with intended objectives. Currently, the most popular frameworks are AutoGen, LangChain [22], CrewAI [23] or SmolAgents [24], each one with different characteristics and specifics. Agent design foundation In its most fundamental form, an agent consists of three core components (see Figure",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-maker",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "Elephant Robotics"
+      ],
+      "sourcePages": [
+        16
+      ],
+      "excerpt": "tial for exploring embodied intelligence and human-robot interaction. For the purposes of this research, the Mercury X1 wheeled humanoid robot, developed by Elephant Robotics [25], was selected as the primary experimental platform. This chapter provides a detailed introduction to the Mercury X1, focusing on its design philosophy, technical specifications, and relevance to th",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-location",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "Shenzhen, China"
+      ],
+      "sourcePages": [
+        16
+      ],
+      "excerpt": "igh-performance mobile base with a dual-arm humanoid structure, offering a versatile hardware platform for both research and practical deployment. Elephant Robotics, based in Shenzhen, China, engineered the Mercury X1 to cater to a wide range of users, including researchers, educators, and developers, with an emphasis on flexibility, precision, and ease of integration int",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-height",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "1.18"
+      ],
+      "sourcePages": [
+        16
+      ],
+      "excerpt": "e: [26] The Mercury X1 is a wheeled humanoid robot designed to bridge the gap between theoretical artificial intelligence and real-world robotic applications. Standing at 1.18 meters tall, it combines a high-performance mobile base with a dual-arm humanoid structure, offering a versatile hardware platform for both research and practical deployment. Elephant Robo",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-components",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "Mercury B1",
+        "wheeled mobile base"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": "2.3.1 Design and Structure The Mercury X1 is composed of two primary components, shown in Figure 5: the Mercury B1 dual-arm semi-humanoid robot and a robust wheeled mobile base. This hybrid design enables the robot to perform tasks requiring both mobility and manipulation, distinguishing it from traditional stationary robotic arms",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-dof",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "19"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": " mobility and manipulation, distinguishing it from traditional stationary robotic arms or purely mobile platforms. The robot features a total of 19 degrees of freedom (DOF), with each of its two seven-axis arms contributing significantly to its dexterity. The arms are constructed with a lightweight carbon fiber shell, which reduces the overall weight to 55 kg ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-weight",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "55 kg"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": "arms contributing significantly to its dexterity. The arms are constructed with a lightweight carbon fiber shell, which reduces the overall weight to 55 kg while maintaining structural rigidity and durability. This design choice enhances the robot’s power efficiency and payload capacity, rated at a maximum of 1 kg. The mobile base is equipped with high-performanc",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-payload",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "1 kg"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": "le maintaining structural rigidity and durability. This design choice enhances the robot’s power efficiency and payload capacity, rated at a maximum of 1 kg. The mobile base is equipped with high-performance direct-drive motors, allowing the Mercury X1 to achieve a maximum operating speed of 1.2 m/s and navigate inclines up to 15 degrees or obstacles up to 2 cm ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-speed",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "1.2 m/s"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": "a maximum of 1 kg. The mobile base is equipped with high-performance direct-drive motors, allowing the Mercury X1 to achieve a maximum operating speed of 1.2 m/s and navigate inclines up to 15 degrees or obstacles up to 2 cm in height. The base integrates advanced perception systems, including high-performance LiDAR, ultrasonic sensors, and 2D vision capabilities, ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-incline",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "15 degrees"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": "s equipped with high-performance direct-drive motors, allowing the Mercury X1 to achieve a maximum operating speed of 1.2 m/s and navigate inclines up to 15 degrees or obstacles up to 2 cm in height. The base integrates advanced perception systems, including high-performance LiDAR, ultrasonic sensors, and 2D vision capabilities, enabling robust environmental awareness",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-obstacle",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "2 cm"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": "ce direct-drive motors, allowing the Mercury X1 to achieve a maximum operating speed of 1.2 m/s and navigate inclines up to 15 degrees or obstacles up to 2 cm in height. The base integrates advanced perception systems, including high-performance LiDAR, ultrasonic sensors, and 2D vision capabilities, enabling robust environmental awareness and autonomous navigati",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-voltage",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "24 V"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": "cal Specifications of the Mercury X1 Robot Specification Value Height 1.18 m Weight 55 kg (net) Degrees of Freedom 19 DOF (dual 7-axis arms, mobile base) Working Voltage 24 V Battery Life Up to 8 hours Maximum Payload 1 kg Repeatability ±0.05 mm Maximum Operating Speed 1.2 m/s Maximum Climbing Angle 15◦ Storage Space 15 L Drive Motors High-performance direct-dri",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-battery",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "8 hours"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": "e Mercury X1 Robot Specification Value Height 1.18 m Weight 55 kg (net) Degrees of Freedom 19 DOF (dual 7-axis arms, mobile base) Working Voltage 24 V Battery Life Up to 8 hours Maximum Payload 1 kg Repeatability ±0.05 mm Maximum Operating Speed 1.2 m/s Maximum Climbing Angle 15◦ Storage Space 15 L Drive Motors High-performance direct-drive motors Control System NV",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-repeatability",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "0.05 mm"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": "ht 1.18 m Weight 55 kg (net) Degrees of Freedom 19 DOF (dual 7-axis arms, mobile base) Working Voltage 24 V Battery Life Up to 8 hours Maximum Payload 1 kg Repeatability ±0.05 mm Maximum Operating Speed 1.2 m/s Maximum Climbing Angle 15◦ Storage Space 15 L Drive Motors High-performance direct-drive motors Control System NVIDIA Jetson Xavier (main), Jetson Nano (aux",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-storage",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "15 L"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": " base) Working Voltage 24 V Battery Life Up to 8 hours Maximum Payload 1 kg Repeatability ±0.05 mm Maximum Operating Speed 1.2 m/s Maximum Climbing Angle 15◦ Storage Space 15 L Drive Motors High-performance direct-drive motors Control System NVIDIA Jetson Xavier (main), Jetson Nano (aux) Perception Systems LiDAR, ultrasonic, 2D vision Software Support Python, RO",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-control",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "NVIDIA Jetson Xavier"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": " 1 kg Repeatability ±0.05 mm Maximum Operating Speed 1.2 m/s Maximum Climbing Angle 15◦ Storage Space 15 L Drive Motors High-performance direct-drive motors Control System NVIDIA Jetson Xavier (main), Jetson Nano (aux) Perception Systems LiDAR, ultrasonic, 2D vision Software Support Python, ROS, MoveIt, Gazebo, Mujoco 17",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-aux-control",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "Jetson Nano"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": "mm Maximum Operating Speed 1.2 m/s Maximum Climbing Angle 15◦ Storage Space 15 L Drive Motors High-performance direct-drive motors Control System NVIDIA Jetson Xavier (main), Jetson Nano (aux) Perception Systems LiDAR, ultrasonic, 2D vision Software Support Python, ROS, MoveIt, Gazebo, Mujoco 17",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-perception",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "LiDAR",
+        "ultrasonic"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": "2 m/s and navigate inclines up to 15 degrees or obstacles up to 2 cm in height. The base integrates advanced perception systems, including high-performance LiDAR, ultrasonic sensors, and 2D vision capabilities, enabling robust environmental awareness and autonomous navigation. These features make the Mercury X1 particularly suited for dynamic environments where a",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:robot-software",
+      "entity": null,
+      "property": "hardware",
+      "value": [
+        "Python",
+        "MoveIt"
+      ],
+      "sourcePages": [
+        17
+      ],
+      "excerpt": "L Drive Motors High-performance direct-drive motors Control System NVIDIA Jetson Xavier (main), Jetson Nano (aux) Perception Systems LiDAR, ultrasonic, 2D vision Software Support Python, ROS, MoveIt, Gazebo, Mujoco 17",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:open-teach-headset",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "Meta Quest 3"
+      ],
+      "sourcePages": [
+        19
+      ],
+      "excerpt": " autonomy in mobile robotics. Similarly, recent advancements have pushed the boundaries of VR-based teleoperation further, like OPEN TEACH [39], an open-source framework that utilizes the Meta Quest 3 VR headset to control various robots, including mobile manipulators, multifingered hands, and bimanual arms. This system operates at up to 90Hz with smooth visual feedback",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:open-teach-rate",
+      "entity": null,
+      "property": "background",
+      "value": [
+        "90Hz"
+      ],
+      "sourcePages": [
+        19
+      ],
+      "excerpt": "open-source framework that utilizes the Meta Quest 3 VR headset to control various robots, including mobile manipulators, multifingered hands, and bimanual arms. This system operates at up to 90Hz with smooth visual feedback, allowing operators to perform tasks ranging from tabletop manipulation to contact-rich dexterous operations across both simulated and real",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:ros-sharp",
+      "entity": null,
+      "property": "software",
+      "value": [
+        "communicating with ROS from .NET applications"
+      ],
+      "sourcePages": [
+        20
+      ],
+      "excerpt": "tion to bridge the autonomy gap. 2.4.2 ROS# Figure 6: ROS# Pipeline. Source: [14] ROS# is a set of open-source software libraries and tools in C# for communicating with ROS from .NET applications, in particular Unity (see Figure 6). With ROS#, developers can effortlessly create .NET applications that communicate with ROS nodes, subscribe to and publish topics, handle actions and services, and interact",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:unity-reason",
+      "entity": null,
+      "property": "software",
+      "value": [
+        "High-quality rendering",
+        "native VR support"
+      ],
+      "sourcePages": [
+        20
+      ],
+      "excerpt": "mera streams, immersive human-inthe-loop control, and collection of demonstration data for training AI models. Unity was selected for this project due to the following key capabilities: • High-quality rendering: Unity’s rendering engine allows for photorealistic visualization of the robot and its environment, improving operator immersion and environmental awareness. • Native VR s",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:sixg-year",
+      "entity": null,
+      "property": "networking",
+      "value": [
+        "June 2023"
+      ],
+      "sourcePages": [
+        21
+      ],
+      "excerpt": "ion platform creates a hybrid reality interface where AI models can be trained and evaluated in a human-centric manner. 2.5 The role of 6G powered systems In June 2023, the International Telecommunication Union (ITU) [41] finalized the framework for the 6G Vision, addressing the fundamental question, \"What is 6G?\" from two key perspectives [42]. The first focuses on ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:sixg-urllc",
+      "entity": null,
+      "property": "networking",
+      "value": [
+        "Ultra-Reliable and Low-Latency Communications"
+      ],
+      "sourcePages": [
+        21
+      ],
+      "excerpt": " the 6G Vision, addressing the fundamental question, \"What is 6G?\" from two key perspectives [42]. The first focuses on the evolution of mobile communications, emphasizing Ultra-Reliable and Low-Latency Communications (URLLC) to enable and support large-scale connectivity. The second perspective extends beyond traditional mobile communications, aiming to achieve Integrated Sensing and Communication (IS",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:sixg-isac",
+      "entity": null,
+      "property": "networking",
+      "value": [
+        "Integrated Sensing and Communication"
+      ],
+      "sourcePages": [
+        21
+      ],
+      "excerpt": "d Low-Latency Communications (URLLC) to enable and support large-scale connectivity. The second perspective extends beyond traditional mobile communications, aiming to achieve Integrated Sensing and Communication (ISAC) while leveraging AI and networking. Figure 7: Connected Intelligence = AGI for 6G + 6G for AGI. Source: [42] A central aspect of 6G is its ability to support large-scale AI-dri",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:sixg-formula",
+      "entity": null,
+      "property": "networking",
+      "value": [
+        "AGI for 6G + 6G for AGI"
+      ],
+      "sourcePages": [
+        21
+      ],
+      "excerpt": "xtends beyond traditional mobile communications, aiming to achieve Integrated Sensing and Communication (ISAC) while leveraging AI and networking. Figure 7: Connected Intelligence = AGI for 6G + 6G for AGI. Source: [42] A central aspect of 6G is its ability to support large-scale AI-driven services and applications. In the era of AI, the core components of applications and servi",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:sixg-bodies",
+      "entity": null,
+      "property": "networking",
+      "value": [
+        "ITU",
+        "3GPP"
+      ],
+      "sourcePages": [
+        22
+      ],
+      "excerpt": "bler of real-time, distributed intelligence for AI-powered agents [44, 45]. Major standardization bodies such as the International Telecommunication Union (ITU) and 3GPP have identified robotics as a key vertical for 6G, emphasizing URLLC, ISAC, and semantic-aware data exchange as foundational enablers for collaborative robotic systems [45, 46]. These capabilit",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:sixg-autonomy",
+      "entity": null,
+      "property": "networking",
+      "value": [
+        "Huawei"
+      ],
+      "sourcePages": [
+        22
+      ],
+      "excerpt": "onse, and industrial inspection. Such capabilities demand low-latency, high-throughput networks, which exceed the capacity of current 5G systems in many practical settings. A vision proposed by Huawei [48] introduces the concept of meta-level autonomy in robotics, in which robots can autonomously define tasks, detect environmental changes, and adapt behavior using",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:sixg-challenges",
+      "entity": null,
+      "property": "networking",
+      "value": [
+        "Network capacity",
+        "AI model flexibility"
+      ],
+      "sourcePages": [
+        23
+      ],
+      "excerpt": " are envisioned to be capable to take autonomous and independent actions in close loop with the environment, bypassing the current open challenges in terms of [51]: 1. Network capacity: Traditional networks are ill-equipped to handle the surging, heterogeneous data demands of AI-driven services. 6G networks, with integrated support for semantic communication, network slicin",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:method-strategy",
+      "entity": null,
+      "property": "methodology",
+      "value": [
+        "bottom-up strategy"
+      ],
+      "sourcePages": [
+        25
+      ],
+      "excerpt": "the design, development, and evaluation of an intelligent embodied system based on the Mercury X1 humanoid robot. The overall approach follows a bottom-up strategy, beginning with low-level control and data acquisition, moving through model training, and culminating in high-level system integration within an agentic architecture. The first section details the development of a",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:teleop-input",
+      "entity": null,
+      "property": "teleoperation",
+      "value": [
+        "Meta Quest 3",
+        "hand controllers"
+      ],
+      "sourcePages": [
+        27
+      ],
+      "excerpt": "nfiguration The teleoperation system is based on the Mercury X1 humanoid robot, equipped with dual seven-axis arms and multiple onboard cameras. The Meta Quest 3 headset and its hand controllers were used to enable immersive control. Three video feeds were captured: one from the main head-mounted camera, and two extra USB cameras, one capturing the scene from a top-down",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:teleop-feeds",
+      "entity": null,
+      "property": "teleoperation",
+      "value": [
+        "Three"
+      ],
+      "sourcePages": [
+        27
+      ],
+      "excerpt": "pped with dual seven-axis arms and multiple onboard cameras. The Meta Quest 3 headset and its hand controllers were used to enable immersive control. Three video feeds were captured: one from the main head-mounted camera, and two extra USB cameras, one capturing the scene from a top-down prespective and the second one from a third-view point of view. The head-mou",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:teleop-main-camera",
+      "entity": null,
+      "property": "teleoperation",
+      "value": [
+        "Orbbec Deeyea 3D"
+      ],
+      "sourcePages": [
+        27
+      ],
+      "excerpt": " extra USB cameras, one capturing the scene from a top-down prespective and the second one from a third-view point of view. The head-mounted camera is an Orbbec Deeyea 3D camera, while the two USB cameras are both Logitech C920 HD Webcams. The system operated over a wireless local network, ensuring low-latency data transmission between the control interface and the robot. T",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:teleop-usb-camera",
+      "entity": null,
+      "property": "teleoperation",
+      "value": [
+        "Logitech C920"
+      ],
+      "sourcePages": [
+        27
+      ],
+      "excerpt": " prespective and the second one from a third-view point of view. The head-mounted camera is an Orbbec Deeyea 3D camera, while the two USB cameras are both Logitech C920 HD Webcams. The system operated over a wireless local network, ensuring low-latency data transmission between the control interface and the robot. The control interface was built in Unity using C#. To bri",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:teleop-unity-ros",
+      "entity": null,
+      "property": "teleoperation",
+      "value": [
+        "ROS#"
+      ],
+      "sourcePages": [
+        27
+      ],
+      "excerpt": "mission between the control interface and the robot. The control interface was built in Unity using C#. To bridge Unity with the robot’s Robot Operating System (ROS), the ROS# library was used. This allowed real-time streaming of sensor data and commands. The Meta Quest 3 controllers were interfaced via Meta’s OVRInput library, enabling tracking of 6-DOF poses ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:teleop-python",
+      "entity": null,
+      "property": "teleoperation",
+      "value": [
+        "pymycobot"
+      ],
+      "sourcePages": [
+        27
+      ],
+      "excerpt": " enabling tracking of 6-DOF poses and button states. On the robot side, custom Python scripts consumed these messages and translated them into control signals using the pymycobot library. Figure 9: Unity teleoperation user interface 27",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:teleop-frequency",
+      "entity": null,
+      "property": "teleoperation",
+      "value": [
+        "50 Hz"
+      ],
+      "sourcePages": [
+        28
+      ],
+      "excerpt": "Table 2). These JSON messages are transmitted via ROS topics and parsed on the robot to command the actuators. The control frequency was maintained at 50 Hz, ensuring fluid and responsive arm movement. Table 2: Fields and sizes of each element in the JSON file for robot control Field Size (bytes) Description float32 timestamp 4 Command timestamp float32[6] target",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:teleop-target-pose",
+      "entity": null,
+      "property": "teleoperation",
+      "value": [
+        "24",
+        "Right arm pose"
+      ],
+      "sourcePages": [
+        28
+      ],
+      "excerpt": "d sizes of each element in the JSON file for robot control Field Size (bytes) Description float32 timestamp 4 Command timestamp float32[6] target_pose_right 24 Right arm pose [x, y, z, rx, ry, rz] [mm, deg] float32[6] target_pose_left 24 Left arm pose [x, y, z, rx, ry, rz] [mm, deg] int16 gripperValueRight 2 Right gripper (0–100) int16 gripperValueLeft 2 Left ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:teleop-command-id",
+      "entity": null,
+      "property": "teleoperation",
+      "value": [
+        "int32",
+        "4"
+      ],
+      "sourcePages": [
+        28
+      ],
+      "excerpt": " [mm, deg] float32[6] target_pose_left 24 Left arm pose [x, y, z, rx, ry, rz] [mm, deg] int16 gripperValueRight 2 Right gripper (0–100) int16 gripperValueLeft 2 Left gripper (0–100) int32 command_id 4 Unique command ID float32[6] target_pose_body_right 24 Right-hand pose in body [x, y, z, rx, ry, rz] float32[6] target_pose_body_left 24 Left-hand pose in body [x, ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:teleop-actuator-rate",
+      "entity": null,
+      "property": "teleoperation",
+      "value": [
+        "1–10 Mb/s"
+      ],
+      "sourcePages": [
+        28
+      ],
+      "excerpt": "l isYPressed 1 Y button pressed Table 3: Data sent to robot: Use Cases, Message Frequency, and Estimated Data Rate Use Cases Message Frequency Estimated Data Rate Closed-loop, actuator control 50–100 Hz 1–10 Mb/s Data collection, telemetry <50 Hz <500 Mb/s To support both real-time control and dataset collection, multiple ROS topics were managed. These included readi",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:teleop-camera-rate",
+      "entity": null,
+      "property": "teleoperation",
+      "value": [
+        "620 Kb/s"
+      ],
+      "sourcePages": [
+        29
+      ],
+      "excerpt": "ead from robot: Use Cases, Message Frequency, and Estimated Data Rate Use Cases Message Frequency Estimated Data Rate Compressed camera stream 30 Hz 620 Kb/s Joint states 30 Hz 10 Kb/s Tables 3 and 4 summarize the communication parameters involved in the control and monitoring of the robotic system. Table 3 details the message frequency and estimated data rates for ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:teleop-joint-rate",
+      "entity": null,
+      "property": "teleoperation",
+      "value": [
+        "10 Kb/s"
+      ],
+      "sourcePages": [
+        29
+      ],
+      "excerpt": "essage Frequency, and Estimated Data Rate Use Cases Message Frequency Estimated Data Rate Compressed camera stream 30 Hz 620 Kb/s Joint states 30 Hz 10 Kb/s Tables 3 and 4 summarize the communication parameters involved in the control and monitoring of the robotic system. Table 3 details the message frequency and estimated data rates for different use cases, highli",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-openx-limit",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "dual-arm interaction capabilities"
+      ],
+      "sourcePages": [
+        30
+      ],
+      "excerpt": " meaning that cameras, lighting conditions and tasks performed can vary significantly from one sub-set to another. In addition, this dataset lacks the dual-arm interaction capabilities required by the Mercury X1 humanoid robot. For these reasons, when working with models such as VLAs applied for robotic applications, it is crucial to collect a custom dataset with your own setup and specific",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-task",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "pick-and-place"
+      ],
+      "sourcePages": [
+        30
+      ],
+      "excerpt": "rous attempts to create different versions of the dataset, varying camera positions and task designs. The main action performed by the robot in each episode is the pick and place task, where the robot interacts with objects visible in front of it, using one of its two arms to pick up an object and place it on a designated area marked by a plate. Throughout all recorded ta",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-instruction",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "Put the [color] [object] on the [color] plate"
+      ],
+      "sourcePages": [
+        30
+      ],
+      "excerpt": "th a specific text instruction that is then fed to the system to learn correlations between spatial and language features. This dataset is composed of one main text instruction: • Put the [color] [object] on the [color] plate : Ex. \"put the yellow banana on the red plate\" This choice follows guidelines from the developers of OpenVLA-OFT and draws inspiration from the Open X-Embodiment dataset, wh",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-example",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "yellow banana on the red plate"
+      ],
+      "sourcePages": [
+        30
+      ],
+      "excerpt": "the system to learn correlations between spatial and language features. This dataset is composed of one main text instruction: • Put the [color] [object] on the [color] plate : Ex. \"put the yellow banana on the red plate\" This choice follows guidelines from the developers of OpenVLA-OFT and draws inspiration from the Open X-Embodiment dataset, where tasks are simple and concise, and smal",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-objects",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "yellow banana",
+        "purple grapes"
+      ],
+      "sourcePages": [
+        30
+      ],
+      "excerpt": "the system to learn correlations between spatial and language features. This dataset is composed of one main text instruction: • Put the [color] [object] on the [color] plate : Ex. \"put the yellow banana on the red plate\" This choice follows guidelines from the developers of OpenVLA-OFT and draws inspiration from the Open X-Embodiment dataset, where tasks are simple and ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-visible-only",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "apple",
+        "orange"
+      ],
+      "sourcePages": [
+        30
+      ],
+      "excerpt": "uced by interacting with different objects to perform the same task. In the Mercury X1 dataset, two objects are considered: a yellow banana and purple grapes. Additionally, other objects such as an apple and an orange are visible in the scene during each episode, but no interaction is performed with them. The entire dataset consists of 480 episodes, a size that a",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-episodes",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "480"
+      ],
+      "sourcePages": [
+        30
+      ],
+      "excerpt": "a and purple grapes. Additionally, other objects such as an apple and an orange are visible in the scene during each episode, but no interaction is performed with them. The entire dataset consists of 480 episodes, a size that aligns with the experiments proposed on the ALOHA dataset by the OpenVLA-OFT researchers. Another layer of sparsity was introduced by var",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-surfaces",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "Table",
+        "red plate",
+        "wooden plate"
+      ],
+      "sourcePages": [
+        31
+      ],
+      "excerpt": "Figure 10: 3D plot of an episode showing the right arm reaching the table to pick up an object, while the left arm remains at the initial position. shown in Table 5, both the banana and the grapes were picked from the table, which is white and highly reflective, the red plate, and the wooden",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-duration",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "9 seconds"
+      ],
+      "sourcePages": [
+        31
+      ],
+      "excerpt": "ch of these three surfaces has a unique thickness, adding variation to the elevation of the objects. Each recorded episode has an average duration of 9 seconds. 31",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-combination-episodes",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "30"
+      ],
+      "sourcePages": [
+        32
+      ],
+      "excerpt": "Table 5: Mercury X1 Dataset: Task Summary Task Arm Pick up from # Episodes put yellow banana on red plate R Wood 30 put yellow banana on red plate R Table 30 put yellow banana on red plate L Wood 30 put yellow banana on red plate L Table 30 put yellow banana on wooden plate R Red plate 30 put yellow banana on wooden plate R Table",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-sample-rate",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "25 Hz"
+      ],
+      "sourcePages": [
+        32
+      ],
+      "excerpt": "obot in a closed-loop system running at 50 Hz. To record the demonstrations for training, each trajectory was sampled at a consistent frame rate of 25 Hz, following the standard set by the ALOHA dataset, which features a similar bi-manual robot architecture. Each episode consists of a series of steps, representing the smallest units of action. Each step contains:",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-standard",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "ALOHA"
+      ],
+      "sourcePages": [
+        32
+      ],
+      "excerpt": "50 Hz. To record the demonstrations for training, each trajectory was sampled at a consistent frame rate of 25 Hz, following the standard set by the ALOHA dataset, which features a similar bi-manual robot architecture. Each episode consists of a series of steps, representing the smallest units of action. Each step contains: 1. RGB images from three synchronized c",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-elements",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "RGB images",
+        "joint angles"
+      ],
+      "sourcePages": [
+        32
+      ],
+      "excerpt": "ures a similar bi-manual robot architecture. Each episode consists of a series of steps, representing the smallest units of action. Each step contains: 1. RGB images from three synchronized camera views (main head camera, topdown camera, third-view camera). 2. Joint angles for both arms (14-dimensional vector: 7 per arm) 3. Gripper actuation values. 4. End-effector po",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-format",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "Reinforcement Learning Dataset"
+      ],
+      "sourcePages": [
+        34
+      ],
+      "excerpt": " each episode, which corresponds to one completed task, was stored in a folder directly on the Meta Quest 3 memory system. The data follows the Reinforcement Learning Dataset (RLDS) [55] format, where every episode consists of a series of steps sampled at a precise frequency during recording. This format is widely used to represent robotic manipulation trajectories and is the same one em",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-lerobot",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "HuggingFace"
+      ],
+      "sourcePages": [
+        34
+      ],
+      "excerpt": "d by the community with custom scripts to convert data into other formats, such as the Lerobot dataset, a flexible and interesting framework developed by HuggingFace [56]. Each episode’s folder contains three subfolders with frames recorded from the three cameras involved, along with a JSON file containing metadata and information about end-effector positions, states, ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-frame",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "PNG",
+        "640x480"
+      ],
+      "sourcePages": [
+        34
+      ],
+      "excerpt": " positions, states, and boolean flags indicating the start and end of the episode. The JSON file follows the structure shown in Table 6. Each image is encoded in PNG format using the RGB color scheme and has a resolution of 640x480 pixels. In the metadata of each episode, the high level task field contains the text instruction related to the task, while the suc",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-action-vector",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "Rotation information",
+        "not recorded"
+      ],
+      "sourcePages": [
+        34
+      ],
+      "excerpt": "4-dimensional joint states array, a 10-dimensional action array, and boolean values marking the start and end of the episode. The action vector is 10-dimensional because rotation information for each end effector was not recorded, as it was fixed to zero. This decision was made to ensure smoother robot control and reduce data complexity. Instead, what is stored are the end-effe",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:data-origin",
+      "entity": null,
+      "property": "dataset",
+      "value": [
+        "robot's wheels"
+      ],
+      "sourcePages": [
+        34
+      ],
+      "excerpt": "the robot’s wheeled base. Importantly, the end-effector positions are expressed in the robot base reference frame, meaning that the origin (0,0,0) corresponds to the position of the robot’s wheels. 34",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:training-vram",
+      "entity": null,
+      "property": "training",
+      "value": [
+        "96 gigabytes"
+      ],
+      "sourcePages": [
+        35
+      ],
+      "excerpt": "er of finding the most fitting hyperparameters to correctly finetune the VLA model. The training has been performed using a single GPU card with 96 gigabytes of VRAM. 3.3.1 Data filtering and adaptation After data collection, episodes were postprocessed to align with OpenVLA-OFT’s input requirements. This included: 1. Converting each episode to an Hierarchical Data Form",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:training-batch",
+      "entity": null,
+      "property": "training",
+      "value": [
+        "4"
+      ],
+      "sourcePages": [
+        35
+      ],
+      "excerpt": "y, and empirical performance, with a particular focus on enabling generalization in dual-arm manipulation tasks. The training was configured with a batch size of 4, using image inputs from two synchronized cameras (third-view and top-down), resized to 256×256 pixels. The learning rate was set to 2 · 10−4, with no warm-up steps and a decay schedule that reduce",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:training-lr",
+      "entity": null,
+      "property": "training",
+      "value": [
+        "2 × 10"
+      ],
+      "sourcePages": [
+        35
+      ],
+      "excerpt": "configured with a batch size of 4, using image inputs from two synchronized cameras (third-view and top-down), resized to 256×256 pixels. The learning rate was set to 2 · 10−4, with no warm-up steps and a decay schedule that reduced the learning rate by a factor of 10 after 75,000 steps. The training was run for a total of 150,005 steps, and a checkpoint was sav",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:training-decay",
+      "entity": null,
+      "property": "training",
+      "value": [
+        "75,000"
+      ],
+      "sourcePages": [
+        35
+      ],
+      "excerpt": "own), resized to 256×256 pixels. The learning rate was set to 2 · 10−4, with no warm-up steps and a decay schedule that reduced the learning rate by a factor of 10 after 75,000 steps. The training was run for a total of 150,005 steps, and a checkpoint was saved every 20,000 steps to allow evaluation at different training stages. The model architecture utilized FiL",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:training-steps",
+      "entity": null,
+      "property": "training",
+      "value": [
+        "150,005"
+      ],
+      "sourcePages": [
+        35
+      ],
+      "excerpt": "e was set to 2 · 10−4, with no warm-up steps and a decay schedule that reduced the learning rate by a factor of 10 after 75,000 steps. The training was run for a total of 150,005 steps, and a checkpoint was saved every 20,000 steps to allow evaluation at different training stages. The model architecture utilized FiLM to condition visual features with language input",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:training-checkpoint",
+      "entity": null,
+      "property": "training",
+      "value": [
+        "20,000"
+      ],
+      "sourcePages": [
+        35
+      ],
+      "excerpt": "d a decay schedule that reduced the learning rate by a factor of 10 after 75,000 steps. The training was run for a total of 150,005 steps, and a checkpoint was saved every 20,000 steps to allow evaluation at different training stages. The model architecture utilized FiLM to condition visual features with language input, improving the grounding of instructions. Alt",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:training-film",
+      "entity": null,
+      "property": "training",
+      "value": [
+        "FiLM"
+      ],
+      "sourcePages": [
+        35
+      ],
+      "excerpt": "aining was run for a total of 150,005 steps, and a checkpoint was saved every 20,000 steps to allow evaluation at different training stages. The model architecture utilized FiLM to condition visual features with language input, improving the grounding of instructions. Although the OpenVLA-OFT architecture supports proprioceptive input, it was disabled in this ex",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:training-proprio",
+      "entity": null,
+      "property": "training",
+      "value": [
+        "disabled"
+      ],
+      "sourcePages": [
+        35
+      ],
+      "excerpt": "zed FiLM to condition visual features with language input, improving the grounding of instructions. Although the OpenVLA-OFT architecture supports proprioceptive input, it was disabled in this experiment to reduce modality complexity. Image augmentation was applied to improve visual generalization. The finetuning also leveraged Low-Rank Adaptation (LoRA) with a rank",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:training-lora",
+      "entity": null,
+      "property": "training",
+      "value": [
+        "32",
+        "0.0"
+      ],
+      "sourcePages": [
+        35
+      ],
+      "excerpt": " experiment to reduce modality complexity. Image augmentation was applied to improve visual generalization. The finetuning also leveraged Low-Rank Adaptation (LoRA) with a rank of 32 and dropout rate of 0.0, allowing efficient adaptation of the large pretrained model without full weight updates. The LoRA weights were merged during training to ensure compatibil",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:training-peak",
+      "entity": null,
+      "property": "training",
+      "value": [
+        "62 GB"
+      ],
+      "sourcePages": [
+        36
+      ],
+      "excerpt": "er architecture. Using the collected dataset and a modified training configuration, the peak VRAM usage during finetuning reached approximately 62 GB. This is consistent with the expected resource footprint for large-scale VLA models trained on rich episodic data. Following training, the deployment of the finetuned OpenVLA-OFT model was executed on a consumer-gra",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:training-deploy",
+      "entity": null,
+      "property": "training",
+      "value": [
+        "24 GB"
+      ],
+      "sourcePages": [
+        36
+      ],
+      "excerpt": "els trained on rich episodic data. Following training, the deployment of the finetuned OpenVLA-OFT model was executed on a consumer-grade GPU with 24 GB of VRAM. During inference, the model maintained real-time responsiveness while occupying approximately 16 GB of VRAM, demonstrating the feasibility of running the system in practical settings without compromising",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:training-inference",
+      "entity": null,
+      "property": "training",
+      "value": [
+        "16 GB"
+      ],
+      "sourcePages": [
+        36
+      ],
+      "excerpt": "s executed on a consumer-grade GPU with 24 GB of VRAM. During inference, the model maintained real-time responsiveness while occupying approximately 16 GB of VRAM, demonstrating the feasibility of running the system in practical settings without compromising performance. This setup enabled real-world testing on the Mercury X1 robot and integration within the broa",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-main-llm",
+      "entity": null,
+      "property": "architecture",
+      "value": [
+        "LLaMA 3.2 7B"
+      ],
+      "sourcePages": [
+        38
+      ],
+      "excerpt": "ed to manage tool-augmented LLM agents using structured, promptbased coordination. At the center of this architecture is a main agent built on LLaMA 3.2 7B [57], which serves as the core reasoning unit and has been chosen considering its efficiency and performances. This agent does not operate in isolation, but instead selectively activates specialized tools based on th",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-vla-role",
+      "entity": null,
+      "property": "architecture",
+      "value": [
+        "callable function"
+      ],
+      "sourcePages": [
+        38
+      ],
+      "excerpt": " instead selectively activates specialized tools based on the user’s input. One of the central ideas in this implementation is to treat the VLA as a callable function. It is invoked by the main agent only when required, specifically, when the user requests a task that involves perception of the environment or interaction with it. This makes the system modular and scalable wh",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-name",
+      "entity": null,
+      "property": "architecture",
+      "value": [
+        "AgenticVLA"
+      ],
+      "sourcePages": [
+        38
+      ],
+      "excerpt": "sistant but also as a controller capable of interacting with the real world. This hybrid system, combining language, vision, and action, is what we refer to as AgenticVLA (see Figure 13), a VLA model extended with agentic coordination logic and equipped with supporting reasoning and awareness capabilities. Figure 13: AgenticVLA complete framework AutoGen handles input",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-conversational-when",
+      "entity": null,
+      "property": "architecture",
+      "value": [
+        "no action-oriented intent"
+      ],
+      "sourcePages": [
+        38
+      ],
+      "excerpt": "a user instruction. The following sections describe the tools and logic involved. 3.4.1 Conversational Agent The conversational agent is used whenever the system detects no action-oriented intent in the input. This means that the user is likely asking a question, seeking 38",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-conversational-llm",
+      "entity": null,
+      "property": "architecture",
+      "value": [
+        "LLaMA 3.2 7B"
+      ],
+      "sourcePages": [
+        39
+      ],
+      "excerpt": "clarification, or issuing a command that does not involve any interaction with the robot’s environment. The tool uses LLaMA 3.2 7B as its backbone to interpret and respond to these types of inputs. It acts as the default fallback for general interaction, allowing the agent to operate like any LLM-based assistant. The Dialogue Tool ensures that th",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-act-verbs",
+      "entity": null,
+      "property": "architecture",
+      "value": [
+        "pick up",
+        "move"
+      ],
+      "sourcePages": [
+        39
+      ],
+      "excerpt": " 3.4.2 Act Agent This agent is responsible for handling all instructions that imply interaction with the physical environment. When the system detects intent through verbs such as “pick up,” “move,” or “put,” this agent is triggered. Rather than directly executing a command, the Act agent first processes the input through two sub-modules: the Reasoning Tool and the",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-act-modules",
+      "entity": null,
+      "property": "architecture",
+      "value": [
+        "Reasoning Tool",
+        "Self-Awareness Tool"
+      ],
+      "sourcePages": [
+        39
+      ],
+      "excerpt": "tent through verbs such as “pick up,” “move,” or “put,” this agent is triggered. Rather than directly executing a command, the Act agent first processes the input through two sub-modules: the Reasoning Tool and the Self-Awareness Tool. These modules allow the system to validate the instruction, clarify user intent, and ensure the feasibility of the requested action. After",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-deploy-server",
+      "entity": null,
+      "property": "architecture",
+      "value": [
+        "server where the OpenVLA-OFT model is deployed"
+      ],
+      "sourcePages": [
+        39
+      ],
+      "excerpt": "e modules allow the system to validate the instruction, clarify user intent, and ensure the feasibility of the requested action. After this layered processing, the refined instruction is sent to a server where the OpenVLA-OFT model is deployed. This model predicts the action sequence that the robot will perform. 39",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-reason-limit",
+      "entity": null,
+      "property": "architecture",
+      "value": [
+        "restricted ability to generalize from natural language"
+      ],
+      "sourcePages": [
+        40
+      ],
+      "excerpt": "s are executed safely, accurately, and only when the conditions for success are fully satisfied. Reasoning Tool The Reasoning Tool addresses a key limitation of current VLAs: their restricted ability to generalize from natural language. Since many VLAs must be trained on highly structured commands, they can fail when given ambiguous, compound, or loosely phrased instructions. This tool operates as an interprete",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-reason-llm",
+      "entity": null,
+      "property": "architecture",
+      "value": [
+        "LLaMA 3.2 7B"
+      ],
+      "sourcePages": [
+        41
+      ],
+      "excerpt": "LLaMA 3.2 7B is used here to perform the reasoning and rephrasing step, ensuring alignment between human language and the robot’s capabilities. System prompt You are a reasoning layer. Your role is to translate user instructions int",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-reason-format",
+      "entity": null,
+      "property": "architecture",
+      "value": [
+        "put the [color] [object] on the [color] plate"
+      ],
+      "sourcePages": [
+        41
+      ],
+      "excerpt": "nes: 1. Decompose complex commands into smaller, sequential steps that reflect the capabilities of the robot. 2. Each final task must be formatted as: put the [color] [object] on the [color] plate where [color] and [object] are specific descriptors present in the scene. 3. Verify availability: • If any referenced object or plate color is not confirmed to be present in the scene, do not guess. • I",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-self-model",
+      "entity": null,
+      "property": "architecture",
+      "value": [
+        "Gemma 3 12B"
+      ],
+      "sourcePages": [
+        41
+      ],
+      "excerpt": "ction is feasible. This component uses visual input from a third-person camera to generate a description of the current scene and monitor the execution of tasks over time. Using Gemma 3 12B from Google DeepMind [58] as the visual backbone, the tool performs two essential functions. First, it identifies the objects currently visible to the robot, providing the agent wit",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-self-functions",
+      "entity": null,
+      "property": "architecture",
+      "value": [
+        "objects currently visible",
+        "potential failures"
+      ],
+      "sourcePages": [
+        41
+      ],
+      "excerpt": " and monitor the execution of tasks over time. Using Gemma 3 12B from Google DeepMind [58] as the visual backbone, the tool performs two essential functions. First, it identifies the objects currently visible to the robot, providing the agent with a list of available items in the workspace. Second, it compares frames across time to detect potential failures during execution. For ins",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:agent-self-camera",
+      "entity": null,
+      "property": "architecture",
+      "value": [
+        "Third-person"
+      ],
+      "sourcePages": [
+        41
+      ],
+      "excerpt": "-awareness Tool The Self-Awareness Tool helps the system understand its environment and evaluate whether a requested action is feasible. This component uses visual input from a third-person camera to generate a description of the current scene and monitor the execution of tasks over time. Using Gemma 3 12B from Google DeepMind [58] as the visual backbone, the tool perfo",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:results-models",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "OpenVLA",
+        "Finetuned OpenVLA-OFT",
+        "AgenticVLA"
+      ],
+      "sourcePages": [
+        43
+      ],
+      "excerpt": "ments conducted are introduced and discussed. Each experiment is structured as an A vs B vs C evaluation (see Figure 14), comparing three models: • OpenVLA: Serving as the initial experiment to develop a functioning VLA for the Mercury X1 robot, OpenVLA was trained from scratch by combining the OpenX-Embodiment dataset with the custom Mercury X1 dataset. This train",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:results-finetuned",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "LoRA"
+      ],
+      "sourcePages": [
+        43
+      ],
+      "excerpt": "odel to the specific characteristics of the new robotic setup. • Finetuned OpenVLA-OFT: Obtained by finetuning the OpenVLA model on the Mercury X1 dataset using LoRA, this version is more specialized for the specific robot and tasks. • AgenticVLA: Building upon the finetuned OpenVLA-OFT, AgenticVLA integrates the model into the Agentic AI framework introduced ea",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:results-metrics",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "Success Rate",
+        "Mean Squared Error"
+      ],
+      "sourcePages": [
+        44
+      ],
+      "excerpt": "uate model performance. The comparison is performed by plotting, over time, the coordinates for each arm and the gripper values, as well as analyzing the Success Rate (SR) and the average Mean Squared Error (MSE). The SR is defined as the ratio between the number of successfully completed tasks, where the robot was able to complete the intended action, and the total num",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:results-sr-definition",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "successfully completed tasks",
+        "total number of tasks"
+      ],
+      "sourcePages": [
+        44
+      ],
+      "excerpt": " the gripper values, as well as analyzing the Success Rate (SR) and the average Mean Squared Error (MSE). The SR is defined as the ratio between the number of successfully completed tasks, where the robot was able to complete the intended action, and the total number of tasks performed. The average MSE, instead, measured in millimeters, is calculated by averaging the MSE across the rel",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:results-mse-unit",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "millimeters"
+      ],
+      "sourcePages": [
+        44
+      ],
+      "excerpt": "cessfully completed tasks, where the robot was able to complete the intended action, and the total number of tasks performed. The average MSE, instead, measured in millimeters, is calculated by averaging the MSE across the relevant dimensions (x, y, z, grasp) for each arm. Formally, given the predicted trajectory yˆ = [𝑦ˆ1, 𝑦ˆ2, . . . , 𝑦ˆ𝑇 ] and the ground truth t",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:results-episodes-one",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "100"
+      ],
+      "sourcePages": [
+        44
+      ],
+      "excerpt": "ed prompting conditions, probing the limitations of instructionbased control. The third benchmark focuses on the system’s ability to interpret its surroundings and respond appropriately to changes in the scene, testing perceptiongrounding capabilities. The first and third benchmarks were each carried out over 100 episodes, while the second included 90 episodes.",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:results-episodes-two",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "90"
+      ],
+      "sourcePages": [
+        44
+      ],
+      "excerpt": "mitations of instructionbased control. The third benchmark focuses on the system’s ability to interpret its surroundings and respond appropriately to changes in the scene, testing perceptiongrounding capabilities. The first and third benchmarks were each carried out over 100 episodes, while the second included 90 episodes. Performance was evaluated using Succe",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-one-instruction",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "put the fruits on the plate"
+      ],
+      "sourcePages": [
+        45
+      ],
+      "excerpt": " performing multiple elementary movements to complete a task of higher complexity. In this experiment, the instruction given to each model is: \"put the fruits on the plate\". The scene includes two fruits that can be picked up, a banana and grapes, both of which are familiar to the VLA, as they are part of the training set (see Figure 15). This scenario requires the model to predict a ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-one-fruits",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "banana",
+        "grapes"
+      ],
+      "sourcePages": [
+        45
+      ],
+      "excerpt": " In this experiment, the instruction given to each model is: \"put the fruits on the plate\". The scene includes two fruits that can be picked up, a banana and grapes, both of which are familiar to the VLA, as they are part of the training set (see Figure 15). This scenario requires the model to predict a more complex trajectory: picking up the first object from the",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-one-agent-sr",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "44%"
+      ],
+      "sourcePages": [
+        45
+      ],
+      "excerpt": "the system so that the complete task could be executed. Figure 15: Image recording of AgenticVLA model succesfully performing the task \"pick up the fruits\" The success rate of AgenticVLA was 44%, while the other models were not able to accomplish this level of complexity. The failures observed with AgenticVLA were mainly due to issues such as dropping the obje",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-one-openvla-sr",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "0%"
+      ],
+      "sourcePages": [
+        46
+      ],
+      "excerpt": "fter placing the first object on the plate. Table 7: Semantic relationship comparison among the tested models. Model Results MRSE (mm) SR (%) OpenVLA 7016 0 Finetuned OpenVLA-OFT 5505 0 AgenticVLA 2369 44 To better understand the behavior of each model, the trajectory of a representative episode is visualized in Figure 16. In this example, the baseline OpenVL",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-one-oft-sr",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "0%"
+      ],
+      "sourcePages": [
+        46
+      ],
+      "excerpt": "fter placing the first object on the plate. Table 7: Semantic relationship comparison among the tested models. Model Results MRSE (mm) SR (%) OpenVLA 7016 0 Finetuned OpenVLA-OFT 5505 0 AgenticVLA 2369 44 To better understand the behavior of each model, the trajectory of a representative episode is visualized in Figure 16. In this example, the baseline OpenVL",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-one-openvla-mrse",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "7016"
+      ],
+      "sourcePages": [
+        46
+      ],
+      "excerpt": "after placing the first object on the plate. Table 7: Semantic relationship comparison among the tested models. Model Results MRSE (mm) SR (%) OpenVLA 7016 0 Finetuned OpenVLA-OFT 5505 0 AgenticVLA 2369 44 To better understand the behavior of each model, the trajectory of a representative episode is visualized in Figure 16. In this example, the baseline OpenVLA ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-one-oft-mrse",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "5505"
+      ],
+      "sourcePages": [
+        46
+      ],
+      "excerpt": "t on the plate. Table 7: Semantic relationship comparison among the tested models. Model Results MRSE (mm) SR (%) OpenVLA 7016 0 Finetuned OpenVLA-OFT 5505 0 AgenticVLA 2369 44 To better understand the behavior of each model, the trajectory of a representative episode is visualized in Figure 16. In this example, the baseline OpenVLA model fails to generate any m",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-one-agent-mrse",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "2369"
+      ],
+      "sourcePages": [
+        46
+      ],
+      "excerpt": "ble 7: Semantic relationship comparison among the tested models. Model Results MRSE (mm) SR (%) OpenVLA 7016 0 Finetuned OpenVLA-OFT 5505 0 AgenticVLA 2369 44 To better understand the behavior of each model, the trajectory of a representative episode is visualized in Figure 16. In this example, the baseline OpenVLA model fails to generate any meaningful motion, ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-one-split",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "banana",
+        "grapes"
+      ],
+      "sourcePages": [
+        45
+      ],
+      "excerpt": " In this experiment, the instruction given to each model is: \"put the fruits on the plate\". The scene includes two fruits that can be picked up, a banana and grapes, both of which are familiar to the VLA, as they are part of the training set (see Figure 15). This scenario requires the model to predict a more complex trajectory: picking up the first object from the",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-one-failures",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "Dropping the object",
+        "failing to pick it up"
+      ],
+      "sourcePages": [
+        45
+      ],
+      "excerpt": "its\" The success rate of AgenticVLA was 44%, while the other models were not able to accomplish this level of complexity. The failures observed with AgenticVLA were mainly due to issues such as dropping the object, failing to pick it up correctly, or an 45",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-easy",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "put banana on plate"
+      ],
+      "sourcePages": [
+        47
+      ],
+      "excerpt": "ases in complexity, by varying the syntax that express intent and adding redundant information. Three different text instructions were chosen: • Easy: \"put banana on plate\". This instruction is exactly as the one used to finetune the model and it has been chosen to work as the baseline for this experiment. • Medium: \"move banana from table to plate\". In this case, few tweaks h",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-medium",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "move banana from table to plate"
+      ],
+      "sourcePages": [
+        47
+      ],
+      "excerpt": "na on plate\". This instruction is exactly as the one used to finetune the model and it has been chosen to work as the baseline for this experiment. • Medium: \"move banana from table to plate\". In this case, few tweaks has been added, changing the main intent verb and specifying where the object must be picked up from. • Hard: \"if possible, please pick up the banana from surface and place ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-hard",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "if possible"
+      ],
+      "sourcePages": [
+        47
+      ],
+      "excerpt": "ve banana from table to plate\". In this case, few tweaks has been added, changing the main intent verb and specifying where the object must be picked up from. • Hard: \"if possible, please pick up the banana from surface and place it on the plate\" This instruction introduces different level of complexity. Firstly, the if cause and secondly it changes all the intent verb",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-oft-easy",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "82%"
+      ],
+      "sourcePages": [
+        48
+      ],
+      "excerpt": "they performed similarly, achieving SRs of 82% and 84%, respectively. The basic OpenVLA behaved as in the previous experiment, failing to move or recognize objects in the scene. Figure 17: Image recording of AgenticVLA model succesfully performing the task \"move b",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-agent-easy",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "84%"
+      ],
+      "sourcePages": [
+        48
+      ],
+      "excerpt": "they performed similarly, achieving SRs of 82% and 84%, respectively. The basic OpenVLA behaved as in the previous experiment, failing to move or recognize objects in the scene. Figure 17: Image recording of AgenticVLA model succesfully performing the task \"move banana f",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-oft-medium",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "61%"
+      ],
+      "sourcePages": [
+        48
+      ],
+      "excerpt": "of results between tested models on three different text instruction with increasing complexity Model Easy Medium Hard MRSE (mm) SR (%) MRSE (mm) SR (%) MRSE (mm) SR (%) OpenVLA 4196 0 6111 0 4338 0 Finetuned OpenVLA-OFT 523 82 3624 61 8826 42 AgenticVLA 1000 84 1177 83 880 84 In the hard experiment, the finetuned VLA was given the most complex input for this ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-agent-medium",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "83%"
+      ],
+      "sourcePages": [
+        48
+      ],
+      "excerpt": "g complexity Model Easy Medium Hard MRSE (mm) SR (%) MRSE (mm) SR (%) MRSE (mm) SR (%) OpenVLA 4196 0 6111 0 4338 0 Finetuned OpenVLA-OFT 523 82 3624 61 8826 42 AgenticVLA 1000 84 1177 83 880 84 In the hard experiment, the finetuned VLA was given the most complex input for this benchmark: \"if possible, please pick up the banana from surface and place it on the",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-oft-hard",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "42%"
+      ],
+      "sourcePages": [
+        48
+      ],
+      "excerpt": " instruction with increasing complexity Model Easy Medium Hard MRSE (mm) SR (%) MRSE (mm) SR (%) MRSE (mm) SR (%) OpenVLA 4196 0 6111 0 4338 0 Finetuned OpenVLA-OFT 523 82 3624 61 8826 42 AgenticVLA 1000 84 1177 83 880 84 In the hard experiment, the finetuned VLA was given the most complex input for this benchmark: \"if possible, please pick up the banana from ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-agent-hard",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "84%"
+      ],
+      "sourcePages": [
+        48
+      ],
+      "excerpt": "they performed similarly, achieving SRs of 82% and 84%, respectively. The basic OpenVLA behaved as in the previous experiment, failing to move or recognize objects in the scene. Figure 17: Image recording of AgenticVLA model succesfully performing the task \"move banana f",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-base",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "0%"
+      ],
+      "sourcePages": [
+        48
+      ],
+      "excerpt": "n of results between tested models on three different text instruction with increasing complexity Model Easy Medium Hard MRSE (mm) SR (%) MRSE (mm) SR (%) MRSE (mm) SR (%) OpenVLA 4196 0 6111 0 4338 0 Finetuned OpenVLA-OFT 523 82 3624 61 8826 42 AgenticVLA 1000 84 1177 83 880 84 In the hard experiment, the finetuned VLA was given the most complex input for th",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-oft-easy-mrse",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "523"
+      ],
+      "sourcePages": [
+        48
+      ],
+      "excerpt": "three different text instruction with increasing complexity Model Easy Medium Hard MRSE (mm) SR (%) MRSE (mm) SR (%) MRSE (mm) SR (%) OpenVLA 4196 0 6111 0 4338 0 Finetuned OpenVLA-OFT 523 82 3624 61 8826 42 AgenticVLA 1000 84 1177 83 880 84 In the hard experiment, the finetuned VLA was given the most complex input for this benchmark: \"if possible, please pick ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-oft-hard-mrse",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "8826"
+      ],
+      "sourcePages": [
+        48
+      ],
+      "excerpt": " text instruction with increasing complexity Model Easy Medium Hard MRSE (mm) SR (%) MRSE (mm) SR (%) MRSE (mm) SR (%) OpenVLA 4196 0 6111 0 4338 0 Finetuned OpenVLA-OFT 523 82 3624 61 8826 42 AgenticVLA 1000 84 1177 83 880 84 In the hard experiment, the finetuned VLA was given the most complex input for this benchmark: \"if possible, please pick up the banana fr",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-agent-hard-mrse",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "880"
+      ],
+      "sourcePages": [
+        48
+      ],
+      "excerpt": "omplexity Model Easy Medium Hard MRSE (mm) SR (%) MRSE (mm) SR (%) MRSE (mm) SR (%) OpenVLA 4196 0 6111 0 4338 0 Finetuned OpenVLA-OFT 523 82 3624 61 8826 42 AgenticVLA 1000 84 1177 83 880 84 In the hard experiment, the finetuned VLA was given the most complex input for this benchmark: \"if possible, please pick up the banana from surface and place it on the pla",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-openvla-medium-mrse",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "6111"
+      ],
+      "sourcePages": [
+        48
+      ],
+      "excerpt": "of results between tested models on three different text instruction with increasing complexity Model Easy Medium Hard MRSE (mm) SR (%) MRSE (mm) SR (%) MRSE (mm) SR (%) OpenVLA 4196 0 6111 0 4338 0 Finetuned OpenVLA-OFT 523 82 3624 61 8826 42 AgenticVLA 1000 84 1177 83 880 84 In the hard experiment, the finetuned VLA was given the most complex input for this be",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-two-reasoning",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "put banana on plate"
+      ],
+      "sourcePages": [
+        47
+      ],
+      "excerpt": "ases in complexity, by varying the syntax that express intent and adding redundant information. Three different text instructions were chosen: • Easy: \"put banana on plate\". This instruction is exactly as the one used to finetune the model and it has been chosen to work as the baseline for this experiment. • Medium: \"move banana from table to plate\". In this case, few tweaks h",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-three-instruction",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "put banana on plate"
+      ],
+      "sourcePages": [
+        52
+      ],
+      "excerpt": "g the need for an additional layer of comprehension, such as the Self-awareness tool. In this experiment, the instruction given to the system is \"put banana on plate,\" but for the first three seconds, the banana is not visible from the robot’s point of view (see Figure 22). After three seconds, the banana is introduced into the scene. The goal is to observe how the VLA model r",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-three-delay",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "three seconds"
+      ],
+      "sourcePages": [
+        52
+      ],
+      "excerpt": "comprehension, such as the Self-awareness tool. In this experiment, the instruction given to the system is \"put banana on plate,\" but for the first three seconds, the banana is not visible from the robot’s point of view (see Figure 22). After three seconds, the banana is introduced into the scene. The goal is to observe how the VLA model reacts and whether it continues t",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-three-oft-sr",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "43%"
+      ],
+      "sourcePages": [
+        53
+      ],
+      "excerpt": "mance Comparison of OpenVLA and Agentic Robot Models Across Various Tasks Model Results MRSE (mm) SR (%) OpenVLA 3477 0 Finetuned OpenVLA-OFT 5156 43 AgenticVLA 300 85 Figure 23: Trajectory plot. Comparison between OpenVLA, Finetuned OpenVLAOFT and AgenticVLA. Studying how VLAs behave when asked to interact with objects that are not present in the scene Figure",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-three-agent-sr",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "85%"
+      ],
+      "sourcePages": [
+        53
+      ],
+      "excerpt": "f OpenVLA and Agentic Robot Models Across Various Tasks Model Results MRSE (mm) SR (%) OpenVLA 3477 0 Finetuned OpenVLA-OFT 5156 43 AgenticVLA 300 85 Figure 23: Trajectory plot. Comparison between OpenVLA, Finetuned OpenVLAOFT and AgenticVLA. Studying how VLAs behave when asked to interact with objects that are not present in the scene Figure 24: Barplot showi",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-three-base-sr",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "0%"
+      ],
+      "sourcePages": [
+        53
+      ],
+      "excerpt": "Table 9: Performance Comparison of OpenVLA and Agentic Robot Models Across Various Tasks Model Results MRSE (mm) SR (%) OpenVLA 3477 0 Finetuned OpenVLA-OFT 5156 43 AgenticVLA 300 85 Figure 23: Trajectory plot. Comparison between OpenVLA, Finetuned OpenVLAOFT and AgenticVLA. Studying how VLAs behave when asked to interact with objects that are n",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-three-openvla-mrse",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "3477"
+      ],
+      "sourcePages": [
+        53
+      ],
+      "excerpt": "Table 9: Performance Comparison of OpenVLA and Agentic Robot Models Across Various Tasks Model Results MRSE (mm) SR (%) OpenVLA 3477 0 Finetuned OpenVLA-OFT 5156 43 AgenticVLA 300 85 Figure 23: Trajectory plot. Comparison between OpenVLA, Finetuned OpenVLAOFT and AgenticVLA. Studying how VLAs behave when asked to interact with objects that are",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-three-oft-mrse",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "5156"
+      ],
+      "sourcePages": [
+        53
+      ],
+      "excerpt": "erformance Comparison of OpenVLA and Agentic Robot Models Across Various Tasks Model Results MRSE (mm) SR (%) OpenVLA 3477 0 Finetuned OpenVLA-OFT 5156 43 AgenticVLA 300 85 Figure 23: Trajectory plot. Comparison between OpenVLA, Finetuned OpenVLAOFT and AgenticVLA. Studying how VLAs behave when asked to interact with objects that are not present in the scene Fig",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-three-agent-mrse",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "300"
+      ],
+      "sourcePages": [
+        53
+      ],
+      "excerpt": "on of OpenVLA and Agentic Robot Models Across Various Tasks Model Results MRSE (mm) SR (%) OpenVLA 3477 0 Finetuned OpenVLA-OFT 5156 43 AgenticVLA 300 85 Figure 23: Trajectory plot. Comparison between OpenVLA, Finetuned OpenVLAOFT and AgenticVLA. Studying how VLAs behave when asked to interact with objects that are not present in the scene Figure 24: Barplot sh",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:result-three-mechanism",
+      "entity": null,
+      "property": "results",
+      "value": [
+        "rest position",
+        "banana is present in the scene"
+      ],
+      "sourcePages": [
+        52
+      ],
+      "excerpt": "thanks to the use of the Self-Awareness tool. This tool ensures that the task is performed only when the banana is present in the scene; until then, it keeps the robot in the rest position. This simple yet effective mechanism boosts the model’s performance to an 85% SR, similar to the results seen in the previous benchmark. Figure 22: Image recording of AgenticVLA model ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:discussion-teleop",
+      "entity": null,
+      "property": "discussion",
+      "value": [
+        "Meta Quest 3"
+      ],
+      "sourcePages": [
+        54
+      ],
+      "excerpt": "rimental pipeline was designed with a strong emphasis on consistency and methodological rigor. A custom-built teleoperation system based on the Meta Quest 3 enabled immersive, high-frequency, and repeatable data acquisition. The use of a standardized RLDS data format ensured compatibility with modern VLA training pipelines and supported a structured and efficient data f",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:discussion-rlds",
+      "entity": null,
+      "property": "discussion",
+      "value": [
+        "RLDS"
+      ],
+      "sourcePages": [
+        54
+      ],
+      "excerpt": "built teleoperation system based on the Meta Quest 3 enabled immersive, high-frequency, and repeatable data acquisition. The use of a standardized RLDS data format ensured compatibility with modern VLA training pipelines and supported a structured and efficient data flow. The data collection process was carefully controlled. Task instructions were predefined, se",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:discussion-external",
+      "entity": null,
+      "property": "discussion",
+      "value": [
+        "controlled nature of the environment"
+      ],
+      "sourcePages": [
+        54
+      ],
+      "excerpt": "t positioning, and sensor configuration. This level of control helped minimize confusing factors and enabled a focused evaluation of system performance. However, the controlled nature of the environment also introduces natural limitations. The results presented may not directly generalize to different robot embodiments, unseen physical layouts, or more complex task domains without further adap",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:discussion-factors",
+      "entity": null,
+      "property": "discussion",
+      "value": [
+        "Mismatch between architecture and setup",
+        "Lack of contextual filtering"
+      ],
+      "sourcePages": [
+        55
+      ],
+      "excerpt": "set, these models did not achieve satisfactory performance in the proposed experimental setting. Several factors may help explain this outcome: • Mismatch between architecture and setup: Although OpenVLA-OFT supports multi-view inputs and dual-arm setups, the specific configuration of the Mercury X1 robot, combined with two camera perspectives and language-based task definitions, may have present",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:discussion-baseline",
+      "entity": null,
+      "property": "discussion",
+      "value": [
+        "baseline",
+        "architectural boundaries"
+      ],
+      "sourcePages": [
+        55
+      ],
+      "excerpt": "pulation tasks that require precise spatial reasoning. Despite these limitations, including OpenVLA in the evaluation was important for two key reasons: • It served as a baseline: Comparing the AgenticVLA system against OpenVLA highlighted the performance improvements enabled by the agentic architecture. This provided a concrete measure of how additional reasoning a",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:discussion-decision",
+      "entity": null,
+      "property": "discussion",
+      "value": [
+        "decision-making"
+      ],
+      "sourcePages": [
+        55
+      ],
+      "excerpt": "ce of OpenVLA reaffirmed the importance of integrating reactive models within broader control frameworks. VLA systems alone, while powerful, benefit substantially from structured decision-making processes to operate reliably in complex or novel environments. In summary, the OpenVLA model played a valuable role in this work, not as a definitive solution, but as a point of c",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:conclusion-agi",
+      "entity": null,
+      "property": "conclusion",
+      "value": [
+        "does not claim"
+      ],
+      "sourcePages": [
+        57
+      ],
+      "excerpt": "lowing responses to the research questions: • RQ1: Can an Agentic AI framework be combined with a Visual-LanguageAction model towards achieving AGI? While this work does not claim to advance toward AGI in any general sense, the AgenticVLA system shows that embedding a VLA model within an agentic control framework increases system flexibility, contextual awareness, and dec",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:conclusion-rq1-needs",
+      "entity": null,
+      "property": "conclusion",
+      "value": [
+        "Memory",
+        "long-horizon planning",
+        "self-adaptation"
+      ],
+      "sourcePages": [
+        57
+      ],
+      "excerpt": "ration is both feasible and beneficial, especially in cases where VLAs on their own are insufficiently robust. However, this approach still requires further development in memory, long-horizon planning, and self-adaptation to be considered a substantial step toward general intelligence. • RQ2: Can a network of AI agents improve the perception and decisionmaking ca",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:conclusion-distributed",
+      "entity": null,
+      "property": "conclusion",
+      "value": [
+        "does not constitute"
+      ],
+      "sourcePages": [
+        57
+      ],
+      "excerpt": "implemented a modular agentic system composed of multiple coordinated agents, each responsible for a distinct function such as reasoning, tool selection, and task execution. While this does not constitute a fully distributed multi-agent system across devices or embodiments, the architecture already demonstrates the value of internal agent specialization and coordination. The u",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:conclusion-communication",
+      "entity": null,
+      "property": "conclusion",
+      "value": [
+        "AutoGen"
+      ],
+      "sourcePages": [
+        57
+      ],
+      "excerpt": "titute a fully distributed multi-agent system across devices or embodiments, the architecture already demonstrates the value of internal agent specialization and coordination. The use of AutoGen enabled structured communication between agents and facilitated clear separation of roles. The results suggest that structuring control through modular, interacting agents ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:conclusion-future",
+      "entity": null,
+      "property": "conclusion",
+      "value": [
+        "inter-agent communication",
+        "dynamic resource allocation"
+      ],
+      "sourcePages": [
+        58
+      ],
+      "excerpt": "Future work should extend this architecture toward more decentralized settings, investigating inter-agent communication across physical systems, collaborative task arbitration, and dynamic resource allocation in networked environments. 5.3 Modularity and the Role of Specialized Agents One of the main contributions of this work is the de",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:conclusion-specialized",
+      "entity": null,
+      "property": "conclusion",
+      "value": [
+        "specialized VLAs",
+        "dynamically allocate resources"
+      ],
+      "sourcePages": [
+        58
+      ],
+      "excerpt": "and Future Research Directions The work presented in this thesis raises several important questions for future research: • How can multi-agent systems coordinate specialized VLAs for collaborative execution? What mechanisms are required to ensure coherence, prevent redundancy, and resolve conflicts among distributed modules? • To what extent can agentic frameworks generaliz",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:conclusion-challenges",
+      "entity": null,
+      "property": "conclusion",
+      "value": [
+        "coordinate specialized VLAs",
+        "long-term memory"
+      ],
+      "sourcePages": [
+        58
+      ],
+      "excerpt": "Challenges and Future Research Directions The work presented in this thesis raises several important questions for future research: • How can multi-agent systems coordinate specialized VLAs for collaborative execution? What mechanisms are required to ensure coherence, prevent redundancy, and resolve conflicts among distributed modules? • To what extent can agentic frameworks generaliz",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:conclusion-stateless",
+      "entity": null,
+      "property": "conclusion",
+      "value": [
+        "essentially stateless"
+      ],
+      "sourcePages": [
+        58
+      ],
+      "excerpt": "etability becomes increasingly important. • How can agentic architectures incorporate long-term memory, state persistence, or experience replay? Current implementations operate in an essentially stateless manner, limiting performance in multi-step or multi-session scenarios. 5.5 Final Remarks This thesis has shown that Agentic AI frameworks can partially compensate for the limit",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:conclusion-reactive",
+      "entity": null,
+      "property": "conclusion",
+      "value": [
+        "limitations of reactive VLA models"
+      ],
+      "sourcePages": [
+        58
+      ],
+      "excerpt": "lly stateless manner, limiting performance in multi-step or multi-session scenarios. 5.5 Final Remarks This thesis has shown that Agentic AI frameworks can partially compensate for the limitations of reactive VLA models, particularly by improving instruction interpretation and decision control. The proposed AgenticVLA architecture represents a step toward more modular, context-aware robotic ",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:refs-count",
+      "entity": null,
+      "property": "references",
+      "value": [
+        "[59]"
+      ],
+      "sourcePages": [
+        66
+      ],
+      "excerpt": "emma 3: A family of lightweight, state-of-the-art open models,” https://deepmind.google/models/gemma/gemma-3/, Google DeepMind, 2025, accessed: 2025-06-14. [59] S. Karamcheti, S. Nair, A. Balakrishna, P. Liang, T. Kollar, and D. Sadigh, “Prismatic vlms: Investigating the design space of visually-conditioned language models,” 2024. [Online]. Available: https://",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:refs-openvla-year",
+      "entity": null,
+      "property": "references",
+      "value": [
+        "2024",
+        "2406.09246"
+      ],
+      "sourcePages": [
+        60
+      ],
+      "excerpt": "References [1] L. Bariah and M. Debbah, “Ai embodiment through 6g: Shaping the future of agi,” IEEE Wireless Communications, vol. 31, no. 5, pp. 174–181, 2024. [2] O. M. Team, D. Ghosh, H. Walke, K. Pertsch, K. Black, O. Mees, S. Dasari, J. Hejna, T. Kreiman, C. Xu, J. Luo, Y. L. Tan, L. Y. Chen, P. Sanketi, Q. Vuong, T. Xiao, D. Sadigh, C. Finn, and S. Levine",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:refs-autogen",
+      "entity": null,
+      "property": "references",
+      "value": [
+        "Autogen: Enabling next-gen llm applications"
+      ],
+      "sourcePages": [
+        62
+      ],
+      "excerpt": "“Autogen: Enabling next-gen llm applications via multi-agent conversation,” 2023. [Online]. Available: https://arxiv.org/abs/2308.08155 [14] Siemens AG and Bischoff, Martin, “ROS#: A set of open source software libraries and tools in C# for communicating with RO",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:refs-autogen-id",
+      "entity": null,
+      "property": "references",
+      "value": [
+        "2308.08155"
+      ],
+      "sourcePages": [
+        62
+      ],
+      "excerpt": "“Autogen: Enabling next-gen llm applications via multi-agent conversation,” 2023. [Online]. Available: https://arxiv.org/abs/2308.08155 [14] Siemens AG and Bischoff, Martin, “ROS#: A set of open source software libraries and tools in C# for communicating with ROS from .NET applications,” https://github.com/siemens/ros-sharp, Siemens AG, 2017–",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:refs-oft",
+      "entity": null,
+      "property": "references",
+      "value": [
+        "Fine-tuning vision-language-action models"
+      ],
+      "sourcePages": [
+        61
+      ],
+      "excerpt": "2– 18 936, 2025. [9] G. R. Team, S. Abeyruwan, J. Ainslie, J.-B. Alayrac, M. G. Arenas, T. Armstrong, A. Balakrishna, R. Baruch, M. Bauza, M. Blokzijl et al., “Gemini robotics: Bringing ai into the physical world,” arXiv preprint arXiv:2503.20020, 2025. [10] E. Robotics, “Mercury x1,” 2023, accessed: 2025-04-07. [Online]. Available: https://www.elephantrobotics.com/en/mercury-x1-en/ [11] M. P. Inc.",
+      "confidence": "direct"
+    },
+    {
+      "id": "fact:refs-gemma",
+      "entity": null,
+      "property": "references",
+      "value": [
+        "Google DeepMind"
+      ],
+      "sourcePages": [
+        66
+      ],
+      "excerpt": "[58] Google DeepMind, “Gemma 3: A family of lightweight, state-of-the-art open models,” https://deepmind.google/models/gemma/gemma-3/, Google DeepMind, 2025, accessed: 2025-06-14. [59] S. Karamcheti, S. Nair, A. Balakrishna, P. Liang, T. ",
+      "confidence": "direct"
+    }
+  ]
+}

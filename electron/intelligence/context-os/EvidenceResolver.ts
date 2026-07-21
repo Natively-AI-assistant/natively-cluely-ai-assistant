@@ -54,6 +54,7 @@ import {
   deriveEvidenceSufficiency,
   MIN_ANSWER_CONFIDENCE,
   selectSmallestSufficientEvidence,
+  supportsEntity,
   type EvidenceSufficiency,
 } from './evidenceSufficiency';
 import {
@@ -61,6 +62,7 @@ import {
   isOkfHybridRetrievalEnabled,
   isRagConfidenceGateEnabled,
   isRagLocalRerankEnabled,
+  isRagSpeculativeRerankEnabled,
 } from '../intelligenceFlags';
 
 // ── Public types ─────────────────────────────────────────────────────────────
@@ -254,6 +256,22 @@ function salientDistinctiveTerms(distinctive: string[], cardBodies: string[]): s
   return sorted.filter((t) => df.get(t)! <= cutoffDf);
 }
 
+/**
+ * A broad requested-property category is not enough when the question names a
+ * specific field within it. For example, generic mentions of a game controller,
+ * a VR controller, or an agent that "acts as a controller" cannot prove a
+ * question asking for a robot's "main control system". Keep the general
+ * vocabulary check in requestedProperty.ts for ordinary controller questions,
+ * but require this exact field label when the user explicitly asks for it.
+ */
+function matchesRequestedField(question: string, text: string, requestedProperty: RequestedProperty): boolean {
+  if (requestedProperty !== 'processor_or_controller') return true;
+  if (/\b(?:main\s+|primary\s+)?control\s+system\b/i.test(question)) {
+    return /\bcontrol\s+system\b/i.test(text);
+  }
+  return true;
+}
+
 export class EvidenceResolver {
   constructor(private readonly deps: EvidenceResolverDeps) {}
 
@@ -370,7 +388,8 @@ export class EvidenceResolver {
     // For a property-bearing question, require at least one card that
     // actually PROVES the requested property (never trust score alone).
     const items: EvidenceItem[] = scoredAcrossFiles.map((s, i) => {
-      const canProve = textCanProveProperty(s.card.body, requestedProperty);
+      const canProve = textCanProveProperty(s.card.body, requestedProperty)
+        && matchesRequestedField(question, s.card.body, requestedProperty);
       return {
         evidenceId: `${turnId}:okf:${i}`,
         sourceKind: 'okf_document_card' as const,
@@ -432,16 +451,34 @@ export class EvidenceResolver {
         // card. Requiring merely ANY distinctive term let a high-frequency filler
         // word ("working" in "what working voltage…") spuriously retain a topical
         // parent card that never contained the real answer word ("voltage"). The
-        // answer then lives only in hybrid's section-routed chunk. Checking the
-        // whole selected set (not just the top card) keeps a case where the
-        // answer-bearing card ranked 2nd behind a topical parent.
+        // answer then lives only in hybrid's section-routed chunk.
         //
         // Match on WHOLE-WORD membership, not substring: a substring `includes`
         // would count "storage" as covering the distinctive term "age", spuriously
         // retaining a topical card. Tokenize the card text into a word set instead.
         const salient = salientDistinctiveTerms(distinctive, corpusBodies);
-        const cardWords = new Set(items.flatMap((it) => contentTokens(it.text)));
-        const covered = salient.some((term) => cardWords.has(term));
+        // Grounding-campaign fix (2026-07-17, THESIS-129/131): checking the
+        // POOLED set of selected cards (any card anywhere carries the salient
+        // term) let a card about a DIFFERENT entity satisfy the gate merely by
+        // sharing a word — e.g. "What model is the visual backbone for the
+        // Self-Awareness Tool?" (entity: "Self-Awareness Tool", salient term:
+        // "backbone") was satisfied because an unrelated "OpenVLA" card
+        // mentions "backbone" (OpenVLA's OWN backbone, not the Self-Awareness
+        // Tool's), so the resolver answered from cards that never actually
+        // named the Self-Awareness Tool's architecture at all. When the
+        // question names a target entity, require the SAME card to carry both
+        // the salient term AND the entity — not just any card in the pool for
+        // each independently. Falls back to the prior pooled check when the
+        // question names no entity (unaffected — matches iteration 5's
+        // "working voltage" tests, which don't exercise this branch).
+        const entities = classification.targetEntities || [];
+        const covered = entities.length > 0
+          ? items.some((it) => {
+              const words = new Set(contentTokens(it.text));
+              if (!salient.some((term) => words.has(term))) return false;
+              return entities.some((entity) => supportsEntity(it, entity));
+            })
+          : salient.some((term) => items.some((it) => contentTokens(it.text).includes(term)));
         if (!covered) return null;
       }
     }
@@ -468,7 +505,14 @@ export class EvidenceResolver {
     const { question, turnId, requestedProperty, transcript, followUpReferentHint, relaxed } = request;
 
     let result: Awaited<ReturnType<HybridRetrieverLike['retrieveHybrid']>>;
+    const h4StageTrace = process.env.NATIVELY_E2E === '1'
+      && process.env.NATIVELY_H4_STAGE_TRACE === '1';
+    const h4StartedAt = Date.now();
+    const markH4ResolverStage = (stage: string, details: Record<string, unknown> = {}) => {
+      if (h4StageTrace) console.log('[TRACE:H4-RESOLVER]', JSON.stringify({ stage, atMs: Date.now() - h4StartedAt, ...details }));
+    };
     try {
+      markH4ResolverStage('hybrid_enter', { fileCount: files.length, requestedProperty });
       result = await this.deps.hybridRetriever.retrieveHybrid(mode, files, {
         query: question,
         transcript,
@@ -476,11 +520,17 @@ export class EvidenceResolver {
         // forceDocumentGrounding is true — pass undefined so it self-selects.
         tokenBudget: relaxed ? 5200 : undefined,
         topK: relaxed ? 24 : undefined,
-        allowRerank: isRagLocalRerankEnabled(),
+        // The governed manual-chat path has a fixed first-useful deadline. It
+        // only opts into the optional local reranker when the explicit
+        // speculative rollout gate is on; ragLocalRerank merely permits the
+        // model, while ragSpeculativeRerank permits this live path to await it.
+        allowRerank: isRagLocalRerankEnabled() && isRagSpeculativeRerankEnabled(),
         forceDocumentGrounding: true,
         followUpReferentHint,
       });
-    } catch {
+      markH4ResolverStage('hybrid_exit', { chunkCount: result.chunks?.length ?? 0, usedFallback: result.usedFallback });
+    } catch (error: any) {
+      markH4ResolverStage('hybrid_error', { message: error?.message || String(error) });
       return {
         pack: this.emptyPack(request, 'insufficient'),
         strategy: 'insufficient',
@@ -503,7 +553,8 @@ export class EvidenceResolver {
     }
 
     const items: EvidenceItem[] = result.chunks.map((c, i) => {
-      const canProve = textCanProveProperty(c.text, requestedProperty);
+      const canProve = textCanProveProperty(c.text, requestedProperty)
+        && matchesRequestedField(question, c.text, requestedProperty);
       return {
         evidenceId: `${turnId}:hybrid:${i}`,
         sourceKind: 'mode_reference_chunk' as const,

@@ -536,6 +536,7 @@ export interface ElectronAPI {
   profileSetMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
   profileDelete: () => Promise<{ success: boolean; error?: string }>
   profileGetProfile: () => Promise<any>
+  profileGetCompanyDossier: () => Promise<any | null>
   profileSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; filePath?: string; error?: string }>
 
   // JD & Research API
@@ -543,6 +544,7 @@ export interface ElectronAPI {
   profileDeleteJD: () => Promise<{ success: boolean; error?: string }>
   profileResearchCompany: (companyName: string) => Promise<{ success: boolean; dossier?: any; error?: string; searchQuotaExhausted?: boolean }>
   profileGenerateNegotiation: (force?: boolean) => Promise<{ success: boolean; script?: any; error?: string }>
+  profileGenerateCoverLetter: (force?: boolean) => Promise<{ success: boolean; letter?: any; error?: string }>
   profileGetNegotiationState: () => Promise<{ success: boolean; state?: any; isActive?: boolean; error?: string }>
   profileResetNegotiation: () => Promise<{ success: boolean; error?: string }>
 
@@ -570,6 +572,8 @@ export interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+  getCodeVerification: () => Promise<boolean>;
+  setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;
   getMeetingRetention: () => Promise<'forever' | '7d' | '30d' | 'never'>;
   setMeetingRetention: (retention: 'forever' | '7d' | '30d' | 'never') => Promise<{ success: boolean; error?: string }>;
   onMeetingRetentionChanged: (callback: (retention: 'forever' | '7d' | '30d' | 'never') => void) => () => void;

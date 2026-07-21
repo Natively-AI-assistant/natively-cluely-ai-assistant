@@ -549,7 +549,19 @@ const COMMON_CODING_PROBLEM_PATTERNS = [
   /\banagram\b|\bsubarray\b|\bsubstring\b/i,
   /\bmerge (?:two )?(?:sorted )?(?:arrays?|lists?)\b/i,
   /\b(?:detect|find)\b.*\bcycle\b|\blinked list cycle\b/i,
-  /\blevel order\b|\bin\s?order\b|\bpre\s?order\b|\bpost\s?order\b|\btraversal\b/i,
+  // Grounding-campaign fix (2026-07-17): bare "in order"/"level order"/etc.
+  // false-positived on ordinary English ("what companies have you worked at,
+  // IN ORDER?", "list your certifications in order of date") — a confirmed
+  // live incident where a résumé question got misrouted to
+  // coding_question_answer (which forbids the resume context layer per spec
+  // §8.3), so the model got zero evidence for a "coding" answer type and
+  // fabricated a fictional employment history instead of grounding correctly.
+  // "traversal" alone is unambiguous DSA vocabulary and stays a bare match;
+  // the order-word variants now require an explicit tree/traversal-adjacent
+  // co-occurrence (checked via lookahead so word order in the sentence
+  // doesn't matter), mirroring the class/method narrowing above in this file.
+  /\btraversal\b/i,
+  /(?=.*\b(?:tree|node|binary|bst)\b)(?=.*\b(?:level|in|pre|post)\s?order\b)/i,
   /\bgcd\b|\blcm\b|\bgreatest common divisor\b/i,
   /\bbubble sort\b|\bquick\s?sort\b|\bmerge sort\b|\binsertion sort\b/i,
 ];
@@ -1078,6 +1090,28 @@ const NEGOTIATION_ADVICE_CUE_RE = /\b(how\s+(should|do|would|can)\s+i\s+(negotia
 const hasJdReferenceCue = (text: string): boolean => JD_REFERENCE_CUE_RE.test(text);
 /** Does the question claim first-person candidate ownership? */
 const hasCandidateOwnershipCue = (text: string): boolean => CANDIDATE_OWNERSHIP_CUE_RE.test(text);
+
+// Grounding-campaign fix (2026-07-17): a bare comp keyword ("compensation",
+// "salary") in a question that ALSO frames the JD as the source ("what's the
+// compensation range for THIS ROLE?") is a factual JD lookup — planAnswer's
+// own resolveJdSourceType correctly routes it to jd_fact_answer. But
+// IntelligenceEngine.ts's live WTA grounding gate uses a separate, cruder
+// classifier (transcriptQuestionExtractor.classifyType) that has no JD-frame
+// awareness and routes ANY comp keyword straight to 'negotiation' —
+// excluding ALL candidate-profile/JD grounding for that turn, including a
+// pure "what does the document literally state" lookup. Confirmed live
+// (test/harness case C4-002): the model then falsely claimed the JD "does
+// not specify the company name" and "does not state a salary range" when
+// both were literally present in the real JD text.
+// This helper reuses the SAME jd-reference-cue + negotiation-advice-cue
+// signals resolveJdSourceType already relies on, without duplicating its
+// full JD-shape resolution logic — narrowly answering just the one question
+// IntelligenceEngine.ts's gate needs: "is this JD-framed and NOT asking for
+// negotiation advice/strategy?" A true negotiation-coaching ask ("how should
+// I negotiate my salary", "what should I counter with") still routes through
+// the existing negotiation channel untouched.
+export const isJdFactualLookupNotNegotiationAdvice = (text: string): boolean =>
+  hasJdReferenceCue(text) && !NEGOTIATION_ADVICE_CUE_RE.test(text);
 // A PEOPLE / leadership / conflict OBJECT after a lead/manage/handle verb marks a behavioral
 // STORY (not a skill probe). This ONE source is interpolated into the behavioral matcher AND
 // its two skill-side guards so the guard is always a superset of the matcher and the three lists

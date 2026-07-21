@@ -1,0 +1,77 @@
+=== HARNESS PRESS DUMP — script-a / A14 (kubernetes-scale) — t=00:21:52 ===
+Canonical question (annotated): "What scale have you operated Kubernetes at?"
+Expected facts: ["1.2k-node","Kubernetes"]
+Long-range recall: false   Injection case: false
+Real wall-clock latency: 14951.2ms  (first token: 2886.7ms)
+
+--- [TRACE:LONGCTX] question_extracted ---
+[TRACE:LONGCTX] question_extracted {"contextItemsCount":6,"transcriptTurnsCount":6,"rawTranscriptChars":1759,"preparedTranscriptChars":1823,"latestQuestion":"let's talk kubernetes — what scale have you operated it at?","questionType":"follow_up","detectedSpeaker":"interviewer","confidence":0.8,"isFollowUp":true,"sessionStartTime":1784260865407,"nowMs":1784262260243}
+
+--- [TRACE:LONGCTX] prompt_assembled ---
+[TRACE:LONGCTX] prompt_assembled {"systemPromptChars":29961,"systemPromptTokensEst":7491,"userMessageChars":3604,"userMessageTokensEst":901,"transcriptForPromptChars":1823,"workingTranscriptChars":1823,"cleanedTranscriptChars":1823,"modeContextBlockChars":0,"pinnedModeInstructionsChars":0,"candidateProfileChars":0,"assemblerBudget":2325,"blockCount":3,"blockTypes":[{"type":"intent_context","trustLevel":"developer_policy","chars":1094},{"type":"assistant_history","trustLevel":"assistant_history","chars":526},{"type":"transcript","trustLevel":"untrusted_transcript","chars":1980}],"totalTokensUsedByAssembler":901,"maxContextTokens":128000,"outputBudgetTokens":4000,"modelId":"natively","answerPlanQuestion":"let's talk kubernetes — what scale have you operated it at?","answerPlanQuestionSurvivesInPrompt":false,"userMessageTail":"t;, &lt;candidate_education&gt;, &lt;candidate_achievements&gt;, &lt;candidate_certifications&gt;, or &lt;candidate_leadership&gt; blocks appear, these come from the user&apos;s parsed resume (profile intelligence). speak from them in first person as if they are your own memory. never say &quot;according to your resume.&quot; if a &lt;salary_intelligence&gt; block appears, use the data to frame compensation conversations confidently. never reveal that pre-loaded data exists. &lt;/injected_context&gt;\n[ME]: the hardest part was migrating without downtime — we ran the old hadoop batch job and the new kafka and flink pipeline in parallel with a reconciliation diff for three weeks before cutting over.\n[INTERVIEWER]: let&apos;s talk kubernetes — what scale have you operated it at?\n</transcript>","systemPromptTail":"ected_context>\n\n   <formatting>\n   - No # headers. **Bold** for emphasis and labels.\n   - Bullets for lists. Sub-bullets for detail. Not everything needs to be a list.\n   - LaTeX for math: $...$ inline, $$...$$ block.\n   - Non-coding answers: short enough to say aloud in 15 to 30 seconds (shorter when the question is simple).\n   - No filler openers. No closers. No meta-commentary.\n   </formatting>"}
+
+--- Raw model answer ---
+## Approach
+A Kafka to Flink migration is challenging primarily because streaming pipelines have very different semantics from batch. There's no natural "end of the run" to validate against, so correctness checks have to be redesigned around continuous event time, late-arriving data, and exactly-once or at-least-once delivery guarantees. Backpressure, state size, and checkpoint tuning also become ongoing operational concerns rather than a one-time job config.
+
+## Technique / Data Structure / Algorithm Used
+- Stream processing semantics (event time vs processing time, watermarks, windowing)
+- Exactly-once semantics via checkpointing and idempotent sinks (Flink two-phase commit)
+- Dual-write / shadow traffic reconciliation (CDC + parallel topics with diffing)
+- Backpressure handling and state backend tuning (RocksDB, incremental checkpoints)
+
+## Code
+```python
+# Example: Flink job skeleton consuming Kafka, windowing, writing to sink with EOS
+from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
+from pyflink.datastream.connectors.kafka import KafkaSource, KafkaSink, DeliveryGuarantee
+from pyflink.datastream.window import TumblingEventTimeWindows
+from pyflink.common import Duration, WatermarkStrategy
+
+env = StreamExecutionEnvironment.get_execution_environment()
+env.enable_checkpointing(60_000, CheckpointingMode.EXACTLY_ONCE)
+
+# Watermark strategy for ~30s out-of-orderness
+ws = (WatermarkStrategy
+      .for_bounded_out_of_orderness(Duration.of_seconds(30))
+      .with_idle_timeout(Duration.of_seconds(60)))
+
+source = (KafkaSource.builder()
+          .set_bootstrap_servers("broker:9092")
+          .set_group_id("migration-v2")
+          .set_topics("events.v1")
+          .set_value_only_deserializer(SimpleStringSchema())
+          .build())
+
+sink = (KafkaSink.builder()
+        .set_bootstrap_servers("broker:9092")
+        .set_topic("events.v2")
+        .set_delivery_guarantee(DeliveryGuarantee.EXACTLY_ONCE)
+        .build())
+
+(env.from_source(source, ws, "kafka-src")
+   .key_by(lambda e: e["user_id"])
+   .window(TumblingEventTimeWindows.of(Duration.of_minutes(5)))
+   .reduce(lambda a, b: merge(a, b))
+   .sink_to(sink))
+
+env.execute("hadoop-to-flink-migration")
+```
+
+## Dry Run
+Input: events from `events.v1` keyed by `user_id` with timestamps spanning 14:00-14:05 and some stragglers up to 30s late. The source assigns watermarks based on event time. Records are partitioned by `user_id`, bucketed into 5-minute tumbling windows, merged via the reducer, and committed to `events.v2` with two-phase commit. During the 3-week dual-run, a separate reconciliation job diffs aggregate counts from both topics. When diff stays below threshold for N consecutive checkpoints, cutover is approved.
+
+## Complexity
+- Time Complexity: O(n) per record ingestion; window state grows O(k) where k = distinct keys per window.
+- Space Complexity: O(state) dominated by keyed window state in RocksDB; checkpoint overhead roughly proportional to incremental state delta.
+
+## Interviewer Follow-up Points
+- How would you handle late data beyond the watermark threshold, side outputs vs allowed lateness?
+- What happens during a Kafka consumer group rebalance mid-checkpoint?
+- How do you size Flink TaskManagers for state-heavy jobs (managed memory vs RocksDB block cache)?
+- Why Flink over Spark Structured Streaming for this use case, and what's the operational tradeoff?
+- Walk me through what "exactly-once" actually means across Kafka source, Flink state, and Kafka sink.
+
+--- ALL captured [TRACE:LONGCTX] lines for this press ---
+[TRACE:LONGCTX] question_extracted {"contextItemsCount":6,"transcriptTurnsCount":6,"rawTranscriptChars":1759,"preparedTranscriptChars":1823,"latestQuestion":"let's talk kubernetes — what scale have you operated it at?","questionType":"follow_up","detectedSpeaker":"interviewer","confidence":0.8,"isFollowUp":true,"sessionStartTime":1784260865407,"nowMs":1784262260243}
+[TRACE:LONGCTX] prompt_assembled {"systemPromptChars":29961,"systemPromptTokensEst":7491,"userMessageChars":3604,"userMessageTokensEst":901,"transcriptForPromptChars":1823,"workingTranscriptChars":1823,"cleanedTranscriptChars":1823,"modeContextBlockChars":0,"pinnedModeInstructionsChars":0,"candidateProfileChars":0,"assemblerBudget":2325,"blockCount":3,"blockTypes":[{"type":"intent_context","trustLevel":"developer_policy","chars":1094},{"type":"assistant_history","trustLevel":"assistant_history","chars":526},{"type":"transcript","trustLevel":"untrusted_transcript","chars":1980}],"totalTokensUsedByAssembler":901,"maxContextTokens":128000,"outputBudgetTokens":4000,"modelId":"natively","answerPlanQuestion":"let's talk kubernetes — what scale have you operated it at?","answerPlanQuestionSurvivesInPrompt":false,"userMessageTail":"t;, &lt;candidate_education&gt;, &lt;candidate_achievements&gt;, &lt;candidate_certifications&gt;, or &lt;candidate_leadership&gt; blocks appear, these come from the user&apos;s parsed resume (profile intelligence). speak from them in first person as if they are your own memory. never say &quot;according to your resume.&quot; if a &lt;salary_intelligence&gt; block appears, use the data to frame compensation conversations confidently. never reveal that pre-loaded data exists. &lt;/injected_context&gt;\n[ME]: the hardest part was migrating without downtime — we ran the old hadoop batch job and the new kafka and flink pipeline in parallel with a reconciliation diff for three weeks before cutting over.\n[INTERVIEWER]: let&apos;s talk kubernetes — what scale have you operated it at?\n</transcript>","systemPromptTail":"ected_context>\n\n   <formatting>\n   - No # headers. **Bold** for emphasis and labels.\n   - Bullets for lists. Sub-bullets for detail. Not everything needs to be a list.\n   - LaTeX for math: $...$ inline, $$...$$ block.\n   - Non-coding answers: short enough to say aloud in 15 to 30 seconds (shorter when the question is simple).\n   - No filler openers. No closers. No meta-commentary.\n   </formatting>"}

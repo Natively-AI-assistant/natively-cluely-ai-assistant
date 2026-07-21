@@ -155,6 +155,17 @@ test('QuestionClassifier: an interrogative-subject category acronym is SOFT, not
   assert.deepEqual(cRos.softEntities, []);
 });
 
+test('QuestionClassifier: uppercase technical modifiers are soft, while definitional acronyms stay hard', async () => {
+  const { classifyQuestion } = await loadModule('services/knowledge/QuestionClassifier.js');
+  const usb = classifyQuestion('What camera model was used for the USB camera views?');
+  assert.ok(usb.softEntities.includes('USB'), 'USB modifies the queried camera noun and must not constrain evidence selection');
+  assert.ok(!usb.targetEntities.includes('USB'), 'USB modifier must not seed an entity-only evidence slot');
+
+  const ros = classifyQuestion('What is ROS?');
+  assert.ok(ros.targetEntities.includes('ROS'), 'a definitional acronym remains a hard entity lookup');
+  assert.ok(!ros.softEntities.includes('ROS'));
+});
+
 test('OkfRetriever: returns relevant cards for all 19 benchmark questions', async () => {
   const pack = await buildPack();
   const { classifyQuestion } = await loadModule('services/knowledge/QuestionClassifier.js');

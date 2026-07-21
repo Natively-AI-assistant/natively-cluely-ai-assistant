@@ -13,9 +13,10 @@ import type { TurnContextContract } from './types';
 import type { EvidencePack } from './evidencePack';
 import type { TurnSourceDecision } from '../../llm/turnSourceDecision';
 import type { FinalPromptEvidenceValidation } from './finalPromptValidation';
+import type { RenderedEvidenceManifest } from './renderedEvidenceManifest';
 import { parseModeSnippets } from './EvidenceOrchestrator';
 import { textCanProveProperty } from './requestedProperty';
-import { renderContractForPrompt, renderEvidenceUseRule, renderEvidencePackForPrompt } from './promptRenderer';
+import { renderContractForPrompt, renderEvidenceUseRule, renderEvidencePackWithManifest } from './promptRenderer';
 
 export interface ContextOsModeSnapshot {
   modeId: string | null;
@@ -38,6 +39,8 @@ export interface ContextOsGenerationContext {
    * fails closed at the last provider boundary, not at retrieval time.
    */
   turnSourceDecision?: TurnSourceDecision | null;
+  /** Manifest emitted by the same operation that renders factual XML. */
+  renderedEvidenceManifest?: RenderedEvidenceManifest;
   /** Written only at the final prompt boundary; reused by E2E/audit callers. */
   finalPromptValidation?: FinalPromptEvidenceValidation;
 }
@@ -112,9 +115,11 @@ export function buildDocumentEvidencePackFromBlock(
  */
 export function renderGoverningFactualBlock(ctx: ContextOsGenerationContext): string {
   if (!ctx.evidencePack || ctx.evidencePack.items.length === 0) return '';
+  const rendered = renderEvidencePackWithManifest(ctx.evidencePack);
+  ctx.renderedEvidenceManifest = rendered.manifest;
   return [
     renderContractForPrompt(ctx.contract),
     renderEvidenceUseRule(ctx.contract, ctx.evidencePack.answerPolicy),
-    renderEvidencePackForPrompt(ctx.evidencePack),
+    rendered.prompt,
   ].join('\n\n');
 }

@@ -55,6 +55,33 @@ export function isLeakedSchemaStub(text: string): boolean {
   return false;
 }
 
+/** The exact provider-transport-error message WhatToAnswerLLM.generateStream's
+ *  catch block yields when the stream itself fails (expired key, 429 rate
+ *  limit, billing) — see WhatToAnswerLLM.ts's `isProviderFailure` branch. This
+ *  is a deliberately user-facing, actionable error string, NOT a real answer
+ *  to the question that was asked. Campaign 2 (longsession, 2026-07-17) —
+ *  live-proven on a real 30-minute benchmark run: when a transient provider
+ *  error fires mid-session, the caller (IntelligenceEngine.runWhatShouldISay)
+ *  had no way to recognize this string and persisted it into session history
+ *  via the default 'store_conversational_only' write policy — the SAME
+ *  precedent the leaked-schema-stub guard above already exists for. On a
+ *  LATER press, the poisoned `[ASSISTANT]: I couldn't reach the AI
+ *  provider...` turn re-enters the prompt as if it were a legitimate prior
+ *  answer, and the model — reasonably, given what it was shown — treats the
+ *  session as mid error-recovery instead of answering the fresh question
+ *  (observed: "That context wasn't part of a meeting transcript, so I don't
+ *  have a clarifying question to respond to. What would you like help with?"
+ *  on an unrelated later press, traces2/harness-script-a-press-A12.txt).
+ *  Matching is exact (the string is a fixed literal, not model-generated
+ *  prose), so this can never false-positive on a real answer that happens to
+ *  discuss API keys or rate limits. */
+const PROVIDER_TRANSPORT_ERROR_TEXT =
+  "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again.";
+export function isProviderTransportError(text: string): boolean {
+  if (!text) return false;
+  return text.trim() === PROVIDER_TRANSPORT_ERROR_TEXT;
+}
+
 /** A leading META-COMMENTARY preamble the model sometimes emits before the real
  *  answer — narrating the task instead of just answering. Observed live (E2E
  *  campaign): "No identity question was actually asked. If I'm asking for a
