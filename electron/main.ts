@@ -1020,10 +1020,10 @@ export class AppState {
     const sttProvider = CredentialsManager.getInstance().getSttProvider();
     const sttLanguage = CredentialsManager.getInstance().getSttLanguage();
 
-    // 'none' means the user has explicitly disabled STT (no provider selected).
-    // Return null so the pipeline skips STT without falling back to Google.
-    if (sttProvider === 'none') {
-      console.log(`[Main] STT provider is 'none' — audio capture will proceed but transcription is disabled.`);
+    // Skip STT when disabled or missing required credentials. Audio capture
+    // continues; only transcription is omitted so the rest of the app works.
+    if (!CredentialsManager.getInstance().isSttConfigured()) {
+      console.log(`[Main] STT not configured (provider: ${sttProvider}) — audio capture will proceed but transcription is disabled.`);
       return null;
     }
 
@@ -1637,7 +1637,9 @@ export class AppState {
       // during constructor) doesn't break the entire pipeline AND the user gets
       // a specific UI signal instead of the generic "no transcript" experience.
       const { CredentialsManager } = require('./services/CredentialsManager');
-      const sttProv = CredentialsManager.getInstance().getSttProvider();
+      const cm = CredentialsManager.getInstance();
+      const sttProv = cm.getSttProvider();
+      const sttConfigured = cm.isSttConfigured();
 
       if (!this.googleSTT) {
         console.log(`[Main] Creating interviewer STT provider: ${sttProv}`);
@@ -1647,7 +1649,7 @@ export class AppState {
           console.error(`[Main] Interviewer STT init failed (${sttProv}):`, sttErr);
           this.googleSTT = null;
         }
-        if (!this.googleSTT) {
+        if (!this.googleSTT && sttConfigured) {
           this.broadcast('audio-capture-failed', {
             channel: 'system',
             message: `Speech-to-text provider "${sttProv}" failed to initialize for the interviewer channel. Check your API key and credentials in Settings.`,
@@ -1667,7 +1669,7 @@ export class AppState {
           console.error(`[Main] User STT init failed (${sttProv}):`, sttErr);
           this.googleSTT_User = null;
         }
-        if (!this.googleSTT_User) {
+        if (!this.googleSTT_User && sttConfigured) {
           this.broadcast('audio-capture-failed', {
             channel: 'mic',
             message: `Speech-to-text provider "${sttProv}" failed to initialize for the microphone channel. Check your API key and credentials in Settings.`,
@@ -1710,6 +1712,11 @@ export class AppState {
    * prevent duplicate construction.
    */
   public prewarmSttProviders(): void {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    if (!CredentialsManager.getInstance().isSttConfigured()) {
+      console.log('[Main] STT not configured — skipping pre-warm.');
+      return;
+    }
     if (this.googleSTT && this.googleSTT_User) return;
     try {
       if (!this.googleSTT) {
@@ -2177,8 +2184,9 @@ export class AppState {
 
     // Broadcast the new STT config state to all windows so they can update banners / warnings
     const { CredentialsManager: CM } = require('./services/CredentialsManager');
-    const newProvider = CM.getInstance().getSttProvider();
-    this.broadcast('stt-config-changed', { configured: newProvider !== 'none', provider: newProvider });
+    const cm = CM.getInstance();
+    const newProvider = cm.getSttProvider();
+    this.broadcast('stt-config-changed', { configured: cm.isSttConfigured(), provider: newProvider });
   }
 
   /**

@@ -193,7 +193,7 @@ const getSttSummary = (
     notConfigured: boolean
 ): { label: string; tone: 'ok' | 'warn' | 'error'; detail: string } => {
     if (notConfigured) {
-        return { label: 'STT not configured', tone: 'error', detail: 'Open Audio settings to select a provider' };
+        return { label: 'STT disabled', tone: 'warn', detail: 'Transcription off — configure a provider in Settings → Audio' };
     }
     if (userStatus === 'failed' || interviewerStatus === 'failed') {
         return { label: 'STT needs attention', tone: 'error', detail: `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system` };
@@ -700,12 +700,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }, []);
 
     // PR #173: STT not configured warning — shown when provider is 'none' during a meeting
-    const [sttNotConfigured, setSttNotConfigured] = useState(false);
+    const [sttNotConfigured, setSttNotConfigured] = useState(true);
     useEffect(() => {
         let mounted = true;
         // Check current STT config on mount
-        window.electronAPI?.getSttProvider?.().then((provider: string) => {
-            if (mounted) setSttNotConfigured(provider === 'none');
+        window.electronAPI?.isSttConfigured?.().then((configured: boolean) => {
+            if (mounted) setSttNotConfigured(!configured);
         }).catch(() => { });
 
         // Listen for live config changes (e.g. user saves a key in Settings while meeting is active)
@@ -1874,7 +1874,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
             if (!question && currentAttachments.length === 0) {
                 // No voice input and no image — show real STT error if available
-                if (sttUserStatus === 'failed' && sttUserError) {
+                if (sttNotConfigured) {
+                    setMessages(prev => [...prev, {
+                        id: Date.now().toString(),
+                        role: 'system',
+                        text: '⚠️ Speech-to-text is not configured. Open Settings → Audio to enable voice input, or attach a screenshot instead.'
+                    }]);
+                } else if (sttUserStatus === 'failed' && sttUserError) {
                     setMessages(prev => [...prev, {
                         id: Date.now().toString(),
                         role: 'system',
@@ -2991,7 +2997,16 @@ Provide only the answer, nothing else.`;
             if (!stealthAutoEngageOkRef.current) return;
             const target = e.target as HTMLElement | null;
             if (!target?.closest?.('[data-stealth-engage="true"]')) return;
-            window.electronAPI.stealthTapStart().catch(() => {});
+            window.electronAPI.stealthTapStart()
+                .then((started) => {
+                    // If tap failed to engage, ensure the input can receive normal DOM focus.
+                    if (!started && textInputRef.current && document.activeElement !== textInputRef.current) {
+                        textInputRef.current.focus();
+                    }
+                })
+                .catch(() => {
+                    textInputRef.current?.focus();
+                });
         };
 
         document.addEventListener('mousedown', onMouseDown, true); // capture phase
@@ -3036,10 +3051,11 @@ Provide only the answer, nothing else.`;
         // and compose CJK characters normally.
         if (!stealthAutoEngageOkRef.current) return;
         // Only block DOM focus when CGEventTap is available on this platform.
-        // On Windows, CGEventTap is never available so this guard exits early
-        // and allows normal input focus. On macOS, the tap is available so we
-        // block focus to prevent the panel from becoming key window.
         if (!isCgEventTapAvailableRef.current) return;
+        // Only block focus once the stealth tap is actually engaged. If tap
+        // failed to start (missing Accessibility permission, etc.), fall back
+        // to normal DOM typing instead of trapping the user in a read-only field.
+        if (!stealthTapActiveRef.current) return;
         e.preventDefault();
         // Don't blur an already-focused element — that itself fires events.
         if (document.activeElement === textInputRef.current) {

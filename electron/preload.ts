@@ -87,6 +87,7 @@ interface ElectronAPI {
   localWhisperPreload: (modelId?: string) => Promise<{ success: boolean; reason?: string; error?: string }>
   localWhisperGetHardware: () => Promise<{ arch: string; platform: string; cpuModel: string; isAppleSilicon: boolean; totalRamGb: number; tier: string; recommendation: string; recommendedModel: string }>
   getSttProvider: () => Promise<string>
+  isSttConfigured: () => Promise<boolean>
   setGroqSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setOpenAiSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setOpenAiSttBaseUrl: (url: string) => Promise<{ success: boolean; error?: string }>
@@ -653,6 +654,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // STT Provider Management
   setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper') => ipcRenderer.invoke("set-stt-provider", provider),
   getSttProvider: () => ipcRenderer.invoke("get-stt-provider"),
+  isSttConfigured: () => ipcRenderer.invoke("is-stt-configured"),
   setGroqSttApiKey: (apiKey: string) => ipcRenderer.invoke("set-groq-stt-api-key", apiKey),
   setOpenAiSttApiKey: (apiKey: string) => ipcRenderer.invoke("set-openai-stt-api-key", apiKey),
   setOpenAiSttBaseUrl: (url: string) => ipcRenderer.invoke("set-openai-stt-base-url", url),

@@ -1687,6 +1687,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle("is-stt-configured", async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().isSttConfigured();
+    } catch {
+      return false;
+    }
+  });
+
   safeHandle("set-groq-stt-api-key", async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
