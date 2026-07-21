@@ -6517,7 +6517,7 @@ Provide only the answer, nothing else.`;
                           if (currentModelDisplayName && currentModelDisplayName !== m) {
                             return currentModelDisplayName;
                           }
-                          if (m === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
+                          if (m === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
                           if (m === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
                           if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
                           if (m === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';

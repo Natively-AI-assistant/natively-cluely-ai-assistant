@@ -101,7 +101,7 @@ interface OllamaResponse {
 }
 
 // Model constants for Gemini (priority: flash-lite → flash → pro)
-const GEMINI_FLASH_MODEL = "gemini-3.5-flash"
+const GEMINI_FLASH_MODEL = "gemini-3.6-flash"
 const GEMINI_FLASH_LITE_MODEL = "gemini-3.1-flash-lite"
 const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 
@@ -178,7 +178,7 @@ function isCannedFallbackPhrase(text: string): boolean {
 }
 
 // ── Gemini thinking budget (THE dominant TTFT lever on Gemini 3.x Flash) ─────
-// Measured: gemini-3.5-flash with default (dynamic) thinking spent ~5.3s
+// Measured: gemini-3.6-flash with default (dynamic) thinking spent ~5.3s
 // "thinking" BEFORE the first content token on a tiny ~1.3K-token prompt — the
 // thinking phase is NOT streamed, so the user just sees a frozen UI for ~5s.
 // `thinkingBudget: 0` DISABLES thinking (SDK: "0 is DISABLED"), collapsing TTFT
@@ -2610,19 +2610,19 @@ const isMultimodal = !!(imagePaths?.length);
    */
   public async generateContentStructured(
     message: string,
-    // The Gemini block leads with flash-lite (fastest, cheapest) then 3.5-flash.
+    // The Gemini block leads with flash-lite (fastest, cheapest) then 3.6-flash.
     // `preferFast` no longer changes ordering (flash-lite is already first); it is
     // retained for API compatibility with latency-critical callers (live coaching).
     //
     // STRUCTURED-EXTRACTION ROUTING (resume/JD/other document ingestion): the
-    // Gemini chain here is intentionally flash-lite → 3.5-flash ONLY. A real
+    // Gemini chain here is intentionally flash-lite → 3.6-flash ONLY. A real
     // head-to-head on the actual extraction code showed flash-lite fully extracts
-    // (18 nodes) fastest; 3.5-flash is the correct single fallback; Gemini Pro
+    // (18 nodes) fastest; 3.6-flash is the correct single fallback; Gemini Pro
     // gives NO quality gain at ~4× latency; MiniMax-M3 severely UNDER-extracts. So
     // Pro/MiniMax/Groq are deliberately excluded from this path. Own-provider keys
     // (OpenAI/Claude/own-Gemini) are still tried first when present; the Natively
     // fallback carries `purpose:'extraction'` so the server runs its own
-    // flash-lite→3.5-flash-only loop (never MiniMax/Pro/Scout). The MAX_ROTATIONS
+    // flash-lite→3.6-flash-only loop (never MiniMax/Pro/Scout). The MAX_ROTATIONS
     // loop below gives the 3-cycle retry-then-fail behavior.
     opts?: { preferFast?: boolean },
   ): Promise<string> {
@@ -2662,14 +2662,14 @@ const isMultimodal = !!(imagePaths?.length);
       providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message) });
     }
 
-    // Priority 3: Gemini cascade — flash-lite → 3.5-flash ONLY (cheapest/fastest
+    // Priority 3: Gemini cascade — flash-lite → 3.6-flash ONLY (cheapest/fastest
     // first). Each model is a distinct provider so the rotation falls through
     // lite → flash on failure, and each carries its OWN circuit key so a saturated
     // tier (repeated 429s) trips independently without burning the other's backoff.
     // Gemini PRO is intentionally EXCLUDED from structured extraction: benchmarked
     // on the real extraction code it gave no quality gain over flash-lite at ~4×
     // latency. MiniMax is likewise excluded (it under-extracts). This is the
-    // flash-lite→3.5-flash extraction pattern.
+    // flash-lite→3.6-flash extraction pattern.
     if (this.client) {
       const buildGeminiProvider = (modelId: string): ProviderAttempt => ({
         name: `Gemini (${modelId})`,
@@ -2731,7 +2731,7 @@ const isMultimodal = !!(imagePaths?.length);
       providers.push({
         name: 'Natively API',
         // Structured extraction: tell the server this is an extraction request so
-        // it runs its dedicated flash-lite→3.5-flash-only loop (3 cycles then
+        // it runs its dedicated flash-lite→3.6-flash-only loop (3 cycles then
         // hard-fail) and NEVER falls through to MiniMax/Pro/Scout. Older servers
         // ignore the unknown field and route via their normal flash-first chain.
         execute: () => this.generateWithNatively(message, undefined, undefined, { purpose: 'extraction' })
@@ -2873,7 +2873,7 @@ const isMultimodal = !!(imagePaths?.length);
     if (this.groqFastTextMode) body.fast_mode = true;
 
     // EXTRACTION hint: opt-in signal that this is a structured document extraction
-    // (resume/JD). The server routes it through a dedicated flash-lite→3.5-flash
+    // (resume/JD). The server routes it through a dedicated flash-lite→3.6-flash
     // loop (3 cycles, then hard-fail) and NEVER escalates to MiniMax/Pro/Scout.
     // Advisory + backward-compatible: older servers drop the unknown field and use
     // their normal flash-first chain. Never combined with fast_mode (opposite intents).
@@ -3673,7 +3673,7 @@ const isMultimodal = !!(imagePaths?.length);
     // Each provider gets MAX_RETRIES_PER_PROVIDER attempts before moving on.
     // Providers are re-ordered dynamically when a provider is unavailable.
     // NOTE: ModelVersionManager folds flash-lite into the GEMINI_FLASH family
-    // (its baseline is 3.5-flash), so flash-lite never surfaces via tiers. We
+    // (its baseline is 3.6-flash), so flash-lite never surfaces via tiers. We
     // inject it explicitly ahead of the flash tier attempt below so the Gemini
     // cascade leads with the cheapest model.
     // ──────────────────────────────────────────────────────────────────
