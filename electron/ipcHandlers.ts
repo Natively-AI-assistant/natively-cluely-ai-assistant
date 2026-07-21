@@ -10863,6 +10863,48 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     });
 
+    // E2E-only: ingest a lesson file (or all .md files under a directory) directly
+    // into the LESSON corpus without the OS file-dialog nonce gate. Same
+    // orchestrator.ingestDocument(LESSON) path as knowledge:ingest-lesson but
+    // accepts raw filesystem paths — suitable for bulk seeding from scripts.
+    safeHandle('__e2e__:ingest-lesson', async (
+      _,
+      params: { filePath: string },
+    ) => {
+      try {
+        const orchestrator = appState.getKnowledgeOrchestrator();
+        if (!orchestrator) return { success: false, error: 'orchestrator_not_initialized' };
+        const { DocType } = require('./knowledge/types');
+        const fsp = require('node:fs/promises');
+        const nodePath = require('node:path');
+        const stat = await fsp.stat(params.filePath).catch(() => null);
+        if (!stat) return { success: false, error: `path not found: ${params.filePath}` };
+        if (stat.isDirectory()) {
+          const walk = async (dir: string): Promise<string[]> => {
+            const entries = await fsp.readdir(dir, { withFileTypes: true });
+            const files: string[] = [];
+            for (const e of entries) {
+              const full = nodePath.join(dir, e.name);
+              if (e.isDirectory()) files.push(...await walk(full));
+              else if (/\.(md|txt|pdf|docx)$/i.test(e.name)) files.push(full);
+            }
+            return files;
+          };
+          const files = await walk(params.filePath);
+          let ok = 0; let fail = 0; const errors: string[] = [];
+          for (const f of files) {
+            const r = await orchestrator.ingestDocument(f, DocType.LESSON);
+            if (r?.success) ok++; else { fail++; errors.push(`${nodePath.basename(f)}: ${r?.error}`); }
+          }
+          return { success: fail === 0, ingested: ok, failed: fail, errors: errors.slice(0, 20) };
+        }
+        const result = await orchestrator.ingestDocument(params.filePath, DocType.LESSON);
+        return result;
+      } catch (e: any) {
+        return { success: false, error: e?.message || String(e) };
+      }
+    });
+
     // E2E-only: read back live ingestion state from the orchestrator + DB so the
     // harness can verify structured_data, node counts, embedding_space, AOT, and
     // OKF pack conformance against ground truth — all from the REAL live DB.

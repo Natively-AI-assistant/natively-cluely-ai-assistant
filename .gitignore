@@ -40,6 +40,9 @@ change.md
 # Local premium dev copy — never commit to public repo
 /premium
 
+# Local Hello Interview lesson corpus (third-party content for LESSON ingest)
+/lessons/
+
 # Generated migration patches — private, not for public repo
 *.patch
 # Exception: the patches/ directory holds patch-package commits that MUST
