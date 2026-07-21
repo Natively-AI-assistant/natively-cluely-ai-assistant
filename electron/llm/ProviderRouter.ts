@@ -408,7 +408,7 @@ export class ProviderRouter {
         const modePreferences: Record<ModeTemplateType, string[]> = {
             'sales': ['groq', 'gemini', 'openai'],
             'recruiting': ['claude', 'groq', 'gemini'],
-            'interview': ['gemini', 'groq', 'openai'],
+            'interview': ['claude', 'gemini', 'groq', 'openai'],
             'default': ['groq', 'gemini', 'openai']
         };
 
