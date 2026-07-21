@@ -53,7 +53,6 @@
     "benchmark:multimode:1000": "cross-env NODE_NO_WARNINGS=1 BENCHMARK_MODEL=gemini-3.1-flash-lite node benchmarks/profile-intelligence/run_multimode_1000_eval.ts --concurrency=1",
     "benchmark:followup:500": "cross-env NODE_NO_WARNINGS=1 BENCHMARK_MODEL=gemini-3.1-flash-lite node benchmarks/profile-intelligence/run_followup_stability_eval.ts",
     "benchmark:longsession:100": "cross-env NODE_NO_WARNINGS=1 BENCHMARK_MODEL=gemini-3.1-flash-lite node benchmarks/profile-intelligence/run_long_session_eval.ts",
-    "doctor": "npx react-doctor@latest",
     "test:intelligence:ui": "playwright test --config intelligence-eval-real-ui/playwright.config.ts",
     "test:intelligence:ui:headed": "playwright test --config intelligence-eval-real-ui/playwright.config.ts --headed",
     "test:intelligence:ui:debug": "PWDEBUG=1 playwright test --config intelligence-eval-real-ui/playwright.config.ts",
