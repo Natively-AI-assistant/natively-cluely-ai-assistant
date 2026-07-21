@@ -1,0 +1,602 @@
+%PDF-1.3
+%ºß¬à
+3 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 4 0 R
+>>
+endobj
+4 0 obj
+<<
+/Length 6190
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(CASE STUDY: Distributed Log Ingestion Pipeline — Petabyte-Scale Reliability Overhaul) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(Company: Helixgrid Analytics \(Series D SaaS, real-time observability\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 703.5 Td
+(Period: March 2022 – November 2023) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(Role: VP of Engineering, Data Platform) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(Headline metric: Reduced p99 ingestion tail latency from 14.2 seconds to 410 milliseconds while sustaining 3.4) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(million sustained events/sec across 11 globally distributed regions.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 636. Td
+(Background. By Q1 2022, Helixgrid's ingestion tier—originally prototyped in 2017 by a three-person team on a single) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 622.5 Td
+(Kafka 0.10 cluster—was buckling. Customer churn briefings cited "missing traces" and "stale dashboards during) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 609. Td
+(incidents," the two moments when the product mattered most. Internal telemetry showed the cluster's ISR shrinkage) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 595.5 Td
+(rate climbing past 18% under peak load, and the on-call rotation was averaging 11.3 pages per engineer per week. I) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 582. Td
+(inherited the platform after the previous VP departed and was given a 14-month window to ship a replacement before) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 568.5 Td
+(the company's largest enterprise renewal cycle.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 541.5 Td
+(Architecture decision. After an eight-week evaluation that included a side-by-side benchmark against Apache Pulsar) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 528. Td
+(and a custom NATS JetStream implementation, we committed to a layered design: an edge fleet of stateless gRPC) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 514.5 Td
+(ingesters written in Go 1.19, fronting a regionally partitioned JetStream-backed log with Raft-replicated metadata. We) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 501. Td
+(deliberately avoided re-architecting the query tier in the same window—that work became a follow-on 2024 initiative.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 487.5 Td
+(The ingestion layer was scoped to one goal: never drop an acknowledged event, never let a regional outage) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 474. Td
+(cascade, and never let p99 exceed half a second under normal load.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 447. Td
+(A specific choice that defined the project: we rejected the prevailing advice to use Kafka's exactly-once semantics) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 433.5 Td
+(and instead implemented a custom idempotency envelope \(a 17-byte ULID prefix combined with a Merkle-anchored) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 420. Td
+(producer sequence number\) that let consumers deduplicate without transactional overhead. This envelope added) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 406.5 Td
+(1.4% to wire payload size but eliminated the cross-broker stall cycles that had been responsible for 71% of our) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 393. Td
+(tail-latency outliers, per continuous profiling with Pyroscope.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 366. Td
+(Execution. I stood up a tiger team of nine engineers across three timezones, supplemented by a four-person SRE) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 352.5 Td
+(rotation embedded for the duration. We ran two-week vertical slices: first the gRPC edge, then regional JetStream) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 339. Td
+(provisioning automation, then the dedup envelope, then the cutover tooling. Cutover was executed region by region) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 325.5 Td
+(over 11 weeks using a dual-write shadow validator that compared SHA-256 checksums of downsampled event) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 312. Td
+(batches against the legacy cluster; we advanced a region only after seven consecutive days of zero checksum) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 298.5 Td
+(mismatches at the 99.95th percentile.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 271.5 Td
+(What the resume does not capture is the human story behind those numbers. In May 2022, during a load test) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 258. Td
+(simulating a synthetic Super Bowl-scale traffic burst, the JetStream metadata layer began rejecting writes with a) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 244.5 Td
+(storage-space error that nobody on the team had seen before. The root cause turned out to be an off-by-one in our) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 231. Td
+(custom retention accountant: it was double-counting compacted segments for windows longer than six hours,) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 217.5 Td
+(exhausting disk 38% faster than projected. The fix was 14 lines of Rust and a reworked compaction cadence, but the) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 204. Td
+(incident forced me to push the customer-facing rollback SLA from 30 minutes to 15 minutes and to commission the) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 190.5 Td
+(chaos harness that became Helixgrid's first formalized game-day program.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 163.5 Td
+(Results. By November 2023, sustained throughput had grown from 2.1M to 3.4M events/sec without additional) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 150. Td
+(hardware spend, because the dedup envelope and the elimination of transactional two-phase commits reduced) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 136.5 Td
+(per-event CPU by 34% \(measured via eBPF histograms on the ingesters\). p99 tail latency landed at 410 ms globally;) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 123. Td
+(the worst single region, ap-southeast-2, came in at 488 ms. Mean time to detect ingestion anomalies improved from) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 109.5 Td
+(9.4 minutes to 41 seconds after we wired the dedup envelope's anomaly counter into PagerDuty. Customer-reported) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 96. Td
+("stale dashboard" tickets dropped 83% quarter-over-quarter, and the platform NPS among site reliability) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 82.5 Td
+(engineers—the harshest internal critics—moved from 12 to 61.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 1076
+>>
+stream
+0.200025 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 744. Td
+(Reflection. The project reinforced a conviction I had been forming for several years: the most consequential) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 730.5 Td
+(engineering decisions in a senior role are rarely about picking the right database, and almost always about scoping.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 717. Td
+(We succeeded not because JetStream was a better log than Kafka in the abstract, but because we drew the cut line) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 703.5 Td
+(so that ingestion could be rebuilt without touching query, and we held that line for fourteen months against) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 690. Td
+(considerable internal pressure to "just fix everything." The one metric I would highlight in any leadership review is the) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 676.5 Td
+(dedup envelope's role in reducing tail-latency outliers by 71%—it is the single decision that turned the project from a) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+48. 663. Td
+(routine rewrite into a durable competitive advantage.) Tj
+ET
+endstream
+endobj
+1 0 obj
+<</Type /Pages
+/Kids [3 0 R 5 0 R ]
+/Count 2
+>>
+endobj
+7 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+8 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+9 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+10 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+11 0 obj
+<<
+/Type /Font
+/BaseFont /Courier
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+12 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+13 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+14 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+15 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Roman
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+16 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+17 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Italic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+18 0 obj
+<<
+/Type /Font
+/BaseFont /Times-BoldItalic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+19 0 obj
+<<
+/Type /Font
+/BaseFont /ZapfDingbats
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+20 0 obj
+<<
+/Type /Font
+/BaseFont /Symbol
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+2 0 obj
+<<
+/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
+/Font <<
+/F1 7 0 R
+/F2 8 0 R
+/F3 9 0 R
+/F4 10 0 R
+/F5 11 0 R
+/F6 12 0 R
+/F7 13 0 R
+/F8 14 0 R
+/F9 15 0 R
+/F10 16 0 R
+/F11 17 0 R
+/F12 18 0 R
+/F13 19 0 R
+/F14 20 0 R
+>>
+/XObject <<
+>>
+>>
+endobj
+21 0 obj
+<<
+/Producer (jsPDF 4.2.1)
+/CreationDate (D:20260702222219+05'30')
+>>
+endobj
+22 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+/OpenAction [3 0 R /FitH null]
+/PageLayout /OneColumn
+>>
+endobj
+xref
+0 23
+0000000000 65535 f 
+0000007595 00000 n 
+0000009420 00000 n 
+0000000015 00000 n 
+0000000120 00000 n 
+0000006362 00000 n 
+0000006467 00000 n 
+0000007658 00000 n 
+0000007783 00000 n 
+0000007913 00000 n 
+0000008046 00000 n 
+0000008184 00000 n 
+0000008308 00000 n 
+0000008437 00000 n 
+0000008569 00000 n 
+0000008705 00000 n 
+0000008833 00000 n 
+0000008960 00000 n 
+0000009089 00000 n 
+0000009222 00000 n 
+0000009324 00000 n 
+0000009670 00000 n 
+0000009756 00000 n 
+trailer
+<<
+/Size 23
+/Root 22 0 R
+/Info 21 0 R
+/ID [ <101D704BFB7D9460319EC0121655FEDB> <101D704BFB7D9460319EC0121655FEDB> ]
+>>
+startxref
+9860
+%%EOF

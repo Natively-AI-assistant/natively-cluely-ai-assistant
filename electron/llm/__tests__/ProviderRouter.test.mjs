@@ -26,6 +26,7 @@ test('routeLLMProviders returns deterministic text fallback order with availabil
       hasGemini: true,
       hasOpenAI: true,
       hasClaude: true,
+      hasDeepseek: true,
     },
     models: {
       groq: 'groq-text',
@@ -34,6 +35,7 @@ test('routeLLMProviders returns deterministic text fallback order with availabil
       geminiPro: 'gemini-pro',
       openai: 'openai-text',
       claude: 'claude-text',
+      deepseek: 'deepseek-v4-flash',
     },
   });
 
@@ -45,9 +47,42 @@ test('routeLLMProviders returns deterministic text fallback order with availabil
     'gemini_pro',
     'openai',
     'claude',
+    'deepseek',
   ]);
   assert.equal(attempts.every(attempt => attempt.status === 'available'), true);
   assert.deepEqual(attempts.map(attempt => attempt.provider), attempts.map(attempt => attempt.provider));
+});
+
+test('routeLLMProviders omits DeepSeek from multimodal fallback (text-only provider)', async () => {
+  const attempts = await route({
+    capability: 'chat',
+    multimodal: true,
+    availability: {
+      hasNatively: true,
+      hasGroq: true,
+      hasCodex: true,
+      hasGemini: true,
+      hasOpenAI: true,
+      hasClaude: true,
+      hasDeepseek: true,
+    },
+  });
+
+  assert.equal(attempts.find(a => a.provider === 'deepseek'), undefined,
+    'DeepSeek must not appear in the multimodal/vision fallback chain');
+});
+
+test('routeLLMProviders marks DeepSeek missing_api_key when key absent', async () => {
+  const attempts = await route({
+    capability: 'chat',
+    multimodal: false,
+    availability: { hasDeepseek: false },
+  });
+
+  const deepseek = attempts.find(a => a.provider === 'deepseek');
+  assert.ok(deepseek, 'DeepSeek must appear in text-only attempts list');
+  assert.equal(deepseek.status, 'unavailable');
+  assert.equal(deepseek.unavailableReason, 'missing_api_key');
 });
 
 test('routeLLMProviders returns multimodal fallback order', async () => {
@@ -89,10 +124,12 @@ test('routeLLMProviders marks missing providers unavailable with reasons', async
     },
   });
 
-  assert.equal(attempts.length, 7);
+  // 7 prior providers + deepseek
+  assert.equal(attempts.length, 8);
   assert.equal(attempts.every(attempt => attempt.status === 'unavailable'), true);
   assert.equal(attempts.find(attempt => attempt.provider === 'codex').unavailableReason, 'missing_config');
   assert.equal(attempts.find(attempt => attempt.provider === 'openai').unavailableReason, 'missing_api_key');
+  assert.equal(attempts.find(attempt => attempt.provider === 'deepseek').unavailableReason, 'missing_api_key');
 });
 
 test('routeLLMProviders reports disabled Groq distinctly from missing key', async () => {

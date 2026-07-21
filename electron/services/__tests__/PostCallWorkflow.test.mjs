@@ -12,19 +12,24 @@ const {
   generateCoachingInsights,
 } = await import(pathToFileURL(workflowPath).href);
 
-test('extractStructuredActionItems captures owner, deadline, and stable ids', () => {
+// Ids switched from `action_<N>` (length-derived; collided across reruns /
+// multi-meeting aggregation) to `action_<uuid>` per issue #253 sweep.
+const ACTION_ID_RE = /^action_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+test('extractStructuredActionItems captures owner, deadline, and unique ids', () => {
   const items = extractStructuredActionItems([
     { speaker: 'user', text: 'I will send the pricing proposal by Friday.', timestamp: 1200 },
     { speaker: 'interviewer', text: 'ACTION: schedule procurement review before next Tuesday.', timestamp: 2400 },
   ]);
 
   assert.equal(items.length, 2);
-  assert.equal(items[0].id, 'action_1');
+  assert.match(items[0].id, ACTION_ID_RE);
   assert.equal(items[0].owner, 'Me');
   assert.equal(items[0].text, 'send the pricing proposal');
   assert.equal(items[0].deadline, 'Friday');
   assert.equal(items[0].sourceTimestamp, 1200);
-  assert.equal(items[1].id, 'action_2');
+  assert.match(items[1].id, ACTION_ID_RE);
+  assert.notEqual(items[0].id, items[1].id);
   assert.match(items[1].text, /schedule procurement review/i);
 });
 
@@ -104,7 +109,7 @@ test('post-call schema remains JSON-safe and excludes raw transcript fields', ()
   assert.equal('rawTranscript' in result, false);
 });
 
-test('structured action items cap at eight and keep deterministic ids after dedupe', () => {
+test('structured action items cap at eight and mint unique ids after dedupe', () => {
   const transcript = Array.from({ length: 12 }, (_, index) => ({
     speaker: 'user',
     text: `I will prepare follow up item ${index + 1} by Friday.`,
@@ -114,15 +119,7 @@ test('structured action items cap at eight and keep deterministic ids after dedu
   const items = extractStructuredActionItems(transcript, ['prepare follow up item 1']);
 
   assert.equal(items.length, 8);
-  assert.deepEqual(items.map(item => item.id), [
-    'action_1',
-    'action_2',
-    'action_3',
-    'action_4',
-    'action_5',
-    'action_6',
-    'action_7',
-    'action_8',
-  ]);
+  for (const item of items) assert.match(item.id, ACTION_ID_RE);
+  assert.equal(new Set(items.map(item => item.id)).size, 8, 'every action id must be unique');
   assert.equal(items.filter(item => item.text === 'prepare follow up item 1').length, 1);
 });

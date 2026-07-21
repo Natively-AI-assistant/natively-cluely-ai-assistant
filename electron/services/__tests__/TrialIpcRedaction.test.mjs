@@ -13,11 +13,11 @@ function read(relativePath) {
 
 test('trial IPC handlers do not return raw trial tokens to the renderer', () => {
   const source = read('electron/ipcHandlers.ts');
-  const startStart = source.indexOf('safeHandle("trial:start"');
-  const statusStart = source.indexOf('safeHandle("trial:status"', startStart);
+  const startStart = source.search(/safeHandle\(['"]trial:start['"]/);
+  const statusStart = source.search(/safeHandle\(['"]trial:status['"]/, startStart);
   const startHandler = source.slice(startStart, statusStart);
-  const localStart = source.indexOf('safeHandle("trial:get-local"');
-  const convertStart = source.indexOf('safeHandle("trial:convert"', localStart);
+  const localStart = source.search(/safeHandle\(['"]trial:get-local['"]/);
+  const convertStart = source.search(/safeHandle\(['"]trial:convert['"]/, localStart);
   const localHandler = source.slice(localStart, convertStart);
 
   assert.ok(startStart >= 0, 'trial:start handler should exist');

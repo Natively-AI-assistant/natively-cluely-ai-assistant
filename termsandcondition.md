@@ -96,7 +96,7 @@ You may not:
 
 - **Share, resell, sublicense, transfer, lease, rent, or assign** the license, the license key, or the activated software to anyone else, including listing it on any resale platform or marketplace.
 - **Activate beyond the allowed device count**, or attempt to bypass the device-binding mechanism in any way (including spoofing, modifying, virtualising, or hiding the hardware identifier the application uses to bind a license to a device).
-- **Reverse engineer, decompile, disassemble, or otherwise attempt to derive the source code** of any non-open-source component of the Service, except to the extent that this restriction cannot lawfully be excluded.
+- **Reverse engineer, decompile, disassemble, or otherwise attempt to derive the source code** of any component of the Service that is not provided in source form, except to the extent that this restriction cannot lawfully be excluded.
 - **Use the Service for unlawful purposes**, or in a way that violates the rights of others.
 - **Circumvent or interfere** with license validation, rate limits, telemetry, anti-abuse mechanisms, or any security feature.
 
@@ -374,9 +374,9 @@ If you send us feedback, suggestions, or bug reports, you grant us a non-exclusi
 
 Honest, non-misleading editorial and review uses (e.g., naming Natively in an article, video, or comparison) are fine and don't require permission.
 
-### 13.4 Open-source components
+### 13.4 Third-party components
 
-The desktop application incorporates open-source components, each licensed under its own terms (typically MIT, Apache 2.0, BSD, or similar permissive licenses). The terms of those licenses prevail over these Terms in respect of those components. A list of components is available with the application or in the source repository.
+The desktop application incorporates third-party components, including open-source components, each licensed under its own terms (typically MIT, Apache 2.0, BSD, or similar permissive licenses). The terms of those licenses prevail over these Terms in respect of those components. A list of components is available with the application or in the source repository.
 
 ### 13.5 Reservation of rights
 

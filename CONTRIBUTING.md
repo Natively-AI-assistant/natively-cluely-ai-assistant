@@ -2,10 +2,19 @@
 
 First off, thank you for considering contributing to Natively! It's people like you that make Natively such a great tool.
 
-Following these guidelines helps to communicate that you respect the time of the developers managing and developing this open source project. In return, they should reciprocate that respect in addressing your issue, assessing changes, and helping you finalize your pull requests.
+Following these guidelines helps to communicate that you respect the time of the developers managing and developing this source-available project. In return, they should reciprocate that respect in addressing your issue, assessing changes, and helping you finalize your pull requests.
+
+## Contribution Terms
+
+Contributions to Natively are welcome.
+
+By submitting a pull request, issue, patch, idea, documentation, design, prompt, workflow, or other contribution, you agree that Natively AI Private Limited may use, modify, distribute, commercialize, and relicense your contribution as part of Natively or any other Natively AI Private Limited product or service.
+
+Please do not submit contributions unless you have the legal right to do so.
 
 ## Table of Contents
 
+- [Contribution Terms](#contribution-terms)
 - [Code of Conduct](#code-of-conduct)
 - [How Can I Contribute?](#how-can-i-contribute)
   - [Reporting Bugs](#reporting-bugs)

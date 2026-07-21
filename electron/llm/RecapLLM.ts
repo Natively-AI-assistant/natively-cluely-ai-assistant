@@ -17,7 +17,11 @@ export class RecapLLM {
         try {
             const promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_RECAP_PROMPT : UNIVERSAL_RECAP_PROMPT;
             const fittedContext = this.llmHelper.fitContextForCurrentModel(context);
-            const stream = this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride);
+            // ignoreKnowledgeMode=true — see ClarifyLLM.generate() for the full
+            // rationale: `context` is a conversation-context blob, not a real
+            // question, and letting it through the knowledge-mode intent classifier
+            // risks misclassifying the whole recap call as an intro request.
+            const stream = this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);
             let fullResponse = "";
             for await (const chunk of stream) fullResponse += chunk;
             return this.clampRecapResponse(fullResponse);
@@ -30,12 +34,20 @@ export class RecapLLM {
     /**
      * Generate a neutral conversation summary (Streamed)
      */
-    async *generateStream(context: string): AsyncGenerator<string> {
+    async *generateStream(context: string, options?: { contractRule?: string }): AsyncGenerator<string> {
         if (!context.trim()) return;
         try {
-            const promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_RECAP_PROMPT : UNIVERSAL_RECAP_PROMPT;
+            let promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_RECAP_PROMPT : UNIVERSAL_RECAP_PROMPT;
+            // CONTEXT OS (Phase 11): the caller may pass a source-contract rule
+            // (built from the active mode's TurnContextContract) so the recap is
+            // no longer mode-blind — e.g. "summarize the transcript only; do not
+            // introduce profile or document facts". Additive: absent → legacy.
+            if (options?.contractRule) {
+                promptOverride = `${promptOverride}\n\n${options.contractRule}`;
+            }
             const fittedContext = this.llmHelper.fitContextForCurrentModel(context);
-            yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride);
+            // See generate() above — ignoreKnowledgeMode=true.
+            yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);
         } catch (error) {
             console.error("[RecapLLM] Streaming generation failed:", error);
         }

@@ -13,3 +13,8 @@
  * rename here updates every call site.
  */
 export const TRIAL_SENTINEL_KEY = '__trial__' as const;
+
+// Single source of truth for DOM capture character budget.
+// If changing, also update the sibling constant in src/constants/domCapture.ts to prevent drift.
+export const DOM_CONTEXT_MAX_CHARS = 25000;
+

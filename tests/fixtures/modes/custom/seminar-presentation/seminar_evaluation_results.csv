@@ -1,0 +1,12 @@
+model,benchmark,metric,value,notes
+OpenVLA,semantic relationship understanding,Success Rate,0%,standard VLA failed the semantic relationship task
+AgenticVLA,semantic relationship understanding,Success Rate,44%,AgenticVLA improved semantic relationship understanding
+finetuned OpenVLA-OFT,prompt complexity analysis,Success Rate,42%,finetuned OpenVLA-OFT baseline for complex prompts
+AgenticVLA,prompt complexity analysis,Success Rate,84%,AgenticVLA improved complex prompt success
+OpenVLA,self-awareness benchmark,Success Rate,43%,standard VLA self-awareness result
+AgenticVLA,self-awareness benchmark,Success Rate,85%,AgenticVLA improved self-awareness
+AgenticVLA,OpenVLA baseline,MSE 0.043,SR 0.72,baseline comparison row
+AgenticVLA,OpenVLA-OFT,MSE 0.031,SR 0.84,optimized model comparison row
+benchmark SR numbers confirm OFT fine-tuning reduces MSE
+Success Rate primary evaluation metric for manipulation tasks
+MSE measures prediction error between predicted and demonstrated actions

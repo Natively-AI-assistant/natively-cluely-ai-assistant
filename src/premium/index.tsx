@@ -3,7 +3,7 @@
  *
  * Uses Vite's import.meta.glob to optionally load premium components
  * from the premium/ directory. If the premium/ folder is removed
- * (open-source build), the globs return empty objects and no-op
+ * (source-available build), the globs return empty objects and no-op
  * fallbacks are used instead. No build errors.
  */
 import React from 'react';
@@ -18,7 +18,8 @@ const nullAdCampaigns = (
   _appStartTime?: number,
   _lastMeetingEndTime?: number | null,
   _isProcessingMeeting?: boolean,
-  _hasNativelyApi?: boolean
+  _hasNativelyApi?: boolean,
+  _enabled?: boolean,
 ) => ({
   activeAd: null as string | null,
   dismissAd: (_campaignId?: string) => {},

@@ -1,0 +1,100 @@
+JOSÉ MUÑOZ
+Software Engineer · Backend & Distributed Systems
+
+Email: jose.munoz.dev@example.com  |  Phone: +1 (415) 555-0182
+Location: San Francisco, CA  |  LinkedIn: linkedin.com/in/josemunozdev  |  GitHub: github.com/jmunoz-eng
+
+────────────────────────────────────────────────────────────────────────────────
+PROFESSIONAL SUMMARY
+────────────────────────────────────────────────────────────────────────────────
+
+Backend-leaning software engineer with 7+ years building reliable distributed
+services in Python, Go, and TypeScript. Comfortable owning a service end-to-end:
+design, deploy, observe, and operate. Led the migration of a billing pipeline
+that cut nightly reconciliation from 9 hours to 42 minutes. Bilingual (EN/ES).
+
+────────────────────────────────────────────────────────────────────────────────
+CORE SKILLS
+────────────────────────────────────────────────────────────────────────────────
+
+Languages        ▪ Python   ▪ Go   ▪ TypeScript   ▪ SQL   ▪ Bash
+Infrastructure   ▪ Kubernetes · Terraform · AWS (EKS, RDS, S3, Lambda)
+Data             ▪ PostgreSQL · Redis · Kafka · Apache Flink
+Practices        ▪ CI/CD · observability · on-call · code review · RFC writing
+
+────────────────────────────────────────────────────────────────────────────────
+WORK EXPERIENCE
+────────────────────────────────────────────────────────────────────────────────
+
+Helix Freight Labs                           San Francisco, CA
+Senior Software Engineer                       03/2022 – Present
+
+► Technical lead for the dispatch optimization service (Go, gRPC, Kafka).
+  Owned SLOs at 99.95% monthly availability across 14 production regions.
+► Reduced p99 route-compute latency from 1,840ms to 310ms by replacing a
+  nightly batch with an incremental Kafka → Flink streaming topology.
+► Designed and rolled out a multi-tenant feature-flag framework adopted by
+  6 product teams; cut configuration-related incidents by 71% in 2023.
+► Mentored 4 engineers (2 mid-level, 2 junior); ran the team's on-call
+  rotation and quarterly game-day chaos exercises.
+
+Northwind Analytics                          Remote (US)
+Software Engineer II                          Mar 2019 – 02/2022
+
+▪ Rebuilt the company's event ingestion gateway from a single-process Flask
+  app into a horizontally scaled Go service behind Envoy, sustaining
+  18k req/sec sustained and 42k req/sec peak during quarterly close.
+▪ Introduced contract testing (Pact) between 22 microservices; consumer-
+  driven failures caught in CI rose from ~3/quarter to ~31/quarter.
+▪ Owned the PostgreSQL → ClickHouse analytics replication; cut dashboard
+  load time for the executive suite from 11s to under 900ms.
+▪ Co-authored the internal SRE handbook (120+ pages), now used by all 9
+  engineering teams.
+
+CadenceCart, Inc.                             Oakland, CA
+Software Engineer                             2017-08 – 2019-02
+
+• Shipped the first version of the returns-and-refunds microservice in
+  Python/Flask, handling ~$2.4M in weekly refund volume.
+• Wrote the team's first meaningful integration test suite, raising
+  coverage of the checkout flow from 34% to 81% in two quarters.
+• Built an internal admin tool (React + Node) that saved the operations
+  team an estimated 6 hours of manual work per week.
+
+────────────────────────────────────────────────────────────────────────────────
+PROJECTS
+────────────────────────────────────────────────────────────────────────────────
+
+pq-tap                                        Open source · 2021 – Present
+A plug-and-back-pressure testing harness for PostgreSQL connection pools.
+• 1.4k★ on GitHub, used in production at 3 companies I'm aware of.
+• Outcome: caught a pool-exhaustion bug in a staging deploy 40 minutes
+  before it would have hit production traffic.
+
+sf-transit-rider                              Personal · Spring 2020
+CLI + dashboard predicting Muni arrival times from GTFS + AVL feeds.
+• Outcome: within ±90 seconds accuracy on 78% of weekday predictions,
+  beating the official SF MTA API on the same 30-day test window.
+
+resume-cli                                    Personal · 2019
+Go tool that validates résumé JSON against JSON Schema and prints a PDF.
+• Outcome: adopted by a small career-coaching org (~40 users) for
+  templated client deliverables.
+
+────────────────────────────────────────────────────────────────────────────────
+EDUCATION
+────────────────────────────────────────────────────────────────────────────────
+
+University of California, Berkeley           Berkeley, CA
+B.S., Electrical Engineering & Computer Science    2013-08 – 2017-05
+• GPA: 3.78 / 4.00  •  Dean's List (Fall 2015, Spring 2016)
+• Senior thesis: "Latency-aware scheduling in containerized microservices"
+
+────────────────────────────────────────────────────────────────────────────────
+ADDITIONAL
+────────────────────────────────────────────────────────────────────────────────
+
+Languages: English (native), Spanish (native)
+Certifications: Certified Kubernetes Administrator (CKA), 2023
+Speaking: "Operability Beyond Dashboards" – SRECon Americas, 03/2023
+Volunteering: Code for San Francisco – civic data working group, 2020 – present

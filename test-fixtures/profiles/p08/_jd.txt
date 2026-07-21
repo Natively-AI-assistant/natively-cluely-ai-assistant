@@ -1,0 +1,69 @@
+**Senior Platform Engineer**
+*Northwind Logistics — Seattle, WA (Hybrid: 3 days in office)*
+
+---
+
+**About Northwind Logistics**
+
+Northwind Logistics is a Series D freight-tech company moving $2.3B of cargo annually across North America. Our platform orchestrates routing, dispatch, and real-time visibility for a fleet of 14,000+ carrier partners and 400 shipper customers including Costco, Sysco, and Dollar Tree. Our infrastructure runs 170+ microservices across two regions, processing 8M+ events per hour during peak. We're a 95-person engineering org that values shipping, deep technical ownership, and a no-blame postmortem culture. We've been remote-friendly since 2019 and have a track record of promoting senior engineers from within — four of our eight staff engineers started here as mid-levels.
+
+---
+
+**The Role**
+
+We're hiring a Senior Platform Engineer to join our 11-person Core Platform team. You'll own significant chunks of our AWS infrastructure, our CI/CD pipelines, and the internal developer platform that ~80 product engineers use daily. This is a hands-on IC role (no direct reports, but strong influence across teams) reporting to the Director of Platform Engineering.
+
+We've just kicked off a 14-month migration from ECS to EKS, and you'll be one of the two engineers leading that effort. Day-to-day you'll be writing Terraform, debugging GitHub Actions runners, designing IAM policies, and pairing with product teams who need help getting their services production-ready.
+
+---
+
+**What You'll Do**
+
+- Design, build, and operate our multi-region AWS infrastructure (EKS, RDS, MSK, S3, CloudFront) serving 8M+ events/hour
+- Lead the migration of ~60 services from ECS to EKS over the next 14 months alongside one other senior engineer
+- Build and maintain our GitHub Actions-based CI/CD platform, currently supporting 170+ services with 1,400+ deploys/week
+- Develop our internal developer platform (Backstage-based) including golden-path templates, service catalog, and deployment tooling
+- Define and enforce platform standards: observability (Datadog), security baselines, SLI/SLO definitions, and cost guardrails
+- Participate in an on-call rotation (1 week per quarter, with a $500 bonus per shift) for platform-level incidents
+- Mentor mid-level engineers and conduct technical reviews for platform-facing PRs
+- Write thorough runbooks, postmortems, and design docs — we value documentation that outlives the author
+
+---
+
+**Requirements**
+
+- 6+ years of professional software engineering experience, with at least 3 years focused on platform, infrastructure, or SRE work
+- Deep hands-on AWS expertise — you've operated production workloads at scale (we'd estimate 50+ services or equivalent complexity)
+- Strong proficiency in at least one systems language: Go, Rust, or C/C++ (our platform tooling is primarily Go)
+- Production Kubernetes experience — you understand networking (CNI, service mesh), operators, and you've debugged control-plane issues at 2am
+- Significant Terraform experience (we use Terraform Cloud, ~180 modules) and a strong opinion about module boundaries
+- Solid CI/CD chops: you've designed pipelines from scratch, not just used them — GitHub Actions, Buildkite, or similar
+- Excellent written communication — async-first culture means your docs and ADRs carry real weight
+- Bachelor's degree in CS or equivalent practical experience
+
+---
+
+**Nice to Have**
+
+- Experience with Backstage, Crossplane, or similar internal developer platforms
+- Familiarity with Kafka/streaming systems (we run MSK with 40+ topics in production)
+- Prior experience leading a cross-team migration or platform modernization effort
+- AWS Solutions Architect Professional or CKA certification
+- You've worked in a regulated or compliance-heavy environment (we're SOC 2 Type II)
+
+---
+
+**Compensation & Benefits**
+
+- Base salary: $185,000 – $225,000 depending on experience (level assessed via structured interview, not resume years alone)
+- 0.08% – 0.12% equity grant (4-year vest, 1-year cliff)
+- 25 PTO days + 11 federal holidays + 2 company-wide week-long shutdowns (last week of July and last week of December)
+- $3,000 annual learning budget (conferences, books, courses — no approval needed under $500)
+- Full medical/dental/vision (90% employer-covered), 401(k) with 4% match
+- $1,500 home office stipend, $80/month commuter benefit for Seattle in-office days
+
+---
+
+*Northwind Logistics is an equal opportunity employer. We make hiring decisions based on qualifications, merit, and business need. We do not discriminate on race, color, religion, sex, sexual orientation, gender identity, national origin, age, disability, veteran status, or any other category protected by law.*
+
+**To apply, please send your resume and a brief note about a platform migration or scaling effort you're proud of to platform-hiring@northwindlogistics.com. No cover letter required.**

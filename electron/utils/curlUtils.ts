@@ -192,15 +192,28 @@ export function validateUrlForSsrf(urlString: string): { isValid: boolean; reaso
     }
 
     const hostname = url.hostname.toLowerCase();
+    const bareHostname = hostname.replace(/^\[/, '').replace(/\]$/, '');
 
-    // Block localhost variants
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '0.0.0.0') {
+    // Block localhost variants (the entire 127.0.0.0/8 range is loopback, not
+    // just 127.0.0.1 — e.g. 127.0.0.2 also routes to the local machine).
+    if (hostname === 'localhost' || hostname.startsWith('127.') || bareHostname === '::1' || hostname === '0.0.0.0') {
         return { isValid: false, reason: 'Loopback addresses are not allowed' };
     }
 
-    // Block link-local (169.254.x.x)
-    if (hostname.startsWith('169.254.')) {
+    // Reject non-dotted numeric hostnames before DNS/canonicalization tricks can
+    // reinterpret them as IPv4 (e.g. https://2130706433/ → 127.0.0.1 in some stacks).
+    if (/^(?:0x[0-9a-f]+|\d+)$/i.test(bareHostname)) {
+        return { isValid: false, reason: 'Encoded IP hostnames are not allowed' };
+    }
+
+    // Block link-local IPv4 (169.254.x.x) and IPv6 (fe80::/10).
+    if (hostname.startsWith('169.254.') || /^fe[89ab][0-9a-f]*:/i.test(bareHostname)) {
         return { isValid: false, reason: 'Link-local addresses are not allowed' };
+    }
+
+    // Block IPv6 unique-local/private (fc00::/7 — fc* and fd*).
+    if (/^f[cd][0-9a-f]*:/i.test(bareHostname)) {
+        return { isValid: false, reason: 'Private IPv6 networks are not allowed' };
     }
 
     // Block private network ranges
@@ -227,12 +240,53 @@ export function validateUrlForSsrf(urlString: string): { isValid: boolean; reaso
         return { isValid: false, reason: 'Path traversal sequences are not allowed' };
     }
 
-    // Require HTTPS for external URLs (allow http://localhost for dev testing only)
-    if (url.protocol !== 'https:' && !hostname.startsWith('127.')) {
-        return { isValid: false, reason: 'Only HTTPS URLs are allowed (except localhost)' };
+    // Require HTTPS for external URLs. All loopback/localhost hosts are already
+    // rejected above, so no http exemption is needed here.
+    if (url.protocol !== 'https:') {
+        return { isValid: false, reason: 'Only HTTPS URLs are allowed' };
     }
 
     return { isValid: true };
+}
+
+/**
+ * SECURITY: Validates an STT provider "region" slug before it is interpolated
+ * into a provider endpoint hostname (Azure / IBM Watson).
+ *
+ * The region is renderer-supplied and is placed *directly into the host* of the
+ * outbound, API-key-bearing request, e.g.
+ *   https://${region}.stt.speech.microsoft.com/...
+ *   https://api.${region}.speech-to-text.watson.cloud.ibm.com/...
+ * Without validation a value like `evil.com/x#` or `foo.attacker.net` would
+ * redirect the key to an attacker-controlled host (SSRF + credential exfil).
+ *
+ * Real Azure/IBM regions are short lowercase slugs (letters, digits, hyphen),
+ * e.g. `eastus`, `westeurope`, `us-south`, `eu-gb`. We allow exactly that shape.
+ * Empty is allowed (callers fall back to a hardcoded default region).
+ */
+export function isValidSttRegion(region: unknown): boolean {
+    if (region === undefined || region === null || region === '') return true;
+    if (typeof region !== 'string') return false;
+    // 1–40 chars, lowercase alphanumerics and single hyphens only. No dots,
+    // slashes, `@`, `#`, whitespace, or uppercase — anything that could break
+    // out of the host label or introduce credentials/paths into the URL.
+    return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(region) && region.length <= 40;
+}
+
+/**
+ * SECURITY: Validates a user-supplied OpenAI-compatible STT base URL.
+ *
+ * Reuses validateUrlForSsrf so a renderer cannot point the STT upload (which
+ * carries the user's OpenAI key) at a loopback/private/non-HTTPS host. Empty is
+ * allowed (falls back to https://api.openai.com). Returns a normalized result
+ * shaped like the other validators in this module.
+ */
+export function validateSttBaseUrl(url: unknown): { isValid: boolean; reason?: string } {
+    if (url === undefined || url === null || url === '') return { isValid: true };
+    if (typeof url !== 'string') return { isValid: false, reason: 'Base URL must be a string' };
+    const trimmed = url.trim();
+    if (trimmed === '') return { isValid: true };
+    return validateUrlForSsrf(trimmed);
 }
 
 /**
@@ -271,10 +325,13 @@ export function validateImagePath(imagePath: string, userDataPath: string): { is
         return { isValid: false, reason: 'Path traversal sequences are not allowed' };
     }
 
-    // Block Windows drive paths
-    if (/^[A-Za-z]:\\/.test(imagePath)) {
-        return { isValid: false, reason: 'Windows absolute paths are not allowed' };
-    }
+    // NOTE: the Windows-drive-path check lives AFTER the allowlist below, not here.
+    // On Windows, userData is itself an absolute drive path
+    // (e.g. C:\Users\<user>\AppData\Roaming\natively), so every legitimate
+    // screenshot path starts with a drive letter. Rejecting drive paths up front
+    // blocked the app's own screenshots before the allowlist could approve them
+    // (issue #304). This mirrors the Unix-absolute-path blocks, which also run
+    // after the allowlist.
 
     // Normalize userDataPath for comparison
     const normalizedUserData = userDataPath.replace(/\\/g, '/');
@@ -320,6 +377,13 @@ export function validateImagePath(imagePath: string, userDataPath: string): { is
 
     if (originalIsAllowed) {
         return { isValid: true };
+    }
+
+    // Block Windows drive paths that are outside userData (e.g. C:\Windows\System32,
+    // D:\secrets, or another user's profile). Legitimate Windows screenshot paths
+    // live under <userData> and were already allowed by the allowlist above.
+    if (/^[A-Za-z]:\\/.test(imagePath)) {
+        return { isValid: false, reason: 'Windows absolute paths are not allowed' };
     }
 
     // Block Unix absolute paths that are outside userData

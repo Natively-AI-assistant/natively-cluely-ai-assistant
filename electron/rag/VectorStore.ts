@@ -5,6 +5,7 @@
 import Database from 'better-sqlite3';
 import { Worker } from 'worker_threads';
 import path from 'path';
+import fs from 'fs';
 import { Chunk } from './SemanticChunker';
 import { DatabaseManager } from '../db/DatabaseManager';
 
@@ -23,7 +24,6 @@ export interface ScoredChunk extends StoredChunk {
  * 
  * Uses sqlite-vec extension for native vector similarity search (O(1) per query via ANN).
  * Falls back to pure JS cosine similarity if sqlite-vec is unavailable.
- * Native sqlite-vec queries are offloaded to a worker thread to avoid blocking the main thread.
  */
 export class VectorStore {
     private db: Database.Database;
@@ -44,13 +44,35 @@ export class VectorStore {
     }
 
     /**
+     * Resolves the on-disk path to vectorSearchWorker.js across all layouts (bundled/unbundled, packaged/unpackaged)
+     */
+    private getWorkerPath(): string {
+        const candidates = [
+            path.join(__dirname, 'vectorSearchWorker.js'),
+            path.join(__dirname, 'rag', 'vectorSearchWorker.js'),
+            path.join(__dirname, 'electron', 'rag', 'vectorSearchWorker.js'),
+        ];
+
+        // Find the first path that actually exists
+        let resolvedPath = candidates.find(p => fs.existsSync(p)) ?? candidates[0];
+
+        // Map to unpacked path if running inside packaged ASAR
+        if (resolvedPath.includes('app.asar') && !resolvedPath.includes('app.asar.unpacked')) {
+            resolvedPath = resolvedPath.replace('app.asar', 'app.asar.unpacked');
+        }
+
+        console.log('[VectorStore] Resolved vectorSearchWorker path to:', resolvedPath);
+        return resolvedPath;
+    }
+
+    /**
      * Lazily initialize the worker thread for JS fallback searches.
      * The worker is reused across all search calls.
      */
     private getWorker(): Worker {
         if (!this.worker) {
             // Resolve the compiled worker script path (dist-electron output)
-            const workerPath = path.join(__dirname, 'vectorSearchWorker.js');
+            const workerPath = this.getWorkerPath();
             this.worker = new Worker(workerPath);
 
             this.worker.on('message', (msg: { type: string; requestId: number; data?: any; error?: string }) => {
@@ -226,15 +248,25 @@ export class VectorStore {
             meetingId?: string;
             limit?: number;
             minSimilarity?: number;
-            providerName?: string;
+            spaceKey?: string;
         } = {}
     ): Promise<ScoredChunk[]> {
-        const { meetingId, limit = 8, minSimilarity = 0.25, providerName } = options;
+        const { meetingId, limit = 8, minSimilarity = 0.25, spaceKey } = options;
+
+        // Hard invariant: without an active space we return NOTHING rather than
+        // leaking every space. The downstream filter is `if (spaceKey)`, so omitting
+        // it would otherwise match ALL spaces and silently reintroduce the v1/v2 leak.
+        // On the live query path spaceKey is always defined (provider.space is a
+        // non-empty readonly string); this guards future callers.
+        if (!spaceKey) {
+            console.warn('[VectorStore] searchSimilar called without an active spaceKey — returning empty (refusing to search across embedding spaces).');
+            return [];
+        }
 
         if (this.useNativeVec) {
-            return this.searchSimilarNative(queryEmbedding, meetingId, limit, minSimilarity, providerName);
+            return this.searchSimilarNative(queryEmbedding, meetingId, limit, minSimilarity, spaceKey);
         }
-        return this.searchSimilarJSWorker(queryEmbedding, meetingId, limit, minSimilarity, providerName);
+        return this.searchSimilarJSWorker(queryEmbedding, meetingId, limit, minSimilarity, spaceKey);
     }
 
     /**
@@ -246,7 +278,7 @@ export class VectorStore {
         meetingId: string | undefined,
         limit: number,
         minSimilarity: number,
-        providerName?: string
+        spaceKey?: string
     ): Promise<ScoredChunk[]> {
         const queryBlob = this.embeddingToBlob(queryEmbedding);
         const dim = queryEmbedding.length;
@@ -258,14 +290,14 @@ export class VectorStore {
                 queryBlob,
                 dim,
                 meetingId,
-                providerName,
+                spaceKey,
                 limit,
                 minSimilarity,
                 fetchMultiplier: 4
             });
         } catch (e) {
             console.error('[VectorStore] Native vec search (worker) failed, falling back to JS:', e);
-            return this.searchSimilarJSWorker(queryEmbedding, meetingId, limit, minSimilarity, providerName);
+            return this.searchSimilarJSWorker(queryEmbedding, meetingId, limit, minSimilarity, spaceKey);
         }
     }
 
@@ -277,11 +309,12 @@ export class VectorStore {
         meetingId: string | undefined,
         limit: number,
         minSimilarity: number,
-        providerName?: string
+        spaceKey?: string
     ): Promise<ScoredChunk[]> {
         let query = `
-            SELECT c.* 
+            SELECT c.*
             FROM chunks c
+            JOIN meetings m ON c.meeting_id = m.id
             WHERE c.embedding IS NOT NULL
         `;
         const params: any[] = [];
@@ -290,12 +323,15 @@ export class VectorStore {
             query += ' AND c.meeting_id = ?';
             params.push(meetingId);
         }
-        // NOTE: We do NOT filter by embedding_provider here — meetings whose
-        // embedding_provider column is NULL (common after legacy imports or if metadata
-        // write was skipped) still have valid embeddings. The dimension check on
-        // line ~308 (byteLength === dim * 4) already safely excludes any chunks whose
-        // embedding dimensions don't match our current query vector, making the SQL
-        // provider filter redundant and harmful for discoverability.
+        // Filter by composite embedding SPACE, not provider name. The byteLength check
+        // below only excludes DIFFERENT-dimension vectors — it cannot tell v1 768d from
+        // v2 768d (same dims, incompatible space). Without this, v1 vectors would be
+        // cosine-compared against v2 queries. NULL space (not yet stamped / mid-reindex)
+        // is intentionally excluded → "empty, not wrong".
+        if (spaceKey) {
+            query += ' AND m.embedding_space = ?';
+            params.push(spaceKey);
+        }
 
         const rows = this.db.prepare(query).all(...params) as any[];
         if (rows.length === 0) return [];
@@ -361,7 +397,7 @@ export class VectorStore {
                     const placeholders = ids.map(() => '?').join(',');
                     const idList = ids.map(r => r.id);
                     // Delete from all known dimension-specific vec0 tables
-                    for (const dim of DatabaseManager.KNOWN_DIMS) {
+                    for (const dim of DatabaseManager.getInstance().getExistingVecDims()) {
                         try {
                             this.db.prepare(
                                 `DELETE FROM vec_chunks_${dim} WHERE chunk_id IN (${placeholders})`
@@ -400,10 +436,19 @@ export class VectorStore {
      *
      * @param providerName The active embedding provider name (e.g. "local", "openai")
      * @param dimensions   The provider's embedding dimensions (e.g. 384, 1536)
+     *
+     * IMPORTANT: This deliberately does NOT stamp `embedding_space`. We cannot
+     * prove a NULL-provider row's vectors were produced by the *current* model —
+     * after a model upgrade they may be in an OLD, incompatible space (e.g. v1
+     * 768d while active is v2 768d). Stamping the active space here would mislabel
+     * them as compatible and they'd never be re-indexed → silent garbage similarity.
+     * Instead we leave `embedding_space` NULL; the auto-reindex sweep treats
+     * NULL-space-with-embeddings rows as unknown-space and safely re-embeds them.
      */
     backfillEmbeddingProviderMetadata(providerName: string, dimensions: number): number {
         try {
-            // Find meetings that have embedded chunks but no provider metadata
+            // Stamp provider/dims for legacy diagnostic value only. Space stays NULL
+            // on purpose (see method doc) so the re-index sweep owns the decision.
             const affected = this.db.prepare(`
                 UPDATE meetings
                 SET embedding_provider = ?, embedding_dimensions = ?
@@ -414,7 +459,7 @@ export class VectorStore {
             `).run(providerName, dimensions);
 
             if (affected.changes > 0) {
-                console.log(`[VectorStore] Backfilled embedding_provider='${providerName}' for ${affected.changes} meeting(s)`);
+                console.log(`[VectorStore] Backfilled provider metadata for ${affected.changes} meeting(s) (space left NULL for re-index sweep)`);
             }
             return affected.changes;
         } catch (e) {
@@ -464,17 +509,40 @@ export class VectorStore {
     }
 
     /**
+     * Stamp a meeting's embedding space/provider/dims if not already set.
+     * Called by the live indexer right after storing an embedding so that
+     * in-session meetings are correctly labeled with the ACTIVE space — which
+     * makes them searchable in-session (search filters on space) and keeps them
+     * out of the "unknown-space" re-index sweep. Idempotent; only sets when NULL.
+     */
+    stampMeetingSpaceIfUnset(meetingId: string, providerName: string, dimensions: number, space: string): void {
+        try {
+            this.db.prepare(
+                'UPDATE meetings SET embedding_provider = ?, embedding_dimensions = ?, embedding_space = ? WHERE id = ? AND embedding_space IS NULL'
+            ).run(providerName, dimensions, space, meetingId);
+        } catch (e) {
+            // Non-fatal — re-index sweep will catch an unstamped meeting later.
+        }
+    }
+
+    /**
      * Search summaries for global queries using native vec0 or JS fallback
      */
     async searchSummaries(
         queryEmbedding: number[],
         limit: number = 5,
-        providerName?: string
+        spaceKey?: string
     ): Promise<{ meetingId: string; summaryText: string; similarity: number }[]> {
-        if (this.useNativeVec) {
-            return this.searchSummariesNative(queryEmbedding, limit, providerName);
+        // Same hard invariant as searchSimilar: no active space → return nothing
+        // rather than leaking every space (see searchSimilar for rationale).
+        if (!spaceKey) {
+            console.warn('[VectorStore] searchSummaries called without an active spaceKey — returning empty.');
+            return [];
         }
-        return this.searchSummariesJSWorker(queryEmbedding, limit, providerName);
+        if (this.useNativeVec) {
+            return this.searchSummariesNative(queryEmbedding, limit, spaceKey);
+        }
+        return this.searchSummariesJSWorker(queryEmbedding, limit, spaceKey);
     }
 
     /**
@@ -483,7 +551,7 @@ export class VectorStore {
     private async searchSummariesNative(
         queryEmbedding: number[],
         limit: number,
-        providerName?: string
+        spaceKey?: string
     ): Promise<{ meetingId: string; summaryText: string; similarity: number }[]> {
         const queryBlob = this.embeddingToBlob(queryEmbedding);
         const dim = queryEmbedding.length;
@@ -494,12 +562,12 @@ export class VectorStore {
                 extPath: this.extPath,
                 queryBlob,
                 dim,
-                providerName,
+                spaceKey,
                 limit
             });
         } catch (e) {
             console.error('[VectorStore] Native summary search (worker) failed, falling back to JS:', e);
-            return this.searchSummariesJSWorker(queryEmbedding, limit, providerName);
+            return this.searchSummariesJSWorker(queryEmbedding, limit, spaceKey);
         }
     }
 
@@ -509,16 +577,22 @@ export class VectorStore {
     private async searchSummariesJSWorker(
         queryEmbedding: number[],
         limit: number,
-        providerName?: string
+        spaceKey?: string
     ): Promise<{ meetingId: string; summaryText: string; similarity: number }[]> {
-        // NOTE: We do NOT filter by embedding_provider — see searchSimilarJSWorker note.
-        // The byte-length dimension check below safely handles provider mismatches.
-        const query = `
-            SELECT s.* 
+        // Filter by composite embedding SPACE, not provider name (see searchSimilarJSWorker).
+        // The byte-length dimension check below cannot distinguish v1 768d from v2 768d.
+        // NULL space is intentionally excluded → "empty, not wrong".
+        let query = `
+            SELECT s.*
             FROM chunk_summaries s
+            JOIN meetings m ON s.meeting_id = m.id
             WHERE s.embedding IS NOT NULL
         `;
         const params: any[] = [];
+        if (spaceKey) {
+            query += ' AND m.embedding_space = ?';
+            params.push(spaceKey);
+        }
 
         const rows = this.db.prepare(query).all(...params) as any[];
 
@@ -567,39 +641,79 @@ export class VectorStore {
     // ============================================
 
     /**
-     * Get count of meetings with incompatible embeddings
+     * Get count of meetings whose embeddings must be rebuilt for the active space.
+     *
+     * Two populations qualify:
+     *  1. KNOWN-INCOMPATIBLE: embedding_space is set and differs from active
+     *     (e.g. gemini-embedding-001 768d while active is gemini-embedding-2 768d —
+     *     same name/dims, different space; the whole reason space keys on the
+     *     composite `${name}:${model}:${dims}`, see embeddingSpace.ts).
+     *  2. UNKNOWN-SPACE-WITH-EMBEDDINGS: embedding_space IS NULL but the meeting
+     *     has stored embeddings (legacy rows, or pre-metadata embeds). We cannot
+     *     prove these are in the active space, so they MUST be re-embedded rather
+     *     than trusted — trusting them is exactly the silent-garbage hazard.
      */
-    getIncompatibleMeetingsCount(providerName: string): number {
-        const row = this.db.prepare(`
-            SELECT COUNT(*) as count FROM meetings 
-            WHERE embedding_provider IS NOT NULL 
-            AND embedding_provider != ?
-            AND is_processed = 1
-        `).get(providerName) as any;
+    /**
+     * Shared WHERE body identifying meetings that need re-embedding for the active
+     * space. Two populations: (1) KNOWN-INCOMPATIBLE — embedding_space set and !=
+     * active (e.g. gemini-embedding-001 768d vs active -2 768d; the whole reason
+     * space keys on the composite `${name}:${model}:${dims}`). (2) UNKNOWN-SPACE-
+     * WITH-EMBEDDINGS — embedding_space NULL but the meeting has stored vectors
+     * (legacy / pre-metadata); we can't prove they're in the active space so they
+     * MUST be re-embedded, not trusted.
+     *
+     * SINGLE SOURCE so getIncompatibleSpaceCount (the trigger) and
+     * getMeetingIdsNeedingReindex (the worklist) can NEVER drift — a mismatch would
+     * make the count say "N to reindex" while a different set actually gets requeued.
+     * The bound parameter is `activeSpace` (the `!= ?` placeholder).
+     */
+    private static readonly REINDEX_PREDICATE = `
+        m.is_processed = 1
+        AND (
+            (m.embedding_space IS NOT NULL AND m.embedding_space != ?)
+            OR (m.embedding_space IS NULL AND (
+                EXISTS (SELECT 1 FROM chunks c WHERE c.meeting_id = m.id AND c.embedding IS NOT NULL)
+                OR EXISTS (SELECT 1 FROM chunk_summaries s WHERE s.meeting_id = m.id AND s.embedding IS NOT NULL)
+            ))
+        )
+    `;
+
+    getIncompatibleSpaceCount(activeSpace: string): number {
+        const row = this.db.prepare(
+            `SELECT COUNT(*) as count FROM meetings m WHERE ${VectorStore.REINDEX_PREDICATE}`
+        ).get(activeSpace) as any;
 
         return row.count || 0;
     }
 
     /**
-     * Delete embeddings for meetings to prep for re-indexer
+     * Return meeting ids that need re-embedding for the active space, most-recent
+     * first. SELECTION ONLY — does not mutate. Uses the SAME REINDEX_PREDICATE as
+     * getIncompatibleSpaceCount so the trigger and the worklist can't diverge.
      */
-    deleteEmbeddingsForMeetings(providerName: string): string[] {
-        // Find incompatible meetings
-        const rows = this.db.prepare(`
-            SELECT id FROM meetings 
-            WHERE embedding_provider IS NOT NULL 
-            AND embedding_provider != ?
-            AND is_processed = 1
-        `).all(providerName) as any[];
+    getMeetingIdsNeedingReindex(activeSpace: string): string[] {
+        const rows = this.db.prepare(
+            `SELECT m.id FROM meetings m WHERE ${VectorStore.REINDEX_PREDICATE} ORDER BY m.created_at DESC`
+        ).all(activeSpace) as any[];
+        return rows.map(r => r.id);
+    }
 
-        const meetingIds = rows.map(r => r.id);
+    /**
+     * Delete embeddings for meetings whose space differs from the active one,
+     * to prep for the re-indexer. Returns affected meeting ids, most-recent-first.
+     *
+     * NOTE: bulk variant — prefer the per-meeting clearEmbeddingsForMeeting() inside
+     * the re-index loop for crash-resumability. Retained for the manual IPC path.
+     */
+    deleteEmbeddingsForSpace(activeSpace: string): string[] {
+        const meetingIds = this.getMeetingIdsNeedingReindex(activeSpace);
         if (meetingIds.length === 0) return [];
 
         for (const id of meetingIds) {
             // Nullify embeddings
             this.db.prepare('UPDATE chunks SET embedding = NULL WHERE meeting_id = ?').run(id);
             this.db.prepare('UPDATE chunk_summaries SET embedding = NULL WHERE meeting_id = ?').run(id);
-            this.db.prepare('UPDATE meetings SET embedding_provider = NULL, embedding_dimensions = NULL WHERE id = ?').run(id);
+            this.db.prepare('UPDATE meetings SET embedding_provider = NULL, embedding_dimensions = NULL, embedding_space = NULL WHERE id = ?').run(id);
 
             // Delete from per-dimension vec0 tables
             if (this.useNativeVec) {
@@ -608,7 +722,7 @@ export class VectorStore {
                     if (cIds.length > 0) {
                         const placeholders = cIds.map(() => '?').join(',');
                         const idList = cIds.map(r => r.id);
-                        for (const dim of DatabaseManager.KNOWN_DIMS) {
+                        for (const dim of DatabaseManager.getInstance().getExistingVecDims()) {
                             try {
                                 this.db.prepare(`DELETE FROM vec_chunks_${dim} WHERE chunk_id IN (${placeholders})`).run(...idList);
                             } catch (_) { /* dim table may not exist */ }
@@ -617,13 +731,15 @@ export class VectorStore {
 
                     const sIds = this.db.prepare('SELECT id FROM chunk_summaries WHERE meeting_id = ?').get(id) as any;
                     if (sIds) {
-                        for (const dim of DatabaseManager.KNOWN_DIMS) {
+                        for (const dim of DatabaseManager.getInstance().getExistingVecDims()) {
                             try {
                                 this.db.prepare(`DELETE FROM vec_summaries_${dim} WHERE summary_id = ?`).run(sIds.id);
                             } catch (_) { /* dim table may not exist */ }
                         }
                     }
-                } catch (e) {}
+                } catch (e) {
+                    console.warn(`[VectorStore] deleteEmbeddingsForSpace: vec0 cleanup failed for meeting ${id}:`, e);
+                }
             }
         }
         return meetingIds;
@@ -643,7 +759,7 @@ export class VectorStore {
 
         // Reset provider metadata so it gets re-assigned by the fallback provider
         this.db.prepare(
-            'UPDATE meetings SET embedding_provider = NULL, embedding_dimensions = NULL WHERE id = ?'
+            'UPDATE meetings SET embedding_provider = NULL, embedding_dimensions = NULL, embedding_space = NULL WHERE id = ?'
         ).run(meetingId);
 
         // Delete rows from all per-dimension vec0 tables
@@ -653,7 +769,7 @@ export class VectorStore {
                 if (cIds.length > 0) {
                     const placeholders = cIds.map(() => '?').join(',');
                     const idList = cIds.map(r => r.id);
-                    for (const dim of DatabaseManager.KNOWN_DIMS) {
+                    for (const dim of DatabaseManager.getInstance().getExistingVecDims()) {
                         try {
                             this.db.prepare(
                                 `DELETE FROM vec_chunks_${dim} WHERE chunk_id IN (${placeholders})`
@@ -664,7 +780,7 @@ export class VectorStore {
 
                 const sRow = this.db.prepare('SELECT id FROM chunk_summaries WHERE meeting_id = ?').get(meetingId) as any;
                 if (sRow) {
-                    for (const dim of DatabaseManager.KNOWN_DIMS) {
+                    for (const dim of DatabaseManager.getInstance().getExistingVecDims()) {
                         try {
                             this.db.prepare(`DELETE FROM vec_summaries_${dim} WHERE summary_id = ?`).run(sRow.id);
                         } catch (_) { /* dim table may not exist */ }

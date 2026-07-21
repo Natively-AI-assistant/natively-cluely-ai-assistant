@@ -3,7 +3,7 @@
 
 use anyhow::Result;
 use cidre::sc::StreamOutput;
-use cidre::{arc, cm, define_obj_type, dispatch, ns, objc, sc};
+use cidre::{api, arc, cm, define_obj_type, dispatch, ns, objc, sc};
 use ringbuf::{
     traits::{Producer, Split},
     HeapCons, HeapProd, HeapRb,
@@ -107,6 +107,21 @@ pub struct SpeakerInput {
 
 impl SpeakerInput {
     pub fn new(device_id: Option<String>) -> Result<Self> {
+        // Gate on macOS 13.0+. sc::StreamCfg.set_captures_audio (and the rest of the
+        // ScreenCaptureKit audio surface) was introduced in 13.0; on macOS 12 the
+        // selector dispatch would abort the process the same way #249 did for
+        // CoreAudio on 14.0-14.3. Fail clean so the JS layer can surface
+        // "unsupported macOS" instead of a process crash.
+        if !ns::ProcessInfo::current().is_os_at_least_version(api::OsVersion {
+            major: 13,
+            minor: 0,
+            patch: 0,
+        }) {
+            return Err(anyhow::anyhow!(
+                "ScreenCaptureKit audio capture requires macOS 13.0+ (current OS lacks SCStreamConfiguration.capturesAudio)"
+            ));
+        }
+
         println!("[SpeakerInput] Initializing ScreenCaptureKit audio capture...");
 
         // ScreenCaptureKit captures ALL system audio, not per-device. If the
@@ -329,5 +344,62 @@ impl Drop for SpeakerStream {
                 println!("[SpeakerStream] WARNING: Stop callback not received after 2s");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for the macOS 13.0 gate on SCK audio capture. Pins the contract so
+    /// a future cidre refactor that breaks `OsVersion::at_least` doesn't silently let the
+    /// fallback crash on macOS 12 hosts (where SCStreamConfiguration.capturesAudio doesn't exist).
+    #[test]
+    fn os_version_gate_resolves_macos_13_on_modern_hosts() {
+        assert!(
+            api::OsVersion {
+                major: 13,
+                minor: 0,
+                patch: 0
+            }
+            .at_least(),
+            "macOS 13.0 should report at_least() == true on a >=13.0 host"
+        );
+    }
+
+    #[test]
+    fn os_version_gate_rejects_future_version_sck() {
+        assert!(
+            !api::OsVersion {
+                major: 99,
+                minor: 0,
+                patch: 0
+            }
+            .at_least(),
+            "macOS 99.0 must not report at_least() == true"
+        );
+    }
+
+    /// Same contract via ProcessInfo — this is the exact API called from
+    /// `SpeakerInput::new` on the SCK side.
+    #[test]
+    fn process_info_is_os_at_least_13_on_modern_hosts() {
+        let pi = ns::ProcessInfo::current();
+        assert!(
+            pi.is_os_at_least_version(api::OsVersion {
+                major: 13,
+                minor: 0,
+                patch: 0
+            }),
+            "ProcessInfo.isOperatingSystemAtLeastVersion(13.0) must be true on a >=13.0 host"
+        );
+        assert!(
+            !pi.is_os_at_least_version(api::OsVersion {
+                major: 99,
+                minor: 0,
+                patch: 0
+            }),
+            "ProcessInfo.isOperatingSystemAtLeastVersion(99.0) must be false"
+        );
     }
 }

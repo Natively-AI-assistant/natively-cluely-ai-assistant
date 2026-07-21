@@ -1,9 +1,159 @@
+// ============================================================================
+// NATIVE-ARCH BOOT GATE — see electron/nativeArchGate.ts.
+//
+// This MUST be the first import in this file. esbuild hoists all imports
+// to the top of the bundled init_main() function in source order; by
+// placing the gate first, we ensure init_nativeArchGate() runs before
+// init_DatabaseManager() (which is what loads better-sqlite3).
+// ============================================================================
+import './nativeArchGate';
+
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
+import * as crypto from "crypto"
 import path from "path"
 import fs from "fs"
+import os from "os"
+import dns from "dns"
+import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { autoUpdater } from "electron-updater"
+
+// Override global dns.lookup to resolve macOS system resolver issues with api.natively.software
+const originalLookup = dns.lookup;
+dns.lookup = function(hostname: any, options: any, callback: any) {
+  if (typeof options === 'function') {
+    callback = options;
+    options = {};
+  }
+  if (hostname === 'api.natively.software') {
+    dns.resolve4(hostname, (err, addresses) => {
+      if (err || !addresses.length) {
+        originalLookup(hostname, options, callback);
+      } else {
+        const addr = addresses[0];
+        if (options && (options as any).all) {
+          callback(null, [{ address: addr, family: 4 }] as any);
+        } else {
+          callback(null, addr, 4);
+        }
+      }
+    });
+  } else {
+    originalLookup(hostname, options, callback);
+  }
+} as any;
+
 if (!app.isPackaged) {
   require('dotenv').config();
+}
+
+// ============================================================================
+// FONTATIONS RENDERER-CRASH MITIGATION (2026-07-10) — user crash report on
+// macOS 27.0 (26A5378j), Electron 33.4.11 / Chromium 130.
+//
+// Chromium's Rust "Fontations" font backend (font hinting + variable-font
+// normalized-coordinate path) traps with EXC_BREAKPOINT / SIGTRAP on the
+// renderer's main thread (CrRendererMain) while shaping text on macOS 26/27.
+// Faulting frames from the real crash report:
+//   fontations_ffi$cxxbridge1$BridgeHintingInstance$operator$sizeof
+//   fontations_ffi$cxxbridge1$BridgeNormalizedCoords$operator$sizeof
+// Disabling the feature falls Chromium back to the legacy CoreText path, which
+// is stable. Related upstream: electron/electron#49522 (no upstream fix).
+//
+// TIMING: this MUST run before app.whenReady() / before the first GPU+renderer
+// command line is assembled, or Chromium ignores the switch. This is bundle
+// load (top of main), which satisfies it. Do NOT move it next to the
+// disable-background-timer-throttling switch later in initializeApp() — that
+// runs AFTER whenReady and is too late for a feature flag.
+//
+// SCOPE: darwin + macOS 26+ only (Darwin kernel major >= 25 — same mapping as
+// ipcHandlers.ts get-os-name). Sequoia (macOS 15 / Darwin 24) and Windows keep
+// the faster Rust backend.
+//
+// ESCAPE HATCH (NATIVELY_* convention):
+//   NATIVELY_DISABLE_FONTATIONS=0 → force-KEEP Fontations even on macOS 26+
+//   NATIVELY_DISABLE_FONTATIONS=1 → force-DISABLE on any platform/version
+//   (unset)                       → auto: disable on darwin macOS 26+ only
+// ============================================================================
+try {
+  const fontationsOverride = process.env.NATIVELY_DISABLE_FONTATIONS;
+  let shouldDisableFontations: boolean;
+  if (fontationsOverride === '0') {
+    shouldDisableFontations = false;
+  } else if (fontationsOverride === '1') {
+    shouldDisableFontations = true;
+  } else {
+    const darwinMajor =
+      process.platform === 'darwin'
+        ? parseInt(os.release().split('.')[0] || '0', 10)
+        : 0;
+    shouldDisableFontations = darwinMajor >= 25; // Darwin 25 = macOS 26
+  }
+  if (shouldDisableFontations) {
+    // NOTE: this is the ONLY disable-features append in the codebase
+    // (verified 2026-07-10). Chromium keeps only the LAST --disable-features
+    // value, so if a second disabled feature is ever added it MUST be combined
+    // into one comma-separated value here rather than a second appendSwitch.
+    //
+    // FEATURE NAMES (verified 2026-07-10 via `strings` on the Electron
+    // 33.4.11 framework binary): the base::Feature names are
+    // "FontationsFontBackend" (the full Rust backend) and
+    // "FontationsForSelectedFormats" (routes selected font formats — incl.
+    // variable fonts, the BridgeNormalizedCoords crash path — through Rust
+    // even when the full backend is off). A bare "Fontations" feature does
+    // NOT exist; Chromium silently ignores unknown names, so passing
+    // 'Fontations' here was a no-op. Both must be disabled together.
+    app.commandLine.appendSwitch(
+      'disable-features',
+      'FontationsFontBackend,FontationsForSelectedFormats'
+    );
+    console.log(
+      '[Fontations] disable-features=FontationsFontBackend,FontationsForSelectedFormats applied ' +
+      `(platform=${process.platform} release=${os.release()} override=${fontationsOverride ?? 'auto'})`
+    );
+  }
+} catch {
+  // Never let the mitigation itself break boot. Worst case: Fontations stays
+  // enabled and the (rare) font crash remains possible — the render-process-gone
+  // auto-reload handler recovers it.
+}
+
+/**
+ * Whether THIS build carries a real Developer ID signature.
+ *
+ * The signed release path (`electron-builder.signed.cjs`) bakes
+ * `nativelySigned: true` into the packaged app's package.json via
+ * `extraMetadata`. The default/dev build leaves it absent. We read the flag
+ * once from the bundled package.json (inside the asar) and cache it.
+ *
+ * This is the "build flag" half of the auto-install gate — see canAutoInstall().
+ */
+let _cachedSignedBuild: boolean | null = null
+function isSignedBuild(): boolean {
+  if (_cachedSignedBuild !== null) return _cachedSignedBuild
+  try {
+    const pkgPath = path.join(app.getAppPath(), 'package.json')
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+    _cachedSignedBuild = pkg?.nativelySigned === true
+  } catch {
+    _cachedSignedBuild = false
+  }
+  return _cachedSignedBuild
+}
+
+/**
+ * Whether this build can perform a real in-place auto-install + relaunch.
+ *
+ *  - Dev (not packaged): never — electron-updater no-ops in dev anyway.
+ *  - Windows / Linux packaged: yes — NSIS/AppImage updaters relaunch fine
+ *    without a macOS-style code signature.
+ *  - macOS packaged: only when signed — Squirrel.Mac refuses to swap and
+ *    relaunch an app that lacks a valid Developer ID signature, so an unsigned
+ *    macOS build must fall back to the manual "open the download" flow.
+ */
+function canAutoInstall(): boolean {
+  if (!app.isPackaged) return false
+  if (process.platform === 'darwin') return isSignedBuild()
+  return true
 }
 
 // Handle stdout/stderr errors at the process level to prevent EIO crashes
@@ -12,11 +162,160 @@ process.stdout?.on?.('error', () => { });
 process.stderr?.on?.('error', () => { });
 
 process.on('uncaughtException', (err) => {
+  const reportPath = isNativeArchGateCrash(err)
+    ? null
+    : writeProcessReport('uncaughtException');
+  logCrashConsole('uncaughtException', {
+    error: formatCrashError(err),
+    reportPath,
+    skippedReport: isNativeArchGateCrash(err) ? 'native-arch-gate' : undefined,
+  });
+  emergencyCloseDatabase('uncaughtException');
+
+  // First-line handler for the native-arch gate (thrown synchronously at
+  // module-load above) and any other uncaught errors. The arch gate's
+  // error message starts with '[nativeArch]' or '[nativeArch:packaged]' — for those,
+  // render the appropriate fix dialog and exit 1. For everything else, fall
+  // through to the original logToFile behavior.
+  if (err instanceof Error && /^\[nativeArch(?::packaged)?\]/.test(err.message)) {
+    const packaged = err.message.startsWith('[nativeArch:packaged]');
+    const detail = err.message.replace(/^\[nativeArch(?::packaged)?\]\s*/, '').replace(/^Architecture mismatch:\s*/, '');
+    // PHASE-2E (CRITICAL fix): tag this fatal exit so the NEXT launch sees
+    // a "previous session ended unexpectedly" marker with reason
+    // fatal-main-error — instead of mis-reading it as a generic crash.
+    // MUST happen here, in this branch, because this handler is the FIRST
+    // one to match the [nativeArch] prefix and exit()s before any other
+    // uncaughtException handler (including the one inside nativeArchGate.ts
+    // and the one in LifecycleTracker) gets a chance to run.
+    try {
+      const { LifecycleTracker } = require('./utils/lifecycleTracker');
+      LifecycleTracker.getInstance().setQuitReason('fatal-main-error', {
+        source: 'native-arch-gate',
+        message: detail.slice(0, 200), // bounded — don't spam the marker
+      });
+    } catch { /* best-effort */ }
+    try {
+      // Lazy-require electron so this handler doesn't fire before
+      // app.whenReady() if the bundle is loaded in a non-Electron context.
+      const { dialog, app: electronApp } = require('electron');
+      // showErrorBox is modal and blocks until the user clicks OK.
+      dialog.showErrorBox(
+        packaged
+          ? 'Natively was built for a different chip — please reinstall'
+          : 'Native modules are wrong architecture — run this command to fix:',
+        detail,
+      );
+      electronApp.exit(1);
+    } catch {
+      // Electron not loaded (running under bare Node in a test) — exit
+      // cleanly with the error text on stderr.
+      console.error('[nativeArch] ' + detail);
+      process.exit(1);
+    }
+    return;
+  }
   logToFile('[CRITICAL] Uncaught Exception: ' + redactArgsForLog([err]));
 });
 
+// Crash-loop guard for unhandledRejection, mirroring the render-process-gone
+// recovery pattern above (RENDERER_RELOAD_MAX / RENDERER_RELOAD_WINDOW_MS).
+//
+// REGRESSION FIX (2026-07-11): unlike uncaughtException / SIGTERM / SIGINT /
+// render-process-gone (all of which either exit the process or are already
+// gated to only close the DB on a genuinely TERMINAL path), this handler used
+// to call emergencyCloseDatabase() unconditionally on EVERY unhandled
+// rejection — and emergencyCloseDatabase() is irreversible (it nulls the
+// DatabaseManager singleton with no reopen path; see its own docstring).
+// Node does NOT terminate the process after 'unhandledRejection' when a
+// listener is registered (this handler never calls process.exit()), so the
+// app kept running for the rest of the session with a permanently dead
+// database after the FIRST stray unhandled rejection ANYWHERE in the
+// codebase — a missing .catch() on any fire-and-forget promise, in this file
+// or any IPC handler. Every meeting save / transcript persist / credential
+// lookup silently no-ops from that point on, with no user-facing signal
+// (DatabaseManager.isAvailable() is never surfaced to the renderer). This is
+// silent, permanent, session-wide data loss triggered by a routine, commonly
+// non-fatal JS error class.
+//
+// Fix: treat an ISOLATED unhandled rejection as recoverable (log it, keep the
+// DB open — main's DatabaseManager instance is unaffected by a rejected
+// promise elsewhere in the process). Only escalate to the terminal,
+// DB-closing path if rejections repeat rapidly within a short window — that
+// pattern (not a single stray rejection) is the actual signal of systemic
+// failure the original code was trying to protect against.
+const unhandledRejectionHistory: number[] = [];
+const UNHANDLED_REJECTION_MAX = 5;            // max unhandled rejections ...
+const UNHANDLED_REJECTION_WINDOW_MS = 60_000; // ... within this rolling window before treating it as terminal
+
 process.on('unhandledRejection', (reason, promise) => {
+  logCrashEvent('unhandledRejection', {
+    reason: formatCrashError(reason),
+    promise: String(promise),
+  });
   logToFile('[CRITICAL] Unhandled Rejection: ' + redactArgsForLog([reason]));
+
+  const now = Date.now();
+  while (unhandledRejectionHistory.length > 0 && now - unhandledRejectionHistory[0] >= UNHANDLED_REJECTION_WINDOW_MS) {
+    unhandledRejectionHistory.shift();
+  }
+  unhandledRejectionHistory.push(now);
+
+  if (unhandledRejectionHistory.length >= UNHANDLED_REJECTION_MAX) {
+    // Rapid-fire unhandled rejections in a short window is a genuine signal
+    // of systemic failure (not a single stray missing .catch()) — treat it
+    // as terminal, matching the render-process-gone-loop-giveup path.
+    logCrashConsole('unhandledRejection-loop-giveup', {
+      rejectionsInWindow: unhandledRejectionHistory.length,
+      windowMs: UNHANDLED_REJECTION_WINDOW_MS,
+    });
+    emergencyCloseDatabase('unhandledRejection-loop-giveup');
+  }
+});
+
+// OS-level shutdown signals. macOS / Linux ship SIGTERM to apps before
+// SIGKILL, and Cmd+Q / Quit menu paths route through app.quit() which we
+// already cover in `before-quit`. These handlers cover the cases where the
+// OS kills the process directly: a hung process getting SIGTERM from
+// launchd, an interrupted `npm run app:dev` Ctrl+C, a tmux/SSH session
+// ending. Each does a synchronous checkpoint+close so the next launch
+// doesn't see a stale WAL holding a kernel lock from the dead process.
+//
+// IMPORTANT: register a handler WITHOUT process.exit()/app.exit() and Node
+// SUPPPRESSES the default exit — the dev workflow (`npm run app:dev` via
+// concurrently) breaks because Ctrl+C kills Vite but the Electron main
+// process keeps running, holding the port indefinitely. So we explicitly
+// call app.exit(0) AFTER the DB close on the dev-relevant signals
+// (SIGINT/SIGTERM). SIGHUP gets the DB close + breadcrumb only — a tmux
+// SSH disconnect shouldn't kill the app on principle, and SIGHUP is rarely
+// sent by anything on macOS.
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, () => {
+    try {
+      logToFile(`[SIGNAL] received ${sig}`);
+      emergencyCloseDatabase(sig);
+    } catch {
+      /* never throw from a signal handler */
+    }
+    // app.exit(0) is the Electron-clean way to terminate synchronously —
+    // skips the "are you sure?" prompts and bypasses before-quit gracefully.
+    // We require() lazily because app may not exist pre-whenReady in a test
+    // harness (ELECTRON_RUN_AS_NODE).
+    try {
+      const { app: electronApp } = require('electron');
+      electronApp.exit(0);
+    } catch {
+      process.exit(0);
+    }
+  });
+}
+process.on('SIGHUP', () => {
+  try {
+    logToFile('[SIGNAL] received SIGHUP');
+    emergencyCloseDatabase('SIGHUP');
+  } catch {
+    /* never throw from a signal handler */
+  }
+  // No exit on SIGHUP — terminal disconnect shouldn't kill a desktop app.
 });
 
 // CQ-04 fix: do NOT call app.getPath() at module load time.
@@ -29,14 +328,236 @@ const getLogFile = (): string | null => {
     _logFile = path.join(app.getPath('documents'), 'natively_debug.log');
     return _logFile;
   } catch {
-    // app.ready not yet fired — return null, logToFile will skip silently
-    return null;
+    // app.ready may not have fired yet (including native module boot gates).
+    // Still write somewhere stable so a pre-ready crash leaves a reason behind.
+    const home = os.homedir?.();
+    _logFile = home
+      ? path.join(home, 'Documents', 'natively_debug.log')
+      : path.join(os.tmpdir(), 'natively_debug.log');
+    return _logFile;
   }
 };
 
 const originalLog = console.log;
 const originalWarn = console.warn;
 const originalError = console.error;
+
+function safeJsonForLog(value: unknown): string {
+  // Replacer-based JSON serializer safe for BigInt, Error, circular refs,
+  // Uint8Array, and other shapes that JSON.stringify throws on by default.
+  // Falls back to a plain-string form on any unexpected failure so a crash
+  // breadcrumb is never silently swallowed.
+  const seen = new WeakSet<object>();
+  try {
+    return JSON.stringify(value, (_k, v) => {
+      if (typeof v === 'bigint') return `<BigInt:${v.toString()}>`;
+      if (v instanceof Error) {
+        return {
+          __error: true,
+          name: v.name,
+          message: v.message,
+          stack: v.stack,
+          cause: v.cause,
+        };
+      }
+      if (v instanceof Uint8Array) return `<Uint8Array len=${v.length}>`;
+      if (v instanceof Buffer) return `<Buffer len=${v.length}>`;
+      if (v && typeof v === 'object') {
+        if (seen.has(v)) return '<circular>';
+        seen.add(v);
+      }
+      return v;
+    }) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function formatCrashError(value: unknown, depth = 0): Record<string, unknown> {
+  if (value instanceof Error) {
+    const cause = value.cause;
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+      // Unwind ES2022 cause chains up to 5 deep — beyond that, just stringify.
+      cause: depth < 5 && cause instanceof Error
+        ? formatCrashError(cause, depth + 1)
+        : (cause != null ? String(cause) : undefined),
+    };
+  }
+  return { value: String(value) };
+}
+
+function getCrashDiagnostics(extra: Record<string, unknown> = {}): Record<string, unknown> {
+  // Wrap the whole body in try/catch — these calls all allocate or query the
+  // OS (memoryUsage, freemem, totalmem, app.isReady) and CAN throw under
+  // OOM / sandboxed test environments. If they throw, the original crash
+  // evidence must survive; we return a minimal fallback so the
+  // [CRASH:*] line still carries the pid/label that points at the crash.
+  try {
+    const mem = process.memoryUsage();
+    return {
+      pid: process.pid,
+      platform: process.platform,
+      arch: process.arch,
+      versions: {
+        electron: process.versions.electron,
+        chrome: process.versions.chrome,
+        node: process.versions.node,
+        v8: process.versions.v8,
+      },
+      uptimeSec: Math.round(process.uptime()),
+      appReady: app.isReady(),
+      appPackaged: app.isPackaged,
+      rssMB: mb(mem.rss),
+      heapUsedMB: mb(mem.heapUsed),
+      heapTotalMB: mb(mem.heapTotal),
+      externalMB: mb(mem.external),
+      arrayBuffersMB: mb(mem.arrayBuffers),
+      freeMemMB: mb(os.freemem()),
+      totalMemMB: mb(os.totalmem()),
+      wal: collectWalSnapshot(),
+      ...extra,
+    };
+  } catch (e: any) {
+    return {
+      pid: process.pid,
+      platform: process.platform,
+      arch: process.arch,
+      diagnosticError: e?.message || String(e),
+      ...extra,
+    };
+  }
+}
+
+function logCrashEvent(label: string, payload: Record<string, unknown>): void {
+  try {
+    logToFile(`[CRASH:${label}] ${safeJsonForLog(getCrashDiagnostics(payload))}`);
+  } catch (e: any) {
+    // Last-resort breadcrumb. If even this fails (e.g. logToFile itself), we
+    // at least surface the label so triage can tell WHICH crash event was
+    // dropped instead of seeing a missing line.
+    try { logToFile(`[CRASH:${label}] logging-failed: ${String(e?.message || e)}`); } catch { /* ignored */ }
+  }
+}
+
+function logCrashConsole(label: string, payload: Record<string, unknown>): void {
+  try {
+    const snapshot = getCrashDiagnostics(payload);
+    const line = `[CRASH:${label}] ${safeJsonForLog(snapshot)}`;
+    logToFile(line);
+    try {
+      process.stderr?.write?.(line + '\n');
+    } catch { /* stdout/stderr can be detached */ }
+  } catch (e: any) {
+    try { logToFile(`[CRASH:${label}] logging-failed: ${String(e?.message || e)}`); } catch { /* ignored */ }
+  }
+}
+
+// Module-scope emergency DB close. Called from EVERY crash path
+// (uncaughtException, unhandledRejection, SIGTERM/SIGINT/SIGHUP,
+// render-process-gone, child-process-gone, gpu-process-crashed) so a
+// hard kill still leaves a clean WAL and releases the OS-level file lock.
+// The next launch's `new Database(dbPath)` then never sees a stale WAL
+// holding a kernel lock from the dead writer (the documented launch-hang
+// class of bug). Idempotent: safe to call from multiple paths in the same
+// process. No-ops if the DB manager isn't initialized yet (early-boot
+// handler fires before DatabaseManager.getInstance() exists).
+//
+// The single-shot flag is set INSIDE the success branch — if checkpoint
+// or close throws (transient disk error, half-initialized DB), a later
+// crash path can still retry the close. Once the close succeeds, the
+// flag sticks and subsequent calls early-return.
+let _emergencyDbClosed = false;
+function emergencyCloseDatabase(reason: string): void {
+  if (_emergencyDbClosed) return;
+  try {
+    const { DatabaseManager } = require('./db/DatabaseManager');
+    const dbMgr = DatabaseManager.getInstance();
+    // REGRESSION FIX (2026-07-10): do NOT wal_checkpoint(TRUNCATE) here.
+    // This function runs ONLY from crash paths (uncaughtException,
+    // unhandledRejection, SIGTERM/SIGINT, SIGHUP, render/child/gpu-process-gone,
+    // initializeApp-failed). A TRUNCATE checkpoint fired from a crashing or
+    // half-initialized process — or interrupted by the macOS SIGTERM→SIGKILL
+    // race — can leave natively.db-wal/-shm half-truncated, which then BLOCKS
+    // the next `new Database()` open and bricks every subsequent launch on both
+    // macOS and Windows (the "loads once, crashes, then never opens again" bug).
+    // We now ONLY release the handle (drop the OS lock) and let SQLite's own
+    // automatic WAL recovery replay the log safely on the next clean open —
+    // exactly how v2.7.0 (which never checkpointed on crash) behaved. The clean
+    // quit path (checkpointDatabase / before-quit / will-quit) still checkpoints
+    // because there the process is HEALTHY.
+    try {
+      if (typeof dbMgr.closeWithoutCheckpoint === 'function') {
+        dbMgr.closeWithoutCheckpoint();
+      } else {
+        // Defensive fallback for an older manager shape — close is still
+        // better than leaving the handle open, even if it checkpoints.
+        dbMgr.close?.();
+      }
+    } catch (e: any) {
+      logToFile(`[DB-EMERGENCY] close failed during ${reason}: ${e?.message || e}`);
+      // Don't latch — a later crash path can retry the close.
+      return;
+    }
+    _emergencyDbClosed = true;
+    logToFile(`[DB-EMERGENCY] closed (no checkpoint) during ${reason}`);
+  } catch (e: any) {
+    // Even if the require itself fails (manager not yet bootstrapped),
+    // we still want the breadcrumb so triage can see we tried. Don't latch
+    // the flag — a later crash path may run after the manager bootstraps.
+    try { logToFile(`[DB-EMERGENCY] failed during ${reason}: ${e?.message || e}`); } catch { /* ignored */ }
+  }
+}
+
+// Returns true if this exception message looks like the routine native-arch
+// gate mismatch (handled by the dialog already). We do NOT write a process
+// report on that path because the user already knows the cause and a full
+// report would just leak env vars.
+function isNativeArchGateCrash(err: unknown): boolean {
+  return err instanceof Error && /^\[nativeArch(?::packaged)?\]/.test(err.message);
+}
+
+function writeProcessReport(label: string): string | null {
+  try {
+    const report = (process as any).report;
+    if (!report?.writeReport) return null;
+    const dir = path.dirname(getLogFile() || path.join(os.tmpdir(), 'natively_debug.log'));
+    try { fs.mkdirSync(dir, { recursive: true }); } catch { /* best-effort */ }
+    const file = path.join(dir, `natively-${label}-${Date.now()}.report.json`);
+    report.writeReport(file);
+    // REDACT environmentVariables from the report on disk. Node's process
+    // report includes the FULL process.env — that includes any API keys the
+    // user has in their shell (GEMINI_API_KEY, OPENAI_API_KEY, etc). Strip
+    // the env block before any other process can read the file. We keep the
+    // heap snapshot, libuv, JS stack, native stack — those are the actually
+    // useful crash artifacts.
+    try {
+      const raw = fs.readFileSync(file, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && 'environmentVariables' in parsed) {
+        delete parsed.environmentVariables;
+        parsed.environmentVariables = '[REDACTED: see natively_debug.log for env-free diagnostic context]';
+        fs.writeFileSync(file, JSON.stringify(parsed, null, 2));
+      }
+    } catch (e: any) {
+      // If we can't read/rewrite, delete the unredacted file rather than leak it.
+      try { fs.unlinkSync(file); } catch { /* best-effort */ }
+      logToFile(`[CRASH:${label}] process report redacted-failed; deleted: ${e?.message || e}`);
+      return null;
+    }
+    logToFile(`[CRASH:${label}] process report written (env redacted): ${file}`);
+    return file;
+  } catch (e: any) {
+    logToFile(`[CRASH:${label}] process report failed: ${e?.message || e}`);
+    return null;
+  }
+}
+
+function logStartupPhase(phase: string, meta: Record<string, unknown> = {}): void {
+  logToFile(`[STARTUP:${phase}] ${safeJsonForLog(getCrashDiagnostics(meta))}`);
+}
 
 // Lazy redactor import — pulled at first call so this file can boot even if
 // the redactor module fails to load (we fall back to a no-op transform).
@@ -52,14 +573,118 @@ function redactArgsForLog(args: unknown[]): string {
   return _redactForLog!(args);
 }
 
+/**
+ * Wraps a promise with a timeout. If the promise doesn't resolve within `ms`
+ * milliseconds, rejects with an error whose message contains `tag`. This
+ * prevents desktopCapturer.getSources (which can block indefinitely on TCC
+ * dialogs or slow API responses) from hanging the Electron main process.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, tag: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`[withTimeout] ${tag} timed out after ${ms}ms`));
+    }, ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 /** Maximum log file size before rotation (10 MB). */
 const LOG_MAX_BYTES = 10 * 1024 * 1024;
 
+// Per-launch reset: when this version of the app starts, an existing
+// natively_debug.log from a previous session is overwritten so the user
+// always sees only the CURRENT session's breadcrumbs. Opt-out via
+// NATIVELY_KEEP_PREVIOUS_LOG=1 (preserve the old log as natively_debug.log.prev
+// for forensics).
+//
+// CRITICAL FIX (2026-07-09): only TRUNCATE when the prior session ended
+// CLEANLY. If the prior session crashed (renderer-gone / fatal-main-error /
+// unknown / no marker at all — the common "force-quit then relaunch" path),
+// rotate the prior log to .prev so the crash evidence the user is trying to
+// debug survives the relaunch. Without this gate, the very common
+// "crash → force-quit → relaunch to capture logs" sequence the user relies
+// on would eat exactly the crash record they want to read.
+function shouldTruncatePriorLog(): boolean {
+  if (process.env.NATIVELY_KEEP_PREVIOUS_LOG === '1') return false;
+  try {
+    const { LifecycleTracker } = require('./utils/lifecycleTracker');
+    const crashed = LifecycleTracker.getInstance().didPreviousSessionCrash();
+    return !crashed;
+  } catch {
+    // LifecycleTracker unavailable (test harness / pre-whenReady): be
+    // conservative and ROTATE so we never destroy evidence we can't verify.
+    return false;
+  }
+}
+
+let _didStartupLogReset = false;
+function resetStartupLog(): void {
+  if (_didStartupLogReset) return;
+  _didStartupLogReset = true;
+  const logFile = getLogFile();
+  if (!logFile) return;
+  try { fs.mkdirSync(path.dirname(logFile), { recursive: true }); } catch { /* best-effort */ }
+  const truncate = shouldTruncatePriorLog();
+  try {
+    if (fs.existsSync(logFile)) {
+      if (truncate) {
+        // Clean prior session: blow away the previous log so the user only
+        // sees current-session breadcrumbs. Old contents are GONE.
+        fs.writeFileSync(logFile, '');
+      } else {
+        // Prior session crashed (or we can't tell): rotate to .prev so the
+        // crash evidence survives this relaunch. The user can read either
+        // file directly off disk.
+        const rotated = logFile + '.prev';
+        try { if (fs.existsSync(rotated)) fs.unlinkSync(rotated); } catch { /* best-effort */ }
+        try { fs.renameSync(logFile, rotated); } catch { /* best-effort */ }
+      }
+    }
+    // Only clear stale process-report files when we're also truncating the
+    // log. When rotating (prior crash), keep the previous report files too
+    // — they're part of the forensic picture the user is debugging.
+    if (truncate) {
+      try {
+        const dir = path.dirname(logFile);
+        for (const name of fs.readdirSync(dir)) {
+          if (/^natively-.*\.report\.json$/.test(name)) {
+            try { fs.unlinkSync(path.join(dir, name)); } catch { /* best-effort */ }
+          }
+        }
+      } catch { /* best-effort */ }
+    }
+  } catch (e: any) {
+    // Non-fatal: if we can't reset, just keep appending to whatever exists.
+    try { fs.appendFileSync(logFile, `[reset-failed] ${e?.message || e}\n`); } catch { /* ignored */ }
+  }
+  // Always write a marker line so the user (and we) can confirm what
+  // happened to the prior log.
+  try {
+    fs.appendFileSync(
+      logFile,
+      `${new Date().toISOString()} [STARTUP] log opened (prior=${truncate ? 'truncated' : 'rotated-to-prev'}) pid=${process.pid} version=${app.getVersion?.() ?? 'unknown'} platform=${process.platform} arch=${process.arch}\n`,
+    );
+  } catch { /* best-effort */ }
+}
+
 function logToFile(msg: string) {
   try {
+    // Lazy: reset the log exactly once per process, on the very first write.
+    // We reset on first write (not at module load) because getLogFile() may
+    // need app.whenReady() to resolve a stable userData path, AND because the
+    // whole point is to overwrite previous-run breadcrumbs.
+    resetStartupLog();
     const logFile = getLogFile();
-    // If the app isn't ready yet (path not available), skip silently.
     if (!logFile) return;
+    try { fs.mkdirSync(path.dirname(logFile), { recursive: true }); } catch { /* best-effort */ }
 
     // P2-1: rotate the log file when it exceeds LOG_MAX_BYTES so that long-running
     // sessions (or meetings with dense transcripts) don't fill the user's disk.
@@ -77,6 +702,27 @@ function logToFile(msg: string) {
     fs.appendFileSync(logFile, new Date().toISOString() + ' ' + msg + '\n');
   } catch (e) {
     // Ignore logging errors
+  }
+}
+
+function mb(n: number | undefined | null): number {
+  return Math.round(((n || 0) / 1024 / 1024) * 10) / 10;
+}
+
+function collectWalSnapshot(): Array<{ file: string; mb: number }> {
+  try {
+    const userData = app.isReady() ? app.getPath('userData') : path.dirname(getLogFile() || os.tmpdir());
+    return fs.readdirSync(userData)
+      .filter(name => name.endsWith('-wal'))
+      .map(name => {
+        const full = path.join(userData, name);
+        return { file: name, mb: mb(fs.statSync(full).size) };
+      })
+      .filter(x => x.mb > 0)
+      .sort((a, b) => b.mb - a.mb)
+      .slice(0, 5);
+  } catch {
+    return [];
   }
 }
 
@@ -116,22 +762,115 @@ async function ensureMacMicrophoneAccess(context: string): Promise<boolean> {
  *   - 'not-determined':  macOS will show the dialog when SCK/CoreAudio tap runs.
  *   - 'restricted':      managed device policy — nothing we can do programmatically.
  */
-function getMacScreenCaptureStatus(): 'granted' | 'denied' | 'not-determined' | 'restricted' {
+type MacScreenCaptureStatus = 'granted' | 'denied' | 'not-determined' | 'restricted';
+
+type MacScreenCaptureCapability = {
+  status: MacScreenCaptureStatus;
+  capturable: boolean;
+  effectiveDenied: boolean;
+  sourceCount: number;
+  message?: string;
+  error?: string;
+};
+
+let latestSystemAudioPermissionWarning: string | null = null;
+
+function rememberSystemAudioPermissionWarning(message: string): void {
+  latestSystemAudioPermissionWarning = message;
+}
+
+function clearSystemAudioPermissionWarning(): void {
+  latestSystemAudioPermissionWarning = null;
+}
+
+/**
+ * B5: Whether the dev-mode TCC bypass is enabled.
+ *
+ * Pre-fix this bypass was unconditional in dev mode: every `npm run app:dev`
+ * launch reported screen-capture status as `'granted'` regardless of the
+ * actual TCC state. Production bugs (the dominant "permissions granted but
+ * no transcription" failure mode) were invisible during local dev.
+ *
+ * Now opt-in: default OFF in dev so devs see the real TCC status; set
+ * `NATIVELY_DEV_BYPASS_SCREEN_TCC=1` to restore the legacy bypass for
+ * smooth daily development.
+ */
+function isDevTccBypassEnabled(): boolean {
+  return !app.isPackaged && process.env.NATIVELY_DEV_BYPASS_SCREEN_TCC === '1';
+}
+
+function getMacScreenCaptureStatus(): MacScreenCaptureStatus {
   if (process.platform !== 'darwin') return 'granted';
 
-  // In development mode, macOS TCC often falsely reports 'denied' for the electron binary
-  // even if the user has granted permission to their Terminal app.
-  if (!app.isPackaged) {
-    console.log('[Main] Ignoring screen capture permission check in development mode');
+  // B5: opt-in dev bypass — see isDevTccBypassEnabled() for rationale.
+  if (isDevTccBypassEnabled()) {
+    console.log('[Main] Dev TCC bypass enabled (NATIVELY_DEV_BYPASS_SCREEN_TCC=1) — reporting screen capture as granted');
     return 'granted';
   }
 
   try {
-    return systemPreferences.getMediaAccessStatus('screen') as
-      'granted' | 'denied' | 'not-determined' | 'restricted';
+    return systemPreferences.getMediaAccessStatus('screen') as MacScreenCaptureStatus;
   } catch (error) {
     console.error('[Main] Failed to check screen recording permission:', error);
     return 'not-determined';
+  }
+}
+
+async function resolveMacScreenCaptureCapability(context: string): Promise<MacScreenCaptureCapability> {
+  const status = getMacScreenCaptureStatus();
+
+  const isMac = process.platform === 'darwin';
+  // B5: Mirror getMacScreenCaptureStatus's opt-in bypass policy. Default in
+  // dev is to run the full capability resolution so devs see the real path.
+  if (!isMac || isDevTccBypassEnabled()) {
+    clearSystemAudioPermissionWarning();
+    return { status, capturable: true, effectiveDenied: false, sourceCount: 0 };
+  }
+
+  if (isMac && status === 'restricted') {
+    const message = formatPermissionMessage('mac-screen-recording-restricted');
+    rememberSystemAudioPermissionWarning(message);
+    return { status, capturable: false, effectiveDenied: true, sourceCount: 0, message };
+  }
+
+  if (status !== 'denied') {
+    clearSystemAudioPermissionWarning();
+    return { status, capturable: true, effectiveDenied: false, sourceCount: 0 };
+  }
+
+  try {
+    const sources = await withTimeout(
+      desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: 1, height: 1 },
+      }),
+      5000,
+      `screen-capture-probe-timeout-${context}`,
+    );
+    const sourceCount = sources.filter((source) => source.id.startsWith('screen:')).length;
+    const capturable = sourceCount > 0;
+
+    if (capturable) {
+      clearSystemAudioPermissionWarning();
+      console.warn(`[Main] Screen Recording status is denied during ${context}, but capture probe succeeded; continuing without permission banner.`);
+    } else {
+      rememberSystemAudioPermissionWarning(formatPermissionMessage('screen-recording-denied'));
+    }
+
+    return { status, capturable, effectiveDenied: !capturable, sourceCount };
+  } catch (error: any) {
+    // Did the timeout fire?
+    if (error?.message?.includes('screen-capture-probe-timeout')) {
+      const message = formatPermissionMessage('screen-recording-denied');
+      rememberSystemAudioPermissionWarning(message + ' (probe timed out)');
+      console.warn(`[Main] Screen Recording capture probe timed out during ${context} — treating as denied.`);
+      return { status, capturable: false, effectiveDenied: true, sourceCount: 0, message, error: error.message };
+    }
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const message = formatPermissionMessage('screen-recording-denied');
+    rememberSystemAudioPermissionWarning(message);
+    console.warn(`[Main] Screen Recording capture probe failed during ${context}: ${errorMessage}`);
+    return { status, capturable: false, effectiveDenied: true, sourceCount: 0, message, error: errorMessage };
   }
 }
 
@@ -150,6 +889,7 @@ function getMacScreenCaptureStatus(): 'granted' | 'denied' | 'not-determined' | 
 // variants have no prefix and branch internally on isMac.
 type PermissionReason =
   | 'screen-recording-denied'
+  | 'mac-screen-recording-restricted'
   | 'mac-screen-recording-revoked-rebuild'
   | 'mic-denied'
   | 'mic-zero-fill'
@@ -162,6 +902,9 @@ function formatPermissionMessage(reason: PermissionReason, extra?: { device?: st
       return isMac
         ? 'Screen Recording permission denied. Interviewer audio will not be captured. Enable in System Settings → Privacy & Security → Screen Recording, then restart the app.'
         : 'System audio capture is unavailable. Interviewer audio will not be captured. Check your audio device routing in Settings and restart the meeting.';
+    case 'mac-screen-recording-restricted':
+      if (!isMac) return formatPermissionMessage('system-audio-stuck');
+      return 'Screen Recording is restricted by device policy. Interviewer audio will not be captured. Contact your administrator to allow screen capture for Natively.';
     case 'mac-screen-recording-revoked-rebuild':
       // Defense-in-depth: even though all call sites must be darwin-gated
       // (the `mac-` prefix marks this constraint), if a future contributor
@@ -226,6 +969,7 @@ import { loadNativeModule } from "./audio/nativeModuleLoader"
 import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
+import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
 import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
@@ -246,12 +990,35 @@ type ScreenshotWindowMode = 'launcher' | 'overlay';
 
 /** Payload for stt-status IPC events broadcast from main to renderer */
 interface SttStatusPayload {
-  state: 'connected' | 'reconnecting' | 'failed';
+  // 'awaiting-audio' (B2) is the post-meeting-start / pre-verified-audio state:
+  // STT WS may be connected but no isFinal transcript has arrived yet, so we
+  // cannot honestly claim 'connected' in the UI. Renderers should display this
+  // as a neutral "Listening for audio…" indicator, NOT green/active.
+  state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio';
   provider: string;
   error?: string;
   channel: 'user' | 'interviewer';
   reconnectAttempts?: number;
 }
+
+export interface LocalWhisperRecoveryNotice {
+  recovered: true;
+  badModelId: string;
+  fallbackModelId: string;
+  message: string;
+}
+
+/** Family-keyed recovery notice for the generalized ONNX load sentinel.
+ *  Each `family` corresponds to one of the local model consumers wired to
+ *  `electron/utils/onnxLoadSentinel.ts`. Renderer pulls via the
+ *  `onnx-get-recovery-notice` IPC, one-shot drained through AppState. */
+export type OnnxRecoveryFamily = 'whisper' | 'intent' | 'embeddings' | 'reranker';
+export interface OnnxRecoveryNotice {
+  family: OnnxRecoveryFamily;
+  badModelId: string;
+  message: string;
+}
+
 type ScreenshotCaptureKind = 'full' | 'selective';
 
 interface ScreenshotCaptureSession {
@@ -268,19 +1035,44 @@ interface ScreenshotCaptureSession {
 // Premium: Knowledge modules loaded conditionally
 let KnowledgeOrchestratorClass: any = null;
 let KnowledgeDatabaseManagerClass: any = null;
+// Phase 1: shared comp-evidence detector for transcript-aware intent routing.
+let textHasCompEvidence: ((text: string) => boolean) | null = null;
 try {
     KnowledgeOrchestratorClass = require('../premium/electron/knowledge/KnowledgeOrchestrator').KnowledgeOrchestrator;
     KnowledgeDatabaseManagerClass = require('../premium/electron/knowledge/KnowledgeDatabaseManager').KnowledgeDatabaseManager;
+    textHasCompEvidence = require('../premium/electron/knowledge/NegotiationConversationTracker').textHasCompEvidence;
 } catch {
     console.log('[Main] Knowledge modules not available — profile intelligence disabled.');
 }
 
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
-import { PhoneMirrorService } from "./services/PhoneMirrorService"
+import { PhoneMirrorService, shouldStartPhoneMirrorOnBoot } from "./services/PhoneMirrorService"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
+import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
+import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
+import { NativeOomTrace } from './utils/NativeOomTrace'
+
+// Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
+// for a copied-profile native OOM investigation. It is inert unless explicitly enabled.
+const nativeOomTrace = new NativeOomTrace()
+
+// Valid disguise modes. The persisted setting is untyped on disk and historical
+// builds wrote values that are no longer part of the union (e.g. 'service'),
+// which then match NO case in _applyDisguise() — leaving the dock app with no
+// icon/name set (the "Disguise icon not found:" empty-path warning) while the
+// window falls back to the terminal icon. That identity mismatch reads as an
+// extra/duplicate dock tile. Coerce any out-of-union value to 'none' on load
+// and at the runtime entry point so app, dock, and window always agree.
+type DisguiseMode = 'terminal' | 'settings' | 'activity' | 'none'
+const VALID_DISGUISE_MODES: readonly DisguiseMode[] = ['terminal', 'settings', 'activity', 'none'] as const
+function normalizeDisguiseMode(value: unknown): DisguiseMode {
+  return (VALID_DISGUISE_MODES as readonly string[]).includes(value as string)
+    ? (value as DisguiseMode)
+    : 'none'
+}
 
 export class AppState {
   private static instance: AppState | null = null
@@ -295,9 +1087,34 @@ export class AppState {
   private intelligenceManager: IntelligenceManager
   private themeManager: ThemeManager
   private ragManager: RAGManager | null = null
+  private modeReferenceRetryPromise: Promise<void> | null = null
+  private stabilityHeartbeatTimer: NodeJS.Timeout | null = null
+  // Diagnostic-only, independently paced native-memory sampler. Normal product
+  // heartbeats remain at 30 seconds; this exists only for a short-lived OOM run.
+  private nativeOomTraceTimer: NodeJS.Timeout | null = null
   private knowledgeOrchestrator: any = null
+
+  public recordNativeOomTrace(event: string, data: Record<string, unknown> = {}): void {
+    nativeOomTrace.record(event, data)
+  }
+
+  public recordNativeOomOutboundIpc(webContentsId: number, channel: string, args: unknown[]): void {
+    nativeOomTrace.recordOutboundIpc(webContentsId, channel, args)
+  }
+
+  public armNativeOomContentTrace(launcherPid: number): void {
+    nativeOomTrace.armContentTrace(launcherPid)
+  }
+
+  public stopNativeOomContentTrace(reason: string): void {
+    void nativeOomTrace.stopContentTrace(reason)
+  }
+
   private tray: Tray | null = null
   private updateAvailable: boolean = false
+  private updateDownloadState: 'idle' | 'available' | 'downloading' | 'downloaded' = 'idle'
+  private updateDownloadPromise: Promise<unknown> | null = null
+  private downloadedUpdateInfo: any = null
   private disguiseMode: 'terminal' | 'settings' | 'activity' | 'none' = 'none'
 
   // View management
@@ -314,6 +1131,17 @@ export class AppState {
 
   private hasDebugged: boolean = false
   private isMeetingActive: boolean = false; // Guard for session state leaks
+  private _meetingGeneration = 0;
+  private _audioInitPromise: Promise<void> | null = null;
+  // AbortController handle for the in-flight startMeeting() audio init, so endMeeting()
+  // can cancel it (signal.aborted short-circuits the init's isCurrentMeeting() guards)
+  // and await its completion before tearing down captures — preventing a fresh capture
+  // from being constructed/started AFTER teardown (dangling native handle / HAL freeze).
+  private _audioInitController: AbortController | null = null;
+  // Re-entry guard for endMeeting(): set true across the early `await _audioInitPromise`
+  // (which yields the event loop before `_pendingTeardown` exists), so a second Stop
+  // click during that window can't double-run the teardown and truncate trailing finals.
+  private _endMeetingInFlight = false;
   // True between Stop click and the end of STT drain. The transcript handler
   // (and only the transcript handler) treats `isMeetingActive || _isDraining`
   // as "accept trailing finals" — every other call site looks at
@@ -329,6 +1157,12 @@ export class AppState {
   // before booting a new session so the shared STT instances are not torn down
   // mid-meeting by a stale teardown task.
   private _pendingTeardown: Promise<void> | null = null;
+  // Tracks meeting IDs currently being processed by processCompletedMeetingForRAG.
+  // Without this guard, a rapid stop→start→stop cycle could enqueue the same
+  // meeting for RAG twice (e.g. recovery retry + normal completion), duplicating
+  // embedding work, slowing the meeting-end perceived latency, and racing the
+  // SQLite INSERT OR IGNORE that protects against duplicates.
+  private _ragProcessingInFlight: Set<string> = new Set();
   private _isQuitting: boolean = false;
   private _verboseLogging: boolean = false;
   // Tracks whether STT sample-rate has been applied for the current capture
@@ -336,11 +1170,28 @@ export class AppState {
   // first-chunk handler reads the freshly-detected native rate.
   private _sysSttRateApplied: boolean = false;
   private _micSttRateApplied: boolean = false;
+  // Per-speaker throttle for the display-only `native-audio-transcript` IPC.
+  // Finals are sent immediately; partials coalesce to latest-wins within
+  // PARTIAL_TRANSCRIPT_THROTTLE_MS so a fast STT (e.g. OpenAI per-delta partials)
+  // can't flood both windows with near-per-token IPC during a long meeting
+  // (audit finding #7). The answer path (intelligenceManager.handleTranscript /
+  // RAG feed) runs BEFORE this send and is unaffected — this only paces the
+  // renderer's rolling transcript bar, which renders the latest preview anyway.
+  private static readonly PARTIAL_TRANSCRIPT_THROTTLE_MS = 100;
+  private _transcriptPartialThrottle = new Map<string, {
+    timer: ReturnType<typeof setTimeout> | null;
+    pending: { speaker: string; text: string; timestamp: number; final: boolean; confidence: number } | null;
+  }>();
   private _disguiseTimers: NodeJS.Timeout[] = []; // Track forceUpdate timeouts
   private _dockDebounceTimer: NodeJS.Timeout | null = null; // Debounce dock state changes
-  private _dockReassertTimers: NodeJS.Timeout[] = []; // Re-assert dock-hidden state after show+focus
+  private _dockReassertTimers: NodeJS.Timeout[] = []; // Self-verifying dock-enforcement retry timers
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
+  private localWhisperRecoveryNotice: LocalWhisperRecoveryNotice | null = null;
+  // Family-keyed stash for the generalized ONNX load-sentinel recovery
+  // notices (intent / embeddings / reranker). Whisper keeps its dedicated
+  // channel for backward-compat with the shipped renderer banner.
+  private onnxRecoveryNotices: Partial<Record<OnnxRecoveryFamily, OnnxRecoveryNotice>> = {};
 
 
   // Processing events
@@ -365,8 +1216,8 @@ export class AppState {
     // 1. Load boot-critical settings first (used by WindowHelpers)
     const settingsManager = SettingsManager.getInstance();
     this.isUndetectable = settingsManager.get('isUndetectable') ?? false;
-    this.disguiseMode = settingsManager.get('disguiseMode') ?? 'none';
-    this._verboseLogging = settingsManager.get('verboseLogging') ?? false;
+    this.disguiseMode = normalizeDisguiseMode(settingsManager.get('disguiseMode'));
+    this._verboseLogging = settingsManager.get('verboseLogging') ?? true;
     setVerboseLoggingFlag(this._verboseLogging);
     console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}`);
 
@@ -396,19 +1247,164 @@ export class AppState {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         if (CredentialsManager.getInstance().getSttProvider() === 'local-whisper') {
-          const { isModelCached } = require('./audio/whisper/modelManager');
+          const { isModelCached, MODEL_CATALOG_IDS } = require('./audio/whisper/modelManager');
           const { modelPreloader } = require('./audio/whisper/modelPreloader');
           const { resolveInferenceConfig } = require('./audio/whisper/inferenceConfig');
-          const modelId = settingsManager.get('localWhisperModel') ?? 'Xenova/whisper-tiny.en';
+          // Startup validation gate: if the persisted modelId isn't in the
+          // catalog (corrupted settings, model retired, fork diverged), reset
+          // to the safest fallback BEFORE preload — otherwise the worker
+          // crashes on init with a confusing "model not found" and the user
+          // is locked out of audio until they manually clear settings.
+          //
+          // Also consume the Whisper load sentinel before validation/preload. If
+          // it exists, the previous process died while loading that model natively
+          // (before JS error handlers could persist a cooldown). Reset any
+          // matching selection headlessly so one bad ONNX model cannot brick
+          // startup.
+          //
+          // Validate BOTH the global setting AND the per-channel overrides
+          // (when per-channel mode is enabled). Per-channel validation runs
+          // here because the per-channel id is read at meeting-start time
+          // (main.ts:1721-1726), not at this preload block — leaving it
+          // un-validated here means a corrupt per-channel id would still
+          // crash the meeting even though the global gate passes.
+          const FALLBACK = 'Xenova/whisper-tiny.en';
+          const poisoned = modelPreloader.consumePoisonedLoadSentinel?.();
+          if (poisoned?.modelId) {
+            let resetAny = false;
+            for (const key of ['localWhisperModel', 'localWhisperModelMic', 'localWhisperModelSystem'] as const) {
+              if (settingsManager.get(key) === poisoned.modelId) {
+                settingsManager.set(key, FALLBACK);
+                resetAny = true;
+              }
+            }
+            if (resetAny) {
+              const message = `Recovered from a local transcription model crash. Reset ${poisoned.modelId} to ${FALLBACK}.`;
+              console.warn(`[AppState] ${message}`);
+              this.setLocalWhisperRecoveryNotice({
+                recovered: true,
+                badModelId: poisoned.modelId,
+                fallbackModelId: FALLBACK,
+                message,
+              });
+            } else {
+              console.warn(`[AppState] Previous local Whisper load for ${poisoned.modelId} did not finish cleanly; current settings no longer reference it.`);
+            }
+          }
+          const rawModelId = settingsManager.get('localWhisperModel') ?? FALLBACK;
+          const modelId = MODEL_CATALOG_IDS.has(rawModelId) ? rawModelId : FALLBACK;
+          if (modelId !== rawModelId) {
+            console.warn(`[AppState] Persisted localWhisperModel "${rawModelId}" not in catalog — resetting to ${modelId}`);
+            settingsManager.set('localWhisperModel', modelId);
+          }
+          if (settingsManager.get('localWhisperPerChannelEnabled')) {
+            for (const key of ['localWhisperModelMic', 'localWhisperModelSystem'] as const) {
+              const raw = settingsManager.get(key);
+              if (raw && !MODEL_CATALOG_IDS.has(raw)) {
+                console.warn(`[AppState] Persisted ${key} "${raw}" not in catalog — resetting to ${FALLBACK}`);
+                settingsManager.set(key, FALLBACK);
+              }
+            }
+          }
           const { dtype } = resolveInferenceConfig();
-          if (isModelCached(modelId, dtype)) {
-            console.log(`[AppState] Preloading local Whisper model: ${modelId}`);
-            modelPreloader.preload(modelId);
+
+          // Collect every model ID the user has selected (global + per-channel)
+          // so we can auto-repair each one that's missing or corrupt.
+          const modelIds = new Set<string>([modelId]);
+          if (settingsManager.get('localWhisperPerChannelEnabled')) {
+            const mic = settingsManager.get('localWhisperModelMic');
+            const sys = settingsManager.get('localWhisperModelSystem');
+            if (mic && MODEL_CATALOG_IDS.has(mic)) modelIds.add(mic);
+            if (sys && MODEL_CATALOG_IDS.has(sys)) modelIds.add(sys);
+          }
+
+          // Which model to warm: mic-channel > global (mic is the user's own
+          // voice — most latency-critical). The preloader is single-slot so we
+          // pick the highest-priority cached candidate.
+          const micOverride = settingsManager.get('localWhisperPerChannelEnabled')
+            ? (settingsManager.get('localWhisperModelMic') ?? '')
+            : '';
+          const preloadPriority = [
+            micOverride && MODEL_CATALOG_IDS.has(micOverride) ? micOverride : '',
+            modelId,
+          ].filter(Boolean);
+          const primaryPreloadId = preloadPriority.find(id => isModelCached(id, dtype)) ?? '';
+
+          const { LocalModelDownloadService } = require('./services/LocalModelDownloadService');
+          for (const id of modelIds) {
+            if (isModelCached(id, dtype)) {
+              if (id === primaryPreloadId) {
+                console.log(`[AppState] Preloading local Whisper model: ${id}`);
+                modelPreloader.preload(id);
+              }
+            } else {
+              // Files are missing or corrupt — auto-download in the background
+              // so the user doesn't have to open Settings and click Download.
+              console.log(`[AppState] Local Whisper model "${id}" not cached — starting background download`);
+              try {
+                const result = LocalModelDownloadService.getInstance().start('whisper', id);
+                if (!result.success && !result.alreadyDownloading) {
+                  console.warn(`[AppState] Auto-download for "${id}" rejected:`, result.error);
+                }
+              } catch (dlErr: any) {
+                console.warn(`[AppState] Auto-download for "${id}" failed to start:`, dlErr?.message);
+              }
+            }
           }
         }
       } catch (e) {
         // Non-fatal — recording still works, just with a cold-start delay
         console.warn('[AppState] Local Whisper preload skipped:', e);
+      }
+    });
+
+    // Generalized ONNX load-sentinel consume (intent / embeddings / reranker).
+    // Runs UNCONDITIONALLY — these families are loaded on demand and a poisoned
+    // disk sentinel must be consumed regardless of the user's STT selection.
+    // Each consumer seeds its own in-memory poison flag so the first call
+    // (warmup, embed, rerank) fast-fails and the user sees a degraded
+    // experience instead of a crashloop.
+    setImmediate(() => {
+      try {
+        const { consumeIntentClassifierSentinel } = require('./llm/IntentClassifier');
+        const { consumeLocalEmbeddingSentinel } = require('./rag/providers/LocalEmbeddingProvider');
+        const { consumeLocalRerankerSentinel } = require('./rag/LocalReranker');
+
+        const intentPoisoned = consumeIntentClassifierSentinel();
+        if (intentPoisoned) {
+          const message = `Recovered from an intent classifier crash. ${intentPoisoned.modelId} is skipped this launch — falling back to regex/heuristic intent.`;
+          console.warn(`[AppState] ${message}`);
+          this.setOnnxRecoveryNotice('intent', {
+            family: 'intent',
+            badModelId: intentPoisoned.modelId,
+            message,
+          });
+        }
+
+        const embeddingPoisoned = consumeLocalEmbeddingSentinel();
+        if (embeddingPoisoned) {
+          const message = `Recovered from a local embedding crash. ${embeddingPoisoned.modelId} is skipped this launch — retrieval falls back to lexical.`;
+          console.warn(`[AppState] ${message}`);
+          this.setOnnxRecoveryNotice('embeddings', {
+            family: 'embeddings',
+            badModelId: embeddingPoisoned.modelId,
+            message,
+          });
+        }
+
+        const rerankerPoisoned = consumeLocalRerankerSentinel();
+        if (rerankerPoisoned) {
+          const message = `Recovered from a local reranker crash. ${rerankerPoisoned.modelId} is skipped this launch — retrieval falls back to cosine top-K.`;
+          console.warn(`[AppState] ${message}`);
+          this.setOnnxRecoveryNotice('reranker', {
+            family: 'reranker',
+            badModelId: rerankerPoisoned.modelId,
+            message,
+          });
+        }
+      } catch (e: any) {
+        // Non-fatal — a missing or broken consume helper must never brick startup.
+        console.warn('[AppState] ONNX sentinel consume skipped (non-fatal):', e?.message || e);
       }
     });
 
@@ -424,33 +1420,52 @@ export class AppState {
     // flow + queries availability/state; the tap itself is toggled by the
     // global shortcut handler above. Only registered on macOS — on other
     // platforms these handlers no-op so the renderer can render fallback UI.
+    //
+    // removeHandler-then-handle on each channel is defensive against a
+    // second `app.ready` firing (rare but possible during dev HMR / single-
+    // instance second-launch path) — `ipcMain.handle` throws on duplicate
+    // registration, which would propagate as a renderer IPC rejection and
+    // silently leave isCgEventTapAvailableRef at its safe-false default.
+    const registerStealthHandler = (channel: string, fn: (...args: any[]) => any) => {
+      ipcMain.removeHandler(channel);
+      ipcMain.handle(channel, fn);
+    };
+    registerStealthHandler('get-system-audio-permission-warning', () => latestSystemAudioPermissionWarning);
     if (process.platform === 'darwin') {
       const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
       const stealth = StealthKeyboardManager.getInstance();
-      ipcMain.handle('stealth-tap:available', () => stealth.isAvailable());
-      ipcMain.handle('stealth-tap:permission-granted', () => stealth.isPermissionGranted());
-      ipcMain.handle('stealth-tap:request-permission', () => stealth.requestPermission());
-      ipcMain.handle('stealth-tap:open-settings', () => { stealth.openSettings(); });
-      ipcMain.handle('stealth-tap:is-active', () => stealth.isActive());
-      ipcMain.handle('stealth-tap:stop', () => { stealth.stop(); });
-      ipcMain.handle('stealth-tap:start', () => stealth.start());
+      registerStealthHandler('stealth-tap:available', () => stealth.isAvailable());
+      registerStealthHandler('stealth-tap:open-settings', () => { stealth.openSettings(); });
+      registerStealthHandler('stealth-tap:stop', () => { stealth.stop(); });
+      registerStealthHandler('stealth-tap:start', () => stealth.start());
       // IME users (Pinyin, Hangul, Kanji, …) cannot compose under the tap
       // because CGEventTap fires below TIS. Renderer consults this before
       // click-to-engage so it can fall back to plain DOM focus when an IME
       // is in play. See electron/services/ImeDetector.ts for the rationale.
-      ipcMain.handle('stealth-tap:should-auto-engage', () => {
+      registerStealthHandler('stealth-tap:should-auto-engage', () => {
         const { shouldAutoEngageStealthTap } = require('./services/ImeDetector');
         return shouldAutoEngageStealthTap();
       });
+      // Force a fresh IME probe and return the refined value. Renderer calls
+      // this on window focus so users who add a Pinyin/Hangul source mid-
+      // session don't silently break CJK composition the next time the tap
+      // would auto-engage (the cached value from mount-time would be stale).
+      registerStealthHandler('stealth-tap:refresh-ime', () => {
+        const { refreshImeDetection, shouldAutoEngageStealthTap } = require('./services/ImeDetector');
+        refreshImeDetection();
+        return shouldAutoEngageStealthTap();
+      });
     } else {
-      ipcMain.handle('stealth-tap:available', () => false);
-      ipcMain.handle('stealth-tap:permission-granted', () => false);
-      ipcMain.handle('stealth-tap:request-permission', () => false);
-      ipcMain.handle('stealth-tap:open-settings', () => {});
-      ipcMain.handle('stealth-tap:is-active', () => false);
-      ipcMain.handle('stealth-tap:stop', () => {});
-      ipcMain.handle('stealth-tap:start', () => false);
-      ipcMain.handle('stealth-tap:should-auto-engage', () => true);
+      registerStealthHandler('stealth-tap:available', () => false);
+      registerStealthHandler('stealth-tap:open-settings', () => {});
+      registerStealthHandler('stealth-tap:stop', () => {});
+      registerStealthHandler('stealth-tap:start', () => false);
+      // Non-darwin: returns true so the renderer's stealthAutoEngageOkRef
+      // stays true and the explicit isCgEventTapAvailableRef guard (added in
+      // PR #250) is what actually gates blockInputFocus. Inverted relative
+      // to availability on purpose — see ImeDetector.ts:67.
+      registerStealthHandler('stealth-tap:should-auto-engage', () => true);
+      registerStealthHandler('stealth-tap:refresh-ime', () => true);
     }
 
     keybindManager.onShortcutTriggered(async (actionId) => {
@@ -470,31 +1485,47 @@ export class AppState {
           // timing gap. The invoke path used by generalHandlers.takeScreenshot() is
           // already proven to work for UI-button screenshots; reuse it here.
           const mainWindow = this.getMainWindow();
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('global-shortcut', { action: 'takeScreenshot' });
-          }
+          this.sendToWindow(mainWindow, 'global-shortcut', { action: 'takeScreenshot' });
         } else if (actionId === 'general:selective-screenshot') {
           const mainWindow = this.getMainWindow();
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('global-shortcut', { action: 'selectiveScreenshot' });
-          }
+          this.sendToWindow(mainWindow, 'global-shortcut', { action: 'selectiveScreenshot' });
         } else if (actionId === 'general:capture-and-process') {
           // Single-trigger: capture current screen then immediately request AI analysis
-          const screenshotPath = await this.takeScreenshot(false);
-          const preview = await this.getImagePreview(screenshotPath);
-          // Ensure the window is visible so the user can see the response without stealing focus
-          this.showMainWindow(true);
-          // win.focus() can cause macOS to re-activate the app. Re-hide the dock
-          // if we are in undetectable mode.
-          if (process.platform === 'darwin' && this.isUndetectable) {
-            app.dock.hide();
+          await this.captureScreenAndProcess();
+
+        } else if (actionId === 'general:capture-dom') {
+          // One hotkey, the right capture: if the companion browser extension is
+          // connected, ask it to grab the active tab's page context (delivered to
+          // the overlay via /dom). If it isn't reachable — not in a browser, SW
+          // asleep, Phone Mirror off — fall back to a screenshot automatically so
+          // the gesture always does something. See natively-browser/README.md.
+          let captured = false;
+          try {
+            const svc = PhoneMirrorService.getInstance();
+            // MV3 race fix: the extension's service worker may have been idle-killed
+            // and is only just reconnecting (its wake-on-interaction handlers fire as
+            // the user touches the browser right before capturing). Poll briefly for
+            // an extension to connect before deciding — otherwise a just-woken SW
+            // would fall straight through to a screenshot. waitForExtension resolves
+            // immediately when one is already connected.
+            const extReady = svc.isRunning() && (await svc.waitForExtension());
+            if (extReady) {
+              const result = await svc.requestDomCapture();
+              captured = result.ok;
+              if (captured) {
+                // The extension only acks `done` after /dom returns 200, so by here
+                // the overlay has already received the page context (it surfaces a
+                // "Page context" pill and uses it on the next answer).
+                console.log('[Main] DOM capture delivered to overlay');
+              } else {
+                console.log('[Main] DOM capture unavailable (', result.reason, ') — falling back to screenshot');
+              }
+            }
+          } catch (e: any) {
+            console.warn('[Main] DOM capture error — falling back to screenshot:', e?.message || e);
           }
-          const mainWindow = this.getMainWindow();
-          if (mainWindow) {
-            mainWindow.webContents.send("capture-and-process", {
-              path: screenshotPath,
-              preview
-            });
+          if (!captured) {
+            await this.captureScreenAndProcess();
           }
 
         // --- STEALTH SHORTCUTS: no focus, no show, pure IPC dispatch ---
@@ -513,9 +1544,7 @@ export class AppState {
           // (no rebuild yet, no Accessibility permission, or non-macOS).
           this.showMainWindow(true);
           const overlay = this.windowHelper.getOverlayWindow();
-          if (overlay && !overlay.isDestroyed()) {
-            overlay.webContents.send('ensure-expanded');
-          }
+          this.sendToWindow(overlay, 'ensure-expanded');
 
           if (process.platform === 'darwin') {
             const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
@@ -528,7 +1557,7 @@ export class AppState {
 
           // Fallback: panel-safe focus on macOS without tap, brief focus on Win.
           if (overlay && !overlay.isDestroyed()) {
-            overlay.webContents.send('global-shortcut', { action: 'focusInput' });
+            this.sendToWindow(overlay, 'global-shortcut', { action: 'focusInput' });
             overlay.focus();
           }
         } else if (
@@ -558,13 +1587,7 @@ export class AppState {
             'chat:scrollRight': 'scrollRight',
           };
           const action = actionMap[actionId];
-          // Send to all windows without focusing — stealth operation
-          const allWindows = BrowserWindow.getAllWindows();
-          allWindows.forEach(win => {
-            if (!win.isDestroyed()) {
-              win.webContents.send('global-shortcut', { action });
-            }
-          });
+          this.sendToMeetingSurfaces('global-shortcut', { action });
 
         // Window movement — move window position without focus change
         } else if (actionId === 'window:move-up') {
@@ -578,19 +1601,9 @@ export class AppState {
 
         // General actions that are now global (stealth)
         } else if (actionId === 'general:process-screenshots') {
-          const allWindows = BrowserWindow.getAllWindows();
-          allWindows.forEach(win => {
-            if (!win.isDestroyed()) {
-              win.webContents.send('global-shortcut', { action: 'processScreenshots' });
-            }
-          });
+          this.sendToMeetingSurfaces('global-shortcut', { action: 'processScreenshots' });
         } else if (actionId === 'general:reset-cancel') {
-          const allWindows = BrowserWindow.getAllWindows();
-          allWindows.forEach(win => {
-            if (!win.isDestroyed()) {
-              win.webContents.send('global-shortcut', { action: 'resetCancel' });
-            }
-          });
+          this.sendToMeetingSurfaces('global-shortcut', { action: 'resetCancel' });
         }
       } catch (e: any) {
         if (e.message !== "Selection cancelled" && e.message !== "Screenshot capture already in progress") {
@@ -631,14 +1644,9 @@ export class AppState {
         fastModel: settingsManager.get('codexCliFastModel') || 'gpt-5.3-codex-spark',
         timeoutMs: settingsManager.get('codexCliTimeoutMs') || 60_000,
         sandboxMode: settingsManager.get('codexCliSandboxMode') || 'read-only',
+        serviceTier: settingsManager.get('codexCliServiceTier') || 'default',
+        modelReasoningEffort: settingsManager.get('codexCliModelReasoningEffort'),
       });
-      // Restore custom notes for non-premium path
-      try {
-        const savedNotes = DatabaseManager.getInstance().getCustomNotes();
-        if (savedNotes) {
-          llmHelper.setCustomNotes(savedNotes);
-        }
-      } catch (_) {}
     }
 
     // Initialize RAGManager (requires database to be ready)
@@ -647,11 +1655,21 @@ export class AppState {
     // Check and prep Ollama embedding model
     this.bootstrapOllamaEmbeddings()
 
+    // Prime the optional Hindsight long-term-memory server health cache (settings/env
+    // config; Noop when unconfigured). Fire-and-forget — never blocks startup.
+    try {
+      const { HindsightManager } = require('./services/HindsightManager');
+      HindsightManager.getInstance().start().catch(() => { /* never blocks startup */ });
+    } catch { /* optional */ }
 
     this.setupIntelligenceEvents()
 
-    // Pre-warm the zero-shot intent classifier in background
-    warmupIntentClassifier();
+    ProviderStatusRegistry.getInstance().setBroadcaster((channel, payload) => {
+      this.broadcast(channel, payload);
+    });
+
+    // Intent-classifier warmup is scheduled after the launcher is visible so
+    // transformers/ONNX initialization cannot contend with the first paint.
 
     // Setup Ollama IPC
     this.setupOllamaIpcHandlers()
@@ -662,13 +1680,229 @@ export class AppState {
 
     // Initialize Auto-Updater
     this.setupAutoUpdater()
+
+    this.startStabilityHeartbeat();
+    this.startNativeOomTraceSampling();
   }
 
-  private broadcast(channel: string, ...args: any[]): void {
-    BrowserWindow.getAllWindows().forEach(win => {
-      if (!win.isDestroyed()) {
-        win.webContents.send(channel, ...args);
+  private startStabilityHeartbeat(): void {
+    if (this.stabilityHeartbeatTimer) return;
+    const emit = () => {
+      try {
+        const mem = process.memoryUsage();
+        const flags = {
+          ragConfidenceGate: isIntelligenceFlagEnabled('ragConfidenceGate'),
+          ragLocalRerank: isIntelligenceFlagEnabled('ragLocalRerank'),
+          ragSpeculativeRerank: isIntelligenceFlagEnabled('ragSpeculativeRerank'),
+          okfKnowledgePacks: isIntelligenceFlagEnabled('okfKnowledgePacks'),
+          okfHybridRetrieval: isIntelligenceFlagEnabled('okfHybridRetrieval'),
+          jitFinalAnswerEnforced: isIntelligenceFlagEnabled('jitFinalAnswerEnforced'),
+          hindsightMemory: isIntelligenceFlagEnabled('hindsightMemory'),
+        };
+        // PER-PROCESS memory breakdown (2026-07-10 leak diagnosis): the
+        // main-process RSS above cannot tell us WHICH process is growing.
+        // app.getAppMetrics() reports RSS per Chromium process (Browser=main,
+        // GPU, Tab=renderer, Utility). This makes a native RSS climb
+        // attributable: if the GPU process is the one ballooning on Windows,
+        // the "Browser"/main RSS and the "GPU" RSS diverge here. Guarded so a
+        // failure never breaks the heartbeat.
+        let procMem: Array<{ type: string; rssMB: number; pid: number; win?: string }> = [];
+        try {
+          const { app: eApp, BrowserWindow, webContents } = require('electron');
+          // Build a pid → window-label map so a leaking "Tab" (renderer) is
+          // attributable to a SPECIFIC window (launcher / overlay / cropper /
+          // settings / model-selector). getAppMetrics() only reports the process
+          // TYPE + pid, not which renderer it is — so on the Windows repro we
+          // couldn't tell WHICH renderer ballooned. Match each live webContents'
+          // OS process id to its window URL's ?window= param.
+          const pidToWin: Record<number, string> = {};
+          try {
+            for (const wc of (webContents?.getAllWebContents?.() || [])) {
+              try {
+                if (wc.isDestroyed?.()) continue;
+                const ospid = wc.getOSProcessId?.();
+                if (!ospid) continue;
+                const url = wc.getURL?.() || '';
+                const m = /[?&]window=([a-z-]+)/.exec(url);
+                let label = m ? m[1] : (url.includes('index.html') || url.includes('localhost') ? 'launcher?' : 'renderer');
+                // Devtools / about:blank helpers
+                if (url.startsWith('devtools://')) label = 'devtools';
+                pidToWin[ospid] = pidToWin[ospid] ? `${pidToWin[ospid]}+${label}` : label;
+              } catch { /* per-wc best effort */ }
+            }
+          } catch { /* webContents enumeration best effort */ }
+          procMem = (eApp.getAppMetrics?.() || [])
+            .map((m: any) => ({
+              type: m.type,
+              rssMB: m.memory?.workingSetSize ? Math.round(m.memory.workingSetSize / 1024) : 0, // KB→MB
+              pid: m.pid,
+              ...(pidToWin[m.pid] ? { win: pidToWin[m.pid] } : {}),
+            }))
+            .sort((a: any, b: any) => b.rssMB - a.rssMB);
+        } catch { /* getAppMetrics unavailable pre-ready — skip */ }
+
+        this.sampleNativeOomTrace(mem);
+
+        console.log('[StabilityHeartbeat]', {
+          rssMB: mb(mem.rss),
+          heapUsedMB: mb(mem.heapUsed),
+          heapTotalMB: mb(mem.heapTotal),
+          externalMB: mb(mem.external),
+          arrayBuffersMB: mb(mem.arrayBuffers),
+          freeMemMB: mb(os.freemem()),
+          totalMemMB: mb(os.totalmem()),
+          uptimeSec: Math.round(process.uptime()),
+          isMeetingActive: this.isMeetingActive,
+          flags,
+          wal: collectWalSnapshot(),
+          // Per-process working-set RSS (MB) — leak-attribution / stability signal.
+          procMem,
+        });
+      } catch (e: any) {
+        console.warn('[StabilityHeartbeat] skipped:', e?.message || e);
       }
+    };
+    setTimeout(emit, 10_000).unref?.();
+    this.stabilityHeartbeatTimer = setInterval(emit, 30_000);
+    this.stabilityHeartbeatTimer.unref?.();
+  }
+
+  private sampleNativeOomTrace(memory = process.memoryUsage()): void {
+    if (!nativeOomTrace.isEnabled()) return;
+    nativeOomTrace.sample(
+      memory,
+      (() => {
+        try {
+          return (app.getAppMetrics?.() || []) as unknown as Array<Record<string, unknown>>;
+        } catch {
+          return [];
+        }
+      })(),
+      (() => {
+        const launcher = this.windowHelper?.getLauncherWindow?.();
+        if (!launcher || launcher.isDestroyed()) return undefined;
+        const pid = launcher.webContents.getOSProcessId();
+        return pid > 0 ? { webContentsId: launcher.webContents.id, pid } : undefined;
+      })(),
+      { freeMemory: os.freemem(), totalMemory: os.totalmem() },
+    );
+  }
+
+  private startNativeOomTraceSampling(): void {
+    if (!nativeOomTrace.isEnabled() || this.nativeOomTraceTimer) return;
+    // A prior incident rose from 497 MB to more than 2 GB in roughly four
+    // seconds; the ordinary 30-second heartbeat cannot observe that onset.
+    this.nativeOomTraceTimer = setInterval(() => this.sampleNativeOomTrace(), 1000);
+    this.nativeOomTraceTimer.unref?.();
+  }
+
+  public stopNativeOomTraceSampling(): void {
+    if (!this.nativeOomTraceTimer) return;
+    clearInterval(this.nativeOomTraceTimer);
+    this.nativeOomTraceTimer = null;
+  }
+
+  private sendToWindow(win: BrowserWindow | null | undefined, channel: string, ...args: any[]): boolean {
+    if (!win || win.isDestroyed()) return false;
+    try {
+      nativeOomTrace.recordOutboundIpc(win.webContents.id, channel, args);
+      win.webContents.send(channel, ...args);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private sendToMeetingSurfaces(channel: string, ...args: any[]): void {
+    const sent = new Set<number>();
+    const sendOnce = (win: BrowserWindow | null | undefined) => {
+      if (!win || sent.has(win.id)) return;
+      if (this.sendToWindow(win, channel, ...args)) sent.add(win.id);
+    };
+    sendOnce(this.windowHelper.getLauncherWindow());
+    sendOnce(this.windowHelper.getOverlayWindow());
+  }
+
+  private sendToSettingsSurfaces(channel: string, ...args: any[]): void {
+    const sent = new Set<number>();
+    const sendOnce = (win: BrowserWindow | null | undefined) => {
+      if (!win || sent.has(win.id)) return;
+      if (this.sendToWindow(win, channel, ...args)) sent.add(win.id);
+    };
+    sendOnce(this.settingsWindowHelper.getSettingsWindow());
+    sendOnce(this.windowHelper.getLauncherWindow());
+  }
+
+  /** Push a transcript payload to the launcher + overlay rolling-transcript bar. */
+  private emitTranscriptToSurfaces(payload: { speaker: string; text: string; timestamp: number; final: boolean; confidence: number }): void {
+    const helper = this.getWindowHelper();
+    this.sendToWindow(helper.getLauncherWindow(), 'native-audio-transcript', payload);
+    this.sendToWindow(helper.getOverlayWindow(), 'native-audio-transcript', payload);
+  }
+
+  /**
+   * Display-only transcript IPC with partial throttling (audit finding #7).
+   * Finals flush any pending partial then send immediately (preserving order);
+   * partials coalesce to latest-wins within PARTIAL_TRANSCRIPT_THROTTLE_MS so a
+   * chatty STT doesn't generate near-per-token IPC to two windows. Keyed per
+   * speaker so interviewer + user channels throttle independently.
+   */
+  private sendThrottledTranscript(payload: { speaker: string; text: string; timestamp: number; final: boolean; confidence: number }): void {
+    const key = payload.speaker;
+    let state = this._transcriptPartialThrottle.get(key);
+    if (!state) {
+      state = { timer: null, pending: null };
+      this._transcriptPartialThrottle.set(key, state);
+    }
+
+    if (payload.final) {
+      // Cancel any pending partial — the final supersedes it — then send now.
+      if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+      state.pending = null;
+      this.emitTranscriptToSurfaces(payload);
+      return;
+    }
+
+    // Partial: remember the latest and ensure a flush is scheduled.
+    state.pending = payload;
+    if (state.timer) return; // a flush is already pending; latest-wins
+    state.timer = setTimeout(() => {
+      const s = this._transcriptPartialThrottle.get(key);
+      if (!s) return;
+      s.timer = null;
+      const p = s.pending;
+      s.pending = null;
+      if (p) this.emitTranscriptToSurfaces(p);
+    }, AppState.PARTIAL_TRANSCRIPT_THROTTLE_MS);
+  }
+
+  /** Drop any pending throttled partials + timers (called on meeting teardown). */
+  private clearTranscriptThrottle(): void {
+    for (const state of this._transcriptPartialThrottle.values()) {
+      if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+      state.pending = null;
+    }
+    this._transcriptPartialThrottle.clear();
+  }
+
+  private sendSttStatus(payload: any): void {
+    this.sendToMeetingSurfaces('stt-status', payload);
+  }
+
+  // Public so initializeApp's startup permission checks (UX1) can emit the
+  // banner symmetrically with sendSystemAudioPermissionDenied. Other in-class
+  // call sites are unaffected.
+  public sendAudioCaptureFailed(payload: any): void {
+    this.sendToMeetingSurfaces('audio-capture-failed', payload);
+  }
+
+  public sendSystemAudioPermissionDenied(message: string): void {
+    this.sendToMeetingSurfaces('system-audio-permission-denied', message);
+  }
+
+  public broadcast(channel: string, ...args: any[]): void {
+    BrowserWindow.getAllWindows().forEach(win => {
+      this.sendToWindow(win, channel, ...args);
     });
   }
 
@@ -688,9 +1922,81 @@ export class AppState {
     this.broadcast('meeting-state-changed', { isActive: this.isMeetingActive });
   }
 
+  // Public so the reference-file upload IPC handler can kick a retry for a
+  // file that landed in 'failed'/'lexical_only' during the embedder warm-up
+  // window (the boot-time scheduler only sees files that existed at start).
+  public scheduleModeReferenceIndexRetry(): void {
+    if (this.modeReferenceRetryPromise) return;
+    const pipeline = this.ragManager?.getEmbeddingPipeline();
+    if (!pipeline) return;
+
+    this.modeReferenceRetryPromise = pipeline.waitForReady(15000).then(async () => {
+      const { ModesManager } = require('./services/ModesManager');
+      const modesManager = ModesManager.getInstance();
+      await modesManager.retryAllLexicalOnlyFiles().catch(() => { /* logged inside */ });
+      // Capture which modes actually had retry-eligible files BEFORE the retry,
+      // so we only nudge those renderers to re-fetch status (LOW #8) instead of
+      // broadcasting a no-op 'done' to every mode on every pipeline-ready event.
+      const affectedModeIds: string[] = modesManager.getModesWithRetryEligibleFiles();
+      for (const modeId of affectedModeIds) {
+        this.broadcast('mode-file-index-status', { modeId, phase: 'done' });
+      }
+    }).catch(() => { /* provider unavailable — lexical fallback remains valid */ })
+      .finally(() => { this.modeReferenceRetryPromise = null; });
+  }
+
   private async bootstrapOllamaEmbeddings() {
     this._ollamaBootstrapPromise = (async () => {
       try {
+        // SKIP when a cloud embedding provider is already available. Pulling the
+        // 274MB `nomic-embed-text` on first launch is pure waste for users who
+        // have an OpenAI/Gemini key (the RAG pipeline resolves to that cloud
+        // provider anyway), and the background pull was racing the ModelSelector
+        // window's forceRestartOllama `kill -9` — leaving a "Setting up AI
+        // memory… 0%" pill stuck forever. Only bootstrap Ollama embeddings when
+        // there is NO cloud key, i.e. Ollama is genuinely the intended provider.
+        try {
+          const { CredentialsManager } = require('./services/CredentialsManager');
+          const cm = CredentialsManager.getInstance();
+          const hasCloudEmbeddingKey =
+            !!(cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY) ||
+            !!(cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
+          if (hasCloudEmbeddingKey) {
+            console.log('[AppState] Skipping Ollama embeddings bootstrap — a cloud embedding provider is configured.');
+            return;
+          }
+        } catch (guardErr: any) {
+          // Credential lookup failed — fall through and attempt the bootstrap.
+          console.warn('[AppState] Ollama bootstrap cloud-key guard failed (non-fatal):', guardErr?.message);
+        }
+
+        // PHASE-2C: capability resolver — even when no cloud key is
+        // configured, the user may have explicitly disabled Ollama (or
+        // configured a non-Ollama local provider). Without this gate, a fresh
+        // install's `spawn ollama` is wasted work that fills the log with
+        // ENOENT noise and can race the ModelSelector force-restart path.
+        // Only attempt to bootstrap when the user has not opted out.
+        try {
+          const { SettingsManager } = require('./services/SettingsManager');
+          const settings = SettingsManager.getInstance();
+          // Best-effort check — any missing key returns undefined and is
+          // treated as "no opt-out" (the bootstrap proceeds, matching
+          // pre-fix behavior). This is intentionally permissive: we only
+          // short-circuit when the user has clearly said NO.
+          const explicitNoOllama =
+            settings.get?.('disableOllamaBootstrap') === true ||
+            settings.get?.('localProvider') === 'none' ||
+            settings.get?.('localProvider') === 'cloud';
+          if (explicitNoOllama) {
+            console.log('[AppState] Skipping Ollama embeddings bootstrap — user has opted out (disableOllamaBootstrap/localProvider).');
+            return;
+          }
+        } catch (settingsErr: any) {
+          // Settings lookup is best-effort; failure here just falls through
+          // to the prior behavior.
+          console.warn('[AppState] Ollama bootstrap opt-out check failed (non-fatal):', settingsErr?.message);
+        }
+
         const { OllamaBootstrap } = require('./rag/OllamaBootstrap');
         const bootstrap = new OllamaBootstrap();
 
@@ -713,6 +2019,7 @@ export class AppState {
                 ollamaUrl: process.env.OLLAMA_URL || "http://localhost:11434",
                 providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
              });
+             this.scheduleModeReferenceIndexRetry();
           }
         }
       } catch (err) {
@@ -731,6 +2038,16 @@ export class AppState {
         const cm = CredentialsManager.getInstance();
         const openaiKey = cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY;
         const geminiKey = cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+        // Gemini embedding key POOL: credential key + all GEMINI_API_KEY(_2.._6)/GOOGLE
+        // env keys, de-duped. Lets the embedding provider rotate off a rate-limited
+        // key (429 → per-key cooldown → next key) instead of failing the index.
+        const geminiKeys = (() => {
+          const pool: string[] = [];
+          const add = (k?: string) => { const v = (k || '').trim(); if (v && !pool.includes(v)) pool.push(v); };
+          add(cm.getGeminiApiKey());
+          for (const n of ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4', 'GEMINI_API_KEY_5', 'GEMINI_API_KEY_6', 'GOOGLE_API_KEY']) add(process.env[n]);
+          return pool;
+        })();
 
         const providerDataScopes = (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })();
         this.ragManager = new RAGManager({
@@ -739,10 +2056,20 @@ export class AppState {
             extPath: db.getExtPath(),
             openaiKey,
             geminiKey,
+            geminiKeys,
             ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
             providerDataScopes
         });
         this.ragManager.setLLMHelper(this.processingHelper.getLLMHelper());
+
+        // Modes reference files must use the same initialized EmbeddingPipeline as
+        // the main RAG stack. A private, never-initialized pipeline marks every
+        // upload as lexical_only even after Gemini/Ollama embeddings are ready.
+        const { ModesManager } = require('./services/ModesManager');
+        const modeEmbeddingPipeline = this.ragManager.getEmbeddingPipeline();
+        ModesManager.getInstance().setSharedEmbeddingPipeline(modeEmbeddingPipeline);
+        this.scheduleModeReferenceIndexRetry();
+
         console.log('[AppState] RAGManager initialized');
       }
     } catch (error) {
@@ -762,29 +2089,127 @@ export class AppState {
         const llmHelper = this.processingHelper.getLLMHelper();
 
         // generateContent function for LLM calls
+        // Join ALL content parts (some callers — e.g. live negotiation coaching —
+        // pass [{text: systemPrefix}, {text: prompt}]; reading only [0] dropped the
+        // prompt). Single-item callers (extraction, script) are unaffected.
+        const joinContents = (contents: any[]) =>
+          (Array.isArray(contents) ? contents : [contents])
+            .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
+            .filter(Boolean)
+            .join('\n\n');
         this.knowledgeOrchestrator.setGenerateContentFn(async (contents: any[]) => {
-          return await llmHelper.generateContentStructured(
-            contents[0]?.text || ''
-          );
+          return await llmHelper.generateContentStructured(joinContents(contents));
         });
+
+        // Low-latency generation for LIVE negotiation coaching (spoken in real
+        // time): Flash-first chain so the tactical note appears fast. The AOT
+        // negotiation script + all extraction keep the quality-first fn above.
+        if (typeof this.knowledgeOrchestrator.setLiveCoachingContentFn === 'function') {
+          this.knowledgeOrchestrator.setLiveCoachingContentFn(async (contents: any[]) => {
+            return await llmHelper.generateContentStructured(joinContents(contents), { preferFast: true });
+          });
+        }
 
         // Embedding function — lazily delegate to the cascaded EmbeddingPipeline
         // (OpenAI → Gemini → Ollama → Local bundled model).
         // We await waitForReady() so uploads during boot wait for the pipeline
         // instead of immediately throwing 'not ready'.
         const self = this;
-        this.knowledgeOrchestrator.setEmbedFn(async (text: string) => {
+        const embedWithProducerMetadata = async (text: string) => {
           const pipeline = self.ragManager?.getEmbeddingPipeline();
           if (!pipeline) throw new Error('RAG pipeline not available');
           await pipeline.waitForReady();
-          return await pipeline.getEmbedding(text);
+          return await pipeline.getEmbeddingWithFallback(text);
+        };
+        this.knowledgeOrchestrator.setEmbedFn(async (text: string) => {
+          return (await embedWithProducerMetadata(text)).embedding;
         });
+        if (typeof this.knowledgeOrchestrator.setEmbedWithMetadataFn === 'function') {
+          this.knowledgeOrchestrator.setEmbedWithMetadataFn(embedWithProducerMetadata);
+        }
+        // Report the active document-embedder's composite space so the orchestrator
+        // can detect knowledge nodes embedded in an OLD space (e.g. after a
+        // gemini-embedding-001 → -2 upgrade) and re-embed them, instead of silently
+        // comparing v1 node vectors against v2 query vectors (same dims = no dim guard).
+        if (typeof this.knowledgeOrchestrator.setActiveSpaceFn === 'function') {
+          this.knowledgeOrchestrator.setActiveSpaceFn(() => {
+            return self.ragManager?.getEmbeddingPipeline()?.getActiveSpaceKey();
+          });
+        }
         if (typeof this.knowledgeOrchestrator.setEmbedQueryFn === 'function') {
           this.knowledgeOrchestrator.setEmbedQueryFn(async (text: string) => {
             const pipeline = self.ragManager?.getEmbeddingPipeline();
             if (!pipeline) throw new Error('RAG pipeline not available');
             await pipeline.waitForReady();
             return await pipeline.getEmbeddingForQuery(text);
+          });
+        }
+        // Fast on-device query embedder for the latency-critical knowledge path.
+        // The orchestrator dimension-checks `dimensions` against the index and
+        // only uses `embed` (bundled MiniLM, ~10ms) when compatible — otherwise
+        // it falls back to the cloud embedFn above so retrieval stays correct.
+        if (typeof this.knowledgeOrchestrator.setFastQueryEmbedFn === 'function') {
+          this.knowledgeOrchestrator.setFastQueryEmbedFn(() => {
+            const pipeline = self.ragManager?.getEmbeddingPipeline();
+            return {
+              dimensions: pipeline?.localDimensions ?? null,
+              // Composite space of the local embedder — the orchestrator gates the
+              // fast path on space identity (not just dimension), so a same-dim but
+              // different-space collision can't silently produce garbage similarity.
+              space: pipeline?.localSpaceKey ?? null,
+              embed: async (text: string) => {
+                if (!pipeline) return null;
+                // Await readiness so the FIRST cold-session question still gets the
+                // local fast path (the local fallback provider is only assigned
+                // once the pipeline finishes init). Without this, the very query
+                // prewarm targets would silently fall back to the cloud embedder.
+                // Swallow errors — getEmbeddingForQueryLocalOnly returns null on
+                // any failure and the orchestrator falls back to embedFn.
+                try { await pipeline.waitForReady(); } catch { /* fall through */ }
+                return await pipeline.getEmbeddingForQueryLocalOnly(text);
+              },
+            };
+          });
+        }
+
+        // Kick a knowledge re-embed once the embedding pipeline is ready. CRITICAL:
+        // the orchestrator's constructor fires refreshCache()→ensureEmbeddingSpace()
+        // BEFORE setActiveSpaceFn is wired above, so that initial pass no-ops (no active
+        // space yet). Without this explicit kick, a v1→v2 model upgrade would leave the
+        // resume/JD nodes stranded in the old space — _spaceGatedNodes would exclude them
+        // and semantic retrieval would silently return nothing until the user re-uploaded.
+        // This is the knowledge-base analogue of RAGManager.scheduleAutoReindex's self-heal.
+        if (typeof this.knowledgeOrchestrator.ensureEmbeddingSpace === 'function') {
+          const ko = this.knowledgeOrchestrator;
+          (async () => {
+            try {
+              await self.ragManager?.getEmbeddingPipeline()?.waitForReady();
+              await ko.ensureEmbeddingSpace();
+            } catch (e: any) {
+              console.warn('[main] Knowledge ensureEmbeddingSpace kick failed (non-fatal):', e?.message || e);
+            }
+          })();
+        }
+
+        // Phase 1: transcript-aware intent hint. The orchestrator (premium) has
+        // no SessionTracker reference (package boundary), so the app layer reads
+        // the rolling ~180s transcript here and hands back a lightweight verdict.
+        // We inspect only the last 1-2 INTERVIEWER turns for comp evidence — NOT
+        // the whole window (that caused topic-bleed) and NOT the candidate's own
+        // typed question (classified separately). Cheap + synchronous.
+        if (typeof this.knowledgeOrchestrator.setConversationContextProvider === 'function') {
+          this.knowledgeOrchestrator.setConversationContextProvider(() => {
+            if (!textHasCompEvidence) return null;
+            try {
+              const items = self.intelligenceManager?.getContext(180) ?? [];
+              const interviewerTurns = items.filter((i: any) => i.role === 'interviewer');
+              const lastTwo = interviewerTurns.slice(-2);
+              const lastInterviewerTurn = lastTwo.length ? lastTwo[lastTwo.length - 1].text : undefined;
+              const recentInterviewerComp = lastTwo.some((i: any) => textHasCompEvidence!(i.text));
+              return { recentInterviewerComp, lastInterviewerTurn };
+            } catch {
+              return null;
+            }
           });
         }
 
@@ -798,14 +2223,13 @@ export class AppState {
         if (sm.get('knowledgeMode')) {
           this.knowledgeOrchestrator.setKnowledgeMode(true);
           console.log('[AppState] Knowledge mode restored from settings');
-        }
-
-        // Restore custom notes so orchestrator has them from first request
-        const savedNotes = DatabaseManager.getInstance().getCustomNotes();
-        if (savedNotes) {
-          this.knowledgeOrchestrator.setCustomNotes(savedNotes);
-          llmHelper.setCustomNotes(savedNotes);
-          console.log('[AppState] Custom notes restored');
+          // Pre-warm the provider prompt cache off the hot path so the first
+          // question of the session doesn't pay full cold-prefill TTFT. Gated
+          // on knowledge mode being active AND a resume being present (only then
+          // is a session likely imminent). Best-effort, non-blocking.
+          if (this.knowledgeOrchestrator.isKnowledgeMode()) {
+            llmHelper.prewarmPromptCache().catch((_e: any): void => {});
+          }
         }
 
         console.log('[AppState] KnowledgeOrchestrator initialized');
@@ -816,8 +2240,48 @@ export class AppState {
   }
 
   private setupAutoUpdater(): void {
+    // Keep downloads user-initiated so the renderer's "Update Now" CTA is the
+    // single source of truth. Signed/packaged builds can still apply a downloaded
+    // update on quit; unsigned macOS builds use the manual GitHub DMG flow.
+    const autoInstall = canAutoInstall()
     autoUpdater.autoDownload = false
-    autoUpdater.autoInstallOnAppQuit = false  // Manual install only via button
+    autoUpdater.autoInstallOnAppQuit = autoInstall
+    console.log(
+      `[AutoUpdater] autoDownload=${autoUpdater.autoDownload} ` +
+      `autoInstallOnAppQuit=${autoUpdater.autoInstallOnAppQuit} ` +
+      `(canAutoInstall=${autoInstall}, signedBuild=${isSignedBuild()}, platform=${process.platform})`
+    )
+
+    // PHASE-2A: log current + feed config on startup so a mis-pointed `latest.yml`
+    // is immediately diagnosable from the log (and from any user bug report).
+    //
+    // NOTE: electron-updater@6.x deprecated `getFeedURL()` — when no explicit URL
+    // was set via `setFeedURL()`, the method returns the literal string
+    // "Deprecated. Do not use it." instead of resolving from `package.json`.
+    // Read the `publish` block directly so the diagnostic reflects truth.
+    try {
+      const pkgPath = path.join(app.getAppPath(), 'package.json')
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+      const publish = pkg?.build?.publish || pkg?.publish
+      let feedLabel: string
+      if (Array.isArray(publish) && publish.length > 0) {
+        // electron-builder allows a publish array (multi-channel). Log them all.
+        feedLabel = publish
+          .map((p: any) => `${p.provider || 'unknown'}:${p.owner ? `${p.owner}/${p.repo ?? ''}` : (p.url || '(default)')}`)
+          .join(', ')
+      } else if (publish && typeof publish === 'object') {
+        feedLabel = `${publish.provider || 'unknown'}:${publish.owner ? `${publish.owner}/${publish.repo ?? ''}` : (publish.url || '(default)')}`
+      } else if (publish) {
+        feedLabel = String(publish)
+      } else {
+        feedLabel = 'auto (publish in package.json)'
+      }
+      console.log(
+        `[AutoUpdater] currentVersion=${app.getVersion()} channel=${autoUpdater.channel} feed=${feedLabel}`
+      )
+    } catch (feedErr) {
+      console.warn('[AutoUpdater] Could not read feed URL:', feedErr)
+    }
 
     // Default to latest (stable) channel - matches latest.yml generated by electron-builder
     autoUpdater.channel = 'latest'
@@ -829,8 +2293,34 @@ export class AppState {
     })
 
     autoUpdater.on("update-available", async (info) => {
+      // PHASE-2A: refuse non-upgrades (downgrade, equal, malformed). electron-updater
+      // normally already filters this, but we belt-and-brace it: a stale latest.yml on
+      // GitHub (or a republish with the wrong tag) must NEVER cause us to invite the
+      // user to "update" to a version older than or equal to what they're running.
+      const currentVersion = app.getVersion()
+      const remoteVersion = (info?.version ?? '').toString().replace(/^v/, '')
+      if (!AppState.isRealUpgrade(currentVersion, remoteVersion)) {
+        console.warn(
+          '[AutoUpdater] Ignoring non-upgrade update:',
+          `current=${currentVersion} remote=${remoteVersion} channel=${autoUpdater.channel}`
+        )
+        this.updateAvailable = false
+        this.updateDownloadState = 'idle'
+        this.downloadedUpdateInfo = null
+        // Treat as "not available" so the UI doesn't show a stale banner.
+        this.broadcast('update-not-available', {
+          version: currentVersion,
+          ignored: true,
+          reason: 'non-upgrade',
+          remote: remoteVersion
+        })
+        return
+      }
+
       console.log("[AutoUpdater] Update available:", info.version)
       this.updateAvailable = true
+      this.updateDownloadState = 'available'
+      this.downloadedUpdateInfo = null
 
       // Fetch structured release notes
       const releaseManager = ReleaseNotesManager.getInstance();
@@ -845,11 +2335,16 @@ export class AppState {
 
     autoUpdater.on("update-not-available", (info) => {
       console.log("[AutoUpdater] Update not available:", info.version)
+      this.updateAvailable = false
+      this.updateDownloadState = 'idle'
+      this.downloadedUpdateInfo = null
       this.broadcast("update-not-available", info)
     })
 
     autoUpdater.on("error", (err) => {
       console.error("[AutoUpdater] Error:", err)
+      this.updateDownloadState = this.updateAvailable ? 'available' : 'idle'
+      this.updateDownloadPromise = null
       // Include more details in the error message for debugging
       const errorMessage = err.message || err.toString() || 'Unknown update error'
       this.broadcast("update-error", errorMessage)
@@ -865,8 +2360,12 @@ export class AppState {
 
     autoUpdater.on("update-downloaded", (info) => {
       console.log("[AutoUpdater] Update downloaded:", info.version)
-      // Notify renderer that update is ready to install
-      this.broadcast("update-downloaded", info)
+      this.updateDownloadState = 'downloaded'
+      this.updateDownloadPromise = null
+      // info.filePath is the public path of the staged update zip from Squirrel.Mac.
+      // Use it over the private downloadedUpdateHelper.file API (see quitAndInstallUpdate).
+      this.downloadedUpdateInfo = { ...info, updateFile: (info as any).filePath }
+      this.broadcast("update-downloaded", this.downloadedUpdateInfo)
     })
 
     // Start checking for updates with a 10-second delay
@@ -898,6 +2397,8 @@ export class AppState {
         if (this.isVersionNewer(currentVersion, latestVersion)) {
           console.log('[AutoUpdater] Manual Check: New version found!');
           this.updateAvailable = true;
+          this.updateDownloadState = 'available';
+          this.downloadedUpdateInfo = null;
 
           // Mock an info object compatible with electron-updater
           const info = {
@@ -916,6 +2417,9 @@ export class AppState {
           });
         } else {
           console.log('[AutoUpdater] Manual Check: App is up to date.');
+          this.updateAvailable = false;
+          this.updateDownloadState = 'idle';
+          this.downloadedUpdateInfo = null;
           this.broadcast("update-not-available", { version: currentVersion });
         }
       }
@@ -940,16 +2444,103 @@ export class AppState {
     return false;
   }
 
+  /**
+   * PHASE-2A: Is `remote` strictly newer than `current` (both semver-ish)?
+   *
+   * Used as the GATE on the production autoUpdater path so a stale or repointed
+   * `latest.yml` can never invite the user to "update" to a version <= theirs.
+   *
+   * Rules:
+   *   - Accept only well-formed X[.Y[.Z[.B]]] (digits). Anything else → false.
+   *   - Leading 'v' (e.g. "v2.8.0") and pre-release suffixes ("2.8.0-beta.1") are
+   *     stripped before comparison so a stable build never accepts a beta as a
+   *     downgrade (and vice versa).
+   *   - Strict greater-than. Equal or older → false.
+   */
+  static isRealUpgrade(current: string, remote: string): boolean {
+    const stripPre = (v: string) => v.replace(/^v/, '').replace(/-.*$/, '')
+    const parse = (v: string): number[] | null => {
+      const parts = stripPre(v).split('.')
+      if (parts.length < 1 || parts.length > 4) return null
+      const out: number[] = []
+      for (const p of parts) {
+        if (!/^\d+$/.test(p)) return null
+        const n = parseInt(p, 10)
+        if (!Number.isFinite(n) || n < 0) return null
+        out.push(n)
+      }
+      // Pad to 4 parts for stable comparison (major.minor.patch.build).
+      while (out.length < 4) out.push(0)
+      return out
+    }
+    const c = parse(current)
+    const r = parse(remote)
+    if (!c || !r) return false
+    for (let i = 0; i < 4; i++) {
+      if (r[i] > c[i]) return true
+      if (r[i] < c[i]) return false
+    }
+    return false
+  }
 
   public async quitAndInstallUpdate(): Promise<void> {
+    // PHASE-2A: belt-and-brace guard against applying a downgrade or no-op update.
+    // The `update-downloaded` path can only be reached after `update-available`
+    // passed isRealUpgrade, but renderer/UI bugs could call this IPC directly.
+    const currentVersion = app.getVersion()
+    const downloadedVersion = (this.downloadedUpdateInfo?.version ?? '').toString().replace(/^v/, '')
+    if (!downloadedVersion) {
+      console.error('[AutoUpdater] quitAndInstall called but no downloaded update info')
+      return
+    }
+    if (!AppState.isRealUpgrade(currentVersion, downloadedVersion)) {
+      console.warn(
+        '[AutoUpdater] Refusing to apply non-upgrade update:',
+        `current=${currentVersion} downloaded=${downloadedVersion}`
+      )
+      this.broadcast('update-error', `Refusing non-upgrade update (${currentVersion} → ${downloadedVersion})`)
+      return
+    }
     console.log('[AutoUpdater] quitAndInstall called - applying update...')
 
-    // On macOS, unsigned apps can't auto-restart via quitAndInstall
-    // Workaround: Open the folder containing the downloaded update so user can install manually
+    // Real in-place install + relaunch. Available on signed macOS builds and on
+    // all packaged Windows/Linux builds (see canAutoInstall()). Squirrel.Mac will
+    // unpack the staged ZIP, swap the .app, and relaunch.
+    if (canAutoInstall()) {
+      console.log('[AutoUpdater] Performing real quitAndInstall (signed/auto-installable build)')
+      // PHASE-2E: tag this quit so the next-launch marker doesn't report it
+      // as a "previous session crashed" event.
+      try {
+        const { LifecycleTracker } = require('./utils/lifecycleTracker');
+        LifecycleTracker.getInstance().setQuitReason('updater-quit-install', {
+          fromVersion: app.getVersion(),
+          toVersion: downloadedVersion,
+        });
+      } catch { /* best-effort */ }
+      setImmediate(() => {
+        try {
+          // isSilent=false (show installer UI on Windows), forceRunAfter=true (relaunch).
+          autoUpdater.quitAndInstall(false, true)
+        } catch (err) {
+          console.error('[AutoUpdater] quitAndInstall failed:', err)
+          app.exit(0)
+        }
+      })
+      return
+    }
+
+    // FALLBACK (unsigned macOS / non-installable build): we can't swap+relaunch in
+    // place, so open the folder holding the downloaded update and quit so the user
+    // can install it by hand.
     if (process.platform === 'darwin') {
       try {
-        // Get the downloaded update file path (e.g., .../Natively-1.0.9-mac.zip)
-        const updateFile = (autoUpdater as any).downloadedUpdateHelper?.file
+        // Prefer the public info.filePath from the update-downloaded event where
+        // available. Fall back to the private API only if for some reason the event
+        // path is absent (shouldn't happen for a packaged build).
+        const updateFile =
+          (autoUpdater as any).downloadedUpdateHelper?.file ??
+          (autoUpdater as any).updateInfo?.filePath ??
+          undefined
         console.log('[AutoUpdater] Downloaded update file:', updateFile)
 
         if (updateFile) {
@@ -965,9 +2556,17 @@ export class AppState {
       } catch (err) {
         console.error('[AutoUpdater] Failed to open update directory:', err)
       }
+
+      // openPath failed or updateFile was absent — just quit so the user can
+      // manually find the staged zip in ~/Library/Caches/electron-update/…
+      // or redownload from GitHub releases. Never call quitAndInstall on an
+      // unsigned macOS build — Squirrel.Mac will fail silently.
+      setTimeout(() => app.quit(), 1000)
+      return
     }
 
-    // Fallback to standard quitAndInstall (works on Windows/Linux or if signed)
+    // Last-resort fallback: Windows/Linux — quitAndInstall works there without a
+    // Developer ID signature because NSIS/Squirrel handles it differently.
     setImmediate(() => {
       try {
         autoUpdater.quitAndInstall(false, true)
@@ -976,6 +2575,11 @@ export class AppState {
         app.exit(0)
       }
     })
+  }
+
+  /** Whether this build can do a real in-place auto-install (see canAutoInstall()). */
+  public canAutoUpdate(): boolean {
+    return canAutoInstall()
   }
 
   public async checkForUpdates(): Promise<void> {
@@ -994,16 +2598,42 @@ export class AppState {
     }
   }
 
-  public downloadUpdate(): void {
+  public async downloadUpdate(): Promise<void> {
+    if (this.updateDownloadState === 'downloaded' && this.downloadedUpdateInfo) {
+      console.log('[AutoUpdater] Download already completed — re-broadcasting downloaded update')
+      this.broadcast('update-downloaded', this.downloadedUpdateInfo)
+      return
+    }
+
+    if (this.updateDownloadState === 'downloading') {
+      console.log('[AutoUpdater] Download already in progress — ignoring duplicate request')
+      await this.updateDownloadPromise
+      return
+    }
+
+    if (!this.updateAvailable) {
+      const message = 'No update is currently available to download.'
+      console.warn(`[AutoUpdater] ${message}`)
+      this.broadcast('update-error', message)
+      return
+    }
+
     console.log('[AutoUpdater] Starting download...')
+    this.updateDownloadState = 'downloading'
     try {
       // Errors during download are surfaced via autoUpdater.on("error") which
       // already broadcasts "update-error". Do not broadcast here to avoid duplicates.
-      autoUpdater.downloadUpdate().catch(err => {
+      this.updateDownloadPromise = autoUpdater.downloadUpdate().catch(err => {
         console.error('[AutoUpdater] downloadUpdate failed:', err)
+        this.updateDownloadState = this.updateAvailable ? 'available' : 'idle'
+        this.updateDownloadPromise = null
+        throw err
       })
+      await this.updateDownloadPromise
     } catch (err: any) {
       console.error('[AutoUpdater] downloadUpdate exception:', err)
+      this.updateDownloadState = this.updateAvailable ? 'available' : 'idle'
+      this.updateDownloadPromise = null
     }
   }
 
@@ -1039,13 +2669,37 @@ export class AppState {
         // 'system' for interviewer (system audio), 'mic' for user (microphone).
         // The server uses ${key}:${channel} as the session key so both streams
         // can coexist without triggering concurrent_session_blocked.
-        stt = new NativelyProSTT(nativelyKey, speaker === 'interviewer' ? 'system' : 'mic');
+        //
+        // Phase 7/8: pass appVersion + platform for the regional-relay
+        // session-create body. The class reads the relay feature flags from
+        // SettingsManager itself and derives the control-plane base URL from
+        // its own host, so the construction site stays tiny. The relay path is
+        // flag-gated OFF by default — this is inert until regionalSttRelayEnabled.
+        stt = new NativelyProSTT(
+          nativelyKey,
+          speaker === 'interviewer' ? 'system' : 'mic',
+          {
+            appVersion: app.getVersion(),
+            platform: process.platform === 'darwin' ? 'mac'
+              : process.platform === 'win32' ? 'windows'
+              : 'linux',
+          },
+        );
       }
     } else if (sttProvider === 'deepgram') {
       const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
       if (apiKey) {
         console.log(`[Main] Using DeepgramStreamingSTT for ${speaker}`);
-        stt = new DeepgramStreamingSTT(apiKey);
+        const dg = new DeepgramStreamingSTT(apiKey);
+        // Opt-in diarization (#3): only on the remote/system channel ('interviewer'), where
+        // multiple people may speak. The mic channel is always the local user ('me'), so
+        // diarizing it adds cost with no benefit. Default OFF via flag.
+        try {
+          if (speaker === 'interviewer' && isIntelligenceFlagEnabled('speakerDiarizationV1')) {
+            dg.setDiarization(true);
+          }
+        } catch { /* flag read non-fatal */ }
+        stt = dg;
       } else {
         console.warn(`[Main] No API key for Deepgram STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
@@ -1131,7 +2785,7 @@ export class AppState {
     stt.setRecognitionLanguage(sttLanguage);
 
     // Wire Transcript Events
-    stt.on('transcript', (segment: { text: string, isFinal: boolean, confidence: number }) => {
+    stt.on('transcript', (segment: { text: string, isFinal: boolean, confidence: number, speakerId?: string }) => {
       // Accept transcripts while a meeting is active OR while we're draining
       // trailing finals after Stop. `_isDraining` covers the ~250 ms grace
       // window between Stop click and STT socket close so the user's last
@@ -1142,6 +2796,7 @@ export class AppState {
 
       this.intelligenceManager.handleTranscript({
         speaker: speaker,
+        ...(segment.speakerId ? { speakerId: segment.speakerId } : {}),
         text: segment.text,
         timestamp: Date.now(),
         final: segment.isFinal,
@@ -1157,28 +2812,48 @@ export class AppState {
         }]);
       }
 
-      const helper = this.getWindowHelper();
       const payload = {
         speaker: speaker,
+        ...(segment.speakerId ? { speakerId: segment.speakerId } : {}),
         text: segment.text,
         timestamp: Date.now(),
         final: segment.isFinal,
         confidence: segment.confidence
       };
-      helper.getLauncherWindow()?.webContents.send('native-audio-transcript', payload);
-      helper.getOverlayWindow()?.webContents.send('native-audio-transcript', payload);
+      // Display-only send, partial-throttled (finals pass through immediately).
+      // The answer path above (handleTranscript / RAG feed) is unaffected.
+      this.sendThrottledTranscript(payload);
 
-      // Feed final recruiter (system audio) transcripts to negotiation tracker
+      // Feed final recruiter (system audio) transcripts to the premium
+      // negotiation tracker. Issue #272: gate by active mode template so the
+      // tracker never accumulates negotiation state in modes where salary is
+      // out of scope (technical-interview, team-meet, lecture). Output gating
+      // in LLMHelper is the primary defense; gating at the source stops state
+      // from carrying over to any future read site. Fails open if ModesManager
+      // is unavailable.
       if (segment.isFinal && speaker === 'interviewer') {
-        this.knowledgeOrchestrator?.feedInterviewerUtterance?.(segment.text);
+        let trackerFeedAllowed = true;
+        try {
+          const { ModesManager } = require('./services/ModesManager');
+          trackerFeedAllowed = ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed();
+        } catch (_err) {
+          // fail open — preserve existing behaviour for modes that need the tracker
+        }
+        if (trackerFeedAllowed) {
+          this.knowledgeOrchestrator?.feedInterviewerUtterance?.(segment.text);
+        }
       }
     });
 
     // Consecutive failure counter — reset on any successful final transcript
     let _consecutiveErrors = 0;
 
-    // Track state so we broadcast 'connected' on recovery from failed/reconnecting
-    let _lastState: 'connected' | 'reconnecting' | 'failed' = 'reconnecting';
+    // B2: Track state so we broadcast 'connected' on recovery from failed/reconnecting.
+    // Initialize to 'awaiting-audio' so the renderer's UI starts in the neutral
+    // "Listening for audio…" state until the first isFinal transcript proves
+    // the pipeline is actually flowing. Pre-fix this was 'reconnecting' which
+    // implied a recovery state from the get-go.
+    let _lastState: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' = 'awaiting-audio';
 
     stt.on('error', (err: Error) => {
       // Google streamingRecognize's 10s silence timeout closes the stream
@@ -1220,7 +2895,7 @@ export class AppState {
       if (isAuthError) {
         _consecutiveErrors = 0;
         _lastState = 'failed';
-        this.broadcast('stt-status', {
+        this.sendSttStatus( {
           state: 'failed',
           provider: sttProvider,
           error: errorMessage,
@@ -1235,7 +2910,7 @@ export class AppState {
 
       if (_consecutiveErrors >= maxErrors || isQuotaError) {
         _lastState = 'failed';
-        this.broadcast('stt-status', {
+        this.sendSttStatus( {
           state: 'failed',
           provider: sttProvider,
           error: isQuotaError
@@ -1246,7 +2921,7 @@ export class AppState {
         } as SttStatusPayload);
       } else {
         _lastState = 'reconnecting';
-        this.broadcast('stt-status', {
+        this.sendSttStatus( {
           state: 'reconnecting',
           provider: sttProvider,
           error: errorMessage,
@@ -1263,7 +2938,7 @@ export class AppState {
         _consecutiveErrors = 0; // Success — reset counter
         if (_lastState !== 'connected') {
           _lastState = 'connected';
-          this.broadcast('stt-status', {
+          this.sendSttStatus( {
             state: 'connected',
             provider: sttProvider,
             channel: speaker,
@@ -1272,15 +2947,37 @@ export class AppState {
       }
     });
 
+    // Non-fatal telemetry from providers (e.g. OpenAIStreamingSTT emits this
+    // when the pre-session ring buffer evicts leading audio while waiting for
+    // the WebSocket handshake). Surface it in the main-process log so the
+    // signal isn't silently dropped — the event is informational, not a status
+    // change, so we don't push it through the stt-status channel.
+    stt.on('warning', (w: { code?: string; message?: string; droppedBytes?: number }) => {
+      console.warn(`[Main] STT (${speaker}) warning: ${w?.code ?? 'unknown'}`,
+        { provider: sttProvider, message: w?.message, droppedBytes: w?.droppedBytes });
+    });
+
     // Auto language detection: NativelyProSTT emits 'languageDetected' when the
     // backend resolves the language from the first audio batch. Notify the renderer
     // so the settings UI can show what was detected.
     if (stt instanceof NativelyProSTT) {
+      stt.on('connected', () => {
+        _consecutiveErrors = 0;
+        if (_lastState !== 'connected') {
+          _lastState = 'awaiting-audio';
+          this.sendSttStatus({
+            state: 'awaiting-audio',
+            provider: sttProvider,
+            channel: speaker,
+          } as SttStatusPayload);
+        }
+      });
+
       stt.on('languageDetected', (bcp47: string) => {
         console.log(`[Main] STT language auto-detected (${speaker}): ${bcp47}`);
         const helper = this.getWindowHelper();
-        helper.getMainWindow()?.webContents.send('stt-language-auto-detected', bcp47);
-        helper.getLauncherWindow()?.webContents.send('stt-language-auto-detected', bcp47);
+        this.sendToWindow(helper.getMainWindow(), 'stt-language-auto-detected', bcp47);
+        this.sendToWindow(helper.getLauncherWindow(), 'stt-language-auto-detected', bcp47);
       });
 
       // Persistent-reconnect signal: NativelyProSTT now retries indefinitely
@@ -1290,7 +2987,7 @@ export class AppState {
       // attempts count so the renderer's existing banner picks it up.
       stt.on('persistent-reconnect', (info: { attempts: number }) => {
         console.warn(`[Main] STT persistent reconnect (${speaker}): ${info.attempts} consecutive attempts.`);
-        this.broadcast('stt-status', {
+        this.sendSttStatus( {
           state: 'reconnecting',
           provider: sttProvider,
           error: `Reconnecting to transcription service — ${info.attempts} consecutive attempts. Check your network connection.`,
@@ -1299,6 +2996,16 @@ export class AppState {
         } as SttStatusPayload);
       });
     }
+
+    // B2: Emit 'awaiting-audio' once the STT provider is wired up but before
+    // any audio has flowed. Renderers that joined mid-session sync to this
+    // unverified state and display "Listening for audio…" until the first
+    // isFinal transcript fires the 'connected' transition above.
+    this.sendSttStatus({
+      state: 'awaiting-audio',
+      provider: sttProvider,
+      channel: speaker,
+    } as SttStatusPayload);
 
     return stt;
   }
@@ -1327,8 +3034,38 @@ export class AppState {
     // CoreAudio Tap isn't bound to, or (c) the system is genuinely silent.
     // Production-grade apps surface this so the user knows their interviewer's
     // audio isn't being picked up — instead of staring at an empty transcript.
+    //
+    // B11: timeout extended from 8000 → 12000ms. The ScreenCaptureKit fallback
+    // path (macOS <14.4 hosts or where CoreAudio Tap init fails) takes 5-7s
+    // to deliver its first audio buffer on a warm system, and ~8-10s on a
+    // slower/contended host. The previous 8s timeout had only a 1-3s margin
+    // and produced false-positive "0 chunks in 8s" banners during legitimate
+    // SCK cold-start.
+    const STUCK_WATCHDOG_MS = 12000;
+    const systemAudioHealth = new SystemAudioHealthClassifier({ watchdogMs: STUCK_WATCHDOG_MS });
+    const handleSystemAudioHealthDecision = (decision: any) => {
+      if (!decision || decision.type === 'none') return;
+      if (decision.type === 'log') {
+        const logger = decision.level === 'info' ? console.log : console.warn;
+        logger(`${prefix}${decision.message}`);
+        return;
+      }
+      if (decision.type === 'warn-user' && decision.reason === 'same-device-input-output') {
+        const msg = formatPermissionMessage('mac-same-device-input-output', { device: decision.device });
+        console.warn(`${prefix}SystemAudioCapture ${msg}`);
+        this.sendAudioCaptureFailed( {
+          channel: 'system',
+          message: msg,
+          attempt: 0,
+          maxAttempts: 3,
+          terminal: decision.terminal,
+          stuck: decision.stuck,
+        });
+      }
+    };
     let stuckTimer: NodeJS.Timeout | null = null;
     const armStuckWatchdog = () => {
+      handleSystemAudioHealthDecision(systemAudioHealth.handle({ kind: 'capture-started', nowMs: Date.now() }));
       if (stuckTimer) clearTimeout(stuckTimer);
       stuckTimer = setTimeout(() => {
         if (this.systemAudioCapture !== capture) return; // capture was replaced
@@ -1341,9 +3078,8 @@ export class AppState {
         // physical device on both sides of the pipeline, macOS cannot run a
         // CoreAudio Process Tap on it while it's also the active microphone
         // — the tap initializes "successfully" but every IO callback yields
-        // zero frames. The 8s watchdog is the most reliable signal we get.
-        // Surface the actual cause instead of a generic "route mismatch"
-        // hint so the user knows what to change.
+        // zero frames. Surface the actual cause instead of a generic
+        // "route mismatch" hint so the user knows what to change.
         // The same-device-input-output limitation is a CoreAudio Process Tap
         // constraint — only relevant on macOS. detectSameInputOutputDevice
         // is itself macOS-specific; skip the check on other platforms.
@@ -1351,72 +3087,33 @@ export class AppState {
           ? this.detectSameInputOutputDevice()
           : null;
         if (sameDeviceName) {
-          const msg = formatPermissionMessage('mac-same-device-input-output', { device: sameDeviceName });
-          console.warn(`${prefix}SystemAudioCapture ${msg}`);
-          this.broadcast('audio-capture-failed', {
-            channel: 'system',
-            message: msg,
-            attempt: 0,
-            maxAttempts: 3,
-            terminal: false,
-            stuck: true,
-          });
+          handleSystemAudioHealthDecision(systemAudioHealth.handle({
+            kind: 'same-device-route-detected',
+            nowMs: Date.now(),
+            device: sameDeviceName,
+          }));
           return;
         }
 
-        console.warn(`${prefix}SystemAudioCapture produced 0 chunks in 8s — likely silent capture (route mismatch or permission revoked).`);
-        this.broadcast('audio-capture-failed', {
-          channel: 'system',
-          message: formatPermissionMessage('system-audio-stuck'),
-          attempt: 0,
-          maxAttempts: 3,
-          terminal: false,
-          stuck: true,
-        });
-      }, 8000);
+        handleSystemAudioHealthDecision(systemAudioHealth.handle({ kind: 'watchdog-tick', nowMs: Date.now() }));
+      }, STUCK_WATCHDOG_MS);
     };
 
-    // TCC zero-fill detector. Apple's CoreAudio Process Tap returns zero-filled
-    // buffers (instead of an OSStatus error) when the launched binary's
-    // Screen Recording / audio-capture grant doesn't apply — typically after a
-    // dev rebuild changes the bundle signature, or when the user revokes the
-    // grant mid-session. Symptom: the IO proc fires at the correct cadence and
-    // chunks flow normally, but every f32 sample is 0.0. Without a dedicated
-    // detector, the no-chunks watchdog above never fires and the user just sees
-    // an empty interviewer transcript with no idea why.
-    //
-    // Strategy: track the absolute peak of every chunk (cheap — 960 i16s per
-    // 20ms chunk). After we've seen ZEROFILL_OBSERVATION_MS of nothing but
-    // peak==0 chunks, broadcast a TCC-specific banner. Latch off the detector
-    // permanently as soon as we see a single non-zero peak so a quiet meeting
-    // doesn't trigger the warning later. The latency budget intentionally
-    // exceeds the no-chunks watchdog (8s) so the two banners don't race.
-    const ZEROFILL_OBSERVATION_MS = 12000;
-    let firstChunkAt = 0;
-    let zerofillLatched = false;       // true once a non-zero peak has been observed (detector off)
-    let zerofillTriggered = false;     // true once we've already broadcast — prevent repeats
-    capture.on('start', armStuckWatchdog);
-    capture.on('stop', () => {
+    // Synchronous disarm closure exposed on the capture instance so endMeeting()
+    // and abortStaleAudioInit() can cancel the stuck watchdog BEFORE stop()/destroy()
+    // — without relying on the on('stop') event firing synchronously. Otherwise a
+    // short meeting that produced 0 chunks can fire a false "system-audio-stuck"
+    // banner up to 12s after the user already stopped.
+    const disarmStuckWatchdog = () => {
       if (stuckTimer) { clearTimeout(stuckTimer); stuckTimer = null; }
-    });
-    // Inter-chunk gap tracking. Normal cadence is one 20ms chunk every 20ms
-    // (so ~50/sec). A gap >2s while the meeting is active and the capture is
-    // still wired indicates a transient route change (AirPods plug/unplug,
-    // HDMI attach, USB hot-plug). The 8s no-chunks watchdog above catches
-    // longer outages; this just logs the in-between case so anyone reading
-    // logs can correlate "transcript stuttered" with a route change instead
-    // of suspecting STT or network problems. Deliberately not promoted to a
-    // UI banner — that would spam during normal device juggling.
-    let lastChunkAt = 0;
+      handleSystemAudioHealthDecision(systemAudioHealth.handle({ kind: 'capture-stopped', nowMs: Date.now() }));
+    };
+    (capture as any).__disarmStuckWatchdog = disarmStuckWatchdog;
+    capture.on('start', armStuckWatchdog);
+    capture.on('stop', disarmStuckWatchdog);
     capture.on('data', (chunk: Buffer) => {
       const now = Date.now();
-      if (lastChunkAt > 0) {
-        const gap = now - lastChunkAt;
-        if (gap > 2000 && gap < 8000) {
-          console.warn(`${prefix}SystemAudio chunk gap ${gap}ms — likely transient route change. Resuming.`);
-        }
-      }
-      lastChunkAt = now;
+      handleSystemAudioHealthDecision(systemAudioHealth.handle({ kind: 'chunk', nowMs: now, chunk }));
       chunkCount++;
       if (chunkCount === 1 && stuckTimer) {
         clearTimeout(stuckTimer);
@@ -1433,37 +3130,6 @@ export class AppState {
         console.log(`${prefix}SystemAudio->STT: chunk #${chunkCount}, ${chunk.length}B, googleSTT=${this.googleSTT ? 'active' : 'NULL'}`);
       }
 
-      // TCC zero-fill check. macOS-specific: WASAPI loopback on Windows does
-      // not produce sustained zero-fill on permission revocation, so the
-      // detector has no diagnostic value off Darwin and the suggested fix
-      // (System Settings → Screen Recording) doesn't apply.
-      if (process.platform === 'darwin' && !zerofillLatched && !zerofillTriggered) {
-        if (firstChunkAt === 0) firstChunkAt = Date.now();
-        // Stride-sample 16 samples across the chunk — sufficient to catch any
-        // real audio content, ~32× cheaper than scanning all 960 samples.
-        let peak = 0;
-        const stride = Math.max(2, (chunk.length >> 5) & ~1); // even byte offset
-        for (let i = 0; i + 1 < chunk.length; i += stride) {
-          const s = chunk.readInt16LE(i);
-          const a = s < 0 ? -s : s;
-          if (a > peak) { peak = a; if (peak > 8) break; }
-        }
-        if (peak > 8) {
-          // Real audio observed — disable the detector for the rest of the session.
-          zerofillLatched = true;
-        } else if (Date.now() - firstChunkAt >= ZEROFILL_OBSERVATION_MS) {
-          zerofillTriggered = true;
-          console.warn(`${prefix}SystemAudio chunks all zero-filled for ${ZEROFILL_OBSERVATION_MS / 1000}s — TCC denial suspected (Screen Recording grant may not apply to this binary).`);
-          this.broadcast('audio-capture-failed', {
-            channel: 'system',
-            message: formatPermissionMessage('mac-screen-recording-revoked-rebuild'),
-            attempt: 0,
-            maxAttempts: 3,
-            terminal: false,
-            stuck: true,
-          });
-        }
-      }
 
       this.googleSTT?.write(chunk);
     });
@@ -1483,10 +3149,15 @@ export class AppState {
     const prefix = label ? `[Main] ${label} ` : '[Main] ';
     let chunkCount = 0;
     // Mirror of the system-audio stuck watchdog: if the cpal callback never
-    // produces samples within 8s of start (USB mic that disappears on open,
-    // exclusive-mode contention with another app, default device returning
-    // a handle that's actually muted), surface a clear UI signal instead of
-    // letting the user transcript silently die.
+    // produces samples within STUCK_WATCHDOG_MS of start (USB mic that
+    // disappears on open, exclusive-mode contention with another app,
+    // default device returning a handle that's actually muted), surface a
+    // clear UI signal instead of letting the user transcript silently die.
+    //
+    // B11: timeout extended from 8000 → 12000ms to mirror the system-audio
+    // watchdog. cpal cold-start on USB hot-replug or Bluetooth HFP transition
+    // can take 5-9s on contended hardware.
+    const STUCK_WATCHDOG_MS = 12000;
     let stuckTimer: NodeJS.Timeout | null = null;
     const armStuckWatchdog = () => {
       if (stuckTimer) clearTimeout(stuckTimer);
@@ -1494,21 +3165,25 @@ export class AppState {
         if (this.microphoneCapture !== capture) return;
         if (chunkCount > 0) return;
         if (!this.isMeetingActive) return;
-        console.warn(`${prefix}MicrophoneCapture produced 0 chunks in 8s — likely silent capture (device contention, hot-unplug, or muted input).`);
-        this.broadcast('audio-capture-failed', {
+        console.warn(`${prefix}MicrophoneCapture produced 0 chunks in ${STUCK_WATCHDOG_MS / 1000}s — likely silent capture (device contention, hot-unplug, or muted input).`);
+        this.sendAudioCaptureFailed( {
           channel: 'mic',
-          message: 'No audio detected from your microphone for 8s. Check that your input device is unmuted and not in use by another app.',
+          message: `No audio detected from your microphone for ${STUCK_WATCHDOG_MS / 1000}s. Check that your input device is unmuted and not in use by another app.`,
           attempt: 0,
           maxAttempts: 3,
           terminal: false,
           stuck: true,
         });
-      }, 8000);
+      }, STUCK_WATCHDOG_MS);
     };
-    capture.on('start', armStuckWatchdog);
-    capture.on('stop', () => {
+    // Mirror wireSystemCapture: expose a synchronous disarm closure so the mic
+    // stuck watchdog can be cancelled BEFORE stop()/destroy() during teardown.
+    const disarmStuckWatchdog = () => {
       if (stuckTimer) { clearTimeout(stuckTimer); stuckTimer = null; }
-    });
+    };
+    (capture as any).__disarmStuckWatchdog = disarmStuckWatchdog;
+    capture.on('start', armStuckWatchdog);
+    capture.on('stop', disarmStuckWatchdog);
     // Inter-chunk gap tracking — see wireSystemCapture for rationale.
     let lastChunkAt = 0;
     // Mic TCC / muted-input zero-fill detector. cpal will happily open a mic
@@ -1524,6 +3199,8 @@ export class AppState {
     let firstChunkAt = 0;
     let zerofillLatched = false;
     let zerofillTriggered = false;
+    // One-shot guard for the mid-meeting HFP-degradation backstop below.
+    let hfpDegradationChecked = false;
     capture.on('data', (chunk: Buffer) => {
       const now = Date.now();
       if (lastChunkAt > 0) {
@@ -1546,21 +3223,87 @@ export class AppState {
         console.log(`${prefix}User STT rate locked from first mic chunk: ${rate}Hz`);
       }
 
+      // HFP-degradation backstop. The proactive reconfigureAudio check handles
+      // the common case (default mic + Bluetooth output) at meeting start; this
+      // catches what it can't see statically: the OS default mic resolving to a
+      // Bluetooth device while output is the laptop speakers, or a device
+      // dropping into HFP mid-meeting. The NATIVE rate is ground truth — macOS
+      // opens a built-in/USB mic at 44.1/48kHz, but a Bluetooth mic in HFP "call
+      // mode" reports ≤24kHz. So ≤24kHz native means the mic is degraded
+      // regardless of how it's named ('default' lists as "Default Microphone",
+      // never the hardware name — which is why the name check alone missed
+      // AirPods). Checked once per capture (hfpDegradationChecked), after open.
+      // Darwin-only: Windows BT mics don't exhibit this exact rate collapse.
+      if (!hfpDegradationChecked && process.platform === 'darwin' && this.microphoneCapture === capture) {
+        hfpDegradationChecked = true;
+        try {
+          const nativeRate = capture.getNativeSampleRate?.() ?? 0;
+          if (nativeRate > 0 && nativeRate <= 24000) {
+            const builtIn = this.findBuiltInInputDevice();
+            const alreadyBuiltIn =
+              !!builtIn &&
+              !!this._lastRequestedInputDeviceId &&
+              this.normalizeDeviceName(builtIn.name) ===
+                this.normalizeDeviceName(this._lastRequestedInputDeviceId);
+
+            if (builtIn && !alreadyBuiltIn) {
+              // Auto-switch to the built-in mic — the "just works" path. The BT
+              // device stays the audio OUTPUT (A2DP), so the user keeps hearing
+              // the meeting in their earbuds. reconfigureAudio tears down +
+              // recreates the mic capture, so defer it off the data handler to
+              // avoid re-entrancy on the live stream.
+              console.warn(`${prefix}Mic native rate ${nativeRate}Hz indicates Bluetooth HFP (degraded). Auto-switching to built-in mic "${builtIn.name}".`);
+              this.broadcast('audio-input-auto-switched', {
+                from: 'Bluetooth mic',
+                to: builtIn.name,
+                reason: 'bluetooth-hfp-avoided',
+              });
+              const outputId = this._lastRequestedOutputDeviceId;
+              setImmediate(() => {
+                if (this.isMeetingActive && this.microphoneCapture === capture) {
+                  void this.reconfigureAudio(builtIn.id, outputId).catch(err =>
+                    console.warn(`${prefix}HFP auto-switch reconfigure failed:`, err),
+                  );
+                }
+              });
+            } else if (!builtIn) {
+              console.warn(`${prefix}Mic in HFP (native ${nativeRate}Hz) but no built-in mic to switch to.`);
+              this.sendAudioCaptureFailed({
+                channel: 'mic',
+                message: `Your microphone is in low-quality Bluetooth call mode. Set your audio output to the speakers, or use a different mic, for better transcription.`,
+                attempt: 0,
+                maxAttempts: 0,
+                terminal: false,
+                stuck: false,
+              });
+            }
+          }
+        } catch (e) {
+          console.warn(`${prefix}HFP degradation check failed (non-fatal):`, e);
+        }
+      }
+
       if (!zerofillLatched && !zerofillTriggered) {
         if (firstChunkAt === 0) firstChunkAt = now;
-        let peak = 0;
+        // B10: peak-to-peak detection — see wireSystemCapture for full rationale.
+        // Pre-fix `abs(sample) > 8` false-latched on DC bias from muted-but-biased
+        // mics (USB/Bluetooth hardware bias of ±10..±50 is common), permanently
+        // disabling the detector. Peak-to-peak (max - min) is DC-offset invariant.
+        let minS = 32767;
+        let maxS = -32768;
         const stride = Math.max(2, (chunk.length >> 5) & ~1);
         for (let i = 0; i + 1 < chunk.length; i += stride) {
           const s = chunk.readInt16LE(i);
-          const a = s < 0 ? -s : s;
-          if (a > peak) { peak = a; if (peak > 8) break; }
+          if (s < minS) minS = s;
+          if (s > maxS) maxS = s;
         }
-        if (peak > 8) {
+        const peakToPeak = maxS - minS;
+        if (peakToPeak > 100) {
           zerofillLatched = true;
         } else if (now - firstChunkAt >= ZEROFILL_OBSERVATION_MS) {
           zerofillTriggered = true;
-          console.warn(`${prefix}Mic chunks all zero-filled for ${ZEROFILL_OBSERVATION_MS / 1000}s — TCC denial or device-mute suspected.`);
-          this.broadcast('audio-capture-failed', {
+          console.warn(`${prefix}Mic chunks all zero-filled (peak-to-peak < 100) for ${ZEROFILL_OBSERVATION_MS / 1000}s — TCC denial or device-mute suspected.`);
+          this.sendAudioCaptureFailed( {
             channel: 'mic',
             message: formatPermissionMessage('mic-zero-fill'),
             attempt: 0,
@@ -1584,32 +3327,56 @@ export class AppState {
     this.setupMicRecoveryHandler();
   }
 
-  private setupSystemAudioPipeline(): void {
+  private async setupSystemAudioPipeline(): Promise<void> {
     // REMOVED EARLY RETURN: if (this.systemAudioCapture && this.microphoneCapture) return; // Already initialized
 
     try {
       // 1. Initialize Captures if missing
       // If they already exist (e.g. from reconfigureAudio), they are already wired to write to this.googleSTT/User
-      if (!this.systemAudioCapture) {
-        // Hard fast-fail when Screen Recording is explicitly denied. Without this
-        // guard, SystemAudioCapture spawns a Rust BG thread that tries CoreAudio
-        // Tap (fails immediately), then ScreenCaptureKit (10s timeout waiting on
-        // a permission callback that never fires), emits 'error', triggers the
-        // recovery handler 3x — total ~30s of dead air with no UI signal. By
-        // checking the TCC status up front we keep the meeting in mic-only mode
-        // and broadcast a clear banner so the user knows.
-        if (process.platform === 'darwin' && getMacScreenCaptureStatus() === 'denied') {
-          console.warn('[Main] Skipping SystemAudioCapture init — Screen Recording permission denied. Meeting will run mic-only.');
-          this.broadcast('system-audio-permission-denied',
-            formatPermissionMessage('screen-recording-denied'));
-          this.broadcastDeviceSelection({
-            kind: 'output',
-            requested: null,
-            actual: null,
-            fellBack: true,
-            reason: 'screen-recording-permission-denied',
-          });
-        } else {
+      //
+      // B6: ALWAYS re-evaluate screen-recording permission at pipeline setup,
+      // regardless of whether a SystemAudioCapture wrapper already exists.
+      // Pre-fix this check was gated on `!this.systemAudioCapture`, so a stale
+      // wrapper that survived from a prior meeting (mid-stream reconfigureAudio
+      // failure, deferred teardown, etc.) would prevent the permission re-check,
+      // and a between-meeting TCC revoke would cause the next meeting to
+      // silently zero-fill with no banner — the exact pattern the audit
+      // identified for "permissions granted (then revoked), no transcription."
+      const screenCapability = await resolveMacScreenCaptureCapability('system audio pipeline setup');
+
+      if (screenCapability.effectiveDenied) {
+        const message = screenCapability.message ?? formatPermissionMessage('screen-recording-denied');
+        console.warn('[Main] Screen Recording permission denied at pipeline setup. Tearing down any stale system audio capture; meeting will run mic-only.');
+        this.sendSystemAudioPermissionDenied(message);
+        this.broadcastDeviceSelection({
+          kind: 'output',
+          requested: null,
+          actual: null,
+          fellBack: true,
+          reason: 'screen-recording-permission-denied',
+        });
+        // B6: tear down any stale capture so the 2nd meeting after a
+        // between-meeting TCC revoke doesn't continue feeding the STT
+        // pipeline zero-filled audio against a now-denied permission.
+        if (this.systemAudioCapture) {
+          try {
+            await this.systemAudioCapture.destroy();
+          } catch (destroyErr) {
+            console.warn('[Main] Stale system audio capture destroy failed during permission-denied path:', destroyErr);
+          }
+          this.systemAudioCapture = null;
+          this._sysSttRateApplied = false;
+        }
+      } else if (!this.systemAudioCapture) {
+        // B3: wrap construction + wiring in its own try/catch so a native-module
+        // failure (NAPI throw, HAL/WASAPI resource exhaustion, internal error
+        // from SystemAudioCapture ctor) doesn't silently leave systemAudioCapture
+        // null with no watchdog armed and no UI signal. Pre-fix the throw was
+        // caught by the outer catch at the bottom of the function, which only
+        // console.error'd — the caller then proceeded with a null capture, the
+        // STT WS connected, the user saw "Listening for audio…" forever, and
+        // no banner ever surfaced.
+        try {
           this.systemAudioCapture = new SystemAudioCapture();
           this.wireSystemCapture(this.systemAudioCapture);
           // Transparency: tell the renderer which device is actually being captured
@@ -1623,12 +3390,41 @@ export class AppState {
             actual: 'default',
             fellBack: false,
           });
+        } catch (capErr) {
+          console.error('[Main] SystemAudioCapture construction failed:', capErr);
+          this.systemAudioCapture = null;
+          this.sendAudioCaptureFailed({
+            channel: 'system',
+            message: 'System audio capture failed to initialize. The native audio module could not allocate the capture device. Restarting Natively may help; if the problem persists, file a bug.',
+            attempt: 0,
+            maxAttempts: 0,
+            terminal: true,
+            stuck: false,
+          });
         }
       }
+      // If !effectiveDenied && this.systemAudioCapture already exists, the
+      // existing wrapper is assumed correct (its watchdogs will detect any
+      // zero-fill or stuck state and surface via audio-capture-failed).
 
       if (!this.microphoneCapture) {
-        this.microphoneCapture = new MicrophoneCapture();
-        this.wireMicCapture(this.microphoneCapture);
+        // B3: same defense for mic ctor throws (USB device disappears on open,
+        // exclusive-mode steal). Outer try/catch only logged; user got no banner.
+        try {
+          this.microphoneCapture = new MicrophoneCapture();
+          this.wireMicCapture(this.microphoneCapture);
+        } catch (capErr) {
+          console.error('[Main] MicrophoneCapture construction failed:', capErr);
+          this.microphoneCapture = null;
+          this.sendAudioCaptureFailed({
+            channel: 'mic',
+            message: 'Microphone capture failed to initialize. The native audio module could not open the default input device. Check that the device is connected and not in exclusive use by another app, then restart Natively.',
+            attempt: 0,
+            maxAttempts: 0,
+            terminal: true,
+            stuck: false,
+          });
+        }
       }
 
       // 2. Initialize STT Services if missing
@@ -1649,8 +3445,8 @@ export class AppState {
           console.error(`[Main] Interviewer STT init failed (${sttProv}):`, sttErr);
           this.googleSTT = null;
         }
-        if (!this.googleSTT && sttConfigured) {
-          this.broadcast('audio-capture-failed', {
+        if (!this.googleSTT) {
+          this.sendAudioCaptureFailed( {
             channel: 'system',
             message: `Speech-to-text provider "${sttProv}" failed to initialize for the interviewer channel. Check your API key and credentials in Settings.`,
             attempt: 0,
@@ -1669,8 +3465,8 @@ export class AppState {
           console.error(`[Main] User STT init failed (${sttProv}):`, sttErr);
           this.googleSTT_User = null;
         }
-        if (!this.googleSTT_User && sttConfigured) {
-          this.broadcast('audio-capture-failed', {
+        if (!this.googleSTT_User) {
+          this.sendAudioCaptureFailed( {
             channel: 'mic',
             message: `Speech-to-text provider "${sttProv}" failed to initialize for the microphone channel. Check your API key and credentials in Settings.`,
             attempt: 0,
@@ -1763,37 +3559,57 @@ export class AppState {
     }
     console.log('[Main] System resume — restarting captures so CoreAudio/cpal handles are fresh.');
 
-    // System audio (CoreAudio Tap is the most fragile across sleep cycles).
-    if (this.systemAudioCapture) {
-      try {
-        this.systemAudioCapture.destroy();
-      } catch (e) {
-        console.warn('[Main] Resume: system capture destroy threw:', e);
-      }
-      this.systemAudioCapture = null;
+    // B7: reset ALL audio recovery state BEFORE recreating captures. State is
+    // tied to a SPECIFIC capture instance's failure history; once we destroy
+    // + recreate, the fresh captures must get a clean slate. Mirrors the
+    // fuller reset done in startMeeting. Pre-fix:
+    //   1. Counter saturation (attempts == 3) caused the early-return guards
+    //      in setupMicRecoveryHandler / setupAudioRecoveryHandler to drop
+    //      the FIRST post-wake error event silently — cpal frequently
+    //      emits a transient 'error' on wake, which was the exact bug.
+    //   2. A pre-sleep recovery in flight (`_*RecoveryInProgress = true`)
+    //      AND its pending `_*RecoveryTimer` would still be referenced by
+    //      the abandoned recovery promise after wake, so a stale recovery
+    //      could land on a freshly recreated capture.
+    this._systemAudioRecoveryInProgress = false;
+    this._systemAudioRecoveryAttempts = 0;
+    this._systemAudioConsecutiveFailures = 0;
+    if (this._systemAudioRecoveryTimer) {
+      clearTimeout(this._systemAudioRecoveryTimer);
+      this._systemAudioRecoveryTimer = null;
     }
-    try {
-      this.systemAudioCapture = new SystemAudioCapture(this._lastRequestedOutputDeviceId);
-      this._sysSttRateApplied = false;
-      this.wireSystemCapture(this.systemAudioCapture, '(Resume)');
-      this.systemAudioCapture.start();
-    } catch (err) {
-      console.error('[Main] Resume: failed to restart system capture:', err);
-      this.broadcast('audio-capture-failed', {
-        channel: 'system',
-        message: 'System audio capture failed to restart after wake. End and restart the meeting to recover.',
-        attempt: 0,
-        maxAttempts: 0,
-        terminal: true,
-        stuck: false,
-      });
+    this._micRecoveryInProgress = false;
+    this._micRecoveryAttempts = 0;
+    if (this._micRecoveryTimer) {
+      clearTimeout(this._micRecoveryTimer);
+      this._micRecoveryTimer = null;
     }
 
-    // Mic — usually survives sleep but recreate to be safe; cpal exclusive
-    // mode on Windows can silently drop the stream.
+    // STT sockets do NOT reliably survive a sleep/wake cycle: the WebSocket can be
+    // half-open (no FIN observed) so writes after wake silently go nowhere and no
+    // transcript ever arrives. Recreating the captures alone (below) left the OLD
+    // STT instances in place, relying on an assumed-but-not-coded reconnect (audit
+    // finding #5). Explicitly tear them down here — same pattern as
+    // _doReconfigureSttProvider — and recreate fresh instances after the captures
+    // are back, so the data path wires to live sockets. Captures are already
+    // stopped/destroyed below, so no audio events race this teardown.
+    if (this.googleSTT) {
+      try { this.googleSTT.stop(); this.googleSTT.removeAllListeners(); } catch (e) { console.warn('[Main] Resume: googleSTT teardown threw:', e); }
+      this.googleSTT = null;
+    }
+    if (this.googleSTT_User) {
+      try { this.googleSTT_User.stop(); this.googleSTT_User.removeAllListeners(); } catch (e) { console.warn('[Main] Resume: googleSTT_User teardown threw:', e); }
+      this.googleSTT_User = null;
+    }
+
+    // Mic first. MicrophoneCapture is lazy-init: start() constructs the cpal
+    // input stream. Do this before starting the CoreAudio system tap so cpal
+    // does not negotiate input while the aggregate device IO proc is active.
+    // Mic usually survives sleep, but recreate to be safe; cpal exclusive mode
+    // on Windows can silently drop the stream.
     if (this.microphoneCapture) {
       try {
-        this.microphoneCapture.destroy();
+        await this.microphoneCapture.destroy();
       } catch (e) {
         console.warn('[Main] Resume: mic capture destroy threw:', e);
       }
@@ -1806,7 +3622,7 @@ export class AppState {
       this.microphoneCapture.start();
     } catch (err) {
       console.error('[Main] Resume: failed to restart mic capture:', err);
-      this.broadcast('audio-capture-failed', {
+      this.sendAudioCaptureFailed( {
         channel: 'mic',
         message: 'Microphone failed to restart after wake. Check that no other app holds the mic, then end and restart the meeting.',
         attempt: 0,
@@ -1814,6 +3630,72 @@ export class AppState {
         terminal: true,
         stuck: false,
       });
+    }
+
+    // System audio (CoreAudio Tap is the most fragile across sleep cycles).
+    // Start it after the mic stream has been constructed to avoid CoreAudio HAL
+    // contention during resume as well as initial meeting start.
+    if (this.systemAudioCapture) {
+      try {
+        await this.systemAudioCapture.destroy();
+      } catch (e) {
+        console.warn('[Main] Resume: system capture destroy threw:', e);
+      }
+      this.systemAudioCapture = null;
+    }
+    try {
+      const screenCapability = await resolveMacScreenCaptureCapability('resume capture restart');
+      if (screenCapability.effectiveDenied) {
+        this.sendSystemAudioPermissionDenied( screenCapability.message ?? formatPermissionMessage('screen-recording-denied'));
+        this.broadcastDeviceSelection({
+          kind: 'output',
+          requested: this._lastRequestedOutputDeviceId || null,
+          actual: null,
+          fellBack: true,
+          reason: 'screen-recording-permission-denied',
+        });
+      } else {
+        this.systemAudioCapture = new SystemAudioCapture(this._lastRequestedOutputDeviceId);
+        this._sysSttRateApplied = false;
+        this.wireSystemCapture(this.systemAudioCapture, '(Resume)');
+        this.systemAudioCapture.start();
+      }
+    } catch (err) {
+      console.error('[Main] Resume: failed to restart system capture:', err);
+      this.sendAudioCaptureFailed( {
+        channel: 'system',
+        message: 'System audio capture failed to restart after wake. End and restart the meeting to recover.',
+        attempt: 0,
+        maxAttempts: 0,
+        terminal: true,
+        stuck: false,
+      });
+    }
+
+    // Recreate the STT providers we tore down above so the freshly-restarted
+    // captures feed live sockets (audit finding #5). Mirrors the STT block in
+    // setupSystemAudioPipeline + the .start() in _doReconfigureSttProvider. Each
+    // is guarded so a single provider failure doesn't abort the other channel; a
+    // failed createSTTProvider leaves the field null and the capture's `?.write`
+    // becomes a no-op rather than throwing. We only recreate ones we nulled, so
+    // there is no risk of double-starting an existing provider.
+    if (!this.googleSTT) {
+      try {
+        this.googleSTT = this.createSTTProvider('interviewer');
+        this.googleSTT?.start();
+      } catch (sttErr) {
+        console.error('[Main] Resume: interviewer STT recreate failed:', sttErr);
+        this.googleSTT = null;
+      }
+    }
+    if (!this.googleSTT_User) {
+      try {
+        this.googleSTT_User = this.createSTTProvider('user');
+        this.googleSTT_User?.start();
+      } catch (sttErr) {
+        console.error('[Main] Resume: user STT recreate failed:', sttErr);
+        this.googleSTT_User = null;
+      }
     }
   }
 
@@ -1832,7 +3714,7 @@ export class AppState {
     reason?: string;
   }): void {
     console.log(`[Main] device-selection-applied:`, payload);
-    this.broadcast('device-selection-applied', payload);
+    this.sendToSettingsSurfaces('device-selection-applied', payload);
   }
 
   /**
@@ -1899,17 +3781,47 @@ export class AppState {
     // Resolve the output UID to its friendly name and compare to the input
     // name (input IDs from cpal ARE the device name, e.g. "Evin's AirPods Pro").
     try {
-      const outputs = AudioDevices.getOutputDevices();
-      const outputMatch = outputs.find(d => stripSuffix(d.id).toLowerCase() === outputBase);
-      if (outputMatch && outputMatch.name) {
-        if (outputMatch.name.toLowerCase() === inputId.toLowerCase()) {
-          return outputMatch.name;
-        }
+      const outputName = this.getEffectiveOutputDeviceName(outputId);
+      if (outputName && outputName.toLowerCase() === inputId.toLowerCase()) {
+        return outputName;
       }
     } catch {
       // Native module unavailable — fall through to "no conflict detected".
     }
     return undefined;
+  }
+
+  /**
+   * Resolve an explicit output device id — or the current default output route
+   * when the user selected Default — to the friendly output name. This is only
+   * for HFP/default-input decision-making; it must not pin the persisted Default
+   * output selection to a concrete device id.
+   */
+  private getEffectiveOutputDeviceName(outputDeviceId?: string): string {
+    const stripSuffix = (s: string) => s.replace(/:(input|output)$/i, '');
+
+    try {
+      const outputs = AudioDevices.getOutputDevices();
+      const resolveOutputName = (id?: string): string => {
+        if (!id) return '';
+        const outputBase = stripSuffix(id).toLowerCase();
+        return outputs.find(
+          d => stripSuffix(d.id).toLowerCase() === outputBase,
+        )?.name ?? '';
+      };
+
+      const explicitName = resolveOutputName(outputDeviceId);
+      if (explicitName) return explicitName;
+
+      const NativeModule: any = loadNativeModule();
+      if (NativeModule && typeof NativeModule.getDefaultOutputDeviceId === 'function') {
+        const defaultOutputId = NativeModule.getDefaultOutputDeviceId() || undefined;
+        return resolveOutputName(defaultOutputId);
+      }
+      return '';
+    } catch {
+      return '';
+    }
   }
 
   /**
@@ -1943,6 +3855,54 @@ export class AppState {
     }
   }
 
+  /**
+   * Loosely normalize a device name for comparison (lowercase, trim, collapse
+   * unicode dashes, strip a :input/:output suffix). Mirrors the Rust-side
+   * normalize_device_name so a single Bluetooth device that appears with
+   * different suffixes/casing across the input and output lists compares equal.
+   */
+  private normalizeDeviceName(name: string): string {
+    return (name || '')
+      .replace(/:(input|output)$/i, '')
+      .replace(/[–—−]/g, '-')
+      .trim()
+      .toLowerCase();
+  }
+
+  /**
+   * Heuristic: is this device name a Bluetooth headset/earbud that macOS will
+   * force into HFP ("Hands-Free"/call mode) when used as a microphone? In HFP
+   * the mic collapses to ~16/24kHz, heavily band-limited telephone-grade audio
+   * that wrecks STT accuracy (the AirPods "0 transcripts on Google" bug). We
+   * match the explicit "Hands-Free" profile suffix macOS appends plus the
+   * common BT families. Name-based because cpal/CoreAudio don't expose the
+   * transport type at this layer.
+   */
+  private isBluetoothInputName(name: string): boolean {
+    const n = this.normalizeDeviceName(name);
+    if (!n) return false;
+    if (n.includes('hands-free') || n.includes('handsfree') || n.includes('(hfp')) return true;
+    const families = [
+      'airpods', 'beats', 'bose', 'sony wh', 'sony wf', 'wh-1000', 'wf-1000',
+      'jabra', 'galaxy buds', 'pixel buds', 'soundcore', 'jbl', 'sennheiser',
+      'momentum', 'oneplus', 'one plus', 'buds', 'earbuds', 'earbud', 'tws',
+      'bluetooth',
+    ];
+    return families.some(f => n.includes(f));
+  }
+
+  /** Find the built-in mic among current input devices, if present. */
+  private findBuiltInInputDevice(): { id: string; name: string } | undefined {
+    try {
+      const builtIn = AudioDevices.getInputDevices().find(d =>
+        /macbook|built[- ]?in|imac|mac\s+studio|mac\s+mini|internal/i.test(d.name),
+      );
+      return builtIn ? { id: builtIn.id, name: builtIn.name } : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private async reconfigureAudio(inputDeviceId?: string | null, outputDeviceId?: string | null): Promise<void> {
     console.log(`[Main] Reconfiguring Audio: Input=${inputDeviceId}, Output=${outputDeviceId}`);
 
@@ -1966,6 +3926,7 @@ export class AppState {
     // path uses the post-fallback wantedInput. Otherwise a stale identical
     // request could short-circuit a needed re-resolution (e.g., user
     // unplugged the built-in fallback after the first reconfigure).
+    let micAutoSwitched = false;
     if (wantedInput && wantedOutput) {
       const conflict = this.checkSameInputOutputDevice(wantedInput, wantedOutput);
       if (conflict) {
@@ -1973,6 +3934,7 @@ export class AppState {
         if (fallback) {
           console.warn(`[Main] I/O conflict detected (${conflict} on both sides). Auto-switching mic to "${fallback.name}".`);
           wantedInput = this.normalizeDeviceId(fallback.id);
+          micAutoSwitched = true;
           this.broadcast('audio-input-auto-switched', {
             from: conflict,
             to: fallback.name,
@@ -1981,6 +3943,60 @@ export class AppState {
         } else {
           console.warn(`[Main] I/O conflict detected (${conflict}) but no alternate input available — system audio will likely be silent.`);
         }
+      }
+    }
+
+    // HFP avoidance: a Bluetooth mic forces macOS into HFP "call mode" the moment
+    // it is opened for input — collapsing it to ~16/24kHz telephone-grade audio
+    // that ruins STT (the AirPods bug). Prefer the built-in mic so the Bluetooth
+    // device stays in high-quality A2DP for OUTPUT (the user keeps hearing the
+    // meeting in their earbuds) — the "just works" path that matches competitors.
+    //
+    // Detection must handle the dominant real case: inputDeviceId === 'default'.
+    // The 'default' list entry is literally named "Default Microphone" (Rust
+    // list_input_devices), NOT the underlying hardware, so a name check on the
+    // input alone never sees "AirPods". Reliable signals:
+    //   (a) the input EXPLICITLY names a Bluetooth device, OR
+    //   (b) the input is 'default' AND the OUTPUT is a Bluetooth device — macOS
+    //       routes the default mic to that BT device in HFP whenever it is the
+    //       active output. (Output = built-in speakers → default mic stays on the
+    //       built-in mic, so we must NOT switch.)
+    // The wireMicCapture native-rate backstop (≤24kHz after open) catches any
+    // residual case this static check can't see. Skipped if the same-device
+    // switch above fired, or no built-in mic exists (e.g. Mac mini / desktop).
+    if (!micAutoSwitched) {
+      try {
+        const inputs = AudioDevices.getInputDevices();
+
+        const explicitName = wantedInput
+          ? inputs.find(d => d.id === wantedInput)?.name ?? ''
+          : '';
+        const inputIsExplicitBt = !!explicitName && this.isBluetoothInputName(explicitName);
+
+        const outputName = this.getEffectiveOutputDeviceName(wantedOutput);
+        const outputIsBt = !!outputName && this.isBluetoothInputName(outputName);
+        const outputResolutionUnknown = !!wantedOutput && !outputName;
+        const inputIsDefault = !wantedInput;
+        const willBeHfp = inputIsExplicitBt || (inputIsDefault && (outputIsBt || outputResolutionUnknown));
+
+        if (willBeHfp) {
+          const fromLabel = inputIsExplicitBt ? explicitName : (outputName || 'Bluetooth mic');
+          const builtIn = this.findBuiltInInputDevice();
+          if (builtIn && this.normalizeDeviceName(builtIn.name) !== this.normalizeDeviceName(fromLabel)) {
+            console.warn(`[Main] Bluetooth mic ("${fromLabel}") would force HFP (low quality). Auto-switching mic to "${builtIn.name}" to keep it in A2DP.`);
+            wantedInput = this.normalizeDeviceId(builtIn.id);
+            micAutoSwitched = true;
+            this.broadcast('audio-input-auto-switched', {
+              from: fromLabel,
+              to: builtIn.name,
+              reason: 'bluetooth-hfp-avoided',
+            });
+          } else if (!builtIn) {
+            console.warn(`[Main] Bluetooth mic ("${fromLabel}") will run in HFP — no built-in mic available to switch to.`);
+          }
+        }
+      } catch (e) {
+        console.warn('[Main] HFP avoidance check failed (non-fatal):', e);
       }
     }
 
@@ -2007,52 +4023,68 @@ export class AppState {
       // destroy() calls stop() AND removeAllListeners(), preventing EventEmitter listener leaks.
       // Using stop()+null would orphan all 'data', 'speech_ended', 'sample_rate_changed'
       // closures (they still hold a ref to `this`) and trigger them on the next meeting.
-      this.systemAudioCapture.destroy();
+      const oldSystemAudioCapture = this.systemAudioCapture;
       this.systemAudioCapture = null;
+      await oldSystemAudioCapture.destroy();
     }
 
-    try {
-      console.log('[Main] Initializing SystemAudioCapture...');
-      this.systemAudioCapture = new SystemAudioCapture(wantedOutput);
-      this._sysSttRateApplied = false;
-      this.wireSystemCapture(this.systemAudioCapture, '(Reconfigured)');
-      console.log('[Main] SystemAudioCapture initialized.');
+    const screenCapability = await resolveMacScreenCaptureCapability('audio reconfigure');
+    if (screenCapability.effectiveDenied) {
+      const message = screenCapability.message ?? formatPermissionMessage('screen-recording-denied');
+      console.warn('[Main] Skipping SystemAudioCapture reconfigure — Screen Recording permission denied. Meeting will run mic-only.');
+      this.sendSystemAudioPermissionDenied( message);
       this.broadcastDeviceSelection({
         kind: 'output',
         requested: wantedOutput || null,
-        actual: wantedOutput || 'default',
-        fellBack: false,
+        actual: null,
+        fellBack: true,
+        reason: 'screen-recording-permission-denied',
       });
-    } catch (err) {
-      console.warn('[Main] Failed to initialize SystemAudioCapture with preferred ID. Falling back to default.', err);
+    } else {
       try {
-        this.systemAudioCapture = new SystemAudioCapture(); // Default
+        console.log('[Main] Initializing SystemAudioCapture...');
+        this.systemAudioCapture = new SystemAudioCapture(wantedOutput);
         this._sysSttRateApplied = false;
-        this.wireSystemCapture(this.systemAudioCapture, '(Default)');
+        this.wireSystemCapture(this.systemAudioCapture, '(Reconfigured)');
+        console.log('[Main] SystemAudioCapture initialized.');
         this.broadcastDeviceSelection({
           kind: 'output',
           requested: wantedOutput || null,
-          actual: 'default',
-          fellBack: true,
-          reason: (err as Error)?.message || 'unknown',
+          actual: wantedOutput || 'default',
+          fellBack: false,
         });
-      } catch (err2) {
-        console.error('[Main] Failed to initialize SystemAudioCapture (Default):', err2);
-        this.broadcastDeviceSelection({
-          kind: 'output',
-          requested: wantedOutput || null,
-          actual: null,
-          fellBack: true,
-          reason: `Both preferred and default failed: ${(err2 as Error)?.message || 'unknown'}`,
-        });
+      } catch (err) {
+        console.warn('[Main] Failed to initialize SystemAudioCapture with preferred ID. Falling back to default.', err);
+        try {
+          this.systemAudioCapture = new SystemAudioCapture(); // Default
+          this._sysSttRateApplied = false;
+          this.wireSystemCapture(this.systemAudioCapture, '(Default)');
+          this.broadcastDeviceSelection({
+            kind: 'output',
+            requested: wantedOutput || null,
+            actual: 'default',
+            fellBack: true,
+            reason: (err as Error)?.message || 'unknown',
+          });
+        } catch (err2) {
+          console.error('[Main] Failed to initialize SystemAudioCapture (Default):', err2);
+          this.broadcastDeviceSelection({
+            kind: 'output',
+            requested: wantedOutput || null,
+            actual: null,
+            fellBack: true,
+            reason: `Both preferred and default failed: ${(err2 as Error)?.message || 'unknown'}`,
+          });
+        }
       }
     }
 
     // 2. Microphone (Input Capture)
     if (this.microphoneCapture) {
       // destroy() calls stop() AND removeAllListeners(), preventing EventEmitter listener leaks.
-      this.microphoneCapture.destroy();
+      const oldMicrophoneCapture = this.microphoneCapture;
       this.microphoneCapture = null;
+      await oldMicrophoneCapture.destroy();
     }
 
     try {
@@ -2128,7 +4160,7 @@ export class AppState {
             reason: `All ${candidates.length + 2} input devices failed: ${(lastErr as Error)?.message || 'unknown'}`,
           });
           // Surface to UI so the user knows the meeting will be system-audio-only.
-          this.broadcast('audio-capture-failed', {
+          this.sendAudioCaptureFailed( {
             channel: 'mic',
             message: 'No working microphone could be initialized. Disconnect and reconnect your audio devices, or restart the app.',
             attempt: 0,
@@ -2139,21 +4171,91 @@ export class AppState {
         }
       }
     }
+
+    if (this.isMeetingActive) {
+      // Mic first: lazy mic start constructs the cpal input stream; do it
+      // before starting the CoreAudio system tap to avoid HAL contention.
+      this.microphoneCapture?.start();
+      this.googleSTT_User?.start();
+      this.systemAudioCapture?.start();
+      this.googleSTT?.start();
+    }
   }
 
   /**
+   * Serialization mutex for reconfigureSttProvider.
+   *
+   * Crash/hang fix (2026-06-05): a single "save Natively API key" action can
+   * fire up to TWO reconfigure calls back-to-back — one from the
+   * `set-natively-api-key` handler (which auto-promotes the STT provider to
+   * 'natively' and reconfigures), and one from the renderer's follow-up
+   * `set-stt-provider('natively')` call. Each call tears down and rebuilds the
+   * native captures (SystemAudioCapture / MicrophoneCapture → CoreAudio /
+   * ScreenCaptureKit / WASAPI). Two interleaved teardown+construct sequences
+   * against the same native device handles is a native-resource race that
+   * deadlocks the OS audio stack or crashes the process — manifesting as the
+   * "app hangs / freezes the system right after entering the key" reports on
+   * BOTH macOS and Windows (the bug is in this cross-platform JS orchestration,
+   * not in any OS-specific native code).
+   *
+   * Every other capture-mutating flow in this class is already guarded
+   * (`_systemAudioRecoveryInProgress`, `_defaultOutputSwitchInProgress`); this
+   * path was the one gap. We serialize rather than drop: the second caller
+   * genuinely needs to apply the latest provider config, so it awaits the
+   * in-flight reconfigure and then runs its own against fresh state.
+   */
+  private _sttReconfigureChain: Promise<void> = Promise.resolve();
+
+  /**
    * Reconfigure STT provider mid-session (called from IPC when user changes provider)
-   * Destroys existing STT instances and recreates them with the new provider
+   * Destroys existing STT instances and recreates them with the new provider.
+   *
+   * Concurrency: serialized via `_sttReconfigureChain`. Concurrent callers are
+   * queued and run one-at-a-time, so the native captures are never torn down /
+   * rebuilt in parallel. A throw in one queued reconfigure must not break the
+   * chain for the next caller, so the chain link swallows the error here and
+   * re-throws to THIS caller only.
    */
   public async reconfigureSttProvider(): Promise<void> {
+    const run = this._sttReconfigureChain.then(
+      () => this._doReconfigureSttProvider(),
+      // Previous link rejected — its error already surfaced to its own caller.
+      // Don't let it poison this link; proceed with our reconfigure.
+      () => this._doReconfigureSttProvider(),
+    );
+    // Keep the chain alive regardless of this run's outcome so a failure never
+    // wedges all future reconfigures.
+    this._sttReconfigureChain = run.then(
+      (): void => undefined,
+      (): void => undefined,
+    );
+    return run;
+  }
+
+  private async _doReconfigureSttProvider(): Promise<void> {
     console.log('[Main] Reconfiguring STT Provider...');
 
     // RC-01 fix: pause audio captures FIRST so their EventEmitter queues drain
     // before we null-out the STT instances. Without this, buffered 'data' events
     // still in-flight call this.googleSTT?.write() while googleSTT is already null.
     if (this.isMeetingActive) {
-      this.systemAudioCapture?.stop();
-      this.microphoneCapture?.stop();
+      // Wait for native teardown before restarting below. This keeps the lazy
+      // mic start from constructing a new cpal stream while the previous
+      // CoreAudio tap / mic handle is still releasing on setImmediate.
+      await Promise.all([
+        Promise.resolve(this.systemAudioCapture?.stop()).catch((e) => {
+          console.warn('[Main] Reconfigure STT: system capture stop threw:', e);
+        }),
+        (async () => {
+          // This path immediately restarts the same wrapper below. Disable the
+          // asynchronous pre-warm so stop() cannot race a freshly-started instance
+          // by constructing an extra cpal stream in its post-teardown .then().
+          this.microphoneCapture?.disablePreWarm();
+          await this.microphoneCapture?.stop();
+        })().catch((e) => {
+          console.warn('[Main] Reconfigure STT: mic capture stop threw:', e);
+        }),
+      ]);
     }
 
     // Now safe to destroy STT instances — no more audio events incoming
@@ -2173,11 +4275,13 @@ export class AppState {
     // eagerly construct a MicrophoneCapture (which calls build_input_stream on
     // macOS and immediately triggers the orange mic indicator even without .play()).
     if (this.isMeetingActive) {
-      this.setupSystemAudioPipeline();
-      this.systemAudioCapture?.start();
+      await this.setupSystemAudioPipeline();
+      // Mic first: lazy mic start constructs the cpal input stream; do it
+      // before starting the CoreAudio system tap to avoid HAL contention.
       this.microphoneCapture?.start();
-      this.googleSTT?.start();
       this.googleSTT_User?.start();
+      this.systemAudioCapture?.start();
+      this.googleSTT?.start();
     }
 
     console.log('[Main] STT Provider reconfigured');
@@ -2208,7 +4312,23 @@ export class AppState {
     if (!this.systemAudioCapture) return;
 
     this.systemAudioCapture.on('error', async (err: Error) => {
-      if (!this.isMeetingActive) return; // Only attempt recovery during active meetings
+      const recoveryMeetingGeneration = this._meetingGeneration;
+      const isRecoveryCurrentMeeting = () => this.isMeetingActive && this._meetingGeneration === recoveryMeetingGeneration;
+      if (!isRecoveryCurrentMeeting()) return; // Only attempt recovery during active meetings
+
+      // Cross-flow mutex with handleDefaultOutputChanged. Both flows
+      // destroy+recreate `this.systemAudioCapture`; without this guard, a
+      // route change racing with a recovery would leave one of the two `fresh`
+      // captures orphaned (still running, emitting chunks to nothing). The
+      // route change will rebuild the capture on its next watcher tick, so
+      // dropping the recovery attempt here is safe — the new capture won't
+      // carry the original error condition.
+      // Bail BEFORE incrementing _systemAudioConsecutiveFailures so the
+      // counter only reflects errors we actually attempted to recover from.
+      if (this._defaultOutputSwitchInProgress) {
+        console.warn('[AudioRecovery] Route change in progress — deferring recovery to that flow.');
+        return;
+      }
 
       const now = Date.now();
       this._systemAudioLastFailureAt = now;
@@ -2232,7 +4352,7 @@ export class AppState {
       // "ScreenCaptureKit access denied", "No displays found") instead of just
       // a generic STT 'reconnecting' indicator. This event is non-fatal — the
       // recovery attempt may still succeed.
-      this.broadcast('audio-capture-failed', {
+      this.sendAudioCaptureFailed( {
         channel: 'system',
         message: err.message,
         attempt: this._systemAudioRecoveryAttempts,
@@ -2245,6 +4365,9 @@ export class AppState {
           this._systemAudioRecoveryTimer = setTimeout(resolve, 1500);
         });
         this._systemAudioRecoveryTimer = null;
+        if (!isRecoveryCurrentMeeting()) {
+          return;
+        }
 
         // Recovery via destroy+recreate, NOT stop()+start():
         //   - SystemAudioCapture.stop() defers the native teardown via setImmediate
@@ -2260,6 +4383,23 @@ export class AppState {
         oldCapture?.destroy();
         this.systemAudioCapture = null;
         this._sysSttRateApplied = false;
+
+        const screenCapability = await resolveMacScreenCaptureCapability('system audio recovery');
+        if (!isRecoveryCurrentMeeting()) {
+          return;
+        }
+        if (screenCapability.effectiveDenied) {
+          this.sendSystemAudioPermissionDenied( screenCapability.message ?? formatPermissionMessage('screen-recording-denied'));
+          this.broadcastDeviceSelection({
+            kind: 'output',
+            requested: this._lastRequestedOutputDeviceId || null,
+            actual: null,
+            fellBack: true,
+            reason: 'screen-recording-permission-denied',
+          });
+          return;
+        }
+
         const fresh = new SystemAudioCapture(this._lastRequestedOutputDeviceId);
         this.systemAudioCapture = fresh;
         this.wireSystemCapture(fresh, '(Recovery)');
@@ -2275,8 +4415,8 @@ export class AppState {
         // If we've exhausted recovery, tell the renderer the failure is now terminal
         // for this meeting so it can stop showing "reconnecting" and surface a
         // mic-only banner instead.
-        if (this._systemAudioRecoveryAttempts >= 3) {
-          this.broadcast('audio-capture-failed', {
+        if (this._systemAudioRecoveryAttempts >= 3 && isRecoveryCurrentMeeting()) {
+          this.sendAudioCaptureFailed( {
             channel: 'system',
             message: `System audio capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`,
             attempt: this._systemAudioRecoveryAttempts,
@@ -2331,6 +4471,7 @@ export class AppState {
     console.log(`[DefaultOutputWatcher] Started. Initial default output: ${this._lastObservedDefaultOutputId || '(none)'}`);
 
     this._defaultOutputWatcherInterval = setInterval(() => {
+      if (this._isQuitting) return;
       if (!this.isMeetingActive) return;
       // Only watch when we're on the default route. If the user explicitly
       // picked an output device, respect that choice.
@@ -2364,8 +4505,33 @@ export class AppState {
     this._lastObservedDefaultOutputId = null;
   }
 
+  // Public wrapper for the before-quit hook so shutdown can cancel the
+  // interval without poking into a private method. Mirrors the meeting-end
+  // path's stopDefaultOutputWatcher() call but is invoked from a context that
+  // does not own a `this` reference inside the AppState class.
+  public stopDefaultOutputWatcherForShutdown(): void {
+    this.stopDefaultOutputWatcher();
+  }
+
   private async handleDefaultOutputChanged(): Promise<void> {
+    const meetingGeneration = this._meetingGeneration;
+    const isCurrentMeeting = () => this.isMeetingActive && this._meetingGeneration === meetingGeneration;
+    if (this._isQuitting) return;
+    if (!isCurrentMeeting()) return;
     if (this._defaultOutputSwitchInProgress) return;
+    // Cross-flow mutex: also bail if the recovery handler is mid-rebuild.
+    // Both flows destroy + recreate `this.systemAudioCapture` and both await
+    // resolveMacScreenCaptureCapability. Without this guard, the two `await`s
+    // can interleave such that the recovery's `fresh` instance is assigned to
+    // `this.systemAudioCapture`, then the route-change's `fresh` overwrites it
+    // — leaving recovery's instance orphaned (still running, emitting chunks,
+    // holding a CoreAudio Tap, double-writing to STT). Dropping this cycle is
+    // safe: the watcher's setInterval will re-fire and pick up the route
+    // change once recovery's instance is in place.
+    if (this._systemAudioRecoveryInProgress) {
+      console.log('[DefaultOutputWatcher] Recovery in progress — deferring route-change rebuild.');
+      return;
+    }
     this._defaultOutputSwitchInProgress = true;
     try {
       // Same destroy+recreate pattern as setupAudioRecoveryHandler — never
@@ -2378,6 +4544,23 @@ export class AppState {
       this._sysSttRateApplied = false;
       this._systemAudioRecoveryAttempts = 0;
       this._systemAudioConsecutiveFailures = 0;
+
+      const screenCapability = await resolveMacScreenCaptureCapability('default output route change');
+      if (this._isQuitting) return;
+      if (!isCurrentMeeting()) {
+        return;
+      }
+      if (screenCapability.effectiveDenied) {
+        this.sendSystemAudioPermissionDenied( screenCapability.message ?? formatPermissionMessage('screen-recording-denied'));
+        this.broadcastDeviceSelection({
+          kind: 'output',
+          requested: null,
+          actual: null,
+          fellBack: true,
+          reason: 'screen-recording-permission-denied',
+        });
+        return;
+      }
 
       // Pass undefined (not the new device id) so CoreAudio picks up the new
       // default at construction time. This is intentional: binding to a
@@ -2415,7 +4598,13 @@ export class AppState {
     if (!this.microphoneCapture) return;
 
     this.microphoneCapture.on('error', async (err: Error) => {
-      if (!this.isMeetingActive) return;
+      // Guard with both live isMeetingActive and the meeting generation. The
+      // live flag drops errors after Stop, while the generation check prevents
+      // an old meeting's delayed recovery timer from restarting the mic after a
+      // new meeting has begun.
+      const micRecoveryMeetingGeneration = this._meetingGeneration;
+      const isMicRecoveryCurrentMeeting = () => this.isMeetingActive && this._meetingGeneration === micRecoveryMeetingGeneration;
+      if (!isMicRecoveryCurrentMeeting()) return;
 
       if (this._micRecoveryInProgress || this._micRecoveryAttempts >= 3) {
         console.warn(
@@ -2435,45 +4624,99 @@ export class AppState {
           this._micRecoveryTimer = setTimeout(resolve, 1500);
         });
         this._micRecoveryTimer = null;
-
-        // Tear down + recreate the mic only (don't touch the system-audio
-        // capture; cpal needs a fresh device handle after error).
-        if (this.microphoneCapture) {
-          this.microphoneCapture.destroy();
-          this.microphoneCapture = null;
+        if (!isMicRecoveryCurrentMeeting()) {
+          return;
         }
-        this._micSttRateApplied = false;
 
+        // Tear down + recreate the mic. Because MicrophoneCapture is lazy-init,
+        // mic.start() constructs the cpal input stream. Pause system audio first
+        // so cpal does not negotiate the mic stream while the CoreAudio aggregate
+        // device IO proc is active — same HAL ordering invariant as startMeeting.
+        const systemCapturePausedForMicRecovery = !!this.systemAudioCapture;
+        const systemCapturePausedByMicRecovery = this.systemAudioCapture;
+        if (systemCapturePausedByMicRecovery) {
+          (systemCapturePausedByMicRecovery as any)?.__disarmStuckWatchdog?.();
+          await systemCapturePausedByMicRecovery.stop();
+        }
+
+        let micRecoveryErr: any = null;
         try {
-          this.microphoneCapture = new MicrophoneCapture(this._lastRequestedInputDeviceId);
-        } catch (createErr) {
-          console.warn('[MicRecovery] Saved device unavailable on recovery, falling back to default.', createErr);
-          this.microphoneCapture = new MicrophoneCapture();
+          if (this.microphoneCapture) {
+            await this.microphoneCapture.destroy();
+            this.microphoneCapture = null;
+          }
+          this._micSttRateApplied = false;
+
+          try {
+            this.microphoneCapture = new MicrophoneCapture(this._lastRequestedInputDeviceId);
+          } catch (createErr) {
+            console.warn('[MicRecovery] Saved device unavailable on recovery, falling back to default.', createErr);
+            this.microphoneCapture = new MicrophoneCapture();
+          }
+
+          // Use the canonical wiring path (wireMicCapture) instead of hand-rolling
+          // data/sample_rate_changed/speech_ended. Hand-rolled wiring drifts: this
+          // recovery path used to omit the stuck-watchdog and zero-fill detector
+          // (lines 1612-1693 of wireMicCapture), so after a mic recovery the user
+          // would silently get zero-filled audio with no UI signal — exactly the
+          // failure mode the watchdog was built to surface. setupMicRecoveryHandler
+          // is invoked at the tail of wireMicCapture so we don't need a separate
+          // call here either. Mirrors the system-audio recovery pattern at L2413.
+          this.wireMicCapture(this.microphoneCapture, '(Recovery)');
+          this.microphoneCapture.start();
+        } catch (err) {
+          micRecoveryErr = err;
+        } finally {
+          // Only restart the exact system wrapper WE paused. If a route-change
+          // watcher or system-audio recovery rebuilt/restarted system audio while
+          // mic recovery was in flight, that owner should keep control; starting
+          // whatever happens to be in this.systemAudioCapture could resurrect a
+          // stale wrapper or double-start a freshly-owned one.
+          if (
+            systemCapturePausedForMicRecovery &&
+            systemCapturePausedByMicRecovery &&
+            this.systemAudioCapture === systemCapturePausedByMicRecovery &&
+            !this._defaultOutputSwitchInProgress &&
+            !this._systemAudioRecoveryInProgress &&
+            isMicRecoveryCurrentMeeting()
+          ) {
+            try {
+              systemCapturePausedByMicRecovery.start();
+            } catch (restartErr) {
+              console.error('[MicRecovery] Failed to restart system audio after mic recovery pause:', restartErr);
+              this.sendAudioCaptureFailed({
+                channel: 'system',
+                message: `System audio failed to restart after microphone recovery: ${(restartErr as Error)?.message || 'unknown error'}`,
+                attempt: 0,
+                maxAttempts: 0,
+                terminal: false,
+              });
+            }
+          }
         }
 
-        // Re-wire the listeners that reconfigureAudio normally sets up.
-        this.microphoneCapture.on('data', (chunk: Buffer) => {
-          if (!this._micSttRateApplied && this.googleSTT_User && this.microphoneCapture) {
-            const r = this.microphoneCapture.getSampleRate();
-            this.googleSTT_User.setSampleRate(r);
-            this.googleSTT_User.setAudioChannelCount?.(1);
-            this._micSttRateApplied = true;
-          }
-          this.googleSTT_User?.write(chunk);
-        });
-        this.microphoneCapture.on('sample_rate_changed', (rate: number) => {
-          this.googleSTT_User?.setSampleRate(rate);
-        });
-        this.microphoneCapture.on('speech_ended', () => {
-          this.googleSTT_User?.notifySpeechEnded?.();
-        });
-        this.setupMicRecoveryHandler(); // re-attach on the new instance
-        this.microphoneCapture.start();
+        if (micRecoveryErr) throw micRecoveryErr;
 
         this._micRecoveryAttempts = 0;
         console.log('[MicRecovery] MicrophoneCapture restarted successfully.');
       } catch (recoveryErr: any) {
         console.error(`[MicRecovery] Recovery attempt #${this._micRecoveryAttempts} failed:`, recoveryErr);
+        // B4: surface a terminal failure to the CURRENT meeting after the same
+        // 3-attempt cap that setupAudioRecoveryHandler uses for system audio
+        // (see L2456-2464). Pre-fix, mic recovery exhausted attempts only via
+        // console.error and the next 'error' was silently dropped by the
+        // early-return guard at the top of this handler — user heard nothing
+        // was being transcribed but no banner ever showed. Meeting-generation
+        // check mirrors isRecoveryCurrentMeeting() in the system-side handler.
+        if (this._micRecoveryAttempts >= 3 && isMicRecoveryCurrentMeeting()) {
+          this.sendAudioCaptureFailed({
+            channel: 'mic',
+            message: `Microphone capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`,
+            attempt: this._micRecoveryAttempts,
+            maxAttempts: 3,
+            terminal: true,
+          });
+        }
       } finally {
         this._micRecoveryInProgress = false;
       }
@@ -2504,45 +4747,98 @@ export class AppState {
     }
   }
 
+  // UX4: system-audio probe runs in parallel with the mic test so users can
+  // verify their system-audio capture path BEFORE starting a meeting.
+  // Without this, the only signals were post-meeting watchdogs (8-12s after
+  // meeting start), which is too late for a smooth "verify and proceed"
+  // onboarding flow.
+  private audioTestSystemCapture: SystemAudioCapture | null = null;
+  // UX4 hardening (code-review HIGH): bumped on every startAudioTest call
+  // AND every stopAudioTest call. The system-audio probe awaits
+  // resolveMacScreenCaptureCapability for ~seconds; if the user closes the
+  // Audio tab during that await, stopAudioTest fires but the subsequent
+  // `new SystemAudioCapture(); start()` would orphan a capture with no
+  // shutdown path. Snapshot this token before the await and bail if it has
+  // changed by the time the await resolves.
+  private _audioTestEpoch = 0;
+  // HANG FIX: pending timer for the debounced system-audio probe. The CoreAudio
+  // process-tap + aggregate-device teardown is a synchronous HAL operation that,
+  // on a Bluetooth output route (e.g. AirPods), can stall coreaudiod's global HAL
+  // lock for seconds — freezing the whole machine — when a tap is created and then
+  // destroyed within ~1-2s. Rapidly opening the Audio tab and switching away does
+  // exactly that. By deferring tap CREATION behind this timer (cleared on
+  // stopAudioTest), a quick tab switch never creates the tap at all, so there is
+  // nothing to tear down. The mic-level probe stays eager; only the system probe
+  // (which owns the CoreAudio tap) is debounced.
+  private _audioTestSystemProbeTimer: NodeJS.Timeout | null = null;
+
   private async _startAudioTestImpl(deviceId?: string): Promise<void> {
     console.log(`[Main] Starting Audio Test on device: ${deviceId || 'default'}`);
-    this.stopAudioTest(); // Stop any existing test
+    this.stopAudioTest(); // Stop any existing test (also bumps _audioTestEpoch)
+    // UX4 hardening: snapshot epoch BEFORE the system-audio probe's awaited
+    // permission probe. If stopAudioTest fires while we're awaiting, the
+    // post-await check below catches it and skips system-capture construction.
+    const startEpoch = ++this._audioTestEpoch;
+    const isCurrentTest = () => this._audioTestEpoch === startEpoch;
 
     if (!(await ensureMacMicrophoneAccess('audio test'))) {
       throw new Error(formatPermissionMessage('mic-denied'));
     }
 
+    const broadcastTargets = (): BrowserWindow[] =>
+      [
+        this.settingsWindowHelper.getSettingsWindow(),
+        this.getWindowHelper().getLauncherWindow(),
+        this.getWindowHelper().getOverlayWindow(),
+      ].filter((win): win is BrowserWindow => !!win && !win.isDestroyed());
+
+    const computeRmsLevel = (chunk: Buffer): number => {
+      let sum = 0;
+      const step = 10;
+      const len = chunk.length;
+      for (let i = 0; i < len; i += 2 * step) {
+        const val = chunk.readInt16LE(i);
+        sum += val * val;
+      }
+      const count = len / (2 * step);
+      if (count <= 0) return 0;
+      const rms = Math.sqrt(sum / count);
+      return Math.min(rms / 10000, 1.0);
+    };
+
     const attachAudioTestListeners = (capture: MicrophoneCapture) => {
       capture.on('data', (chunk: Buffer) => {
-        const targets = [
-          this.settingsWindowHelper.getSettingsWindow(),
-          this.getWindowHelper().getLauncherWindow(),
-          this.getWindowHelper().getOverlayWindow(),
-        ].filter((win): win is BrowserWindow => !!win && !win.isDestroyed());
-
+        const targets = broadcastTargets();
         if (targets.length === 0) return;
-
-        let sum = 0;
-        const step = 10;
-        const len = chunk.length;
-
-        for (let i = 0; i < len; i += 2 * step) {
-          const val = chunk.readInt16LE(i);
-          sum += val * val;
-        }
-
-        const count = len / (2 * step);
-        if (count > 0) {
-          const rms = Math.sqrt(sum / count);
-          const level = Math.min(rms / 10000, 1.0);
-          for (const target of targets) {
-            target.webContents.send('audio-test-level', level);
-          }
+        const level = computeRmsLevel(chunk);
+        for (const target of targets) {
+          this.sendToWindow(target, 'audio-test-level', level);
         }
       });
 
       capture.on('error', (err: Error) => {
         console.error('[Main] AudioTest Error:', err);
+      });
+    };
+
+    // UX4: parallel system-audio probe. Wired AFTER the mic capture so a
+    // missing screen-recording grant doesn't block the mic level meter.
+    // Listeners include a TCC zero-fill detector (peak-to-peak < 100 for
+    // the entire probe = TCC silently denied even though SCK started).
+    const attachSystemTestListeners = (capture: SystemAudioCapture) => {
+      capture.on('data', (chunk: Buffer) => {
+        const targets = broadcastTargets();
+        if (targets.length === 0) return;
+        const level = computeRmsLevel(chunk);
+        for (const target of targets) {
+          this.sendToWindow(target, 'audio-test-system-level', level);
+        }
+      });
+      capture.on('error', (err: Error) => {
+        console.error('[Main] AudioTest System Error:', err);
+        for (const target of broadcastTargets()) {
+          this.sendToWindow(target, 'audio-test-system-error', err.message || String(err));
+        }
       });
     };
 
@@ -2554,7 +4850,10 @@ export class AppState {
       console.warn('[Main] Failed to start audio test on preferred device. Falling back to default.', err);
       // RC-02 fix: explicitly stop and null the failed capture before creating
       // the fallback to prevent a brief double-microphone-capture window.
-      try { this.audioTestCapture?.stop(); } catch { /* ignore errors on already-failed capture */ }
+      try {
+        this.audioTestCapture?.disablePreWarm();
+        this.audioTestCapture?.stop();
+      } catch { /* ignore errors on already-failed capture */ }
       this.audioTestCapture = null;
       try {
         this.audioTestCapture = new MicrophoneCapture();
@@ -2565,13 +4864,120 @@ export class AppState {
         throw fallbackErr;
       }
     }
+
+    // Independent system-audio probe — failure here does NOT abort the mic
+    // test. The renderer renders the system-level bar greyed-out + a
+    // permission-denied notice if the screen capture probe couldn't start.
+    try {
+      const screenCapability = await resolveMacScreenCaptureCapability('audio test');
+      // UX4 hardening: bail if a stopAudioTest fired during the await.
+      // Constructing+starting a SystemAudioCapture after stop would orphan
+      // the capture with no shutdown path.
+      if (!isCurrentTest()) {
+        console.log('[Main] Audio test was stopped during permission probe — skipping system capture construction.');
+        return;
+      }
+      if (screenCapability.effectiveDenied) {
+        for (const target of broadcastTargets()) {
+          this.sendToWindow(
+            target,
+            'audio-test-system-error',
+            screenCapability.message ?? formatPermissionMessage('screen-recording-denied'),
+          );
+        }
+      } else {
+        // HANG FIX: defer the CoreAudio tap creation behind a debounce. If the
+        // user switches away from the Audio tab within this window, stopAudioTest
+        // clears the timer and the tap is NEVER created — so coreaudiod never has
+        // to tear down a freshly-created Bluetooth aggregate-device tap (the
+        // operation that stalls the system-wide HAL lock and hangs the machine).
+        // 600ms is long enough to absorb an accidental click-through, short enough
+        // that a deliberate visit to the Audio tab still shows the system meter
+        // promptly.
+        if (this._audioTestSystemProbeTimer) {
+          clearTimeout(this._audioTestSystemProbeTimer);
+          this._audioTestSystemProbeTimer = null;
+        }
+        this._audioTestSystemProbeTimer = setTimeout(() => {
+          this._audioTestSystemProbeTimer = null;
+          // Re-check the epoch: a stopAudioTest (tab switch / close) bumps it and
+          // would have cleared this timer, but guard anyway against races.
+          if (!isCurrentTest()) {
+            console.log('[Main] Audio test stopped during system-probe debounce — skipping CoreAudio tap creation.');
+            return;
+          }
+          try {
+            this.audioTestSystemCapture = new SystemAudioCapture();
+            attachSystemTestListeners(this.audioTestSystemCapture);
+            // INVARIANT: SystemAudioCapture.start() MUST remain synchronous (its
+            // native CoreAudio init runs on a background thread and start()
+            // returns instantly). Because nothing awaits between start() and the
+            // isCurrentTest() re-check below, no stopAudioTest can interleave, so
+            // this guard cannot itself trigger a create-then-immediately-destroy
+            // teardown — the exact HAL stall this debounce exists to avoid. If
+            // start() is ever made async/awaiting, this inline stop() would run
+            // right after the tap is created and REINTRODUCE the hang; in that
+            // case, defer/cancel here instead of calling stop() inline.
+            this.audioTestSystemCapture.start();
+            if (!isCurrentTest()) {
+              try { this.audioTestSystemCapture?.stop(); } catch { /* ignore */ }
+              this.audioTestSystemCapture = null;
+            }
+          } catch (probeErr: any) {
+            console.warn('[Main] Deferred system-audio probe failed to start:', probeErr);
+            for (const target of broadcastTargets()) {
+              this.sendToWindow(
+                target,
+                'audio-test-system-error',
+                probeErr?.message || 'System audio probe failed to start.',
+              );
+            }
+          }
+        }, 600);
+      }
+    } catch (sysErr: any) {
+      console.warn('[Main] Failed to start system-audio probe:', sysErr);
+      for (const target of broadcastTargets()) {
+        this.sendToWindow(
+          target,
+          'audio-test-system-error',
+          sysErr?.message || 'System audio probe failed to start.',
+        );
+      }
+    }
   }
 
   public stopAudioTest(): void {
+    // UX4 hardening: bump epoch so any in-flight _startAudioTestImpl that's
+    // awaiting resolveMacScreenCaptureCapability sees the change and skips
+    // constructing the system capture (avoids orphaned-capture race).
+    this._audioTestEpoch++;
+    // HANG FIX: cancel a pending debounced system-audio probe. If the user
+    // switched away from the Audio tab before the 600ms timer fired, the
+    // CoreAudio tap was never created — clearing the timer here ensures it
+    // never will be for this (now stale) test, so there is no Bluetooth
+    // aggregate-device teardown to stall coreaudiod.
+    if (this._audioTestSystemProbeTimer) {
+      clearTimeout(this._audioTestSystemProbeTimer);
+      this._audioTestSystemProbeTimer = null;
+    }
+    // Also disable pre-warm so stop() doesn't pre-warm a new monitor that would
+    // keep the DSP thread alive after the settings panel is closed. Mirrors
+    // the endMeeting() pattern where disablePreWarm() is called before stop().
+    this.audioTestCapture?.disablePreWarm();
     if (this.audioTestCapture) {
       console.log('[Main] Stopping Audio Test');
       this.audioTestCapture.stop();
       this.audioTestCapture = null;
+    }
+    // UX4: also stop the parallel system probe.
+    if (this.audioTestSystemCapture) {
+      try {
+        this.audioTestSystemCapture.stop();
+      } catch (e) {
+        console.warn('[Main] Stopping system audio test threw:', e);
+      }
+      this.audioTestSystemCapture = null;
     }
   }
 
@@ -2604,6 +5010,7 @@ export class AppState {
     this._systemAudioRecoveryInProgress = false;
     this._systemAudioRecoveryAttempts = 0;
     this._systemAudioConsecutiveFailures = 0;
+    this._micRecoveryAttempts = 0;
     if (this._systemAudioRecoveryTimer) {
       clearTimeout(this._systemAudioRecoveryTimer);
       this._systemAudioRecoveryTimer = null;
@@ -2612,7 +5019,16 @@ export class AppState {
     if (!(await ensureMacMicrophoneAccess('meeting start'))) {
       const message = formatPermissionMessage('mic-denied');
       this.broadcast('meeting-audio-error', message);
-      throw new Error(message);
+      // Tag the thrown error so the renderer's start-meeting caller (still on
+      // the launcher — the overlay/meeting surface hasn't been shown yet, so
+      // the in-overlay audio banner would not be visible) can recognise this
+      // as a recoverable mic-permission denial and re-open the permissions
+      // card instead of failing silently with only a console.error. Pre-fix,
+      // a denied/revoked mic grant made "Start Natively" do nothing on screen.
+      const err = new Error(message) as Error & { code?: string; channel?: string };
+      err.code = 'mic-permission-denied';
+      err.channel = 'mic';
+      throw err;
     }
 
     // Check Screen Recording permission required for system audio capture
@@ -2622,16 +5038,16 @@ export class AppState {
     // explicit 'denied' — in that case warn the user but let the meeting continue
     // with microphone-only transcription.
     if (process.platform === 'darwin') {
-      const screenStatus = getMacScreenCaptureStatus();
-      console.log(`[Main] macOS screen recording permission status: ${screenStatus}`);
-      if (screenStatus === 'denied') {
+      const screenCapability = await resolveMacScreenCaptureCapability('meeting start');
+      console.log(`[Main] macOS screen recording permission status: ${screenCapability.status}; capturable=${screenCapability.capturable}; sources=${screenCapability.sourceCount}`);
+      if (screenCapability.effectiveDenied) {
         // Permission was explicitly denied — warn the user via the UI but do NOT
         // auto-open System Settings. Forcing that window open every meeting start
         // is extremely disruptive, especially when mic transcription is still working.
         // The UI will show a non-blocking banner; the user can fix it deliberately.
-        const message = formatPermissionMessage('screen-recording-denied');
+        const message = screenCapability.message ?? formatPermissionMessage('screen-recording-denied');
         console.warn('[Main]', message);
-        this.broadcast('system-audio-permission-denied', message);
+        this.sendSystemAudioPermissionDenied( message);
         // NOTE: Do NOT call shell.openExternal() here — it hijacks focus on every meeting
         // start. The UI banner (system-audio-permission-denied IPC event) handles this.
       }
@@ -2654,6 +5070,7 @@ export class AppState {
     // the state event arrives, so the user only ever sees the overlay.
     this.windowHelper.setWindowMode('overlay');
 
+    const meetingGeneration = ++this._meetingGeneration;
     this.isMeetingActive = true;
     this.broadcastMeetingState()
     if (metadata) {
@@ -2669,7 +5086,7 @@ export class AppState {
       const { ModesManager } = require('./services/ModesManager');
       const activeMode = ModesManager.getInstance().getActiveMode();
       if (activeMode) {
-        const sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const sessionId = `session_${crypto.randomUUID()}`;
         _meetingTelemetrySessionId = sessionId;
         this.intelligenceManager.setDynamicActionContext({
           sessionId,
@@ -2696,18 +5113,62 @@ export class AppState {
     } catch { /* non-fatal */ }
 
     // Emit session reset to clear UI state immediately
-    this.getWindowHelper().getOverlayWindow()?.webContents.send('session-reset');
-    this.getWindowHelper().getLauncherWindow()?.webContents.send('session-reset');
+    this.sendToWindow(this.getWindowHelper().getOverlayWindow(), 'session-reset');
+    this.sendToWindow(this.getWindowHelper().getLauncherWindow(), 'session-reset');
+
+    // LOCAL-MODEL WARMUP: if the active model is a local Ollama model, warm + pin
+    // it now (fire-and-forget) so the cold weight-load (8-12s for a 7-9B model)
+    // happens DURING the meeting-start / audio-init window instead of on the user's
+    // first live question — where it would otherwise blow the first-token deadline
+    // and surface the canned fallback. Cloud models no-op here (prewarm returns
+    // fast for non-Ollama), so a cloud session pays nothing. Never blocks start.
+    try {
+      const llmHelper = this.processingHelper.getLLMHelper();
+      if (llmHelper?.isUsingOllama?.()) {
+        llmHelper.prewarmPromptCache().catch((_e: any): void => {});
+      }
+    } catch { /* non-fatal — warmup must never block meeting start */ }
 
     // ★ ASYNC AUDIO INIT: Return INSTANTLY so the IPC response goes back
     // to the renderer immediately, allowing the UI to switch to overlay
     // without waiting for SCK/audio initialization (which takes 5-7 seconds).
-    // setTimeout(0) ensures setWindowMode IPC is processed first.
-    setTimeout(async () => {
-      // BUG-02 fix: a fast start→stop sequence can call endMeeting() before
-      // this callback fires, leaving isMeetingActive=false. If that happened,
-      // do NOT boot the audio pipeline — it would run forever with no stop signal.
-      if (!this.isMeetingActive) {
+    const audioInitController = new AbortController();
+    this._audioInitController = audioInitController;
+    const audioInitSignal = audioInitController.signal;
+    this._audioInitPromise = (async () => {
+      const isCurrentMeeting = () => this.isMeetingActive && this._meetingGeneration === meetingGeneration && !audioInitSignal.aborted;
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      let systemCaptureOwnedByInit = this.systemAudioCapture;
+      let microphoneCaptureOwnedByInit = this.microphoneCapture;
+      let systemSttOwnedByInit = this.googleSTT;
+      let userSttOwnedByInit = this.googleSTT_User;
+      let ragManagerOwnedByInit = this.ragManager;
+      let systemSttStartedByInit = false;
+      let userSttStartedByInit = false;
+      let liveIndexingStartedByInit = false;
+      const abortStaleAudioInit = () => {
+        if (this.systemAudioCapture === systemCaptureOwnedByInit) {
+          (this.systemAudioCapture as any)?.__disarmStuckWatchdog?.();
+          this.systemAudioCapture?.destroy();
+          this.systemAudioCapture = null;
+        }
+        if (this.microphoneCapture === microphoneCaptureOwnedByInit) {
+          (this.microphoneCapture as any)?.__disarmStuckWatchdog?.();
+          this.microphoneCapture?.destroy();
+          this.microphoneCapture = null;
+        }
+        if (systemSttStartedByInit) {
+          if (this.googleSTT === systemSttOwnedByInit) this.googleSTT?.stop();
+        }
+        if (userSttStartedByInit) {
+          if (this.googleSTT_User === userSttOwnedByInit) this.googleSTT_User?.stop();
+        }
+        if (liveIndexingStartedByInit) {
+          if (this.ragManager === ragManagerOwnedByInit) this.ragManager?.stopLiveIndexing?.();
+        }
+      };
+
+      if (!isCurrentMeeting()) {
         console.warn('[Main] Meeting was cancelled before audio pipeline could start — aborting init.');
         return;
       }
@@ -2715,22 +5176,53 @@ export class AppState {
         // Check for audio configuration preference
         if (metadata?.audio) {
           await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
+          if (!isCurrentMeeting()) {
+            abortStaleAudioInit();
+            return;
+          }
+          systemCaptureOwnedByInit = this.systemAudioCapture;
+          microphoneCaptureOwnedByInit = this.microphoneCapture;
+          systemSttOwnedByInit = this.googleSTT;
+          userSttOwnedByInit = this.googleSTT_User;
+          ragManagerOwnedByInit = this.ragManager;
         }
 
         // LAZY INIT: Ensure pipeline is ready (if not reconfigured above)
-        this.setupSystemAudioPipeline();
+        await this.setupSystemAudioPipeline();
+        if (!isCurrentMeeting()) {
+          abortStaleAudioInit();
+          return;
+        }
+        systemCaptureOwnedByInit = this.systemAudioCapture;
+        microphoneCaptureOwnedByInit = this.microphoneCapture;
+        systemSttOwnedByInit = this.googleSTT;
+        userSttOwnedByInit = this.googleSTT_User;
+        ragManagerOwnedByInit = this.ragManager;
 
-        // Start System Audio
-        this.systemAudioCapture?.start();
-        this.googleSTT?.start();
-
-        // Start Microphone
+        // Start Microphone FIRST. MicrophoneCapture is lazy-init: start()
+        // constructs the cpal input stream. If we start the CoreAudio system
+        // tap first, cpal can hang inside build_input_stream while the aggregate
+        // device IO proc is already active (observed: logs stop after
+        // `[Microphone] Device: ...`). Keep launch-time mic discipline by
+        // staying lazy, but restore the pre-fix HAL ordering inside meetings.
         this.microphoneCapture?.start();
         this.googleSTT_User?.start();
+        userSttStartedByInit = true;
+
+        // Start System Audio after the mic stream has been constructed.
+        this.systemAudioCapture?.start();
+        this.googleSTT?.start();
+        systemSttStartedByInit = true;
 
         // Start JIT RAG live indexing
         if (this.ragManager) {
           this.ragManager.startLiveIndexing('live-meeting-current');
+          liveIndexingStartedByInit = true;
+        }
+
+        if (!isCurrentMeeting()) {
+          abortStaleAudioInit();
+          return;
         }
 
         // Watch for default-output route changes so the CoreAudio Tap follows
@@ -2750,14 +5242,42 @@ export class AppState {
         }
         console.log('[Main] Audio pipeline started successfully.');
       } catch (err) {
-        console.error('[Main] Error initializing audio pipeline:', err);
-        // Notify UI so user knows microphone/audio failed to start
-        this.broadcast('meeting-audio-error', (err as Error).message || 'Audio pipeline failed to start');
+        // An endMeeting()-driven abort (or a generation change) is expected — it is
+        // NOT a real audio failure, so we must not surface a "pipeline failed" banner
+        // for a Stop the user initiated themselves.
+        const isAbort = (err as Error)?.message === 'audio_init_aborted' || !isCurrentMeeting();
+        if (!isAbort) {
+          console.error('[Main] Error initializing audio pipeline:', err);
+          // Notify UI so user knows microphone/audio failed to start
+          this.broadcast('meeting-audio-error', (err as Error).message || 'Audio pipeline failed to start');
+        } else {
+          abortStaleAudioInit();
+        }
+      } finally {
+        if (this._meetingGeneration === meetingGeneration) this._audioInitPromise = null;
+        if (this._audioInitController === audioInitController) {
+          this._audioInitController = null;
+        }
       }
-    }, 0); // Defer to next event loop tick — ensures IPC response reaches renderer before audio init
+    })(); // Defer to next event loop tick — ensures IPC response reaches renderer before audio init
   }
 
   public async endMeeting(): Promise<void> {
+    // Idempotency guard: a double-click on Stop, or a Stop racing with a
+    // global-shortcut reset, can deliver two endMeeting() calls within ms of
+    // each other. Without this, both invocations would run the synchronous
+    // teardown block (overwriting the in-flight `_pendingTeardown` promise
+    // reference, breaking startMeeting()'s await on it, and both `finally`
+    // handlers could clear `_isDraining` prematurely — truncating the trailing
+    // transcript finals from the first teardown).
+    if (this._endMeetingInFlight || (!this.isMeetingActive && this._pendingTeardown)) {
+      console.log('[Main] endMeeting() ignored — teardown already in flight.');
+      await this._pendingTeardown?.catch((): void => {});
+      return;
+    }
+    // Cover the window between here and `_pendingTeardown` assignment, during which
+    // the new in-flight-audio-init await below yields the event loop.
+    this._endMeetingInFlight = true;
     console.log('[Main] Ending Meeting...');
 
     // Phase 6 — meeting_stop telemetry. Emit BEFORE any teardown so a crash
@@ -2778,35 +5298,115 @@ export class AppState {
       this.setOverlayMousePassthrough(false);
     }
 
+    // ─── WINDOW SWAP BEFORE STATE BROADCAST ───────────────────────────────
+    // Mirror startMeeting()'s ordering: swap the window BEFORE flipping
+    // `isMeetingActive` and broadcasting. If the overlay receives
+    // `meeting-state-changed:{isActive:false}` while it is still visible, the
+    // overlay's React tree may begin unmount/cleanup paths (cancel streams,
+    // clear effects) while still painted — combined with a same-instance theme
+    // switch, that interleaving produces the half-painted overlay symptom the
+    // user can only escape via force-quit. Hide first, then broadcast.
+    this.windowHelper.setWindowMode('launcher');
+
+    // ─── CLEAR THE OVERLAY TREE WHILE IT IS HIDDEN ─────────────────────────
+    // The overlay BrowserWindow is PERSISTENT — created once with show:false
+    // and thereafter only hide()/show()'d; its React tree is never unmounted
+    // between meetings. The line above just hid it. If we don't clear it now,
+    // the previous meeting's messages + expanded width survive into the next
+    // meeting and are briefly VISIBLE the instant startMeeting() show()s the
+    // window again — then torn down ON SCREEN (chat-list unmount + height
+    // recompute + the shellWidth→OS-resize shrink) when the start-side
+    // session-reset finally lands a few frames after show(). That on-screen
+    // teardown is the "old UI flashes, then a choppy collapse" the user sees.
+    //
+    // Clearing HERE — after the window is hidden, with a whole meeting of idle
+    // time before the next show() — means the overlay's mounted state is
+    // already the clean collapsed baseline by the next meeting, so its FIRST
+    // visible frame is clean and there is nothing to resize/tear down on
+    // screen. The renderer's onSessionReset handler does the full synchronous
+    // clear (messages, shellWidth→collapsed, code-expansion refs/timers); the
+    // only change is that it now runs while hidden instead of while visible.
+    //
+    // Safe: the overlay is already hidden above and shows nothing post-stop —
+    // trailing transcript finals (_isDraining), meeting save, and the
+    // title/summary all run against the DB / other windows, never this tree.
+    // The start-side session-reset (in startMeeting) is kept as a safety net
+    // for the cold-start / crash-recovery path where endMeeting never ran; on
+    // the normal Stop→Start path it is now a no-op (state already clean).
+    this.sendToWindow(this.getWindowHelper().getOverlayWindow(), 'session-reset');
+
     // ─── UX STATE FLIP — SYNCHRONOUS ───────────────────────────────────────
-    // Flip the UX-facing meeting flag to false RIGHT NOW and broadcast. The
-    // launcher's "Meeting ongoing" pill subscribes to meeting-state-changed,
-    // so this guarantees the pill reverts to "Start Natively" the moment the
-    // user clicks Stop — no green→blue flash if they click Start again before
-    // the 250 ms STT drain finishes. The transcript handler keys off
-    // `_isDraining` instead so trailing finals are still accepted.
+    // Now flip the UX-facing meeting flag and broadcast. The launcher's
+    // "Meeting ongoing" pill reverts to "Start Natively" immediately;
+    // trailing transcript finals are still accepted via `_isDraining`.
     this.isMeetingActive = false;
+    this._meetingGeneration++;
     this._isDraining = true;
     this.broadcastMeetingState();
 
-    // ─── WINDOW SWAP ───────────────────────────────────────────────────────
-    // Swap to the launcher BEFORE any audio teardown. The native monitor.stop()
-    // calls below are scheduled via setImmediate; libuv runs setImmediate
-    // callbacks on the very next tick AFTER this handler returns and BEFORE
-    // the next IPC message is processed. So if we did the window swap after
-    // (or relied on a follow-up setWindowMode IPC), the user would stare at
-    // the frozen overlay for 100–600 ms while the DSP/CoreAudio Tap/SCK
-    // threads joined. Calling switchToLauncher() here gets the show/hide
-    // commands to the OS compositor before the main thread blocks.
-    this.windowHelper.setWindowMode('launcher');
+    // ─── ABORT + AWAIT IN-FLIGHT AUDIO INIT (before any capture teardown) ───
+    // If startMeeting()'s async audio init is still mid-`setupSystemAudioPipeline()`
+    // it can construct/start a FRESH native capture AFTER our stop()/destroy() runs,
+    // leaving a dangling CoreAudio/SCK handle — or both the dying and fresh captures
+    // grab the HAL property-listener lock at once and freeze the main thread mid-paint.
+    // abort() is synchronous (flips audioInitSignal.aborted so the init's
+    // isCurrentMeeting() guards short-circuit and it tears down its own captures);
+    // the await is INSTANT in the common case (_audioInitPromise is already null once
+    // init completed) and only blocks in the narrow cold-start-then-immediate-Stop
+    // window — where waiting is exactly what prevents the freeze. The launcher UI
+    // already reverted above via broadcastMeetingState(), so perceived responsiveness
+    // is unaffected.
+    this._audioInitController?.abort();
+    try {
+      await this._audioInitPromise;
+    } catch {
+      // The init body may reject with the `audio_init_aborted` sentinel on abort — expected.
+    }
+    this._audioInitPromise = null;
+    // The await (the only yield point before `_pendingTeardown` is assigned) is done;
+    // the remaining teardown runs synchronously, so re-entry is no longer possible here
+    // and the `_pendingTeardown`-based guard above takes over once it's set.
+    this._endMeetingInFlight = false;
 
     // ─── SYNCHRONOUS: things the user expects "right now" on Stop click ────
-    // Captures are deferred-stop wrappers (see SystemAudioCapture.stop /
-    // MicrophoneCapture.stop) — they flip the JS-side isRecording flag
-    // immediately so no new audio reaches STT, but defer the blocking native
-    // teardown to setImmediate. Returns within ~1ms.
-    this.systemAudioCapture?.stop();
-    this.microphoneCapture?.stop();
+    // Disarm the stuck-capture watchdogs BEFORE stop() — stop() flips isRecording
+    // and schedules a deferred native teardown, so we cannot rely on the on('stop')
+    // listener firing in time to cancel the 12s timer. Without this, a short meeting
+    // that captured 0 chunks can fire a false "system-audio-stuck" banner after the
+    // user already stopped. clearTimeout(null) is a no-op, so this is always safe.
+    (this.systemAudioCapture as any)?.__disarmStuckWatchdog?.();
+    (this.microphoneCapture as any)?.__disarmStuckWatchdog?.();
+
+    // ─── CAPTURE TEARDOWN — DESTROY + RECREATE, NOT STOP + REUSE ───────────
+    // Snapshot the live capture wrappers, then null the fields SYNCHRONOUSLY.
+    // This is the fix for the second-meeting UI freeze: if we leave the
+    // wrappers in place, a fast Stop→Start on the SAME device skips the
+    // reconfigureAudio destroy+recreate path ("reconfigure skipped — device
+    // IDs unchanged") and setupSystemAudioPipeline's `if (!this.microphoneCapture)`
+    // guard, so MicrophoneCapture.start() ends up SYNCHRONOUSLY constructing a
+    // fresh `new RustMicCapture` on the main thread WHILE the previous meeting's
+    // deferred `monitor.stop()` is still releasing the same CoreAudio device —
+    // both grab the HAL property-listener lock and deadlock the main thread.
+    // Nulling here forces the next meeting down the serialized reconstruction
+    // path, and the destroy() promises below are threaded into _pendingTeardown
+    // (awaited by the next startMeeting) so the dying native handle is fully
+    // released BEFORE any new capture is constructed on the same device.
+    //
+    // destroy() = disablePreWarm + (deferred) stop + removeAllListeners + null
+    // monitor. It returns within ~1ms (the native teardown is on setImmediate);
+    // we do NOT await it here — endMeeting still returns instantly.
+    const dyingSystemCapture = this.systemAudioCapture;
+    const dyingMicrophoneCapture = this.microphoneCapture;
+    this.systemAudioCapture = null;
+    this.microphoneCapture = null;
+    const captureTeardownPromise = Promise.all([
+      Promise.resolve(dyingSystemCapture?.destroy()).catch((e) => {
+        console.error('[Main] System capture teardown failed:', e);
+      }),
+      Promise.resolve(dyingMicrophoneCapture?.destroy()).catch((e) => {
+        console.error('[Main] Microphone capture teardown failed:', e);
+      }),
+    ]).then(() => {});
 
     // Stop the default-output watcher — no point polling CoreAudio while
     // there's no active capture to rebind.
@@ -2827,6 +5427,15 @@ export class AppState {
     // session on the (still-shared) STT instances.
     const ragManager = this.ragManager;
     this._pendingTeardown = (async () => {
+      // CRITICAL ORDERING: await the native capture teardown FIRST, before any
+      // of the STT/RAG drain below. startMeeting() awaits this whole
+      // _pendingTeardown promise before it constructs/starts a new capture, so
+      // resolving captureTeardownPromise inside it guarantees the previous
+      // meeting's `monitor.stop()` has released the CoreAudio device before the
+      // next meeting opens it — closing the HAL-lock deadlock window. It is
+      // awaited up front (not in parallel) so even a slow native release blocks
+      // the next start rather than racing it.
+      await captureTeardownPromise;
       try {
         // 0. Revert to Default Model. Moved into BG: getDefaultModel() and the
         //    provider list reads touch disk, and the 'model-changed' broadcast
@@ -2843,7 +5452,7 @@ export class AppState {
           console.log(`[Main] Reverting model to default: ${defaultModel}`);
           this.processingHelper.getLLMHelper().setModel(defaultModel, all);
           BrowserWindow.getAllWindows().forEach(win => {
-            if (!win.isDestroyed()) win.webContents.send('model-changed', defaultModel);
+            this.sendToWindow(win, 'model-changed', defaultModel);
           });
         } catch (e) {
           console.error('[Main] Failed to revert model:', e);
@@ -2876,7 +5485,7 @@ export class AppState {
           }
         } else {
           if (ragManager) {
-            await ragManager.stopLiveIndexing().catch(() => {});
+            await ragManager.stopLiveIndexing().catch((): void => {});
             if (!this.isMeetingActive) ragManager.deleteMeetingData('live-meeting-current');
           }
         }
@@ -2884,6 +5493,7 @@ export class AppState {
         console.error('[Main] Background meeting teardown failed:', err);
       } finally {
         this._isDraining = false;
+        this.clearTranscriptThrottle();
       }
     })();
     // endMeeting returns NOW — the IPC handler resolves and the renderer's
@@ -2893,6 +5503,17 @@ export class AppState {
 
   private async processCompletedMeetingForRAG(meetingId: string): Promise<void> {
     if (!this.ragManager) return;
+
+    // In-flight guard: rapid teardown paths (recovery retry + normal completion,
+    // or back-to-back endMeeting calls) can enqueue the same meeting twice
+    // before the first completes. Each invocation re-reads the transcript,
+    // re-chunks, and re-queues embeddings — duplicating ~100ms-2s of work and
+    // racing the SQLite INSERT-OR-IGNORE. Short-circuit if already in flight.
+    if (this._ragProcessingInFlight.has(meetingId)) {
+      console.log(`[AppState] RAG processing for ${meetingId} already in flight — skipping duplicate.`);
+      return;
+    }
+    this._ragProcessingInFlight.add(meetingId);
 
     try {
       // Use the explicit meetingId passed from endMeeting() — deterministic, never
@@ -2921,6 +5542,8 @@ export class AppState {
 
     } catch (error) {
       console.error('[AppState] Failed to process meeting for RAG:', error);
+    } finally {
+      this._ragProcessingInFlight.delete(meetingId);
     }
   }
 
@@ -2952,7 +5575,7 @@ export class AppState {
       if (!win) { tokenBatches.clear(); return; }
       for (const [kind, items] of tokenBatches.entries()) {
         if (items.length > 0) {
-          win.webContents.send('intelligence-token-batch', { kind, items });
+          this.sendToWindow(win, 'intelligence-token-batch', { kind, items });
         }
       }
       tokenBatches.clear();
@@ -2981,16 +5604,16 @@ export class AppState {
     this.intelligenceManager.on('assist_update', (insight: string) => {
       // Send to both if both exist, though mostly overlay needs it
       const helper = this.getWindowHelper();
-      helper.getLauncherWindow()?.webContents.send('intelligence-assist-update', { insight });
-      helper.getOverlayWindow()?.webContents.send('intelligence-assist-update', { insight });
+      this.sendToWindow(helper.getLauncherWindow(), 'intelligence-assist-update', { insight });
+      this.sendToWindow(helper.getOverlayWindow(), 'intelligence-assist-update', { insight });
     })
 
     // Phase 3 — Cluely-style dynamic action card. Forward to all open windows
     // (launcher + overlay) so whichever surface the user has up shows the card.
     this.intelligenceManager.on('dynamic_action_emitted', (action: any) => {
       const helper = this.getWindowHelper();
-      helper.getLauncherWindow()?.webContents.send('intelligence-dynamic-action', { action });
-      helper.getOverlayWindow()?.webContents.send('intelligence-dynamic-action', { action });
+      this.sendToWindow(helper.getLauncherWindow(), 'intelligence-dynamic-action', { action });
+      this.sendToWindow(helper.getOverlayWindow(), 'intelligence-dynamic-action', { action });
       // Phase 6 — telemetry: log detection (sanitized: NO transcript text, NO
       // evidence body — only ids, type, mode, confidence). The TelemetryService
       // sanitizer also strips transcript-shaped fields defensively.
@@ -3014,15 +5637,39 @@ export class AppState {
     this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-suggested-answer', { answer, question, confidence })
-      }
+      this.sendToWindow(win, 'intelligence-suggested-answer', { answer, question, confidence })
 
     })
 
-    this.intelligenceManager.on('suggested_answer_token', (token: string, question: string, confidence: number) => {
+    this.intelligenceManager.on('suggested_answer_token', (token: string, question: string, confidence: number, generationId?: number) => {
       // Sprint 9: batch instead of per-token webContents.send.
-      queueBatch('suggested_answer', { token, question, confidence });
+      // generationId (audit finding #3): carried per-item so the renderer can
+      // drop a batch belonging to a superseded live answer. Undefined for the
+      // other live streams (code hint / brainstorm) — id-less items are accepted.
+      queueBatch('suggested_answer', { token, question, confidence, generationId });
+    })
+
+    // Orphaned-scaffold fix: a what-to-answer stream that already showed a
+    // coding scaffold ended with no final answer (superseded/declined/errored).
+    // Tell the renderer to drop the open scaffold row. Flush pending token
+    // batches first so a late scaffold batch can't re-mount the row afterwards.
+    this.intelligenceManager.on('suggested_answer_discard', (reason: string) => {
+      flushBatchesBeforeFinal();
+      const win = mainWindow()
+      this.sendToWindow(win, 'intelligence-suggested-answer-discard', { reason })
+    })
+
+    // Verified code execution (background): a ✓ badge when the shown code passed
+    // its executed test cases, and a NEW corrected message when it failed and a
+    // re-verified fix was produced. Both arrive AFTER the answer was shown.
+    this.intelligenceManager.on('code_verified', (info: { question: string; passed: number; total: number; language: string }) => {
+      const win = mainWindow()
+      this.sendToWindow(win, 'intelligence-code-verified', info)
+    })
+    this.intelligenceManager.on('code_correction', (info: { question: string; answer: string; note: string; reVerified: boolean }) => {
+      flushBatchesBeforeFinal();
+      const win = mainWindow()
+      this.sendToWindow(win, 'intelligence-code-correction', info)
     })
 
     // Sprint 7: dedicated negotiation-coaching channel. Engine emits this
@@ -3034,9 +5681,7 @@ export class AppState {
       // sees them before the coaching card swap.
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-negotiation-coaching', { payload })
-      }
+      this.sendToWindow(win, 'intelligence-negotiation-coaching', { payload })
     })
 
     this.intelligenceManager.on('refined_answer_token', (token: string, intent: string) => {
@@ -3047,18 +5692,14 @@ export class AppState {
     this.intelligenceManager.on('refined_answer', (answer: string, intent: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-refined-answer', { answer, intent })
-      }
+      this.sendToWindow(win, 'intelligence-refined-answer', { answer, intent })
 
     })
 
     this.intelligenceManager.on('recap', (summary: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-recap', { summary })
-      }
+      this.sendToWindow(win, 'intelligence-recap', { summary })
     })
 
     this.intelligenceManager.on('recap_token', (token: string) => {
@@ -3069,9 +5710,7 @@ export class AppState {
     this.intelligenceManager.on('clarify', (clarification: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-clarify', { clarification })
-      }
+      this.sendToWindow(win, 'intelligence-clarify', { clarification })
     })
 
     this.intelligenceManager.on('clarify_token', (token: string) => {
@@ -3082,9 +5721,7 @@ export class AppState {
     this.intelligenceManager.on('follow_up_questions_update', (questions: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-follow-up-questions-update', { questions })
-      }
+      this.sendToWindow(win, 'intelligence-follow-up-questions-update', { questions })
     })
 
     this.intelligenceManager.on('follow_up_questions_token', (token: string) => {
@@ -3094,32 +5731,24 @@ export class AppState {
 
     this.intelligenceManager.on('manual_answer_started', () => {
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-manual-started')
-      }
+      this.sendToWindow(win, 'intelligence-manual-started')
     })
 
     this.intelligenceManager.on('manual_answer_result', (answer: string, question: string) => {
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-manual-result', { answer, question })
-      }
+      this.sendToWindow(win, 'intelligence-manual-result', { answer, question })
 
     })
 
     this.intelligenceManager.on('mode_changed', (mode: string) => {
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-mode-changed', { mode })
-      }
+      this.sendToWindow(win, 'intelligence-mode-changed', { mode })
     })
 
     this.intelligenceManager.on('error', (error: Error, mode: string) => {
       console.error(`[IntelligenceManager] Error in ${mode}:`, error)
       const win = mainWindow()
-      if (win) {
-        win.webContents.send('intelligence-error', { error: error.message, mode })
-      }
+      this.sendToWindow(win, 'intelligence-error', { error: error.message, mode })
     })
   }
 
@@ -3165,6 +5794,26 @@ export class AppState {
   // Getters and Setters
   public getMainWindow(): BrowserWindow | null {
     return this.windowHelper.getMainWindow()
+  }
+
+  public setLocalWhisperRecoveryNotice(notice: LocalWhisperRecoveryNotice): void {
+    this.localWhisperRecoveryNotice = notice;
+  }
+
+  public takeLocalWhisperRecoveryNotice(): LocalWhisperRecoveryNotice | null {
+    const notice = this.localWhisperRecoveryNotice;
+    this.localWhisperRecoveryNotice = null;
+    return notice;
+  }
+
+  public setOnnxRecoveryNotice(family: OnnxRecoveryFamily, notice: OnnxRecoveryNotice): void {
+    this.onnxRecoveryNotices[family] = notice;
+  }
+
+  public takeOnnxRecoveryNotice(family: OnnxRecoveryFamily): OnnxRecoveryNotice | null {
+    const notice = this.onnxRecoveryNotices[family];
+    if (notice) delete this.onnxRecoveryNotices[family];
+    return notice ?? null;
   }
 
   public getWindowHelper(): WindowHelper {
@@ -3275,9 +5924,7 @@ export class AppState {
     } else {
       // In overlay mode, send toggle-expand IPC to expand/collapse the UI
       const targetWindow = this.windowHelper.getOverlayWindow();
-      if (targetWindow && !targetWindow.isDestroyed()) {
-        targetWindow.webContents.send('toggle-expand');
-      }
+      this.sendToWindow(targetWindow, 'toggle-expand');
     }
   }
 
@@ -3416,6 +6063,29 @@ export class AppState {
     return this.withScreenshotCaptureSession('full', restoreFocus, (session) =>
       this.screenshotHelper.takeScreenshot(this.getTargetDisplayForFullScreenshot(session))
     )
+  }
+
+  /**
+   * Capture the current screen and immediately request AI analysis (the
+   * "capture-and-process" single-trigger). Extracted so both the
+   * `general:capture-and-process` hotkey and the `general:capture-dom`
+   * screenshot fallback share one path.
+   */
+  private async captureScreenAndProcess(): Promise<void> {
+    const screenshotPath = await this.takeScreenshot(false);
+    const preview = await this.getImagePreview(screenshotPath);
+    // Ensure the window is visible so the user can see the response without stealing focus
+    this.showMainWindow(true);
+    // win.focus() can cause macOS to re-activate the app. Re-hide the dock
+    // if we are in undetectable mode.
+    if (process.platform === 'darwin' && this.isUndetectable) {
+      app.dock.hide();
+    }
+    const mainWindow = this.getMainWindow();
+    this.sendToWindow(mainWindow, 'capture-and-process', {
+      path: screenshotPath,
+      preview,
+    });
   }
 
   public async takeSelectiveScreenshot(restoreFocus: boolean = true): Promise<string> {
@@ -3565,12 +6235,10 @@ export class AppState {
             const screenshotPath = await this.takeScreenshot()
             const preview = await this.getImagePreview(screenshotPath)
             const mainWindow = this.getMainWindow()
-            if (mainWindow) {
-              mainWindow.webContents.send("screenshot-taken", {
-                path: screenshotPath,
-                preview
-              })
-            }
+            this.sendToWindow(mainWindow, 'screenshot-taken', {
+              path: screenshotPath,
+              preview,
+            })
           } catch (error) {
             console.error("Error taking screenshot from tray:", error)
           }
@@ -3607,9 +6275,19 @@ export class AppState {
   }
 
   public setUndetectable(state: boolean): void {
-    // Guard: skip if state hasn't actually changed to prevent
-    // duplicate dock hide/show cycles from renderer feedback loops
-    if (this.isUndetectable === state) return;
+    const decision = decideToggle(this.isUndetectable, state);
+
+    // RC-2 fix: even when the value is unchanged, RE-BROADCAST the authoritative
+    // state so a renderer whose optimistic toggle drifted out of sync (dropped/
+    // duplicate event, concurrent shortcut press) heals itself. Previously this
+    // path returned silently, leaving the UI showing the wrong state until the
+    // user toggled to a *different* value (the "toggle does nothing" symptom).
+    // The expensive macOS dock/focus side-effects below still only run on a real
+    // change, so we don't thrash the dock on a no-op.
+    if (!decision.changed) {
+      this._broadcastToAllWindows('undetectable-changed', this.isUndetectable);
+      return;
+    }
 
     console.log(`[Stealth] setUndetectable(${state}) called`);
 
@@ -3618,6 +6296,12 @@ export class AppState {
     this.settingsWindowHelper.setContentProtection(state)
     this.modelSelectorWindowHelper.setContentProtection(state)
     this.cropperWindowHelper.setContentProtection(state)
+
+    if (process.platform === 'win32') {
+      this.windowHelper.syncOverlayInteractionPolicy();
+      this.settingsWindowHelper.syncActivationPolicy();
+      this.modelSelectorWindowHelper.syncActivationPolicy();
+    }
 
     // Persist state via SettingsManager
     SettingsManager.getInstance().set('isUndetectable', state);
@@ -3631,15 +6315,26 @@ export class AppState {
       this._disguiseTimers = [];
     }
 
+    // Cancel any pending content-protection re-assert from a PREVIOUS toggle —
+    // a fresh toggle supersedes it, and we don't want a stale follow-up pushing
+    // an outdated sharingType after the user has changed their mind.
+    for (const timer of this._dockReassertTimers) {
+      clearTimeout(timer);
+    }
+    this._dockReassertTimers = [];
+
     // Broadcast state change to all relevant windows
     this._broadcastToAllWindows('undetectable-changed', state);
 
     // --- STEALTH MODE LOGIC ---
-    // The dock hide/show is debounced: rapid toggles update isUndetectable immediately
-    // (so content protection, IPC broadcasts and the guard above are always current),
-    // but the actual macOS dock/tray/focus operation only fires once the user stops
-    // toggling. This eliminates the race where dock.show() + NSApp.activate() lingers
-    // after a subsequent dock.hide() call.
+    // The dock hide/show is debounced: rapid toggles update isUndetectable
+    // immediately (so content protection, IPC broadcasts and the guard above are
+    // always current), but the actual macOS dock/tray/focus operation only fires
+    // once the user stops toggling. The debounce window MUST be longer than a
+    // human's fast toggle cadence (~250-350ms/click); at the old 150ms it
+    // expired between clicks and every click fired its own dock op, churning the
+    // activation policy. 350ms collapses a burst into a single settled
+    // transition, after which _enforceDockState() verifies it actually stuck.
     if (process.platform === 'darwin') {
       if (this._dockDebounceTimer) {
         clearTimeout(this._dockDebounceTimer);
@@ -3653,13 +6348,14 @@ export class AppState {
         // if the user toggled again before the timer fired.
         const settled = this.isUndetectable;
 
+        // Pre-toggle focus bookkeeping so the dock transition doesn't hand
+        // keyboard focus to whatever app is behind us.
         const activeWindow = this.windowHelper.getMainWindow();
         const settingsWindow = this.settingsWindowHelper.getSettingsWindow();
         let targetFocusWindow = activeWindow;
         if (settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isVisible()) {
           targetFocusWindow = settingsWindow;
         }
-
         const modelSelectorWindow = this.modelSelectorWindowHelper.getWindow();
         const isModelSelectorVisible = modelSelectorWindow && !modelSelectorWindow.isDestroyed() && modelSelectorWindow.isVisible();
 
@@ -3667,56 +6363,181 @@ export class AppState {
           this.settingsWindowHelper.setIgnoreBlur(true);
         }
         if (isModelSelectorVisible) {
-          this.modelSelectorWindowHelper.setIgnoreBlur(true);
+          /* this.modelSelectorWindowHelper.setIgnoreBlur(true); */
         }
 
-        if (settled) {
-          // Capture whether Natively is currently the frontmost app BEFORE
-          // dock.hide() — that call triggers an implicit macOS app-deactivation
-          // which shifts keyboard focus to the next frontmost app (Chrome, etc.).
-          const nativelyWasFocused =
-            targetFocusWindow != null &&
-            !targetFocusWindow.isDestroyed() &&
-            targetFocusWindow.isFocused();
-
-          console.log('[Stealth] Calling app.dock.hide()');
-          app.dock.hide();
-          this.hideTray();
-
-          // If Natively was the focused window when the user toggled stealth,
-          // restore focus to our window after dock.hide() so macOS does not
-          // hand control to Chrome / whatever is behind us.
-          // We use win.focus() (not app.focus()) to avoid the heavy-handed
-          // [NSApp activateIgnoringOtherApps:YES] side-effect.
-          if (nativelyWasFocused && targetFocusWindow && !targetFocusWindow.isDestroyed()) {
-            targetFocusWindow.focus();
-          }
-        } else {
-          console.log('[Stealth] Calling app.dock.show()');
-          app.dock.show();
-          this.showTray();
-          // Do NOT call focus() — let the user's current app retain focus
-        }
+        // Drive the dock/tray to the settled state via a SELF-VERIFYING loop.
+        // Issuing app.dock.hide()/show() once is unreliable after a burst of
+        // toggles: macOS coalesces rapid activation-policy flips and can DROP
+        // the final call (the symptom: "still shows in dock even in undetectable
+        // mode"). enforceDockState() re-reads app.dock.isVisible() — the OS
+        // ground truth — and re-applies until reality matches intent.
+        this._enforceDockState(settled, targetFocusWindow, 0);
 
         if (targetFocusWindow && targetFocusWindow === settingsWindow) {
           setTimeout(() => { this.settingsWindowHelper.setIgnoreBlur(false); }, 500);
         }
         if (isModelSelectorVisible) {
-          setTimeout(() => { this.modelSelectorWindowHelper.setIgnoreBlur(false); }, 500);
+          setTimeout(() => { /* this.modelSelectorWindowHelper.setIgnoreBlur(false); */ }, 500);
         }
-      }, 150);
+      }, 350);
     }
+  }
+
+  // Self-verifying dock/tray enforcement. macOS asynchronously coalesces and
+  // sometimes DROPS rapid app.dock.hide()/show() calls (each flips the app's
+  // activation policy), so a single fire-and-forget call is not reliable after a
+  // toggle burst. We poll app.dock.isVisible() — the OS ground truth — and
+  // re-apply the desired state until it sticks (or the user changes intent).
+  // Also re-asserts content protection on every hide, because the activation-
+  // policy flip can reset each window's NSWindowSharingType.
+  private _enforceDockState(
+    wantUndetectable: boolean,
+    targetFocusWindow: BrowserWindow | null,
+    attempt: number,
+    maxAttempts: number = 6,
+  ): void {
+    if (process.platform !== 'darwin') return;
+
+    // Abort if the user toggled again since this enforcement was scheduled —
+    // the newer toggle owns the dock now (and cleared these timers anyway).
+    if (this.isUndetectable !== wantUndetectable) return;
+
+    // app.dock.isVisible() is the OS ground truth. decideDockTransition tells us
+    // whether the dock needs changing given the desired state and what's
+    // currently applied (currentlyHidden = !visible).
+    const currentlyHidden = !app.dock.isVisible();
+    const { shouldApply } = decideDockTransition(wantUndetectable, currentlyHidden);
+
+    if (shouldApply) {
+      if (wantUndetectable) {
+        const nativelyWasFocused =
+          targetFocusWindow != null &&
+          !targetFocusWindow.isDestroyed() &&
+          targetFocusWindow.isFocused();
+
+        console.log(`[Stealth] app.dock.hide() (enforce attempt ${attempt})`);
+        app.dock.hide();
+        this.hideTray();
+
+        // Re-assert content protection: the activation-policy flip can reset
+        // the windows' sharingType, silently undoing screen-capture stealth.
+        this.reassertAllContentProtection();
+
+        // Keep focus on Natively (win.focus(), not app.focus()) so dock.hide()'s
+        // implicit app-deactivation doesn't hand control to the app behind us.
+        if (nativelyWasFocused && targetFocusWindow && !targetFocusWindow.isDestroyed()) {
+          targetFocusWindow.focus();
+        }
+      } else {
+        console.log(`[Stealth] app.dock.show() (enforce attempt ${attempt})`);
+        app.dock.show();
+        this.showTray();
+        // Do NOT call focus() — let the user's current app retain focus.
+      }
+    }
+
+    // Verify it actually stuck. macOS may apply the policy change a tick later
+    // (or drop it), so re-check a few times even when this pass looked correct.
+    // Timers are tracked so the next toggle cancels stale enforcement.
+    if (attempt < maxAttempts) {
+      const t = setTimeout(() => {
+        this._dockReassertTimers = this._dockReassertTimers.filter((x) => x !== t);
+        this._enforceDockState(wantUndetectable, targetFocusWindow, attempt + 1, maxAttempts);
+      }, 130);
+      this._dockReassertTimers.push(t);
+    }
+  }
+
+  // Force-reapply the current content-protection state to every window helper,
+  // bypassing their dedupe guards. See setUndetectable() for why this is needed
+  // after macOS dock/activation-policy transitions.
+  private reassertAllContentProtection(): void {
+    this.windowHelper.reassertContentProtection();
+    this.settingsWindowHelper.reassertContentProtection();
+    this.modelSelectorWindowHelper.reassertContentProtection();
+    this.cropperWindowHelper.reassertContentProtection();
   }
 
   public getUndetectable(): boolean {
     return this.isUndetectable
   }
 
+  // Converge a persisted-ON undetectable session to actually-stealth at startup.
+  //
+  // WHY this is needed separately from the pre-emptive app.dock.hide() in
+  // initializeApp(): that hide runs BEFORE createWindow(), but creating and
+  // showing the launcher window re-registers the app with macOS and re-shows the
+  // dock icon, silently undoing the pre-emptive hide. The old startup code
+  // assumed "dock already hidden, no action needed" — which is false — and never
+  // ran any enforcement, so a persisted-ON launch came up NOT undetectable until
+  // the user toggled off/on (which routes through the robust _enforceDockState
+  // loop). This method runs that SAME self-verifying enforcement at startup:
+  // re-assert content protection (window show can flip the activation policy and
+  // reset sharingType) and drive the dock to hidden, retrying against the OS
+  // ground truth so a late ready-to-show dock re-show is corrected.
+  public applyInitialUndetectableState(): void {
+    // Longer retry budget than the toggle path (~2.5s vs ~0.8s): at startup the
+    // dock re-show lands at the launcher's ready-to-show, which on a cold launch
+    // can arrive later than the toggle path's 6-retry window. Extra isVisible()
+    // re-checks are cheap and stop early via the isUndetectable guard.
+    this.reassertUndetectableStealth(18);
+  }
+
+  // Re-drive the app back to a fully-stealth state after any operation that can
+  // silently undo it — used by both startup convergence (above) and, critically,
+  // every launcher window show (WindowHelper.switchToLauncher).
+  //
+  // WHY launcher shows leak stealth: the launcher is a REGULAR macOS window (no
+  // `type: 'panel'`, no skipTaskbar — unlike the overlay NSPanel). Calling
+  // .show()+.focus() on it while the app is in accessory policy with the dock
+  // tile hidden re-activates the app as a foreground app, which makes macOS
+  // re-register it and REVEAL the dock tile — silently undoing app.dock.hide().
+  // This is the "Natively icon appears in the dock after Stop meeting" bug:
+  // endMeeting() swaps overlay→launcher, the activating show re-shows the tile,
+  // and nothing re-asserted stealth afterward. It is intermittent because macOS
+  // asynchronously coalesces and sometimes drops activation-policy/dock calls.
+  //
+  // This routes through the SAME self-verifying _enforceDockState() loop the
+  // toggle path uses: it polls app.dock.isVisible() (the OS ground truth) and
+  // re-applies dock.hide() + content protection until reality matches intent,
+  // so it cannot be defeated by a dropped call or a late re-show. Cheap and safe
+  // to call redundantly — it no-ops immediately off-darwin or when not
+  // undetectable, and stops early via the isUndetectable guard inside the loop.
+  public reassertUndetectableStealth(maxAttempts: number = 10): void {
+    if (process.platform !== 'darwin') return;
+    if (!this.isUndetectable) return;
+    // Collapse any in-flight enforcement chain from a PRIOR re-assert before
+    // starting a fresh one — same discipline as setUndetectable(). Without this,
+    // a burst of launcher shows (rapid Stop→Start→Stop, or a cold-start
+    // convergence overlapping a ready-to-show switchToLauncher) would spawn
+    // several overlapping _enforceDockState chains. They are idempotent and
+    // self-cancelling (all want dock hidden; each stops early once app.dock
+    // reports hidden or the isUndetectable guard flips), so this is not a
+    // correctness fix — it just avoids redundant isVisible() polling. The newest
+    // re-assert owns the dock; the intent (want-hidden) is unchanged, so
+    // cancelling the older timers loses nothing.
+    for (const timer of this._dockReassertTimers) {
+      clearTimeout(timer);
+    }
+    this._dockReassertTimers = [];
+    this.reassertAllContentProtection();
+    const focusWindow = this.windowHelper.getMainWindow();
+    this._enforceDockState(true, focusWindow, 0, maxAttempts);
+  }
+
   // --- Mouse Passthrough (Adapted from public PR #113 — verify premium interaction) ---
   private overlayMousePassthrough: boolean = false;
 
   public setOverlayMousePassthrough(state: boolean): void {
-    if (this.overlayMousePassthrough === state) return;
+    const decision = decideToggle(this.overlayMousePassthrough, state);
+
+    // RC-2 fix (see setUndetectable): always reconcile the renderer with the
+    // authoritative state, even on a no-op, so the UI can never stay desynced.
+    if (!decision.changed) {
+      this._broadcastToAllWindows('overlay-mouse-passthrough-changed', this.overlayMousePassthrough);
+      return;
+    }
 
     console.log(`[Overlay] setOverlayMousePassthrough(${state}) called`);
 
@@ -3756,12 +6577,31 @@ export class AppState {
   }
 
   public setDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
+    mode = normalizeDisguiseMode(mode);
     this.disguiseMode = mode;
     SettingsManager.getInstance().set('disguiseMode', mode);
 
-    // Apply the disguise regardless of undetectable state
-    // (disguise affects Activity Monitor name via process.title,
-    //  dock icon only updates when NOT in stealth)
+    // NO runtime activation-policy churn here — and this is deliberate.
+    //
+    // The dual-dock-icon bug is a STARTUP phenomenon: the app is born, paints a
+    // tile, THEN renames via app.setName()+CFBundleName, and the LaunchServices
+    // re-registration races into a second tile. That path is fully handled at
+    // startup by LSUIElement (the bundle is born tile-less) plus the one-shot
+    // accessory→regular promotion after createWindow() — see the whenReady block.
+    //
+    // At RUNTIME the app already owns a single stable 'regular' dock tile, and
+    // app.setName() updates that tile's label in place rather than spawning a
+    // duplicate. The old code still bracketed this rename in accessory→regular
+    // "to be safe", but that round-trip deactivates the whole application for a
+    // tick — the always-on-top overlay/launcher windows leave the foreground
+    // layer and snap back, producing a visible disappear/reappear flicker on
+    // every disguise switch. Trading a guaranteed flicker for a hypothetical
+    // duplicate tile is the wrong deal, so the bracket is gone. With no policy
+    // change the app never deactivates, so there is also nothing to re-focus.
+    //
+    // Stealth is unaffected: _applyDisguise() already skips app.setName() and
+    // app.dock.setIcon() when isUndetectable (the dock stays hidden), and we
+    // never promote activation policy here.
     this._applyDisguise(mode);
   }
 
@@ -3814,6 +6654,7 @@ export class AppState {
         }
         break;
       case 'none':
+      default:
         appName = "Natively";
         if (isMac) {
           iconPath = app.isPackaged
@@ -3876,19 +6717,19 @@ export class AppState {
     const launcher = this.windowHelper.getLauncherWindow();
     if (launcher && !launcher.isDestroyed()) {
       launcher.setTitle(appName.trim());
-      launcher.webContents.send('disguise-changed', mode);
+      this.sendToWindow(launcher, 'disguise-changed', mode);
     }
 
     const overlay = this.windowHelper.getOverlayWindow();
     if (overlay && !overlay.isDestroyed()) {
       overlay.setTitle(appName.trim());
-      overlay.webContents.send('disguise-changed', mode);
+      this.sendToWindow(overlay, 'disguise-changed', mode);
     }
 
     const settingsWin = this.settingsWindowHelper.getSettingsWindow();
     if (settingsWin && !settingsWin.isDestroyed()) {
       settingsWin.setTitle(appName.trim());
-      settingsWin.webContents.send('disguise-changed', mode);
+      this.sendToWindow(settingsWin, 'disguise-changed', mode);
     }
 
     // Cancel any stale forceUpdate timeouts from previous disguise changes
@@ -3927,7 +6768,7 @@ export class AppState {
     for (const win of windows) {
       if (win && !win.isDestroyed() && !sent.has(win.id)) {
         sent.add(win.id);
-        win.webContents.send(channel, ...args);
+        this.sendToWindow(win, channel, ...args);
       }
     }
   }
@@ -3940,10 +6781,12 @@ export class AppState {
 // Application initialization
 
 async function initializeApp() {
+  logStartupPhase('initializeApp:start');
   // 1. Enforce single instance — prevent duplicate dock icons from leftover processes.
   // In development mode with hot-reload this is still safe because electron is restarted
   // by the build step, not re-launched by concurrently while the old process is alive.
   const gotLock = app.requestSingleInstanceLock();
+  logStartupPhase('single-instance-lock', { gotLock });
   if (!gotLock) {
     console.log('[Main] Another instance is already running. Exiting this instance.');
     // Use app.exit(0) — app.quit() before whenReady can be deferred or no-op'd
@@ -3967,11 +6810,93 @@ async function initializeApp() {
     }
   });
 
-  // 2. Wait for app to be ready
-  await app.whenReady()
+  // PHASE-2E: install lifecycle tracking BEFORE app.whenReady() so we never
+  // miss a renderer crash, GPU crash, or worker death that occurs during
+  // initial window creation.
+  try {
+    const { LifecycleTracker } = require('./utils/lifecycleTracker');
+    const consoleLog: (msg: string, meta?: Record<string, unknown>) => void = (msg, meta) => {
+      // Use the same redaction policy as logToFile — never log secrets.
+      const safeMeta = meta
+        ? Object.fromEntries(
+            Object.entries(meta).map(([k, v]) => {
+              if (/key|secret|token|password|auth|credential/i.test(k)) return [k, '[REDACTED]'];
+              return [k, v];
+            })
+          )
+        : undefined;
+      console.log(msg, safeMeta ?? '');
+      logToFile(msg + ' ' + (safeMeta ? JSON.stringify(safeMeta) : ''));
+    };
+    LifecycleTracker.getInstance().install(consoleLog);
+    // Surface "previous session crashed" — useful for the user-facing
+    // diagnostics UI, and free insurance for the very report that triggered
+    // this work.
+    const prev = LifecycleTracker.getInstance().readPreviousSessionMarker();
+    if (prev && LifecycleTracker.getInstance().didPreviousSessionCrash()) {
+      console.warn(
+        `[Lifecycle] previous session ended unexpectedly: ` +
+        `pid=${prev.pid} lastEvent=${prev.lastEvent} reason=${prev.quitReason ?? 'unknown'} ` +
+        `startedAt=${prev.startedAt} lastEventAt=${prev.lastEventAt}`
+      );
+    }
+  } catch (err) {
+    console.warn('[Main] LifecycleTracker install failed (non-fatal):', err);
+  }
 
-  // 2a. PRE-EMPTIVE dock hide: must happen before ANY operation that causes macOS to
-  // register a dock entry (app.setName, BrowserWindow creation, etc.).
+  // 2. Wait for app to be ready
+  logStartupPhase('before-app-whenReady');
+  await app.whenReady()
+  nativeOomTrace.initialize()
+  nativeOomTrace.record('app-ready', {
+    pid: process.pid,
+    platform: process.platform,
+    electron: process.versions.electron,
+  })
+  logStartupPhase('after-app-whenReady', { userData: app.getPath('userData') });
+
+  // 2a-verify. Context OS flag-parity assertion (2026-07-14 real-app
+  // source-switch repair): no-op unless NATIVELY_VERIFICATION_MODE=1 is
+  // explicitly set (internal benchmark/CI/soak runs only). Fails fast and
+  // loudly if this Electron process's effective flags don't match what a
+  // verification run assumes — the exact class of drift that let the
+  // benchmark and the real app silently exercise different Context OS
+  // behavior on the same build.
+  //
+  // HARD EXIT (code-review 2026-07-14 round 2): a throw here would otherwise
+  // propagate into initializeApp()'s generic top-level .catch(), which logs
+  // but never exits — leaving a half-initialized, windowless process alive
+  // indefinitely. That defeats the whole point for a CI/soak harness, which
+  // needs an unambiguous nonzero exit code, not a hang it has to time out on.
+  // Mirrors the existing [nativeArch] gate precedent (main.ts ~line 219):
+  // print the reason, then app.exit(1) (or process.exit(1) if Electron's
+  // app isn't available, e.g. under a bare-Node verification harness).
+  try {
+    const { assertVerificationFlagsOrThrow } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
+    assertVerificationFlagsOrThrow();
+  } catch (verifyErr: any) {
+    console.error('[ContextOS] verification flag assertion failed — exiting:', verifyErr?.message || verifyErr);
+    if (typeof app?.exit === 'function') {
+      app.exit(1);
+    } else {
+      process.exit(1);
+    }
+  }
+
+  // 2a. PRE-EMPTIVE dock hide / activation-policy clamp: must happen before ANY
+  // operation that causes macOS to register a dock entry (app.setName, the
+  // LaunchServices live-rename in _applyDisguise, BrowserWindow creation, etc.).
+  //
+  // DUAL-DOCK-ICON FIX: even in NORMAL (non-stealth) mode, applyInitialDisguise()
+  // → app.setName() + the native setProcessDisplayName() LaunchServices rename
+  // re-register the running app's LS identity. Doing that while the app is on the
+  // default 'regular' activation policy makes macOS paint a SECOND dock tile (the
+  // old identity's tile lingers while the renamed one registers) — the duplicate
+  // "Natively" icon multiple users reported. We therefore drop to 'accessory'
+  // (no dock tile) for the whole rename+window-creation window, then promote back
+  // to 'regular' exactly once AFTER createWindow() so a single, correctly-named
+  // tile appears together with the window. Stealth mode stays hidden via dock.hide()
+  // and is never promoted.
   // We read isUndetectable directly from settings here — AppState singleton isn't
   // constructed yet, so we cannot call appState.getUndetectable().
   if (process.platform === 'darwin') {
@@ -3979,6 +6904,11 @@ async function initializeApp() {
     const isUndetectableOnStartup = SettingsManager.getInstance().get('isUndetectable') ?? false;
     if (isUndetectableOnStartup) {
       app.dock.hide();
+    } else {
+      // Non-stealth: clamp to accessory (dock-tile-less) until the disguised
+      // name/icon is painted and the window exists. Do NOT promote to 'regular'
+      // here — that happens once after createWindow() below.
+      app.setActivationPolicy('accessory');
     }
   }
 
@@ -3987,27 +6917,64 @@ async function initializeApp() {
   // singleton was constructed with cwd-relative paths at module-load time
   // (before app.whenReady), so we reconfigure here. Honors the user's
   // telemetry-enabled setting (default: on, local-only JSONL).
+  logStartupPhase('telemetry-configure:start');
   try {
     const { telemetryService } = require('./services/telemetry/TelemetryService');
     const userDataPath = app.getPath('userData');
     const telemetryEnabledSetting = SettingsManager.getInstance().get('telemetryEnabled');
+
+    // Remote sinks are built from env (set at app launch / packaged build). Each
+    // is added ONLY when its credential is present, so unset = silently local-only.
+    // A stable, NON-PII install id (random, persisted in settings) lets PostHog
+    // dedupe sessions without ever shipping a key/email.
+    const release = (typeof app.getVersion === 'function' ? app.getVersion() : undefined) || process.env.APP_VERSION || 'unknown';
+    const environment = process.env.NODE_ENV === 'development' ? 'development' : 'production';
+    let distinctId: string | undefined;
+    try {
+      const sm = SettingsManager.getInstance() as unknown as { get: (k: string) => unknown; set: (k: string, v: unknown) => void };
+      distinctId = sm.get('telemetryInstallId') as string | undefined;
+      if (!distinctId) {
+        distinctId = `nd_${Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+        sm.set('telemetryInstallId', distinctId);
+      }
+    } catch { /* settings unavailable — distinctId stays undefined */ }
+
+    const sinks: Array<Record<string, unknown>> = [{ name: 'local-jsonl', enabled: true }];
+    if (process.env.POSTHOG_API_KEY) {
+      sinks.push({ name: 'posthog', enabled: true, apiKey: process.env.POSTHOG_API_KEY, endpoint: process.env.POSTHOG_HOST || 'https://app.posthog.com', distinctId });
+    }
+    if (process.env.SENTRY_DSN) {
+      sinks.push({ name: 'sentry', enabled: true, dsn: process.env.SENTRY_DSN, release, environment });
+    }
+    if (process.env.AXIOM_TOKEN && process.env.AXIOM_DATASET) {
+      sinks.push({ name: 'axiom', enabled: true, apiKey: process.env.AXIOM_TOKEN, dataset: process.env.AXIOM_DATASET });
+    }
+
     telemetryService.configure({
       userDataPath,
       enabled: telemetryEnabledSetting !== false, // default true
       localEnabled: true,
+      sinks,
     });
-    telemetryService.track({ name: 'app_start', properties: { platform: process.platform } });
+    const remote = sinks.filter(s => s.name !== 'local-jsonl').map(s => s.name);
+    console.log(`[Telemetry] sinks: local-jsonl${remote.length ? ' + ' + remote.join(' + ') : ' (remote unconfigured)'} release=${release}`);
+    telemetryService.track({ name: 'app_start', properties: { platform: process.platform, release } });
+    logStartupPhase('telemetry-configure:complete', { release, remoteSinks: remote });
   } catch (err) {
     console.warn('[Init] TelemetryService configure threw (non-fatal):', err);
   }
 
   // Initialize CredentialsManager and load keys explicitly
   // This fixes the issue where keys (especially in production) aren't loaded in time for RAG/LLM
+  logStartupPhase('credentials-init:start');
   const { CredentialsManager } = require('./services/CredentialsManager');
   CredentialsManager.getInstance().init();
+  logStartupPhase('credentials-init:complete');
 
   // 4. Initialize State
+  logStartupPhase('app-state:get-instance:start');
   const appState = AppState.getInstance()
+  logStartupPhase('app-state:get-instance:complete')
 
   // Explicitly load credentials into helpers
   appState.processingHelper.loadStoredCredentials();
@@ -4023,11 +6990,71 @@ async function initializeApp() {
   // Initialize IPC handlers before window creation
   initializeIpcHandlers(appState)
 
+  // Start the in-app review session ledger. This is intentionally main-process
+  // owned so renderer reloads don't double-count app sessions. Also sync the
+  // backend prompt-state once so cross-install dismissals/reviews are honored.
+  try {
+    const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
+    const reviewService = ReviewService.getInstance();
+    reviewService.recordSessionStart();
+    const apiKey = getReviewApiKey();
+    getReviewHardwareId()
+      .then((hwid: string | null) => reviewService.syncWithBackend(apiKey, hwid))
+      .catch(() => {});
+  } catch (err) {
+    console.warn('[Init] ReviewService recordSessionStart failed (non-fatal):', err);
+  }
+
+  // Generic, provider-agnostic local-model download service. Owns the
+  // in-flight state for Whisper (today) and any future local model family
+  // (vision, embeddings, …). Instantiated BEFORE createWindow so the
+  // Settings overlay can call `getDownloadState` on first mount without
+  // waiting for IPC registration. The service rehydrates from disk
+  // synchronously in its constructor.
+  try {
+    const { LocalModelDownloadService, createWhisperDownloadProvider } = require('./services/LocalModelDownloadService');
+    const downloadService = LocalModelDownloadService.getInstance();
+    downloadService.registerProvider(createWhisperDownloadProvider());
+    // 2026-07-06: lazy download for the reranker (smart-retrieval Phase 1).
+    // The 283 MB bge-reranker-base model is no longer bundled — it is fetched
+    // on first document-grounded mode activation via ModesManager.
+    try {
+        const { createRerankerDownloadProvider } = require('./rag/rerankerDownloadProvider');
+        downloadService.registerProvider(createRerankerDownloadProvider());
+    } catch (e: any) {
+        console.warn('[main] Reranker download provider registration failed (non-fatal):', e?.message);
+    }
+  } catch (e: any) {
+    console.warn('[main] LocalModelDownloadService init failed (non-fatal):', e?.message);
+  }
+
   // Apply the full disguise payload (names, dock icon, AUMID) early
   appState.applyInitialDisguise();
 
-  // Start the Ollama lifecycle manager
-  OllamaManager.getInstance().init().catch(console.error);
+  // Ollama is an external optional provider. Do not spawn it on startup unless
+  // the user explicitly selected/opted into it; Natively's packaged fallback
+  // stack must work without Ollama installed.
+  try {
+    const settingsManager = SettingsManager.getInstance();
+    const defaultModel = CredentialsManager.getInstance().getDefaultModel();
+    const shouldStartOllama =
+      settingsManager.get('autoStartOllama') === true ||
+      defaultModel.startsWith('ollama-') ||
+      defaultModel.startsWith('ollama:') ||
+      process.env.NATIVELY_AUTO_START_OLLAMA === '1';
+    if (shouldStartOllama) {
+      OllamaManager.getInstance().ensureRunning({
+        reason: settingsManager.get('autoStartOllama') === true ? 'auto-start-setting' : 'startup-selected',
+        selectedModel: defaultModel,
+      }).catch((err: any) => console.warn('[OllamaManager] Startup ensureRunning failed (non-fatal):', err?.message || err));
+    } else {
+      OllamaManager.getInstance().skipStartup('Ollama not selected; startup skipped');
+      console.log('[OllamaManager] Skipping Ollama startup; Ollama provider not selected');
+    }
+  } catch (err: any) {
+    console.warn('[OllamaManager] Startup selection check failed (non-fatal):', err?.message || err);
+    OllamaManager.getInstance().skipStartup('Ollama startup skipped after selection check failure');
+  }
 
   // NOTE: CredentialsManager.init() and loadStoredCredentials() are already called
   // above before this block — do NOT call them again here to avoid double key-load.
@@ -4052,6 +7079,56 @@ async function initializeApp() {
 
   console.log("App is ready")
 
+  // DEV-ONLY: thinking-budget sweep. Runs after credentials are loaded (so the
+  // LIVE Gemini key is available — the .env key is billing-dead), prints the
+  // table + writes userData/thinking-budget-bench-results.json, then quits.
+  //   THINKING_BENCH=1 npm run electron:build
+  //   THINKING_BENCH=1 THINKING_BENCH_BUDGETS=0,256,512,1024 THINKING_BENCH_REPEATS=2 npm run electron:build
+  if (process.env.THINKING_BENCH === '1') {
+    (async () => {
+      try {
+        const llmHelper = appState.processingHelper?.getLLMHelper?.();
+        if (!llmHelper) { console.error('[ThinkingBudgetBench] LLMHelper unavailable'); app.quit(); return; }
+        const { runThinkingBudgetBench } = require('./services/dev/ThinkingBudgetBench');
+        const budgets = (process.env.THINKING_BENCH_BUDGETS || '0,128,512,1024,-1').split(',').map((s: string) => Number(s.trim()));
+        const repeats = Number(process.env.THINKING_BENCH_REPEATS || '1');
+        const model = process.env.THINKING_BENCH_MODEL || 'gemini-3.1-flash-lite';
+        // Give the embedding/provider init a moment to settle.
+        await new Promise(r => setTimeout(r, 2000));
+        await runThinkingBudgetBench(llmHelper, { budgets, repeats, model, log: (s: string) => console.log(s) });
+      } catch (e: any) {
+        console.error('[ThinkingBudgetBench] failed:', e?.message || e);
+      } finally {
+        console.log('[ThinkingBudgetBench] done — quitting.');
+        app.quit();
+      }
+    })();
+    return; // skip the rest of startup (no meeting/STT prewarm needed for the bench)
+  }
+
+  // DEV-ONLY: thinking MATRIX (budgets × levels) on a focused problem subset.
+  //   THINKING_MATRIX=1 THINKING_BENCH_MODEL=gemini-3.5-flash THINKING_BENCH_DATASET=$(pwd)/electron/services/dev/cf10.json npm run electron:build
+if (process.env.THINKING_MATRIX === '1') {
+    (async () => {
+      try {
+        const llmHelper = appState.processingHelper?.getLLMHelper?.();
+        if (!llmHelper) { console.error('[ThinkingMatrix] LLMHelper unavailable'); app.quit(); return; }
+        const { runThinkingMatrix } = require('./services/dev/ThinkingBudgetBench');
+        const model = process.env.THINKING_BENCH_MODEL || 'gemini-3.1-flash-lite';
+        const delayMs = Number(process.env.THINKING_BENCH_DELAY_MS || '500');
+        const configs = process.env.THINKING_MATRIX_CONFIGS || undefined;
+        await new Promise(r => setTimeout(r, 2000));
+        await runThinkingMatrix(llmHelper, { model, delayMs, configs, log: (s: string) => console.log(s) });
+      } catch (e: any) {
+        console.error('[ThinkingMatrix] failed:', e?.message || e);
+      } finally {
+        console.log('[ThinkingMatrix] done — quitting.');
+        app.quit();
+      }
+    })();
+    return;
+  }
+
   // PERF: pre-construct STT provider objects so the meeting-start critical
   // path doesn't pay for class init + listener wiring. Runs after all
   // credentials are loaded (so the provider can read its API key) and is
@@ -4062,16 +7139,122 @@ async function initializeApp() {
     console.warn('[Init] STT pre-warm threw (non-fatal):', err);
   }
 
+  // Mic-indicator discipline: at this point in the launch path we MUST NOT
+  // have any live MicrophoneCapture instances. microphoneCapture is the
+  // meeting-time capture (constructed in setupSystemAudioPipeline, gated on
+  // isMeetingActive). audioTestCapture is the Settings > Audio test capture
+  // (constructed in startAudioTest, user-initiated). If either is non-null
+  // at app launch — before any user has started a meeting or opened Audio
+  // settings — the macOS CoreAudio HAL is being touched prematurely, and the
+  // orange menu-bar mic-in-use indicator will be on for the lifetime of the
+  // process. This is a regression guard; log and continue (don't crash).
+  if (process.platform === 'darwin') {
+    try {
+      const mc = (appState as unknown as { microphoneCapture: unknown }).microphoneCapture;
+      const at = (appState as unknown as { audioTestCapture: unknown }).audioTestCapture;
+      if (mc !== null && mc !== undefined) {
+        console.warn(
+          '[INVARIANT] MicrophoneCapture exists at app launch (pre-meeting). ' +
+          'This will keep the macOS mic-in-use indicator on. Investigate the ' +
+          'construction site — setupSystemAudioPipeline must remain LAZY.'
+        );
+      }
+      if (at !== null && at !== undefined) {
+        console.warn(
+          '[INVARIANT] audioTestCapture exists at app launch. This means ' +
+          'Settings > Audio test was started without user action — investigate.'
+        );
+      }
+    } catch (e) {
+      // Non-fatal: this is a debug aid, not a safety check.
+      console.error('[INVARIANT] mic-capture invariant check threw:', e);
+    }
+  }
+
+  logStartupPhase('create-window:start');
   appState.createWindow()
+  logStartupPhase('create-window:complete', {
+    windowCount: BrowserWindow.getAllWindows().length,
+  });
+
+  // Opt-in: NATIVELY_LOG_GPU_STATUS=1 logs Chromium's GPU feature status once
+  // at boot (whether gpu_compositing/rasterization are 'enabled' vs.
+  // 'software'/'disabled') — useful when diagnosing a renderer that freezes
+  // or fails to composite. Off by default to avoid unconditional boot noise.
+  if (process.env.NATIVELY_LOG_GPU_STATUS === '1') {
+    try {
+      const status = app.getGPUFeatureStatus();
+      console.log('[GPU] featureStatus', JSON.stringify(status));
+    } catch (e: any) {
+      console.warn('[GPU] getGPUFeatureStatus failed:', e?.message || e);
+    }
+  }
+
+  // Run the local-fallback preflight AFTER the launcher paints. We schedule
+  // it via setTimeout so the visible launch is not blocked by:
+  //   - native module requires (onnxruntime-node, sqlite-vec)
+  //   - transformers.js / @huggingface/transformers probe
+  //   - reading the bundled model file sizes
+  // The preflight itself never blocks the main thread for more than a few
+  // hundred ms; we add a second safety net: if the app is quitting when
+  // the timer fires, skip the preflight (its writes to ProviderStatusRegistry
+  // would still succeed but its reads of process.resourcesPath / app.getPath
+  // can throw during teardown). Also wrapped in try/catch so a synchronous
+  // throw in the require() or in runLocalFallbackPreflight cannot crash
+  // the main process. Idempotent: runLocalFallbackPreflight is single-flighted.
+  const preflightTimer = setTimeout(() => {
+    if (appState.isQuitting?.()) {
+      console.log('[LocalFallbackPreflight] skipped — app is quitting');
+      return;
+    }
+    try {
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      const { runLocalFallbackPreflight } = require('./services/LocalFallbackPreflight');
+      runLocalFallbackPreflight({ ollamaSelected: llmHelper.isUsingOllama?.() === true })
+        .catch((err: any) => console.warn('[LocalFallbackPreflight] failed to run (non-fatal):', err?.message || err));
+    } catch (err: any) {
+      console.warn('[LocalFallbackPreflight] scheduling failed (non-fatal):', err?.message || err);
+    }
+  }, Number(process.env.NATIVELY_LOCAL_PREFLIGHT_DELAY_MS || '1500'));
+  // Don't let the preflight timer keep the process alive past quit.
+  if (preflightTimer && typeof preflightTimer.unref === 'function') preflightTimer.unref();
+
+  // Defer the zero-shot intent classifier warmup until after the launcher has
+  // had a chance to paint and settle. The classifier still lazy-loads on first
+  // use, so this only moves startup CPU work out of the visible launch path.
+  setTimeout(() => {
+    try {
+      warmupIntentClassifier();
+    } catch (err) {
+      console.warn('[Init] Intent classifier warmup scheduling failed (non-fatal):', err);
+    }
+  }, Number(process.env.NATIVELY_INTENT_WARMUP_DELAY_MS || '2500'));
+
+  // DUAL-DOCK-ICON FIX (promotion half): now that the disguised name/icon are
+  // applied and the window exists, promote back to 'regular' so a SINGLE dock
+  // tile appears together with the window. Gated on darwin && !undetectable so
+  // stealth mode is never promoted (it must stay dock-tile-less). This pairs
+  // with the 'accessory' clamp in step 2a above — together they ensure the LS
+  // re-registration from app.setName()/setProcessDisplayName() happens while no
+  // tile is visible, so macOS never paints a second "Natively" icon.
+  if (process.platform === 'darwin' && !appState.getUndetectable()) {
+    app.setActivationPolicy('regular');
+  }
 
   // Apply initial stealth state based on isUndetectable setting.
-  // NOTE: app.dock.hide() was already called pre-emptively before createWindow()
-  // when isUndetectable=true. Here we only need to initialize the tray for non-stealth mode.
   if (!appState.getUndetectable()) {
     // Normal mode: show tray (dock is already showing — no need to call dock.show() again)
     appState.showTray();
+  } else {
+    // Persisted undetectable: the pre-emptive app.dock.hide() above is NOT
+    // sufficient — createWindow() + the launcher's first show re-registers the
+    // app and re-shows the dock. Converge through the same self-verifying
+    // enforcement the runtime toggle uses, so the app comes up actually
+    // undetectable without the user having to toggle off/on. The enforcement
+    // loop re-checks app.dock.isVisible() across several retries, which also
+    // catches the dock re-show that lands at the launcher's ready-to-show.
+    appState.applyInitialUndetectableState();
   }
-  // Stealth mode: dock is already hidden, tray stays hidden, no action needed here.
   // Register global shortcuts using KeybindManager
   KeybindManager.getInstance().registerGlobalShortcuts()
 
@@ -4096,15 +7279,32 @@ async function initializeApp() {
     console.warn('[Main] powerMonitor unavailable — sleep/wake recovery disabled:', err);
   }
 
-  // Pre-create settings window in background for faster first open
+  // Pre-create detached overlay companion windows in background for faster first open
   appState.settingsWindowHelper.preloadWindow()
+  appState.modelSelectorWindowHelper.preloadWindow()
 
   // Restore Phone Mirror service if it was enabled in a previous session.
   // Failure here is non-fatal — the user can re-enable from Settings.
-  if (SettingsManager.getInstance().get('phoneMirrorEnabled')) {
+  //
+  // DIAGNOSTIC (2026-07-11): NATIVELY_DISABLE_PHONE_MIRROR=1 stops the PhoneMirror
+  // WebSocket server from ever starting. On the Windows repro, the launcher
+  // renderer's native RSS explodes (497→2008MB in ~4s, flat JS heap) within
+  // seconds of `[PhoneMirror] companion extension connected` — the same trigger
+  // in 3 separate logs. This flag lets the (frozen) user boot WITHOUT the WS
+  // server so the phone/companion extension can't connect. If the leak vanishes,
+  // PhoneMirror connect is confirmed as the trigger.
+  const disablePhoneMirrorOnBoot = process.env.NATIVELY_DISABLE_PHONE_MIRROR === '1';
+  if (
+    shouldStartPhoneMirrorOnBoot({
+      disablePhoneMirror: disablePhoneMirrorOnBoot,
+      phoneMirrorEnabled: !!SettingsManager.getInstance().get('phoneMirrorEnabled'),
+    })
+  ) {
     PhoneMirrorService.getInstance()
       .start({ exposeOnLan: !!SettingsManager.getInstance().get('phoneMirrorExposeOnLan'), persist: false })
       .catch((err) => console.error('[Init] PhoneMirror auto-start failed:', err));
+  } else if (disablePhoneMirrorOnBoot) {
+    console.warn('[LeakTest] NATIVELY_DISABLE_PHONE_MIRROR=1 → PhoneMirror WS server NOT started this run');
   }
 
   // One-time macOS screen recording permission prompt.
@@ -4128,8 +7328,11 @@ async function initializeApp() {
         const screenStatus = systemPreferences.getMediaAccessStatus('screen');
         console.log(`[Init] Screen recording permission status at startup: ${screenStatus}`);
 
-        if (!app.isPackaged) {
-          console.log('[Init] Ignoring screen recording permission check in development mode');
+        if (isDevTccBypassEnabled()) {
+          // B5: Legacy dev bypass — see isDevTccBypassEnabled() docstring.
+          // Without the env var, dev users get the same startup TCC flow as
+          // production so production bugs are reproducible locally.
+          console.log('[Init] Dev TCC bypass enabled — skipping startup screen-recording check');
           return;
         }
 
@@ -4152,21 +7355,51 @@ async function initializeApp() {
           // startMeeting() reads the status when the user actually tries to use audio.
 
         } else if (screenStatus === 'denied') {
-          // Returning user who previously denied — show the banner immediately at startup
-          // so they know system audio won't work before they even start a meeting.
-          console.warn('[Init] Screen recording was previously denied — notifying UI banner.');
-          const { BrowserWindow } = require('electron');
-          BrowserWindow.getAllWindows().forEach((win: Electron.BrowserWindow) => {
-            if (!win.isDestroyed()) {
-              win.webContents.send(
-                'system-audio-permission-denied',
-                'Screen Recording is disabled. System audio capture will not work. Click "Open Settings" to enable it, then restart Natively.'
-              );
-            }
-          });
+          const screenCapability = await resolveMacScreenCaptureCapability('startup permission check');
+          if (screenCapability.effectiveDenied) {
+            // Returning user who previously denied — show the banner immediately at startup
+            // so they know system audio won't work before they even start a meeting.
+            console.warn('[Init] Screen recording was previously denied — notifying UI banner.');
+            appState.sendSystemAudioPermissionDenied(screenCapability.message ?? formatPermissionMessage('screen-recording-denied'));
+          }
         } else {
-          // 'granted' or 'restricted' — nothing to do.
+          // 'granted' or 'restricted' — nothing to do for screen recording.
           console.log(`[Init] Screen recording permission already resolved: ${screenStatus}`);
+        }
+
+        // UX1: also check Microphone permission at startup. The existing
+        // screen-recording check above gave returning users with a denied
+        // grant immediate feedback; do the same for the mic so users know
+        // before they start a meeting that audio capture is blocked.
+        // Symmetric to the screen-recording branch above.
+        try {
+          const micStatus = systemPreferences.getMediaAccessStatus('microphone');
+          console.log(`[Init] Microphone permission status at startup: ${micStatus}`);
+          if (micStatus === 'denied') {
+            console.warn('[Init] Microphone was previously denied — notifying UI banner.');
+            appState.sendAudioCaptureFailed({
+              channel: 'mic',
+              message: formatPermissionMessage('mic-denied'),
+              attempt: 0,
+              maxAttempts: 0,
+              terminal: true,
+              stuck: false,
+            });
+          } else if (micStatus === 'restricted') {
+            console.warn('[Init] Microphone is restricted by device policy at startup.');
+            appState.sendAudioCaptureFailed({
+              channel: 'mic',
+              message: 'Microphone is restricted by device policy. Contact your administrator to enable microphone access for Natively.',
+              attempt: 0,
+              maxAttempts: 0,
+              terminal: true,
+              stuck: false,
+            });
+          }
+          // 'granted' or 'not-determined' — no banner. 'not-determined' is
+          // resolved at first meeting start via ensureMacMicrophoneAccess.
+        } catch (micErr) {
+          console.warn('[Init] Startup microphone permission check failed:', micErr);
         }
       } catch (e) {
         console.warn('[Init] Startup screen recording permission check failed:', e);
@@ -4204,6 +7437,8 @@ async function initializeApp() {
     console.error('[Main] Failed to recover unprocessed meetings:', err);
   });
 
+  logStartupPhase('initializeApp:complete');
+
   // Note: We do NOT force dock show here anymore, respecting stealth mode.
 
   app.on("activate", () => {
@@ -4234,10 +7469,214 @@ async function initializeApp() {
     }
   })
 
+  function stopAppManagedHindsight(reason: string): void {
+    try {
+      const { HindsightManager } = require('./services/HindsightManager');
+      HindsightManager.getInstance().stopSync();
+    } catch { /* optional */ }
+  }
+
+  function checkpointDatabase(reason: string): void {
+    try {
+      const { DatabaseManager } = require('./db/DatabaseManager');
+      DatabaseManager.getInstance().checkpoint();
+    } catch (e) {
+      console.warn(`[main] DatabaseManager.checkpoint failed during ${reason} (non-fatal):`, e);
+    }
+  }
+
+  app.on('will-quit', () => {
+    appState.stopNativeOomTraceSampling();
+    nativeOomTrace.stop('will-quit');
+    stopAppManagedHindsight('will-quit');
+    checkpointDatabase('will-quit');
+  });
+
+  // Crash-loop guard: reload timestamps per webContentsId.
+  const rendererReloadHistory = new Map<number, number[]>();
+  const RENDERER_RELOAD_MAX = 3;            // max auto-reloads ...
+  const RENDERER_RELOAD_WINDOW_MS = 60_000; // ... within this rolling window
+
+  app.on('render-process-gone', (_event, webContents, details) => {
+    const urlNow = (() => { try { return webContents?.getURL?.() || ''; } catch { return ''; } })();
+    logCrashConsole('render-process-gone', {
+      details,
+      webContentsId: webContents?.id,
+      webContentsUrl: urlNow || null,
+    });
+    console.warn('[main] render-process-gone:', details);
+    stopAppManagedHindsight('render-process-gone');
+
+    // RECOVERY (2026-07-10): a renderer crash (e.g. the Fontations font trap on
+    // macOS 26/27 — see the disable-features mitigation at top-of-module) kills
+    // only the render process; the BrowserWindow and the main process survive.
+    // Previously we only logged + closed the DB, leaving a blank/dead launcher
+    // that the user reads as "the app crashed and won't come back." Now we
+    // reload the dead webContents with a crash-loop backoff.
+    //
+    // CRITICAL: do NOT emergencyCloseDatabase on the RECOVER path. That call is
+    // irreversible (it nulls the singleton DB with no reopen path), so closing
+    // it here would hand the reloaded renderer a dead main-process DB (no
+    // history/modes/persistence). The renderer does not own the DB — main does,
+    // synchronously — so a renderer crash cannot corrupt it. We only close the
+    // DB on TERMINAL paths (quit / non-crash / give-up).
+    const reason = details?.reason;
+    const isCrash = reason === 'crashed' || reason === 'abnormal-exit';
+
+    // Never fight an intentional teardown, and don't reload a clean/intentional
+    // exit or an intentional kill — treat those as terminal (preserve the
+    // original crash-path behavior so the WAL lock is released cleanly).
+    if (!isCrash || appState.isQuitting?.()) {
+      emergencyCloseDatabase('render-process-gone');
+      return;
+    }
+
+    // Only auto-reload real user-facing windows. Transient/hidden helpers
+    // (cropper = screenshot overlay; model-selector = hidden preload with a
+    // known forceRestartOllama side-effect) should NOT be blindly reloaded —
+    // they get recreated on next open. Reload launcher / settings / overlay.
+    const isRecoverableWindow =
+      urlNow === '' /* URL unavailable — assume the main launcher */ ||
+      /[?&]window=(launcher|settings|overlay)\b/.test(urlNow) ||
+      !/[?&]window=/.test(urlNow) /* no window tag → the default launcher */;
+    if (!isRecoverableWindow) {
+      logToFile(`[main] render-process-gone: not auto-reloading transient window (${urlNow})`);
+      return;
+    }
+
+    const id = webContents?.id;
+    if (typeof id !== 'number' || !webContents || webContents.isDestroyed?.()) {
+      // WebContents gone entirely — recreate the launcher via the existing
+      // helper (idempotent: no-ops if a launcher already exists). Keep the DB
+      // OPEN so the recreated renderer is fully functional.
+      try {
+        appState.createWindow();
+        logToFile('[main] render-process-gone: webContents destroyed, recreated launcher window');
+      } catch (e: any) {
+        logToFile(`[main] render-process-gone: window recreate failed: ${e?.message || e}`);
+      }
+      return;
+    }
+
+    const now = Date.now();
+    const history = (rendererReloadHistory.get(id) || []).filter(
+      (t) => now - t < RENDERER_RELOAD_WINDOW_MS
+    );
+
+    if (history.length >= RENDERER_RELOAD_MAX) {
+      // Crash loop: stop reloading. NOW it is terminal — release the DB cleanly
+      // and surface a single dialog. Do not loop.
+      rendererReloadHistory.delete(id);
+      logCrashConsole('render-process-gone-loop-giveup', {
+        webContentsId: id,
+        reloadsInWindow: history.length,
+        windowMs: RENDERER_RELOAD_WINDOW_MS,
+      });
+      emergencyCloseDatabase('render-process-gone-loop-giveup');
+      try {
+        // dialog is not imported at module top — require it lazily (matches
+        // the native-arch gate handler's pattern above).
+        const { dialog } = require('electron');
+        dialog.showErrorBox(
+          'Natively — display error',
+          'A window keeps crashing while rendering. Please restart Natively. ' +
+          'If this continues, update to the latest version.'
+        );
+      } catch { /* dialog best-effort */ }
+      return;
+    }
+
+    // Under the cap → reload. Keep the DB OPEN (main owns it; it is healthy).
+    history.push(now);
+    rendererReloadHistory.set(id, history);
+    logToFile(
+      `[main] render-process-gone: auto-reloading webContents ${id} ` +
+      `(attempt ${history.length}/${RENDERER_RELOAD_MAX} within ${RENDERER_RELOAD_WINDOW_MS}ms)`
+    );
+    try {
+      webContents.reloadIgnoringCache();
+    } catch (e: any) {
+      logToFile(`[main] render-process-gone: reload failed: ${e?.message || e}`);
+    }
+  });
+
+  app.on('child-process-gone', (_event, details) => {
+    logCrashConsole('child-process-gone', { details });
+    console.warn('[main] child-process-gone:', details);
+    stopAppManagedHindsight('child-process-gone');
+    emergencyCloseDatabase('child-process-gone');
+  });
+
+  app.on('gpu-process-crashed', (_event, killed: boolean) => {
+    logCrashConsole('gpu-process-crashed', { killed });
+    emergencyCloseDatabase('gpu-process-crashed');
+  });
+
+  app.on('gpu-info-update', () => {
+    logToFile('[DIAG:gpu-info-update] GPU process info changed');
+  });
+
   // Scrub API keys from memory on quit to minimize exposure window
   app.on("before-quit", (event) => {
     console.log("App is quitting, cleaning up resources...");
     appState.setQuitting(true);
+
+    // Stop the default-output watcher immediately after setting the quitting
+    // flag so any straggler interval tick observes _isQuitting before native
+    // audio handles start tearing down.
+    try {
+      appState.stopDefaultOutputWatcherForShutdown?.();
+    } catch (e) {
+      console.error('[main] Failed to stop DefaultOutputWatcher during shutdown:', e);
+    }
+
+    // 2026-07-08: TRUNCATE the SQLite WAL file early in shutdown.
+    // On a force-quit (e.g. user ⌘Q during a meeting, macOS sending
+    // SIGKILL after a hang, or `kill -9` from the auto-update flow) the
+    // `-wal` file may be left mid-transaction. The next launch's
+    // `new Database(dbPath)` then either:
+    //   1. Hangs on a kernel lock the OS believes is held by the dead
+    //      process (the user sees a frozen launcher), or
+    //   2. Reads partial data, fails a migration, and degrades to
+    //      `db: null` silently.
+    // PRAGMA wal_checkpoint(TRUNCATE) is synchronous and fast (<5ms
+    // typically) and writes any pending WAL frames to the main .db
+    // before exit. Idempotent and safe to call even when db is null.
+    checkpointDatabase('before-quit');
+
+    // Stop an app-managed Hindsight server SYNCHRONOUSLY (kills the detached process group
+    // → no orphaned Python/Postgres). No-op unless we spawned one. Must be sync: the app
+    // can exit before any async kill completes.
+    stopAppManagedHindsight('before-quit');
+
+    // Review-prompt service: close any in-flight session so total_usage_ms
+    // captures this run, then flush the debounced state write (250ms window)
+    // synchronously so a user dismissing the prompt 100ms before quit isn't
+    // re-prompted on next launch. Idempotent with the renderer's
+    // beforeunload path (which also calls review:flush-session).
+    try {
+      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
+      const reviewService = ReviewService.getInstance();
+      const totals = reviewService.beforeQuit();
+      if (totals.counted) {
+        const apiKey = getReviewApiKey();
+        getReviewHardwareId()
+          .then((hwid: string | null) => reviewService.reportUsage(apiKey, hwid, totals.usage_ms))
+          .catch(() => {});
+      }
+    } catch { /* optional */ }
+
+    // Local-model download service: synchronously flush the in-flight state
+    // map to disk and terminate every live worker. Without this, a quit
+    // mid-download (e.g. user force-quits while a 1.5GB Whisper Medium is
+    // downloading) leaves the service's state file in a stale
+    // 'downloading' state forever, AND any workers keep running until the
+    // process is actually reaped. The next launch rehydrates to
+    // 'interrupted' (or 'complete' if the bytes actually landed).
+    try {
+      const { LocalModelDownloadService } = require('./services/LocalModelDownloadService');
+      LocalModelDownloadService.getInstance().pauseForShutdown();
+    } catch { /* optional */ }
 
     // ROUND 2 FIX (#9): synchronously stop the CGEventTap worker thread
     // BEFORE V8 starts tearing down. The tap callback holds an
@@ -4266,13 +7705,51 @@ async function initializeApp() {
       appState.cropperWindowHelper.dispose();
     }
 
+    // Cancel any pending RAG auto-reindex timer (could fire ~15s — or the long
+    // drain-poll — after quit) and terminate the VectorStore worker thread.
+    try {
+      const rag = appState.getRAGManager();
+      rag?.cancelPendingReindex();
+      void rag?.dispose();
+    } catch (e) {
+      console.error('[main] Failed to dispose RAGManager during shutdown:', e);
+    }
+
     // Kill Ollama if we started it
     OllamaManager.getInstance().stop();
+
+    // Stop any in-flight Settings > Audio test so the OS mic indicator turns
+    // off cleanly on quit. Without this, a user who quits while on the Audio
+    // tab leaves `audioTestCapture` running on the deferred setImmediate path,
+    // and the CoreAudio HAL handle can outlive V8 teardown — keeping the
+    // orange mic-in-use indicator briefly visible in the macOS menu bar after
+    // the process exits. Idempotent (no-op if no test is running).
+    try {
+      appState.stopAudioTest();
+    } catch (e) {
+      console.error('[main] Failed to stop audio test during shutdown:', e);
+    }
 
     // Tear down the Phone Mirror service so the OS port is freed cleanly.
     PhoneMirrorService.getInstance().dispose().catch((err) =>
       console.error('[Main] PhoneMirror dispose failed:', err)
     );
+
+    // Best-effort WAL checkpoint so a crash/force-quit followed by immediate
+    // relaunch has less recovery work and fewer chances to trip over a large
+    // or stale natively.db-wal. Must be synchronous and must never block quit.
+    // 2026-07-08: now uses the new `close()` method which checkpoints AND
+    // closes the better-sqlite3 connection so the file lock is released
+    // before the process exits. A stale lock on a brand-new user profile
+    // would cause the next launch to hang on `new Database(dbPath)`.
+    try {
+      const { DatabaseManager } = require('./db/DatabaseManager');
+      const dbMgr = DatabaseManager.getInstance();
+      dbMgr.checkpoint?.();
+      dbMgr.close?.();
+    } catch (e) {
+      console.error('[Main] Failed to checkpoint/close database during shutdown:', e);
+    }
 
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -4293,6 +7770,17 @@ async function initializeApp() {
     } catch (e) {
       console.error('[Main] Failed to clear screenshot queues on quit:', e);
     }
+
+    // PHASE-2E: mark this as a clean exit so the next-launch marker doesn't
+    // show "previous session crashed". Last write wins — placed at the end
+    // of the cleanup handler so a throw earlier in the chain still leaves
+    // the marker with the originating quit reason.
+    try {
+      const { LifecycleTracker } = require('./utils/lifecycleTracker');
+      // Only mark clean if no specific quit reason was set (e.g. an
+      // updater install). Those should retain their explicit reason.
+      LifecycleTracker.getInstance().markCleanExit();
+    } catch { /* best-effort */ }
   })
 
 
@@ -4302,4 +7790,19 @@ async function initializeApp() {
 }
 
 // Start the application
-initializeApp().catch(console.error)
+initializeApp().catch((err) => {
+  // Close DB BEFORE writing the process report so the next launch never
+  // sees a stale WAL from this half-open app. The helper is idempotent
+  // and safe even if DatabaseManager.getInstance() throws (early-boot
+  // failure where the DB was never opened).
+  try { emergencyCloseDatabase('initializeApp-failed'); } catch { /* best-effort */ }
+  const reportPath = isNativeArchGateCrash(err)
+    ? null
+    : writeProcessReport('initializeApp-failed');
+  logCrashConsole('initializeApp-failed', {
+    error: formatCrashError(err),
+    reportPath,
+    skippedReport: isNativeArchGateCrash(err) ? 'native-arch-gate' : undefined,
+  });
+  console.error(err);
+})

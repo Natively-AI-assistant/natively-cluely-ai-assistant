@@ -1,18 +1,52 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import UpdateModal from './UpdateModal';
 
+type UpdateInfo = {
+    version?: string;
+    parsedNotes?: ParsedReleaseNotes;
+};
+
+type ParsedReleaseNotes = {
+    version: string;
+    summary: string;
+    sections: Array<{ title: string; items: string[] }>;
+    fullBody?: string;
+    url?: string;
+};
+
+const LATEST_RELEASE_URL = 'https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/latest';
+
 const UpdateBanner: React.FC = () => {
-    const [updateInfo, setUpdateInfo] = useState<any>(null);
-    const [parsedNotes, setParsedNotes] = useState<any>(null);
+    const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+    const [parsedNotes, setParsedNotes] = useState<ParsedReleaseNotes | null>(null);
     const [isVisible, setIsVisible] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState(0);
     const [status, setStatus] = useState<'idle' | 'downloading' | 'ready' | 'error' | 'instructions'>('idle');
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [instructionsArch, setInstructionsArch] = useState<'arm64' | 'x64' | null>(null);
+    // Whether this build can install + relaunch in place (signed macOS build, or
+    // any packaged Windows/Linux build). Drives whether "Install" runs the real
+    // in-app download flow or falls back to the manual DMG-download instructions.
+    const [canAutoUpdate, setCanAutoUpdate] = useState(false);
+    // Tracks whether the user explicitly dismissed the toast — progress events
+    // should not override a deliberate dismiss.
+    const userDismissedRef = useRef(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        window.electronAPI.getCanAutoUpdate?.()
+            .then(({ canAutoUpdate }) => { if (!cancelled) setCanAutoUpdate(canAutoUpdate); })
+            .catch((err) => {
+                if (cancelled) return;
+                // Silent failure falls through to default false (manual fallback) — log for observability.
+                console.warn('[UpdateBanner] getCanAutoUpdate failed, using manual fallback:', err);
+            });
+        return () => { cancelled = true; };
+    }, []);
 
     useEffect(() => {
         // Listen for update available
-        const unsubAvailable = window.electronAPI.onUpdateAvailable((info: any) => {
+        const unsubAvailable = window.electronAPI.onUpdateAvailable((info: UpdateInfo) => {
             console.log('[UpdateBanner] Update available:', info);
             setUpdateInfo(info);
             setErrorMessage(null);
@@ -22,12 +56,16 @@ const UpdateBanner: React.FC = () => {
                 setParsedNotes(info.parsedNotes);
             }
             setIsVisible(true);
+            // A new update cycle begins — clear any prior dismiss state so the toast shows.
+            userDismissedRef.current = false;
         });
 
         // Listen for download progress
         const unsubProgress = window.electronAPI.onDownloadProgress((progressObj) => {
-            // Ensure modal is visible if download starts
-            setIsVisible(true);
+            // Re-show toast only if user hasn't explicitly dismissed it
+            if (!userDismissedRef.current) {
+                setIsVisible(true);
+            }
             setStatus('downloading');
             setDownloadProgress(progressObj.percent);
         });
@@ -37,9 +75,17 @@ const UpdateBanner: React.FC = () => {
             console.log('[UpdateBanner] Update downloaded:', info);
             setUpdateInfo(info); // Update info again just in case
             if (info.parsedNotes) setParsedNotes(info.parsedNotes);
-
-            setStatus('ready');
-            setIsVisible(true);
+            // Guard: only transition to ready if we have a version. If version is
+            // absent (shouldn't happen), fall through to error handling rather
+            // than silently showing "ready" with no version to install.
+            if (info?.version) {
+                setStatus('ready');
+                setIsVisible(true);
+            } else {
+                console.warn('[UpdateBanner] update-downloaded received with no version');
+                setStatus('error');
+                setErrorMessage('Update downloaded but version is unknown. Please download from GitHub releases.');
+            }
         });
 
         // Listen for update errors
@@ -72,7 +118,7 @@ const UpdateBanner: React.FC = () => {
                 e.preventDefault();
                 console.log("[UpdateBanner] Cmd+J pressed: Triggering Instruction UI mock...");
                 setUpdateInfo({ version: '2.0.8' });
-                setParsedNotes({ summary: 'Test Update', fullBody: 'Testing', sections: [{ title: 'Notes', items: ['UI Test'] }] });
+                setParsedNotes({ version: '2.0.8', summary: 'Test Update', fullBody: 'Testing', sections: [{ title: 'Notes', items: ['UI Test'] }] });
                 setStatus('idle');
                 setIsVisible(true);
             }
@@ -82,20 +128,39 @@ const UpdateBanner: React.FC = () => {
     }, []);
 
     const handleInstall = async () => {
+        // Signed macOS builds (and all packaged Windows/Linux builds) can download
+        // and install in place, so always use the real in-app flow: download via
+        // IPC, then "Restart & Install" once ready.
+        if (canAutoUpdate) {
+            setStatus('downloading');
+            window.electronAPI.downloadUpdate();
+            return;
+        }
+
+        // FALLBACK (unsigned macOS build): we can't swap+relaunch in place, so send
+        // the user to the signed DMG on GitHub and show the manual-install steps.
+        // Guard: if version is absent, fall back to triggering download (which will
+        // surface an error) rather than sending user to a broken GitHub URL.
         if (window.electronAPI.platform === 'darwin') {
+            if (!updateInfo?.version) {
+                console.warn('[UpdateBanner] No version in updateInfo — opening latest GitHub release instead of in-app download');
+                window.electronAPI.openExternal(LATEST_RELEASE_URL);
+                setStatus('instructions');
+                return;
+            }
             try {
                 const arch = await window.electronAPI.getArch();
                 const isArm = arch === 'arm64';
                 const dmgSuffix = isArm ? 'arm64' : 'x64';
                 setInstructionsArch(dmgSuffix);
-                const version = updateInfo?.version ? updateInfo.version.replace('v', '') : '2.0.8';
+                const version = updateInfo.version.replace('v', '');
                 const url = `https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/download/v${version}/Natively-${version}-${dmgSuffix}.dmg`;
                 window.electronAPI.openExternal(url);
                 setStatus('instructions');
             } catch (err) {
                 console.error("Failed to get arch", err);
-                setStatus('downloading');
-                window.electronAPI.downloadUpdate();
+                window.electronAPI.openExternal(LATEST_RELEASE_URL);
+                setStatus('instructions');
             }
         } else {
             setStatus('downloading');
@@ -105,6 +170,7 @@ const UpdateBanner: React.FC = () => {
     };
 
     const handleDismiss = () => {
+        userDismissedRef.current = true;
         setIsVisible(false);
         setStatus('idle'); // Reset error/downloading state so next event starts clean
     };
@@ -122,6 +188,7 @@ const UpdateBanner: React.FC = () => {
             status={status}
             errorMessage={errorMessage}
             instructionsArch={instructionsArch}
+            canAutoUpdate={canAutoUpdate}
         />
     );
 };

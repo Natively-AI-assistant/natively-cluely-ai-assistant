@@ -1,0 +1,19 @@
+=== MINUTE-2 vs MINUTE-24 DIFF SUMMARY ===
+
+contextItemsCount:       minute2=6   minute24=6
+extracted question:      minute2="tell me about a time you had to debug a really difficult production issue."
+                         minute24="why do you want to work here specifically, and what makes you a good fit for this role?"
+question confidence:     minute2=0.8   minute24=0.95
+userMessageChars:        minute2=1968   minute24=2261
+systemPromptChars:       minute2=29961   minute24=29961
+totalTokensUsedByAssembler: minute2=492   minute24=566
+answerPlanQuestionSurvivesInPrompt: minute2=true   minute24=true
+
+answer (minute2):  Likely Cause:
+
+A timing or ordering issue where a downstream consumer processed an event before the corresponding upstream write was durably committed, so the data it read was stale or missing.
+
+How I Would Investigate:
+
+Reproduce the issue in a staging environment with the same load profile, then a
+answer (minute24): Honestly, what pulled me in is that this team is shipping real-time ad infrastructure at serious scale, and that's exactly the kind of system I want to keep building. I've worked across Kafka-heavy streaming pipelines, built gRPC services handling high-throughput requests, and spent real time tuning

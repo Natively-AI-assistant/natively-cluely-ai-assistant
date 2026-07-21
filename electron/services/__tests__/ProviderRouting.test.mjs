@@ -33,6 +33,8 @@ describe('RateLimiter', () => {
     assert.ok(limiters.gemini instanceof RateLimiter, 'gemini rate limiter created');
     assert.ok(limiters.openai instanceof RateLimiter, 'openai rate limiter created');
     assert.ok(limiters.claude instanceof RateLimiter, 'claude rate limiter created');
+    assert.ok(limiters.deepseek instanceof RateLimiter, 'deepseek rate limiter created');
+    assert.ok(limiters.litellm instanceof RateLimiter, 'litellm rate limiter created');
   });
 
   test('acquire() allows requests when tokens available', async () => {

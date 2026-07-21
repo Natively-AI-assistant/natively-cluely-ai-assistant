@@ -897,22 +897,19 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
     return (
         <div className="w-full h-full flex flex-col animated fadeIn pb-10">
-            <div className="mb-6 shrink-0">
-                <h2 className={`text-2xl font-bold text-text-primary flex items-center gap-3`}>
-                    <HelpCircle className="w-6 h-6 text-accent-primary" />
-                    Help & Setup Guide
-                </h2>
-                <p className={`text-sm text-text-secondary mt-3 max-w-2xl`}>
+            <header className="mb-2 shrink-0">
+                <h3 className="text-lg font-bold text-text-primary mb-1">Help & Setup Guide</h3>
+                <p className="text-xs text-text-secondary mb-2">
                     Learn how to deeply configure Natively. Everything from providing the right API scopes to executing conversational interviews seamlessly is covered below.
                 </p>
-            </div>
+            </header>
 
             <div className="flex-1 space-y-2">
 
                 {onNavigate && (
                     <div
                         onClick={() => onNavigate('natively-api')}
-                        className="mb-8 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
+                        className="mb-6 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
                     >
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 flex-1">
                             <div className="w-10 h-10 shrink-0 rounded-xl bg-bg-item-surface border border-border-subtle flex items-center justify-center group-hover:bg-bg-elevated transition-colors">
@@ -1117,6 +1114,21 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
                                     Provides high-end medical/law tier transcriptions using their standard dashboard API Key.
                                 </p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 pt-4">
+                            <h4 className="font-semibold text-sm text-text-primary border-b border-border-subtle pb-1.5 flex items-center gap-1.5">
+                                <Globe className="w-4 h-4 text-accent-primary" /> Language Selection & Auto-Detection
+                            </h4>
+                            <p className="text-xs text-text-secondary leading-relaxed">
+                                In v2.8, the Speech-to-Text pipeline has expanded support to include <strong>Romanian</strong> and 16 other major regional languages.
+                            </p>
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                <ul className="text-[11px] text-text-secondary space-y-1.5 list-disc pl-4">
+                                    <li><strong>Auto-Detection:</strong> Toggle <strong>Auto-Detect Language</strong> in the Audio Settings to let the pipeline classify spoken languages automatically during conversations.</li>
+                                    <li><strong>Fixed Selection:</strong> Use the language dropdown selector to explicitly bind transcription to a specific language, optimizing transcription accuracy and latency.</li>
+                                </ul>
                             </div>
                         </div>
 
@@ -1559,7 +1571,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <FileText size={14} /> Custom Context Notes
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    In addition to your Resume and JD, type any free-form context into the <strong>Custom Context</strong> textarea — sales stats, product details, LeetCode solutions, personal preferences. Injected as a <code className="bg-bg-elevated px-1 rounded text-[10px]">&lt;user_context&gt;</code> block into every AI call, across all modes and providers.
+                                    Free-form context — sales stats, product details, LeetCode solutions, personal preferences — now lives per-mode in <strong>Modes Manager</strong> instead of a single global field. Each mode's <strong>Real-time prompt</strong> is injected into every AI call while that mode is active, so different contexts stay scoped to the situations where they're relevant. See <strong>Modes Manager</strong> below.
                                 </p>
                             </div>
                             <div className="grid md:grid-cols-2 gap-3">
@@ -1568,10 +1580,10 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         <Upload className="w-4 h-4 text-emerald-500" /> How to Use
                                     </h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Open <strong>Settings → Profile Intelligence</strong></li>
-                                        <li>Scroll to the <strong>Custom Context</strong> textarea</li>
-                                        <li>Type anything — auto-saved after 800 ms</li>
-                                        <li>Up to 4,000 characters with a live counter</li>
+                                        <li>Open <strong>Modes Manager</strong></li>
+                                        <li>Select or create a mode, then scroll to <strong>Real-time prompt</strong></li>
+                                        <li>Type anything — auto-saved as you go</li>
+                                        <li>Only active while that mode is selected</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
@@ -1746,7 +1758,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <Wifi className="w-4 h-4 text-sky-500" /> Enable & Connect
                                 </h4>
                                 <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                    <li>Open <strong>Settings → Phone Mirror</strong></li>
+                                    <li>Open <strong>Settings → Sync</strong></li>
                                     <li>Toggle on, then scan the generated QR code from your phone</li>
                                     <li>Loopback by default — flip <strong>Expose on LAN</strong> to reach it from another device on the same Wi-Fi</li>
                                 </ul>
@@ -1802,6 +1814,269 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         <strong>⚠️ Warning:</strong> This renders the Natively overlay completely unclickable. You MUST memorize the Global Hotkeys (e.g. <strong>{isMac ? 'Cmd' : 'Ctrl'}+Shift+Arrows</strong> to move, <strong>{isMac ? 'Cmd' : 'Ctrl'}+B</strong> to hide, <strong>{isMac ? 'Cmd' : 'Ctrl'}+1-7</strong> for actions) to control the application once this is active.
                                     </p>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </AccordionSection>
+
+                <AccordionSection title="12. Hindsight Long-Term Memory (LTM) Setup" icon={<Brain className="w-4 h-4" />}>
+                    <div className="space-y-4">
+                        <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl mb-4">
+                            <h4 className="text-[13px] font-semibold text-purple-400 flex items-center gap-2 mb-1">
+                                <Brain size={14} /> Cross-Meeting Memory Infrastructure
+                            </h4>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                Hindsight is a local or cloud-based sidecar service that acts as Natively's vector database. It indexes past meeting transcript segments, custom profiles, and documents to make them queryable via semantic vector search.
+                            </p>
+                        </div>
+
+                        <div className="grid gap-3">
+                            {/* Option 1: Managed Cloud */}
+                            <div className="p-4 rounded-xl border bg-accent-primary/5 border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Globe className="w-4 h-4 text-blue-500" /> Option A: Hindsight Cloud (Recommended)
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    A fully managed memory service hosted by Vectorize.io that handles all vector database indexing, LLM fact extraction, and observation consolidation.
+                                </p>
+                                <ol className="text-[11px] text-text-secondary space-y-2 list-decimal pl-4 mb-3">
+                                    <li>Sign up for an account at:
+                                        <button
+                                            onClick={() => { (window as any).electronAPI?.openExternal('https://ui.hindsight.vectorize.io/signup') }}
+                                            className="ml-1 text-accent-primary hover:underline font-semibold inline-flex items-center gap-0.5"
+                                        >
+                                            ui.hindsight.vectorize.io/signup <ExternalLink size={10} />
+                                        </button>
+                                    </li>
+                                    <li>Create a new <strong>Memory Bank</strong> in the Hindsight Dashboard to obtain your <strong>API Access Key</strong>.</li>
+                                    <li>In Natively desktop: open <strong>Settings → Intelligence</strong>.</li>
+                                    <li>Set the Base URL to: <code className="bg-bg-elevated px-1 font-mono text-[10px]">https://api.hindsight.vectorize.io/v1</code>.</li>
+                                    <li>Enter your Hindsight <strong>API Access Key</strong>, click <strong>Test Connection</strong>, and enable <strong>Long-term memory</strong>.</li>
+                                </ol>
+                            </div>
+
+                            {/* Option 2: Local Docker / Pip */}
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Cpu className="w-4 h-4 text-purple-500" /> Option B: Local Self-Hosted Daemon (Docker or Pip)
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    Run Hindsight as a background daemon on your local computer using Docker or Python pip:
+                                </p>
+                                <div className="space-y-3 pl-1 text-[11px] text-text-secondary">
+                                    <div>
+                                        <p className="font-semibold text-[10.5px] text-text-primary mb-1">Via Docker (One command with local PostgreSQL):</p>
+                                        <code className="block bg-bg-elevated p-2 rounded font-mono text-[9.5px] border border-border-subtle overflow-x-auto whitespace-pre">
+                                            {`docker run -d --name hindsight -p 8888:8888 -p 9999:9999 \\
+  -e HINDSIGHT_API_LLM_API_KEY=$OPENAI_API_KEY \\
+  -v hindsight-data:/home/hindsight/.pg0 \\
+  ghcr.io/vectorize-io/hindsight:latest`}
+                                        </code>
+                                    </div>
+                                    <div>
+                                        <p className="font-semibold text-[10.5px] text-text-primary mb-1">Via Pip (Bare metal Python service):</p>
+                                        <code className="block bg-bg-elevated p-2 rounded font-mono text-[9.5px] border border-border-subtle overflow-x-auto whitespace-pre">
+                                            {`pip install hindsight-api
+export HINDSIGHT_API_LLM_PROVIDER=openai
+export HINDSIGHT_API_LLM_API_KEY=sk-xxxx
+hindsight-api`}
+                                        </code>
+                                    </div>
+                                    <p className="text-[10px] text-text-muted mt-1 leading-relaxed">
+                                        Once running, access the local dashboard UI at <code className="bg-bg-elevated px-1 font-mono text-[9px]">http://localhost:9999</code>. In Natively settings, set the Base URL to <code className="bg-bg-elevated px-1 font-mono text-[9px]">http://localhost:8888</code>.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Option 3: Local Dev Script */}
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-purple-400" /> Option C: Monorepo Developer Sidecar
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    Quickly start a local developer instance using the scripts packaged with Natively:
+                                </p>
+                                <ol className="text-[11px] text-text-secondary space-y-1 list-decimal pl-4">
+                                    <li>Install the embedded server package (Python 3.11+): <code className="bg-bg-elevated px-1 font-mono text-[10px]">pip install hindsight-all</code> (Intel Macs: <code className="bg-bg-elevated px-1 font-mono text-[10px]">hindsight-all-slim</code>).</li>
+                                    <li>From the Natively project folder, run the bundled launcher: <code className="bg-bg-elevated px-1 font-mono text-[10px]">bash scripts/hindsight-start.sh</code>. It starts the embedded memory server (bundled Postgres + pgvector, no Docker) on port 8888 and wires your AI provider chain + fallback automatically.</li>
+                                    <li>Set Natively Base URL to <code className="bg-bg-elevated px-1 font-mono text-[10px]">http://localhost:8888</code> and toggle on memory.</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                </AccordionSection>
+
+                <AccordionSection title="13. Sandboxed Code Verification & Corrector" icon={<Cpu className="w-4 h-4" />}>
+                    <div className="space-y-4">
+                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl mb-4">
+                            <h4 className="text-[13px] font-semibold text-emerald-500 flex items-center gap-2 mb-1">
+                                <CheckCircle2 size={14} /> Execution-Based Answer Verification
+                            </h4>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                When a coding question is answered, Natively extracts code blocks and executes them inside isolated local sandboxed processes to verify their logical correctness. Code blocks receive a "Verified ✓" badge once tested.
+                            </p>
+                        </div>
+
+                        <div className="grid gap-3">
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Settings className="w-4 h-4 text-emerald-500" /> Environment Requirements
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    Because code is run locally, you must have the appropriate interpreters installed on your device and exposed in your system PATH:
+                                </p>
+                                <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
+                                    <li>
+                                        <strong>Python Code Verification:</strong> Requires <code className="bg-bg-elevated px-1 font-mono text-[10px]">python3</code> or <code className="bg-bg-elevated px-1 font-mono text-[10px]">python</code> to be installed on your machine.
+                                    </li>
+                                    <li>
+                                        <strong>JS/TS Code Verification:</strong> Requires Node.js (<code className="bg-bg-elevated px-1 font-mono text-[10px]">node</code>) to be installed on your machine.
+                                    </li>
+                                    <li>
+                                        <strong>SQL Verification:</strong> Uses the system's local SQLite client (<code className="bg-bg-elevated px-1 font-mono text-[10px]">sqlite3</code>) with specialized safe/bail modes to verify queries in memory.
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Sparkles className="w-4 h-4 text-amber-500" /> One-Shot Code Corrector
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed">
+                                    If a sandboxed code block fails to compile or yields runtime errors, Natively initiates a background correction request to the reasoning model, supplying the execution error logs. The corrected code is streamed back to your interface automatically.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </AccordionSection>
+
+                <AccordionSection title="14. Companion Browser Extension Setup" icon={<Smartphone className="w-4 h-4" />}>
+                    <div className="space-y-4">
+                        <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mb-4">
+                            <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
+                                <Smartphone size={14} /> Active Tab Context Capture
+                            </h4>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                The Natively browser extension (Manifest V3) allows you to securely send the active browser tab's text content and source code to the Natively desktop app. It only communicates over your local loopback.
+                            </p>
+                        </div>
+
+                        <div className="grid gap-3">
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Cpu className="w-4 h-4 text-indigo-500" /> 1. Install the Extension
+                                </h4>
+                                <div className="space-y-3 text-[11px] text-text-secondary">
+                                    <div className="p-3 bg-accent-primary/5 border border-border-subtle rounded-lg">
+                                        <p className="font-semibold text-text-primary mb-1 flex items-center gap-1.5">
+                                            <ExternalLink className="w-3.5 h-3.5 text-accent-primary" /> Chrome Web Store (Recommended)
+                                        </p>
+                                        <p className="mb-2 leading-relaxed">Install the official companion extension in one click directly from the Web Store:</p>
+                                        <button
+                                            onClick={() => { (window as any).electronAPI?.openExternal('https://chromewebstore.google.com/detail/lmhgnkbjnelmciecjkleaomjpejcgaln?utm_source=item-share-cb') }}
+                                            className="px-2.5 py-1 bg-accent-primary hover:bg-accent-hover text-white rounded text-[10px] font-semibold transition-colors flex items-center gap-1"
+                                        >
+                                            Install from Chrome Web Store <ExternalLink size={10} />
+                                        </button>
+                                    </div>
+                                    <div className="p-3 border border-border-subtle rounded-lg">
+                                        <p className="font-semibold text-text-primary mb-1">Local Developer Build (Alternative)</p>
+                                        <p className="mb-1 leading-relaxed">To build the extension from source and load it manually:</p>
+                                        <ol className="space-y-1 list-decimal pl-4">
+                                            <li>Open your terminal and run:
+                                                <code className="block bg-bg-elevated p-1.5 rounded font-mono text-[9px] my-1 border border-border-subtle overflow-x-auto whitespace-pre">
+                                                    cd natively-browser && npm install && npm run build
+                                                </code>
+                                            </li>
+                                            <li>Navigate to <code className="bg-bg-elevated px-1 font-mono text-[9.5px]">chrome://extensions</code> and turn on <strong>Developer mode</strong>.</li>
+                                            <li>Click <strong>Load unpacked</strong> and select the <code className="bg-bg-elevated px-1 font-mono text-[9.5px]">natively-browser/dist</code> folder.</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Zap className="w-4 h-4 text-amber-500" /> 2. Pair with Natively Desktop
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    Establish a secure paired loopback connection (done only once):
+                                </p>
+                                <ol className="text-[11px] text-text-secondary space-y-1 list-decimal pl-4">
+                                    <li>In Natively desktop: go to <strong>Settings → Sync</strong>, ensure Phone Mirror is running, and under the **Browser Extension** card click <strong>Connect browser extension</strong> (arms pairing for 60s).</li>
+                                    <li>In your browser: click the Natively extension toolbar icon, then click <strong>Connect to Natively</strong>.</li>
+                                    <li>Once paired, the connection status shows a green dot ("Connected — capture ready").</li>
+                                </ol>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Monitor className="w-4 h-4 text-emerald-500" /> 3. Triggering Tab Capture
+                                </h4>
+                                <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
+                                    <li>
+                                        <strong>Global Hotkey (Recommended):</strong> Press <kbd className="bg-bg-elevated px-1.5 py-0.5 rounded border text-[10.5px] border-border-subtle font-sans">{isMac ? '⌘' : 'Ctrl'}+Shift+Y</kbd> anywhere on your system. Natively pulls DOM context automatically; if the browser isn't active/reachable, it defaults to a screenshot automatically.
+                                    </li>
+                                    <li>
+                                        <strong>Manual Capture:</strong> Open the extension toolbar popup and click <strong>Capture this page</strong>.
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </AccordionSection>
+
+                <AccordionSection title="15. Session Memory & Spoken Humanizer" icon={<Sparkles className="w-4 h-4" />}>
+                    <div className="space-y-4">
+                        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-4">
+                            <h4 className="text-[13px] font-semibold text-amber-500 flex items-center gap-2 mb-1">
+                                <Sparkles size={14} /> Conversational Polish & Context Awareness
+                            </h4>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                Natively implements real-time session tracking, entity extraction, and stylistic rewriting. This ensures responses refer correctly to prior chat context and sound completely natural when read aloud, without robotic or repetitive patterns.
+                            </p>
+                        </div>
+
+                        <div className="grid gap-3">
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Brain className="w-4 h-4 text-purple-500" /> Time-Aware Session Memory & Entity Resolver
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    As meetings progress, Natively monitors speaker turns and extracts key entities (such as projects, skills, and compensation):
+                                </p>
+                                <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
+                                    <li><strong>Demonstrative Follow-ups:</strong> If you ask "Tell me more about <em>that project</em>", Natively resolves the pronoun to the specific project name discussed previously (e.g. "Natively").</li>
+                                    <li><strong>Time-Decayed Salience:</strong> Entities fade in priority based on a half-life recency calculation (measured in seconds), keeping the AI focused on the most active discussion topic.</li>
+                                    <li><strong>Mode-Aware Routing:</strong> Access is restricted based on mode boundaries (e.g., Coding Mode blocks resume/project history; Negotiation Mode is the only mode permitted to fetch compensation/salary details).</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Sparkles className="w-4 h-4 text-amber-500" /> Spoken Answer Humanizer
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    Raw LLM responses are automatically post-processed before they are returned to sound like natural human speech:
+                                </p>
+                                <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
+                                    <li><strong>Corporate Cliché Stripping:</strong> Deterministically removes corporate filler words such as <em>"unique blend"</em>, <em>"leverage"</em>, <em>"streamline"</em>, and <em>"cutting-edge"</em>.</li>
+                                    <li><strong>First-Person Rewriting:</strong> Converts third-person candidate references (e.g. "the candidate worked on...") directly into first-person speech (<em>"I worked on..."</em>).</li>
+                                    <li><strong>Formatting Cleanup:</strong> Removes symbols and structures unfit for audio generation, such as em/en dashes and empty bullet points, while retaining markdown bold elements (`**bold**`).</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <RefreshCw className="w-4 h-4 text-emerald-500" /> Answer Diversity Guard & Polish
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    To ensure responses remain fresh and varied across long meeting sessions:
+                                </p>
+                                <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
+                                    <li><strong>Similarity Prevention:</strong> Computes Jaccard similarity and sentence structure matches to block the AI from repeating recently used phrases or patterns.</li>
+                                    <li><strong>Boilerplate Compressing:</strong> Condenses repetitive prompt headers (e.g. <em>"Based on the code on your screen..."</em>, <em>"Sure, I can help with that..."</em>) directly into speakable, action-oriented answers.</li>
+                                </ul>
                             </div>
                         </div>
                     </div>

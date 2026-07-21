@@ -9,7 +9,7 @@
 
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
-import { SessionTracker } from './SessionTracker';
+import { SessionTracker, type ConversationSurface } from './SessionTracker';
 import { IntelligenceEngine } from './IntelligenceEngine';
 import { MeetingPersistence } from './MeetingPersistence';
 import { ScreenContext } from './services/screen/ScreenContextService';
@@ -19,7 +19,8 @@ export type { TranscriptSegment, SuggestionTrigger, ContextItem } from './Sessio
 export type { IntelligenceMode, IntelligenceModeEvents } from './IntelligenceEngine';
 export type { DynamicAction } from './services/dynamic-actions/DynamicAction';
 
-export const GEMINI_FLASH_MODEL = "gemini-3.1-flash-lite-preview";
+export const GEMINI_FLASH_MODEL = "gemini-3.5-flash";
+export const GEMINI_FLASH_LITE_MODEL = "gemini-3.1-flash-lite";
 
 /**
  * IntelligenceManager - Facade for the intelligence layer.
@@ -40,6 +41,13 @@ export class IntelligenceManager extends EventEmitter {
         this.engine = new IntelligenceEngine(llmHelper, this.session);
         this.persistence = new MeetingPersistence(this.session, llmHelper);
 
+        // Wire the LLMHelper used by the async per-section prompt compiler (Phase 16b).
+        // Fire-and-forget compilation runs when a user adds/edits a note section or custom mode.
+        try {
+            const { ModesManager } = require('./services/ModesManager');
+            ModesManager.setLlmHelperForCompiler(llmHelper);
+        } catch { /* non-fatal */ }
+
         // Forward all engine events through the facade
         this.forwardEngineEvents();
     }
@@ -50,7 +58,9 @@ export class IntelligenceManager extends EventEmitter {
      */
     private forwardEngineEvents(): void {
         const events = [
-            'assist_update', 'suggested_answer', 'suggested_answer_token',
+            'assist_update', 'suggested_answer', 'suggested_answer_token', 'suggested_answer_discard',
+            // Verified code execution (background): ✓ badge + corrected message.
+            'code_verified', 'code_correction',
             'refined_answer', 'refined_answer_token',
             'recap', 'recap_token', 'clarify', 'clarify_token',
             'follow_up_questions_update', 'follow_up_questions_token',
@@ -102,16 +112,20 @@ export class IntelligenceManager extends EventEmitter {
         }
     }
 
-    addAssistantMessage(text: string): void {
-        this.session.addAssistantMessage(text);
+    addAssistantMessage(
+        text: string,
+        writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean },
+        surface?: ConversationSurface,
+    ): void {
+        this.session.addAssistantMessage(text, writeDecision, surface);
     }
 
     getContext(lastSeconds: number = 120) {
         return this.session.getContext(lastSeconds);
     }
 
-    getLastAssistantMessage(): string | null {
-        return this.session.getLastAssistantMessage();
+    getLastAssistantMessage(surface?: ConversationSurface): string | null {
+        return this.session.getLastAssistantMessage(surface);
     }
 
     getFormattedContext(lastSeconds: number = 120): string {
@@ -120,6 +134,11 @@ export class IntelligenceManager extends EventEmitter {
 
     getLastInterviewerTurn(): string | null {
         return this.session.getLastInterviewerTurn();
+    }
+
+    /** Current meeting's full finalized transcript (for in-meeting search, Phase 10). */
+    getCurrentMeetingTranscript(): Array<{ speaker: string; text: string; timestamp: number }> {
+        return this.session.getFullTranscript().map(s => ({ speaker: s.speaker, text: s.text, timestamp: s.timestamp }));
     }
 
     logUsage(type: string, question: string, answer: string): void {
@@ -146,7 +165,7 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.runAssistMode();
     }
 
-    async runWhatShouldISay(question?: string, confidence?: number, imagePaths?: string[], options?: { skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string }): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence?: number, imagePaths?: string[], options?: { skipCooldown?: boolean; forceFresh?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string }): Promise<string | null> {
         return this.engine.runWhatShouldISay(question, confidence, imagePaths, options);
     }
 
@@ -213,6 +232,16 @@ export class IntelligenceManager extends EventEmitter {
 
     async recoverUnprocessedMeetings(): Promise<void> {
         return this.persistence.recoverUnprocessedMeetings();
+    }
+
+    /** Regenerate V3 notes for a saved meeting (optionally with a different mode/tone). */
+    async regenerateMeetingSummary(meetingId: string, opts?: { templateType?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }): Promise<boolean> {
+        return this.persistence.regenerateSavedMeeting(meetingId, opts);
+    }
+
+    /** Regenerate only the follow-up draft for a saved V3 meeting. */
+    async regenerateMeetingFollowUp(meetingId: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly'): Promise<boolean> {
+        return this.persistence.regenerateFollowUpDraft(meetingId, tone);
     }
 
     // ============================================

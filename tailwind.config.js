@@ -60,7 +60,7 @@ module.exports = {
         pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
         shimmer: "shimmer 2s linear infinite",
         "text-gradient-wave": "textGradientWave 2s infinite ease-in-out",
-        "fade-in-up": "fadeInUp 0.3s cubic-bezier(0.25, 1, 0.5, 1) forwards",
+        "fade-in-up": "fadeInUp 0.26s cubic-bezier(0.23, 1, 0.32, 1) forwards",
         "scale-in": "scaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards"
       },
       keyframes: {
@@ -93,8 +93,8 @@ module.exports = {
           }
         },
         fadeInUp: {
-          "0%": { opacity: 0, transform: "translateY(8px)" },
-          "100%": { opacity: 1, transform: "translateY(0)" }
+          "0%": { opacity: 0, transform: "translateY(8px)", filter: "blur(4px)" },
+          "100%": { opacity: 1, transform: "translateY(0)", filter: "blur(0px)" }
         },
         scaleIn: {
           "0%": { opacity: 0, transform: "scale(0.95)" },

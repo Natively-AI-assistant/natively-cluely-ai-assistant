@@ -29,6 +29,7 @@ export interface ShortcutConfig {
     toggleMousePassthrough: string[];
     processScreenshots: string[];
     captureAndProcess: string[];
+    capturePage: string[];
     resetCancel: string[];
     takeScreenshot: string[];
     selectiveScreenshot: string[];
@@ -61,6 +62,7 @@ function buildDefaultShortcuts(): ShortcutConfig {
         toggleMousePassthrough: [mod, shift, 'B'],
         processScreenshots: [mod, 'Enter'],
         captureAndProcess: [mod, shift, 'Enter'],
+        capturePage: [mod, shift, 'Y'],
         resetCancel: [mod, 'R'],
         takeScreenshot: [mod, 'H'],
         selectiveScreenshot: [mod, shift, 'H']
@@ -121,6 +123,7 @@ export const useShortcuts = () => {
                 else if (kb.id === 'general:toggle-mouse-passthrough') newShortcuts.toggleMousePassthrough = keys;
                 else if (kb.id === 'general:process-screenshots') newShortcuts.processScreenshots = keys;
                 else if (kb.id === 'general:capture-and-process') newShortcuts.captureAndProcess = keys;
+                else if (kb.id === 'general:capture-dom') newShortcuts.capturePage = keys;
                 else if (kb.id === 'general:reset-cancel') newShortcuts.resetCancel = keys;
                 else if (kb.id === 'general:take-screenshot') newShortcuts.takeScreenshot = keys;
                 else if (kb.id === 'general:selective-screenshot') newShortcuts.selectiveScreenshot = keys;
@@ -186,6 +189,7 @@ export const useShortcuts = () => {
             case 'toggleMousePassthrough': backendId = 'general:toggle-mouse-passthrough'; break;
             case 'processScreenshots': backendId = 'general:process-screenshots'; break;
             case 'captureAndProcess': backendId = 'general:capture-and-process'; break;
+            case 'capturePage': backendId = 'general:capture-dom'; break;
             case 'resetCancel': backendId = 'general:reset-cancel'; break;
             case 'takeScreenshot': backendId = 'general:take-screenshot'; break;
             case 'selectiveScreenshot': backendId = 'general:selective-screenshot'; break;

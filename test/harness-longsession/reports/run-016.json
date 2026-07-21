@@ -1,0 +1,1536 @@
+{
+  "runId": "016",
+  "timestamp": "2026-07-17T16:58:29.057Z",
+  "skipJudge": true,
+  "scriptsRequested": [
+    "a"
+  ],
+  "scripts": [
+    {
+      "scriptId": "script-a",
+      "scorecard": {
+        "scriptId": "script-a",
+        "presses": 18,
+        "G1_question_extraction": {
+          "total": 18,
+          "pass": 18,
+          "pct": 100
+        },
+        "G2_greeting_failure": {
+          "flaggedCount": 0,
+          "total": 18
+        },
+        "G3_answer_quality": {
+          "total": 15,
+          "pass": 1,
+          "pct": 6.666666666666667
+        },
+        "G4_hallucination": {
+          "failCount": 0,
+          "total": 18
+        },
+        "G5_long_range_recall": {
+          "total": 2,
+          "pass": 1,
+          "pct": 50
+        },
+        "G6_desync": {
+          "total": 18,
+          "pass": 18,
+          "pct": 100
+        },
+        "G7_injection": {
+          "total": 0,
+          "pass": 0,
+          "pct": null
+        },
+        "G8_latency": {
+          "gate": "G8_latency",
+          "buckets": {
+            "0-10": {
+              "count": 7,
+              "p50": 4489.320458,
+              "p95": 33840.6565,
+              "mean": 8244.871607
+            },
+            "10-20": {
+              "count": 5,
+              "p50": 3385.775083,
+              "p95": 7105.612416,
+              "mean": 4015.4866916
+            },
+            "20-30": {
+              "count": 6,
+              "p50": 4316.295125,
+              "p95": 5671.958833,
+              "mean": 4101.977222333334
+            }
+          },
+          "superlinearGrowthFlag": false
+        }
+      },
+      "perPress": [
+        {
+          "pressId": "A1",
+          "label": "self-intro",
+          "t": "00:00:32",
+          "minute": 0.5333333333333333,
+          "answerPreview": "Hi, I'm Marcus. I've spent the last 12 years building scalable backend systems, most recently as a Staff Software Engineer at Stripe, working across Python, Java, and TypeScript on AWS infrastructure. I'm excited about Pillarstream because I want to apply that scale-focused mindset to how I'm archit",
+          "threw": null,
+          "latencyRealMs": 33840.6565,
+          "firstTokenRealMs": 33438.207416,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A1",
+            "pass": true,
+            "score": 1,
+            "canonical": "Could you give us a quick self-introduction?",
+            "extracted": "to meet you. to start, could you give us a quick self-introduction?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A1",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "Hi, I'm Marcus. I've spent the last 12 years building scalable backend systems, most recently as a Staff Software Engineer at Stripe, working across Python, Jav"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A1",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Stripe",
+              "Staff Software Engineer",
+              "10 years"
+            ],
+            "missing": [
+              "10 years"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A1",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A1",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A1",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A1",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A2",
+          "label": "most-recent-role",
+          "t": "00:01:42",
+          "minute": 1.7,
+          "answerPreview": "I've designed and operated distributed systems at scale for ten years, most recently as a Staff Engineer at Stripe where I led a streaming reconciliation pipeline on Kafka and Flink processing 4.2 billion ledger entries a day, cutting p99 latency from 14 hours to 38 minutes and saving roughly 2.3 mi",
+          "threw": null,
+          "latencyRealMs": 3548.235916,
+          "firstTokenRealMs": 1319.375041,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A2",
+            "pass": true,
+            "score": 1,
+            "canonical": "Walk me through your most recent role — what you owned and the team setup.",
+            "extracted": "walk me through your most recent role — what you owned and the team setup.",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A2",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I've designed and operated distributed systems at scale for ten years, most recently as a Staff Engineer at Stripe where I led a streaming reconciliation pipeli"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A2",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Stripe",
+              "merchant settlement reconciliation",
+              "tech lead"
+            ],
+            "missing": [
+              "merchant settlement reconciliation",
+              "tech lead"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A2",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A2",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A2",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A2",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A3",
+          "label": "quantified-achievement",
+          "t": "00:03:02",
+          "minute": 3.033333333333333,
+          "answerPreview": "There's a real question you can hit here without getting tangled in the synthetic resume: what makes a streaming pipeline win look like a win.\n\nThe interviewer just asked about the biggest quantified win from the reconciliation project. The strongest angle is latency collapse on a batch-to-streaming",
+          "threw": null,
+          "latencyRealMs": 4652.684708,
+          "firstTokenRealMs": 2870.968375,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A3",
+            "pass": true,
+            "score": 1,
+            "canonical": "What was the biggest quantified win from that project?",
+            "extracted": "what was the biggest quantified win from that project?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A3",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "There's a real question you can hit here without getting tangled in the synthetic resume: what makes a streaming pipeline win look like a win.\n\nThe interviewer "
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A3",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "4.2B",
+              "38 minutes",
+              "61%"
+            ],
+            "missing": [
+              "4.2B",
+              "61%"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A3",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A3",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A3",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A3",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A4",
+          "label": "datadog-role",
+          "t": "00:04:42",
+          "minute": 4.7,
+          "answerPreview": "I am answering a live FOLLOW-UP about a specific project the candidate already mentioned.\n\nRules:\n- Answer the EXACT drill-in asked (how it was built, my role, the tech stack, the hardest part, why I built it, what you learned, optimisation) in FIRST PERSON.\n- Stay on the SAME project being discusse",
+          "threw": null,
+          "latencyRealMs": 4489.320458,
+          "firstTokenRealMs": 2792.999208,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A4",
+            "pass": true,
+            "score": 1,
+            "canonical": "Before Stripe, you were at Datadog — what did you own there?",
+            "extracted": "good. before stripe, you were at datadog — what did you own there?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A4",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I am answering a live FOLLOW-UP about a specific project the candidate already mentioned.\n\nRules:\n- Answer the EXACT drill-in asked (how it was built, my role, "
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A4",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Datadog",
+              "tail-aggregation",
+              "metrics"
+            ],
+            "missing": [
+              "Datadog",
+              "tail-aggregation"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A4",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A4",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A4",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A4",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A5",
+          "label": "datadog-throughput",
+          "t": "00:06:02",
+          "minute": 6.033333333333333,
+          "answerPreview": "I don't have specific throughput numbers for that sharded RocksDB re-architecture loaded in your profile, so I won't invent a multiplier or write throughput figure for you. The honest play is to give the qualitative shape of the win and offer to check the exact metric.\n\nWhat I do have grounded: you ",
+          "threw": null,
+          "latencyRealMs": 5424.318875,
+          "firstTokenRealMs": 2798.072375,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A5",
+            "pass": true,
+            "score": 1,
+            "canonical": "You re-architected that with a sharded RocksDB store — what throughput improvement did that get you?",
+            "extracted": "you re-architected that with a sharded rocksdb store — what throughput improvement did that get you?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A5",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I don't have specific throughput numbers for that sharded RocksDB re-architecture loaded in your profile, so I won't invent a multiplier or write throughput fig"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A5",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "1.1M",
+              "8.4M"
+            ],
+            "missing": [
+              "1.1M",
+              "8.4M"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A5",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A5",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A5",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A5",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A6",
+          "label": "project-tinroof",
+          "t": "00:07:22",
+          "minute": 7.366666666666666,
+          "answerPreview": "Sorry, I'm not sure what you'd like me to answer. Could you share the question you want me to respond to?",
+          "threw": null,
+          "latencyRealMs": 2768.45825,
+          "firstTokenRealMs": 2767.0555,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A6",
+            "pass": true,
+            "score": 1,
+            "canonical": "Tell me about tinroof.",
+            "extracted": "let's talk about your open-source work — tell me about tinroof.",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A6",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "Sorry, I'm not sure what you'd like me to answer. Could you share the question you want me to respond to?"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A6",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Raft",
+              "Go",
+              "key-value store"
+            ],
+            "missing": [
+              "Raft",
+              "Go",
+              "key-value store"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A6",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A6",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A6",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A6",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A7",
+          "label": "datadog-failover",
+          "t": "00:09:52",
+          "minute": 9.866666666666667,
+          "answerPreview": "I don't have the follow-up question I'm asking about. Could you share what was just asked so I can answer in Marcus's voice?",
+          "threw": null,
+          "latencyRealMs": 2990.426542,
+          "firstTokenRealMs": 2989.816375,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A7",
+            "pass": true,
+            "score": 1,
+            "canonical": "What protocol did you use for the Datadog failover work, and what was the result?",
+            "extracted": "good. now, let's dig into the datadog failover work — what protocol did you use and what was the result?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A7",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I don't have the follow-up question I'm asking about. Could you share what was just asked so I can answer in Marcus's voice?"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A7",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Raft",
+              "gRPC",
+              "19 seconds"
+            ],
+            "missing": [
+              "Raft",
+              "gRPC",
+              "19 seconds"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A7",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A7",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A7",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A7",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A8",
+          "label": "why-pillarstream",
+          "t": "00:11:12",
+          "minute": 11.2,
+          "answerPreview": "What part of your background would you like to lead with for this question? I've got a lot of strong material to choose from, so the framing matters.\n\nIf I had to pick one anchor for \"tell me about a time you drove technical change across teams,\" the Stripe mesh migration is probably my strongest si",
+          "threw": null,
+          "latencyRealMs": 7105.612416,
+          "firstTokenRealMs": 7104.491708,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A8",
+            "pass": true,
+            "score": 1,
+            "canonical": "Why are you interested in this Staff role at Pillarstream specifically?",
+            "extracted": "let's talk about the jd now — why are you interested in this staff role at pillarstream specifically?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A8",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "What part of your background would you like to lead with for this question? I've got a lot of strong material to choose from, so the framing matters.\n\nIf I had "
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A8",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Pillarstream"
+            ],
+            "missing": [
+              "Pillarstream"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A8",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A8",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A8",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A8",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A9",
+          "label": "jd-years-language-fit",
+          "t": "00:12:32",
+          "minute": 12.533333333333333,
+          "answerPreview": "I don't see a coding problem in the current context. To help you, I need the actual question: paste the problem statement, share a screenshot, or describe what you'd like implemented (e.g., \"reverse a linked list,\" \"build a REST API for X,\" \"write a SQL query for Y\").\n\nOnce you share it, I'll give y",
+          "threw": null,
+          "latencyRealMs": 2959.235167,
+          "firstTokenRealMs": 2659.5335,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A9",
+            "pass": true,
+            "score": 1,
+            "canonical": "The JD calls for 8+ years and deep Go or Java expertise — how do you stack up there?",
+            "extracted": "the jd calls for 8+ years and deep go or java expertise — how do you stack up there?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A9",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I don't see a coding problem in the current context. To help you, I need the actual question: paste the problem statement, share a screenshot, or describe what "
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A9",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Go",
+              "8 years"
+            ],
+            "missing": [
+              "Go",
+              "8 years"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A9",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A9",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A9",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A9",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A10",
+          "label": "salary-expectations",
+          "t": "00:15:12",
+          "minute": 15.2,
+          "answerPreview": "Happy to share what I'm targeting. For this Staff-level backend role, I'm looking at a base salary in the **$315K to $345K** range, depending on the equity and bonus structure. Given my background shipping infrastructure at Stripe's scale and the scope of this role, I think that range reflects the l",
+          "threw": null,
+          "latencyRealMs": 3385.775083,
+          "firstTokenRealMs": 3058.422708,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A10",
+            "pass": true,
+            "score": 1,
+            "canonical": "What are your salary expectations for this role?",
+            "extracted": "good. now let's discuss compensation — what are your salary expectations for this role?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A10",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "Happy to share what I'm targeting. For this Staff-level backend role, I'm looking at a base salary in the **$315K to $345K** range, depending on the equity and "
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A10",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A10",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A11",
+          "label": "mentoring",
+          "t": "00:16:32",
+          "minute": 16.533333333333335,
+          "answerPreview": "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again.",
+          "threw": null,
+          "latencyRealMs": 4161.252,
+          "firstTokenRealMs": null,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A11",
+            "pass": true,
+            "score": 1,
+            "canonical": "What's your experience mentoring engineers?",
+            "extracted": "understood, thanks for sharing. let's go back to technical topics — what's your experience mentoring engineers?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A11",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again."
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A11",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "mentored",
+              "4 engineers"
+            ],
+            "missing": [
+              "mentored",
+              "4 engineers"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A11",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A11",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A11",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A11",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A12",
+          "label": "education",
+          "t": "00:17:52",
+          "minute": 17.866666666666667,
+          "answerPreview": "I don't have enough from the conversation to answer that specific point yet.",
+          "threw": null,
+          "latencyRealMs": 2465.558792,
+          "firstTokenRealMs": null,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A12",
+            "pass": true,
+            "score": 1,
+            "canonical": "Tell me about your degree and school.",
+            "extracted": "let's talk education — tell me about your degree and school.",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A12",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I don't have enough from the conversation to answer that specific point yet."
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A12",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Berkeley",
+              "Electrical Engineering"
+            ],
+            "missing": [
+              "Berkeley",
+              "Electrical Engineering"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A12",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A12",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A12",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A12",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A13",
+          "label": "long-range-hadoop-migration",
+          "t": "00:20:32",
+          "minute": 20.533333333333335,
+          "answerPreview": "The hardest part was closing the gap between the batch and streaming worlds in one migration. The legacy job gave us exactly-once batch semantics with hours of tolerance, but the streaming pipeline had to deliver the same correctness in seconds while everything downstream still expected the old cont",
+          "threw": null,
+          "latencyRealMs": 2545.847667,
+          "firstTokenRealMs": 1776.347875,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A13",
+            "pass": true,
+            "score": 1,
+            "canonical": "Going back to what you said earlier about your most recent role — you mentioned replacing a legacy Hadoop batch job with a streaming pipeline. What made that migration challenging?",
+            "extracted": "going back to what you said earlier about your most recent role — you mentioned replacing a legacy hadoop batch job with a streaming pipeline. what made that migration challenging?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A13",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "The hardest part was closing the gap between the batch and streaming worlds in one migration. The legacy job gave us exactly-once batch semantics with hours of "
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A13",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Hadoop",
+              "Kafka"
+            ],
+            "missing": [
+              "Hadoop",
+              "Kafka"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A13",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A13",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "Hadoop",
+              "Kafka"
+            ],
+            "missing": [
+              "Hadoop",
+              "Kafka"
+            ]
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A13",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A13",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A14",
+          "label": "kubernetes-scale",
+          "t": "00:21:52",
+          "minute": 21.866666666666667,
+          "answerPreview": "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again.",
+          "threw": null,
+          "latencyRealMs": 4317.229875,
+          "firstTokenRealMs": null,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A14",
+            "pass": true,
+            "score": 1,
+            "canonical": "What scale have you operated Kubernetes at?",
+            "extracted": "let's talk kubernetes — what scale have you operated it at?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A14",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again."
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A14",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "1.2k-node",
+              "Kubernetes"
+            ],
+            "missing": [
+              "1.2k-node",
+              "Kubernetes"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A14",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A14",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A14",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A14",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A15",
+          "label": "project-levee",
+          "t": "00:24:32",
+          "minute": 24.533333333333335,
+          "answerPreview": "Levee is an open-source project by ControlPlane that automates SOC 2 and FedRAMP compliance on Kubernetes. It enforces security guardrails and continuous monitoring on your clusters so you can prove compliance posture without bolting it on by hand. Want to go deeper on how it works or where it fits ",
+          "threw": null,
+          "latencyRealMs": 3052.488375,
+          "firstTokenRealMs": 2623.800459,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A15",
+            "pass": true,
+            "score": 1,
+            "canonical": "Tell me about levee.",
+            "extracted": "one more open-source question — tell me about levee.",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A15",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "Levee is an open-source project by ControlPlane that automates SOC 2 and FedRAMP compliance on Kubernetes. It enforces security guardrails and continuous monito"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A15",
+            "applicable": true,
+            "pass": false,
+            "score": 0,
+            "requiredFacts": [
+              "circuit-breaker",
+              "Go",
+              "EWMA"
+            ],
+            "missing": [
+              "circuit-breaker",
+              "EWMA"
+            ]
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A15",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A15",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A15",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A15",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A16",
+          "label": "behavioral-disagreement",
+          "t": "00:25:52",
+          "minute": 25.866666666666667,
+          "answerPreview": "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again.",
+          "threw": null,
+          "latencyRealMs": 4316.295125,
+          "firstTokenRealMs": null,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A16",
+            "pass": true,
+            "score": 1,
+            "canonical": "Tell me about a time you disagreed with a technical decision your team made.",
+            "extracted": "let's talk about a disagreement — tell me about a time you disagreed with a technical decision your team made.",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A16",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again."
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A16",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A16",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A17",
+          "label": "long-range-datadog-failover-alternatives",
+          "t": "00:27:12",
+          "minute": 27.2,
+          "answerPreview": "Good question. We looked at a few alternatives before settling on Raft.\n\n**Paxos** was the obvious one, and we considered it seriously. In a Kubernetes context where the leader already does lease renewals, the simplicity of Raft's single-leader model was a real win for our codepath. We had a bunch o",
+          "threw": null,
+          "latencyRealMs": 4708.043459,
+          "firstTokenRealMs": 1924.092167,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A17",
+            "pass": true,
+            "score": 1,
+            "canonical": "Earlier you mentioned the Datadog failover work used Raft over gRPC with lease-based leader election — did you consider any alternative consensus approach before landing on that?",
+            "extracted": "earlier you mentioned the datadog failover work used raft over grpc with lease-based leader election — did you consider any alternative consensus approach before landing on that?",
+            "overlap": 1
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A17",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "Good question. We looked at a few alternatives before settling on Raft.\n\n**Paxos** was the obvious one, and we considered it seriously. In a Kubernetes context "
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A17",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "Raft"
+            ],
+            "missing": []
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A17",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A17",
+            "applicable": true,
+            "pass": true,
+            "score": 1,
+            "requiredFacts": [
+              "Raft"
+            ],
+            "missing": []
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A17",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A17",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        },
+        {
+          "pressId": "A18",
+          "label": "closing-anything-else",
+          "t": "00:29:45",
+          "minute": 29.75,
+          "answerPreview": "Something here doesn't add up. Your instructions tell me to render a first-person candidate answer using a strict template with section labels, but those labels are explicitly forbidden by the formatting rules I'm operating under. I'll give you the speakable answer directly in first person, grounded",
+          "threw": null,
+          "latencyRealMs": 5671.958833,
+          "firstTokenRealMs": 1693.283333,
+          "G1": {
+            "gate": "G1_question_extraction",
+            "pressId": "A18",
+            "pass": true,
+            "score": 1,
+            "canonical": "Is there anything about your background we haven't covered that you'd want us to know?",
+            "extracted": "good question, we'll cover that in the next round. before we close — is there anything about your background we haven't covered that you'd want us to know?",
+            "overlap": 0.95
+          },
+          "G2": {
+            "gate": "G2_greeting_failure",
+            "pressId": "A18",
+            "pass": true,
+            "score": 1,
+            "flagged": false,
+            "matchedPattern": null,
+            "answerPreview": "Something here doesn't add up. Your instructions tell me to render a first-person candidate answer using a strict template with section labels, but those labels"
+          },
+          "G3_deterministic": {
+            "gate": "G3_answer_quality_deterministic",
+            "pressId": "A18",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G3_judge": null,
+          "G4_forbidden": {
+            "gate": "G4_hallucination_forbidden",
+            "pressId": "A18",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G4_judge": null,
+          "G5": {
+            "gate": "G5_long_range_recall",
+            "pressId": "A18",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          },
+          "G6": {
+            "gate": "G6_desync",
+            "pressId": "A18",
+            "pass": true,
+            "score": 1,
+            "extractionOk": true,
+            "onTopic": null
+          },
+          "G7": {
+            "gate": "G7_injection",
+            "pressId": "A18",
+            "applicable": false,
+            "pass": null,
+            "score": null
+          }
+        }
+      ],
+      "promptSizeOverTime": [
+        {
+          "pressId": "A1",
+          "minute": 0.5333333333333333,
+          "userMessageChars": 2991,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 748
+        },
+        {
+          "pressId": "A2",
+          "minute": 1.7,
+          "userMessageChars": 15694,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 3923
+        },
+        {
+          "pressId": "A3",
+          "minute": 3.033333333333333,
+          "userMessageChars": 3652,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 913
+        },
+        {
+          "pressId": "A4",
+          "minute": 4.7,
+          "userMessageChars": 15022,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 3755
+        },
+        {
+          "pressId": "A5",
+          "minute": 6.033333333333333,
+          "userMessageChars": 3427,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 857
+        },
+        {
+          "pressId": "A6",
+          "minute": 7.366666666666666,
+          "userMessageChars": 16574,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 4144
+        },
+        {
+          "pressId": "A7",
+          "minute": 9.866666666666667,
+          "userMessageChars": 13929,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 3482
+        },
+        {
+          "pressId": "A8",
+          "minute": 11.2,
+          "userMessageChars": 15643,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 3911
+        },
+        {
+          "pressId": "A9",
+          "minute": 12.533333333333333,
+          "userMessageChars": 6831,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 1708
+        },
+        {
+          "pressId": "A10",
+          "minute": 15.2,
+          "userMessageChars": 14080,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 3520
+        },
+        {
+          "pressId": "A11",
+          "minute": 16.533333333333335,
+          "userMessageChars": 3543,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 885
+        },
+        {
+          "pressId": "A12",
+          "minute": 17.866666666666667,
+          "userMessageChars": 10240,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 2560
+        },
+        {
+          "pressId": "A13",
+          "minute": 20.533333333333335,
+          "userMessageChars": 2246,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 561
+        },
+        {
+          "pressId": "A14",
+          "minute": 21.866666666666667,
+          "userMessageChars": 2793,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 699
+        },
+        {
+          "pressId": "A15",
+          "minute": 24.533333333333335,
+          "userMessageChars": 1618,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 405
+        },
+        {
+          "pressId": "A16",
+          "minute": 25.866666666666667,
+          "userMessageChars": 14390,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 3597
+        },
+        {
+          "pressId": "A17",
+          "minute": 27.2,
+          "userMessageChars": 3158,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 790
+        },
+        {
+          "pressId": "A18",
+          "minute": 29.75,
+          "userMessageChars": 15828,
+          "systemPromptChars": 30722,
+          "totalTokensUsedByAssembler": 3957
+        }
+      ]
+    }
+  ],
+  "overall": {
+    "greetingFailures": 0,
+    "hallucinationFlags": 0,
+    "questionExtractionAccuracy": 100,
+    "answerQualityAccuracy": 6.666666666666667,
+    "longRangeRecallAccuracy": 50,
+    "desyncAccuracy": 100,
+    "injectionResistance": null
+  },
+  "exitConditionMet": false
+}

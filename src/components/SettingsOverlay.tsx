@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLanguage, useT } from '../i18n';
 import packageJson from '../../package.json';
 import {
     X, Mic, Speaker, Monitor, Keyboard, User, LifeBuoy, LogOut, Upload,
     ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
-    Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield
+    Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2
 } from 'lucide-react';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
@@ -15,6 +16,8 @@ import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { NativelyApiSettings } from './settings/NativelyApiSettings';
 import { NativelyProSettings } from './settings/NativelyProSettings';
 import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
+import { IntelligenceSettings } from './settings/IntelligenceSettings';
+import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
 import { NativelyLogoMark } from './NativelyLogoMark';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -41,6 +44,7 @@ import icon from './icon.png';
 // MockupNativelyInterface — fake in-meeting widget for the opacity preview
 // ---------------------------------------------------------------------------
 const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
+    const t = useT();
     const resolvedTheme = useResolvedTheme();
     const appearance = useMemo(
         () => getOverlayAppearance(opacity, resolvedTheme),
@@ -67,7 +71,7 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                             </div>
                             <div className="flex items-center gap-2 px-4 py-1.5 rounded-full text-[12px] font-medium border overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
                                 <ChevronUp className="w-3.5 h-3.5 opacity-70" />
-                                <span className="opacity-80 tracking-wide">Hide</span>
+                                <span className="opacity-80 tracking-wide">{t('Hide')}</span>
                             </div>
                             <div className="w-8 h-8 rounded-full flex items-center justify-center overlay-icon-surface overlay-text-primary" style={appearance.iconStyle}>
                                 <div className="w-3.5 h-3.5 rounded-[3px] bg-red-400 opacity-80" />
@@ -81,8 +85,8 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                         {/* Rolling Transcript Bar */}
                         <div className="w-full flex justify-center py-2 px-4 border-b mb-1 overlay-transcript-surface" style={appearance.transcriptStyle}>
                             <p className="text-[13px] truncate max-w-[90%] font-medium overlay-text-primary">
-                                <span className={`${resolvedTheme === 'light' ? 'text-blue-700' : 'text-blue-400'} mr-2 font-semibold`}>Interviewer</span>
-                                <span className="opacity-95">So how would you optimize the current algorithm?</span>
+                                <span className={`${resolvedTheme === 'light' ? 'text-blue-700' : 'text-blue-400'} mr-2 font-semibold`}>{t('Interviewer')}</span>
+                                <span className="opacity-95">{t('So how would you optimize the current algorithm?')}</span>
                             </p>
                         </div>
 
@@ -90,8 +94,8 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                         <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
                             <div className="flex justify-start">
                                 <div className="max-w-[85%] px-4 py-3 text-[14px] leading-relaxed font-normal overlay-text-primary">
-                                    <span className="font-semibold text-emerald-500 block mb-1">Suggestion</span>
-                                    A good approach would be to use a hash map to cache the intermediate results, which brings the time complexity down from O(n²) to O(n).
+                                    <span className="font-semibold text-emerald-500 block mb-1">{t('Suggestion')}</span>
+                                    {t('A good approach would be to use a hash map to cache the intermediate results, which brings the time complexity down from O(n²) to O(n).')}
                                 </div>
                             </div>
                         </div>
@@ -99,19 +103,19 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                         {/* Quick Actions */}
                         <div className="flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 pt-3">
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <Pencil className="w-3 h-3 opacity-70" /> What to answer?
+                                <Pencil className="w-3 h-3 opacity-70" /> {t('What to answer?')}
                             </div>
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <MessageSquare className="w-3 h-3 opacity-70" /> Clarify
+                                <MessageSquare className="w-3 h-3 opacity-70" /> {t('Clarify')}
                             </div>
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <RefreshCw className="w-3 h-3 opacity-70" /> Recap
+                                <RefreshCw className="w-3 h-3 opacity-70" /> {t('Recap')}
                             </div>
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question
+                                <HelpCircle className="w-3 h-3 opacity-70" /> {t('Follow Up Question')}
                             </div>
                             <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium min-w-[74px] shrink-0 border overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <Zap className="w-3 h-3 opacity-70" /> Answer
+                                <Zap className="w-3 h-3 opacity-70" /> {t('Answer')}
                             </div>
                         </div>
 
@@ -119,7 +123,7 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                         <div className="px-3">
                             <div className="relative group">
                                 <div className="w-full border rounded-xl pl-3 pr-10 py-2.5 h-[38px] flex items-center overlay-input-surface" style={appearance.inputStyle}>
-                                    <span className="text-[13px] overlay-text-muted">Ask anything on screen or conversation</span>
+                                    <span className="text-[13px] overlay-text-muted">{t('Ask anything on screen or conversation')}</span>
                                 </div>
                             </div>
 
@@ -153,6 +157,7 @@ interface CustomSelectProps {
 }
 
 const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options, onChange, placeholder = "Select device" }) => {
+    const t = useT();
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = React.useRef<HTMLDivElement>(null);
 
@@ -203,7 +208,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options
                                 </button>
                             ))}
                             {options.length === 0 && (
-                                <div className="px-3 py-2 text-sm text-gray-500 italic">No devices found</div>
+                                <div className="px-3 py-2 text-sm text-gray-500 italic">{t('No devices found')}</div>
                             )}
                         </div>
                     </div>
@@ -230,6 +235,7 @@ interface ProviderSelectProps {
 }
 
 const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChange }) => {
+    const t = useT();
     const isLight = useResolvedTheme() === 'light';
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = React.useRef<HTMLDivElement>(null);
@@ -288,14 +294,14 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
                         <div className="min-w-0 flex-1 text-left">
                             <div className="flex items-center gap-2">
                                 <span className="text-[13px] font-semibold text-text-primary truncate leading-tight">{selected.label}</span>
-                                {selected.badge && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ml-2 ${getBadgeStyle(selected.badge === 'Saved' ? 'green' : selected.color)}`}>{selected.badge}</span>}
-                                {selected.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ml-2 ${getBadgeStyle(selected.color)}`}>Recommended</span>}
+                                {selected.badge && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ml-2 ${getBadgeStyle(selected.badge === 'Saved' ? 'green' : selected.color)}`}>{t(selected.badge)}</span>}
+                                {selected.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ml-2 ${getBadgeStyle(selected.color)}`}>{t('Recommended')}</span>}
                             </div>
                             {/* Short description for trigger */}
                             <span className="text-[11px] text-text-tertiary truncate block leading-tight mt-0.5">{selected.desc}</span>
                         </div>
                     </div>
-                ) : <span className="text-text-secondary px-2 text-sm">Select Provider</span>}
+                ) : <span className="text-text-secondary px-2 text-sm">{t('Select Provider')}</span>}
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-text-tertiary transition-transform duration-300 group-hover:bg-bg-input ${isOpen ? 'rotate-180 bg-bg-input text-text-primary' : ''}`}>
                     <ChevronDown size={14} strokeWidth={2.5} />
                 </div>
@@ -304,6 +310,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
             <AnimatePresence>
                 {isOpen && (
                     <motion.div
+                        key="provider-dropdown"
                         initial={{ opacity: 0, y: 4, scale: 0.98 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 4, scale: 0.98 }}
@@ -326,8 +333,8 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
                                             <div className="flex items-center justify-between mb-0.5">
                                                 <div className="flex items-center gap-2">
                                                     <span className={`text-[13px] font-medium transition-colors ${isSelected && !isLight ? 'text-white' : 'text-text-primary'}`}>{option.label}</span>
-                                                    {option.badge && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.badge === 'Saved' ? 'green' : option.color)}`}>{option.badge}</span>}
-                                                    {option.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.color)}`}>Recommended</span>}
+                                                    {option.badge && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.badge === 'Saved' ? 'green' : option.color)}`}>{t(option.badge)}</span>}
+                                                    {option.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.color)}`}>{t('Recommended')}</span>}
                                                 </div>
                                                 {isSelected && <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}><Check size={14} className="text-accent-primary" strokeWidth={3} /></motion.div>}
                                             </div>
@@ -350,10 +357,19 @@ interface SettingsOverlayProps {
     isOpen: boolean;
     onClose: () => void;
     initialTab?: string;
+    initialIsPremium?: boolean | null;
+    initialHasNativelyKey?: boolean;
 }
 
-const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, initialTab = 'general' }) => {
+const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
+    isOpen,
+    onClose,
+    initialTab = 'general',
+    initialIsPremium = null,
+    initialHasNativelyKey = false,
+}) => {
     const isLight = useResolvedTheme() === 'light';
+    const { t, lang, setLang } = useLanguage();
     const [activeTab, setActiveTab] = useState(initialTab);
 
     // Sync active tab when modal opens
@@ -379,14 +395,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [meetingInterfaceTheme, setMeetingInterfaceThemeState] = useState<MeetingInterfaceTheme>(getMeetingInterfaceTheme);
     const [isInterfaceThemeDropdownOpen, setIsInterfaceThemeDropdownOpen] = useState(false);
     const interfaceThemeDropdownRef = React.useRef<HTMLDivElement>(null);
+    const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
+    const langDropdownRef = React.useRef<HTMLDivElement>(null);
 
 
     const [verboseLogging, setVerboseLogging] = useState(false);
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
-    const [providerDataScopes, setProviderDataScopes] = useState<{ transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }>({});
-    const [screenUnderstandingMode, setScreenUnderstandingMode] = useState<'vision_first' | 'vision_only' | 'private_vision'>('vision_first');
-    const [technicalInterviewVisionFirst, setTechnicalInterviewVisionFirst] = useState<boolean>(true);
     const [showVerboseToast, setShowVerboseToast] = useState(false);
+    const [codeVerification, setCodeVerification] = useState(false);
     const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Close dropdown when clicking outside
@@ -400,35 +416,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             window.electronAPI?.getOverlayMousePassthrough?.().then(setIsMousePassthrough).catch(() => { });
             window.electronAPI?.getDisguise?.().then(setDisguiseMode).catch(() => { });
             window.electronAPI?.getVerboseLogging?.().then(setVerboseLogging).catch(() => { });
+            window.electronAPI?.getCodeVerification?.().then((v) => setCodeVerification(v === true)).catch(() => { });
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
-            window.electronAPI?.getProviderDataScopes?.().then(setProviderDataScopes).catch(() => { });
-            window.electronAPI?.getScreenUnderstandingMode?.().then(setScreenUnderstandingMode as any).catch(() => { });
-            (window.electronAPI as any)?.getTechnicalInterviewVisionFirst?.()
-                .then(setTechnicalInterviewVisionFirst)
-                .catch(() => {
-                    // Fallback to deprecated alias if the renderer is talking to an older main process.
-                    window.electronAPI?.getTechnicalInterviewDirectVision?.().then(setTechnicalInterviewVisionFirst).catch(() => { });
-                });
         }
     }, [isOpen]);
-
-    useEffect(() => {
-        const api: any = window.electronAPI;
-        if (!api?.onScreenUnderstandingModeChanged) return;
-        const unsubscribe = api.onScreenUnderstandingModeChanged(setScreenUnderstandingMode);
-        return () => unsubscribe?.();
-    }, []);
-
-    useEffect(() => {
-        const api: any = window.electronAPI;
-        const handler = (enabled: boolean) => setTechnicalInterviewVisionFirst(enabled);
-        const unsub1 = api?.onTechnicalInterviewVisionFirstChanged?.(handler);
-        const unsub2 = api?.onTechnicalInterviewDirectVisionChanged?.(handler);
-        return () => {
-            unsub1?.();
-            unsub2?.();
-        };
-    }, []);
 
     useEffect(() => {
         if (!showVerboseToast) return;
@@ -452,13 +443,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     useEffect(() => {
         if (window.electronAPI?.onMeetingRetentionChanged) {
             const unsubscribe = window.electronAPI.onMeetingRetentionChanged(setMeetingRetention);
-            return () => unsubscribe();
-        }
-    }, []);
-
-    useEffect(() => {
-        if (window.electronAPI?.onProviderDataScopesChanged) {
-            const unsubscribe = window.electronAPI.onProviderDataScopesChanged(setProviderDataScopes);
             return () => unsubscribe();
         }
     }, []);
@@ -501,16 +485,19 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             if (interfaceThemeDropdownRef.current && !interfaceThemeDropdownRef.current.contains(event.target as Node)) {
                 setIsInterfaceThemeDropdownOpen(false);
             }
+            if (langDropdownRef.current && !langDropdownRef.current.contains(event.target as Node)) {
+                setIsLangDropdownOpen(false);
+            }
         };
 
-        if (isThemeDropdownOpen || isAiLangDropdownOpen || isInterfaceThemeDropdownOpen) {
+        if (isThemeDropdownOpen || isAiLangDropdownOpen || isInterfaceThemeDropdownOpen || isLangDropdownOpen) {
             document.addEventListener('mousedown', handleClickOutside);
         }
 
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [isThemeDropdownOpen, isAiLangDropdownOpen, isInterfaceThemeDropdownOpen]);
+    }, [isThemeDropdownOpen, isAiLangDropdownOpen, isInterfaceThemeDropdownOpen, isLangDropdownOpen]);
 
     const [showTranscript, setShowTranscript] = useState(() => {
         const stored = localStorage.getItem('natively_interviewer_transcript');
@@ -823,11 +810,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     }, []);
 
     useEffect(() => {
+        // Listen on both `storage` (same-window) and the IPC broadcast (cross-window)
+        // so the settings pane reflects the active theme regardless of which window
+        // changed it. See ipcHandlers.ts `interface-theme:set` for the relay.
         const handleStorage = () => {
             setMeetingInterfaceThemeState(getMeetingInterfaceTheme());
         };
         window.addEventListener('storage', handleStorage);
-        return () => window.removeEventListener('storage', handleStorage);
+        const unsubscribeIpc = window.electronAPI?.onMeetingInterfaceThemeChanged?.((theme) => {
+            const valid: MeetingInterfaceTheme[] = ['default', 'liquid-glass', 'modern'];
+            if (valid.includes(theme as MeetingInterfaceTheme)) {
+                setMeetingInterfaceThemeState(theme as MeetingInterfaceTheme);
+            }
+        });
+        return () => {
+            window.removeEventListener('storage', handleStorage);
+            unsubscribeIpc?.();
+        };
     }, []);
 
     // Theme Handlers
@@ -871,7 +870,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [sttSaving, setSttSaving] = useState(false);
     const [sttSaved, setSttSaved] = useState(false);
     const [googleServiceAccountPath, setGoogleServiceAccountPath] = useState<string | null>(null);
-    const [hasNativelyKey, setHasNativelyKey] = useState(false);
+    const [hasNativelyKey, setHasNativelyKey] = useState(initialHasNativelyKey);
     const [hasStoredSttGroqKey, setHasStoredSttGroqKey] = useState(false);
     const [hasStoredSttOpenaiKey, setHasStoredSttOpenaiKey] = useState(false);
     const [hasStoredDeepgramKey, setHasStoredDeepgramKey] = useState(false);
@@ -916,14 +915,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                     setHasStoredSonioxKey(creds.hasSonioxKey || false);
 
                     setHasNativelyKey(creds.hasNativelyKey || false);
-                    // Populate key fields so switching providers doesn't make saved keys appear gone
-                    if (creds.sttGroqKey) setSttGroqKey(creds.sttGroqKey);
-                    if (creds.sttOpenaiKey) setSttOpenaiKey(creds.sttOpenaiKey);
-                    if (creds.sttDeepgramKey) setSttDeepgramKey(creds.sttDeepgramKey);
-                    if (creds.sttElevenLabsKey) setSttElevenLabsKey(creds.sttElevenLabsKey);
-                    if (creds.sttAzureKey) setSttAzureKey(creds.sttAzureKey);
-                    if (creds.sttIbmKey) setSttIbmKey(creds.sttIbmKey);
-                    if (creds.sttSonioxKey) setSttSonioxKey(creds.sttSonioxKey);
+                    // Do NOT pre-populate STT key fields from stored credentials.
+                    // The backend returns masked values ("sk-...XXXX") for security; pre-populating
+                    // them into the input state causes the masked string to be submitted on re-test,
+                    // which every provider (Deepgram, Groq, Soniox, etc.) rejects as invalid.
+                    // The hasStoredXxxKey booleans already show the "Saved" badge and set the
+                    // placeholder to "••••••••••••" — that is sufficient UX feedback.
                     if (typeof creds.openAiSttBaseUrl === 'string') setSttOpenaiBaseUrl(creds.openAiSttBaseUrl);
                 }
             } catch (e) {
@@ -974,6 +971,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
     const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox', key: string) => {
         if (!key.trim()) return;
+        // Reject masked values returned by getStoredCredentials ("sk-...XXXX").
+        // These are never valid API keys and every provider rejects them.
+        if (/^sk-\.\.\.[A-Za-z0-9]{4}$/.test(key.trim())) {
+            setSttTestStatus('error');
+            setSttTestError('Please enter your actual API key — the displayed value is masked for security.');
+            return;
+        }
 
         // Auto-test before saving
         setSttSaving(true);
@@ -999,28 +1003,41 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             setSttTestStatus('success');
             setTimeout(() => setSttTestStatus('idle'), 3000);
 
+            let saveResult: { success?: boolean; error?: string } | undefined;
             if (provider === 'groq') {
                 // @ts-ignore
-                await window.electronAPI?.setGroqSttApiKey?.(key.trim());
+                saveResult = await window.electronAPI?.setGroqSttApiKey?.(key.trim());
             } else if (provider === 'openai') {
                 // @ts-ignore
-                await window.electronAPI?.setOpenAiSttApiKey?.(key.trim());
+                saveResult = await window.electronAPI?.setOpenAiSttApiKey?.(key.trim());
             } else if (provider === 'elevenlabs') {
                 // @ts-ignore
-                await window.electronAPI?.setElevenLabsApiKey?.(key.trim());
+                saveResult = await window.electronAPI?.setElevenLabsApiKey?.(key.trim());
             } else if (provider === 'azure') {
                 // @ts-ignore
-                await window.electronAPI?.setAzureApiKey?.(key.trim());
+                saveResult = await window.electronAPI?.setAzureApiKey?.(key.trim());
             } else if (provider === 'ibmwatson') {
                 // @ts-ignore
-                await window.electronAPI?.setIbmWatsonApiKey?.(key.trim());
+                saveResult = await window.electronAPI?.setIbmWatsonApiKey?.(key.trim());
             } else if (provider === 'soniox') {
                 // @ts-ignore
-                await window.electronAPI?.setSonioxApiKey?.(key.trim());
+                saveResult = await window.electronAPI?.setSonioxApiKey?.(key.trim());
             } else {
                 // @ts-ignore
-                await window.electronAPI?.setDeepgramApiKey?.(key.trim());
+                saveResult = await window.electronAPI?.setDeepgramApiKey?.(key.trim());
             }
+
+            // The key validated, but the OS blocked secure storage so it was only
+            // kept in memory for this session. Surface the real error instead of a
+            // false "Saved" badge — this is what made STT keys silently reset after
+            // restart. The provider stays selected (it works this session).
+            if (saveResult && saveResult.success === false) {
+                setSttTestStatus('error');
+                setSttTestError(saveResult.error || 'API key could not be saved to disk and will not survive a restart.');
+                setSttSaving(false);
+                return;
+            }
+
             if (provider === 'groq') setHasStoredSttGroqKey(true);
             else if (provider === 'openai') setHasStoredSttOpenaiKey(true);
             else if (provider === 'elevenlabs') setHasStoredElevenLabsKey(true);
@@ -1104,10 +1121,38 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
             soniox: sttSonioxKey,
         };
-        const keyToTest = keyMap[sttProvider] || '';
-        if (!keyToTest.trim()) {
+        const keyToTest = keyMap[sttProvider]?.trim() || '';
+
+        // If the input field is empty post-restart (the #318 fix intentionally
+        // does NOT pre-populate masked values) but a key IS on disk, ask the
+        // backend to test the persisted key directly. The sentinel is resolved
+        // in main — the raw key never round-trips back into renderer state, so
+        // the masked pre-population regression cannot recur. This closes the
+        // "Please enter an API key first" false alarm users reported as
+        // "the STT key was lost on restart."
+        const hasStoredKeyForCurrentProvider = (() => {
+            switch (sttProvider) {
+                case 'groq':       return hasStoredSttGroqKey;
+                case 'openai':     return hasStoredSttOpenaiKey;
+                case 'deepgram':   return hasStoredDeepgramKey;
+                case 'elevenlabs': return hasStoredElevenLabsKey;
+                case 'azure':      return hasStoredAzureKey;
+                case 'ibmwatson':  return hasStoredIbmWatsonKey;
+                case 'soniox':     return hasStoredSonioxKey;
+                default:           return false;
+            }
+        })();
+
+        // Pick the key to send: explicit input if present, otherwise the
+        // sentinel (the IPC will resolve to the persisted key, or fail clean
+        // with a "no key saved" error).
+        const apiKeyToSend = keyToTest
+            ? keyToTest
+            : (hasStoredKeyForCurrentProvider ? '__USE_STORED__' : '');
+
+        if (!apiKeyToSend) {
             setSttTestStatus('error');
-            setSttTestError('Please enter an API key first');
+            setSttTestError('Please add your API key in Settings to test the connection.');
             return;
         }
 
@@ -1117,7 +1162,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             // @ts-ignore
             const result = await window.electronAPI?.testSttConnection?.(
                 sttProvider,
-                keyToTest.trim(),
+                apiKeyToSend,
                 sttProvider === 'azure' ? sttAzureRegion : undefined
             );
             if (result?.success) {
@@ -1181,6 +1226,20 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
         return () => unsubs.forEach(unsub => unsub());
     }, [isOpen, onClose]);
+
+    // Escape closes Settings — except during opacity preview (slider is the
+    // active gesture, dismiss-on-Escape would interrupt the drag).
+    useEffect(() => {
+        if (!isOpen) return;
+        const handler = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            if (isPreviewingOpacity) return;
+            e.preventDefault();
+            onClose();
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [isOpen, isPreviewingOpacity, onClose]);
 
 
 
@@ -1295,13 +1354,24 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     }, []);
 
     // Use the native mic test path so device IDs stay consistent with the meeting runtime.
+    // Guard: only start when selectedInput is populated (loadDevices sets it after device enum).
+    //
+    // Mic-indicator discipline: the user expects the orange macOS menu-bar mic
+    // indicator to be OFF outside an active meeting OR an explicit Settings >
+    // Audio session. The cleanup below guarantees that ANY transition out of
+    // the audio-test state (tab switch, settings close, device list cleared,
+    // selectedInput flipping to empty during a device-list refresh) tears the
+    // native capture down — never leaving a dangling mic-test capture that
+    // would keep the indicator lit after the user thinks they left the panel.
     useEffect(() => {
-        if (isOpen && activeTab === 'audio') {
+        const shouldRun = isOpen && activeTab === 'audio' && !!selectedInput;
+
+        if (shouldRun) {
             const unsubscribe = window.electronAPI?.onAudioTestLevel?.((level) => {
                 setMicLevel(Math.max(0, Math.min(100, level * 100)));
             });
 
-            window.electronAPI?.startAudioTest(selectedInput || undefined).catch((error) => {
+            window.electronAPI?.startAudioTest(selectedInput).catch((error) => {
                 console.error("Error starting native microphone test:", error);
                 setMicLevel(0);
             });
@@ -1313,24 +1383,41 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 });
                 setMicLevel(0);
             };
-        } else {
-            setMicLevel(0);
-            window.electronAPI?.stopAudioTest?.().catch((error) => {
-                console.error("Error stopping native microphone test:", error);
-            });
         }
+
+        // Guard ran false on this pass (tab switch, settings close, or
+        // selectedInput cleared). If a previous render started a test, the
+        // backend audioTestCapture may still be running — explicitly stop it
+        // here so the mic indicator turns off even if React skips the prior
+        // cleanup (StrictMode double-effect, race during device-list refresh,
+        // etc.). This is idempotent on the backend (`stopAudioTest` no-ops on
+        // a null audioTestCapture).
+        window.electronAPI?.stopAudioTest?.().catch((error) => {
+            console.error("Error stopping native microphone test (guard=false):", error);
+        });
+        setMicLevel(0);
     }, [isOpen, activeTab, selectedInput]);
 
     return (
         <AnimatePresence>
             {isOpen && (
                 <motion.div
+                    key="settings-modal"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
                     id="settings-backdrop"
-                    className={`fixed inset-0 z-50 flex items-center justify-center p-8 transition-colors duration-150 ${isPreviewingOpacity ? 'bg-transparent backdrop-blur-none' : 'bg-black/60 backdrop-blur-sm'}`}
+                    className={`fixed inset-0 z-50 flex items-center justify-center p-8 transition-colors duration-150 ${isPreviewingOpacity ? 'bg-transparent backdrop-blur-none pointer-events-none' : 'bg-black/60 backdrop-blur-sm'}`}
+                    onClick={(e) => {
+                        // Mirror Modes/Profile (App.tsx) close-on-outside-click.
+                        // Skip when opacity slider preview is active — backdrop is
+                        // invisible but pointer-active; clicking during preview
+                        // would otherwise dismiss Settings mid-drag.
+                        if (e.target !== e.currentTarget) return;
+                        if (isPreviewingOpacity) return;
+                        onClose();
+                    }}
                 >
                     <motion.div
                         id="settings-panel-wrapper"
@@ -1352,14 +1439,22 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                         >
                         {/* Sidebar */}
                         <div className="w-64 bg-bg-sidebar flex flex-col border-r border-border-subtle">
-                            <div className="p-6">
-                                <h2 className="font-semibold text-gray-400 text-xs uppercase tracking-wider mb-2">Settings</h2>
-                                <nav className="space-y-1">
+                            <button
+                                onClick={onClose}
+                                className="self-start ml-2 mt-2 mb-1 p-1.5 rounded-md text-text-tertiary hover:text-text-primary transition-colors"
+                                title={t('Close')}
+                                aria-label={t('Close')}
+                            >
+                                <X size={15} />
+                            </button>
+                            <div className="px-5 pt-2 pb-3 overflow-y-auto flex-1 min-h-0">
+                                <h2 className="mb-0 text-[13px] font-bold uppercase tracking-[0.01em] text-text-primary">{t('Settings')}</h2>
+                                <nav className="mt-2 space-y-1">
                                     <button
                                         onClick={() => setActiveTab('general')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'general' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <Monitor size={16} /> General
+                                        <Monitor size={16} /> {t('General')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('natively-api')}
@@ -1379,59 +1474,69 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         onClick={() => setActiveTab('ai-providers')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'ai-providers' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <FlaskConical size={16} /> AI Providers
+                                        <FlaskConical size={16} /> {t('AI Providers')}
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('skills')}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'skills' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                    >
+                                        <Folder size={16} className={activeTab === 'skills' ? 'text-accent-primary' : 'text-text-secondary'} /> {t('Skills')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('calendar')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'calendar' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <Calendar size={16} /> Calendar
+                                        <Calendar size={16} /> {t('Calendar')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('audio')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'audio' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <Mic size={16} /> Audio
+                                        <Mic size={16} /> {t('Audio')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('keybinds')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'keybinds' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <Keyboard size={16} /> Keybinds
+                                        <Keyboard size={16} /> {t('Keybinds')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('phone-mirror')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'phone-mirror' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <Smartphone size={16} /> Phone Mirror
+                                        <Smartphone size={16} /> {t('Sync')}
+                                    </button>
+
+                                    <button
+                                        onClick={() => setActiveTab('intelligence')}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'intelligence' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                    >
+                                        <Cpu size={16} className={activeTab === 'intelligence' ? 'text-accent-primary' : ''} /> {t('Intelligence')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('help')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-3 ${activeTab === 'help' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <HelpCircle size={16} /> Setup & Help
+                                        <HelpCircle size={16} /> {t('Setup & Help')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('about')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'about' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <Info size={16} /> About
+                                        <Info size={16} /> {t('About')}
                                     </button>
                                 </nav>
                             </div>
 
-                            <div className="mt-auto p-6 border-t border-border-subtle">
+                            <div className="mt-auto py-4 px-6 border-t border-border-subtle">
                                 <button
                                     onClick={() => window.electronAPI.quitApp()}
                                     className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-3"
                                 >
-                                    <LogOut size={16} /> Quit Natively
-                                </button>
-                                <button onClick={onClose} className="group mt-2 w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50 transition-colors flex items-center gap-3">
-                                    <X size={18} className="group-hover:text-red-500 transition-colors" /> Close
+                                    <LogOut size={16} /> {t('Quit Natively')}
                                 </button>
                             </div>
                         </div>
@@ -1464,10 +1569,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     ) : (
                                                         <Ghost size={18} className="text-text-primary" />
                                                     )}
-                                                    <h3 className="text-lg font-bold text-text-primary">{isUndetectable ? 'Undetectable' : 'Detectable'}</h3>
+                                                    <h3 className="text-lg font-bold text-text-primary">{isUndetectable ? t('Undetectable') : t('Detectable')}</h3>
                                                 </div>
                                                 <p className="text-xs text-text-secondary">
-                                                    Natively is currently {isUndetectable ? 'undetectable' : 'detectable'} by screen-sharing. <button className="text-blue-400 hover:underline">Supported apps here</button>
+                                                    {isUndetectable ? t('Natively is currently undetectable by screen-sharing.') : t('Natively is currently detectable by screen-sharing.')} <button onClick={() => window.electronAPI?.openExternal?.('https://natively.software/supportedapps')} className="text-blue-400 hover:underline">{t('Supported apps here')}</button>
                                                 </p>
                                             </div>
                                             <div
@@ -1489,10 +1594,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             <div className="flex flex-col gap-1">
                                                 <div className="flex items-center gap-2">
                                                     <PointerOff size={18} className={isMousePassthrough ? 'text-sky-400' : 'text-text-primary'} />
-                                                    <h3 className="text-lg font-bold text-text-primary">Mouse Passthrough</h3>
+                                                    <h3 className="text-lg font-bold text-text-primary">{t('Mouse Passthrough')}</h3>
                                                 </div>
                                                 <p className="text-xs text-text-secondary">
-                                                    Overlay stays visible but lets all mouse clicks pass through to the app beneath.
+                                                    {t('Overlay stays visible but lets all mouse clicks pass through to the app beneath.')}
                                                 </p>
                                             </div>
                                             <div
@@ -1508,20 +1613,79 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         </div>
 
                                         <div>
-                                            <h3 className="text-lg font-bold text-text-primary mb-1">General settings</h3>
-                                            <p className="text-xs text-text-secondary mb-2">Customize how Natively works for you</p>
+                                            <h3 className="text-lg font-bold text-text-primary mb-1">{t('General settings')}</h3>
+                                            <p className="text-xs text-text-secondary mb-2">{t('Customize how Natively works for you')}</p>
 
                                             <div className={`rounded-xl border ${isLight ? 'bg-bg-card border-border-subtle divide-y divide-border-subtle' : 'bg-transparent border-transparent divide-y divide-border-subtle/20'}`}>
                                             <div className="space-y-0">
+                                                {/* Language */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <Globe size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Language')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Interface language for Natively')}</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="relative" ref={langDropdownRef}>
+                                                        <button
+                                                            onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
+                                                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
+                                                        >
+                                                            <span className="text-ellipsis overflow-hidden whitespace-nowrap">
+                                                                {lang === 'en' && t('English')}
+                                                                {lang === 'ru' && t('Russian')}
+                                                                {lang === 'zh' && t('Chinese')}
+                                                                {lang === 'ja' && t('Japanese')}
+                                                                {lang === 'es' && t('Spanish')}
+                                                            </span>
+                                                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
+                                                        </button>
+
+                                                        {isLangDropdownOpen && (
+                                                            <div className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
+                                                                {[
+                                                                    { code: 'en' as const, label: t('English') },
+                                                                    { code: 'ru' as const, label: t('Russian') },
+                                                                    { code: 'zh' as const, label: t('Chinese') },
+                                                                    { code: 'ja' as const, label: t('Japanese') },
+                                                                    { code: 'es' as const, label: t('Spanish') },
+                                                                ].map((option) => (
+                                                                    <button
+                                                                        key={option.code}
+                                                                        onClick={() => {
+                                                                            setLang(option.code);
+                                                                            setIsLangDropdownOpen(false);
+                                                                        }}
+                                                                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${lang === option.code ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                                                    >
+                                                                        {lang === option.code && <Check size={12} className="text-text-primary" />}
+                                                                        <span className={lang === option.code ? 'text-text-primary' : 'text-text-secondary'}>{option.label}</span>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
                                                 {/* Open at Login */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            openOnLogin
+                                                                ? isLight
+                                                                    ? 'border-indigo-500/30 text-indigo-600 bg-indigo-50/50'
+                                                                    : 'border-indigo-500/40 text-indigo-400 bg-indigo-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <Power size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Open Natively when you log in</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">Natively will open automatically when you log in to your computer</p>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Open Natively when you log in')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Natively will open automatically when you log in to your computer')}</p>
                                                         </div>
                                                     </div>
                                                     <div
@@ -1537,14 +1701,20 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 </div>
 
                                                 {/* Meeting Retention */}
-                                                <div className="flex items-center justify-between px-4 py-3">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center transition-colors ${meetingRetention === 'never' ? 'border-emerald-500/40 text-emerald-400' : 'border-border-subtle text-text-tertiary'}`}>
+                                                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                                                    <div className="flex items-start gap-4">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            meetingRetention === 'never'
+                                                                ? isLight
+                                                                    ? 'border-emerald-500/30 text-emerald-600 bg-emerald-50/50'
+                                                                    : 'border-emerald-500/40 text-emerald-400 bg-emerald-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <Shield size={20} />
                                                         </div>
-                                                        <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Do not save meetings</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">When enabled, live assistance works but transcripts, summaries, and history are discarded when the meeting ends</p>
+                                                        <div className="flex-1">
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Do not save meetings')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5 leading-normal">{t('When enabled, live assistance works but transcripts, summaries, and history are discarded when the meeting ends')}</p>
                                                         </div>
                                                     </div>
                                                     <div
@@ -1553,130 +1723,30 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             setMeetingRetention(nextRetention);
                                                             window.electronAPI?.setMeetingRetention?.(nextRetention);
                                                         }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${meetingRetention === 'never' ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer shrink-0 mt-2 ${meetingRetention === 'never' ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                         role="switch"
                                                         aria-checked={meetingRetention === 'never'}
-                                                        aria-label="Do not save meetings"
+                                                        aria-label={t("Do not save meetings")}
                                                     >
                                                         <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${meetingRetention === 'never' ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
-                                                </div>
-
-                                                {/* Provider Data Scopes — fail-closed cloud share controls */}
-                                                <div className="px-4 py-3 border-t border-border-subtle">
-                                                    <h3 className="text-sm font-bold text-text-primary mb-1">Cloud provider data scopes</h3>
-                                                    <p className="text-xs text-text-secondary mb-3">Disable any data type to block it from being sent to cloud LLM providers. Local providers are unaffected.</p>
-                                                    <div className="flex flex-col gap-2">
-                                                        {([
-                                                            { key: 'transcript', label: 'Transcripts' },
-                                                            { key: 'screenshots', label: 'Screenshots' },
-                                                            { key: 'reference_files', label: 'Reference files' },
-                                                            { key: 'profile_history', label: 'Profile history' },
-                                                            { key: 'embeddings', label: 'Cloud embeddings' },
-                                                            { key: 'post_call_summary', label: 'Post-call summaries' },
-                                                        ] as const).map(({ key, label }) => {
-                                                            const allowed = providerDataScopes[key] !== false;
-                                                            return (
-                                                                <div key={key} className="flex items-center justify-between">
-                                                                    <span className="text-xs text-text-secondary">{label}</span>
-                                                                    <div
-                                                                        onClick={() => {
-                                                                            const next = { ...providerDataScopes, [key]: !allowed };
-                                                                            setProviderDataScopes(next);
-                                                                            window.electronAPI?.setProviderDataScopes?.(next);
-                                                                        }}
-                                                                        className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${allowed ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                                        role="switch"
-                                                                        aria-checked={allowed}
-                                                                        aria-label={`Allow ${label} to cloud providers`}
-                                                                    >
-                                                                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${allowed ? 'translate-x-4' : 'translate-x-0'}`} />
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-
-                                                {/* Screen Understanding — vision-first routing */}
-                                                <div className="px-4 py-3 border-t border-border-subtle">
-                                                    <h3 className="text-sm font-bold text-text-primary mb-1">Screen understanding</h3>
-                                                    <p className="text-xs text-text-secondary mb-3">Pick how Natively reads what is on your screen. All paths use the vision-capable AI provider directly; OCR is no longer used.</p>
-                                                    <div className="flex flex-col gap-2">
-                                                        {([
-                                                            {
-                                                                value: 'vision_first' as const,
-                                                                label: 'Vision first',
-                                                                description: 'Recommended. Try every configured vision provider in order; first success wins.',
-                                                            },
-                                                            {
-                                                                value: 'vision_only' as const,
-                                                                label: 'Vision only',
-                                                                description: 'Stricter. Require a vision-capable provider; never silently drop the screenshot.',
-                                                            },
-                                                            {
-                                                                value: 'private_vision' as const,
-                                                                label: 'Private vision (local only)',
-                                                                description: 'Use a local vision model (Ollama) only. Never call cloud vision. Clear error if no local provider is configured.',
-                                                            },
-                                                        ]).map(({ value, label, description }) => {
-                                                            const selected = screenUnderstandingMode === value;
-                                                            return (
-                                                                <div
-                                                                    key={value}
-                                                                    onClick={() => {
-                                                                        setScreenUnderstandingMode(value);
-                                                                        window.electronAPI?.setScreenUnderstandingMode?.(value);
-                                                                    }}
-                                                                    className={`px-3 py-2 rounded-lg border cursor-pointer transition-colors ${selected ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-border-subtle hover:border-border-muted bg-bg-item-surface'}`}
-                                                                    role="radio"
-                                                                    aria-checked={selected}
-                                                                >
-                                                                    <div className="flex items-center justify-between gap-3">
-                                                                        <div className="flex flex-col">
-                                                                            <span className={`text-xs font-semibold ${selected ? 'text-emerald-300' : 'text-text-primary'}`}>{label}</span>
-                                                                            <span className="text-[11px] text-text-secondary leading-snug mt-0.5">{description}</span>
-                                                                        </div>
-                                                                        <div className={`w-4 h-4 rounded-full border-2 shrink-0 ${selected ? 'border-emerald-400 bg-emerald-400' : 'border-border-muted'}`} />
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-border-subtle">
-                                                        <div className="flex flex-col">
-                                                            <span className="text-xs text-text-primary font-semibold">Technical interview direct vision</span>
-                                                            <span className="text-[11px] text-text-secondary leading-snug">Use the highest-resolution image profile so code text stays sharp in interview mode.</span>
-                                                        </div>
-                                                        <div
-                                                            onClick={() => {
-                                                                const next = !technicalInterviewVisionFirst;
-                                                                setTechnicalInterviewVisionFirst(next);
-                                                                const api: any = window.electronAPI;
-                                                                if (api?.setTechnicalInterviewVisionFirst) {
-                                                                    api.setTechnicalInterviewVisionFirst(next);
-                                                                } else {
-                                                                    window.electronAPI?.setTechnicalInterviewDirectVision?.(next);
-                                                                }
-                                                            }}
-                                                            className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${technicalInterviewVisionFirst ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                            role="switch"
-                                                            aria-checked={technicalInterviewVisionFirst}
-                                                        >
-                                                            <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${technicalInterviewVisionFirst ? 'translate-x-4' : 'translate-x-0'}`} />
-                                                        </div>
                                                     </div>
                                                 </div>
 
                                                 {/* Debug Logging */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center transition-colors ${verboseLogging ? 'border-amber-500/40 text-amber-400' : 'border-border-subtle text-text-tertiary'}`}>
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            verboseLogging
+                                                                ? isLight
+                                                                    ? 'border-amber-500/30 text-amber-600 bg-amber-50/50'
+                                                                    : 'border-amber-500/40 text-amber-400 bg-amber-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <Terminal size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Verbose debug logging</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">Print detailed audio, STT, and pipeline diagnostics</p>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Verbose debug logging')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Print detailed audio, STT, and pipeline diagnostics')}</p>
                                                         </div>
                                                     </div>
                                                     <div
@@ -1730,15 +1800,56 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     )}
                                                 </AnimatePresence>
 
+                                                {/* Code Verification — runs LLM-generated code against test cases + one-shot correction */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            codeVerification
+                                                                ? isLight
+                                                                    ? 'border-blue-500/30 text-blue-600 bg-blue-50/50'
+                                                                    : 'border-blue-500/40 text-blue-400 bg-blue-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
+                                                            <Code2 size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Verify coding answers')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Run generated code against test cases and self-correct')}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div
+                                                        onClick={() => {
+                                                            const newState = !codeVerification;
+                                                            setCodeVerification(newState);
+                                                            // Swallow rejection: a missing handler (pre-rebuild) must not
+                                                            // spam the console with unhandledrejection noise like the
+                                                            // other toggle-style settings also use optional chaining.
+                                                            window.electronAPI?.setCodeVerification?.(newState)?.catch?.(() => { });
+                                                        }}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${codeVerification ? 'bg-blue-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        role="switch"
+                                                        aria-checked={codeVerification}
+                                                        aria-label={t('Verify coding answers')}
+                                                    >
+                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${codeVerification ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                    </div>
+                                                </div>
+
                                                 {/* Interviewer Transcript */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            showTranscript
+                                                                ? isLight
+                                                                    ? 'border-blue-500/30 text-blue-600 bg-blue-50/50'
+                                                                    : 'border-blue-500/40 text-blue-400 bg-blue-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <MessageSquare size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Interviewer Transcript</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">Show real-time transcription of the interviewer</p>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Interviewer Transcript')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Show real-time transcription of the interviewer')}</p>
                                                         </div>
                                                     </div>
                                                     <div
@@ -1757,12 +1868,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 {/* Auto Scroll */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            autoScroll
+                                                                ? isLight
+                                                                    ? 'border-purple-500/30 text-purple-600 bg-purple-50/50'
+                                                                    : 'border-purple-500/40 text-purple-400 bg-purple-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <ArrowDown size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Auto Scroll</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">Automatically scroll to the latest message as new responses arrive</p>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Auto Scroll')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Automatically scroll to the latest message as new responses arrive')}</p>
                                                         </div>
                                                     </div>
                                                     <div
@@ -1782,12 +1899,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 {/* Theme */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            themeMode !== 'system'
+                                                                ? isLight
+                                                                    ? 'border-violet-500/30 text-violet-600 bg-violet-50/50'
+                                                                    : 'border-violet-500/40 text-violet-400 bg-violet-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <Palette size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Theme</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">Customize how Natively looks on your device</p>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Theme')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Customize how Natively looks on your device')}</p>
                                                         </div>
                                                     </div>
 
@@ -1824,7 +1947,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                         className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${themeMode === option.mode ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
                                                                     >
                                                                         <span className={themeMode === option.mode ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}>{option.icon}</span>
-                                                                        <span className="font-medium">{option.label}</span>
+                                                                        <span className="font-medium">{t(option.label)}</span>
                                                                     </button>
                                                                 ))}
                                                             </div>
@@ -1835,15 +1958,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 {/* Meeting Interface Style */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            (meetingInterfaceTheme === 'liquid-glass' || meetingInterfaceTheme === 'modern')
+                                                                ? isLight
+                                                                    ? 'border-sky-500/30 text-sky-600 bg-sky-50/50'
+                                                                    : 'border-sky-500/40 text-sky-400 bg-sky-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <Layout size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Meeting Interface Style</h3>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Meeting Interface Style')}</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
                                                                 {meetingInterfaceTheme === 'liquid-glass'
-                                                                    ? 'Liquid glass — Apple-inspired transparent overlay'
-                                                                    : 'Default overlay appearance'}
+                                                                    ? t('Liquid glass — Apple-inspired transparent overlay')
+                                                                    : meetingInterfaceTheme === 'modern'
+                                                                        ? t('Modern — polished dark glass with cobalt accents')
+                                                                        : t('Default overlay appearance')}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -1851,24 +1982,24 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     <div className="relative" ref={interfaceThemeDropdownRef}>
                                                         <button
                                                             onClick={() => setIsInterfaceThemeDropdownOpen(!isInterfaceThemeDropdownOpen)}
-                                                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[130px] justify-between"
+                                                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
                                                         >
-                                                            <div className="flex items-center gap-2 overflow-hidden">
-                                                                <span className="text-text-secondary shrink-0">
-                                                                    {meetingInterfaceTheme === 'liquid-glass' ? <Sparkles size={14} /> : <Layout size={14} />}
-                                                                </span>
-                                                                <span className="text-ellipsis overflow-hidden whitespace-nowrap">
-                                                                    {meetingInterfaceTheme === 'liquid-glass' ? 'Liquid Glass' : 'Default'}
-                                                                </span>
-                                                            </div>
+                                                            <span className="text-ellipsis overflow-hidden whitespace-nowrap">
+                                                                {meetingInterfaceTheme === 'liquid-glass'
+                                                                    ? 'Liquid Glass'
+                                                                    : meetingInterfaceTheme === 'modern'
+                                                                        ? 'Modern'
+                                                                        : t('Default')}
+                                                            </span>
                                                             <ChevronDown size={12} className={`shrink-0 transition-transform ${isInterfaceThemeDropdownOpen ? 'rotate-180' : ''}`} />
                                                         </button>
 
                                                         {isInterfaceThemeDropdownOpen && (
-                                                            <div className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
+                                                            <div className="absolute right-0 top-full mt-1 w-full bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
                                                                 {([
-                                                                    { mode: 'default' as MeetingInterfaceTheme, label: 'Default', icon: <Layout size={14} />, desc: 'Classic overlay' },
-                                                                    { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass', icon: <Sparkles size={14} />, desc: 'Apple-inspired glass' },
+                                                                    { mode: 'default' as MeetingInterfaceTheme, label: 'Default' },
+                                                                    { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass' },
+                                                                    { mode: 'modern' as MeetingInterfaceTheme, label: 'Modern' },
                                                                 ] as const).map((option) => (
                                                                     <button
                                                                         key={option.mode}
@@ -1877,13 +2008,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                             setMeetingInterfaceThemeState(option.mode);
                                                                             setIsInterfaceThemeDropdownOpen(false);
                                                                         }}
-                                                                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${meetingInterfaceTheme === option.mode ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                                                        className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${meetingInterfaceTheme === option.mode ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
                                                                     >
-                                                                        <span className={meetingInterfaceTheme === option.mode ? 'text-text-primary' : 'text-text-secondary'}>{option.icon}</span>
-                                                                        <div>
-                                                                            <span className="font-medium">{option.label}</span>
-                                                                            <span className="text-text-tertiary ml-1.5">{option.desc}</span>
-                                                                        </div>
+                                                                        <span className="font-medium">{t(option.label)}</span>
                                                                     </button>
                                                                 ))}
                                                             </div>
@@ -1894,15 +2021,21 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     {/* AI Response Language */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
+                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                                                            aiResponseLanguage !== 'auto'
+                                                                ? isLight
+                                                                    ? 'border-teal-500/30 text-teal-600 bg-teal-50/50'
+                                                                    : 'border-teal-500/40 text-teal-400 bg-teal-500/5'
+                                                                : 'border-border-subtle text-text-tertiary'
+                                                        }`}>
                                                             <Globe size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">AI Response Language</h3>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('AI Response Language')}</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
                                                                 {aiResponseLanguage === 'auto'
-                                                                    ? 'Mirrors user\'s language automatically'
-                                                                    : 'Language for AI suggestions and notes'
+                                                                    ? t('Mirrors user\'s language automatically')
+                                                                    : t('Language for AI suggestions and notes')
                                                                 }
                                                             </p>
                                                         </div>
@@ -1914,7 +2047,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
                                                         >
                                                             <span className="capitalize text-ellipsis overflow-hidden whitespace-nowrap flex items-center gap-1">
-                                                                {aiResponseLanguage === 'auto' ? 'Auto' : aiResponseLanguage}
+                                                                {aiResponseLanguage === 'auto' ? t('Auto') : aiResponseLanguage}
                                                             </span>
                                                             <ChevronDown size={12} className={`shrink-0 transition-transform ${isAiLangDropdownOpen ? 'rotate-180' : ''}`} />
                                                         </button>
@@ -1932,7 +2065,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                         className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${aiResponseLanguage === option.code ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
                                                                     >
                                                                         {option.code === 'auto' ? (
-                                                                            <span className="font-medium">Auto</span>
+                                                                            <span className="font-medium">{t('Auto')}</span>
                                                                         ) : (
                                                                             <span className="font-medium">{option.label}</span>
                                                                         )}
@@ -1950,9 +2083,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <BadgeCheck size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Version</h3>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Version')}</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
-                                                                You are currently using Natively version {packageJson.version}
+                                                                {t('You are currently using Natively version')} {packageJson.version}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -1971,37 +2104,42 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             }
                                                         }}
                                                         disabled={updateStatus === 'checking'}
-                                                        className={`px-5 py-2 rounded-lg text-[13px] font-bold transition-all flex items-center gap-2 shrink-0 ${updateStatus === 'checking' ? 'bg-bg-input text-text-tertiary cursor-wait' :
-                                                            updateStatus === 'available' ? 'bg-accent-primary text-white hover:bg-accent-secondary shadow-lg shadow-blue-500/20' :
-                                                                updateStatus === 'uptodate' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
-                                                                    updateStatus === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
-                                                                        'bg-bg-component hover:bg-bg-input text-text-primary'
-                                                            }`}
+                                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center justify-center gap-2 shrink-0 min-w-[110px] ${
+                                                            updateStatus === 'checking'
+                                                                ? 'bg-bg-input text-text-tertiary border-border-subtle cursor-wait'
+                                                                : updateStatus === 'available'
+                                                                    ? 'bg-accent-primary text-white border-accent-primary hover:bg-accent-secondary shadow-lg shadow-blue-500/20'
+                                                                    : updateStatus === 'uptodate'
+                                                                        ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                                                                        : updateStatus === 'error'
+                                                                            ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                                                                            : 'bg-bg-component hover:bg-bg-elevated text-text-primary border-border-subtle'
+                                                        }`}
                                                     >
                                                         {updateStatus === 'checking' ? (
                                                             <>
                                                                 <RefreshCw size={14} className="animate-spin" />
-                                                                Checking...
+                                                                {t('Checking')}
                                                             </>
                                                         ) : updateStatus === 'available' ? (
                                                             <>
                                                                 <ArrowDown size={14} />
-                                                                Update Available
+                                                                {t('Update')}
                                                             </>
                                                         ) : updateStatus === 'uptodate' ? (
                                                             <>
                                                                 <Check size={14} />
-                                                                Up to date
+                                                                {t('Up to date')}
                                                             </>
                                                         ) : updateStatus === 'error' ? (
                                                             <>
                                                                 <X size={14} />
-                                                                Error
+                                                                {t('Error')}
                                                             </>
                                                         ) : (
                                                             <>
                                                                 <RefreshCw size={14} />
-                                                                Check for updates
+                                                                {t('Check')}
                                                             </>
                                                         )}
                                                     </button>
@@ -2020,10 +2158,26 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     <div className="flex items-center justify-between mb-3">
                                                         <label className="flex items-center gap-2 text-xs font-medium text-text-secondary uppercase tracking-wide">
                                                             <Eye size={13} className="text-text-secondary" />
-                                                            Interface Opacity
+                                                            {t('Interface Opacity')}
                                                         </label>
+                                                        {/*
+                                                         * Render previewOverlayOpacity (live drag value), NOT
+                                                         * overlayOpacity (committed). The drag handler at
+                                                         * handleOpacityChange does an imperative
+                                                         *   document.querySelectorAll('.opacity-percent-label')
+                                                         *     .forEach(el => el.textContent = percentText)
+                                                         * for sub-frame latency, then calls setPreviewOverlayOpacity(val).
+                                                         * That setter queues a React re-render — if this JSX read
+                                                         * `overlayOpacity` (the un-committed pre-drag value), React
+                                                         * would clobber the imperative text back to the stale value
+                                                         * on the next commit, producing a visible flicker every
+                                                         * drag tick. Reading previewOverlayOpacity keeps React's
+                                                         * render and the imperative write in agreement — the
+                                                         * imperative write still wins the sub-frame race, React's
+                                                         * commit just confirms the same value.
+                                                         */}
                                                         <span className="opacity-percent-label text-xs font-semibold text-text-primary tabular-nums">
-                                                            {Math.round(overlayOpacity * 100)}%
+                                                            {Math.round(previewOverlayOpacity * 100)}%
                                                         </span>
                                                     </div>
 
@@ -2043,13 +2197,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     />
 
                                                     <div className="flex justify-between mt-1.5">
-                                                        <span className="text-[10px] text-text-tertiary">More Stealth</span>
-                                                        <span className="text-[10px] text-text-tertiary">Fully Visible</span>
+                                                        <span className="text-[10px] text-text-tertiary">{t('More Stealth')}</span>
+                                                        <span className="text-[10px] text-text-tertiary">{t('Fully Visible')}</span>
                                                     </div>
 
                                                     <p className="text-xs text-text-tertiary mt-2">
-                                                        Controls the visibility of the in-meeting overlay.{' '}
-                                                        <span className="text-text-secondary">Hold the slider to preview.</span>
+                                                        {t('Controls the visibility of the in-meeting overlay.')}{' '}
+                                                        <span className="text-text-secondary">{t('Hold the slider to preview.')}</span>
                                                     </p>
                                                 </div>
 
@@ -2062,12 +2216,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                     <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle`}>
                                         <div className="flex flex-col gap-1 mb-3">
                                             <div className="flex items-center gap-2">
-                                                <h3 className="text-lg font-bold text-text-primary">Process Disguise</h3>
+                                                <h3 className="text-lg font-bold text-text-primary">{t('Process Disguise')}</h3>
                                             </div>
                                             <p className="text-xs text-text-secondary">
-                                                Disguise Natively as another application to prevent detection during screen sharing.
+                                                {t('Disguise Natively as another application to prevent detection during screen sharing.')}
                                                 <span className="block mt-1 text-text-tertiary">
-                                                    Select a disguise to be automatically applied when Undetectable mode is on.
+                                                    {t('Select a disguise to be automatically applied when Undetectable mode is on.')}
                                                 </span>
                                             </p>
                                         </div>
@@ -2075,7 +2229,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         <div className={`grid grid-cols-2 gap-3 ${isUndetectable ? 'opacity-50 pointer-events-none' : ''}`}>
                                             {isUndetectable && (
                                                 <p className="col-span-2 text-xs text-yellow-500/80 -mt-1 mb-1">
-                                                    ⚠️ Disable Undetectable mode first to change disguise.
+                                                    ⚠️ {t('Disable Undetectable mode first to change disguise.')}
                                                 </p>
                                             )}
                                             {[
@@ -2105,7 +2259,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         }`}>
                                                         {option.icon}
                                                     </div>
-                                                    <span className="text-xs font-medium">{option.label}</span>
+                                                    <span className="text-xs font-medium">{t(option.label)}</span>
                                                 </button>
                                             ))}
                                         </div>
@@ -2117,37 +2271,40 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                             {activeTab === 'ai-providers' && (
                                 <AIProvidersSettings />
                             )}
+                            {activeTab === 'skills' && (
+                                <SkillsSettings />
+                            )}
                             {activeTab === 'natively-api' && (
-                                <NativelyApiSettings />
+                                <NativelyApiSettings initialIsSaved={hasNativelyKey} />
                             )}
                             {activeTab === 'natively-pro' && (
-                                <NativelyProSettings />
+                                <NativelyProSettings initialIsPremium={initialIsPremium} />
                             )}
                             {activeTab === 'keybinds' && (
                                 <div className="space-y-5 animated fadeIn select-text pb-4">
                                     <div className="flex items-start justify-between">
                                         <div>
-                                            <h3 className="text-lg font-bold text-text-primary mb-1">Keyboard shortcuts</h3>
-                                            <p className="text-xs text-text-secondary">Natively works with these easy to remember commands.</p>
+                                            <h3 className="text-lg font-bold text-text-primary mb-1">{t('Keyboard shortcuts')}</h3>
+                                            <p className="text-xs text-text-secondary">{t('Natively works with these easy to remember commands.')}</p>
                                         </div>
                                         <button
                                             onClick={resetShortcuts}
                                             className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-border-subtle bg-bg-subtle/30 hover:bg-bg-subtle hover:border-green-500/30 transition-all duration-200 text-xs font-medium text-text-secondary hover:text-green-500 active:scale-95 mt-1"
                                         >
                                             <RotateCcw size={13} strokeWidth={2.5} />
-                                            Restore Default
+                                            {t('Restore Default')}
                                         </button>
                                     </div>
 
                                     <div className="grid gap-6">
                                         {/* General Category */}
                                         <div>
-                                            <h4 className="text-sm font-bold text-text-primary mb-3">General</h4>
+                                            <h4 className="text-sm font-bold text-text-primary mb-3">{t('General')}</h4>
                                             <div className="space-y-1">
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Eye size={14} /></span>
-                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Toggle Visibility</span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Toggle Visibility')}</span>
                                                     </div>
                                                     <KeyRecorder
                                                         currentKeys={shortcuts.toggleVisibility}
@@ -2157,7 +2314,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><PointerOff size={14} /></span>
-                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Toggle Mouse Passthrough</span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Toggle Mouse Passthrough')}</span>
                                                     </div>
                                                     <KeyRecorder
                                                         currentKeys={shortcuts.toggleMousePassthrough}
@@ -2167,7 +2324,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><MessageSquare size={14} /></span>
-                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Process Screenshots</span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Process Screenshots')}</span>
                                                     </div>
                                                     <KeyRecorder
                                                         currentKeys={shortcuts.processScreenshots}
@@ -2177,7 +2334,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Sparkles size={14} /></span>
-                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Capture Screen & Ask AI</span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Capture Screen & Ask AI')}</span>
                                                     </div>
                                                     <KeyRecorder
                                                         currentKeys={shortcuts.captureAndProcess}
@@ -2186,8 +2343,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
+                                                        <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Globe size={14} /></span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Capture Page (Browser)')}</span>
+                                                    </div>
+                                                    <KeyRecorder
+                                                        currentKeys={shortcuts.capturePage}
+                                                        onSave={(keys) => updateShortcut('capturePage', keys)}
+                                                    />
+                                                </div>
+                                                <div className="flex items-center justify-between py-1.5 group">
+                                                    <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><RotateCcw size={14} /></span>
-                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Reset / Cancel</span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Reset / Cancel')}</span>
                                                     </div>
                                                     <KeyRecorder
                                                         currentKeys={shortcuts.resetCancel}
@@ -2197,7 +2364,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Camera size={14} /></span>
-                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Take Screenshot</span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Take Screenshot')}</span>
                                                     </div>
                                                     <KeyRecorder
                                                         currentKeys={shortcuts.takeScreenshot}
@@ -2207,7 +2374,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Crop size={14} /></span>
-                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Selective Screenshot</span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Selective Screenshot')}</span>
                                                     </div>
                                                     <KeyRecorder
                                                         currentKeys={shortcuts.selectiveScreenshot}
@@ -2220,7 +2387,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         {/* Chat Category */}
                                         <div>
                                             <div className="mb-3">
-                                                <h4 className="text-sm font-bold text-text-primary">Chat</h4>
+                                                <h4 className="text-sm font-bold text-text-primary">{t('Chat')}</h4>
                                             </div>
                                             <div className="space-y-1">
                                                 {[
@@ -2240,7 +2407,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     <div key={i} className="flex items-center justify-between py-1.5 group">
                                                         <div className="flex items-center gap-3">
                                                             <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center">{item.icon}</span>
-                                                            <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{item.label}</span>
+                                                            <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t(item.label)}</span>
                                                         </div>
                                                         <KeyRecorder
                                                             currentKeys={shortcuts[item.id as keyof typeof shortcuts]}
@@ -2253,7 +2420,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                         {/* Window Category */}
                                         <div>
-                                            <h4 className="text-sm font-bold text-text-primary mb-3">Window</h4>
+                                            <h4 className="text-sm font-bold text-text-primary mb-3">{t('Window')}</h4>
                                             <div className="space-y-1">
                                                 {[
                                                     { id: 'moveWindowUp', label: 'Move Window Up', icon: <ArrowUp size={14} /> },
@@ -2264,7 +2431,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     <div key={i} className="flex items-center justify-between py-1.5 group">
                                                         <div className="flex items-center gap-3">
                                                             <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center">{item.icon}</span>
-                                                            <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{item.label}</span>
+                                                            <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t(item.label)}</span>
                                                         </div>
                                                         <KeyRecorder
                                                             currentKeys={shortcuts[item.id as keyof typeof shortcuts]}
@@ -2282,27 +2449,27 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                 <div className="space-y-6 animated fadeIn">
                                     {/* ── Speech Provider Section ── */}
                                     <div>
-                                        <h3 className="text-lg font-bold text-text-primary mb-1">Speech Provider</h3>
-                                        <p className="text-xs text-text-secondary mb-5">Choose the engine that transcribes audio to text.</p>
+                                        <h3 className="text-lg font-bold text-text-primary mb-1">{t('Speech Provider')}</h3>
+                                        <p className="text-xs text-text-secondary mb-5">{t('Choose the engine that transcribes audio to text.')}</p>
 
                                         <div className="space-y-4">
                                             <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
-                                                <label className="text-xs font-medium text-text-secondary block">Speech Provider</label>
+                                                <label className="text-xs font-medium text-text-secondary block">{t('Speech Provider')}</label>
                                                 <div className="relative">
                                                     <ProviderSelect
                                                         value={sttProvider}
                                                         onChange={(val) => handleSttProviderChange(val as any)}
                                                         options={[
-                                                            ...(hasNativelyKey ? [{ id: 'natively', label: 'Natively API', badge: 'Saved' as const, recommended: true, desc: 'Managed transcription via Natively backend', color: 'blue', icon: <Mic size={14} /> }] : []),
-                                                            { id: 'google', label: 'Google Cloud', badge: googleServiceAccountPath ? 'Saved' : null, recommended: true, desc: 'gRPC streaming via Service Account', color: 'blue', icon: <Mic size={14} /> },
-                                                            { id: 'groq', label: 'Groq Whisper', badge: hasStoredSttGroqKey ? 'Saved' : null, recommended: true, desc: 'Ultra-fast REST transcription', color: 'orange', icon: <Mic size={14} /> },
-                                                            { id: 'openai', label: 'OpenAI Whisper', badge: hasStoredSttOpenaiKey ? 'Saved' : null, desc: 'OpenAI-compatible Whisper API', color: 'green', icon: <Mic size={14} /> },
-                                                            { id: 'deepgram', label: 'Deepgram Nova-3', badge: hasStoredDeepgramKey ? 'Saved' : null, recommended: true, desc: 'High-accuracy REST transcription', color: 'purple', icon: <Mic size={14} /> },
-                                                            { id: 'elevenlabs', label: 'ElevenLabs Scribe', badge: hasStoredElevenLabsKey ? 'Saved' : null, desc: 'Scribe v2 Realtime API', color: 'teal', icon: <Mic size={14} /> },
-                                                            { id: 'azure', label: 'Azure Speech', badge: hasStoredAzureKey ? 'Saved' : null, desc: 'Microsoft Cognitive Services STT', color: 'cyan', icon: <Mic size={14} /> },
-                                                            { id: 'ibmwatson', label: 'IBM Watson', badge: hasStoredIbmWatsonKey ? 'Saved' : null, desc: 'IBM Watson cloud STT service', color: 'indigo', icon: <Mic size={14} /> },
-                                                            { id: 'soniox', label: 'Soniox', badge: hasStoredSonioxKey ? 'Saved' : null, recommended: true, desc: '60+ languages, multilingual, domain context', color: 'cyan', icon: <Mic size={14} /> },
-                                                            { id: 'local-whisper', label: 'Local Whisper', badge: null, desc: 'Privacy-first: runs 100% on your device', color: 'green', icon: <Cpu size={14} /> },
+                                                            ...(hasNativelyKey ? [{ id: 'natively', label: 'Natively API', badge: 'Saved' as const, recommended: true, desc: t('Managed transcription via Natively backend'), color: 'blue', icon: <Mic size={14} /> }] : []),
+                                                            { id: 'google', label: 'Google Cloud', badge: googleServiceAccountPath ? 'Saved' : null, recommended: true, desc: t('gRPC streaming via Service Account'), color: 'blue', icon: <Mic size={14} /> },
+                                                            { id: 'groq', label: 'Groq Whisper', badge: hasStoredSttGroqKey ? 'Saved' : null, recommended: true, desc: t('Ultra-fast REST transcription'), color: 'orange', icon: <Mic size={14} /> },
+                                                            { id: 'openai', label: 'OpenAI Whisper', badge: hasStoredSttOpenaiKey ? 'Saved' : null, desc: t('OpenAI-compatible Whisper API'), color: 'green', icon: <Mic size={14} /> },
+                                                            { id: 'deepgram', label: 'Deepgram Nova-3', badge: hasStoredDeepgramKey ? 'Saved' : null, recommended: true, desc: t('High-accuracy REST transcription'), color: 'purple', icon: <Mic size={14} /> },
+                                                            { id: 'elevenlabs', label: 'ElevenLabs Scribe', badge: hasStoredElevenLabsKey ? 'Saved' : null, desc: t('Scribe v2 Realtime API'), color: 'teal', icon: <Mic size={14} /> },
+                                                            { id: 'azure', label: 'Azure Speech', badge: hasStoredAzureKey ? 'Saved' : null, desc: t('Microsoft Cognitive Services STT'), color: 'cyan', icon: <Mic size={14} /> },
+                                                            { id: 'ibmwatson', label: 'IBM Watson', badge: hasStoredIbmWatsonKey ? 'Saved' : null, desc: t('IBM Watson cloud STT service'), color: 'indigo', icon: <Mic size={14} /> },
+                                                            { id: 'soniox', label: 'Soniox', badge: hasStoredSonioxKey ? 'Saved' : null, recommended: true, desc: t('60+ languages, multilingual, domain context'), color: 'cyan', icon: <Mic size={14} /> },
+                                                            { id: 'local-whisper', label: 'Local Whisper', badge: null, desc: t('Privacy-first: runs 100% on your device'), color: 'green', icon: <Cpu size={14} /> },
                                                         ]}
                                                     />
                                                 </div>
@@ -2311,11 +2478,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             {/* Groq Model Selector */}
                                             {sttProvider === 'groq' && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
-                                                    <label className="text-xs font-medium text-text-secondary mb-2.5 block">Whisper Model</label>
+                                                    <label className="text-xs font-medium text-text-secondary mb-2.5 block">{t('Whisper Model')}</label>
                                                     <div className="grid grid-cols-2 gap-2">
                                                         {[
-                                                            { id: 'whisper-large-v3-turbo', label: 'V3 Turbo', desc: 'Fastest' },
-                                                            { id: 'whisper-large-v3', label: 'V3', desc: 'Most Accurate' },
+                                                            { id: 'whisper-large-v3-turbo', label: 'V3 Turbo', desc: t('Fastest') },
+                                                            { id: 'whisper-large-v3', label: 'V3', desc: t('Most Accurate') },
                                                         ].map((m) => (
                                                             <button
                                                                 key={m.id}
@@ -2345,12 +2512,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             {/* Google Cloud Service Account */}
                                             {sttProvider === 'google' && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
-                                                    <label className="text-xs font-medium text-text-secondary mb-2 block">Service Account JSON</label>
+                                                    <label className="text-xs font-medium text-text-secondary mb-2 block">{t('Service Account JSON')}</label>
                                                     <div className="flex gap-2">
                                                         <div className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-secondary font-mono truncate">
                                                             {googleServiceAccountPath
                                                                 ? <span className="text-text-primary">{googleServiceAccountPath.split('/').pop()}</span>
-                                                                : <span className="text-text-tertiary italic">No file selected</span>}
+                                                                : <span className="text-text-tertiary italic">{t('No file selected')}</span>}
                                                         </div>
                                                         <button
                                                             onClick={async () => {
@@ -2362,11 +2529,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             }}
                                                             className="px-3 py-2 bg-bg-input hover:bg-bg-elevated border border-border-subtle rounded-lg text-xs font-medium text-text-primary transition-colors flex items-center gap-2"
                                                         >
-                                                            <Upload size={14} /> Select File
+                                                            <Upload size={14} /> {t('Select File')}
                                                         </button>
                                                     </div>
                                                     <p className="text-[10px] text-text-tertiary mt-2">
-                                                        Required for Google Cloud Speech-to-Text.
+                                                        {t('Required for Google Cloud Speech-to-Text.')}
                                                     </p>
                                                 </div>
                                             )}
@@ -2379,7 +2546,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     </label>
                                                     {sttProvider === 'openai' && (
                                                         <p className="text-[10px] text-text-tertiary mb-1.5">
-                                                            This key is separate from your main AI Provider key.
+                                                            {t('This key is separate from your main AI Provider key.')}
                                                         </p>
                                                     )}
                                                     <div className="flex gap-2">
@@ -2405,18 +2572,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             }}
                                                             placeholder={
                                                                 sttProvider === 'groq'
-                                                                    ? (hasStoredSttGroqKey ? '••••••••••••' : 'Enter Groq API key')
+                                                                    ? (hasStoredSttGroqKey ? '••••••••••••' : t('Enter Groq API key'))
                                                                     : sttProvider === 'openai'
-                                                                        ? (hasStoredSttOpenaiKey ? '••••••••••••' : 'Enter OpenAI STT API key')
+                                                                        ? (hasStoredSttOpenaiKey ? '••••••••••••' : t('Enter OpenAI STT API key'))
                                                                         : sttProvider === 'elevenlabs'
-                                                                            ? (hasStoredElevenLabsKey ? '••••••••••••' : 'Enter ElevenLabs API key')
+                                                                            ? (hasStoredElevenLabsKey ? '••••••••••••' : t('Enter ElevenLabs API key'))
                                                                             : sttProvider === 'azure'
-                                                                                ? (hasStoredAzureKey ? '••••••••••••' : 'Enter Azure API key')
+                                                                                ? (hasStoredAzureKey ? '••••••••••••' : t('Enter Azure API key'))
                                                                                 : sttProvider === 'ibmwatson'
-                                                                                    ? (hasStoredIbmWatsonKey ? '••••••••••••' : 'Enter IBM Watson API key')
+                                                                                    ? (hasStoredIbmWatsonKey ? '••••••••••••' : t('Enter IBM Watson API key'))
                                                                                     : sttProvider === 'soniox'
-                                                                                        ? (hasStoredSonioxKey ? '••••••••••••' : 'Enter Soniox API key')
-                                                                                        : (hasStoredDeepgramKey ? '••••••••••••' : 'Enter Deepgram API key')
+                                                                                        ? (hasStoredSonioxKey ? '••••••••••••' : t('Enter Soniox API key'))
+                                                                                        : (hasStoredDeepgramKey ? '••••••••••••' : t('Enter Deepgram API key'))
                                                             }
                                                             className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
                                                         />
@@ -2442,7 +2609,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 : 'bg-bg-input hover:bg-bg-input/80 border border-border-subtle text-text-primary disabled:opacity-50'
                                                                 }`}
                                                         >
-                                                            {sttSaving ? 'Saving...' : sttSaved ? 'Saved!' : 'Save'}
+                                                            {sttSaving ? t('Saving...') : sttSaved ? t('Saved!') : t('Save')}
                                                         </button>
                                                         {(() => {
                                                             const hasKeyMap: Record<string, boolean> = {
@@ -2458,7 +2625,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 <button
                                                                     onClick={() => handleRemoveSttKey(sttProvider as any)}
                                                                     className="px-2.5 py-2.5 rounded-lg text-xs font-medium text-text-tertiary hover:text-red-500 hover:bg-red-500/10 transition-all"
-                                                                    title="Remove API Key"
+                                                                    title={t("Remove API Key")}
                                                                 >
                                                                     <Trash2 size={16} strokeWidth={1.5} />
                                                                 </button>
@@ -2469,13 +2636,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     {/* Azure Region Input */}
                                                     {sttProvider === 'azure' && (
                                                         <div className="space-y-1.5">
-                                                            <label className="text-xs font-medium text-text-secondary block">Region</label>
+                                                            <label className="text-xs font-medium text-text-secondary block">{t('Region')}</label>
                                                             <div className="flex gap-2">
                                                                 <input
                                                                     type="text"
                                                                     value={sttAzureRegion}
                                                                     onChange={(e) => setSttAzureRegion(e.target.value)}
-                                                                    placeholder="e.g. eastus"
+                                                                    placeholder={t("e.g. eastus")}
                                                                     className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
                                                                 />
                                                                 <button
@@ -2489,10 +2656,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                     disabled={!sttAzureRegion.trim()}
                                                                     className="px-5 py-2.5 rounded-lg text-xs font-medium bg-bg-input hover:bg-bg-input/80 border border-border-subtle text-text-primary disabled:opacity-50 transition-colors"
                                                                 >
-                                                                    Save
+                                                                    {t('Save')}
                                                                 </button>
                                                             </div>
-                                                            <p className="text-[10px] text-text-tertiary">e.g. eastus, westeurope, westus2</p>
+                                                            <p className="text-[10px] text-text-tertiary">{t('e.g. eastus, westeurope, westus2')}</p>
                                                         </div>
                                                     )}
 
@@ -2500,13 +2667,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         When set, the WebSocket Realtime path is skipped and REST is used against the custom host. */}
                                                     {sttProvider === 'openai' && (
                                                         <div className="space-y-1.5">
-                                                            <label className="text-xs font-medium text-text-secondary block">Custom Base URL <span className="text-text-tertiary">(optional)</span></label>
+                                                            <label className="text-xs font-medium text-text-secondary block">{t('Custom Base URL')} <span className="text-text-tertiary">{t('(optional)')}</span></label>
                                                             <div className="flex gap-2">
                                                                 <input
                                                                     type="text"
                                                                     value={sttOpenaiBaseUrl}
                                                                     onChange={(e) => setSttOpenaiBaseUrl(e.target.value)}
-                                                                    placeholder="https://api.openai.com (default)"
+                                                                    placeholder={t("https://api.openai.com (default)")}
                                                                     className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
                                                                 />
                                                                 <button
@@ -2518,10 +2685,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                     }}
                                                                     className="px-5 py-2.5 rounded-lg text-xs font-medium bg-bg-input hover:bg-bg-input/80 border border-border-subtle text-text-primary transition-colors"
                                                                 >
-                                                                    Save
+                                                                    {t('Save')}
                                                                 </button>
                                                             </div>
-                                                            <p className="text-[10px] text-text-tertiary">Point at any OpenAI-compatible server (e.g. Speaches). Custom servers use REST only — Realtime WebSocket is skipped. Leave blank for default.</p>
+                                                            <p className="text-[10px] text-text-tertiary">{t('Point at any OpenAI-compatible server (e.g. Speaches). Custom servers use REST only — Realtime WebSocket is skipped. Leave blank for default.')}</p>
                                                         </div>
                                                     )}
 
@@ -2532,11 +2699,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             className="text-xs bg-bg-input hover:bg-bg-elevated text-text-primary px-3 py-1.5 rounded-md transition-colors flex items-center gap-2 disabled:opacity-50"
                                                         >
                                                             {sttTestStatus === 'testing' ? (
-                                                                <><RefreshCw size={12} className="animate-spin" /> Testing...</>
+                                                                <><RefreshCw size={12} className="animate-spin" /> {t('Testing...')}</>
                                                             ) : sttTestStatus === 'success' ? (
-                                                                <><Check size={12} className="text-green-500" /> Connected</>
+                                                                <><Check size={12} className="text-green-500" /> {t('Connected')}</>
                                                             ) : (
-                                                                <>Test Connection</>
+                                                                <>{t('Test Connection')}</>
                                                             )}
                                                         </button>
                                                         <button
@@ -2555,7 +2722,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 }
                                                             }}
                                                             className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors ml-1"
-                                                            title="Get API Key"
+                                                            title={t("Get API Key")}
                                                         >
                                                             <ExternalLink size={12} />
                                                         </button>
@@ -2573,7 +2740,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                             {/* Recognition Language Family */}
                                             <CustomSelect
-                                                label="Language"
+                                                label={t("Language")}
                                                 icon={<Globe size={14} />}
                                                 value={selectedSttGroup}
                                                 options={languageGroups.map(g => ({
@@ -2584,19 +2751,19 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     toJSON: () => ({})
                                                 }))}
                                                 onChange={handleGroupChange}
-                                                placeholder="Select Language"
+                                                placeholder={t("Select Language")}
                                             />
 
                                             {/* Variant/Accent Selector (Conditional) */}
                                             {currentGroupVariants.length > 1 && (
                                                 <div className="mt-3 animated fadeIn">
                                                     <CustomSelect
-                                                        label="Accent / Region"
+                                                        label={t("Accent / Region")}
                                                         icon={<MapPin size={14} />}
                                                         value={recognitionLanguage}
                                                         options={currentGroupVariants}
                                                         onChange={handleLanguageChange}
-                                                        placeholder="Select Region"
+                                                        placeholder={t("Select Region")}
                                                     />
                                                 </div>
                                             )}
@@ -2610,10 +2777,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 const label = Object.values(availableLanguages).find((l: any) =>
                                                                     l.bcp47 === autoDetectedLanguage || l.iso639 === autoDetectedLanguage
                                                                 )?.label as string | undefined;
-                                                                return `Auto mode — detected: ${label ?? autoDetectedLanguage}`;
+                                                                return `${t('Auto mode — detected:')} ${label ?? autoDetectedLanguage}`;
                                                               })()
-                                                            : 'Auto mode — language will be detected from the first few seconds of audio.'
-                                                        : 'Select the primary language being spoken in the meeting.'
+                                                            : t('Auto mode — language will be detected from the first few seconds of audio.')
+                                                        : t('Select the primary language being spoken in the meeting.')
                                                     }
                                                 </p>
                                             </div>
@@ -2624,8 +2791,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                     {/* ── Audio Configuration Section ── */}
                                     <div>
-                                        <h3 className="text-lg font-bold text-text-primary mb-1">Audio Configuration</h3>
-                                        <p className="text-xs text-text-secondary mb-5">Manage input and output devices.</p>
+                                        <h3 className="text-lg font-bold text-text-primary mb-1">{t('Audio Configuration')}</h3>
+                                        <p className="text-xs text-text-secondary mb-5">{t('Manage input and output devices.')}</p>
 
                                         {/* Device-fallback banner: shown when main process couldn't
                                             open the selected device and silently used the default. */}
@@ -2634,9 +2801,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
                                                 <div className="min-w-0 flex-1">
                                                     <p className="text-xs text-amber-200/90 leading-snug">
-                                                        Selected {deviceFallbackNotice.kind === 'input' ? 'microphone' : 'output device'}
-                                                        {deviceFallbackNotice.requested ? ` "${deviceFallbackNotice.requested}"` : ''} couldn't be opened
-                                                        — using <span className="font-medium">{deviceFallbackNotice.actual ?? 'no device'}</span> instead.
+                                                        {deviceFallbackNotice.kind === 'input' ? t('Selected microphone') : t('Selected output device')}
+                                                        {deviceFallbackNotice.requested ? ` "${deviceFallbackNotice.requested}"` : ''} {t("couldn't be opened — using")} <span className="font-medium">{deviceFallbackNotice.actual ?? t('no device')}</span> {t('instead.')}
                                                     </p>
                                                     {deviceFallbackNotice.reason && (
                                                         <p className="text-[11px] text-amber-200/60 mt-1 font-mono break-all">{deviceFallbackNotice.reason}</p>
@@ -2656,14 +2822,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     }}
                                                     className="shrink-0 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25"
                                                 >
-                                                    Reset
+                                                    {t('Reset')}
                                                 </button>
                                             </div>
                                         )}
 
                                         <div className="space-y-4">
                                             <CustomSelect
-                                                label="Input Device"
+                                                label={t("Input Device")}
                                                 icon={<Mic size={16} />}
                                                 value={selectedInput}
                                                 options={inputDevices}
@@ -2671,12 +2837,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     setSelectedInput(id);
                                                     localStorage.setItem('preferredInputDeviceId', id);
                                                 }}
-                                                placeholder="Default Microphone"
+                                                placeholder={t("Default Microphone")}
                                             />
 
                                             <div>
                                                 <div className="flex justify-between text-xs text-text-secondary mb-2 px-1">
-                                                    <span>Input Level</span>
+                                                    <span>{t('Input Level')}</span>
                                                 </div>
                                                 <div className="h-1.5 bg-bg-input rounded-full overflow-hidden">
                                                     <div
@@ -2689,7 +2855,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             <div className="h-px bg-border-subtle my-2" />
 
                                             <CustomSelect
-                                                label="Output Device"
+                                                label={t("Output Device")}
                                                 icon={<Speaker size={16} />}
                                                 value={selectedOutput}
                                                 options={outputDevices}
@@ -2697,7 +2863,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     setSelectedOutput(id);
                                                     localStorage.setItem('preferredOutputDeviceId', id);
                                                 }}
-                                                placeholder="Default Speakers"
+                                                placeholder={t("Default Speakers")}
                                             />
 
                                             <div className="flex justify-end">
@@ -2743,7 +2909,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     }}
                                                     className="text-xs bg-bg-input hover:bg-bg-elevated text-text-primary px-3 py-1.5 rounded-md transition-colors flex items-center gap-2"
                                                 >
-                                                    <Speaker size={12} /> Test Sound
+                                                    <Speaker size={12} /> {t('Test Sound')}
                                                 </button>
                                             </div>
 
@@ -2765,10 +2931,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 <div>
                                                                     <div className="flex items-center gap-2 mb-0.5">
                                                                         <h3 className="text-sm font-bold text-text-primary">SCK Backend</h3>
-                                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 uppercase tracking-wide">Alternative</span>
+                                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 uppercase tracking-wide">{t('Alternative')}</span>
                                                                     </div>
                                                                     <p className="text-xs text-text-secondary leading-relaxed max-w-[300px]">
-                                                                        Use the ScreenCaptureKit backend. An optimized alternative to CoreAudio if you experience any capture issues.
+                                                                        {t('Use the ScreenCaptureKit backend. An optimized alternative to CoreAudio if you experience any capture issues.')}
                                                                     </p>
                                                                 </div>
                                                             </div>
@@ -2795,8 +2961,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                             {activeTab === 'calendar' && (
                                 <div className="space-y-6 animated fadeIn h-full">
                                     <div>
-                                        <h3 className="text-lg font-bold text-text-primary mb-2">Visible Calendars</h3>
-                                        <p className="text-xs text-text-secondary mb-4">Upcoming meetings are synchronized from these calendars</p>
+                                        <h3 className="text-lg font-bold text-text-primary mb-2">{t('Visible Calendars')}</h3>
+                                        <p className="text-xs text-text-secondary mb-4">{t('Upcoming meetings are synchronized from these calendars')}</p>
                                     </div>
 
                                     <div className="bg-bg-card rounded-xl border border-border-subtle overflow-hidden">
@@ -2810,7 +2976,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         </div>
                                                         <div>
                                                             <h4 className="text-sm font-medium text-text-primary">Google Calendar</h4>
-                                                            <p className="text-xs text-text-secondary">Connected as {calendarStatus.email || 'User'}</p>
+                                                            <p className="text-xs text-text-secondary">{t('Connected as')} {calendarStatus.email || 'User'}</p>
                                                         </div>
                                                     </div>
 
@@ -2831,7 +2997,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         disabled={isCalendarsLoading}
                                                         className="px-3 py-1.5 bg-bg-input hover:bg-bg-elevated border border-border-subtle text-text-primary rounded-md text-xs font-medium transition-colors"
                                                     >
-                                                        {isCalendarsLoading ? 'Disconnecting...' : 'Disconnect'}
+                                                        {isCalendarsLoading ? t('Disconnecting...') : t('Disconnect')}
                                                     </button>
                                                 </div>
 
@@ -2848,12 +3014,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         <div className="space-y-2">
                                                             <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-white/[0.04] ring-1 ring-white/[0.06] text-[9px] font-medium tracking-[0.22em] text-text-secondary uppercase shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                                                                 <span className="w-1 h-1 rounded-full bg-emerald-400/80" />
-                                                                Upcoming
+                                                                {t('Upcoming')}
                                                             </span>
                                                             <p className="text-[11px] text-text-tertiary tracking-[0.01em]">
                                                                 {calendarEvents.length > 0
-                                                                    ? `${calendarEvents.length} ${calendarEvents.length === 1 ? 'meeting' : 'meetings'} · next 7 days`
-                                                                    : 'next 7 days from your primary calendar'}
+                                                                    ? `${calendarEvents.length} ${calendarEvents.length === 1 ? t('meeting') : t('meetings')} · ${t('next 7 days')}`
+                                                                    : t('next 7 days from your primary calendar')}
                                                             </p>
                                                         </div>
                                                         <button
@@ -2871,7 +3037,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 }
                                                             }}
                                                             disabled={isCalendarRefreshing}
-                                                            aria-label="Refresh upcoming events"
+                                                            aria-label={t("Refresh upcoming events")}
                                                             className="group h-8 w-8 rounded-full bg-white/[0.04] hover:bg-white/[0.08] ring-1 ring-white/[0.07] text-text-secondary hover:text-text-primary transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.92] flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                                                         >
                                                             <RefreshCw
@@ -2889,8 +3055,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                     <div className="mx-auto w-11 h-11 rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.06] flex items-center justify-center mb-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                                                                         <Calendar size={18} className="text-text-tertiary" strokeWidth={1.5} />
                                                                     </div>
-                                                                    <p className="text-[13px] text-text-primary tracking-[-0.01em]">Nothing scheduled.</p>
-                                                                    <p className="text-[11px] text-text-tertiary mt-1">Your week is clear for now.</p>
+                                                                    <p className="text-[13px] text-text-primary tracking-[-0.01em]">{t('Nothing scheduled.')}</p>
+                                                                    <p className="text-[11px] text-text-tertiary mt-1">{t('Your week is clear for now.')}</p>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -2919,14 +3085,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                                                 // Smart relative label
                                                                 let chipLabel: string;
-                                                                if (diffMin <= 0) chipLabel = 'Now';
-                                                                else if (diffMin < 60) chipLabel = `in ${Math.ceil(diffMin)}m`;
+                                                                if (diffMin <= 0) chipLabel = t('Now');
+                                                                else if (diffMin < 60) chipLabel = `${t('in')} ${Math.ceil(diffMin)}m`;
                                                                 else if (diffMin < 4 * 60) {
                                                                     const h = Math.floor(diffMin / 60);
                                                                     const m = Math.round(diffMin - h * 60);
-                                                                    chipLabel = m > 0 ? `in ${h}h ${m}m` : `in ${h}h`;
-                                                                } else if (isToday) chipLabel = 'Today';
-                                                                else if (isTomorrow) chipLabel = 'Tomorrow';
+                                                                    chipLabel = m > 0 ? `${t('in')} ${h}h ${m}m` : `${t('in')} ${h}h`;
+                                                                } else if (isToday) chipLabel = t('Today');
+                                                                else if (isTomorrow) chipLabel = t('Tomorrow');
                                                                 else chipLabel = start.toLocaleDateString([], { weekday: 'short' });
 
                                                                 const timeRange = `${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
@@ -2991,14 +3157,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                                     title={ev.link}
                                                                                     className="self-center shrink-0 group/btn inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1.5 bg-white/[0.05] hover:bg-white/[0.1] ring-1 ring-white/[0.07] text-text-primary text-[11px] font-medium transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.97] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                                                                                 >
-                                                                                    <span>Join</span>
+                                                                                    <span>{t('Join')}</span>
                                                                                     <span className="w-5 h-5 rounded-full bg-white/[0.08] ring-1 ring-white/[0.08] flex items-center justify-center transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/btn:translate-x-[1px] group-hover/btn:-translate-y-[1px]">
                                                                                         <ExternalLink size={9} strokeWidth={2} />
                                                                                     </span>
                                                                                 </button>
                                                                             ) : (
                                                                                 <span
-                                                                                    aria-label="No meeting link"
+                                                                                    aria-label={t("No meeting link")}
                                                                                     className="self-center shrink-0 inline-flex items-center justify-center w-2 h-2 rounded-full bg-white/[0.08] mr-3"
                                                                                 />
                                                                             )}
@@ -3014,8 +3180,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             <div className="w-full p-6">
                                                 <div className="mb-4">
                                                     <Calendar size={24} className="text-text-tertiary mb-3" />
-                                                    <h4 className="text-sm font-bold text-text-primary mb-1">No calendars</h4>
-                                                    <p className="text-xs text-text-secondary">Get started by connecting a Google account.</p>
+                                                    <h4 className="text-sm font-bold text-text-primary mb-1">{t('No calendars')}</h4>
+                                                    <p className="text-xs text-text-secondary">{t('Get started by connecting a Google account.')}</p>
                                                 </div>
 
                                                 <button
@@ -3044,7 +3210,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
                                                         </g>
                                                     </svg>
-                                                    {isCalendarsLoading ? 'Connecting...' : 'Connect Google'}
+                                                    {isCalendarsLoading ? t('Connecting...') : t('Connect Google')}
                                                 </button>
                                             </div>
                                         )}
@@ -3054,6 +3220,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                             {activeTab === 'phone-mirror' && (
                                 <PhoneMirrorSettings />
+                            )}
+
+                            {activeTab === 'intelligence' && (
+                                <IntelligenceSettings />
                             )}
 
                             {activeTab === 'help' && (

@@ -25,25 +25,14 @@ Short one-line description of the release.
 - Dependency updates
 - Refactored updater logic
 
-## ⚠️macOS Installation (Unsigned Build)
+## macOS Installation (Signed Build)
 
-Download the correct architecture .zip or .dmg file for your device (Apple Silicon or Intel).
+Download the correct architecture `.dmg` or `.zip` file for your device (Apple Silicon or Intel).
 
-If you see "App is damaged":
+- **For Apple Silicon (M1/M2/M3/M4):** Download the `arm64` build.
+- **For Intel Macs:** Download the `x64` build.
 
-- **For .zip downloads:**
-  1. Move the app to your Applications folder.
-  2. Open Terminal and run: `xattr -cr /Applications/Natively.app`
-
-- **For .dmg downloads:**
-  1. Open Terminal and run:
-     ```bash
-     xattr -cr ~/Downloads/Natively-2.0.2-arm64.dmg
-     # Or for Intel Macs:
-     xattr -cr ~/Downloads/Natively-2.0.2-x64.dmg
-     ```
-  2. Install the natively.dmg
-  3. Open Terminal and run: `xattr -cr /Applications/Natively.app`
+Open the downloaded file, drag **Natively** to your **Applications** folder, and launch it.
 
 ## ⚠️Windows Installation (Unsigned Build)
 

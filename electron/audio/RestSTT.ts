@@ -15,6 +15,7 @@ import { EventEmitter } from 'events';
 import axios from 'axios';
 import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
+import { isValidSttRegion } from '../utils/curlUtils';
 
 export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson';
 
@@ -148,8 +149,12 @@ export class RestSTT extends EventEmitter {
         super();
         this.provider = provider;
         this.apiKey = apiKey;
-        this.region = region;
-        this.config = PROVIDER_CONFIGS[provider](apiKey, region);
+        // SSRF guard (defense in depth): the region is interpolated into the
+        // Azure/IBM endpoint hostname. If a malformed region ever reaches this
+        // far (e.g. persisted before the IPC guard existed), drop it so the
+        // PROVIDER_CONFIGS default region is used instead of a poisoned host.
+        this.region = isValidSttRegion(region) ? region : undefined;
+        this.config = PROVIDER_CONFIGS[provider](apiKey, this.region);
         if (modelOverride) {
             this.config.model = modelOverride;
         }
@@ -266,6 +271,15 @@ export class RestSTT extends EventEmitter {
      * Concatenate buffered chunks, add WAV header, and upload to REST API
      */
     private async flushAndUpload(): Promise<void> {
+        // Gate every flush on isActive. Without this, the
+        // finally-re-entrancy at line ~334 (`if (this.flushPending) this.flushAndUpload()`)
+        // can fire AFTER stop() has set isActive=false, and the body below
+        // would happily upload trailing audio to the REST provider for the
+        // rest of the process lifetime. The re-arm block below would also
+        // resurrect a fresh setInterval if safetyNetTimer happened to be
+        // non-null in some race window. Bailing here closes both holes.
+        if (!this.isActive) return;
+
         // Skip if no data
         if (this.chunks.length === 0 || this.totalBufferedBytes < MIN_BUFFER_BYTES) return;
 
@@ -275,8 +289,12 @@ export class RestSTT extends EventEmitter {
             return;
         }
 
-        // Reset safety-net timer to prevent double-flush
-        if (this.safetyNetTimer) {
+        // Reset safety-net timer to prevent double-flush. The outer
+        // `if (!this.isActive) return` above guarantees we never re-arm
+        // after stop() — but keep the timer guard here too as belt-and-braces
+        // in case a future caller invokes flushAndUpload from a path that
+        // skips the isActive check.
+        if (this.safetyNetTimer && this.isActive) {
             clearInterval(this.safetyNetTimer);
             this.safetyNetTimer = setInterval(() => {
                 this.flushAndUpload();

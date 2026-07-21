@@ -1,0 +1,170 @@
+{
+  "name": "Margaret E. Hollingsworth",
+  "email": "marg.hollingworth@protonmail.com",
+  "phone": "(415) 555-0182",
+  "location": "San Francisco, CA",
+  "linkedin": "linkedin.com/in/marghollingworth-eng",
+  "github": "github.com/mhollingworth",
+  "portfolio": "marghollingworth.dev",
+  "fullName": "Margaret E. Hollingsworth",
+  "totalExperienceMonths": 0,
+  "total_experience_years": 18,
+  "current_title": "VP of Platform Engineering",
+  "current_company": "Stratagem Cloud, Inc.",
+  "previous_titles": [
+    "Director of Distributed Systems"
+  ],
+  "previous_companies": [
+    "Helix Data Systems"
+  ],
+  "team_size_managed_max": 240,
+  "budget_owned_usd": "$48.3M annually",
+  "patents_issued": 7,
+  "publications_peer_reviewed": 19,
+  "github_stars_combined": "31,000",
+  "open_source_projects_maintained": "3 CNCF-adjacent",
+  "speaking_engagements": [
+    "QCon",
+    "KubeCon",
+    "Strange Loop",
+    "re:Invent"
+  ],
+  "core_skills": [
+    "distributed systems",
+    "infrastructure platforms",
+    "data pipelines",
+    "event-driven architectures",
+    "Kubernetes",
+    "machine learning infrastructure",
+    "multi-cloud orchestration",
+    "Kafka",
+    "Warpstream",
+    "Flink",
+    "Spark Streaming",
+    "OpenTelemetry",
+    "SRE",
+    "FinOps"
+  ],
+  "metrics_highlights": [
+    "14B events/day at sub-50ms p99",
+    "scaled org 14 to 187 engineers",
+    "reduced onboarding 11 weeks to 38 minutes",
+    "71% infra cost reduction per tenant",
+    "14s RTO / zero RPO",
+    "94% reduction in Kafka pager incidents",
+    "$2.1M annual savings",
+    "ML deploy cycle 6 weeks to 4 hours",
+    "$11.4M FinOps savings",
+    "11x throughput improvement",
+    "6x latency reduction",
+    "storage cost $23 to $4.10/TB"
+  ],
+  "years_experience": "18",
+  "org_size_managed": "187",
+  "max_org_size_managed": "240",
+  "max_budget_owned": "$48.3M annually",
+  "max_events_per_day": "14 billion at sub-50ms p99 latency",
+  "patents": "7 issued US patents",
+  "publications": "19 peer-reviewed",
+  "open_source": "3 CNCF-adjacent projects, 31,000 GitHub stars combined",
+  "speaking": "QCon, KubeCon, Strange Loop, re:Invent",
+  "key_skills": [
+    "distributed systems",
+    "Kubernetes",
+    "event-driven architectures",
+    "ML infrastructure",
+    "platform engineering",
+    "SRE",
+    "multi-cloud orchestration",
+    "data pipelines"
+  ],
+  "previous_role": "Director of Distributed Systems",
+  "previous_company": "Helix Data Systems (NYSE: HLX)",
+  "tech_stack": [
+    "Go",
+    "Kubernetes",
+    "Kafka",
+    "Warpstream",
+    "Apache Flink",
+    "Spark Streaming",
+    "OpenTelemetry",
+    "AWS",
+    "GCP",
+    "Azure",
+    "S3",
+    "Glacier",
+    "NVMe"
+  ],
+  "notable_achievements": [
+    "scaled platform org from 14 to 187 engineers",
+    "monolith to 47 microservices redesign",
+    "cut onboarding from 11 weeks to 38 minutes",
+    "71% infra cost reduction per tenant",
+    "$11.4M FinOps savings",
+    "94% reduction in Kafka pager incidents",
+    "StreamQL query engine 11x throughput improvement",
+    "storage cost $23 to $4.10 per TB"
+  ],
+  "team_size_managed": "up to 240 engineers",
+  "budget_managed": "$48M+ annually",
+  "events_handled": "14 billion events/day at sub-50ms p99",
+  "oss_projects": "3 CNCF-adjacent, 31,000 GitHub stars",
+  "recent_achievements": [
+    "scaled org from 14 to 187",
+    "monolith to 47 microservices",
+    "onboarding 11 weeks to 38 minutes",
+    "71% infra cost reduction per tenant",
+    "active-active multi-region 14s RTO/zero RPO",
+    "Kafka pager incidents -94%",
+    "$2.1M egress savings",
+    "ML deploy 6 weeks to 4 hours",
+    "$11.4M FinOps savings",
+    "9 promotions to Staff+"
+  ],
+  "prior_role": "Director of Distributed Systems, Helix Data Systems (NYSE: HLX)",
+  "prior_achievements": [
+    "StreamQL on Flink: 11x throughput, 6x latency",
+    "tiered storage cost $23 to $4.10/TB",
+    "HOS observability platform (started)"
+  ],
+  "education": "not specified in provided resume",
+  "contact": "marg.hollingworth@protonmail.com, (415) 555-0182, linkedin.com/in/marghollingworth-eng, github.com/mhollingworth, marghollingworth.dev",
+  "current_role": "VP of Platform Engineering",
+  "oss_maintainer_stars": "31,000",
+  "mostRecentEmployer": "Stratagem Cloud, Inc.",
+  "topSkills": [
+    "distributed systems",
+    "infrastructure platforms",
+    "data pipelines",
+    "event-driven architectures",
+    "Kubernetes"
+  ],
+  "projects": [
+    {
+      "name": "Stratagem Multi-Cloud Orchestration Platform",
+      "description": "Led architectural redesign of flagship orchestration product from monolithic Go service into 47 Kubernetes-native microservices, enabling multi-region active-active architecture across AWS, GCP, and Azure for 9,200 enterprise customers with 14s RTO and zero RPO."
+    },
+    {
+      "name": "Helix StreamQL Query Engine",
+      "description": "Built real-time query engine on Apache Flink for Helix Data Systems, achieving 11x throughput improvement and 6x latency reduction versus legacy Spark Streaming implementation."
+    }
+  ],
+  "jdCompany": "Skyforge Analytics",
+  "jdRole": "Director of Engineering",
+  "requirementsMet": [
+    "Relevant experience present",
+    "Relevant experience present",
+    "Relevant experience present"
+  ],
+  "requirementsNotMet": [
+    "Gap to be assessed in interview",
+    "Gap to be assessed in interview"
+  ],
+  "expectedSalaryBand": null,
+  "id": "p06",
+  "edgeCase": "Very senior engineering leader with a 6+ PAGE resume: 8 roles across 15 years, 12 named projects, publications, patents, speaking engagement",
+  "resumeFormat": "pdf",
+  "hasSecondDoc": true,
+  "secondDocFile": "doc2.pdf",
+  "mostRecentTitle": "VP of Platform Engineering"
+}

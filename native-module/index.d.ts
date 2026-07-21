@@ -2,7 +2,16 @@
 /* eslint-disable */
 export declare class MicrophoneCapture {
   constructor(deviceId?: string | undefined | null)
+  /**
+   * EMITTED sample rate — the rate of the PCM handed to STT (16000 when the
+   * resampler is active). Declare THIS to STT providers.
+   */
   getSampleRate(): number
+  /**
+   * NATIVE hardware rate (e.g. 24000 for AirPods HFP, 48000 built-in) — for
+   * diagnostics and HFP/Bluetooth-degradation detection only.
+   */
+  getNativeSampleRate(): number
   start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null): void
   stop(): void
 }
@@ -21,7 +30,21 @@ export declare class StealthKeyboardTap {
    *
    * Idempotent: repeated `start()` calls while active are no-ops.
    */
-  start(callback: ((err: Error | null, arg: CapturedKey) => any)): boolean
+  start(callback: ((err: Error | null, arg: CapturedKey) => any), overlayBounds?: OverlayBoundsInput | undefined | null): boolean
+  /**
+   * Push fresh overlay bounds into the live tap. Required when the
+   * OS window moves or resizes mid-session: without this, the start()
+   * snapshot goes stale and mouse-down classification (inside vs
+   * outside the overlay) drifts against the actual frame. No-op when
+   * the tap is not active so JS can call it unconditionally.
+   *
+   * Concurrency note: a benign TOCTOU exists where this method observes
+   * `active=true`, stop() then clears bounds, and we overwrite with a
+   * stale value. That's safe: the worker is exiting, the per-event reader
+   * short-circuits on `!active`, and the next `start()` re-snapshots
+   * bounds from the provider — so the stale write is invisible.
+   */
+  updateOverlayBounds(overlayBounds?: OverlayBoundsInput | undefined | null): void
   /**
    * Disengage the tap. After this returns, the next keystroke will
    * reach the foreground app normally. Safe to call multiple times.
@@ -36,7 +59,16 @@ export declare class StealthKeyboardTap {
 
 export declare class SystemAudioCapture {
   constructor(deviceId?: string | undefined | null)
+  /**
+   * EMITTED sample rate — the rate of the PCM handed to STT (16000 when the
+   * resampler is active). This is what callers must declare to STT providers.
+   */
   getSampleRate(): number
+  /**
+   * NATIVE hardware sample rate (e.g. 48000) — for diagnostics and
+   * HFP/Bluetooth-degradation detection only. NOT the rate of emitted bytes.
+   */
+  getNativeSampleRate(): number
   start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null): void
   stop(): void
 }
@@ -90,6 +122,8 @@ export interface CapturedKey {
    * by the worker.
    */
   isKeyDown: boolean
+  /** True for a pass-through mouse down outside the overlay bounds. */
+  isOutsideMouseDown: boolean
 }
 
 /**
@@ -132,6 +166,13 @@ export declare function getOutputDevices(): Array<AudioDeviceInfo>
  * Cheap; safe to poll from JS to drive UI state.
  */
 export declare function isAccessibilityGranted(): boolean
+
+export interface OverlayBoundsInput {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 /**
  * Validates an existing Dodo Payments license key against the live API.

@@ -1,0 +1,73 @@
+MARCUS J. HOLLOWAY
+marcus.holloway@protonmail.com | (415) 555-0182 | linkedin.com/in/marcusholloway | github.com/mjholloway
+San Francisco, CA | Authorized to work in the US (US Citizen)
+
+SUMMARY
+
+Senior backend engineer with 10 years of experience designing, building, and operating distributed systems at scale. Deep expertise in service-oriented architectures, consensus protocols, and high-throughput data pipelines. Shipped infrastructure that handled tens of billions of requests per day at FAANG-adjacent companies. Comfortable owning systems end-to-end: from RFC and capacity planning through on-call rotation and post-incident review. Strong opinions, loosely held, on idempotency, backpressure, and the cost of premature abstraction.
+
+WORK EXPERIENCE
+
+Stripe, Inc. — Staff Software Engineer (L6)
+San Francisco, CA | March 2022 – Present
+Payments Orchestration Platform team. Tech lead for the merchant settlement reconciliation pipeline.
+
+- Designed and shipped a replacement reconciliation system that processes 4.2B ledger entries per day, replacing a legacy Hadoop batch job with a streaming pipeline on Kafka and Flink. Reduced end-to-end reconciliation latency from 14 hours to 38 minutes (p99) and cut compute cost by 61% (~$2.3M/year).
+- Led the migration of 17 microservices from a monolithic API gateway to an Envoy-based service mesh. Defined the SLO framework (availability, latency, error budget burn rate) used across the org; published internal RFC adopted by 9 teams in the first quarter.
+- Built a deterministic replay framework for payment workflows that reproduces production bugs from sampled traces with 99.2% fidelity. Reduced mean time to resolution on P0 payment bugs from 6.5 hours to 47 minutes.
+- Owned the on-call rotation for a Tier-1 service surface (Stripe Terminal backend). Maintained 99.987% availability over 18 consecutive months across 3 quarterly SLO reviews.
+- Mentored 4 engineers through promotion to senior; authored the team's distributed-systems interview rubric now used by 30+ interviewers.
+
+Datadog — Senior Software Engineer
+New York, NY | August 2019 – February 2022
+Metrics ingestion platform ("Longtail" team). Owned the tail-aggregation service for high-cardinality customer metrics.
+
+- Re-architected the metrics tail-aggregation pipeline to use a custom sharded RocksDB store with consistent hashing across 2,400 ingestion nodes. Increased sustained write throughput from 1.1M points/sec to 8.4M points/sec on the same hardware footprint.
+- Designed and implemented the cross-region failover protocol for the metrics backend, using Raft over gRPC with explicit lease-based leader election. Cut regional failover time from 11 minutes to 19 seconds and eliminated 3 classes of split-brain incidents observed in the prior system.
+- Shipped a query-side caching layer (Redis + LFU eviction with adaptive TTLs) that reduced p95 dashboard load times by 73% for customers with >10K active series. Drove $4.1M in incremental ARR per the FY21 retention analysis.
+- Co-led the company's adoption of OpenTelemetry for trace ingestion; authored the auto-instrumentation guide that became required reading for new backend hires.
+
+Uber Technologies — Software Engineer II
+San Francisco, CA | July 2017 – July 2019
+Real-time pricing and dispatch infrastructure (Surge team). Focused on the geospatial indexing layer for the rider-driver matching system.
+
+- Rebuilt the surge-pricing grid index from a quadtree-based PostgreSQL implementation to a custom H3-based in-memory index, reducing per-query p99 latency from 38ms to 2.4ms at the 95th percentile. Sustained through the 2018 New Year's Eve peak of 19M rides globally.
+- Designed the backpressure protocol used between the dispatch service and downstream trip-state stores; eliminated a class of cascading failures that had caused 4 P0 incidents in the prior 6 months.
+- Owned the schema migration tooling used by the team to evolve Redis cluster state across rolling deploys without dropping in-flight requests. Used in production for 47 zero-downtime migrations.
+- Presented an internal talk on "Time, Clocks, and the Ordering Problem in Distributed Dispatch" that was mandatory viewing for new engineers on the marketplace org for two quarters.
+
+Amazon Web Services — Software Development Engineer
+Seattle, WA | August 2014 – June 2017
+EC2 control plane, Instance State Management team. Owned the EBS-backed instance launch path.
+
+- Shipped the migration of instance-launch state from a single-region MySQL cluster (with cross-region async replication) to a per-AZ DynamoDB-backed state machine. Reduced launch failures due to state-store contention by 94% and cut the median launch path by 280ms.
+- Designed and implemented the optimistic concurrency control scheme for the instance-terminate API, using conditional writes plus a tombstone TTL. Eliminated the "zombie instance" class of bugs that had generated 600+ customer support tickets in the preceding year.
+- Authored the team's runbook for the 2017 s2n TLS rotation across the EC2 control plane, completed 11 days ahead of the corporate security deadline.
+- Received the Q4 2016 "Bar Raiser" award for technical interviewing; conducted 60+ on-site loops.
+
+PROJECTS
+
+tinroof — A pure-Go implementation of the Raft consensus algorithm with a built-in linearizable KV store. Used as a teaching tool at two Bay Area meetups. github.com/mjholloway/tinroof — 1.4k GitHub stars, adopted by a YC W23 startup as their config-store backbone.
+
+obscura — A Prometheus-compatible remote-write proxy that batches and compacts metrics before forwarding, with a sidecar mode for Kubernetes pods. Reduced egress costs by 44% for the maintainer's homelab cluster of 32 nodes. Documented at obscura.dev with a published benchmark suite.
+
+levee — An open-source circuit-breaker library for Go with adaptive thresholds based on a rolling EWMA of error rates and explicit half-open concurrency limits. Vendored by 11 OSS projects (including two CNCF incubating projects). Available at github.com/mjholloway/levee — 2.1k stars, 47 contributors.
+
+EDUCATION
+
+University of California, Berkeley
+B.S., Electrical Engineering and Computer Science | GPA 3.82/4.00 | Graduated May 2014
+Relevant coursework: Distributed Systems (CS 162), Operating Systems (CS 162 grad section), Algorithms (CS 170), Databases (CS 186).
+Senior thesis: "Practical Tradeoffs in Eventually-Consistent Counters" — advised by Prof. Ion Stoica.
+
+SKILLS
+
+Languages: Go (primary, 8+ years production), Python, Rust (working proficiency), Java, TypeScript
+Distributed systems: Raft, Paxos, consistent hashing, gossip protocols, CRDTs, vector clocks, leaderless replication, quorum systems, two-phase commit, saga pattern
+Storage: PostgreSQL, MySQL, DynamoDB, RocksDB, Cassandra, Redis, Kafka, Pulsar, S3
+Infra & orchestration: Kubernetes (operated 1.2k-node clusters), Envoy/Istio, Terraform, Ansible, Helm, Argo, Linkerd
+Observability: Prometheus, Grafana, OpenTelemetry, Jaeger, Honeycomb, Datadog (self-explanatory)
+Protocol & RPC: gRPC, Thrift, Protocol Buffers, FlatBuffers, HTTP/2, QUIC
+CI/CD: GitHub Actions, Buildkite, Spinnaker, Prow
+AWS: EC2, S3, RDS, DynamoDB, Kinesis, Lambda, IAM, VPC networking — Solutions Architect Associate certified (2021, since lapsed)
+Other: Linux internals (cgroups, namespaces, eBPF beginner), capacity planning, chaos engineering (chaos-mesh, Gremlin), postmortem culture, technical writing, hiring & interviewing, mentoring

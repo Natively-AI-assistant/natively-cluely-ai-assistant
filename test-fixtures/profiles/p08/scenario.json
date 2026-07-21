@@ -1,0 +1,202 @@
+{
+  "turns": [
+    {
+      "speaker": "interviewer",
+      "text": "Thanks for joining me today. Could you start by giving me a brief introduction and walking me through your background?",
+      "isQuestion": true,
+      "qid": "Q1"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Sure, I'm a platform engineer with about nine years of experience, mostly focused on Go-based systems and Kubernetes infrastructure.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Great. Can you tell me about your most recent role and what you did there?",
+      "isQuestion": true,
+      "qid": "Q2"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'm currently a Staff Engineer at Nimbus Systems. I returned in 2021 after a stint elsewhere and was promoted from Senior to Staff along the way.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "How many years have you been working with Go?",
+      "isQuestion": true,
+      "qid": "Q3"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Roughly seven years professionally, going back to my first role.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "I noticed you led the OpenTelemetry Collector Distribution for Kubernetes project. Can you tell me what that involved?",
+      "isQuestion": true,
+      "qid": "Q4"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I designed and shipped a distribution that bundles collectors with sane defaults for k8s clusters, including auto-instrumentation hooks and a custom operator for rollout management.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What would you consider your biggest achievement at your most recent employer?",
+      "isQuestion": true,
+      "qid": "Q5"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'd say migrating our internal metrics pipeline onto that OTel-based distribution, which cut our observability costs by around 40%.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Why are you interested in this Senior Platform Engineer role at Northwind Logistics?",
+      "isQuestion": true,
+      "qid": "Q6"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Logistics is an interesting domain where platform reliability really matters, and Northwind's stack looks like a strong fit for my background.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Let's touch on a key requirement: you clearly bring strong Go and Kubernetes experience. How do you feel that maps to what we're looking for?",
+      "isQuestion": true,
+      "qid": "Q7"
+    },
+    {
+      "speaker": "candidate",
+      "text": "It's directly relevant. I've spent years building internal platforms on Go and k8s, so the core day-to-day should feel familiar.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "One thing to dig into: the role calls for experience with multi-tenant infrastructure at scale, and I don't see that directly on your resume. How would you approach closing that gap?",
+      "isQuestion": true,
+      "qid": "Q8"
+    },
+    {
+      "speaker": "candidate",
+      "text": "My OTel distribution work involved tenant-aware pipelines and quotas, though it wasn't framed that way. I'd lean on that and ramp quickly on anything tenant-specific.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Quick detour, then I'll get back on track. By the way, did you have any trouble finding parking around here?",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Now, can you tell me about your education?",
+      "isQuestion": true,
+      "qid": "Q9"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I have a B.S. in Computer Science from State University, graduated in 2014.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Tell me about a time you faced a significant technical challenge and how you handled it. Use the STAR format if you can.",
+      "isQuestion": true,
+      "qid": "Q10"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Sure. Situation: our collectors were dropping spans under load. Task: restore fidelity without raising costs. Action: I profiled, found the batching bug, and rewrote the exporter pipeline. Result: span loss dropped to near zero and we cut CPU usage in half.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "What are your salary expectations for this role?",
+      "isQuestion": true,
+      "qid": "Q11"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'm flexible within reason, but based on market data for senior platform roles I'd target the 170 to 190k range, depending on equity and benefits.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Do you have any questions for me?",
+      "isQuestion": true,
+      "qid": "Q12"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yeah, two things. What does on-call look like for this role, and how is the platform team structured across product lines?",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "How long did that OTel rollout project take from kickoff to full adoption?",
+      "isQuestion": true,
+      "qid": "Q13"
+    },
+    {
+      "speaker": "candidate",
+      "text": "About five months from first commit to fully replacing the legacy stack across all production clusters.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Just to confirm a logistical detail: do you have a valid driver's license, since some of our logistics partners require on-site visits?",
+      "isQuestion": true,
+      "qid": "Q14"
+    },
+    {
+      "speaker": "candidate",
+      "text": "No, I don't currently hold one. I use public transit and rideshare, though I'm open to discussing what the on-site requirements would look like.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "candidate",
+      "text": "Thanks for being flexible with my schedule today.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Last question, and I'll combine two: what would your ideal first 90 days look like, and how do you measure your own success in a role like this? And what interests you most about this opportunity?",
+      "isQuestion": true,
+      "qid": "Q15"
+    },
+    {
+      "speaker": "candidate",
+      "text": "First 90 days I'd focus on understanding existing systems, building trust with the team, and shipping one or two quick wins. Success for me is measured by team velocity and the reliability of what we ship.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "candidate",
+      "text": "That covers everything on my list. Appreciate your time and we'll be in touch soon.",
+      "isQuestion": false,
+      "qid": null
+    }
+  ]
+}

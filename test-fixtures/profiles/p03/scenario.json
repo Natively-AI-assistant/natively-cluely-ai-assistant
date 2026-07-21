@@ -1,0 +1,202 @@
+{
+  "turns": [
+    {
+      "speaker": "candidate",
+      "text": "Hi, thank you for having me. I'm Alex, nice to meet you.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Welcome, Alex. Could you start by telling me a bit about yourself and what brought you here today?",
+      "isQuestion": true,
+      "qid": "Q1"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Sure. I'm a former high school math teacher looking to move into data analytics. I finished a bootcamp recently and I'm excited about this opportunity.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Thanks for sharing. Can you walk me through your most recent role and what you were responsible for there?",
+      "isQuestion": true,
+      "qid": "Q2"
+    },
+    {
+      "speaker": "candidate",
+      "text": "My most recent professional role was teaching high school math. I taught Algebra II and Statistics, designed lesson plans, and tracked student performance data.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Got it. How many years of experience do you have using SQL, which I see listed as your top skill?",
+      "isQuestion": true,
+      "qid": "Q3"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I've used SQL intensively for about a year now, mainly through my bootcamp and personal projects. Before that, I used basic database queries occasionally while teaching.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Nice. I noticed on your resume a project called Nashville Housing Market: Price Drivers and Foreclosure Risk. Can you tell me about that?",
+      "isQuestion": true,
+      "qid": "Q4"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes. I pulled public housing data, cleaned it in SQL, and built a model in Python to identify price drivers and flag foreclosure risk. I visualized the results in Tableau.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "That sounds relevant. What would you say was your biggest achievement in your most recent role?",
+      "isQuestion": true,
+      "qid": "Q5"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'd say redesigning our Statistics curriculum to include more real-data projects. Student engagement and test scores both improved noticeably that year.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Great. Why are you interested in this Data Analyst role at Northwind Logistics specifically?",
+      "isQuestion": true,
+      "qid": "Q6"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Northwind's logistics focus means interesting supply chain data, and I like that you're a growing company. It feels like a place where I can add value while learning fast.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Understood. You mentioned earlier that you have relevant analytics experience from projects and your bootcamp. Can you expand on that?",
+      "isQuestion": true,
+      "qid": "Q7"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Absolutely. I completed an eight-month data analytics bootcamp covering SQL, Python, Tableau, and statistics. I also built two end-to-end projects, including the Nashville housing one.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "I also want to address something I noticed. There's a roughly two-year gap on your resume after your teaching career. Can you walk me through that?",
+      "isQuestion": true,
+      "qid": "Q8"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Of course. After teaching, I took time off to care for a family member who was ill. Once that stabilized, I decided to pursue the career switch and enrolled in the bootcamp.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Thank you for being open about that. Before we go further, could you tell me about your educational background?",
+      "isQuestion": true,
+      "qid": "Q9"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I have a Bachelor's in Mathematics and a teaching credential. I recently completed a Data Analytics bootcamp certificate as well.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Great. Can you share a specific challenge you faced and how you handled it, using the STAR format?",
+      "isQuestion": true,
+      "qid": "Q10"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Sure. In my bootcamp capstone, our team had a member go silent. I stepped in to redistribute the workload, reorganized our timeline, and we delivered the project on time with a strong final presentation.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Appreciate that. What are your salary expectations for this role?",
+      "isQuestion": true,
+      "qid": "Q11"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Based on my research for entry-level data analyst roles in this area, I'd be targeting somewhere in the 65 to 75 thousand range, though I'm open to discussion.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Good to know. Do you have any questions for me about the role or the team?",
+      "isQuestion": true,
+      "qid": "Q12"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes, what does a typical day look like for this role, and how large is the analytics team I'd be joining?",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "It's a team of six. Going back to your bootcamp capstone, how long did that project take from start to finish?",
+      "isQuestion": true,
+      "qid": "Q13"
+    },
+    {
+      "speaker": "candidate",
+      "text": "The capstone ran for about six weeks total, with the final two weeks dedicated to analysis and presentation.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Quick one: do you have a valid driver's license?",
+      "isQuestion": true,
+      "qid": "Q14"
+    },
+    {
+      "speaker": "candidate",
+      "text": "No, I don't currently have one.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "It was great meeting you, Alex. I really enjoyed our conversation today.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Before we wrap up, two quick things: where do you see yourself in three to five years, and is there anything else you'd like us to know about you? And what interests you most about this opportunity?",
+      "isQuestion": true,
+      "qid": "Q15"
+    },
+    {
+      "speaker": "candidate",
+      "text": "In three to five years, I'd like to be a senior analyst mentoring newer team members. I'd also like you to know that I'm a dedicated learner and I'm excited to bring my analytical skills to Northwind.",
+      "isQuestion": false,
+      "qid": null
+    },
+    {
+      "speaker": "candidate",
+      "text": "Wonderful. Thanks so much for your time today, Alex. We'll be in touch soon.",
+      "isQuestion": false,
+      "qid": null
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+=== GOLDEN TRACE — minute 2 ===
+Simulated latency (clock-advance only, not real wall time): 8115ms
+
+--- [TRACE:LONGCTX] question_extracted ---
+[TRACE:LONGCTX] question_extracted {"contextItemsCount":6,"transcriptTurnsCount":6,"rawTranscriptChars":453,"preparedTranscriptChars":506,"latestQuestion":"tell me about a time you had to debug a really difficult production issue.","questionType":"behavioral","detectedSpeaker":"interviewer","confidence":0.8,"isFollowUp":false,"sessionStartTime":1784231494615,"nowMs":1784231614637}
+
+  contextItemsCount:      6
+  transcriptTurnsCount:   6
+  rawTranscriptChars:     453
+  preparedTranscriptChars:506
+  latestQuestion:         "tell me about a time you had to debug a really difficult production issue."
+  questionType:           behavioral
+  confidence:             0.8
+
+--- [TRACE:LONGCTX] prompt_assembled ---
+[TRACE:LONGCTX] prompt_assembled {"systemPromptChars":29961,"systemPromptTokensEst":7491,"userMessageChars":1968,"userMessageTokensEst":492,"transcriptForPromptChars":506,"workingTranscriptChars":506,"cleanedTranscriptChars":506,"modeContextBlockChars":0,"pinnedModeInstructionsChars":0,"candidateProfileChars":0,"assemblerBudget":2351,"blockCount":2,"blockTypes":[{"type":"intent_context","trustLevel":"developer_policy","chars":1404},{"type":"transcript","trustLevel":"untrusted_transcript","chars":562}],"totalTokensUsedByAssembler":492,"maxContextTokens":128000,"outputBudgetTokens":4000,"modelId":"natively","answerPlanQuestion":"tell me about a time you had to debug a really difficult production issue.","answerPlanQuestionSurvivesInPrompt":true,"userMessageTail":"vention:\n[How to prevent recurrence.]\n\nSTYLE: Use the STAR shape — Situation, Task, Action, Result — in first person, concise and speakable (about 60 seconds). Name a concrete, grounded example; do not invent metrics.\n</answer_contract>\n\n<transcript trust_level=\"untrusted\">\n[INTERVIEWER]: hi, thanks for joining today. can you hear me\n[ME]: i can hear you fine, thanks.\n[INTERVIEWER]: let&apos;s get started. can you walk me through your most recent project and what you built?\n[ME]: i recently built a real-time data pipeline using kafka and flink for stream processing at my last role.\n[INTERVIEWER]: what specific challenges did you run into with the kafka pipeline, and how did you scale it?\n[INTERVIEWER]: tell me about a time you had to debug a really difficult production issue.\n</transcript>","systemPromptTail":"ected_context>\n\n   <formatting>\n   - No # headers. **Bold** for emphasis and labels.\n   - Bullets for lists. Sub-bullets for detail. Not everything needs to be a list.\n   - LaTeX for math: $...$ inline, $$...$$ block.\n   - Non-coding answers: short enough to say aloud in 15 to 30 seconds (shorter when the question is simple).\n   - No filler openers. No closers. No meta-commentary.\n   </formatting>"}
+
+  systemPromptChars:      29961 (~7491 tok)
+  userMessageChars:       1968 (~492 tok)
+  transcriptForPromptChars: 506
+  workingTranscriptChars:   506
+  cleanedTranscriptChars:   506
+  assemblerBudget:          2351
+  totalTokensUsedByAssembler: 492
+  maxContextTokens:         128000
+  modelId:                  natively
+  answerPlanQuestion:              "tell me about a time you had to debug a really difficult production issue."
+  answerPlanQuestionSurvivesInPrompt: true
+
+  blockTypes:
+    - intent_context (developer_policy): 1404 chars
+    - transcript (untrusted_transcript): 562 chars
+
+  userMessageTail (last 800 chars sent to provider):
+  ---
+vention:
+[How to prevent recurrence.]
+
+STYLE: Use the STAR shape — Situation, Task, Action, Result — in first person, concise and speakable (about 60 seconds). Name a concrete, grounded example; do not invent metrics.
+</answer_contract>
+
+<transcript trust_level="untrusted">
+[INTERVIEWER]: hi, thanks for joining today. can you hear me
+[ME]: i can hear you fine, thanks.
+[INTERVIEWER]: let&apos;s get started. can you walk me through your most recent project and what you built?
+[ME]: i recently built a real-time data pipeline using kafka and flink for stream processing at my last role.
+[INTERVIEWER]: what specific challenges did you run into with the kafka pipeline, and how did you scale it?
+[INTERVIEWER]: tell me about a time you had to debug a really difficult production issue.
+</transcript>
+  ---
+
+--- Raw model answer ---
+Likely Cause:
+
+A timing or ordering issue where a downstream consumer processed an event before the corresponding upstream write was durably committed, so the data it read was stale or missing.
+
+How I Would Investigate:
+
+Reproduce the issue in a staging environment with the same load profile, then add distributed tracing across the producer, the topic, and the consumer to compare timestamps at each hop. Cross-check consumer offsets against producer commit logs, and inspect the Kafka broker logs for any ISR changes, rebalances, or out-of-memory events around the time of the incident.
+
+Fix:
+
+Switch the producer to acks=all with idempotent enabled, raise the consumer's isolation level to read_committed, and bump replication factor for the affected topic. Then rewind the consumer offset to the last known good position and replay the affected partitions.
+
+Validation:
+
+Run a chaos test that kills a broker mid-stream and confirms no duplicates and no data loss in the consumer. Also build a reconciliation job that compares per-partition high-water marks against the sink's row counts on a daily cadence.
+
+Prevention:
+
+Add a contract test between producer and consumer schemas, alert on consumer lag exceeding a defined threshold, and run regular game-day exercises that inject broker failures so the team can rehearse the runbook before the next incident.
+
+--- ALL captured [TRACE:LONGCTX] lines for this press ---
+[TRACE:LONGCTX] question_extracted {"contextItemsCount":6,"transcriptTurnsCount":6,"rawTranscriptChars":453,"preparedTranscriptChars":506,"latestQuestion":"tell me about a time you had to debug a really difficult production issue.","questionType":"behavioral","detectedSpeaker":"interviewer","confidence":0.8,"isFollowUp":false,"sessionStartTime":1784231494615,"nowMs":1784231614637}
+[TRACE:LONGCTX] prompt_assembled {"systemPromptChars":29961,"systemPromptTokensEst":7491,"userMessageChars":1968,"userMessageTokensEst":492,"transcriptForPromptChars":506,"workingTranscriptChars":506,"cleanedTranscriptChars":506,"modeContextBlockChars":0,"pinnedModeInstructionsChars":0,"candidateProfileChars":0,"assemblerBudget":2351,"blockCount":2,"blockTypes":[{"type":"intent_context","trustLevel":"developer_policy","chars":1404},{"type":"transcript","trustLevel":"untrusted_transcript","chars":562}],"totalTokensUsedByAssembler":492,"maxContextTokens":128000,"outputBudgetTokens":4000,"modelId":"natively","answerPlanQuestion":"tell me about a time you had to debug a really difficult production issue.","answerPlanQuestionSurvivesInPrompt":true,"userMessageTail":"vention:\n[How to prevent recurrence.]\n\nSTYLE: Use the STAR shape — Situation, Task, Action, Result — in first person, concise and speakable (about 60 seconds). Name a concrete, grounded example; do not invent metrics.\n</answer_contract>\n\n<transcript trust_level=\"untrusted\">\n[INTERVIEWER]: hi, thanks for joining today. can you hear me\n[ME]: i can hear you fine, thanks.\n[INTERVIEWER]: let&apos;s get started. can you walk me through your most recent project and what you built?\n[ME]: i recently built a real-time data pipeline using kafka and flink for stream processing at my last role.\n[INTERVIEWER]: what specific challenges did you run into with the kafka pipeline, and how did you scale it?\n[INTERVIEWER]: tell me about a time you had to debug a really difficult production issue.\n</transcript>","systemPromptTail":"ected_context>\n\n   <formatting>\n   - No # headers. **Bold** for emphasis and labels.\n   - Bullets for lists. Sub-bullets for detail. Not everything needs to be a list.\n   - LaTeX for math: $...$ inline, $$...$$ block.\n   - Non-coding answers: short enough to say aloud in 15 to 30 seconds (shorter when the question is simple).\n   - No filler openers. No closers. No meta-commentary.\n   </formatting>"}

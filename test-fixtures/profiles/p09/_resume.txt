@@ -1,0 +1,72 @@
+ARJUN MEHTA
+Senior Machine Learning Engineer
+Bangalore, Karnataka, India | +91-98453-22108 | arjun.mehta.iitb@gmail.com | linkedin.com/in/arjunmehta-ml | github.com/arjunm-iitb
+
+SUMMARY
+
+Machine learning engineer with 5 years of experience building production ML systems across recommendation, NLP, and computer vision. Shipped models that served over 40 million monthly active users across fintech and e-commerce platforms. Strong background in large-scale training pipelines, feature engineering, and A/B experimentation. Seeking senior ML engineer roles in the United States; will require H-1B visa sponsorship from the prospective employer. Compensation expectation in the range of INR 65-75 lakhs per annum for India-based roles, with flexibility to align with U.S. market benchmarks for sponsored positions.
+
+WORK EXPERIENCE
+
+Senior Machine Learning Engineer
+Razorpay Software Pvt. Ltd., Bangalore, India
+March 2023 - Present
+
+- Designed and deployed a real-time fraud detection system using a gradient-boosted ensemble (XGBoost + LightGBM) over 180+ engineered features, reducing payment fraud losses by 31 percent and saving an estimated INR 84 crore annually across 12 million monthly transactions.
+- Led the migration of the legacy batch scoring pipeline to a streaming architecture on Apache Flink and Kafka, cutting end-to-end inference latency from 14 seconds to under 220 milliseconds for the risk decisioning service.
+- Architected the merchant lifetime value (LTV) prediction model using Temporal Fusion Transformers, integrated into the CRM tool used by 800+ relationship managers; improved upsell conversion by 19 percent in controlled A/B tests over 60 days.
+- Built an internal ML platform feature store (Feast-based) serving 2.4 TB of online features with sub-50ms p99 lookup, adopted by six downstream teams and eliminating approximately 70 percent of redundant feature computation.
+- Mentored four junior engineers through structured biweekly ML system design reviews; two were promoted to mid-level within 11 months.
+
+Machine Learning Engineer
+Flipkart Internet Pvt. Ltd., Bangalore, India
+July 2021 - February 2023
+
+- Built the next-best-action recommender for the post-order tracking page using a two-tower neural retrieval model followed by a cross-attention ranker, increasing repeat purchase rate by 7.4 percent and incremental GMV of INR 220 crore over 9 months.
+- Co-developed Flipkart's session-based personalization service on TensorFlow Serving, handling 18,000 QPS during peak Big Billion Days traffic with a documented availability of 99.94 percent.
+- Created an off-policy evaluation framework using IPS and doubly robust estimators that reduced the time-to-decision for new ranking models from 6 weeks to 9 days, saving roughly 280 engineering hours per quarter.
+- Owned the cold-start problem for new seller listings by combining product attribute embeddings (from a fine-tuned MiniLM) with category-level priors, lifting first-week impressions for new SKUs by 23 percent.
+
+Associate Machine Learning Engineer
+Mu Sigma Business Solutions Pvt. Ltd., Bangalore, India
+August 2019 - June 2021
+
+- Delivered churn prediction models for two Fortune 500 telecom clients (Verizon Wireless, Deutsche Telekom) using stacked ensembles; achieved AUC of 0.87 and 0.84 respectively on holdout sets.
+- Built a demand forecasting system for a U.S. grocery client using Prophet and LSTM hybrids, reducing mean absolute percentage error from 18.6 percent to 9.2 percent across 1,400 store-SKU combinations.
+- Authored an internal NLP toolkit (tokenization, NER wrappers, and weak-supervision labeling using Snorkel) adopted by 11 client teams, cutting typical text pipeline setup time by approximately 60 percent.
+
+PROJECTS
+
+BharatTranslate - Low-Resource Neural Machine Translation
+github.com/arjunm-iitb/bharattranslate
+- Built a 250M-parameter Transformer model translating between 11 Indian language pairs (Hindi, Tamil, Bengali, Telugu, Marathi, Malayalam, Kannada, Gujarati, Punjabi, Odia, Assamese), training on a curated 18M sentence-parallel corpus augmented with back-translation.
+- Achieved a BLEU score of 28.4 on Hindi-Tamil (compared to 14.1 from the IndicTrans baseline) and won the Best Open-Source Project award at ML India Annual Summit 2022.
+
+CardioRisk - ECG-Based Cardiovascular Risk Stratification
+- Developed a 1D ResNet-50 model trained on 1.2 million 12-lead ECG recordings (PTB-XL and a private hospital dataset) to predict 5-year major adverse cardiac events, reaching an AUROC of 0.91.
+- Deployed as a clinician-facing dashboard at a partner hospital in Mumbai; flagged 312 high-risk patients in a 3-month pilot, of whom 274 were independently confirmed positive on follow-up angiography.
+
+EDUCATION
+
+Bachelor of Technology (B.Tech.), Computer Science and Engineering
+Indian Institute of Technology Bombay, Mumbai, India
+2015 - 2019
+CGPA: 9.18 / 10.0
+Relevant Coursework: Machine Learning, Deep Learning, Optimization, Probabilistic Graphical Models, Distributed Systems, Information Retrieval.
+Capstone: "Sparse Mixture-of-Experts for Multilingual Document Classification" (Advisor: Prof. Preethi Jyothi), published as a workshop paper at EMNLP 2020.
+
+SKILLS
+
+Programming: Python, Scala, Go, SQL, Bash, C++
+ML Frameworks: PyTorch, TensorFlow, JAX, scikit-learn, XGBoost, LightGBM, CatBoost
+NLP / CV: Hugging Face Transformers, spaCy, OpenCV, Sentence-Transformers, FAISS
+Data & Infrastructure: Apache Spark, Kafka, Flink, Airflow, dbt, Ray, MLflow, Kubeflow, Feast, Redis, PostgreSQL, BigQuery, Snowflake
+Cloud: AWS (S3, SageMaker, EKS, Lambda), GCP (Vertex AI, GKE), Kubernetes, Docker, Terraform
+Practices: A/B testing, causal inference, offline/online evaluation, feature stores, model governance, MLOps, cost optimization, technical mentoring
+
+ADDITIONAL
+
+- Publications: "Sparse Routing for Low-Resource Code-Mixed Hinglish Classification," EMNLP 2020 Workshop on NLP for Similar Languages and Code-Switching.
+- Certifications: AWS Certified Machine Learning - Specialty (2023), Deep Learning Specialization, deeplearning.ai (2020).
+- Languages: English (fluent), Hindi (native), Marathi (conversational).
+- Visa status: Indian citizen; requires H-1B sponsorship for U.S.-based employment. Already in possession of a valid U.S. B1/B2 visa (expiring March 2028) and have previously traveled to the U.S. on business four times for client engagements.

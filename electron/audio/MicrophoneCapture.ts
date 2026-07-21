@@ -2,8 +2,12 @@ import { EventEmitter } from 'events';
 import { loadNativeModule } from './nativeModuleLoader';
 
 // RustMicCapture is the native Rust class (napi-rs) that captures microphone input.
-// Uses eager init — the monitor is created in the constructor and kept alive across
-// stop/restart cycles to avoid re-initialization latency.
+// Uses LAZY init — the native monitor is NOT created in the constructor. Constructing
+// the wrapper must NOT touch macOS CoreAudio HAL: doing so lights the orange menu-bar
+// microphone-in-use indicator, which would be on for the lifetime of the process even
+// though no meeting is active (the user-facing invariant we're protecting here).
+// The native monitor is constructed in start() (the only point at which capture is
+// actually requested) and in the post-stop() pre-warm path (gated on preWarmEnabled).
 const NativeModule: any = loadNativeModule();
 const { MicrophoneCapture: RustMicCapture } = NativeModule || {};
 
@@ -11,6 +15,28 @@ export class MicrophoneCapture extends EventEmitter {
     private monitor: any = null;
     private isRecording: boolean = false;
     private deviceId: string | null = null;
+    // Promise that resolves when the deferred native teardown setImmediate body
+    // finishes (i.e. monitor.stop() has released the cpal stream / HAL handle).
+    // Tracked so:
+    //   - repeated stop() calls return the same in-flight promise (idempotent),
+    //   - callers can `await capture.stop()` to know teardown is genuinely
+    //     complete before constructing a new native instance / starting again,
+    //   - destroy() awaits this before removing listeners and nulling fields.
+    private _teardownPromise: Promise<void> | null = null;
+    // When false, the post-teardown pre-warm step (which constructs a fresh
+    // RustMicCapture so the next meeting's start() doesn't pay the cpal init
+    // cost on the Electron main thread) is skipped. Disabled by:
+    //   - destroy() — permanent disposal, the wrapper will never be used again
+    //   - disablePreWarm() — called from main.ts during app quit, aborted
+    //     meeting init, and device-swap paths where the next start (if any)
+    //     will construct a brand-new MicrophoneCapture instance anyway.
+    //   - the wrapper has never had a successful start() — there's no evidence
+    //     the user will ever need the warm instance, so don't re-open the cpal
+    //     stream during the gap between endMeeting() and the next startMeeting().
+    // Default false: the first meeting pays the cold-start cost once, and every
+    // subsequent meeting benefits from pre-warm (preWarmEnabled flips to true
+    // inside start() after a successful monitor.start).
+    private preWarmEnabled: boolean = false;
 
     constructor(deviceId?: string | null) {
         super();
@@ -18,18 +44,12 @@ export class MicrophoneCapture extends EventEmitter {
         if (!RustMicCapture) {
             console.error('[MicrophoneCapture] Rust class implementation not found.');
         } else {
-            console.log(`[MicrophoneCapture] Initialized wrapper. Device ID: ${this.deviceId || 'default'}`);
-            try {
-                console.log('[MicrophoneCapture] Creating native monitor (Eager Init)...');
-                this.monitor = new RustMicCapture(this.deviceId);
-            } catch (e) {
-                console.error('[MicrophoneCapture] Failed to create native monitor:', e);
-                // Re-throw so callers (e.g. reconfigureAudio) can catch and fall back to
-                // the default device. Without this, the constructor returns a broken
-                // instance (monitor=null) and the fallback try/catch in main.ts is
-                // never reached, leaving the user with zero microphone capture.
-                throw e;
-            }
+            // LAZY INIT: do NOT construct the native monitor here. Doing so opens
+            // a cpal input stream on macOS and lights the orange menu-bar mic-in-use
+            // indicator — even though no meeting has started. Construction is
+            // deferred to start() (when the user actually needs capture) and to
+            // the gated post-stop() pre-warm path.
+            console.log(`[MicrophoneCapture] Initialized wrapper (lazy). Device ID: ${this.deviceId || 'default'}`);
         }
     }
 
@@ -47,6 +67,23 @@ export class MicrophoneCapture extends EventEmitter {
     }
 
     /**
+     * The NATIVE hardware sample rate (e.g. 24000 when AirPods are in Bluetooth
+     * HFP "call mode", 48000 for the built-in mic) — distinct from getSampleRate(),
+     * which returns the canonical EMITTED rate (16000) after the DSP resampler.
+     * Used for HFP/Bluetooth-degradation detection. Returns 0 if unavailable.
+     */
+    public getNativeSampleRate(): number {
+        if (this.monitor) {
+            if (typeof this.monitor.getNativeSampleRate === 'function') {
+                return this.monitor.getNativeSampleRate();
+            } else if (typeof this.monitor.get_native_sample_rate === 'function') {
+                return this.monitor.get_native_sample_rate();
+            }
+        }
+        return 0;
+    }
+
+    /**
      * Start capturing microphone audio
      */
     public start(): void {
@@ -57,17 +94,24 @@ export class MicrophoneCapture extends EventEmitter {
             return;
         }
 
-        // Defensive fallback: under normal flow the constructor always
-        // creates this.monitor (and throws on failure). This branch only
-        // fires if someone constructs the class with RustMicCapture present,
-        // then the native object is externally freed (edge case).
+        // PRIMARY construction site (lazy init). The wrapper does NOT construct
+        // a native monitor in its constructor — doing so would open a cpal
+        // input stream on macOS and light the orange mic-in-use indicator at
+        // app launch (see constructor comments). Construction is deferred to
+        // here, where the user has actually requested capture. The branch is
+        // also defensive: if the native monitor was externally freed (edge
+        // case) we still recover cleanly.
         if (!this.monitor) {
-            console.log('[MicrophoneCapture] Monitor not initialized. Re-initializing...');
+            console.log('[MicrophoneCapture] Constructing native monitor (lazy start-time init)...');
             try {
                 this.monitor = new RustMicCapture(this.deviceId);
             } catch (e) {
                 this.emit('error', e);
-                return;
+                // Preserve the pre-lazy-init contract: native construction
+                // failures are catchable by the caller (startMeeting,
+                // reconfigureAudio, audio-test fallback). Emitting alone would
+                // silently skip those existing try/catch UI/error paths.
+                throw e;
             }
         }
 
@@ -81,6 +125,7 @@ export class MicrophoneCapture extends EventEmitter {
                 if (err) {
                     console.error('[MicrophoneCapture] Callback error:', err);
                     this.isRecording = false; // Allow recovery via restart
+                    this.preWarmEnabled = false;
                     this.emit('error', err);
                     return;
                 }
@@ -107,11 +152,18 @@ export class MicrophoneCapture extends EventEmitter {
                 this.emit('speech_ended');
             });
 
+            // Enable pre-warm for the NEXT stop() cycle only after the JS-side
+            // native start call returned successfully. If monitor.start() throws,
+            // the catch below keeps preWarmEnabled=false so a failed start cannot
+            // reopen the mic in stop()'s post-teardown pre-warm.
+            this.preWarmEnabled = true;
             this.emit('start');
         } catch (error) {
             console.error('[MicrophoneCapture] Failed to start:', error);
             this.isRecording = false;
+            this.preWarmEnabled = false;
             this.emit('error', error);
+            throw error;
         }
     }
 
@@ -126,28 +178,113 @@ export class MicrophoneCapture extends EventEmitter {
      * data-callback guard) see the stopped state immediately, then defer the
      * native teardown so the Electron IPC handler returns without waiting.
      */
-    public stop(): void {
-        if (!this.isRecording) return;
+    public stop(): Promise<void> {
+        // Idempotent: a concurrent stop() (e.g. endMeeting racing an audio
+        // recovery teardown) joins the in-flight teardown instead of
+        // starting a second one. If we are not recording AND no teardown is
+        // in flight, this is a no-op resolved promise.
+        if (!this.isRecording) {
+            return this._teardownPromise ?? Promise.resolve();
+        }
 
         console.log('[MicrophoneCapture] Stopping capture (deferred native teardown)...');
         this.isRecording = false;
         const monitor = this.monitor;
-        setImmediate(() => {
+        // Null the field so any caller that wins the race against the setImmediate
+        // below sees a clean slate. The setImmediate callback will eagerly
+        // reconstruct a fresh Rust monitor before the next meeting starts.
+        this.monitor = null;
+
+        // Native teardown only — the setImmediate body releases the HAL
+        // handle and resolves the promise. Pre-warm has been pulled OUT of
+        // this body (it used to run inside the same setImmediate). Now it
+        // runs in a separate .then() chained off the teardown promise so
+        // that:
+        //   1. `await capture.stop()` resolves the instant the OS-side
+        //      handle is gone — callers waiting on teardown don't pay the
+        //      pre-warm cost.
+        //   2. Pre-warm is gated on `this.preWarmEnabled`, which destroy()
+        //      and disablePreWarm() flip to false. Without this gate, the
+        //      old in-body pre-warm would happily construct a fresh native
+        //      handle during app quit, device swap, or aborted meeting init
+        //      — wasted work in every case, and on `before-quit` an actual
+        //      bug (we'd grab the OS mic for a process about to die).
+        const teardownPromise = new Promise<void>((resolve) => {
+            setImmediate(() => {
+                try {
+                    monitor?.stop();
+                } catch (e) {
+                    console.error('[MicrophoneCapture] Error stopping (deferred):', e);
+                }
+                resolve();
+            });
+        });
+        this._teardownPromise = teardownPromise;
+
+        // After teardown settles: clear the in-flight slot, then conditionally
+        // pre-warm. Order matters — the slot clear must happen before
+        // pre-warm so that a fast `await stop(); start()` sequence sees a
+        // clean state on entry to start(), and the pre-warm's `!this.monitor`
+        // check below correctly skips if start() already constructed one.
+        void teardownPromise.then(() => {
+            if (this._teardownPromise === teardownPromise) {
+                this._teardownPromise = null;
+            }
+            if (!this.preWarmEnabled) return;
+            if (!RustMicCapture) return;
+            if (this.monitor) return;  // start() raced ahead and already grabbed a fresh handle
             try {
-                monitor?.stop();
+                console.log('[MicrophoneCapture] Pre-warming native monitor for next meeting...');
+                this.monitor = new RustMicCapture(this.deviceId);
             } catch (e) {
-                console.error('[MicrophoneCapture] Error stopping (deferred):', e);
+                // Emit a structured event so observers (main.ts handles
+                // 'error', AudioRecovery, telemetry) see the failure
+                // instead of it being buried in console output. The
+                // defensive branch in start() (line ~64) will still retry
+                // construction synchronously — at that point the failure
+                // surfaces as a normal start error to the user. The event
+                // here is purely for diagnostics on why the next start
+                // suffered the main-thread HAL stall.
+                console.error('[MicrophoneCapture] Pre-warm failed (next start() will retry):', e);
+                // Snake_case to match sibling events on this class
+                // (speech_ended, sample_rate_changed).
+                this.emit('pre_warm_failed', e);
             }
         });
+
         this.emit('stop');
+        return teardownPromise;
     }
 
-    public destroy(): void {
-        this.stop();
-        // Remove all listeners BEFORE nulling monitor.
-        // In-flight Rust callbacks may still arrive (via napi's scheduler)
-        // after stop() returns. Clearing listeners prevents them from emitting
-        // events on an object the caller considers dead.
+    /**
+     * Permanently disable the post-teardown pre-warm step.
+     *
+     * Callers from main.ts use this in three situations:
+     *   - app `before-quit`: process is exiting; grabbing the OS mic now
+     *     leaks a native handle past V8 teardown.
+     *   - device swap (reconfigureAudio): the next start will construct a
+     *     brand-new MicrophoneCapture for the new device — pre-warming the
+     *     OLD device would build a handle that nothing ever uses.
+     *   - aborted meeting init: the user cancelled before any audio reached
+     *     the STT; there is no "next start" imminent enough to justify the
+     *     cpal cold-start work.
+     *
+     * destroy() flips this flag automatically before awaiting stop(), so
+     * callers using destroy() do not need a separate disablePreWarm() call.
+     */
+    public disablePreWarm(): void {
+        this.preWarmEnabled = false;
+    }
+
+    public async destroy(): Promise<void> {
+        // Disable pre-warm BEFORE awaiting stop(). Without this, the
+        // teardown promise's .then() would happily reconstruct a fresh
+        // RustMicCapture immediately after monitor.stop() — only to be
+        // nulled again at the bottom of this method. Wasted FFI work on
+        // every destroy, and a small window where this.monitor briefly
+        // points at a handle the caller considers dead.
+        this.preWarmEnabled = false;
+        await this.stop();
         this.removeAllListeners();
         this.monitor = null;
     }

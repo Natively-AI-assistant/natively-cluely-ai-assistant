@@ -1,17 +1,17 @@
 {
-  "suite": "ModeContextRetriever",
+  "suite": "WhatToAnswerLLM",
   "ran_at": "2026-05-15T11:42:00Z",
   "total": 12,
   "passed": 11,
   "failed": 1,
   "failures": [
     {
-      "name": "retrieveHybrid - returns lexical fallback when EmbeddingPipeline.isReady is false",
-      "file": "electron/services/__tests__/ModeContextRetriever.test.mjs",
-      "line": 218,
-      "error": "Test ModeContextRetriever.retrieveHybrid failed with timeout 5000ms — the EmbeddingPipeline mock never resolved isReady to false, so the hybrid path waited for an embedding response that never came.",
+      "name": "generateStream - streams after custom mode hot-swap",
+      "file": "electron/llm/__tests__/WhatToAnswerLLM.test.mjs",
+      "line": 139,
+      "error": "TypeError: Cannot read properties of undefined (reading 'streamChat')",
       "regression_introduced_in": "commit 5d95836 reference file upload feature"
     }
   ],
-  "follow_up": "Add fake EmbeddingPipeline that returns isReady=false synchronously to remove the 5s timeout dependency from this suite."
+  "follow_up": "Add a regression test that reconstructs WhatToAnswerLLM through the custom-mode hot-swap path and asserts the existing LLMHelper dependency is preserved and streamChat is called."
 }

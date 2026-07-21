@@ -15,11 +15,25 @@ const MODEL_CATALOG: WhisperModelInfo[] = [
   //     ~6× faster CPU/GPU at near-equivalent WER. English-only.
   { id: 'distil-whisper/distil-small.en',    name: 'Distil Small EN',  sizeMb: 164,  speed: 'very-fast', accuracy: 'high',      multilingual: false, status: 'missing', distilled: true },
   { id: 'distil-whisper/distil-medium.en',   name: 'Distil Medium EN', sizeMb: 383,  speed: 'fast',      accuracy: 'very-high', multilingual: false, status: 'missing', distilled: true },
-  { id: 'distil-whisper/distil-large-v3',    name: 'Distil Large v3',  sizeMb: 731,  speed: 'medium',    accuracy: 'very-high', multilingual: false, status: 'missing', distilled: true },
-  { id: 'distil-whisper/distil-large-v2',    name: 'Distil Large v2',  sizeMb: 731,  speed: 'medium',    accuracy: 'very-high', multilingual: false, status: 'missing', distilled: true },
+  //   distil-large-v* are external-data checkpoints (fp32 encoder weights in a
+  //   sibling encoder_model.onnx_data). Their OWN config.json self-declares it,
+  //   so transformers fetches it on download — but we still record the layout
+  //   here so isModelCached requires the companion (an aborted download leaving
+  //   the stub-without-data would otherwise falsely report "available" → crash
+  //   on load, the same failure mode as turbo).
+  { id: 'distil-whisper/distil-large-v3',    name: 'Distil Large v3',  sizeMb: 731,  speed: 'medium',    accuracy: 'very-high', multilingual: false, status: 'missing', distilled: true, externalDataFormat: { 'encoder_model.onnx': true } },
+  { id: 'distil-whisper/distil-large-v2',    name: 'Distil Large v2',  sizeMb: 731,  speed: 'medium',    accuracy: 'very-high', multilingual: false, status: 'missing', distilled: true, externalDataFormat: { 'encoder_model.onnx': true } },
 
   // ── Whisper Large v3 Turbo — 6× faster than Large v3, multilingual.
-  { id: 'onnx-community/whisper-large-v3-turbo-ONNX', name: 'Whisper Large v3 Turbo', sizeMb: 1031, speed: 'medium', accuracy: 'very-high', multilingual: true, status: 'missing' },
+  //    External-data checkpoint: the fp32 encoder weights live in a sibling
+  //    `encoder_model.onnx_data` (~820MB) that transformers only fetches when
+  //    use_external_data_format is set. Unlike distil-large-v*/medium.en, this
+  //    repo's config.json does NOT self-declare it, so we must — otherwise only
+  //    the 0.4MB graph stub downloads and ORT aborts on load (filesystem error:
+  //    file_size encoder_model.onnx_data). The encoder is fp32 on every
+  //    platform (uniform-fp32 on Apple; encoder_model:'fp32' in the per-module
+  //    map elsewhere), so this key is platform-robust.
+  { id: 'onnx-community/whisper-large-v3-turbo-ONNX', name: 'Whisper Large v3 Turbo', sizeMb: 1031, speed: 'medium', accuracy: 'very-high', multilingual: true, status: 'missing', externalDataFormat: { 'encoder_model.onnx': true } },
 
   // ── Standard Whisper
   { id: 'Xenova/whisper-tiny.en',    name: 'Tiny English',    sizeMb: 39,   speed: 'very-fast', accuracy: 'decent',   multilingual: false, status: 'missing' },
@@ -28,9 +42,22 @@ const MODEL_CATALOG: WhisperModelInfo[] = [
   { id: 'Xenova/whisper-base',       name: 'Base Multilingual', sizeMb: 145, speed: 'fast',     accuracy: 'good',     multilingual: true,  status: 'missing' },
   { id: 'Xenova/whisper-small.en',   name: 'Small English',   sizeMb: 244,  speed: 'medium',    accuracy: 'high',     multilingual: false, status: 'missing' },
   { id: 'Xenova/whisper-small',      name: 'Small Multilingual', sizeMb: 466, speed: 'medium',  accuracy: 'high',     multilingual: true,  status: 'missing' },
-  { id: 'Xenova/whisper-medium.en',  name: 'Medium English',  sizeMb: 1500, speed: 'slow',      accuracy: 'very-high', multilingual: false, status: 'missing', requiresAppleSilicon: true },
+  // whisper-medium.en puts the external-data split on the DECODER (its fp32
+  // decoder_model_merged weights live in decoder_model_merged.onnx_data). Its
+  // config self-declares it for download; recorded here so the cache check
+  // requires the companion of whichever decoder layout it validates.
+  { id: 'Xenova/whisper-medium.en',  name: 'Medium English',  sizeMb: 1500, speed: 'slow',      accuracy: 'very-high', multilingual: false, status: 'missing', requiresAppleSilicon: true, externalDataFormat: { 'decoder_model_merged.onnx': true } },
   { id: 'Xenova/whisper-medium',     name: 'Medium Multilingual', sizeMb: 1530, speed: 'slow',  accuracy: 'very-high', multilingual: true,  status: 'missing', requiresAppleSilicon: true },
 ];
+
+/**
+ * Set of every modelId declared in MODEL_CATALOG above. Exported for startup
+ * validation gates: a persisted `localWhisperModel` / `localWhisperModelMic` /
+ * `localWhisperModelSystem` setting must be one of these, otherwise the
+ * worker crashes on init and the user is locked out of audio. Callers should
+ * fall back to `Xenova/whisper-tiny.en` (always present) on miss.
+ */
+export const MODEL_CATALOG_IDS: Set<string> = new Set(MODEL_CATALOG.map(m => m.id));
 
 /**
  * Returns the directory where Whisper models are stored.
@@ -96,19 +123,90 @@ function onnxFilename(basename: string, dt: string): string {
 }
 
 /**
+ * Number of external-data chunks declared for a given ONNX file, mirroring the
+ * resolution in @huggingface/transformers (constructSession): the map is keyed
+ * by the full ONNX basename (e.g. `encoder_model.onnx`) first, then by the
+ * module name (`encoder_model`); a bare boolean/number applies to every file.
+ * `+value` coerces false→0, true→1, and leaves an explicit chunk count intact.
+ * Returns 0 when no external data applies, so callers can skip the `_data` check.
+ */
+function externalDataChunks(
+  fmt: boolean | Record<string, boolean> | undefined,
+  baseName: string,
+  moduleName: string,
+): number {
+  if (!fmt) return 0;
+  let v: boolean | number = false;
+  if (typeof fmt === 'object') {
+    if (Object.prototype.hasOwnProperty.call(fmt, baseName)) v = fmt[baseName];
+    else if (Object.prototype.hasOwnProperty.call(fmt, moduleName)) v = fmt[moduleName];
+    else v = false;
+  } else {
+    v = fmt;
+  }
+  return +v;
+}
+
+/**
+ * The `*.onnx_data` companion filenames required alongside a given ONNX file,
+ * named exactly as transformers fetches them: `${baseName}_data` for chunk 0,
+ * `${baseName}_data_${i}` for any further chunks.
+ */
+function externalDataFilesFor(
+  moduleName: string,
+  dt: string,
+  fmt: boolean | Record<string, boolean> | undefined,
+): string[] {
+  const baseName = onnxFilename(moduleName, dt);
+  const chunks = externalDataChunks(fmt, baseName, moduleName);
+  const files: string[] = [];
+  for (let i = 0; i < chunks; i++) files.push(`${baseName}_data${i === 0 ? '' : '_' + i}`);
+  return files;
+}
+
+/**
  * Computes the ONNX files that the active dtype will load. Whisper-family
  * pipelines accept EITHER the merged decoder OR the (decoder + decoder_with_past)
  * pair — so we list both decoder layouts and require either to be complete.
  * Moonshine uses the same naming, so this works uniformly.
  */
-function expectedOnnxFiles(dtype: string | Record<string, string>) {
-  const enc = onnxFilename('encoder_model', dtypeForFile('encoder_model', dtype));
-  const merged = onnxFilename('decoder_model_merged', dtypeForFile('decoder_model_merged', dtype));
+function expectedOnnxFiles(
+  dtype: string | Record<string, string>,
+  externalDataFormat?: boolean | Record<string, boolean>,
+) {
+  const encDt = dtypeForFile('encoder_model', dtype);
+  const mergedDt = dtypeForFile('decoder_model_merged', dtype);
+  const decDt = dtypeForFile('decoder_model', dtype);
+  const pastDt = dtypeForFile('decoder_with_past_model', dtype);
+
+  const enc = onnxFilename('encoder_model', encDt);
+  const merged = onnxFilename('decoder_model_merged', mergedDt);
   const split = [
-    onnxFilename('decoder_model', dtypeForFile('decoder_model', dtype)),
-    onnxFilename('decoder_with_past_model', dtypeForFile('decoder_with_past_model', dtype)),
+    onnxFilename('decoder_model', decDt),
+    onnxFilename('decoder_with_past_model', pastDt),
   ];
-  return { encoder: enc, decoderOptions: [[merged], split] };
+
+  // External-data checkpoints (e.g. Whisper Large v3 Turbo) split a module's
+  // weights into a sibling `*.onnx_data` file. The `.onnx` graph alone is a
+  // tiny stub that loads then aborts at file_size() — so for a model to count
+  // as cached, every declared `_data` companion of the files it will load must
+  // also be present. Required alongside the encoder always; alongside whichever
+  // decoder layout is checked.
+  const encoderData = externalDataFilesFor('encoder_model', encDt, externalDataFormat);
+  const mergedData = externalDataFilesFor('decoder_model_merged', mergedDt, externalDataFormat);
+  const splitData = [
+    ...externalDataFilesFor('decoder_model', decDt, externalDataFormat),
+    ...externalDataFilesFor('decoder_with_past_model', pastDt, externalDataFormat),
+  ];
+
+  return {
+    encoder: enc,
+    encoderData,
+    decoderOptions: [
+      [merged, ...mergedData],
+      [...split, ...splitData],
+    ],
+  };
 }
 
 /**
@@ -134,9 +232,19 @@ export function isModelCached(modelId: WhisperModelId, dtype?: string | Record<s
   const onnxDir = path.join(modelDir, 'onnx');
   if (!fs.existsSync(onnxDir)) return false;
 
-  const { encoder, decoderOptions } = expectedOnnxFiles(dtype);
-  if (!fs.existsSync(path.join(onnxDir, encoder))) return false;
-  return decoderOptions.some(opt => opt.every(f => fs.existsSync(path.join(onnxDir, f))));
+  // A present-but-empty file is a partial/aborted download, not a cache hit —
+  // require non-zero size so a 0-byte stub (observed in the broken turbo state)
+  // forces a clean re-fetch instead of being reported as available.
+  const present = (f: string): boolean => {
+    try { return fs.statSync(path.join(onnxDir, f)).size > 0; } catch { return false; }
+  };
+
+  const externalDataFormat = getModelExternalDataFormat(modelId);
+  const { encoder, encoderData, decoderOptions } = expectedOnnxFiles(dtype, externalDataFormat);
+  if (!present(encoder)) return false;
+  // External-weight companion(s) of the encoder must exist too, else ORT aborts.
+  if (!encoderData.every(present)) return false;
+  return decoderOptions.some(opt => opt.every(present));
 }
 
 /**
@@ -145,6 +253,24 @@ export function isModelCached(modelId: WhisperModelId, dtype?: string | Record<s
  * cached — not just "any file in the directory".
  */
 export function getAvailableModels(): WhisperModelInfo[] {
+  // onnxruntime-node 1.22.0 links against libc++ symbols (std::to_chars for
+  // double) that are only exported on macOS 13 Ventura and later. On macOS 12
+  // (Monterey) and earlier the dylib load fails with "Symbol not found:
+  // __ZNSt3__18to_charsEPcS0_d". Surface a clear error so users don't waste
+  // time downloading models that will immediately crash.
+  if (process.platform === 'darwin') {
+    const release = (require('os') as typeof import('os')).release(); // e.g. "21.x.x" = macOS 12
+    const darwinMajor = parseInt(release.split('.')[0], 10);
+    // Darwin 22 = macOS 13 Ventura. Darwin 21 = macOS 12 Monterey.
+    if (Number.isNaN(darwinMajor) || darwinMajor < 22) {
+      return MODEL_CATALOG.map(m => ({
+        ...m,
+        status: 'error' as const,
+        errorMessage: 'Requires macOS 13 Ventura or later. Local models are not supported on macOS 12 (Monterey) or earlier.',
+      }));
+    }
+  }
+
   // Resolve the active dtype lazily — avoids importing inferenceConfig at
   // module top (which would break the modelPreloader → modelManager require
   // chain on platforms where process info isn't yet available).
@@ -159,6 +285,31 @@ export function getAvailableModels(): WhisperModelInfo[] {
     ...m,
     status: isModelCached(m.id, dtype) ? 'available' : 'missing',
   }));
+}
+
+/**
+ * Catalog download size (in bytes) for a model, used as the progress-bar
+ * denominator from byte zero so the bar tracks real wall-clock download
+ * instead of inferring the total from whichever files have reported so far.
+ * Returns 0 for unknown ids (caller then falls back to observed file totals).
+ */
+export function getModelSizeBytes(modelId: string): number {
+  const m = MODEL_CATALOG.find(x => x.id === modelId);
+  return m ? Math.round(m.sizeMb * 1024 * 1024) : 0;
+}
+
+/**
+ * The catalog's declared ONNX external-data format for a model, or undefined.
+ * Forwarded by buildWorkerInitMessage → the worker's pipeline() call as
+ * `use_external_data_format` so the sibling `*.onnx_data` weight files get
+ * fetched for checkpoints whose own config.json omits the declaration (e.g.
+ * Whisper Large v3 Turbo). Returns undefined for unknown ids.
+ */
+export function getModelExternalDataFormat(
+  modelId: string,
+): boolean | Record<string, boolean> | undefined {
+  const m = MODEL_CATALOG.find(x => x.id === modelId);
+  return m?.externalDataFormat;
 }
 
 /**

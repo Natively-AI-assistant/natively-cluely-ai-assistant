@@ -213,11 +213,11 @@ By using paid products you'll receive **operational emails** related to your pur
 
 ---
 
-## 12. Open-source transparency
+## 12. Source transparency
 
-The desktop application is open source. The full source is available on GitHub at <https://github.com/evinjohnn/natively-cluely-ai-assistant>. You are welcome to audit the code to verify the claims in this policy.
+The desktop application source is available on GitHub at <https://github.com/evinjohnn/natively-cluely-ai-assistant> under the Natively Personal Use Source License v1.0. You are welcome to audit the code to verify the claims in this policy.
 
-A small caveat: open-source code does **not** by itself guarantee that the binaries we distribute are byte-for-byte produced from that source — reproducible builds are a separate effort we don't currently provide. If you require reproducible binaries, build from source.
+A small caveat: source availability does **not** by itself guarantee that the binaries we distribute are byte-for-byte produced from that source — reproducible builds are a separate effort we don't currently provide. If you require reproducible binaries, build from source.
 
 ---
 

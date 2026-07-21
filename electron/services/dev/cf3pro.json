@@ -1,0 +1,183 @@
+[
+  {
+    "id": "cf-m1-avoid-abba-subsequence",
+    "difficulty": "medium",
+    "entry": "entry",
+    "prompt": "You are given a string `s` consisting only of the characters 'A' and 'B'. You may delete any characters you choose. Find the MINIMUM number of deletions so that the resulting string does NOT contain \"ABBA\" as a SUBSEQUENCE (a subsequence need not be contiguous).\n\nImplement `entry(s)` returning the minimum number of deletions as an int. If `s` is empty, return 0.\n\nReturn a single int.",
+    "reference": "def entry(s):\n    INF = float('inf')\n    dp = [0, INF, INF, INF]\n    target = \"ABBA\"\n    for ch in s:\n        nd = [INF] * 4\n        for st in range(4):\n            if dp[st] == INF:\n                continue\n            if dp[st] + 1 < nd[st]:\n                nd[st] = dp[st] + 1\n            if ch == target[st]:\n                nxt = st + 1\n                if nxt < 4:\n                    if dp[st] < nd[nxt]:\n                        nd[nxt] = dp[st]\n            else:\n                if dp[st] < nd[st]:\n                    nd[st] = dp[st]\n        dp = nd\n    return min(dp)",
+    "bruteforce": "def entry(s):\n    from itertools import combinations\n    n = len(s)\n    def has_abba(t):\n        st = 0\n        pat = \"ABBA\"\n        for ch in t:\n            if st < 4 and ch == pat[st]:\n                st += 1\n                if st == 4:\n                    return True\n        return False\n    for keep in range(n, -1, -1):\n        for combo in combinations(range(n), keep):\n            t = ''.join(s[i] for i in combo)\n            if not has_abba(t):\n                return n - keep\n    return n",
+    "inputs": [
+      [
+        "ABBA"
+      ],
+      [
+        "AABBBA"
+      ],
+      [
+        ""
+      ],
+      [
+        "AAAA"
+      ],
+      [
+        "ABABABA"
+      ],
+      [
+        "BBAA"
+      ]
+    ]
+  },
+  {
+    "id": "cf-h2-digit-dp-altsum",
+    "difficulty": "hard",
+    "entry": "entry",
+    "prompt": "For a non-negative integer x, define its alternating digit sum as d0 - d1 + d2 - d3 + ..., where d0 is the LEAST significant digit, d1 the next, and so on (the sign alternates, starting with + on the units digit). You are given integers lo, hi (0 <= lo <= hi) and a positive integer M. Count how many integers x with lo <= x <= hi have an alternating digit sum that is divisible by M (a value v is divisible by M when v mod M == 0, using Python's modulo for negatives).\n\nImplement `entry(lo, hi, M)` returning that count as an int.",
+    "reference": "def entry(lo, hi, M):\n    def count_upto(N):\n        if N<0: return 0\n        s=str(N)\n        L=len(s)\n        from functools import lru_cache\n        @lru_cache(maxsize=None)\n        def dp(i, rem, tight, started):\n            if i==L:\n                return 1 if (rem % M)==0 else 0\n            hi_d = int(s[i]) if tight else 9\n            total=0\n            for d in range(0, hi_d+1):\n                nt = tight and (d==hi_d)\n                ns = started or (d>0)\n                exp=L-1-i\n                sign = 1 if exp%2==0 else -1\n                nrem = (rem + sign*d) % M\n                total += dp(i+1, nrem, nt, ns)\n            return total\n        return dp(0,0,True,False)\n    return count_upto(hi)-count_upto(lo-1)",
+    "bruteforce": "def entry(lo, hi, M):\n    cnt=0\n    for x in range(lo, hi+1):\n        ds=str(x)[::-1]\n        s=0\n        for i,ch in enumerate(ds):\n            d=int(ch)\n            s+= d if i%2==0 else -d\n        if s % M ==0:\n            cnt+=1\n    return cnt",
+    "inputs": [
+      [
+        0,
+        20,
+        3
+      ],
+      [
+        1,
+        1,
+        2
+      ],
+      [
+        10,
+        99,
+        11
+      ],
+      [
+        0,
+        0,
+        5
+      ],
+      [
+        5,
+        50,
+        7
+      ],
+      [
+        100,
+        130,
+        2
+      ]
+    ]
+  },
+  {
+    "id": "cf-h2-tree-color-paths",
+    "difficulty": "hard",
+    "entry": "entry",
+    "prompt": "You are given a tree with n nodes labeled 0..n-1, an edge list `edges` (n-1 undirected edges, or empty when n==1), and an integer k (number of colors). Color each node with one of k colors. A coloring is GOOD if there is no node b that has two or more neighbors sharing b's own color. (Equivalently: for every node b, the number of neighbors of b whose color equals color[b] is at most 1; equivalently no length-2 path a-b-c exists with color[a]==color[b]==color[c].)\n\nImplement `entry(n, edges, k)` returning the number of good colorings modulo 1000000007 as an int.",
+    "reference": "def entry(n, edges, k):\n    MOD=10**9+7\n    g=[[] for _ in range(n)]\n    for a,b in edges:\n        g[a].append(b); g[b].append(a)\n    parent=[-1]*n; order=[]; visited=[False]*n\n    stack=[0]; visited[0]=True\n    while stack:\n        u=stack.pop(); order.append(u)\n        for v in g[u]:\n            if not visited[v]:\n                visited[v]=True; parent[v]=u; stack.append(v)\n    dp=[None]*n\n    for u in reversed(order):\n        children=[v for v in g[u] if v!=parent[u]]\n        cur=[[0,0] for _ in range(k)]\n        for c in range(k):\n            ways=[1,0]\n            for ch in children:\n                contrib_same = dp[ch][c][0]\n                contrib_diff = 0\n                for cc in range(k):\n                    if cc==c: continue\n                    contrib_diff = (contrib_diff + dp[ch][cc][0] + dp[ch][cc][1]) % MOD\n                new=[0,0]\n                for s in range(2):\n                    if ways[s]==0: continue\n                    new[s]=(new[s]+ways[s]*contrib_diff)%MOD\n                    if s+1<=1:\n                        new[s+1]=(new[s+1]+ways[s]*contrib_same)%MOD\n                ways=new\n            cur[c]=ways\n        dp[u]=cur\n    res=0\n    for c in range(k):\n        res=(res+dp[0][c][0]+dp[0][c][1])%MOD\n    return res",
+    "bruteforce": "import itertools\ndef entry(n, edges, k):\n    MOD=10**9+7\n    g=[[] for _ in range(n)]\n    for a,b in edges:\n        g[a].append(b); g[b].append(a)\n    cnt=0\n    for assign in itertools.product(range(k), repeat=n):\n        ok=True\n        for b in range(n):\n            same=0\n            for nb in g[b]:\n                if assign[nb]==assign[b]:\n                    same+=1\n            if same>=2:\n                ok=False; break\n        if ok: cnt+=1\n    return cnt%MOD",
+    "inputs": [
+      [
+        1,
+        [],
+        3
+      ],
+      [
+        3,
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        2
+      ],
+      [
+        4,
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            3
+          ]
+        ],
+        2
+      ],
+      [
+        4,
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            3
+          ]
+        ],
+        3
+      ],
+      [
+        5,
+        [
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            0,
+            3
+          ],
+          [
+            0,
+            4
+          ]
+        ],
+        3
+      ],
+      [
+        6,
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            3,
+            4
+          ],
+          [
+            4,
+            5
+          ]
+        ],
+        2
+      ]
+    ]
+  }
+]

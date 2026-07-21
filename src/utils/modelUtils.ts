@@ -3,12 +3,12 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     ids: string[];
     names: string[];
     descs: string[];
-    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel';
+    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel' | 'deepseekPreferredModel';
 }> = {
     gemini: {
         hasKeyCheck: (creds) => !!creds?.hasGeminiKey,
-        ids: ['gemini-3.1-flash-lite-preview', 'gemini-3.1-pro-preview'],
-        names: ['Gemini 3.1 Flash', 'Gemini 3.1 Pro'],
+        ids: ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview'],
+        names: ['Gemini 3.5 Flash', 'Gemini 3.1 Flash Lite', 'Gemini 3.1 Pro'],
         descs: ['Fastest • Multimodal', 'Reasoning • High Quality'],
         pmKey: 'geminiPreferredModel'
     },
@@ -32,6 +32,13 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
         names: ['Groq Llama 3.3'],
         descs: ['Ultra Fast'],
         pmKey: 'groqPreferredModel'
+    },
+    deepseek: {
+        hasKeyCheck: (creds) => !!creds?.hasDeepseekKey,
+        ids: ['deepseek-v4-flash', 'deepseek-v4-pro'],
+        names: ['DeepSeek V4 Flash', 'DeepSeek V4 Pro'],
+        descs: ['Fast • Text-only', 'Reasoning • Text-only'],
+        pmKey: 'deepseekPreferredModel'
     },
 };
 

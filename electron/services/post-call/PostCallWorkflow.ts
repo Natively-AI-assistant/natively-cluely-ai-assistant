@@ -1,3 +1,5 @@
+import * as crypto from 'crypto';
+
 export type PostCallModeType =
   | 'general'
   | 'looking-for-work'
@@ -77,7 +79,7 @@ export function extractStructuredActionItems(
     if (seen.has(key)) return;
     seen.add(key);
     items.push({
-      id: `action_${items.length + 1}`,
+      id: `action_${crypto.randomUUID()}`,
       text: cleaned,
       ...(owner ? { owner } : {}),
       ...(deadline ? { deadline: deadline.trim() } : {}),
@@ -147,7 +149,7 @@ export function generateCoachingInsights(
   const insights: CoachingInsight[] = [];
 
   const add = (type: string, title: string, detail: string, severity: CoachingInsight['severity'], evidence?: string) => {
-    insights.push({ id: `coach_${insights.length + 1}`, type, title, detail, severity, ...(evidence ? { evidence } : {}) });
+    insights.push({ id: `coach_${crypto.randomUUID()}`, type, title, detail, severity, ...(evidence ? { evidence } : {}) });
   };
 
   if (modeTemplateType === 'sales') {

@@ -1,0 +1,92 @@
+JONATHAN A. RIVERA
+Brooklyn, NY 11215 | (646) 555-0182 | jon.rivera.consulting@gmail.com
+LinkedIn: linkedin.com/in/jonathan-rivera-data | GitHub: github.com/jriveradata
+
+SUMMARY
+
+Independent analytics and data-platform consultant with eight years of designing, building, and rescuing customer-data pipelines, marketing-attribution models, and revenue dashboards for mid-market DTC and SaaS companies. Known for compressing six-month discovery work into a four-week intake and for handing off runbooks that junior analysts can actually operate. Have shipped or rebuilt thirteen production systems across events, sessions, CRM, and warehouse layers. Comfortable being the only data person in the room and equally comfortable working inside a team of twelve. Looking for a senior IC or player-coach role where I can keep one hand on the data model and the other on delivery.
+
+WORK EXPERIENCE
+
+Independent Analytics & Data Platform Consultant
+Self-employed / 1099 engagements, Brooklyn, NY
+July 2017 - Present
+
+Engagements follow. Dates overlap deliberately; any single calendar window contains 1-2 active clients.
+
+- Ironwood Outdoor Co. (DTC outdoor gear, ~$28M GMV)  |  Lead Analytics Consultant  |  May 2024 - Present (overlap with March 2025 engagement)
+  Rebuilt the Klaviyo-attributed revenue model after the previous agency's sunsetting of UTM stitching. Migrated event capture from a custom Segment plan back to native Shopify web pixel plus server-side GA4, cutting tracked events from 41 to 14 and dropping weekly ETL failures from ~6 to 0. Delivered a Looker dashboard suite (5 dashboards, 32 tiles) reviewed weekly by the founder and CFO. Outcome: marketing team recovered $1.9M in previously mis-attributed repeat-customer revenue across Q3-Q4 2024, per reconciled Shopify-Klaviyo-net rev.
+
+- Birchline Financial (B2B SaaS, expense management)  |  Fractional Data Lead  |  March 2025 - August 2025
+  Stood up the company's first Snowflake account, dbt project, and Hightouch reverse-ETL layer in 11 weeks against a planned 24. Wrote 47 dbt models with 100% column-level tests passing in CI. Outcome: go-to-market team launched an account-scoring model that lifted MQL-to-SQL conversion from 11.2% to 17.8% in the first 90 days post-handoff, validated against held-out accounts.
+
+- Cardinal Pediatrics Group (multi-clinic healthcare, 22 locations)  |  Data Engineering Consultant  |  February 2024 - January 2025
+  Replaced a brittle nightly SFTP ingestion chain with a FHIR-based pipeline pulling from athenahealth into BigQuery on a 15-minute cadence. Built de-identification wrapper compliant with the practice's HIPAA BAA. Outcome: clinical operations dashboard surfaced 14% over-scheduling in three clinics, leading to a scheduling-template change that recovered an estimated 480 patient-visit slots per month.
+
+- Halberd Media (independent agency)  |  Senior Analyst (embedded)  |  August 2023 - November 2023
+  Three-month rescue engagement after their senior analyst departed. Took ownership of eight active client dashboards across Mixpanel, Amplitude, and GA4. Wrote a templated QA checklist adopted across the agency. Outcome: eliminated a backlog of 11 broken client reports in the first 30 days, retained four clients Halberd expected to lose that quarter.
+
+- Trellis & Vine (DTC home goods, ~$9M Shopify Plus)  |  Analytics Consultant  |  April 2023 - September 2024
+  Rebuilt attribution after a replatforming from Magento. Implemented a first-party cookie plan with a 7-day user-stitching identity graph. Outcome: reduced duplicate customer counts from 38% to 4.1% and gave the merchandising team a reliable repeat-customer LTV curve; CEO cited the work in their Series A pitch deck.
+
+- Northwind Press (B2B publishing, ~60 employees)  |  Data Engineering Consultant  |  October 2022 - May 2023
+  Led a four-person team migrating off Looker onto a self-hosted Superset instance. Wrote the dbt project, CI/CD pipelines in GitHub Actions, and a runbook that two analysts now operate independently. Outcome: cut annual BI tooling cost from $182K to $43K with no reported downtime in the first eight months post-cutover.
+
+- Filament Labs (developer tools, Series B)  |  Contract Analytics Lead  |  June 2022 - February 2023 (concurrent with Northwind Press from Oct 2022)
+  Built the company's first product-analytics function. Selected Heap over PostHog after a four-week eval written up as an internal memo. Instrumented 38 events across the SDK and web app. Outcome: weekly active developer count metric became the board's primary product-health KPI for the Series C raise 11 months later.
+
+- Garden State Logistics (mid-market 3PL, 412 employees)  |  Data Consultant  |  January 2022 - June 2022
+  Replaced a 14-tab Excel revenue model with a dbt + Looker rebuild. The previous model took 9 hours of analyst time per weekly close; the new one runs in 11 minutes. Outcome: operations finance team closed books 3 business days faster in the month following handoff and reduced late-billing disputes by 22%.
+
+- Quill & Quire Bookshop (DTC + 11 retail, ~$6M)  |  Analytics Consultant  |  May 2021 - December 2021
+  Sourced, negotiated, and implemented their first CDP (Segment). Outcome: enabled the founder's pivot to a membership model that grew from 0 to 3,400 paid members in the first 90 days after launch.
+
+- Westmere Analytics (analytics consultancy, embedded)  |  Senior Consultant  |  September 2020 - April 2021
+  Worked as a billable contractor inside Westmere on a client engagement for a private-equity-backed fitness chain. Built a 17-club cohort retention model in BigQuery. Outcome: PE deal team's diligence on the eventual add-on acquisition relied on my churn cohorts; deal closed Q2 2021.
+
+- Verdant Studios (B2C media, ~14 headcount)  |  Marketing Analytics Lead (contract)  |  February 2020 - August 2020
+  Replaced a Mixpanel-Segment-Klaviyo attribution chain that had been silently double-counting ~31% of conversions. Outcome: founder could finally see true paid-organic ratio and reallocated 28% of paid spend, lifting blended ROAS from 1.9x to 3.4x by week 14.
+
+- Redfern & Co. Recruitment (staffing, ~$40M revenue)  |  Analytics Consultant  |  August 2019 - January 2020
+  Built a recruiter-performance scorecard in Metabase on top of a Postgres mirror of their Bullhorn ATS. Outcome: identified $740K in annualized revenue leakage from mis-routed candidates; CEO referenced the analysis at their 2020 kickoff.
+
+- Harborside Cycling (DTC, single SKU)  |  Analytics Consultant  |  November 2018 - July 2019
+  First solo consulting engagement. Built the company's first GA4-enhanced-ecommerce + Shopify dashboard suite. Outcome: founder grew from ~$180K to $520K annual revenue using the funnel diagnostics from the dashboard as the primary decision-making tool.
+
+- Cobalt Charter Schools (charter network, 4 campuses)  |  Reporting Analyst (contract)  |  July 2017 - October 2018
+  Longest-running early engagement and only non-customer-facing work. Replaced a network of 31 disconnected Excel reports with a single Power BI semantic model refreshed from SQL Server. Outcome: state compliance reporting time dropped from 3 weeks to 4 days; work was cited in the network's 2019 accountability filing.
+
+EARLIER EXPERIENCE
+
+Marketing Analyst, Larchmont Provisions (DTC grocery startup)
+March 2016 - June 2017
+Built first attribution model and weekly growth deck. Team grew from 9 to 32 during tenure.
+
+Marketing Coordinator, Mountain & Main Outfitters (regional outdoor retailer)
+June 2014 - February 2016
+Owned email calendar, in-store analytics, and the migration from Mailchimp to Klaviyo.
+
+EDUCATION
+
+B.A., Economics, concentration in Statistics  |  Oberlin College  |  Oberlin, OH  |  2010 - 2014
+GPA 3.71/4.00. Senior thesis: "Cohort retention modeling for subscription businesses with missing payment data."
+
+SKILLS
+
+Warehouses & data modeling: Snowflake, BigQuery, Databricks SQL, Postgres, dbt (project runner and contributor to two open-source packages), dimensional modeling, slowly-changing-dim patterns, identity resolution.
+
+Analytics & BI: Looker (LookML), Looker Studio, Metabase, Superset, Power BI, Mode, Hex.
+
+Events & product analytics: Segment (incl. Protocols), Rudderstack, mParticle, GA4 enhanced ecom, Mixpanel, Amplitude, Heap, PostHog, Snowplow.
+
+CRM & reverse-ETL: Hightouch, Census, Klaviyo, Iterable, Attentive, HubSpot, Salesforce.
+
+Languages & tooling: SQL (daily, 8+ years), Python (pandas, numpy, dbt Python models, lightweight Airflow DAGs), R (occasional), Bash, GitHub Actions, Terraform basics, Lightweight HTML/CSS for email and landing-page QA.
+
+Soft skills: client intake and scoping, written status updates, runbook writing, mentoring junior analysts (have onboarded 4 junior data hires into their next senior roles), executive-level storytelling with numbers.
+
+SELECTED PUBLIC WORK
+
+- Speaker, "Looker Dashboard Taxonomies That Survive Handoff," Looker Join 2023 (virtual lightning talk).
+- Author, "Identity Graphs for Sub-$50M Brands" - 14-part blog series on jonriveradata.substack.com (1,800 subscribers as of Aug 2025).
+- Open-source contributor: dbt-utils (3 merged PRs, 2023), sqlfluff-templater-dbt (2 merged PRs, 2024).

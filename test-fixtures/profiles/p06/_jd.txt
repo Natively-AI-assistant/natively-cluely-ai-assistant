@@ -1,0 +1,48 @@
+Director of Engineering
+Location: Austin, TX (Hybrid — 3 days onsite, 2 remote)
+Reports to: VP of Engineering
+Team Size: 6 Engineering Managers (~45 ICs across Platform, Infrastructure, and Data Engineering)
+Compensation: $245,000 – $295,000 base + equity + performance bonus
+
+About Skyforge Analytics
+Skyforge Analytics is a Series C developer-infrastructure company that helps engineering organizations measure, debug, and accelerate distributed systems. Our platform is used by 1,800+ companies — including three of the Fortune 50 in financial services and several high-growth AI labs — to instrument billions of daily transactions. We process 14 petabytes of telemetry per day, run across three cloud regions, and ship to production dozens of times a day. Backed by Sequoia and Andreessen Horowitz, we are 230 people globally and are scaling the platform group from "works at a single-tenant scale" to "carrier-grade multi-region platform."
+
+The Role
+We are hiring a Director of Engineering to lead our Platform org — the team responsible for the ingestion pipeline, query engine, multi-tenant isolation layer, and the internal developer platform that our product engineers build on top of. You will directly manage 6 EMs, partner with product and design on roadmap, and own the technical strategy for taking our platform from tens of thousands of tenants to hundreds of thousands while reducing our cloud unit economics by 40%.
+
+This is a player-coach role for someone who has scaled an engineering org through a 5x–10x growth phase and is comfortable being both in the code review and in the board prep deck.
+
+What You Will Do
+- Own the architecture, reliability, and cost trajectory of the Skyforge Platform — currently running ~14PB/day of telemetry ingestion with a 99.97% rolling 30-day availability SLO.
+- Manage, coach, and develop 6 Engineering Managers and a Principal Engineer; raise the bar on hiring, performance management, and technical review across ~45 ICs.
+- Define the multi-tenant platform strategy for the next 24 months, including the migration from single-tenant logical isolation to a true multi-tenant control plane.
+- Partner with the VP of Engineering and the CTO on org design, sequencing of platform investments, and headcount planning.
+- Drive a 40% reduction in cost-per-GB-ingested over 18 months through architectural changes, not just procurement tricks.
+- Set and hold a clear reliability bar — own the incident response process, postmortem quality, and the SLO framework.
+- Work closely with Product, Security, and GTM on enterprise commitments around data residency, SOC 2, and FedRAMP-readiness.
+- Represent engineering in customer briefings, including strategic accounts and design partner conversations.
+
+What You Bring
+- 12+ years of professional software engineering experience, with at least 5 years managing managers (managers-of-managers) in a platform, infrastructure, or data systems org.
+- A track record of scaling an engineering org through a 5x or larger growth phase while maintaining or improving reliability and developer velocity.
+- Hands-on depth in at least one of: distributed data processing, large-scale ingestion pipelines, multi-tenant SaaS architecture, or observability / telemetry systems. You can still read code, review designs, and push back on EMs at the architecture-review level.
+- Experience setting and operating against SLOs at a serious scale — billions of events per day, or comparable.
+- A demonstrated ability to drive cost and reliability improvements through architectural change, not just throwing hardware at the problem.
+- Strong written and verbal communication — you can write a clear technical strategy doc, run an executive review, and give direct feedback to a senior IC without flinching.
+- History of hiring and developing senior engineers and EMs; you have promoted people into roles they didn't know they were ready for, and it worked.
+
+Nice to Have
+- Experience operating a platform that is sold to enterprise customers with strict data residency, BYOK, or compliance requirements (SOC 2, ISO 27001, FedRAMP, HIPAA).
+- Familiarity with the observability, APM, or telemetry space — either as a builder, a heavy user, or both.
+- Background in a developer-tools or infrastructure company that sells to engineering teams.
+- Exposure to multi-cloud or hybrid deployment architectures.
+
+What We Offer
+- Meaningful equity in a profitable, fast-growing company.
+- $3,000 annual learning and conference budget.
+- Comprehensive health, dental, and vision coverage; 16 weeks paid parental leave.
+- A leadership team that has done this before and treats engineering as the product, not a cost center.
+
+To apply, please send a short note describing a platform or system you helped scale through a 5x+ growth phase, and what your specific contribution was. We read every note.
+
+Skyforge Analytics is an equal opportunity employer. We value diversity and do not discriminate on the basis of race, religion, color, national origin, gender, sexual orientation, age, marital status, veteran status, or disability status.

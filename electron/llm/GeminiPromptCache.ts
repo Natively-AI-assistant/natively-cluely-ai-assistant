@@ -103,6 +103,51 @@ export class GeminiPromptCache {
   }
 
   /**
+   * NON-BLOCKING variant for the latency-critical streaming path.
+   *
+   * Returns an already-live cache name SYNCHRONOUSLY if one exists (cache hit).
+   * On a MISS it returns null immediately and kicks off `create()` in the
+   * BACKGROUND so the cache is warm for the NEXT request — the current request
+   * uses `systemInstruction` directly and is not blocked on the (multi-second)
+   * `caches.create` round-trip. This is the fix for "first token blocked 2.4s on
+   * cache create": the create cost moves off the hot path entirely.
+   *
+   * Use this on streaming/first-token paths. Use getOrCreate() only where you
+   * intend to PAY the create cost up front (e.g. an explicit prewarm).
+   */
+  getCachedOrWarmInBackground(
+    client: GoogleGenAI,
+    model: string,
+    systemPrompt: string
+  ): string | null {
+    if (!systemPrompt || systemPrompt.length < MIN_PROMPT_CHARS) return null;
+
+    const key = this.hashKey(model, systemPrompt);
+    const now = Date.now();
+    const existing = this.entries.get(key);
+
+    if (existing) {
+      // Failure sentinel still in cooldown — don't retry, don't warm.
+      if (!existing.name && existing.expiresAt > now) return null;
+      // Live cache, comfortably before expiry — synchronous hit.
+      if (existing.name && existing.expiresAt - now > RENEWAL_WINDOW_MS) {
+        return existing.name;
+      }
+    }
+
+    // Miss (or near-expiry): warm in the background, don't block this request.
+    if (!this.inflight.has(key)) {
+      const creation = this.create(client, model, systemPrompt, key).finally(() => {
+        this.inflight.delete(key);
+      });
+      this.inflight.set(key, creation);
+      // Swallow — this is fire-and-forget; the create() body logs on failure.
+      creation.catch(() => {});
+    }
+    return null;
+  }
+
+  /**
    * Drop a stale entry when the server reports the cache no longer exists
    * (e.g. expired between our last use and now). Safe to call with any name.
    */
@@ -113,6 +158,18 @@ export class GeminiPromptCache {
         return;
       }
     }
+  }
+
+  /**
+   * Drop every entry. Call this when the Gemini API key changes — cache
+   * resource names are scoped to the project/key that created them, so a
+   * key swap makes all in-memory names invalid (they'd fail with NOT_FOUND
+   * or PERMISSION_DENIED on reuse). Clearing forces a fresh create under the
+   * new key on the next request instead of one wasted failing round-trip.
+   */
+  clear(): void {
+    this.entries.clear();
+    this.inflight.clear();
   }
 
   /** For diagnostics. */

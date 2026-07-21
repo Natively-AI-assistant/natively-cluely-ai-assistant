@@ -1,0 +1,169 @@
+{
+  "name": "Marcus J. Holloway",
+  "email": "marcus.holloway@protonmail.com",
+  "phone": "(415) 555-0182",
+  "location": "San Francisco, CA",
+  "linkedin": "linkedin.com/in/marcusholloway",
+  "github": "github.com/mjholloway",
+  "work_authorization": "US Citizen",
+  "current_title": "Staff Software Engineer (L6)",
+  "current_company": "Stripe",
+  "years_experience": "10",
+  "fullName": "Marcus J. Holloway",
+  "totalExperienceMonths": 0,
+  "candidate_name": "Marcus J. Holloway",
+  "current_employer": "Stripe, Inc.",
+  "years_experience_total": "10",
+  "core_skills": [
+    "distributed systems",
+    "service-oriented architectures",
+    "consensus protocols",
+    "high-throughput data pipelines",
+    "Kafka",
+    "Flink",
+    "Envoy service mesh",
+    "Raft",
+    "gRPC",
+    "RocksDB",
+    "Redis",
+    "OpenTelemetry",
+    "H3 geospatial indexing",
+    "backpressure",
+    "idempotency"
+  ],
+  "domain_experience": [
+    "payments orchestration",
+    "merchant settlement reconciliation",
+    "metrics ingestion",
+    "real-time pricing and dispatch",
+    "geospatial indexing",
+    "ledger systems"
+  ],
+  "scale_metrics": [
+    "4.2B ledger entries/day",
+    "2,400 ingestion nodes",
+    "8.4M points/sec",
+    "99.987% availability over 18 months",
+    "19M rides peak"
+  ],
+  "leadership_signals": [
+    "tech lead",
+    "owned Tier-1 on-call",
+    "mentored 4 engineers to senior",
+    "authored org-adopted RFC",
+    "co-led OpenTelemetry adoption"
+  ],
+  "education": [],
+  "work_auth": "US Citizen",
+  "key_skills": [
+    "distributed systems",
+    "Kafka",
+    "Flink",
+    "Envoy",
+    "service mesh",
+    "Raft",
+    "gRPC",
+    "RocksDB",
+    "Redis",
+    "H3",
+    "OpenTelemetry",
+    "PostgreSQL"
+  ],
+  "notable_achievements": [
+    "Processed 4.2B ledger entries/day; reduced reconciliation latency from 14h to 38min p99; cut compute cost 61% (~$2.3M/yr)",
+    "Increased metrics throughput from 1.1M to 8.4M points/sec",
+    "Cut regional failover time from 11min to 19sec using Raft",
+    "Reduced pricing grid p99 latency from 38ms to 2.4ms"
+  ],
+  "availability_signals": [
+    "US Citizen, authorized to work in US",
+    "based in San Francisco CA"
+  ],
+  "authorized_to_work": "US Citizen",
+  "current_location": "San Francisco, CA",
+  "languages_implied": [
+    "Java/Scala/Kotlin (Kafka/Flink/JVM ecosystem)",
+    "Go or Rust (Envoy, gRPC, Raft implementations typical)",
+    "Python (tooling, instrumentation)"
+  ],
+  "industries": [
+    "payments",
+    "observability/monitoring",
+    "ride-sharing/transit"
+  ],
+  "clear_gaps_or_weak_signals": [
+    "resume text appears truncated at Uber role",
+    "no explicit degree/education listed in provided excerpt",
+    "no mobile/web frontend signal",
+    "no ML/AI signal"
+  ],
+  "skills": [
+    "distributed systems",
+    "service-oriented architectures",
+    "consensus protocols",
+    "high-throughput data pipelines",
+    "Kafka",
+    "Flink",
+    "Envoy service mesh",
+    "Raft",
+    "gRPC",
+    "RocksDB",
+    "consistent hashing",
+    "Redis",
+    "OpenTelemetry",
+    "H3 geospatial indexing",
+    "PostgreSQL",
+    "idempotency",
+    "backpressure",
+    "capacity planning",
+    "SLO frameworks"
+  ],
+  "domains": [
+    "payments orchestration",
+    "settlement reconciliation",
+    "metrics ingestion",
+    "real-time pricing",
+    "geospatial dispatch",
+    "service mesh",
+    "ledger systems"
+  ],
+  "topSkills": [
+    "distributed systems",
+    "service-oriented architectures",
+    "consensus protocols",
+    "high-throughput data pipelines",
+    "Kafka",
+    "Flink",
+    "Envoy service mesh",
+    "Raft"
+  ],
+  "mostRecentEmployer": "Stripe, Inc.",
+  "projects": [
+    {
+      "name": "Merchant Settlement Reconciliation Pipeline",
+      "description": "Replacement reconciliation system at Stripe that processes 4.2B ledger entries per day via Kafka and Flink streaming pipeline, replacing a legacy Hadoop batch job. Reduced end-to-end reconciliation latency from 14 hours to 38 minutes (p99) and cut compute cost by 61% (~$2.3M/year)."
+    },
+    {
+      "name": "Metrics Tail-Aggregation Pipeline (Longtail)",
+      "description": "Re-architected Datadog's tail-aggregation service for high-cardinality customer metrics using a custom sharded RocksDB store with consistent hashing across 2,400 ingestion nodes. Increased sustained write throughput from 1.1M points/sec to 8.4M points/sec on the same hardware footprint."
+    }
+  ],
+  "jdCompany": "Pillarstream, Inc",
+  "jdRole": "Staff Software Engineer",
+  "requirementsMet": [
+    "Relevant experience present",
+    "Relevant experience present",
+    "Relevant experience present"
+  ],
+  "requirementsNotMet": [
+    "Gap to be assessed in interview",
+    "Gap to be assessed in interview"
+  ],
+  "expectedSalaryBand": null,
+  "id": "p01",
+  "edgeCase": "Senior backend engineer, ~10 years, worked at large well-known tech companies (FAANG-adjacent). Dense 3-page resume with 4 roles, quantified",
+  "resumeFormat": "pdf",
+  "hasSecondDoc": true,
+  "secondDocFile": "doc2.pdf",
+  "mostRecentTitle": "Staff Software Engineer (L6)"
+}

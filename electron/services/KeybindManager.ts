@@ -19,6 +19,11 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     { id: 'general:reset-cancel', label: 'Reset / Cancel', accelerator: 'CommandOrControl+R', isGlobal: true, defaultAccelerator: 'CommandOrControl+R' },
     { id: 'general:take-screenshot', label: 'Take Screenshot', accelerator: 'CommandOrControl+H', isGlobal: true, defaultAccelerator: 'CommandOrControl+H' },
     { id: 'general:selective-screenshot', label: 'Selective Screenshot', accelerator: 'CommandOrControl+Shift+H', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+H' },
+    // Capture the active browser tab's page context via the companion extension;
+    // falls back to a screenshot when no extension/browser is reachable. Works
+    // from any focused app (including the Natively overlay), which the old
+    // Chrome-owned hotkey could not. See natively-browser/README.md.
+    { id: 'general:capture-dom', label: 'Capture Page / Screen (Browser)', accelerator: 'CommandOrControl+Shift+Y', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Y' },
 
     // Chat - Global shortcuts (work even when app is not focused - stealth mode)
     { id: 'chat:whatToAnswer', label: 'What to Answer', accelerator: 'CommandOrControl+1', isGlobal: true, defaultAccelerator: 'CommandOrControl+1' },
@@ -92,6 +97,9 @@ export class KeybindManager {
         if (actionId === 'general:take-screenshot') return true;
         if (actionId === 'general:selective-screenshot') return true;
         if (actionId === 'general:capture-and-process') return true;
+        // Browser/page capture must work globally in both modes (same rationale
+        // as the screenshot shortcuts — it's a global capture trigger).
+        if (actionId === 'general:capture-dom') return true;
 
         return false;
     }

@@ -41,6 +41,15 @@ export interface WhisperModelInfo {
   // Moonshine: streaming-native architecture, ~100× lower perceived latency
   // than Whisper. Highest priority recommendation for English live use.
   streaming?: boolean;
+  // ONNX external-data format. Large checkpoints (e.g. Whisper Large v3 Turbo)
+  // store the graph in `encoder_model.onnx` (a small stub) but the weights in a
+  // sibling `encoder_model.onnx_data` file. @huggingface/transformers only
+  // fetches that companion when `use_external_data_format` is truthy, and this
+  // model's config.json does NOT declare it — so without this flag the weight
+  // file is never downloaded and ONNX Runtime aborts on load. Shape matches the
+  // upstream `transformers.js_config` convention: `true` for all chunked files,
+  // or a map keyed by ONNX basename (e.g. `{ 'encoder_model.onnx': true }`).
+  externalDataFormat?: boolean | Record<string, boolean>;
 }
 
 export interface WorkerInitMessage {
@@ -51,6 +60,14 @@ export interface WorkerInitMessage {
   // Per-module dtype map (see inferenceConfig.ts). String applies to all
   // ONNX files; Record keys are ONNX basenames without `.onnx`.
   dtype?: string | Record<string, string>;
+  // Catalog download size in bytes — the progress-bar denominator from byte
+  // zero (see whisperProgressAggregator.ts). Optional / 0 when unknown, in
+  // which case the worker falls back to observed per-file byte totals.
+  expectedBytes?: number;
+  // Forwarded to transformers' pipeline() as `use_external_data_format` so the
+  // sibling `*.onnx_data` weight files of external-data checkpoints get fetched.
+  // See WhisperModelInfo.externalDataFormat for the full rationale.
+  useExternalDataFormat?: boolean | Record<string, boolean>;
 }
 export interface WorkerTranscribeMessage {
   type: 'transcribe';

@@ -19,7 +19,7 @@ export class AssistLLM {
      * @param context - Current conversation context
      * @returns Insight (no post-clamp; prompt enforces brevity)
      */
-    async generate(context: string): Promise<string> {
+    async generate(context: string, abortSignal?: AbortSignal): Promise<string> {
         try {
             if (!context.trim()) {
                 return "";
@@ -31,13 +31,21 @@ export class AssistLLM {
 
             const promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_ASSIST_PROMPT : UNIVERSAL_ASSIST_PROMPT;
             const fittedContext = this.llmHelper.fitContextForCurrentModel(context);
-            return await this.llmHelper.chat(
+            let result = "";
+            for await (const chunk of this.llmHelper.streamChat(
                 instruction,
                 undefined,
                 fittedContext,
                 promptOverride,
-                true
-            );
+                false,
+                true,
+                [],
+                abortSignal,
+            )) {
+                if (abortSignal?.aborted) return "";
+                result += chunk;
+            }
+            return result;
 
         } catch (error) {
             console.error("[AssistLLM] Generation failed:", error);

@@ -94,3 +94,45 @@ test('legacy buildActiveModeContextBlock still exists for non-summary paths', ()
   const src = read('electron/services/ModesManager.ts');
   assert.match(src, /public buildActiveModeContextBlock\(\): string \{/);
 });
+
+test('buildSummarySafeModeContextBlock DROPS sensitive customContext (salary) from the summary', async () => {
+  // The summary path is non-negotiation by nature; a salary/comp chunk in the
+  // mode's customContext must not land in a stored meeting summary, while a
+  // benign chunk in the same blob is preserved.
+  const distPath = path.resolve(__dirname, '../../../dist-electron/electron/services/ModesManager.js');
+  const url = (await import('node:url')).pathToFileURL(distPath).href;
+  const mod = await import(url);
+  const mgr = mod.ModesManager.getInstance();
+
+  const FAKE_MODE_ID = 'test-sensitive-mode';
+  const fakeMode = {
+    id: FAKE_MODE_ID,
+    name: 'Fake Sensitive',
+    templateType: 'recruiting',
+    // Two chunks: one benign style note, one sensitive salary line.
+    customContext: 'Keep answers concise and structured.\n\nMy current CTC is 30 LPA and target is 45 LPA.',
+    isCustom: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    isDefault: false,
+    isActive: false,
+  };
+
+  const originalGetModes = mgr.getModes.bind(mgr);
+  const originalGetReferenceFiles = mgr.getReferenceFiles.bind(mgr);
+  mgr.getModes = () => [fakeMode];
+  mgr.getReferenceFiles = () => [];
+
+  try {
+    const summary = mgr.buildSummarySafeModeContextBlock(FAKE_MODE_ID, {
+      query: 'meeting summary',
+      transcript: 'short transcript',
+      includeReferenceSnippets: false,
+    });
+    assert.ok(summary.includes('concise and structured'), 'benign customContext chunk must be preserved');
+    assert.ok(!/30 LPA|45 LPA|CTC/.test(summary), 'sensitive salary chunk must be dropped from the summary');
+  } finally {
+    mgr.getModes = originalGetModes;
+    mgr.getReferenceFiles = originalGetReferenceFiles;
+  }
+});

@@ -18,41 +18,44 @@ export default function TopPill({
     onLogoClick,
 }: TopPillProps) {
     return (
-        <div className="flex justify-center mt-2 select-none z-50">
+        <div className="flex justify-center select-none z-50">
             <div
                 className="
           draggable-area
           flex items-center gap-2
           rounded-full
+          border
           overlay-pill-surface
           backdrop-blur-md
-          pl-1.5 pr-1.5 py-1.5
+          px-1.5 py-1.5
           transition-all duration-300 ease-sculpted
         "
                 style={appearance.pillStyle}
             >
-                {/* LOGO BUTTON */}
-                <button
-                    onClick={onLogoClick}
-                    className={`
-            w-8 h-8
-            rounded-full
-            overlay-icon-surface
-            overlay-icon-surface-hover
-            flex items-center justify-center
-            relative overflow-hidden
-            interaction-base interaction-press
-          `}
-                    style={appearance.iconStyle}
-                >
-                    <img
-                        src={icon}
-                        alt="Natively"
-                        className="w-[24px] h-[24px] object-contain opacity-95 scale-105 force-black-icon"
-                        draggable="false"
-                        onDragStart={(e) => e.preventDefault()}
-                    />
-                </button>
+                <div className="draggable-area">
+                    {/* LOGO BUTTON */}
+                    <button
+                        onClick={onLogoClick}
+                        className={`
+              w-7 h-7
+              rounded-full
+              overlay-icon-surface
+              overlay-icon-surface-hover
+              flex items-center justify-center
+              relative overflow-hidden
+              interaction-base interaction-press
+            `}
+                        style={appearance.iconStyle}
+                    >
+                        <img
+                            src={icon}
+                            alt="Natively"
+                            className="w-[24px] h-[24px] object-contain opacity-95 scale-105 force-black-icon"
+                            draggable="false"
+                            onDragStart={(e) => e.preventDefault()}
+                        />
+                    </button>
+                </div>
 
                 {/* CENTER SEGMENT */}
                 <button
@@ -60,7 +63,7 @@ export default function TopPill({
                     className={`
             flex items-center gap-2
             group
-            px-4 py-1.5
+            px-3 py-1
             rounded-full
             backdrop-blur-md
             overlay-chip-surface
@@ -86,7 +89,7 @@ export default function TopPill({
                 <button
                     onClick={onQuit}
                     className={`
-            w-8 h-8
+            w-7 h-7
             rounded-full
             overlay-icon-surface
             overlay-text-primary

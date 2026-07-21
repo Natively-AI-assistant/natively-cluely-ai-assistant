@@ -1,0 +1,268 @@
+{
+  "name": "Arjun Mehta",
+  "current_title": "Senior Machine Learning Engineer",
+  "location": "Bangalore, Karnataka, India",
+  "phone": "+91-98453-22108",
+  "email": "arjun.mehta.iitb@gmail.com",
+  "linkedin": "linkedin.com/in/arjunmehta-ml",
+  "github": "github.com/arjunm-iitb",
+  "fullName": "Arjun Mehta",
+  "totalExperienceMonths": 0,
+  "title": "Senior Machine Learning Engineer",
+  "mostRecentTitle": "Senior Machine Learning Engineer",
+  "jdRole": "Senior Machine Learning Engineer",
+  "years_of_experience": 5,
+  "projects": [
+    {
+      "name": "BharatTranslate - Low-Resource Neural Machine Translation",
+      "verifiableFact": "Built a 250M-parameter Transformer model translating between 11 Indian language pairs (Hindi, Tamil, Bengali, Telugu, Marathi, Malayalam, Kannad"
+    }
+  ],
+  "years_experience_ml": 5,
+  "requires_visa_sponsorship": true,
+  "willing_to_relocate_us": true,
+  "compensation_inr_lakhs_range": "65-75",
+  "core_domains": [
+    "recommendation systems",
+    "NLP",
+    "computer vision",
+    "fraud detection",
+    "ML platforms"
+  ],
+  "scale_users_served": "40M+ MAU",
+  "key_skills": [
+    "XGBoost",
+    "LightGBM",
+    "Apache Flink",
+    "Kafka",
+    "Temporal Fusion Transformers",
+    "Feast feature store",
+    "TensorFlow Serving",
+    "two-tower retrieval",
+    "cross-attention ranker",
+    "off-policy evaluation",
+    "IPS",
+    "doubly robust estimators",
+    "MiniLM",
+    "Prophet",
+    "LSTM",
+    "Snorkel",
+    "A/B testing",
+    "large-scale training pipelines",
+    "feature engineering"
+  ],
+  "production_scale_highlights": [
+    {
+      "metric": "fraud loss reduction",
+      "value": "31%"
+    },
+    {
+      "metric": "annual fraud savings",
+      "value": "INR 84 crore"
+    },
+    {
+      "metric": "monthly transactions",
+      "value": "12M"
+    },
+    {
+      "metric": "inference latency reduction",
+      "value": "14s to <220ms"
+    },
+    {
+      "metric": "feature store online size",
+      "value": "2.4 TB"
+    },
+    {
+      "metric": "feature lookup p99",
+      "value": "<50ms"
+    },
+    {
+      "metric": "recommender QPS peak",
+      "value": "18000"
+    },
+    {
+      "metric": "service availability",
+      "value": "99.94%"
+    },
+    {
+      "metric": "upsell conversion lift",
+      "value": "19%"
+    },
+    {
+      "metric": "repeat purchase lift",
+      "value": "7.4%"
+    },
+    {
+      "metric": "incremental GMV",
+      "value": "INR 220 crore"
+    },
+    {
+      "metric": "cold-start impression lift",
+      "value": "23%"
+    },
+    {
+      "metric": "demand forecast MAPE",
+      "value": "18.6% to 9.2%"
+    }
+  ],
+  "education_signal": "IIT Bombay email handle (arjun.mehta.iitb@gmail.com) suggests IIT Bombay alumnus",
+  "tools_frameworks": [
+    "XGBoost",
+    "LightGBM",
+    "Apache Flink",
+    "Kafka",
+    "Feast",
+    "TensorFlow Serving",
+    "TensorFlow",
+    "Prophet",
+    "Snorkel",
+    "MiniLM"
+  ],
+  "leadership_signals": [
+    "Mentored 4 junior engineers",
+    "2 promoted to mid-level in 11 months",
+    "Adopted by 6 downstream teams",
+    "11 client teams adopted NLP toolkit"
+  ],
+  "industries": [
+    "fintech",
+    "e-commerce",
+    "telecom",
+    "grocery retail"
+  ],
+  "years_experience": "5",
+  "requires_sponsorship": true,
+  "current_compensation_inr_lakhs": "65-75",
+  "target_role": "Senior Machine Learning Engineer",
+  "target_location": "United States",
+  "core_skills": [
+    "XGBoost",
+    "LightGBM",
+    "Apache Flink",
+    "Kafka",
+    "Temporal Fusion Transformers",
+    "Feast",
+    "TensorFlow Serving",
+    "MiniLM",
+    "Prophet",
+    "LSTM",
+    "Snorkel",
+    "Transformer"
+  ],
+  "domains": [
+    "fraud detection",
+    "recommendation systems",
+    "NLP",
+    "personalization",
+    "churn prediction",
+    "demand forecasting",
+    "neural machine translation"
+  ],
+  "highlights": [
+    "31% fraud loss reduction; INR 84Cr saved",
+    "Latency 14s to 220ms via Flink/Kafka",
+    "LTV model; 19% upsell lift",
+    "Feast feature store; sub-50ms p99",
+    "7.4% repeat purchase lift; INR 220Cr GMV",
+    "18,000 QPS; 99.94% availability",
+    "AUC 0.87/0.84 on churn",
+    "MAPE 18.6% to 9.2% forecasting"
+  ],
+  "education_mentioned": "IIT Bombay (inferred from email/github handle)",
+  "scale": "40M+ MAU; 12M monthly transactions; 2.4TB feature store",
+  "leadership": "Mentored 4 juniors; 2 promoted in 11 months",
+  "visa_status": "Requires H-1B sponsorship",
+  "compensation_expectation": "INR 65-75 lakhs (India); flexible for US benchmark",
+  "degree": "Not specified in provided resume text",
+  "notable_achievements": [
+    "31% fraud loss reduction",
+    "INR 84 crore annual savings",
+    "latency cut 14s to 220ms",
+    "19% upsell conversion lift",
+    "40M+ MAU served",
+    "99.94% availability at 18,000 QPS",
+    "AUC 0.87 churn model",
+    "MAPE reduced 18.6% to 9.2%"
+  ],
+  "scale_metrics": {
+    "fraud_transactions": "12M monthly",
+    "feature_store": "2.4 TB",
+    "users": "40M+ MAU",
+    "rec_incremental_gmv": "INR 220 crore"
+  },
+  "publications_or_research": "Not mentioned",
+  "open_source": "BharatTranslate (11 Indian language pairs, 250M-param Transformer)",
+  "education": "Not shown in provided text",
+  "compensation_india_lpa": "65-75",
+  "frameworks": [
+    "XGBoost",
+    "LightGBM",
+    "TensorFlow",
+    "PyTorch",
+    "Prophet",
+    "Snorkel",
+    "Feast"
+  ],
+  "infrastructure": [
+    "Apache Flink",
+    "Kafka",
+    "TensorFlow Serving",
+    "streaming"
+  ],
+  "models": [
+    "gradient_boosted_ensembles",
+    "Temporal Fusion Transformers",
+    "two_tower_neural_retrieval",
+    "cross_attention_ranker",
+    "MiniLM",
+    "LSTM",
+    "Transformer"
+  ],
+  "metrics_achievements": [
+    "31% fraud loss reduction",
+    "14s to 220ms latency cut",
+    "19% upsell conversion lift",
+    "7.4% repeat purchase lift",
+    "INR 220cr incremental GMV",
+    "99.94% availability",
+    "AUC 0.87",
+    "MAPE 18.6% to 9.2%",
+    "23% cold-start impression lift"
+  ],
+  "languages_claimed_for_translation": [
+    "Hindi",
+    "Tamil",
+    "Bengali",
+    "Telugu",
+    "Marathi",
+    "Malayalam",
+    "Kannada"
+  ],
+  "notice_period_status": "not_specified",
+  "highest_degree_inferred": "not_listed",
+  "peak_qps_handled": "18000",
+  "mostRecentEmployer": "Razorpay Software Pvt. Ltd.",
+  "topSkills": [
+    "XGBoost",
+    "LightGBM",
+    "Apache Flink",
+    "Kafka",
+    "Temporal Fusion Transformers"
+  ],
+  "jdCompany": "Lattice Analytics, Inc",
+  "requirementsMet": [
+    "Relevant experience present",
+    "Relevant experience present",
+    "Relevant experience present"
+  ],
+  "requirementsNotMet": [
+    "Gap to be assessed in interview",
+    "Gap to be assessed in interview"
+  ],
+  "expectedSalaryBand": null,
+  "id": "p09",
+  "edgeCase": "INTERNATIONAL profile: studied at IIT Bombay (India), degree B.Tech, currently in India, salary expectations in INR (lakhs per annum), menti",
+  "resumeFormat": "pdf",
+  "hasSecondDoc": true,
+  "secondDocFile": "jd2.txt"
+}

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Natively — INHERITED entitlements for Electron HELPER processes
+      (GPU / Renderer / Plugin / Utility / Network).
+
+      Helpers only need the V8/native-module runtime allowances. The privacy
+      capability (microphone) lives on the TOP-LEVEL app only: mic capture runs in
+      the MAIN process via the Rust native module, and there is no renderer
+      getUserMedia usage, so helpers must NOT carry com.apple.security.device.audio-input.
+
+      disable-library-validation is load-bearing: the unpacked .node / .dylib native
+      modules are loaded by helper processes and would otherwise fail validation
+      under the Hardened Runtime.
+    -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+</dict>
+</plist>

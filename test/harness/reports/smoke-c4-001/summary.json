@@ -1,0 +1,19 @@
+{
+  "runId": "smoke-c4-001",
+  "finishedAt": "2026-07-17T02:18:18.507Z",
+  "resultCount": 1,
+  "providerCalls": 1,
+  "overall": {
+    "total": 1,
+    "passed": 1
+  },
+  "hallucinationFlags": [],
+  "falseRefusals": [],
+  "byCategory": {
+    "mode_jd_grounding": {
+      "total": 1,
+      "passed": 1,
+      "hallucinations": 0
+    }
+  }
+}

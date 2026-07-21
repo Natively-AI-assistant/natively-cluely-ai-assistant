@@ -5,9 +5,32 @@
 import { RecapLLM } from './llm';
 import { isVerboseLogging } from './verboseLog';
 
+// Canned-fallback phrases that mean the model gave up entirely, not phrases
+// that might legitimately appear inside a real answer. Matched only when the
+// ENTIRE (trimmed, punctuation-stripped) message consists of one of these —
+// never as a substring — so honest answers like "I'm not sure of his exact
+// title, but he's on the platform team" are kept in session history instead
+// of being silently dropped from contextItems/fullTranscript/history.
+// Mirrors the equivalent guard in LLMHelper.processResponse (kept as a
+// separate local copy here to avoid a cross-module import for one helper).
+const CANNED_FALLBACK_PHRASES = [
+    "i'm not sure",
+    "it depends",
+    "i can't answer",
+    "i don't know",
+];
+function isCannedFallbackPhrase(text: string): boolean {
+    const normalized = text.trim().toLowerCase().replace(/^[\s"'.!?]+|[\s"'.!?]+$/g, '');
+    return CANNED_FALLBACK_PHRASES.includes(normalized);
+}
+
 export interface TranscriptSegment {
     marker?: string;
     speaker: string;
+    // Optional canonical speaker id from provider diarization (e.g. "speaker_2"). Only set on
+    // the remote/system channel when diarization is enabled; the mic channel is always "me".
+    // Additive — summary normalization reads it when present, everything else ignores it.
+    speakerId?: string;
     text: string;
     timestamp: number;
     final: boolean;
@@ -27,20 +50,49 @@ export interface ContextItem {
     timestamp: number;
 }
 
+/**
+ * Which conversational surface produced/consumes a turn (real-app
+ * source-switch repair, 2026-07-14, Phase 9 — surface isolation). Manual chat,
+ * What-to-Answer (live suggestions), and meeting auto-answer are DISTINCT
+ * conversations that happen to share this session's transcript/meeting
+ * context; a turn from one must not silently look like a prior turn of
+ * another when resolving a follow-up referent ("what about that?"). Optional
+ * (absent = legacy/unknown caller) so this is purely additive — no existing
+ * write site is required to change.
+ */
+export type ConversationSurface = 'manual_chat' | 'what_to_answer' | 'screenshot' | 'meeting_auto_answer' | 'phone_mirror';
+
 export interface AssistantResponse {
     text: string;
     timestamp: number;
     questionContext: string;
+    /** Which surface produced this turn. Absent for legacy callers. */
+    surface?: ConversationSurface;
 }
 
 export class SessionTracker {
     // Context management (mirrors Swift ContextManager)
     private contextItems: ContextItem[] = [];
-    private readonly contextWindowDuration: number = 120; // 120 seconds
+    // Grounding-campaign2 fix (H7, 2026-07-17): this eviction bound must be >=
+    // the largest `lastSeconds` any live call site actually requests, or
+    // getContext(N) silently truncates to whatever this value is regardless of
+    // N. Every live caller (IntelligenceEngine.runWhatShouldISay/
+    // planSuggestionTrigger, LiveTranscriptBrain's DEFAULT_ANSWER_WINDOW_SECONDS,
+    // main.ts's comp-evidence provider) requests 180s — this was hard-coded to
+    // 120, so getContext(180) returned only the last ~120s of a 180s window and
+    // called it a match. Raised to 180 so the write-side retention actually
+    // covers every documented 180s read. Fixture-proven: traces2/... (H7).
+    private readonly contextWindowDuration: number = 180; // seconds
     private readonly maxContextItems: number = 500;
 
     // Last assistant message for follow-up mode
     private lastAssistantMessage: string | null = null;
+    // Per-surface last assistant message (Phase 9 surface isolation,
+    // 2026-07-14) — populated ADDITIVELY alongside the shared
+    // `lastAssistantMessage` above, never replacing it (existing meeting/WTA
+    // continuity that intentionally reads the shared field is unaffected).
+    // Keyed by ConversationSurface; a surface with no turns yet is simply absent.
+    private lastAssistantMessageBySurface: Partial<Record<ConversationSurface, string>> = {};
 
     // Temporal RAG: Track all assistant responses in session for anti-repetition
     private assistantResponseHistory: AssistantResponse[] = [];
@@ -231,10 +283,15 @@ export class SessionTracker {
 
         this.evictOldEntries();
 
-        // Filter out internal system prompts that might be passed via IPC
-        const isInternalPrompt = text.startsWith("You are a real-time interview assistant") ||
-            text.startsWith("You are a helper") ||
-            text.startsWith("CONTEXT:");
+        // Filter out only exact internal system prompts (not broad prefix match)
+        // These are injected internally and should not be treated as real transcript
+        const knownInternalPrompts = [
+            "You are a real-time interview assistant",
+            "You are a helper",
+        ];
+        const isExactInternalPrompt = knownInternalPrompts.some(p => text === p);
+        const isContextInjection = text.startsWith("CONTEXT:");
+        const isInternalPrompt = isExactInternalPrompt || isContextInjection;
 
         if (!isInternalPrompt) {
             // Add to session transcript
@@ -252,8 +309,23 @@ export class SessionTracker {
     /**
      * Add assistant-generated message to context
      */
-    addAssistantMessage(text: string): void {
-        console.log(`[SessionTracker] addAssistantMessage called`, { length: text.length });
+    addAssistantMessage(
+        text: string,
+        writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean },
+        // Phase 9 surface isolation (2026-07-14): OPTIONAL — absent means the
+        // caller hasn't been updated yet, and this write behaves exactly as
+        // before (shared lastAssistantMessage / assistantResponseHistory
+        // only). Passing a surface additionally populates the per-surface map
+        // a same-surface-only reader (getLastAssistantMessage(surface)) can
+        // consult, without changing what the shared, cross-surface state sees.
+        surface?: ConversationSurface,
+    ): void {
+        console.log(`[SessionTracker] addAssistantMessage called`, { length: text.length, policy: writeDecision?.policy || 'store_conversational_only', surface: surface ?? 'unspecified' });
+
+        if (writeDecision?.policy === 'do_not_store' || writeDecision?.blockedFromSessionTracker) {
+            console.warn(`[SessionTracker] Blocked assistant message by write policy`, { reason: writeDecision?.reason || 'unspecified' });
+            return;
+        }
 
         // Natively-style filtering
         if (!text) return;
@@ -264,7 +336,7 @@ export class SessionTracker {
             return;
         }
 
-        if (cleanText.includes("I'm not sure") || cleanText.includes("I can't answer")) {
+        if (isCannedFallbackPhrase(cleanText)) {
             console.warn(`[SessionTracker] Ignored fallback message`);
             return;
         }
@@ -291,12 +363,16 @@ export class SessionTracker {
         );
 
         this.lastAssistantMessage = cleanText;
+        if (surface) {
+            this.lastAssistantMessageBySurface[surface] = cleanText;
+        }
 
         // Temporal RAG: Track response history for anti-repetition
         this.assistantResponseHistory.push({
             text: cleanText,
             timestamp: Date.now(),
-            questionContext: this.getLastInterviewerTurn() || 'unknown'
+            questionContext: this.getLastInterviewerTurn() || 'unknown',
+            surface,
         });
 
         // Keep history bounded (last 10 responses)
@@ -361,11 +437,69 @@ export class SessionTracker {
         return this.contextItems.filter(item => item.timestamp >= cutoff);
     }
 
-    getLastAssistantMessage(): string | null {
+    /**
+     * DURABLE context window (Intelligence OS, 2026-06-12). Unlike `getContext()`,
+     * which reads `contextItems` — hard-evicted to `contextWindowDuration` (120s) on
+     * EVERY final segment by `evictOldEntries()` — this reads `fullTranscript`, the
+     * session's persisted store that survives the 120s eviction. It exists to make
+     * genuinely long-range recall possible: a project named at minute 1 is still
+     * present at minute 62.
+     *
+     * WHY THIS METHOD EXISTS: `IntelligenceEngine.LIVE_MEMORY_WINDOW_SECONDS = 7200`
+     * fed `getContext(7200)` into the long-range follow-up memory and assumed a 2h
+     * window. But `contextItems` can never hold more than ~120s, so that path
+     * silently saw at most the last two minutes — the long-range entity it was built
+     * to recall had already been evicted. Pointing it at the durable store fixes the
+     * bug for the common case (a multi-minute session under the compaction threshold).
+     *
+     * BOUND: after a >1800-segment session `compactTranscriptIfNeeded` summarizes and
+     * evicts the OLDEST 500 raw segments into an epoch summary, so this returns only
+     * the raw segments STILL RESIDENT — a minute-1 entity in a *very* long session can
+     * still age out of the raw store into a summary. That's a far higher bar than the
+     * 120s `contextItems` eviction this fixes; for the full summary-prefixed view see
+     * `getFullSessionContext()`.
+     *
+     * @param lastSeconds Window size in seconds (default 7200 = 2h). `Infinity`
+     *   returns the entire resident transcript.
+     */
+    getDurableContext(lastSeconds: number = 7200): ContextItem[] {
+        const cutoff = Number.isFinite(lastSeconds)
+            ? Date.now() - (lastSeconds * 1000)
+            : -Infinity;
+        const out: ContextItem[] = [];
+        for (const seg of this.fullTranscript) {
+            if (seg.timestamp < cutoff) continue;
+            const text = (seg.text || '').trim();
+            if (!text) continue;
+            out.push({ role: this.mapSpeakerToRole(seg.speaker), text, timestamp: seg.timestamp });
+        }
+        return out;
+    }
+
+    /**
+     * The last assistant message. With NO argument, returns the shared,
+     * cross-surface value (unchanged legacy behavior — meeting/WTA continuity
+     * that intentionally wants "the last thing said on ANY surface" keeps
+     * working exactly as before).
+     *
+     * With a `surface` argument (Phase 9 surface isolation, 2026-07-14),
+     * returns ONLY that surface's own last message — `null` if that surface
+     * has never written one, even if a DIFFERENT surface has. Use this for a
+     * follow-up-referent resolution that must not treat a WTA/meeting answer
+     * as the user's own prior manual-chat turn (the reported "concatenated/
+     * unrelated WTA responses leaking into manual chat" defect).
+     */
+    getLastAssistantMessage(surface?: ConversationSurface): string | null {
+        if (surface) {
+            return this.lastAssistantMessageBySurface[surface] ?? null;
+        }
         return this.lastAssistantMessage;
     }
 
-    getAssistantResponseHistory(): AssistantResponse[] {
+    getAssistantResponseHistory(surface?: ConversationSurface): AssistantResponse[] {
+        if (surface) {
+            return this.assistantResponseHistory.filter((r) => r.surface === surface);
+        }
         return this.assistantResponseHistory;
     }
 
@@ -374,10 +508,47 @@ export class SessionTracker {
     }
 
     /**
+     * Context items for LLM prompts, including the latest interim interviewer
+     * partial when finals have not caught up yet (matches What to Answer path).
+     */
+    getContextWithInterim(lastSeconds: number = 120): ContextItem[] {
+        const contextItems = [...this.getContext(lastSeconds)];
+
+        const lastInterim = this.lastInterimInterviewer;
+        if (lastInterim && lastInterim.text.trim().length > 0) {
+            const lastItem = contextItems[contextItems.length - 1];
+            const isDuplicate = lastItem &&
+                lastItem.role === 'interviewer' &&
+                (lastItem.text === lastInterim.text ||
+                    Math.abs(lastItem.timestamp - lastInterim.timestamp) < 1000);
+
+            if (!isDuplicate) {
+                contextItems.push({
+                    role: 'interviewer',
+                    text: lastInterim.text,
+                    timestamp: lastInterim.timestamp,
+                });
+            }
+        }
+
+        return contextItems;
+    }
+
+    /**
      * Get formatted context string for LLM prompts
      */
     getFormattedContext(lastSeconds: number = 120): string {
-        const items = this.getContext(lastSeconds);
+        return this.formatContextItems(this.getContext(lastSeconds));
+    }
+
+    /**
+     * Formatted context including rolling interim interviewer speech.
+     */
+    getFormattedContextWithInterim(lastSeconds: number = 120): string {
+        return this.formatContextItems(this.getContextWithInterim(lastSeconds));
+    }
+
+    private formatContextItems(items: ContextItem[]): string {
         return items.map(item => {
             const label = item.role === 'interviewer' ? 'INTERVIEWER' :
                 item.role === 'user' ? 'ME' :
@@ -431,6 +602,27 @@ export class SessionTracker {
         return this.fullUsage;
     }
 
+    getRecentManualTurn(maxAgeMs: number = 5 * 60 * 1000): { question: string; answer: string; timestamp: number } | null {
+        // Usage entries are appended chronologically by current callers; if a future
+        // restore/replay path pushes out-of-order entries, sort by timestamp here.
+        const cutoff = Date.now() - maxAgeMs;
+        for (let i = this.fullUsage.length - 1; i >= 0; i--) {
+            const entry = this.fullUsage[i];
+            if (!entry || entry.timestamp < cutoff) continue;
+            if (entry.type !== 'chat') continue;
+            if (entry.source !== 'manual_chat') continue;
+            if (entry.synthetic === true) continue;
+
+            const question = typeof entry.question === 'string' ? entry.question.trim() : '';
+            const answer = typeof entry.answer === 'string' ? entry.answer.trim() : '';
+            if (!question || !answer) continue;
+            if (question === 'Clarify Question' || question === 'Recap Meeting') continue;
+
+            return { question, answer, timestamp: entry.timestamp };
+        }
+        return null;
+    }
+
     getSessionStartTime(): number {
         return this.sessionStartTime;
     }
@@ -456,8 +648,10 @@ export class SessionTracker {
             type,
             timestamp: Date.now(),
             question,
-            answer
+            answer,
+            source: type === 'chat' ? 'manual_chat' : 'external',
         });
+        this.capUsageArray();
     }
 
     pushUsage(entry: any): void {

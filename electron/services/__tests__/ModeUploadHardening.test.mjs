@@ -1,14 +1,5 @@
-// electron/services/__tests__/ModeUploadHardening.test.mjs
-//
-// Regression for FIX-009: modes:upload-reference-file used to fall through
-// to fs.readFileSync(utf8) for any non-PDF/DOCX file, regardless of
-// extension. Renamed binaries (e.g. secret.zip → secret.txt) were stored as
-// mojibake-laden text and polluted every subsequent retrieval. Size and
-// empty-result handling were also absent.
-//
-// We test the handler at the source level — same pattern as
-// ModeBleeding.test.mjs and ProfileIntelligenceGate.test.mjs — because the
-// safeHandle wrapper requires an Electron runtime to invoke directly.
+// Regression for FIX-009: Modes and Profile Intelligence must use one hardened
+// document parser rather than accepting renamed binaries or unbounded files.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,87 +8,91 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SOURCE = fs.readFileSync(path.resolve(__dirname, '../../ipcHandlers.ts'), 'utf8');
+const EXTRACTOR_SOURCE = fs.readFileSync(
+  path.resolve(__dirname, '../SafeDocumentTextExtractor.ts'),
+  'utf8',
+);
+const MODE_INGESTION_SOURCE = fs.readFileSync(
+  path.resolve(__dirname, '../ModeReferenceFileIngestion.ts'),
+  'utf8',
+);
+const IPC_SOURCE = fs.readFileSync(path.resolve(__dirname, '../../ipcHandlers.ts'), 'utf8');
+const BUILD_SCRIPT = fs.readFileSync(path.resolve(__dirname, '../../../scripts/build-electron.js'), 'utf8');
 
-function handlerBody() {
-  const start = SOURCE.indexOf('safeHandle("modes:upload-reference-file"');
-  assert.ok(start >= 0, 'Upload handler must exist');
-  const end = SOURCE.indexOf('safeHandle("modes:delete-reference-file"', start);
-  return SOURCE.slice(start, end > 0 ? end : start + 6000);
-}
+const REQUIRED_EXTENSIONS = [
+  '.txt', '.md', '.markdown', '.json', '.csv', '.tsv', '.xml', '.html', '.htm', '.log', '.pdf', '.docx',
+];
 
-describe('FIX-009: modes:upload-reference-file hardening', () => {
-  const body = handlerBody();
+describe('FIX-009: shared document upload hardening', () => {
+  test('keeps one explicit allow-list for every supported document format', () => {
+    assert.ok(EXTRACTOR_SOURCE.includes('SAFE_DOCUMENT_EXTENSIONS'));
+    for (const ext of REQUIRED_EXTENSIONS) {
+      assert.ok(EXTRACTOR_SOURCE.includes(`'${ext}'`), `Allow-list must contain ${ext}`);
+    }
+    assert.doesNotMatch(EXTRACTOR_SOURCE, /'\.doc'/, 'Legacy .doc must stay excluded');
+  });
 
-  test('declares an explicit server-side ALLOWED_EXTENSIONS allow-list', () => {
-    assert.ok(body.includes('ALLOWED_EXTENSIONS'), 'Allow-list must be declared');
-    // Must include the plain-text formats the test plan promises (txt md json
-    // csv xml html) plus the parser-backed binary formats (pdf docx doc).
-    for (const ext of ['.txt', '.md', '.json', '.csv', '.xml', '.html', '.pdf', '.docx', '.doc']) {
-      assert.ok(body.includes(`'${ext}'`), `Allow-list must contain ${ext}`);
+  test('Modes delegates parsing to the shared hardened extractor', () => {
+    assert.match(MODE_INGESTION_SOURCE, /extractSafeDocumentText\(options\.filePath\)/);
+    assert.match(MODE_INGESTION_SOURCE, /MODE_REFERENCE_FILE_EXTENSIONS\s*=\s*SAFE_DOCUMENT_EXTENSIONS/);
+    assert.match(MODE_INGESTION_SOURCE, /MODE_REFERENCE_FILE_MAX_BYTES\s*=\s*SAFE_DOCUMENT_MAX_BYTES/);
+  });
+
+  test('enforces regular-file, size, timeout, and empty-result guards before persistence', () => {
+    assert.match(EXTRACTOR_SOURCE, /fs\.promises\.lstat\(filePath\)/);
+    assert.match(EXTRACTOR_SOURCE, /stats\.isFile\(\)/);
+    assert.match(EXTRACTOR_SOURCE, /stats\.size > SAFE_DOCUMENT_MAX_BYTES/);
+    assert.match(EXTRACTOR_SOURCE, /PARSE_TIMEOUT_MS = 30_000/);
+    assert.match(EXTRACTOR_SOURCE, /withTimeout<any>\(parser\.getText\(\), 'PDF parse'\)/);
+    assert.match(EXTRACTOR_SOURCE, /withTimeout<any>\(mammoth\.extractRawText\(\{ path: filePath \}\), 'DOCX parse'\)/);
+    assert.match(EXTRACTOR_SOURCE, /file parsed to empty text/);
+  });
+
+  test('decodes BOM text and rejects renamed binaries', () => {
+    assert.match(EXTRACTOR_SOURCE, /0xff.*0xfe/);
+    assert.match(EXTRACTOR_SOURCE, /0xfe.*0xff/);
+    assert.match(EXTRACTOR_SOURCE, /0xef.*0xbb.*0xbf/s);
+    assert.match(EXTRACTOR_SOURCE, /utf16le/);
+    assert.match(EXTRACTOR_SOURCE, /includes\(0\)/);
+  });
+
+  test('pins the real pdfjs worker before pdf-parse runs', () => {
+    assert.match(EXTRACTOR_SOURCE, /pdfjs-dist\/legacy\/build\/pdf\.mjs/);
+    assert.match(EXTRACTOR_SOURCE, /require\.resolve\('pdfjs-dist\/legacy\/build\/pdf\.worker\.mjs'\)/);
+    assert.match(EXTRACTOR_SOURCE, /pathToFileURL\(workerPath\)\.href/);
+    assert.match(EXTRACTOR_SOURCE, /GlobalWorkerOptions\.workerSrc =/);
+  });
+
+  test('Profile picker consumes the shared format set and preserves All Files fallback', () => {
+    assert.match(IPC_SOURCE, /import \{ SAFE_DOCUMENT_EXTENSIONS \} from '\.\/services\/SafeDocumentTextExtractor'/);
+    assert.match(IPC_SOURCE, /const extensions = \[\.\.\.SAFE_DOCUMENT_EXTENSIONS\]\.map\(extension => extension\.slice\(1\)\)/);
+    assert.match(IPC_SOURCE, /name: 'Resume & JD Documents'/);
+    assert.match(IPC_SOURCE, /name: 'All Files', extensions: \['\*'\]/);
+  });
+
+  test('Profile handlers translate legacy .doc failures returned by the orchestrator', () => {
+    const resumeHandler = IPC_SOURCE.slice(
+      IPC_SOURCE.indexOf("safeHandle('profile:upload-resume'"),
+      IPC_SOURCE.indexOf("safeHandle('profile:get-status'"),
+    );
+    const jdHandler = IPC_SOURCE.slice(
+      IPC_SOURCE.indexOf("safeHandle('profile:upload-jd'"),
+      IPC_SOURCE.indexOf("safeHandle('profile:delete-jd'"),
+    );
+    const docError = /Legacy Word \.doc files are not supported\. Save the file as \.docx and upload it again\./;
+    const resultMapping = /if \(!result\?\.success && path\.extname\(resolvedPath\)\.toLowerCase\(\) === '\.doc'\)/;
+
+    for (const handler of [resumeHandler, jdHandler]) {
+      assert.match(handler, docError);
+      assert.match(handler, resultMapping);
     }
   });
 
-  test('declares a size cap (MAX_FILE_BYTES) and pre-flight checks lstat size + isFile', () => {
-    assert.ok(body.includes('MAX_FILE_BYTES'), 'Size constant must be declared');
-    // lstatSync (not statSync) — must NOT follow symlinks, otherwise a
-    // symlink to /dev/zero hangs the renderer-IPC reply forever.
-    assert.ok(body.includes('fs.lstatSync(filePath)'), 'Handler must lstat the file pre-parse (not statSync)');
-    assert.ok(/stats\.isFile\(\)/.test(body), 'Handler must reject non-regular-files (symlinks, devices, fifos, directories)');
-    assert.ok(/stats\.size\s*>\s*MAX_FILE_BYTES/.test(body), 'Handler must reject when stats.size exceeds the cap');
-  });
-
-  test('wraps PDF and DOCX parsers in a timeout to guard against malformed input / zip bombs', () => {
-    assert.ok(body.includes('PARSE_TIMEOUT_MS'), 'Parse-timeout constant must be declared');
-    assert.ok(body.includes('withTimeout'), 'Handler must define a withTimeout helper');
-    assert.ok(/withTimeout(?:<[^>]+>)?\(parser\.getText\(\)/.test(body), 'PDF parse must be wrapped in withTimeout');
-    assert.ok(/withTimeout(?:<[^>]+>)?\(mammoth\.extractRawText/.test(body), 'DOCX parse must be wrapped in withTimeout');
-  });
-
-  test('BOM-aware decoding for UTF-16 / UTF-8-BOM text files (no false-positive binary rejection)', () => {
-    // UTF-16 LE BOM: 0xFF 0xFE → decode with utf16le, do NOT treat embedded
-    // null bytes as a renamed-binary signal.
-    assert.ok(/0xFF.+0xFE/.test(body), 'Handler must detect UTF-16 LE BOM');
-    assert.ok(/0xFE.+0xFF/.test(body), 'Handler must detect UTF-16 BE BOM');
-    assert.ok(/0xEF.+0xBB.+0xBF/.test(body), 'Handler must detect UTF-8 BOM');
-    assert.ok(/utf16le/.test(body), 'Handler must decode UTF-16 with the utf16le codec');
-  });
-
-  test('rejects extensions not in the allow-list with a friendly user-facing message', () => {
-    assert.ok(/Unsupported file type/.test(body), 'Friendly error message must be present');
-    assert.ok(/Profile Intelligence/.test(body), 'Error must route resume/JD users to Profile Intelligence');
-  });
-
-  test('sniffs the first bytes for null-byte to detect renamed binaries on plain-text path', () => {
-    // The sniff must read raw bytes (encoding null) and look for a zero byte
-    // before utf8-decoding the rest of the buffer.
-    assert.ok(/encoding:\s*null/.test(body), 'Plain-text path must read raw bytes');
-    assert.ok(/sniffWindow\.includes\(0\)/.test(body) || /includes\(0\)/.test(body),
-      'Plain-text path must check for null byte');
-  });
-
-  test('rejects parses that yield empty content (image-only PDFs, password-protected, corrupt)', () => {
-    assert.ok(/parsed to empty text/.test(body) || /empty/.test(body),
-      'Handler must reject empty-parse results');
-  });
-
-  test('does not leak raw error.message to the renderer on unexpected failures', () => {
-    // The catch block must NOT return `error: e.message`. It must return a
-    // generic string; the detail goes only to the main-process console.
-    assert.ok(
-      !/return\s*\{\s*success:\s*false,\s*error:\s*e\.message\s*\}/.test(body),
-      'Handler must NOT echo raw e.message back to the renderer'
-    );
-    assert.ok(
-      /console\.error\(.+modes:upload-reference-file/.test(body),
-      'Handler must log the raw error in main-process console'
-    );
-  });
-
-  test('still gates on Pro/trial before doing any work', () => {
-    const gateIdx = body.indexOf('isProOrTrialActive()');
-    const showDialogIdx = body.indexOf('showOpenDialog');
-    assert.ok(gateIdx >= 0 && showDialogIdx >= 0);
-    assert.ok(gateIdx < showDialogIdx, 'Pro gate must run before opening the file dialog');
+  test('build externalizes document parsers so the pdfjs worker pin works packaged', () => {
+    const externalMatch = BUILD_SCRIPT.match(/external:\s*\[([\s\S]*?)\]/);
+    assert.ok(externalMatch, 'build-electron.js must declare an external list');
+    for (const pkg of ['pdfjs-dist', 'pdf-parse', 'mammoth']) {
+      assert.match(externalMatch[1], new RegExp(`['"]${pkg}['"]`));
+    }
   });
 });

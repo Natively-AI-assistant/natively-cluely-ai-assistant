@@ -33,14 +33,15 @@
 
 import { EventEmitter } from 'events';
 import { Worker } from 'worker_threads';
-import path from 'path';
 import { resampleToF32 } from './whisper/audioResampler';
 import { VadProcessor } from './whisper/vadProcessor';
 import { filterHallucination } from './whisper/hallucinationFilter';
 import { configureTransformersCache } from './whisper/modelManager';
-import { modelPreloader } from './whisper/modelPreloader';
+import { clearLoadSentinel, modelPreloader, writeLoadSentinel } from './whisper/modelPreloader';
 import { buildWorkerInitMessage } from './whisper/inferenceConfig';
+import { resolveWhisperWorkerPath } from './whisper/workerPathResolver';
 import type { WorkerOutMessage } from './whisper/types';
+import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../utils/onnxThreadConfig';
 
 export class LocalWhisperSTT extends EventEmitter {
     private readonly modelId: string;
@@ -83,6 +84,12 @@ export class LocalWhisperSTT extends EventEmitter {
     private worker: Worker | null = null;
     private vad: VadProcessor | null = null;
     private isActive = false;
+    // Cross-loader ONNX gate slot. Acquired in spawnWorker() before posting
+    // init; released in worker error/exit handlers so other ONNX consumers
+    // (LocalReranker / LocalEmbeddingProvider / IntentClassifier) can take
+    // the slot promptly. Whisper uses priority 'high' so its streaming loop
+    // acquires before queued normal-priority consumers.
+    private slotRelease: (() => void) | null = null;
     private taskCounter = 0;
     private workerReady = false;
     private isDrainingFinals = false;
@@ -118,6 +125,14 @@ export class LocalWhisperSTT extends EventEmitter {
     // the next delay; reset to base on a successful dispatch.
     private streamingStallCount = 0;
     private streamingNextDelayMs = 0; // set in constructor from streamingIntervalBaseMs
+    // Watchdog: if the worker takes longer than this on an in-flight streaming
+    // task we assume it's stuck (hypothesis: GPU lock, deadlock, dead pointer)
+    // and force-clear the in-flight state so the loop can recover. Without
+    // this, a stuck worker permanently pins streamingTaskInFlight=true and
+    // every subsequent tick is a no-op stall (transcription appears to stop
+    // after 3-4 questions once the worker gets wedged).
+    private streamingWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
+    private static readonly STREAMING_WATCHDOG_MS = 30000;
 
     // LocalAgreement-2 state. We hold the last partial transcript, and when
     // the next partial arrives we emit the longest common prefix as the
@@ -206,7 +221,26 @@ export class LocalWhisperSTT extends EventEmitter {
         this.drainingFinalsInFlight = 0;
         this.isActive = true;
         this.vad = new VadProcessor();
-        this.spawnWorker();
+        this.spawnWorker().catch((err) => {
+            // Gate refusal or worker spawn failure (e.g. insufficient memory for
+            // the ONNX session). There is NO retry path, so we must NOT leave a
+            // live streaming loop + VAD churning with worker=null — that silently
+            // drops every audio segment (dispatchFinal early-returns on !worker)
+            // and leaks a self-chaining 12s streaming timer for the whole session.
+            // Tear the instance back down to a clean inactive no-op (write() then
+            // no-ops on !isActive/!vad) and surface the error so the supervisor
+            // can fall back to cloud STT.
+            console.error('[LocalWhisperSTT] spawnWorker failed:', err);
+            this.stopStreamingLoop();
+            if (this.gapFlushTimer) {
+                clearTimeout(this.gapFlushTimer);
+                this.gapFlushTimer = null;
+            }
+            this.vad = null;
+            this.isActive = false;
+            this.workerReady = false;
+            this.emit('error', err instanceof Error ? err : new Error(String(err)));
+        });
         this.startStreamingLoop();
     }
 
@@ -328,10 +362,35 @@ export class LocalWhisperSTT extends EventEmitter {
             clearTimeout(this.streamingTimer);
             this.streamingTimer = null;
         }
+        this.clearStreamingWatchdog();
         this.streamingTaskInFlight = false;
         this.streamingTaskId = null;
         this.streamingStallCount = 0;
         this.streamingNextDelayMs = this.streamingIntervalBaseMs;
+    }
+
+    private armStreamingWatchdog(): void {
+        this.clearStreamingWatchdog();
+        this.streamingWatchdogTimer = setTimeout(() => {
+            this.streamingWatchdogTimer = null;
+            if (!this.streamingTaskInFlight) return;
+            console.warn(`[LocalWhisperSTT] Streaming watchdog fired after ${LocalWhisperSTT.STREAMING_WATCHDOG_MS}ms — worker is stuck, force-clearing in-flight task`);
+            const stuckTaskId = this.streamingTaskId;
+            this.streamingTaskInFlight = false;
+            this.streamingTaskId = null;
+            this.streamingStallCount = 0;
+            this.streamingNextDelayMs = this.streamingIntervalBaseMs;
+            this.emit('error', new Error(
+                `Local Whisper streaming task ${stuckTaskId ?? '?'} did not return within ${LocalWhisperSTT.STREAMING_WATCHDOG_MS}ms — worker likely stuck, unblocking next tick.`
+            ));
+        }, LocalWhisperSTT.STREAMING_WATCHDOG_MS);
+    }
+
+    private clearStreamingWatchdog(): void {
+        if (this.streamingWatchdogTimer) {
+            clearTimeout(this.streamingWatchdogTimer);
+            this.streamingWatchdogTimer = null;
+        }
     }
 
     private streamingTick(): void {
@@ -359,6 +418,7 @@ export class LocalWhisperSTT extends EventEmitter {
         const taskId = `s${++this.taskCounter}`;
         this.streamingTaskId = taskId;
         const copy = open.samples.slice();
+        this.armStreamingWatchdog();
         this.worker.postMessage(
             { type: 'transcribe', taskId, audio: copy, language: this.language, streaming: true },
             [copy.buffer]
@@ -385,6 +445,7 @@ export class LocalWhisperSTT extends EventEmitter {
      * emit only the *new* committed text as an interim transcript.
      */
     private handleStreamingPartial(text: string): void {
+        this.clearStreamingWatchdog();
         this.streamingTaskInFlight = false;
         // Worker just became free → recover from any backoff state so the
         // next dispatch fires at the base interval instead of waiting out
@@ -505,6 +566,7 @@ export class LocalWhisperSTT extends EventEmitter {
         // Invalidate any in-flight streaming task so its late `partial`
         // response is dropped by the taskId guard below instead of mutating
         // the next segment's agreement baseline.
+        this.clearStreamingWatchdog();
         this.streamingTaskId = null;
     }
 
@@ -516,6 +578,7 @@ export class LocalWhisperSTT extends EventEmitter {
         // A final pass closes the streaming window — clear agreement state so
         // the next segment starts clean.
         this.resetAgreementState();
+        this.clearStreamingWatchdog();
         this.streamingTaskInFlight = false;
 
         if (!this.workerReady) {
@@ -548,21 +611,39 @@ export class LocalWhisperSTT extends EventEmitter {
 
     /* ──────────────── Worker lifecycle ──────────────── */
 
-    private spawnWorker(): void {
+    private async spawnWorker(): Promise<void> {
         const warm = modelPreloader.takeWarmWorker(this.modelId);
         if (warm) {
             console.log(`[LocalWhisperSTT] Using preloaded warm worker for ${this.modelId}`);
             this.worker = warm;
             this.workerReady = true;
+            // Inherit the slot release the preloader acquired. Both preloader
+            // and our local listeners will call this — it's a no-op the
+            // second time.
+            this.slotRelease = (warm as any).__slotRelease ?? null;
             this.attachWorkerListeners();
             this.flushPending();
-        } else {
-            console.log(`[LocalWhisperSTT] Cold-starting worker for ${this.modelId}`);
-            const workerPath = path.join(__dirname, 'whisper', 'whisperWorker.js');
-            this.worker = new Worker(workerPath);
-            this.attachWorkerListeners();
-            this.worker.postMessage(buildWorkerInitMessage(this.modelId));
+            return;
         }
+
+        // Cold path. Acquire the shared ONNX slot at HIGH priority — Whisper
+        // is latency-critical (~750ms real-time streaming) and would deadlock
+        // behind a queued embedding batch.
+        if (!hasEnoughMemoryForOnnxSession()) {
+            const heapGB = (process.memoryUsage().heapUsed / 1024 ** 3).toFixed(1);
+            throw new Error(
+                `[LocalWhisperSTT] insufficient available memory (<${getMinFreeGBForOnnxSession()}GB) — Whisper init refused (heaped=${heapGB}GB)`,
+            );
+        }
+
+        this.slotRelease = await acquireOnnxSlot('high');
+
+        console.log(`[LocalWhisperSTT] Cold-starting worker for ${this.modelId}`);
+        const workerPath = resolveWhisperWorkerPath();
+        writeLoadSentinel(this.modelId);
+        this.worker = new Worker(workerPath);
+        this.attachWorkerListeners();
+        this.worker.postMessage(buildWorkerInitMessage(this.modelId));
     }
 
     private attachWorkerListeners(): void {
@@ -570,6 +651,7 @@ export class LocalWhisperSTT extends EventEmitter {
 
         this.worker.on('message', (msg: WorkerOutMessage) => {
             if (msg.type === 'ready') {
+                clearLoadSentinel(this.modelId);
                 this.workerReady = true;
                 this.flushPending();
                 return;
@@ -629,14 +711,69 @@ export class LocalWhisperSTT extends EventEmitter {
                     this.streamingNextDelayMs = this.streamingIntervalBaseMs;
                 }
                 if (msg.message.includes('Failed to load model')) {
+                    const isOnnxSymbolError = msg.message.includes('Symbol not found')
+                        || msg.message.includes('__ZNSt3__18to_charsEPcS0_d')
+                        || msg.message.includes('libonnxruntime');
                     this.emit('error', new Error(
-                        'Local Whisper model not found. Please download a model in Settings → Audio.'
+                        isOnnxSymbolError
+                            ? 'Local Whisper is not supported on macOS 12 (Monterey) or earlier. Please upgrade to macOS 13 Ventura or later, or use a cloud STT provider.'
+                            : 'Local Whisper model not found. Please download a model in Settings → Audio.'
                     ));
                 }
             }
         });
 
-        this.worker.on('error', (err) => this.emit('error', err));
+        this.worker.on('error', (err) => {
+            // Reset all in-flight streaming state so a dead worker can never
+            // permanently pin streamingTaskInFlight=true (which would freeze
+            // the loop — symptom: transcription stops after 3-4 questions).
+            this.clearStreamingWatchdog();
+            this.streamingTaskInFlight = false;
+            this.streamingTaskId = null;
+            // Free the shared ONNX gate slot — Whisper's session is gone.
+            if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
+            this.workerReady = false;
+            // Symmetric with the exit handler below: a worker `error` is
+            // followed by a non-zero `exit` in node:worker_threads, so the
+            // exit handler also calls recordLoadFailure. Calling here too is
+            // belt-and-braces for the theoretical error-without-exit case
+            // (e.g. a hard native abort that races the parent). Idempotent
+            // because recordLoadFailure only sets a map expiry, never clears.
+            modelPreloader.recordLoadFailure(this.modelId);
+            const isOnnxSymbolError = err.message.includes('Symbol not found')
+                || err.message.includes('to_chars')
+                || err.message.includes('libonnxruntime');
+            if (isOnnxSymbolError) {
+                this.emit('error', new Error(
+                    'Local Whisper is not supported on macOS 12 (Monterey) or earlier. Please upgrade to macOS 13 Ventura or later, or use a cloud STT provider.'
+                ));
+            } else {
+                this.emit('error', err);
+            }
+        });
+
+        // 'exit' fires whenever the worker terminates (voluntarily or not),
+        // including the 'error' path above. If the worker is gone, the
+        // streaming loop must be unblocked — otherwise streamingTaskInFlight
+        // stays true and the next tick silently stalls forever.
+        this.worker.on('exit', (code) => {
+            if (code === 0) {
+                clearLoadSentinel(this.modelId);
+                return; // clean shutdown
+            }
+            modelPreloader.recordLoadFailure(this.modelId);
+            this.clearStreamingWatchdog();
+            if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
+            const hadInFlight = this.streamingTaskInFlight;
+            this.streamingTaskInFlight = false;
+            this.streamingTaskId = null;
+            this.workerReady = false;
+            if (hadInFlight) {
+                this.emit('error', new Error(
+                    `Local Whisper worker exited unexpectedly (code=${code}) — transcription stream has been unblocked.`
+                ));
+            }
+        });
     }
 
     private flushPending(): void {
@@ -656,6 +793,9 @@ export class LocalWhisperSTT extends EventEmitter {
         this.workerReady = false;
         this.isDrainingFinals = false;
         this.drainingFinalsInFlight = 0;
+        // Free the shared ONNX gate slot on clean shutdown — the session's
+        // BFCArena is being torn down with the worker, so the slot can go.
+        if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
         // Reset the sent-prompt tracker: a future spawnWorker call will get a
         // fresh worker with empty cache, so we must re-push on next ready.
         this.contextPromptSentToWorker = '';

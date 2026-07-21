@@ -62,7 +62,16 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
         };
     }
 
-    // 3. Quota exceeded
+    // 3. Trial expired — NativelyPro fatal code
+    if (lower.includes('trial_expired')) {
+        return {
+            title: 'Trial Expired',
+            body: 'Your Natively Pro trial has ended. Upgrade your plan to continue using STT.',
+            category: 'auth',
+        };
+    }
+
+    // 4. Quota exceeded
     if (
         lower.includes('transcription_quota_exceeded')
         || lower.includes('quota')
@@ -74,7 +83,7 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
         };
     }
 
-    // 4. Rate limited
+    // 5. Rate limited
     if (rawError.startsWith('429 ') || lower.includes('too many requests') || lower.includes('rate limit')) {
         return {
             title: 'Rate Limited',
@@ -83,7 +92,7 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
         };
     }
 
-    // 5. Connection lost
+    // 6. Connection lost
     if (
         lower.includes('econnrefused')
         || lower.includes('enotfound')
@@ -99,7 +108,7 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
         };
     }
 
-    // 6. Timed out
+    // 7. Timed out
     if (
         lower.includes('etimedout')
         || lower.includes('connection timeout')
@@ -114,7 +123,7 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
         };
     }
 
-    // 7. Service unavailable (5xx)
+    // 8. Service unavailable (5xx)
     if (
         rawError.startsWith('500 ')
         || rawError.startsWith('502 ')
@@ -131,7 +140,7 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
         };
     }
 
-    // 8. Invalid configuration / bad request
+    // 9. Invalid configuration / bad request
     if (rawError.startsWith('400 ') || lower.includes('bad request') || lower.includes('invalid argument')) {
         return {
             title: 'Invalid Configuration',
@@ -140,7 +149,7 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
         };
     }
 
-    // 9. Session conflict (NativelyPro specific)
+    // 10. Session conflict (NativelyPro specific)
     if (lower.includes('concurrent_session_blocked')) {
         return {
             title: 'Session Conflict',
@@ -149,7 +158,7 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
         };
     }
 
-    // 10. Generic provider error
+    // 11. Generic provider error
     return {
         title: 'STT Provider Error',
         body: 'The transcription service encountered an unexpected issue.',
