@@ -44,7 +44,7 @@ describe('FIX-009: shared document upload hardening', () => {
     assert.match(EXTRACTOR_SOURCE, /stats\.size > SAFE_DOCUMENT_MAX_BYTES/);
     assert.match(EXTRACTOR_SOURCE, /PARSE_TIMEOUT_MS = 30_000/);
     assert.match(EXTRACTOR_SOURCE, /withTimeout<any>\(parser\.getText\(\), 'PDF parse'\)/);
-    assert.match(EXTRACTOR_SOURCE, /withTimeout<any>\(mammoth\.extractRawText\(\{ path: filePath \}\), 'DOCX parse'\)/);
+    assert.match(EXTRACTOR_SOURCE, /withTimeout<any>\(\s*mammoth\.extractRawText\(\{ path: filePath \}\),\s*'DOCX parse',?\s*\)/);
     assert.match(EXTRACTOR_SOURCE, /file parsed to empty text/);
   });
 
