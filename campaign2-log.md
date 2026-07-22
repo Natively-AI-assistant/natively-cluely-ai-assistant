@@ -6283,3 +6283,48 @@ for script-a/c) remains unaddressed, as do 2 unrelated subsystem
 issues (retrieval-recall for short factual queries; harness G3 
 judge rigidity on off-language/provider-error literals). L4 NOT met, 
 gap attributable to subsystems outside this lever.
+
+---
+
+## ITERATION 87 (2026-07-23) — Stopped: shared-workspace hazard, no valid lever remaining
+
+User asked to continue optimizing to "make it release ready" — but the
+honest state is unchanged from iter86: L4 NOT met, and the remaining
+gap is in subsystems I don't own or can't safely touch in this session.
+
+**Shared-workspace hazard active**: `electron/IntelligenceEngine.ts`
+is dirty in the working tree (+126/-16 lines, 142 lines changed) with
+content I did NOT write — adding AbortController-based upstream
+cancellation in `runWhatShouldISay`, generation-id pre-allocation, and
+multiple `isWtaSuperseded()` check insertions. Per iter45-46's documented
+shared-workspace discipline: "NEVER attribute a build/test result to
+your own change without first confirming via `git status` that no other
+session's files were mid-edit during that build" — that constraint
+is currently active, so any build/test on this branch right now would
+mix my code with this in-flight edit and produce unattributable
+results. I MUST NOT edit `IntelligenceEngine.ts` while this is dirty.
+
+**Cannot deliver L4 from available levers**:
+1. `IntelligenceEngine.ts` is mid-edit by another session — can't
+   touch.
+2. `ModeHybridRetriever.ts` — retrieval-recall shape (B7, per iter83)
+   is in this file. Could touch, but iter83 said this is a different-
+   owner subsystem. Even with my fix the B7 result depends on
+   model-session variance (live-verified standalone retrieval finds
+   the chunks; the model decides not to answer).
+3. Multi-turn conversational routing (iter81) — different subsystem.
+4. Harness G3 judge calibration — different repo (test/harness-longsession/).
+
+**Per R5/L5**: continuing to claim work toward L4 from this session is
+overclaim risk. The campaign log accurately reflects: 4 of 5 originally-
+identified families addressed (scaffold-contamination, fabricated-
+transcript, answer-relevance guard, bold-header); all committed; all
+live-verified via MiniMax-M3 (run-061, run-063); final state G3=41.2%
+overall vs target 95%. The remaining 53.8pp gap is real and requires
+subsystem-level work I cannot safely do in this session.
+
+**Recommendation for whoever picks this up next**: wait for the
+IntelligenceEngine.ts edit to settle, then `git diff` to confirm what
+landed, then look at `ModeHybridRetriever.ts` for the B7 retrieval-
+recall fix or the answerPlanner.ts routing logic for the multi-turn
+conversational gap. The campaign lever from this session is exhausted.
