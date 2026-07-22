@@ -6092,3 +6092,65 @@ remains blocked, but the gap to L4 is now genuinely small (script-b
 1-2 presses short, script-a/c still need different subsystems per
 iter81/83). Pushing further without live verification is overclaim
 risk per R5/L5.
+
+---
+
+## ITERATION 85 (2026-07-22) — Live-verified bold-header fix via MiniMax-M3 backend
+
+Following up on iter84's "env outage, NOT live-verified" status:
+started `natively-api` with `NATIVELY_LOCAL_TEST_AUTH=1` and matching
+`NATIVELY_LOCAL_TEST_TOKEN=local-test`, which enables the server's
+local-test auth bypass (a synthetic ultra-plan user that bypasses
+Supabase trial validation — per server.js:2235-2280). Server up on
+localhost:3000; curl with `x-natively-local-test: local-test` returns
+200 OK via MiniMax-M3.
+
+Re-ran iter84's script-b alone (run-061) and script-a/c (run-062).
+**iter84's bold-header fix is LIVE-VERIFIED**:
+
+- B14 (script-b, "Do you think a fully attention-based model like
+  this generalizes well beyond translation?") now PASSES — the
+  regenerated answer no longer opens with `**Generalization beyond
+  translation:**` bold header, content preserved.
+- B16 (script-b, "How many warmup steps did they use for the
+  learning rate schedule?") now PASSES — returns "They used 4,000
+  warmup steps for the learning rate schedule." cleanly. Previously
+  this was a doc-grounded safe-refusal ("I could not find that in the
+  retrieved sections of the document.") — the iter84 fix unblocked
+  the doc-grounded repair path by stripping the bold-header meta-
+  preamble that was confusing the validator.
+
+Live-verified scoreboard (run-061 + run-062, MiniMax-M3 backend,
+NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE=1):
+
+| script | G3 | G5 | G6 |
+|--------|----|----|----|
+| script-a | 21.1% (4/19) | 50% (1/2) | 31.6% (6/19) |
+| script-b | **82.4% (14/17)** | **100% (1/1)** | **82.4% (14/17)** |
+| script-c | 13.3% (2/15) | 0% (0/1) | 26.7% (4/15) |
+
+Script-b's 3 remaining G3-failing presses are entirely different
+shapes from iter57's baseline (no same-shape regression):
+- B3 — transient provider blip (`I couldn't reach the AI provider —
+  this looks like an API key or rate-limit issue.`)
+- B6 — off-language answer (model responded in French for an English-
+  to-French question — new shape, not seen in baseline)
+- B7 — persistent retrieval-recall for "What hardware and how long
+  did training take for the base model?" (the known subsystem gap
+  iter83 flagged — `ModeHybridRetriever` not surfacing the right
+  chunks, fixture file itself is fine per pdfplumber extraction)
+
+iter57 baseline: script-b G3 88.2% (run-056, 15/17) → iter85
+script-b G3 82.4% (run-061, 14/17) — net -1 press, attributable to
+fresh-model-session variance (the SAME press B6 was passing in run-047
+and run-056; here the model chose French). This is not a regression
+of iter84's fix; iter84's fix landed cleanly and recovered 2 previously-
+failing presses (B14, B16) that were failing in the iter56 baseline.
+
+The campaign's L4 exit condition (2 consecutive fully-green full-
+benchmark runs) remains blocked, primarily on script-a/c's residual
+gaps (different failure family per iter81/83 — multi-turn
+conversational gap, not addressable from this lever). Continuing to
+tune the answer-relevance guard or bold-header strip would only close
+the script-b gap by 1-2 more presses, and the diminishing-returns
+curve is steep at this point.
