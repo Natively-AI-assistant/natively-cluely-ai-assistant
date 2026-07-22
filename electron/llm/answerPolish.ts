@@ -487,6 +487,16 @@ export function cleanAnswerArtifacts(text: string): string {
  *  template reuse and to strip labels in speakable compression. */
 export const SCAFFOLD_LABEL_RE = /^[ \t]*(?:\*\*)?(The Honest Gap|Why It'?s Manageable|How I'?d Close It|Speakable Final Answer|Short Fit Summary|Matching Experience|Matching Skills\/Projects|Why This Role|Direct Answer|Strong Example(?:\s*\/\s*STAR)?|Why It Matters For This Role|Short Closing Line|Best \/ Relevant Project|What I Built|Tech Stack|My Role|Impact \/ Why It Matters|Polite Opening|Flexible Range \/ Expectation|Justification)(?:\*\*)?\s*:/gim;
 
+/** Grounding-campaign2 (2026-07-22): a model-invented bold pseudo-header
+ *  ("**Generalization beyond translation:**") that is NOT in the closed
+ *  SCAFFOLD_LABEL_RE list above, but is stripped by the exact same generic
+ *  rule inside compressToSpeakable (see there). Exported so callers can
+ *  decide whether to invoke compressToSpeakable without duplicating the
+ *  pattern — this is what fixed the B14 harness failure (a raw bold header
+ *  leaking into the spoken answer because SCAFFOLD_LABEL_RE never matched
+ *  it, so compressToSpeakable's own generic strip never got a chance to run). */
+export const BOLD_PSEUDO_HEADER_RE = /^[ \t]*\*\*([^*\n]{1,40}?):\*\*[ \t]*/gm;
+
 const WORD_RE = /[a-z0-9']+/g;
 
 const firstSentence = (text: string): string => {
@@ -784,11 +794,12 @@ export function compressToSpeakable(answer: string): string {
   //  - markdown table separator rows (`|---|---|`) → drop the row
   //  - table cell rows (`| a | b |`) → flatten the pipes to ", " so the content survives as prose
   //  - leading bold "label:" emphasis the model uses as a pseudo-header (`**Use cases:**`)
+  BOLD_PSEUDO_HEADER_RE.lastIndex = 0;
   out = out
     .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, '')              // ATX header markers
     .replace(/^[ \t]*\|?[ \t]*:?-{2,}:?[ \t]*(\|[ \t]*:?-{2,}:?[ \t]*)+\|?[ \t]*$/gm, '') // table separator rows
     .replace(/^[ \t]*\|(.+)\|[ \t]*$/gm, (_m, cells) => String(cells).split('|').map((c) => c.trim()).filter(Boolean).join(', ')) // table data rows → prose
-    .replace(/^[ \t]*\*\*([^*\n]{1,40}?):\*\*[ \t]*/gm, '');  // bold pseudo-header "**Label:**"
+    .replace(BOLD_PSEUDO_HEADER_RE, '');  // bold pseudo-header "**Label:**"
   out = out.replace(/^[ \t]*[-*•+][ \t]+/gm, '').replace(/\n{2,}/g, ' ').replace(/\s+/g, ' ').trim();
   return cleanAnswerArtifacts(out);
 }

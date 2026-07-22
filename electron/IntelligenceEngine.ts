@@ -19,7 +19,7 @@ import {
     raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, LIVE_TOTAL_HARD_TIMEOUT_MS,
     LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope,
     isProviderTransportError, isLeakedInternalTagBlock, isLeakedAnswerArtifact,
-    cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE,
+    cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE, BOLD_PSEUDO_HEADER_RE,
     buildProfileJitPrompt, decideSessionWritePolicy,
     checkAnswerRelevance
 } from './llm';
@@ -3206,8 +3206,17 @@ export class IntelligenceEngine extends EventEmitter {
                             rawChars: finalWtaAnswer.length, cleanedChars: cleaned.length,
                         }));
                     }
+                    // Grounding-campaign2 (2026-07-22, B14 harness fix): SCAFFOLD_LABEL_RE
+                    // is a CLOSED list of known robotic labels. A model-invented bold
+                    // pseudo-header ("**Generalization beyond translation:**") never
+                    // matches it, so compressToSpeakable (which already strips both
+                    // shapes generically) was never invoked and the header leaked
+                    // verbatim into the spoken answer. Widen the gate to also fire on
+                    // BOLD_PSEUDO_HEADER_RE — this adds no new stripping logic, it only
+                    // lets compressToSpeakable's existing generic strip run.
                     SCAFFOLD_LABEL_RE.lastIndex = 0;
-                    if (SCAFFOLD_LABEL_RE.test(cleaned)) {
+                    BOLD_PSEUDO_HEADER_RE.lastIndex = 0;
+                    if (SCAFFOLD_LABEL_RE.test(cleaned) || BOLD_PSEUDO_HEADER_RE.test(cleaned)) {
                         const speakable = compressToSpeakable(cleaned);
                         if (speakable.trim().length >= 40) cleaned = speakable;
                     }
