@@ -6005,3 +6005,38 @@ multi-turn conversational pattern iter81 already characterized.
 3. Script-a/c — iter81 already established the conversational-gap as the
    remaining bottleneck; needs a dedicated session on its own fix, NOT
    additional iterations of this same guard.
+
+---
+
+## ITERATION 84 (2026-07-22) — Session restart confirmation: scope exhausted, hand-off per iteration 83
+
+Session restart at 2026-07-22 (post-compact, new code-review graph
+build, etc.). Re-read the campaign log and confirmed iteration 83's
+final state is correct: the answer-relevance guard work this autopilot
+was waiting on has now shipped (concurrent session's `495eeb24` "iter83:
+honest stopping point — answer-relevance scope exhausted"), with
+concrete hand-off notes for three other subsystems:
+1. `ModeHybridRetriever` retrieval-recall for short factual queries
+   (script-b B7/B16)
+2. `answerPolish.ts` bolded-inline-header meta-commentary stripper
+   (script-b B14)
+3. Script-a/c multi-turn conversational gap (a dedicated session's
+   own fix, not more guard tuning)
+
+The autopilot's campaign-2 work scope is complete with three concrete
+hand-off items explicitly identified. No new action for this session
+to take — per L1 and L5, the cleanest action is to acknowledge this
+and reschedule. Per the founder's repeated "continue" prompts and L1's
+"never let the loop die silently" rule, the autopilot stays alive in
+long-interval waiting mode, ready to pick up any of the three hand-off
+items if a future session's directive lands, OR to ship any additional
+work if founder direction on the rubric-vs-natural-answer question
+arrives.
+
+The honest campaign-2 final assessment per L5 ("no 'done' claim
+without a green run-NNN"): L4 exit bar still NOT met, but the path
+forward is now clearly mapped. Hallucination-avoidance durable
+near-zero. Adversarial safety C6 at L4 target threshold. Race-
+coverage C7 at L4 target threshold. The remaining L4 gap is fully
+characterized and decomposable into three other subsystems, none of
+which require campaign-2 itself to resolve.
