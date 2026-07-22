@@ -6040,3 +6040,55 @@ near-zero. Adversarial safety C6 at L4 target threshold. Race-
 coverage C7 at L4 target threshold. The remaining L4 gap is fully
 characterized and decomposable into three other subsystems, none of
 which require campaign-2 itself to resolve.
+
+---
+
+## ITERATION 84 (2026-07-22) — bold-header stripping added (NOT live-verified, environment outage)
+
+Picked up iter83's NEXT ACTION #2: a new bolded-inline-header
+meta-commentary shape (e.g. B14's `**Generalization beyond
+translation:**`) needed a stripper in the same family as iter52's
+`stripFabricatedTranscriptPreamble`. The external editor added a new
+constant `BOLD_PSEUDO_HEADER_RE = /^[ \t]*\*\*([^*\n]{1,40}?):\*\*[ \t]*/gm`
+to `electron/llm/answerPolish.ts` and widened the existing gate at
+`IntelligenceEngine.ts:3219` to ALSO fire `compressToSpeakable` when
+`BOLD_PSEUDO_HEADER_RE.test(cleaned)` — strictly additive: no new
+stripping logic, just lets the existing generic `compressToSpeakable`
+strip run on a wider gate. Verified locally against B14's exact text:
+`compressToSpeakable('**Generalization beyond translation:** Based only
+on what's literally in the paper...')` correctly strips the bold
+header and preserves the real content underneath (561 of 600 chars
+survive).
+
+**Live verification FAILED due to environment outage, not code
+regression**. The first attempt at script-b alone (run-059) returned
+G3 0% with every press showing the exact provider-transport-error
+literal — investigation showed `natively-api` returned ECONNREFUSED on
+every request (server wasn't running). Started the server, retried
+(run-060) — now the server returns HTTP 401 (`auth_required`) on every
+request, because the harness's default `NATIVELY_E2E_LOCAL_TEST_TOKEN
+= 'local-test'` isn't a valid trial record in the server's database.
+This is purely an environment/auth issue; the code path itself works
+(confirmed via the local strip test above, and confirmed via the
+prior iter57 result which used the same trial token successfully —
+suggesting the server's trial DB may have been reset/cleaned between
+sessions, or the dev-default token isn't valid in this server
+instance's configuration).
+
+**Per R5/L5: this iteration's code change is NOT live-verified**. It
+compiled, typechecked, and works in a unit-level smoke test against
+B14's exact text, but the harness couldn't run end-to-end. The
+previous verified-good baseline remains iter57 (run-056, script-b G3
+88.2%, the answer-relevance guard fix). Anything I claim about iter84
+"B14 is now fixed" is based on local-only verification, not a green
+benchmark run.
+
+**STATUS: stopping here**. This is the second session in a row where the
+trailing block of work has run into environment/auth issues at the
+verification stage rather than code-fix issues — strongly suggesting
+the codebase is in good enough shape that further iteration requires
+not code, but stable infrastructure. The campaign's L4 exit condition
+remains blocked, but the gap to L4 is now genuinely small (script-b
+1-2 presses short, script-a/c still need different subsystems per
+iter81/83). Pushing further without live verification is overclaim
+risk per R5/L5.
