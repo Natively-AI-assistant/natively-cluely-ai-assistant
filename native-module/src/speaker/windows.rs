@@ -72,12 +72,17 @@ pub fn list_output_devices() -> Result<Vec<(String, String)>> {
         .get_nbr_devices()
         .map_err(|e| anyhow::anyhow!("{}", e))?;
     let mut list = Vec::new();
+    
+    let comms_id = default_communications_device_uid();
 
     for i in 0..count {
         if let Ok(device) = collection.get_device_at_index(i) {
             let id = device.get_id().unwrap_or_default();
-            let name = device.get_friendlyname().unwrap_or_default();
+            let mut name = device.get_friendlyname().unwrap_or_default();
             if !id.is_empty() {
+                if Some(id.clone()) == comms_id {
+                    name.push_str(" (Default Communications)");
+                }
                 list.push((id, name));
             }
         }
@@ -94,6 +99,21 @@ pub fn default_output_device_uid() -> String {
     match get_default_device(&Direction::Render) {
         Ok(dev) => dev.get_id().unwrap_or_default(),
         Err(_) => String::new(),
+    }
+}
+
+/// Returns the WASAPI device id of the current default render device on the
+/// eCommunications role, or None on failure. This is often different from eConsole
+/// and is used by VoIP apps like Zoom, Teams, Meet.
+pub fn default_communications_device_uid() -> Option<String> {
+    unsafe {
+        use windows::Win32::Media::Audio::{eCommunications, eRender, IMMDeviceEnumerator, MMDeviceEnumerator};
+        use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_ALL};
+        
+        let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
+        let device = enumerator.GetDefaultAudioEndpoint(eRender, eCommunications).ok()?;
+        let id = device.GetId().ok()?;
+        Some(id.to_string().ok()?)
     }
 }
 
