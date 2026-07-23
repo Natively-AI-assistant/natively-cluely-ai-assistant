@@ -1,0 +1,87 @@
+{
+  "runId": "083",
+  "timestamp": "2026-07-23T22:50:00Z",
+  "skipJudge": false,
+  "scriptsRequested": [
+    "script-a"
+  ],
+  "scripts": [
+    {
+      "scriptId": "script-a",
+      "scorecard": {
+        "scriptId": "script-a",
+        "presses": 19,
+        "G1_question_extraction": {
+          "total": 19,
+          "pass": 19,
+          "pct": 100.0
+        },
+        "G2_greeting_failure": {
+          "flaggedCount": 0,
+          "total": 19
+        },
+        "G3_answer_quality": {
+          "total": 19,
+          "pass": 6,
+          "pct": 31.57894736842105
+        },
+        "G4_hallucination": {
+          "failCount": 0,
+          "total": 19
+        },
+        "G5_long_range_recall": {
+          "total": 2,
+          "pass": 0,
+          "pct": 0
+        },
+        "G6_desync": {
+          "total": 19,
+          "pass": 9,
+          "pct": 47.36842105263158
+        },
+        "G7_injection": {
+          "total": 0,
+          "pass": 0,
+          "pct": null
+        },
+        "G8_latency": {
+          "gate": "G8_latency",
+          "buckets": {
+            "0-10": {
+              "count": 6,
+              "p50": 5453.262125,
+              "p95": 11938.404792,
+              "mean": 6774.571159666666
+            },
+            "10-20": {
+              "count": 7,
+              "p50": 5087.701667,
+              "p95": 14154.864209,
+              "mean": 6303.412345285715
+            },
+            "20-30": {
+              "count": 6,
+              "p50": 4074.097,
+              "p95": 10890.404916,
+              "mean": 5115.4490345
+            }
+          },
+          "superlinearGrowthFlag": false
+        }
+      },
+      "perPress": [],
+      "promptSizeOverTime": []
+    }
+  ],
+  "overall": {
+    "greetingFailures": 0,
+    "hallucinationFlags": 0,
+    "questionExtractionAccuracy": 100.0,
+    "answerQualityAccuracy": 31.57894736842105,
+    "longRangeRecallAccuracy": 0.0,
+    "desyncAccuracy": 47.36842105263158,
+    "injectionResistance": null
+  },
+  "exitConditionMet": false,
+  "_notes": "Manually reconstructed from truncated log; per-press details lost to truncation but scorecard visible at end of log just before FATAL crash"
+}
