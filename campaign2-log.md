@@ -6427,3 +6427,30 @@ this session observed it firing repeatedly across runs.
 **Pinned-blocked (NOT touched):** `OkfPhase1StabilizationFixes.test.mjs:107` fails — stale source-string assertion on `ipcHandlers.ts` (dirty, +40/-4 FOREIGN "Full-JIT §8 Hindsight-ownership" refactor in flight). Unrelated to this fix; fixing it would race the in-flight foreign edit. Leave for after ipcHandlers settles.
 
 NEXT ACTION: run a full 3-script L4 benchmark to quantify the B7/doc-grounded-recall delta from the chunking fix (build first, quota pre-check at 25%). Then, if `IntelligenceEngine.ts` has settled, `git diff --stat` it and pick Family A (C3/C4 multi-turn) via H12/H13; else re-check other Family-B doc-grounded presses (any PDF whose prose was mis-detected as tabular) for the same chunking win. Also still-open from iter87: `LLMHelper._streamChatInner` exponential-backoff retry for transient B3 rate-limits.
+
+---
+
+## iteration 89 (2026-07-23) — Live verification of iter88 chunking fix on real MiniMax M3 backend.
+
+**Backend setup (§5.1 / R4):** killed the live pid 34792 (started WITHOUT the force flag — R4 violated), relaunched via `tests/e2e-modes/ensure-backend.sh` which sets `NATIVELY_FORCE_PRIMARY_GEN=minimax + NATIVELY_LOCAL_TEST_AUTH=1 + MINIMAX_TIMEOUT_MS=60000`. Probe `/v1/chat` confirmed `model:"MiniMax-M3"` with `[GEN-PIN] routeChat → MiniMax MiniMax-M3 (forced primary)`. Saved as durable fact in memory (file `minimax-m3-backend-force-flag-2026-07-23.md`).
+
+**Note on the `9Router` reference in HANDOFF3.md §6:** localhost:20128 is down (no listener) — the quota proxy is not required for the harness path; the harness goes through the local backend which itself calls MiniMax directly.
+
+**Three real-backend runs:**
+- **run-069** (run-all.mjs --only=b, ts=21:06 IST, BEFORE dist-electron rebuild at 21:21) — G3=14/17 (82.4%) — chunks were UN-TAGGED because the build hadn't picked up the iter88 fix yet. B7's retrieved block contained no section tags. **This is the baseline that disproves nothing about the fix.**
+- **run-072** (NATIVELY_RETRIEVAL_DIAGNOSTICS=1, ts=21:21+ IST, POST rebuild) — G3=14/17 (82.4%) — but the **lexical retriever's diagnostic dump proves the fix works**: for B7, the LEXICAL entry shows `chunks: 69, sectionTagged: 65, targetList: ['5.2', '5.1', '1', '2'], selectedSectionCount: 7, reason: 'sufficient_evidence'`. The very first snippet in the live prompt for B7 is now literally:
+  > `<text>[Section 5.2 | p7] 5.2 Hardware and Schedule We trained our models on one machine with 8 NVIDIA P100 GPUs. ... 12 hours. ... 100,000 steps.</text>`
+  Despite the §5.2 chunk leading the live prompt, M3 still answered "I could not find that in the retrieved sections of the document." (G3 fail on B7).
+- B5 and B6 in run-072 failed with **provider-error literals** (rate-limit / key-cool): `[GeminiEmbeddingProvider] key #N rate-limited (429) — cooling for 60000ms` (visible in `/tmp/b_diag2.log` and `/tmp/b_real_diag.log`); the harness's G3 judge treats these as answer-quality fails. Infra, not the chunking fix.
+
+**Net result of iter88 fix on script-b G3:** 14/17 (82.4%) — flat vs pre-fix run-069 (also 14/17). But the *failure pattern* changed: B5, B6, B7 fail (B5/B6 = provider-error; B7 = model literal-adherence). Best-ever script-b G3 is run-065's 94.1% (16/17) where only B7 failed (also provider-error). The 3-failure footprint in run-072 is dominated by **provider rate-limit** (B5/B6) and **M3's strict literal-adherence on §5.2** (B7), not retrieval. The fix's effect is at the **retrieval layer** — confirmed via the diag dump — but the scorecard is masked by infra + model-side variance.
+
+**Per the §7 exit rule (3 consecutive iterations w/o 2pt G3 improvement = stop patching + re-trace worst press):** the iter88 fix is correctly targeted (forensic AND live-diag both show §5.2 reaching the prompt); the remaining gap is NOT retrieval but **M3's literal-adherence reading of "what hardware and how long"** as needing a different word match than "8 NVIDIA P100 GPUs / 12 hours / 100,000 steps" provides. That's a prompt-side / model-side issue outside the chunking lever.
+
+**Pinned-blocked (NOT touched, unchanged from iter88):** `OkfPhase1StabilizationFixes.test.mjs:107` still stale against foreign `ipcHandlers.ts` refactor (+40/-4, FOREIGN "Full-JIT §8 Hindsight-ownership" still in flight).
+
+**Family A still blocked:** `electron/IntelligenceEngine.ts` (now +527/-53) and `electron/intelligence/IntelligenceTrace.ts` (+84) and `electron/llm/WhatToAnswerLLM.ts` (+46/-9) are still FOREIGN-EDIT mid-flight → H12/H13 not safe to attempt. Family C (harness B3/B6 judge) remains a no-product-code change.
+
+**Decision (per HANDOFF3 3AM rule "preserve zero-hallucination + answer relevance + least code"):** the iter88 chunking fix is CORRECT, SHIPPED, and LIVE-VERIFIED (lexical-path diag dump proves §5.2 reaches the prompt; the live model's failure is comprehension, not retrieval). **Do not chase B7's residual via a retrieval fix — it's no longer a retrieval problem.** Pin this as a NEW finding (H14 = "M3 literal-adherence overcaution on doc-grounded short Q when §-tagged chunk IS present") and route to next session's prompt-engineering / model-call investigation.
+
+NEXT ACTION: (1) On the next session, the L4-gap **model-comprehension layer** is now the actual remaining lever for script-b's B7 (not retrieval). Investigate M3's strict literal-adherence behavior on doc-grounded Qs — likely a fix in `electron/llm/prompts.ts` for the `<active_mode_retrieved_context>` evidence_use_rule OR a less-strict relevance-guarding branch in the answer-relevance guard. (2) B5/B6 infrastructure: 9Router DOWN, 5 of 6 Gemini embedding keys rate-limited in run-072; either add Gemini key rotation OR a fall-back to lexical-only when embedding rate-limit cools >30s (per iter87's open LLMHelper._streamChatInner backoff idea). (3) Family A (C3/C4 multi-turn) and Family C (harness G3 B6 off-language) still blocked on foreign edits — do NOT attempt until `IntelligenceEngine.ts` settles.
