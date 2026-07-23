@@ -367,6 +367,28 @@ export function tabularChunks(content: string, rowsPerChunk?: number): string[] 
     const consistent = sample.filter((l) => Math.abs(l.split(delim).length - cols) <= 1).length;
     if (consistent < sample.length * 0.8) return null;
 
+    // Field-shape guard (2026-07-23): column-count consistency alone accepts
+    // comma-rich PROSE — an academic paper's pdf-parse text has a comma on most
+    // lines with a stable ±1 field count, so a whole prose document (e.g.
+    // "Attention Is All You Need") was mis-detected as a 2-column CSV and chunked
+    // as `[Table rows N-M]` with ZERO `[Section N.N | …]` tags, defeating the
+    // hybrid retriever's section-target restore and starving §5.2-type answers.
+    // A genuine data cell is short and mostly a single token (a name, number, or
+    // short label); a prose clause between commas is a multi-word phrase. Reject
+    // when fields are predominantly multi-word — cleanly separates real CSV/TSV
+    // (≈1.0 words/field, 0% multi-word) from prose (≈5 words/field, ~50%+).
+    let fieldCount = 0;
+    let multiWordFields = 0;
+    for (const line of sample) {
+        for (const field of line.split(delim)) {
+            fieldCount++;
+            if (field.trim().split(/\s+/).filter(Boolean).length >= 3) multiWordFields++;
+        }
+    }
+    // >=30% of fields being 3+ words is far above any real table (a lone free-text
+    // "description"/"notes" column tops out well under this) yet far below prose.
+    if (fieldCount > 0 && multiWordFields / fieldCount >= 0.3) return null;
+
     const headerLine = header.trim();
     const rows = lines.slice(1);
     // ADAPTIVE granularity: small tables get SMALL chunks (finer granularity → each

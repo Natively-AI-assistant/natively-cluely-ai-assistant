@@ -6400,3 +6400,30 @@ exponential backoff` fallback in `LLMHelper._streamChatInner` so a
 single transient rate-limit doesn't burn a press — a small
 infrastructure fix orthogonal to the guard work, but worth doing since
 this session observed it firing repeatedly across runs.
+
+---
+
+## iteration 88 (2026-07-23) — Family B retrieval-recall: root cause CHUNKING, not ranking. FIXED + live-verified at retrieval layer.
+
+**Lever:** Family B (§2.2), press B7 = `training-hardware` ("What hardware and how long did training take for the base model?"), doc-grounded against `attention_is_all_you_need_1706.03762.pdf` (Transformer paper §5.2 "Hardware and Schedule": *"8 NVIDIA P100 GPUs … base models … 12 hours"*).
+
+**Preflight:** HEAD `30b85891`. `IntelligenceEngine.ts` STILL dirty (grew to +527/-53) + `IntelligenceTrace.ts`(+84) + `WhatToAnswerLLM.ts`(+46/-9) → Family A H13 remains FOREIGN-EDIT BLOCKED. `ModeHybridRetriever.ts` (real path: `electron/services/modes/ModeHybridRetriever.ts`) CLEAN → picked Family B per §5.2.
+
+**Phase-0 live trace** (`traces2/harness-script-b-press-B7.txt`): retrieval fired (4832-char `active_mode_retrieved_context` block present) but the P100 sentence was NOT in it; model correctly refused ("could not find that in the retrieved sections") — zero-hallucination intact, a RECALL miss.
+
+**Forensic** (`traces2/b7-forensic.mjs`, drives real compiled DocumentMap + ModeHybridRetriever over the real PDF):
+- H12 (routing) REFUTED as cause: `resolveTargetSections(query)` correctly returns `["5.2","5.1",…]` — §5.2 "Hardware and Schedule" IS the top target.
+- **ROOT CAUSE (chunking):** the PDF chunked as 86 `[Table rows N-M]` UNTAGGED chunks, ZERO `[Section N.N | …]` tags. `tabularChunks()` (DocumentMap.ts) FALSE-POSITIVED on comma-rich academic prose: `header=lines[0]` is the copyright banner (comma-laden), and ≥80% of prose lines carry a comma with stable ±1 field count, so the column-consistency check passed. Untagged chunks can NEVER match the hybrid retriever's section-target restore regex `/^\[Section\s+([\d.]+)\s*\|/` (ModeHybridRetriever.ts:1106) → the entire §5.2 safety net was dead code for this doc → hybrid cosine ranked P100 below top-12 with no rescue.
+- H11 (assembly-drop) REFUTED: lexical path kept P100 in the final block; the drop was hybrid ranking + missing section-restore, both downstream of the chunking bug.
+
+**Field-shape discriminator (empirically measured):** real CSV/TSV = 1.00 words/field, 0% multi-word fields; B7 prose = 5.21 words/field, 53.1% multi-word. A data cell is short/single-token; a prose clause between commas is multi-word.
+
+**FIX (`electron/services/modes/DocumentMap.ts`, +22):** after the column-consistency check, reject as tabular when ≥30% of sampled fields are ≥3 words (far above any real table incl. a lone free-text column, far below prose). Least-code, generic, preserves zero-hallucination.
+
+**Live verification (forensic re-run):** paper now → 69 SECTION-TAGGED chunks; `chunk#36 sectionTag=5.2 :: [Section 5.2 | p1] 5.2 Hardware and Schedule We trained our models on one machine with 8 NVIDIA P100 GPUs…`. `retrieve()` final block LEADS with §5.2; P100 + "twelve hours" PRESENT. This also ARMS the hybrid section-target restore (tags now match target "5.2") — closes the live hybrid-path refusal.
+
+**Regression:** all chunking/retrieval suites 148/148 green after fixing ONE stale source-string test (`SectionAwareChunker.test.mjs`: asserted literal `window.join(' ')` but source dropped it in refactor 3c8016f8/2026-07-18; target file clean/settled → legitimately mine to update). Category B/C suites 56/56 green.
+
+**Pinned-blocked (NOT touched):** `OkfPhase1StabilizationFixes.test.mjs:107` fails — stale source-string assertion on `ipcHandlers.ts` (dirty, +40/-4 FOREIGN "Full-JIT §8 Hindsight-ownership" refactor in flight). Unrelated to this fix; fixing it would race the in-flight foreign edit. Leave for after ipcHandlers settles.
+
+NEXT ACTION: run a full 3-script L4 benchmark to quantify the B7/doc-grounded-recall delta from the chunking fix (build first, quota pre-check at 25%). Then, if `IntelligenceEngine.ts` has settled, `git diff --stat` it and pick Family A (C3/C4 multi-turn) via H12/H13; else re-check other Family-B doc-grounded presses (any PDF whose prose was mis-detected as tabular) for the same chunking win. Also still-open from iter87: `LLMHelper._streamChatInner` exponential-backoff retry for transient B3 rate-limits.
