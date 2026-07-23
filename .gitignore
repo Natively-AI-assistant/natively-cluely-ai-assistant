@@ -411,3 +411,31 @@ user log/
 /NATIVELY_CONTEXT_SYSTEM_SIMPLIFICATION_PROMPT.md
 # Generated Vite build output that mirrors src/**/*.{tsx,ts}
 /src/**/*.js
+
+# --- User requested exclusions (2026-07-23) ---
+PRODUCTION_HARDENING_FINAL_REPORT.md
+loop.md
+loop2.md
+AUDIT_AI_CONTEXT_OWNERSHIP.md
+AUDIT_ARCHITECTURE_MAP.md
+AUDIT_AUDIO_REALTIME_PIPELINE.md
+AUDIT_BACKEND_SECURITY_STABILITY.md
+AUDIT_DEPENDENCIES_PACKAGING.md
+AUDIT_ELECTRON_SECURITY.md
+AUDIT_ERROR_OBSERVABILITY.md
+AUDIT_FRONTEND_STATE_REACT.md
+AUDIT_MEMORY_AND_LOOPS.md
+AUDIT_PRIVACY_SECRETS_LOGGING.md
+AUDIT_VERIFICATION_REPORT.md
+campaign-log.md
+campaign2-log.md
+campaign3-log.md
+contextauthresearchdoc.md
+test/
+test-fixtures/
+traces/
+traces2/
+traces3/
+--help/
+.remember/
+
