@@ -56,13 +56,235 @@ describe('#6 — runWhatShouldISay captures ONE mode snapshot at t0 and threads 
   test('an immutable request snapshot is built and passed into generateStream', () => {
     assert.match(body, /const requestSnapshot: WhatToAnswerRequestSnapshot = Object\.freeze\(/,
       'a frozen request snapshot must be assembled');
-    assert.match(body, /generateStream\([^;]*,\s*modeContextPromise,\s*requestSnapshot\)/,
-      'the snapshot must be threaded into WhatToAnswerLLM.generateStream');
+    assert.match(body, /generateStream\([^;]*,\s*modeContextPromise,\s*requestSnapshot,\s*whatToAnswerCancellationToken\.signal\)/,
+      'the snapshot and request cancellation signal must be threaded into WhatToAnswerLLM.generateStream');
+  });
+
+  test('a newer WTA request aborts the previous provider request at t0', () => {
+    assert.match(body, /this\.whatToAnswerCancellationToken\.abort\('superseded'\)/,
+      'a new WTA request must abort the prior request before beginning its own work');
+    assert.match(body, /const whatToAnswerCancellationToken = new AbortController\(\)/,
+      'each WTA request must own a new AbortController');
+    assert.match(body, /const generationId = \+\+this\.currentGenerationId/,
+      'generation id must be minted before the first await to preserve newest-wins ordering');
+    assert.match(body, /const isWtaSuperseded = \(\) => \(/,
+      'late-path checks must retain a request ownership guard independent of local cleanup');
+  });
+
+  test('only the owning WTA request clears the shared cancellation slot', () => {
+    assert.match(body, /if \(this\.whatToAnswerCancellationToken === whatToAnswerCancellationToken\) \{\s*this\.whatToAnswerCancellationToken = null;/s,
+      'an older request must not clear a newer request\'s cancellation controller');
   });
 
   test('the parallel mode-context prefetch is pinned to the t0 mode id', () => {
     assert.match(body, /buildRetrievedActiveModeContextBlockHybrid\(\s*preparedTranscript, preparedTranscript, 1800, undefined, true, snapshotModeInfo\?\.id,/,
       'the prefetched retrieval must pin the snapshot mode id');
+  });
+
+  test('the canonical-turn observe seam uses only t0 source availability', () => {
+    assert.match(body, /const snapshotSourceAvailability = Object\.freeze\(/,
+      'source availability must be frozen with the t0 request snapshot');
+    assert.match(body, /const canonicalTurn = resolveCanonicalTurn\(/,
+      'WTA must resolve one canonical turn before dispatch');
+    assert.match(body, /sourceContract: snapshotSourceContract/,
+      'canonical turn must read the t0 persisted source contract');
+    assert.match(body, /availability: snapshotSourceAvailability/,
+      'canonical turn must read frozen t0 availability rather than re-querying live stores');
+    assert.match(body, /const answerPlan = canonicalTurn\.answerPlan/,
+      'the main WTA provider path must consume the canonical answer plan');
+  });
+
+  // ── Candidate-profile gate contract (survives any future authority dedup) ──
+  // These pin the two invariants a legacy-block removal MUST preserve, so the
+  // duplicate-authority cleanup can't silently re-open profile evidence on a
+  // JD-only / reference-files-only / transcript-only turn.
+  test('the candidate-profile orchestrator fetch is gated on the canonical never-retrieve decision', () => {
+    assert.match(body, /isKnowledgeMode\?\.\(\) && !documentGroundedCustomModeActive\s*\n?\s*&& wtaDecisionAllowsCandidateProfile/s,
+      'the résumé orchestrator fetch must AND the canonical candidate-profile gate');
+  });
+
+  test('the JIT profile-evidence fetch is gated on both the never-retrieve decision and the profile-allowed contract', () => {
+    assert.match(body, /if \(!candidateProfile && wtaDecisionAllowsCandidateProfile\s*\n?\s*&& \(wtaProfileAllowed \|\| _jdShapeAllowed\)\)/s,
+      'the JIT profile-evidence fetch must AND the canonical + contract gates');
+  });
+
+  test('wtaDecisionAllowsCandidateProfile is derived from the canonical turnSourceDecision', () => {
+    assert.match(body, /wtaDecisionAllowsCandidateProfile =\s*\n?\s*_?\w*_wtaTurnSourceDecision\.outcome === 'default'\s*\n?\s*\|\| _?\w*_wtaTurnSourceDecision\.outcome === 'explicit_granted'/s,
+      'the gate must be derived from the canonical decision outcome');
+    assert.match(body, /allowedEvidenceKinds\.includes\('profile_resume'\)/,
+      'the gate must consult the canonical allowed evidence kinds');
+  });
+
+  test('multi-family WTA evidence reuses the canonical decision and t0 profile/JD snapshots', () => {
+    assert.match(body, /const WTA_COORDINATOR_KINDS = new Set\(\['reference_files', 'profile_resume', 'projects', 'profile_jd'\]\)/,
+      'WTA coordinator must keep transcript and meeting-RAG families out of this first slice');
+    assert.match(body, /decision: canonicalTurn\.turnSourceDecision/,
+      'coordinator must consume the canonical source decision');
+    assert.match(body, /profile: snapshotProfileFacts/,
+      'profile evidence must use the t0 profile snapshot');
+    assert.match(body, /jobDescription: snapshotJobDescriptionFacts/,
+      'JD evidence must use the t0 JD snapshot');
+    assert.match(body, /evidencePack: coordinatorResult\.pack/,
+      'the resolved packet must be passed intact to provider generation');
+    assert.match(body, /candidateProfile = ''/,
+      'governed packet must suppress competing raw profile injection');
+  });
+
+  test('mixed reference/profile turns retrieve typed reference evidence from the t0 mode snapshot', () => {
+    assert.match(body, /const retrieveReferenceEvidence = canonicalTurn\.requiredEvidenceKinds\.includes\('reference_files'\)/,
+      'a required reference family must supply a typed resolver');
+    assert.match(body, /const snapshotMode = snapshotModesManager && snapshotModeInfo\?\.id\s*\? snapshotModesManager\.getModeSnapshot\(snapshotModeInfo\.id\)/s,
+      'the full mode must be captured from the t0 mode id');
+    assert.match(body, /getModeSnapshot: \(\) => \(\{ \.\.\.snapshotMode \}\)/,
+      'EvidenceResolver must not re-read the live active mode');
+    assert.match(body, /getReferenceFiles: \(modeId: string\) => \(\s*modeId === snapshotMode\.id \? snapshotReferenceFiles\.map\(\(file\) => \(\{ \.\.\.file \}\)\) : \[\]/s,
+      'reference files must remain scoped to the captured mode');
+    assert.match(body, /retrieveReferenceEvidence,\s*retrieveProfileEvidence:/s,
+      'TurnEvidenceCoordinator must merge the independent typed family packets');
+    assert.match(body, /if \(!snapshotMode \|\| snapshotReferenceFiles\.length === 0\)/,
+      'a missing/deleted pinned mode must fail closed rather than borrow the new active mode');
+    assert.match(body, /modesManager\.retrieveHybridRaw\(mode, files, options\)/,
+      'the typed resolver must reuse the shared indexed hybrid retriever');
+  });
+
+  test('a pre-resolved multi-family packet is reused by WhatToAnswerLLM without re-retrieval', () => {
+    const llmSrc = read('../../llm/WhatToAnswerLLM.ts');
+    assert.match(llmSrc, /let governedEvidencePack: import\('\.\.\/intelligence\/context-os'\)\.EvidencePack \| null =\s*initialContextOsGeneration\?\.evidencePack \?\? null/s,
+      'WTA generation must begin with the coordinator-owned EvidencePack');
+    assert.match(llmSrc, /if \(!activeSkill && !governedEvidencePack\) \{/,
+      'a resolved packet must skip the legacy document retrieval branch');
+    assert.match(llmSrc, /const pack = governedEvidencePack \?\? _cog\.evidencePack/,
+      'the rendered factual block must use that same packet identity');
+  });
+
+  test('the final wtaTurnContract carries the canonical decision and switch allowlist', () => {
+    assert.match(body, /turnSourceDecision: _wtaTurnSourceDecision/,
+      'wtaTurnContract must receive the persisted canonical decision');
+    assert.match(body, /allowedExplicitSwitches: snapshotSourceContract\?\.allowedExplicitSwitches \?\? null/,
+      'wtaTurnContract must also carry the persisted switch allowlist');
+  });
+
+  test('the multi-family coordinator result carries turnSourceDecision onto wtaContextOsGeneration', () => {
+    assert.match(body, /turnSourceDecision: canonicalTurn\.turnSourceDecision,\s*\n\s*govern: true/s,
+      'the coordinator-built context must surface the decision for validateFinalPromptEvidence');
+  });
+
+  test('a mid-resolution WTA supersession drops the coordinator packet and bails out', () => {
+    assert.match(body, /if \(isWtaSuperseded\(\)\)/,
+      'an in-flight coordinator must discard its result on supersession');
+    assert.match(body, /wtaContextOsGeneration = undefined/,
+      'the discarded coordinator result must clear the provider context');
+    assert.match(body, /recordWtaCancellation\(\)/,
+      'a superseded coordinator turn must record terminal cancellation');
+  });
+
+  test('the coordinator budget widens for doc-grounded turns without bypassing the cancellation path', () => {
+    assert.match(body, /const WTA_COORDINATOR_BUDGET_MS = documentGroundedCustomModeActive \? 2000 : 1000/,
+      'doc-grounded WTA coordinator calls inherit the larger budget');
+  });
+
+  test('the canonical WTA governance reuses the resolved pack to thread contextOsGeneration', () => {
+    const llmSrc = read('../../llm/WhatToAnswerLLM.ts');
+    assert.match(llmSrc, /const resolvedGovernedPack: import\('\.\.\/intelligence\/context-os'\)\.EvidencePack \| null =/s,
+      'wtaRouteOptions must derive from the RESOLVED pack, not the local variable');
+    assert.match(llmSrc, /wtaRouteOptions = resolvedGovernedPack && governedWtaContextOs/,
+      'route options must thread contextOsGeneration when the resolved pack governs');
+  });
+
+  test('LLMHelper stream pins document-grounded retrieval to the t0 mode id via route options', () => {
+    const llmHelperSrc = read('../../LLMHelper.ts');
+    const policySrc = read('../../llm/streamContextPolicy.ts');
+    assert.match(policySrc, /pinnedModeId\?: string \| null/,
+      'StreamRouteOptions must carry the t0 mode pin');
+    assert.match(llmHelperSrc, /mm\.getActiveModeDocumentGroundingInfo\?\.?\(pin \?\? undefined\)/,
+      'document-grounded detection must consult the route pin');
+    assert.match(llmHelperSrc, /modesMgrForInjection\.getActiveModeDocumentGroundingInfo\?\.?\(_pinnedModeId\)/,
+      'active-mode injection must read the pinned grounding info');
+    assert.match(llmHelperSrc, /routeOptions\?\.pinnedModeId \?\? undefined/,
+      'all mode-injection reads must thread the route pin');
+    assert.match(llmHelperSrc, /modesMgr\.getModeSnapshot\?\.?\(_pinnedModeIdEvidenceResolver\)/,
+      'the EvidenceResolver block must resolve the pinned mode row');
+  });
+
+  test('a deadline replaces an unseen sub-threshold provider fragment with the safe fallback', () => {
+    // `raceStreamWithDeadline` considers a response useful only at the same
+    // safe-prefix threshold. A short provider fragment that then times out must
+    // not bypass the fallback merely because fullAnswer is non-empty.
+    assert.match(body, /if \(fullAnswer\.trim\(\)\.length < STREAMING_SAFE_PREFIX_CHARS\) \{\s*const safe =/s,
+      'the timeout fallback must replace an unseen short provider fragment');
+  });
+
+  test('a post-deadline exception is not mistaken for supersession', () => {
+    // Deadline cleanup deliberately aborts the owning provider controller. The
+    // outer catch must check request ownership only; testing `.signal.aborted`
+    // here would silently discard a real post-deadline failure as superseded.
+    const catchStart = body.lastIndexOf('} catch (error) {');
+    assert.ok(catchStart >= 0, 'WTA outer catch must be present');
+    const catchBody = body.slice(catchStart, catchStart + 1200);
+    assert.match(catchBody, /if \(isWtaSuperseded\(\)\) \{/,
+      'only a replaced/reset request may take the cancellation branch');
+    assert.doesNotMatch(catchBody, /whatToAnswerCancellationToken\.signal\.aborted/,
+      'the request-owned deadline abort must not be treated as supersession');
+  });
+});
+
+describe('WTA repairs inherit the owning request cancellation', () => {
+  const src = read('../../IntelligenceEngine.ts');
+
+  function repairWindow(marker) {
+    const start = src.indexOf(marker);
+    assert.ok(start >= 0, `expected repair marker: ${marker}`);
+    return src.slice(start, start + 6000);
+  }
+
+  function assertForegroundRepairUsesRequestSignal(marker) {
+    const window = repairWindow(marker);
+    assert.match(window, /stream: this\.llmHelper\.streamChat\([\s\S]*?whatToAnswerCancellationToken\.signal/s,
+      `${marker} repair must thread its request AbortSignal into streamChat`);
+    assert.match(window, /shouldAbort: \(\) =>[\s\S]*?whatToAnswerCancellationToken\.signal\.aborted[\s\S]*?isWtaSuperseded\(\)/s,
+      `${marker} repair must stop local stream consumption when superseded`);
+  }
+
+  test('every foreground repair cancels its provider request on WTA supersession', () => {
+    assertForegroundRepairUsesRequestSignal("trace.mark('repair_used', { reason: 'scaffold_contamination_detected'");
+    assertForegroundRepairUsesRequestSignal('The previous answer failed document-grounded validation:');
+    assertForegroundRepairUsesRequestSignal('const repairInstruction = pv.repairInstruction');
+    assertForegroundRepairUsesRequestSignal('Your previous response did not address the question below at all.');
+  });
+
+  test('background coding correction inherits its child cancellation signal', () => {
+    const start = src.indexOf('private async maybeVerifyCoding(');
+    const end = src.indexOf('async runFollowUp(', start);
+    assert.ok(start >= 0 && end > start, 'maybeVerifyCoding must be isolatable');
+    const body = src.slice(start, end);
+
+    assert.match(body, /stream: this\.llmHelper\.streamChat\([\s\S]*?abortSignal/s,
+      'the background correction must thread its child AbortSignal into streamChat');
+    assert.match(body, /shouldAbort: \(\) => fixed\.length > 1200 \|\| superseded\(\)/,
+      'the background correction must stop consuming when its generation is superseded');
+  });
+});
+
+describe('answer pipeline lifecycle telemetry', () => {
+  const engineSrc = read('../../IntelligenceEngine.ts');
+  const ipcSrc = read('../../ipcHandlers.ts');
+
+  test('WTA records every canonical lifecycle stage and commits cancellation', () => {
+    for (const stage of ['created', 'planned', 'evidence_selected', 'prompt_built', 'provider_dispatched', 'streaming', 'validating', 'repairing', 'completed', 'cancelled', 'failed']) {
+      assert.match(engineSrc, new RegExp(`\\.lifecycle\\('${stage}'`), `WTA must record ${stage}`);
+    }
+    assert.match(engineSrc, /const recordWtaCancellation = \(\) => \s*\{[\s\S]*?\.lifecycle\('cancelled'[\s\S]*?commitTrace\(wtaTrace\)/,
+      'WTA cancellation must be committed, not silently dropped');
+    assert.match(engineSrc, /if \(streamAborted\) \{\s*recordWtaCancellation\(\)/,
+      'the streaming cancellation path must record the terminal lifecycle event');
+  });
+
+  test('manual chat records the same lifecycle and commits supersession', () => {
+    for (const stage of ['created', 'planned', 'evidence_selected', 'prompt_built', 'provider_dispatched', 'streaming', 'validating', 'repairing', 'completed', 'cancelled', 'failed']) {
+      assert.match(ipcSrc, new RegExp(`\\.lifecycle\\('${stage}'`), `manual chat must record ${stage}`);
+    }
+    assert.match(ipcSrc, /if \(manualSuperseded\) \{\s*iTrace\.setCorrelation\(\{ aborted: true, errorCategory: 'superseded' \}\)\s*\.lifecycle\('cancelled'[\s\S]*?commitTrace\(iTrace\)/,
+      'a superseded manual turn must be committed as cancelled, not silently dropped');
   });
 });
 

@@ -1,6 +1,9 @@
 // electron/services/modes/DocumentMap.ts
 //
 // Document Map for document-grounded custom modes (round-6 rebuild, 2026-06-29).
+
+import { normalizeDocumentGroundedRetrievalQuery } from '../../llm/documentGroundedPrompt';
+import { includesPlannerTerm } from './retrievalTextMatch';
 //
 // WHY THIS EXISTS
 // ---------------
@@ -364,6 +367,28 @@ export function tabularChunks(content: string, rowsPerChunk?: number): string[] 
     const consistent = sample.filter((l) => Math.abs(l.split(delim).length - cols) <= 1).length;
     if (consistent < sample.length * 0.8) return null;
 
+    // Field-shape guard (2026-07-23): column-count consistency alone accepts
+    // comma-rich PROSE — an academic paper's pdf-parse text has a comma on most
+    // lines with a stable ±1 field count, so a whole prose document (e.g.
+    // "Attention Is All You Need") was mis-detected as a 2-column CSV and chunked
+    // as `[Table rows N-M]` with ZERO `[Section N.N | …]` tags, defeating the
+    // hybrid retriever's section-target restore and starving §5.2-type answers.
+    // A genuine data cell is short and mostly a single token (a name, number, or
+    // short label); a prose clause between commas is a multi-word phrase. Reject
+    // when fields are predominantly multi-word — cleanly separates real CSV/TSV
+    // (≈1.0 words/field, 0% multi-word) from prose (≈5 words/field, ~50%+).
+    let fieldCount = 0;
+    let multiWordFields = 0;
+    for (const line of sample) {
+        for (const field of line.split(delim)) {
+            fieldCount++;
+            if (field.trim().split(/\s+/).filter(Boolean).length >= 3) multiWordFields++;
+        }
+    }
+    // >=30% of fields being 3+ words is far above any real table (a lone free-text
+    // "description"/"notes" column tops out well under this) yet far below prose.
+    if (fieldCount > 0 && multiWordFields / fieldCount >= 0.3) return null;
+
     const headerLine = header.trim();
     const rows = lines.slice(1);
     // ADAPTIVE granularity: small tables get SMALL chunks (finer granularity → each
@@ -512,7 +537,7 @@ export function sectionAwareChunksFromMap(
  * confidently; the caller then falls back to global retrieval.
  */
 export function resolveTargetSections(query: string, map: DocumentMap): string[] {
-    const q = query.toLowerCase();
+    const q = normalizeDocumentGroundedRetrievalQuery(query).toLowerCase();
     const qWords = new Set(
         q.replace(/[^a-z0-9#-]+/g, ' ').split(/\s+/).filter(w => w.length > 2),
     );
@@ -605,8 +630,29 @@ export function resolveTargetSections(query: string, map: DocumentMap): string[]
     const strongTitleTargets = scored
         .filter(s => s.score >= 1.0 && (s.wordHits >= 2 || s.distinctiveHit))
         .slice(0, 4).map(s => s.num);
-    if (strongTitleTargets.length > 0) return strongTitleTargets;
-    return resolveByContent(query, map, qOrdinals);
+
+    const contentTargets = resolveByContent(query, map, qOrdinals);
+    if (strongTitleTargets.length === 0) return contentTargets;
+
+    // An entity title can be a strong locator while a narrower section body
+    // contains the requested fact. Retain exact title routing first, then append
+    // content candidates that match a question term NOT already in that title.
+    // This keeps title-only entity queries precise while letting verb/noun drift
+    // ("weigh" → "weighs") surface a specifications subsection.
+    const titleTerms = new Set(
+        strongTitleTargets.flatMap((target) => {
+            const section = map.sections.find((s) => s.num === target);
+            return section ? tokenizeTitle(section.heading) : [];
+        }),
+    );
+    const extraContentTargets = map.sections
+        .filter((section) => section.num && section.body)
+        .filter((section) => {
+            const body = section.body.toLowerCase();
+            return [...qWords].some((word) => !titleTerms.has(word) && includesPlannerTerm(body, word));
+        })
+        .map((section) => section.num);
+    return [...new Set([...strongTitleTargets, ...extraContentTargets])].slice(0, 4);
 }
 
 /**
@@ -624,7 +670,7 @@ export function resolveTargetSections(query: string, map: DocumentMap): string[]
  * but NOT in §4.2.2 or §4.2.3, providing a decisive discriminating signal.
  */
 function resolveByContent(query: string, map: DocumentMap, qOrdinals: Set<string> = new Set()): string[] {
-    const q = query.toLowerCase();
+    const q = normalizeDocumentGroundedRetrievalQuery(query).toLowerCase();
     const qWords = new Set(q.replace(/[^a-z0-9#-]+/g, ' ').split(/\s+/).filter(w => w.length > 2));
     const STOPWORDS = new Set([
         'what', 'which', 'where', 'when', 'how', 'why', 'who', 'whom',
@@ -654,7 +700,7 @@ function resolveByContent(query: string, map: DocumentMap, qOrdinals: Set<string
     const sf = new Map<string, number>();
     for (const w of contentWords) {
         let n = 0;
-        for (const lb of lowerBodies) if (lb.includes(w)) n++;
+        for (const lb of lowerBodies) if (includesPlannerTerm(lb, w)) n++;
         sf.set(w, n);
     }
     const total = sectionsWithBody.length;
@@ -662,14 +708,18 @@ function resolveByContent(query: string, map: DocumentMap, qOrdinals: Set<string
     const bodyScored: Array<{ num: string; score: number }> = [];
     for (let i = 0; i < sectionsWithBody.length; i++) {
         const bodyLower = lowerBodies[i];
-        if (!bodyLower.includes(rarest)) continue;
+        // An entity word is often the rarest term, but a field/value subsection
+        // may deliberately omit that entity while carrying the requested fact
+        // (e.g. a table row headed "Weight"). Score every section on the terms
+        // it actually contains; the entity-bearing parent remains a strong
+        // advisory target, while the fact-bearing child can now join it.
         let score = 0;
         for (const w of contentWords) {
-            if (!bodyLower.includes(w)) continue;
+            if (!includesPlannerTerm(bodyLower, w)) continue;
             const freq = sf.get(w) || total;
             score += Math.log((total + 1) / (freq + 1));
         }
-        // Title-word tiebreak: a section whose HEADING contains a content word is
+            // Title-word tiebreak: a section whose HEADING contains a content word is
         // the authoritative source for that concept — a strong bonus so that
         // §3.2.3 "Preprocessing and RLDS format" decisively outranks §3.3 for
         // "what format was the dataset stored in?", and §3.2.1 "Robotic Task
@@ -714,5 +764,10 @@ function resolveByContent(query: string, map: DocumentMap, qOrdinals: Set<string
     bodyScored.sort((a, b) => b.score - a.score);
     if (bodyScored.length === 0) return [];
     const top = bodyScored[0].score;
-    return bodyScored.filter(s => s.score >= top * 0.8).slice(0, 3).map(s => s.num);
+    // Near-ties are advisory routing alternatives, not confidence failures. Use
+    // an absolute slack as well as the existing proportional band so a compact
+    // value-bearing subsection (one decisive field term) stays alongside an
+    // entity-bearing parent when both plausibly answer the question.
+    const cutoff = Math.max(top * 0.8, top - 1.5);
+    return bodyScored.filter(s => s.score >= cutoff).slice(0, 3).map(s => s.num);
 }

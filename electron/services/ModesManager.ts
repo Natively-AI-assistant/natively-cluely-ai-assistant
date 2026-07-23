@@ -40,6 +40,8 @@ import {
     MODE_TEAM_MEET_PROMPT,
     MODE_LECTURE_PROMPT,
     MODE_TECHNICAL_INTERVIEW_PROMPT,
+    // Campaign-3 (2026-07-19): 8th built-in mode prompt.
+    MODE_SEMINAR_PROMPT,
     SHARED_MODE_PREFIX,
     SHARED_MODE_PREFIX_SHORT,
 } from '../llm/prompts';
@@ -58,7 +60,11 @@ export type ModeTemplateType =
     | 'recruiting'
     | 'team-meet'
     | 'lecture'
-    | 'technical-interview';
+    | 'technical-interview'
+    // Campaign-3 (fix/answer-policy-engine, 2026-07-19): 8th built-in mode.
+    // Strict: evidence required, off-document Qs answered general-labeled
+    // with a visible "not from your reference files" preamble.
+    | 'seminar';
 
 export interface Mode {
     id: string;
@@ -113,6 +119,12 @@ export const MODE_TEMPLATES: Array<{
     { type: 'looking-for-work',     label: 'Looking for work',     description: 'Answer interview questions with confidence and clarity.' },
     { type: 'technical-interview',  label: 'Technical Interview',  description: 'Whiteboard-style coding and system design support.' },
     { type: 'lecture',              label: 'Lecture',              description: 'Capture key concepts and content from lectures.' },
+    // Campaign-3 (2026-07-19, fix/answer-policy-engine): 8th built-in mode.
+    // "Seminar Mode" — strict file-grounded Q&A for presentations, thesis
+    // defenses, paper walkthroughs. Off-document questions are answered
+    // general-labeled with a visible "not from your reference files" preamble
+    // (NEVER a refusal — even strict profiles answer; they just label honestly).
+    { type: 'seminar',              label: 'Seminar',              description: 'Strict file-grounded Q&A: answer from your reference files; off-file questions get a visible "general knowledge" label, never a refusal.' },
 ];
 
 // Default note sections seeded when a mode is created from a template
@@ -181,9 +193,19 @@ export const TEMPLATE_NOTE_SECTIONS: Record<ModeTemplateType, Array<{ title: str
         { title: 'Referral / follow-up', description: 'Referral requests, thank-you notes, materials to send, or networking follow-up.' },
         { title: 'Next steps', description: 'Concrete next steps, owners, dates, and preparation items.' },
     ],
+    // Campaign-3 (2026-07-19): 8th built-in mode — file-grounded Q&A.
+    seminar: [
+        { title: 'Question', description: 'The question asked (verbatim or paraphrased).' },
+        { title: 'Answer from your files', description: 'The answer grounded in your reference files / slides / paper. Direct quote or close paraphrase.' },
+        { title: 'Source', description: 'Which file + section the answer came from. Cite the filename and section/heading.' },
+        { title: 'If not in your files', description: 'A short, labeled "not from your reference files" note from general knowledge — never fabricated as if from the files.' },
+        { title: 'Follow-up you might be asked', description: 'Likely follow-up questions on the same topic the audience or panel could ask next.' },
+    ],
 };
 
-const TEMPLATE_SYSTEM_PROMPTS: Record<ModeTemplateType, string> = {
+// Campaign-3 (2026-07-19): exported (was `const`) so tests + future UI
+// debugging can verify which prompt each templateType resolves to.
+export const TEMPLATE_SYSTEM_PROMPTS: Record<ModeTemplateType, string> = {
     // General = universal adaptive copilot (own prompt, not technical interview)
     general: MODE_GENERAL_PROMPT,
     'technical-interview': MODE_TECHNICAL_INTERVIEW_PROMPT,
@@ -193,6 +215,8 @@ const TEMPLATE_SYSTEM_PROMPTS: Record<ModeTemplateType, string> = {
     recruiting: MODE_RECRUITING_PROMPT,
     'team-meet': MODE_TEAM_MEET_PROMPT,
     lecture: MODE_LECTURE_PROMPT,
+    // Campaign-3 (2026-07-19): 8th built-in mode — file-grounded Q&A.
+    seminar: MODE_SEMINAR_PROMPT,
 };
 
 // Startup invariant: every MODE_*_PROMPT must begin with one of the two shared
@@ -436,6 +460,7 @@ export class ModesManager {
         'technical-interview',
         'team-meet',
         'lecture',
+        'seminar',
     ]);
 
     /**
@@ -715,6 +740,37 @@ export class ModesManager {
 
     public getReferenceFiles(modeId: string): ModeReferenceFile[] {
         return DatabaseManager.getInstance().getReferenceFiles(modeId).map(rowToFile);
+    }
+
+    /**
+     * Return one immutable mode record captured by an answer request at t0.
+     *
+     * `getActiveModeInfo()` intentionally returns a narrow planner snapshot; the
+     * governed EvidenceResolver additionally needs the mode's template/context
+     * fields. The only valid capture target is the current active mode at t0;
+     * reject a mismatched id instead of falling forward to a different active
+     * mode. This avoids a full mode-list scan on the latency-critical path.
+     */
+    public getModeSnapshot(modeId: string): Readonly<Mode> | null {
+        const mode = this.getActiveMode();
+        if (!mode || mode.id !== modeId) return null;
+        // Deep-freeze at runtime for genuine request-scoped immutability. The
+        // frozen arrays widen to `readonly T[]` which TS cannot assign back to
+        // the mutable `Mode` shape, so cast through unknown — the runtime object
+        // is strictly narrower (frozen) than the declared type, never wider.
+        const frozen = {
+            ...mode,
+            sourceContract: mode.sourceContract
+                ? Object.freeze({
+                    ...mode.sourceContract,
+                    allowedExplicitSwitches: Object.freeze([...mode.sourceContract.allowedExplicitSwitches]),
+                    groundingProfile: mode.sourceContract.groundingProfile
+                        ? Object.freeze({ ...mode.sourceContract.groundingProfile })
+                        : mode.sourceContract.groundingProfile,
+                  })
+                : null,
+        };
+        return Object.freeze(frozen) as unknown as Readonly<Mode>;
     }
 
     public addReferenceFile(params: {

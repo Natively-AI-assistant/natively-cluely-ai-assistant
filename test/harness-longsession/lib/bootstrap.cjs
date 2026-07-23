@@ -188,6 +188,31 @@ async function bootstrap(opts = {}) {
 
   process.env.NATIVELY_TRACE_LONGCTX = process.env.NATIVELY_TRACE_LONGCTX || '1';
   process.env.NATIVELY_API_URL = process.env.NATIVELY_API_URL || 'http://localhost:3000';
+  // Campaign 2 longsession (2026-07-20, iteration 55): calibrate-and-enable
+  // the answer-relevance guard for harness runs. Empirically tuned against
+  // run-047's full corpus (50 presses, 11 G3-pass / 39 G3-fail, live
+  // MiniMax-M3 backend): threshold 0.15 (the existing default in
+  // AnswerRelevanceChecker.ts) achieves TP=24, FP=0, F1=0.762 — perfect
+  // precision on this corpus, recovering ~62% of G3-failing presses with
+  // ZERO risk of regenerating a currently-passing one. The flag stays
+  // off-by-default in production (SettingsManager opt-in only) but the
+  // harness always exercises it so future iterations get real-world
+  // accuracy data accumulated automatically.
+  process.env.NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE = process.env.NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE || '1';
+
+  // Fallback auth: if no real NATIVELY_API_KEY is set (nothing in this repo's
+  // .env provisions one — it's meant to come from the invoking shell), fall
+  // back to the same NATIVELY_E2E local-test bypass that LLMHelper.hasNatively()
+  // / generateWithNatively() / streamWithNatively() already support, and that
+  // test/harness/run-benchmark.mjs already relies on for its Playwright E2E
+  // runs. This only engages when NATIVELY_API_KEY is absent, so it can never
+  // change behavior for an invocation that does have a real key.
+  if (!process.env.NATIVELY_API_KEY && !process.env.NATIVELY_E2E) {
+    process.env.NATIVELY_E2E = '1';
+    process.env.NATIVELY_E2E_LOCAL_TEST_TOKEN = process.env.NATIVELY_E2E_LOCAL_TEST_TOKEN
+      || process.env.NATIVELY_LOCAL_TEST_TOKEN
+      || 'local-test';
+  }
 
   const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), opts.tmpPrefix || 'longsession-harness-'));
   installElectronStub(tmpUserData);
@@ -267,6 +292,66 @@ async function bootstrap(opts = {}) {
     const modesManager = ModesManager.getInstance();
     modesManager.setSharedEmbeddingPipeline(embeddingPipeline);
     modesManager.ensureSeeded();
+
+    // Campaign 2 longsession (2026-07-19, run-032/033/034/045 forensics): esbuild's
+    // build-electron.js bundles EVERY .ts file as its OWN independent entry
+    // point (bundle:true with one entryPoint per source file, no code-
+    // splitting — splitting requires format:'esm' and this build targets
+    // format:'cjs'). That means `IntelligenceEngine.js` (required above) and
+    // `ModesManager.js` (required here) each carry their OWN separately-
+    // bundled copy of the ModesManager class — including its own private
+    // `static instance` singleton field. `engine.whatToAnswerLLM` internally
+    // calls `ModesManager.getInstance()` from ITS bundle's copy, which is a
+    // COMPLETELY DIFFERENT object than the `modesManager` configured just
+    // above (different in-memory state: no shared embedding pipeline, no
+    // seeded mode, no indexed reference files — even though the underlying
+    // SQLite file IS shared, since that's real disk I/O, not in-memory
+    // singleton state). Live-confirmed via a temporary stack-trace
+    // instrumentation in DatabaseManager.getInstance() (added, tested,
+    // reverted): the SAME class shows up as constructed 5 TIMES within one
+    // script's single process, each from a different bundled file's private
+    // copy — confirmed via `grep -c "class _DatabaseManager"` across
+    // dist-electron/electron/ showing 31 separate files each with their own
+    // embedded copy (18 for ModesManager).
+    //
+    // In the REAL packaged app this is harmless — Electron only ever loads
+    // ONE entry point (dist-electron/electron/main.js per package.json
+    // "main"), so every transitive `require()` esbuild can statically
+    // resolve gets inlined into THAT one bundle and shares one consistent
+    // set of class definitions internally (confirmed: main.js's own
+    // `ModesManager.getInstance()` call sites all route through esbuild's
+    // shared `init_ModesManager()` lazy-init inside the SAME output file).
+    // This bug is a property of the test harness's practice of `req()`-ing
+    // multiple separately-bundled top-level .js files and expecting them to
+    // share singleton state, which esbuild's per-entry-point architecture
+    // does not provide.
+    //
+    // Fix: force `engine`'s internally-bundled WhatToAnswerLLM to use THIS
+    // (correctly seeded + embedding-pipeline-injected) modesManager instance
+    // instead of falling back to its own bundle's un-seeded
+    // `ModesManager.getInstance()` copy. `WhatToAnswerLLM.modesManager` is a
+    // TypeScript `private` field with no runtime enforcement, and
+    // `getModesManager()` only calls `ModesManager.getInstance()` when this
+    // field is falsy (electron/llm/WhatToAnswerLLM.ts:105-111) — so setting
+    // it here is exactly the officially-supported injection seam (the
+    // constructor already accepts an optional `modesManager` param for this
+    // exact purpose; we can't use the constructor since `engine` already
+    // built its own `WhatToAnswerLLM` internally in `initializeLLMs()`, so
+    // we assign the field directly instead).
+    //
+    // NOTE (iteration 45): a first attempt at this exact fix appeared to
+    // cause every script-b press to return a null answer with zero
+    // NativelyAPI calls attempted. Re-testing after a full revert showed the
+    // null-answer regression PERSISTED even without this fix — it was
+    // actually caused by a concurrent session's uncommitted, in-progress
+    // edits to IntelligenceEngine.ts (a `const` vs `var` scoping bug in
+    // their own new code, since fixed and committed in their own iter3).
+    // This fix was never the actual cause; re-applying it now that the
+    // workspace is clean (verified via `git status` showing both files
+    // committed).
+    if (engine.whatToAnswerLLM) {
+      engine.whatToAnswerLLM.modesManager = modesManager;
+    }
 
     ctx.dbm = dbm;
     ctx.vectorStore = vectorStore;

@@ -72,6 +72,8 @@
     "ci:tier2": "npm run ci:tier1 && cross-env BENCHMARK_MODEL=gemini-3.1-flash-lite node benchmarks/profile-intelligence/run_residual_failures.ts",
     "ci:tier3": "npm run benchmark:multimode:1000 && npm run benchmark:followup:500 && npm run benchmark:longsession:100 && npm run benchmark:answer-quality",
     "ci:tier4": "npm run benchmark:livememory && npm run benchmark:live-replay:50 && npm run benchmark:wta:100 && npm run test:intelligence:ui",
+    "benchmark:l4-aggregate": "node --experimental-strip-types benchmarks/profile-intelligence/aggregate_l4_progress.ts",
+    "test:l4-aggregator": "node --test benchmarks/profile-intelligence/aggregate_l4_progress.selftest.mjs",
     "benchmark:manual-ui-truth": "cross-env NODE_NO_WARNINGS=1 BENCHMARK_MODEL=gemini-3.1-flash-lite node benchmarks/profile-intelligence/run_manual_ui_truth_eval.ts",
     "verify:hindsight": "node scripts/verify-hindsight.mjs",
     "verify:packaged-local-assets": "node scripts/verify-packaged-local-assets.mjs",

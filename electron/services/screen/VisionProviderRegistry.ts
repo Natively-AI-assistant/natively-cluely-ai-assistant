@@ -110,7 +110,7 @@ function geminiFlash(creds: CredentialsManager, _inputs: VisionProviderBuildInpu
   return {
     id: 'gemini_flash',
     displayName: 'Gemini Flash',
-    modelId: 'gemini-3.5-flash',
+    modelId: 'gemini-3.6-flash',
     isLocal: false,
     isConfigured: !!apiKey,
     supportsVision: !!apiKey,

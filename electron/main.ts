@@ -5626,10 +5626,18 @@ export class AppState {
       } catch { /* non-fatal */ }
     })
 
-    this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number) => {
+    this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number, generationId?: number, sourceLabel?: string) => {
+      // Phase 4 defense-in-depth (forensic-report §6b): forward the optional
+      // generationId the engine emits. Id-less emits (legacy answerLLM path,
+      // code-hint, brainstorm) continue to ship without it — the renderer
+      // treats them as always-accepted, same as id-less token batches today.
+      // Campaign-3 (fix/answer-policy-engine, 2026-07-19, founder §2.6):
+      // forward the optional sourceLabel the engine computes from the
+      // TurnPlan. Falls back to 'General knowledge' for legacy emitters
+      // (fallback paths, code-hint, brainstorm) that don't compute it.
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      this.sendToWindow(win, 'intelligence-suggested-answer', { answer, question, confidence })
+      this.sendToWindow(win, 'intelligence-suggested-answer', { answer, question, confidence, generationId, sourceLabel: sourceLabel ?? 'General knowledge' })
 
     })
 
@@ -7099,7 +7107,7 @@ async function initializeApp() {
   }
 
   // DEV-ONLY: thinking MATRIX (budgets × levels) on a focused problem subset.
-  //   THINKING_MATRIX=1 THINKING_BENCH_MODEL=gemini-3.5-flash THINKING_BENCH_DATASET=$(pwd)/electron/services/dev/cf10.json npm run electron:build
+  //   THINKING_MATRIX=1 THINKING_BENCH_MODEL=gemini-3.6-flash THINKING_BENCH_DATASET=$(pwd)/electron/services/dev/cf10.json npm run electron:build
 if (process.env.THINKING_MATRIX === '1') {
     (async () => {
       try {

@@ -106,6 +106,7 @@ const EXPECTED_KEYS = [
   'contextOsMemorySafetyEnabled',
   'contextOsEnforceSourceCapabilities',
   'contextOsPropertyValidation',
+  'contextOsMultiFamilyEvidenceEnabled',
 ];
 
 // All NATIVELY_* env vars these flags read — cleared before/after so a leaked env from the
@@ -126,6 +127,18 @@ const DEFAULT_ON_KEYS = new Set([
   // production policy, not a dev/test-only experiment), restored 2026-07-14
   // after the 2026-07-09 stability rollback was resolved.
   'jitFinalAnswerEnforced',
+  // Context OS core pipeline — promoted from dev/test-only to unconditional
+  // production default-ON (2026-07-18, grounding campaign) after live
+  // verification (H4/NEW-3/THESIS-091/C8 traces, real MiniMax-M3, real
+  // documents). contextOsEnforceSourceCapabilities/contextOsPropertyValidation/
+  // contextOsMultiFamilyEvidenceEnabled are SEPARATE stricter flags not
+  // covered by this promotion — they stay dev/test-only (isInternalDevTestContext).
+  'contextOsEnabled',
+  'contextOsManualChatEnabled',
+  'contextOsWtaEnabled',
+  'contextOsRecapFollowupEnabled',
+  'contextOsEvidencePackEnabled',
+  'contextOsMemorySafetyEnabled',
 ]);
 
 const ALL_ENV_VARS = [
@@ -180,6 +193,7 @@ const ALL_ENV_VARS = [
   'NATIVELY_CONTEXT_OS_MEMORY_SAFETY',
   'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES',
   'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION',
+  'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE',
 ];
 
 function clearAllEnv() {

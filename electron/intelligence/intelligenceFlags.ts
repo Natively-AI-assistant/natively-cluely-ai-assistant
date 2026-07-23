@@ -172,7 +172,24 @@ export type IntelligenceFlagKey =
   // Enforce capability-scoped retrieval (block, not just log, forbidden fetches).
   | 'contextOsEnforceSourceCapabilities'
   // Property-aware evidence validation gates generation (refuse on mismatch).
-  | 'contextOsPropertyValidation';
+  | 'contextOsPropertyValidation'
+  // Coordinate evidence from multiple explicitly-authorized source families.
+  | 'contextOsMultiFamilyEvidenceEnabled'
+  // ── Answer-relevance semantic guard (campaign2 longsession, 2026-07-19) ──
+  // Live-fires ONE bounded regeneration when a local zero-shot NLI check
+  // (AnswerRelevanceChecker.ts) flags an answer as not addressing the
+  // question — targets the free-form no-content-hallucination family. Default
+  // OFF (observe-only): validation run-032 found the classifier's confidence
+  // scores for REAL, on-topic answers in the live multi-turn transcript
+  // context (observed range ~0.0002-0.09) overlap almost entirely with the
+  // synthetic single-turn tuning corpus's known-bad range (~0.0-0.224) — no
+  // threshold separates them on real traffic, and a live-reproduced case
+  // (press A1, run-032) showed the guard actively made a correct answer
+  // WORSE by regenerating it. When OFF, `checkAnswerRelevance` still runs and
+  // its verdict is still traced (`answer_relevance_discard`/`_would_fire`)
+  // so real production score distributions can be collected before this is
+  // re-enabled — mirrors the `ragConfidenceGate` observe-only precedent.
+  | 'answerRelevanceGuardLive';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -322,15 +339,33 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   jitFinalAnswerEnforced: { env: 'NATIVELY_JIT_FINAL_ANSWER_ENFORCED', setting: 'jitFinalAnswerEnforcedEnabled', default: true },
   // ── Context OS / Source Authority Kernel (2026-07-10) ────────────────────
   // Rollout ladder (docs/context-os/): observe → shadow-block → enforce, per
-  // surface. Everything default OFF in production; the umbrella + observe-only
-  // surfaces default ON in dev/test so the contamination suite exercises the
-  // real path (same convention as okfProfilePacks).
-  contextOsEnabled: { env: 'NATIVELY_CONTEXT_OS', setting: 'contextOsEnabled', default: isInternalDevTestContext },
-  contextOsManualChatEnabled: { env: 'NATIVELY_CONTEXT_OS_MANUAL_CHAT', setting: 'contextOsManualChatEnabled', default: isInternalDevTestContext },
-  contextOsWtaEnabled: { env: 'NATIVELY_CONTEXT_OS_WTA', setting: 'contextOsWtaEnabled', default: isInternalDevTestContext },
-  contextOsRecapFollowupEnabled: { env: 'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP', setting: 'contextOsRecapFollowupEnabled', default: isInternalDevTestContext },
-  contextOsEvidencePackEnabled: { env: 'NATIVELY_CONTEXT_OS_EVIDENCE_PACK', setting: 'contextOsEvidencePackEnabled', default: isInternalDevTestContext },
-  contextOsMemorySafetyEnabled: { env: 'NATIVELY_CONTEXT_OS_MEMORY_SAFETY', setting: 'contextOsMemorySafetyEnabled', default: isInternalDevTestContext },
+  // surface. Originally everything defaulted OFF in production pending
+  // telemetry validation; the umbrella + observe-only surfaces defaulted ON
+  // in dev/test so the contamination suite exercised the real path (same
+  // convention as okfProfilePacks).
+  //
+  // PROMOTED TO PRODUCTION DEFAULT-ON (2026-07-18, grounding campaign): this
+  // is the "telemetry validation" the original decision was waiting on. This
+  // campaign's live-Electron traces (real MiniMax-M3, real thesis document,
+  // no mocking) exercised this exact pipeline end-to-end and found it
+  // correct: H4 routing dead zone refuted (all 10 phrasings route
+  // correctly), NEW-3 false-refusal fabrication found+fixed, THESIS-091
+  // query-dependent recall gap found+fixed, C8 rapid-fire desync tested
+  // clean (3/3 runs, zero cross-contamination). The stricter invariant this
+  // flag enables (one typed EvidencePack before the provider, no
+  // unrestricted raw-retrieval fallback, final-prompt validation) is a
+  // hallucination-prevention improvement over the legacy path, promoted ON
+  // per explicit user instruction after this evidence was presented.
+  // contextOsEnforceSourceCapabilities / contextOsPropertyValidation are
+  // SEPARATE, stricter enforcement flags not covered by this promotion — see
+  // their own comment below; they remain dev/test-only pending their own
+  // dedicated rollout decision.
+  contextOsEnabled: { env: 'NATIVELY_CONTEXT_OS', setting: 'contextOsEnabled', default: true },
+  contextOsManualChatEnabled: { env: 'NATIVELY_CONTEXT_OS_MANUAL_CHAT', setting: 'contextOsManualChatEnabled', default: true },
+  contextOsWtaEnabled: { env: 'NATIVELY_CONTEXT_OS_WTA', setting: 'contextOsWtaEnabled', default: true },
+  contextOsRecapFollowupEnabled: { env: 'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP', setting: 'contextOsRecapFollowupEnabled', default: true },
+  contextOsEvidencePackEnabled: { env: 'NATIVELY_CONTEXT_OS_EVIDENCE_PACK', setting: 'contextOsEvidencePackEnabled', default: true },
+  contextOsMemorySafetyEnabled: { env: 'NATIVELY_CONTEXT_OS_MEMORY_SAFETY', setting: 'contextOsMemorySafetyEnabled', default: true },
   // Real-custom-mode-repair (2026-07-11), Phase 7: these two flags gate the
   // ONLY code paths that actually ACT on the kernel's decision (the
   // clarification short-circuit and the hard capability gate). Before this
@@ -346,6 +381,15 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // rolled out."
   contextOsEnforceSourceCapabilities: { env: 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES', setting: 'contextOsEnforceSourceCapabilitiesEnabled', default: isInternalDevTestContext },
   contextOsPropertyValidation: { env: 'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION', setting: 'contextOsPropertyValidationEnabled', default: isInternalDevTestContext },
+  contextOsMultiFamilyEvidenceEnabled: { env: 'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE', setting: 'contextOsMultiFamilyEvidenceEnabled', default: isInternalDevTestContext },
+  // Default false (not isInternalDevTestContext) even in dev/test — unlike
+  // the Context OS flags above, this one's live-fire behavior was PROVEN to
+  // regress real answers in run-032 (see the flag's doc comment). Dev/test
+  // should observe the same off-by-default state as production until the
+  // classifier is recalibrated against real traffic; it must not be
+  // silently exercised by every dev-context test run the way the Context OS
+  // rollout flags intentionally are.
+  answerRelevanceGuardLive: { env: 'NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE', setting: 'answerRelevanceGuardLiveEnabled', default: false },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);
@@ -583,10 +627,12 @@ export function intelligenceFlagKeys(): IntelligenceFlagKey[] {
 // silently, for internal verification builds only.
 
 /**
- * The flags a verification build expects to be ON (mirrors the dev/test
- * defaults these flags were designed to have). Kept as a short, explicit list
- * rather than "every isInternalDevTestContext() flag" so this assertion is
- * legible and doesn't silently grow/shrink as unrelated flags are added.
+ * The flags a verification build expects to be ON. Kept as a short, explicit
+ * list rather than "every isInternalDevTestContext() flag" so this assertion is
+ * legible and doesn't silently grow/shrink as unrelated flags are added. The
+ * Context OS core entries are production-default-ON; the retrieval/OKF entries
+ * remain a verification-only expectation because production deliberately keeps
+ * those higher-cost augmentations opt-in.
  */
 export const REQUIRED_CONTEXT_OS_FLAGS_FOR_VERIFICATION: IntelligenceFlagKey[] = [
   'ragConfidenceGate',
@@ -594,6 +640,12 @@ export const REQUIRED_CONTEXT_OS_FLAGS_FOR_VERIFICATION: IntelligenceFlagKey[] =
   'okfKnowledgePacks',
   'okfHybridRetrieval',
   'jitFinalAnswerEnforced',
+  'contextOsEnabled',
+  'contextOsManualChatEnabled',
+  'contextOsWtaEnabled',
+  'contextOsRecapFollowupEnabled',
+  'contextOsEvidencePackEnabled',
+  'contextOsMemorySafetyEnabled',
 ];
 
 /**

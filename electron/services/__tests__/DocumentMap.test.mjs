@@ -455,6 +455,27 @@ test('resolveByContent routes "Benchmark 1" to §4.2.1 not §4.2.2/4.2.3 (Q47 re
   );
 });
 
+test('conversational weight wrapper and inflection target the technical specification section', async () => {
+  const { buildDocumentMap, resolveTargetSections } = await loadMap();
+  const doc = [
+    '[Page 1]', 'Contents',
+    '2.3 Mercury X1 Robot . . . . . . . . . 16',
+    '2.3.2 Technical Specifications . . . . 17',
+    '5.5 Final Remarks . . . . . . . . . . . 58',
+    '[Page 16]', '2.3 Mercury X1 Robot',
+    'Mercury X1 is a dual-arm humanoid robot used for manipulation.',
+    '[Page 17]', '2.3.2 Technical Specifications',
+    'Total Weight: 55 kg. Working Voltage: 24 V. The robot weighs 55 kg.',
+    '[Page 58]', '5.5 Final Remarks',
+    'The thesis closes with future research directions.',
+  ].join('\n');
+  const map = buildDocumentMap(doc);
+  const direct = resolveTargetSections('How much does it weigh?', map);
+  const wrapped = resolveTargetSections('Hey, do you know how much it weighs?', map);
+  assert.ok(direct.includes('2.3.2'), `direct question must target specs, got: [${direct.join(',')}]`);
+  assert.deepEqual(wrapped, direct, 'a conversational wrapper must not alter section targeting');
+});
+
 test('resolveTargetSections returns empty for an unmatched query (global fallback)', async () => {
   const { buildDocumentMap, resolveTargetSections } = await loadMap();
   const map = buildDocumentMap(THESIS);

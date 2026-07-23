@@ -77,6 +77,19 @@ export async function gradeScriptRun(scriptId, pressResults, sourceContextForPre
       t: pr.t,
       minute: pr.minute,
       answerPreview: (pr.answer || '(null)').slice(0, 300),
+      // Grounding-campaign2 fix (2026-07-20): the 300-char answerPreview above
+      // was the ONLY stored copy of a press's answer — every scaffold-
+      // contamination / fabricated-transcript forensic investigation this
+      // campaign has done (C8 in iterations 47/49, A6 in iteration 50) hit
+      // the same wall: the real defect (a second scaffold heading, a
+      // fabricated [INTERVIEWER] re-quote further into the answer) sits past
+      // the 300-char cutoff, making the finding inconclusive without a fresh
+      // live re-run. Store the COMPLETE answer text here so a future
+      // investigation can read it directly from the JSON report instead of
+      // needing to reproduce the failure live. Kept as a SEPARATE field
+      // (not a change to answerPreview) so the markdown report generator's
+      // existing 300-char display is untouched — this is purely additive.
+      answerFull: pr.answer || '(null)',
       threw: pr.threw,
       latencyRealMs: pr.latencyRealMs,
       firstTokenRealMs: pr.firstTokenRealMs,

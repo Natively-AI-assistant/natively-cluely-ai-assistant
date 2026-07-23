@@ -74,8 +74,13 @@ test('section-aware chunker: anchors each window chunk in a long section with th
   // window of a long section would lose its heading and rank lower on a
   // heading-keyword query. (Variable renamed to `ct` in the 2026-06-28 refactor
   // that split the default vs document-grounded fine-chunk paths.)
+  // 2026-07-18 (commit 3c8016f8): the long-section body path adopted
+  // `sentenceAwareWindows`, whose iterator yields each window as a STRING, so
+  // the old `window.join(' ')` was dropped from the anchor expression. The
+  // heading-anchoring invariant this test guards is unchanged; only the literal
+  // window expression differs. Assert the current, correct form.
   assert.ok(
-    src.includes("const ct = headingLine ? `${headingLine}\\n${window.join(' ')}` : window.join(' ')"),
+    src.includes("const ct = headingLine ? `${headingLine}\\n${window}` : window"),
     'chunkText must anchor every window chunk in a long section with the heading',
   );
 });

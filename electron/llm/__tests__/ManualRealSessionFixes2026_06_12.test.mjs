@@ -35,6 +35,8 @@ const PROFILE = {
     projects: [{ name: 'SQL-Copilot', description: 'A query assistant for analysts' }],
 };
 
+const hasItem = (r, field, value) => r.items.some((f) => f.field === field && (value === undefined || JSON.stringify(f.value) === JSON.stringify(value)));
+
 // ── P2: identity routing ─────────────────────────────────────────────────────
 describe('P2: identity probe routing', () => {
     test('candidate-ambiguous probes go to the fast path when a profile is loaded', () => {
@@ -69,12 +71,17 @@ describe('P2: identity probe routing', () => {
             assert.equal(resolveIdentityProbe(q, true).kind, 'none', q);
         }
     });
-    test('the fast path actually answers the routed probes (no Natively leak possible)', () => {
+    test('the fast path actually selects the candidate\'s own identity as evidence for the routed probes (no Natively leak possible)', () => {
+        // Since the Full-JIT policy (2026-07-07/08, commit 6e6189b4), this layer only
+        // SELECTS structured evidence — it never renders `.answer` prose. Assert the
+        // evidence itself names the candidate and excludes the assistant's identity.
         for (const q of ['who are you?', 'what is your name?', 'introduce yourself']) {
             const r = tryBuildManualProfileFastPathAnswer({ question: q, profile: PROFILE, source: 'manual_input' });
-            assert.ok(r?.answer, q);
-            assert.match(r.answer, /Aarav Menon/);
-            assert.doesNotMatch(r.answer, /Natively|AI assistant/i);
+            assert.ok(r, q);
+            assert.equal(r.answer, undefined, 'Full-JIT policy: must not render a final answer string');
+            assert.ok(r.items.some((f) => f.field === 'identity.name' && f.value === 'Aarav Menon'), q);
+            assert.ok(r.excludedContextLayers.includes('assistant_identity'), q);
+            assert.doesNotMatch(JSON.stringify(r.items), /Natively|AI assistant/i, q);
         }
     });
 });
@@ -228,14 +235,22 @@ describe('behavioral past-experience routing', () => {
 
 // ── Intro variants + grammar fixes ───────────────────────────────────────────
 describe('intro variants + grammar', () => {
-    test('intro/background/style questions produce DIFFERENT grounded intros', () => {
-        const intro = tryBuildManualProfileFastPathAnswer({ question: 'introduce yourself', profile: PROFILE, source: 'manual_input' })?.answer;
-        const background = tryBuildManualProfileFastPathAnswer({ question: 'walk me through your background', profile: PROFILE, source: 'manual_input' })?.answer;
-        const style = tryBuildManualProfileFastPathAnswer({ question: 'how would you describe yourself?', profile: PROFILE, source: 'manual_input' })?.answer;
-        assert.ok(intro && background && style);
-        assert.notEqual(intro, background);
-        assert.notEqual(intro, style);
-        for (const a of [intro, background, style]) assert.match(a, /Aarav Menon/);
+    test('intro/background/style questions all select the SAME grounded identity evidence (phrasing variation is a JIT-prompt concern, not this layer)', () => {
+        // Since the Full-JIT policy, this layer no longer renders prose per phrasing —
+        // it only selects evidence. Runtime probe confirms all three phrasings produce
+        // byte-for-byte identical evidence selection here; divergent wording is applied
+        // downstream by the JIT prompt builder. Assert consistent, non-fabricated evidence.
+        const intro = tryBuildManualProfileFastPathAnswer({ question: 'introduce yourself', profile: PROFILE, source: 'manual_input' });
+        const background = tryBuildManualProfileFastPathAnswer({ question: 'walk me through your background', profile: PROFILE, source: 'manual_input' });
+        const style = tryBuildManualProfileFastPathAnswer({ question: 'how would you describe yourself?', profile: PROFILE, source: 'manual_input' });
+        for (const r of [intro, background, style]) {
+            assert.ok(r);
+            assert.equal(r.answer, undefined, 'Full-JIT policy: must not render a final answer string');
+            assert.equal(r.answerType, 'identity_answer');
+            assert.ok(hasItem(r, 'identity.name', 'Aarav Menon'));
+        }
+        assert.deepEqual(intro.items, background.items);
+        assert.deepEqual(intro.items, style.items);
     });
     test('intro variant selection is deterministic (same question → same answer)', () => {
         const a = tryBuildManualProfileFastPathAnswer({ question: 'introduce yourself', profile: PROFILE, source: 'manual_input' })?.answer;
@@ -249,11 +264,12 @@ describe('intro variants + grammar', () => {
             assert.match(r.answer, /is a query assistant/);
         }
     });
-    test('two-item skill list reads "X and Y" (no Oxford comma)', () => {
+    test('two-item skill list is selected as evidence intact (the "X and Y" grammar is a JIT-prompt-builder phrasing concern, not testable at this layer)', () => {
         const twoSkill = { ...PROFILE, skills: ['SQL', 'Python'] };
         const r = tryBuildManualProfileFastPathAnswer({ question: 'introduce yourself', profile: twoSkill, source: 'manual_input' });
-        assert.match(r.answer, /SQL and Python/);
-        assert.doesNotMatch(r.answer, /SQL, and Python/);
+        assert.ok(r);
+        assert.equal(r.answer, undefined, 'Full-JIT policy: must not render a final answer string');
+        assert.ok(hasItem(r, 'skills.summary', ['SQL', 'Python']));
     });
 });
 

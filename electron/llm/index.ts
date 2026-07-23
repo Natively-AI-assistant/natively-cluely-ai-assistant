@@ -33,6 +33,8 @@ export {
     warmupIntentClassifier
 } from "./IntentClassifier";
 export type { ConversationIntent, IntentResult } from "./IntentClassifier";
+export { checkAnswerRelevance } from "./AnswerRelevanceChecker";
+export type { AnswerRelevanceResult } from "./AnswerRelevanceChecker";
 export { planNextAssistantAction } from "./PlannerDecision";
 export type { PlannerDecision, PlannerDecisionKind, PlannerInput } from "./PlannerDecision";
 export { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, shouldScaffold, isStealthEvasionQuestion, isJdFactualLookupNotNegotiationAdvice } from "./AnswerPlanner";
@@ -52,7 +54,7 @@ export {
 export type { SpeakabilityDecision, SpeakabilityClass, SpeakabilityTarget, ShortLengthBand, ShortBandTarget } from "./speakability";
 export { checkAnswerForCodeBugs, checkCodeCompleteness } from "./CodeSanityCheck";
 export type { CodeSanityResult, CodeSanityIssue } from "./CodeSanityCheck";
-export { AnswerDiversityGuard, cleanAnswerArtifacts, isLeakedSchemaStub, isProviderTransportError, stripMetaPreamble, compressToSpeakable, varySpokenOpening, SCAFFOLD_LABEL_RE } from "./answerPolish";
+export { AnswerDiversityGuard, cleanAnswerArtifacts, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope, isProviderTransportError, isLeakedInternalTagBlock, isLeakedAnswerArtifact, stripMetaPreamble, stripFabricatedTranscriptPreamble, isFabricatedTranscriptOnly, compressToSpeakable, varySpokenOpening, SCAFFOLD_LABEL_RE, BOLD_PSEUDO_HEADER_RE } from "./answerPolish";
 export type { RepetitionVerdict, RepetitionReason, DiversityCheckOpts } from "./answerPolish";
 export type { AnswerPlan, AnswerSource, AnswerType, ContextLayer, OutputPerspective, SpeakerPerspective } from "./AnswerPlanner";
 export { applyModeFallback, MODE_CONTEXT_PROFILES } from "./modeProfiles";
@@ -80,7 +82,7 @@ export {
   LIVE_INTER_TOKEN_STALL_MS, BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS,
 } from "./liveDeadlines";
 export type { FollowUpContext, ResolvedFollowUp, FollowUpSurface } from "./FollowUpResolver";
-export { renderCodingAnswerMarkdown, repairCodingAnswer, repairCodingMarkdown, validateAnswerStructure, validateCodingMarkdown, buildCodingScaffold } from "./AnswerValidator";
+export { renderCodingAnswerMarkdown, repairCodingAnswer, repairCodingMarkdown, validateAnswerStructure, validateCodingMarkdown, buildCodingScaffold, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination } from "./AnswerValidator";
 export type { AnswerValidationResult, CodingAnswer } from "./AnswerValidator";
 export { validateProfileOutput, buildProfileRepairInstruction, stripProfileTokensFromCoding, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES } from "./ProfileOutputValidator";
 export type { ProfileValidationResult, ProfileViolation, ProfileViolationCode, ProfileValidationInput, CandidateSanitizeResult, AssistantVoiceSanitizeResult } from "./ProfileOutputValidator";

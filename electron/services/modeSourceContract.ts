@@ -53,7 +53,12 @@ export type ContractTemplateType =
   | 'recruiting'
   | 'team-meet'
   | 'lecture'
-  | 'technical-interview';
+  | 'technical-interview'
+  // Campaign-3 (fix/answer-policy-engine, 2026-07-19): the 8th built-in mode.
+  // "Seminar Mode" enforces the strictest answer policy — evidence required,
+  // off-document Qs answered general-labeled with a visible "not from your
+  // reference files" preamble (NEVER a refusal in this built-in mode).
+  | 'seminar';
 
 export type ModeConflictPolicy =
   | 'reference_files_win'
@@ -74,6 +79,34 @@ export interface ModeSourceContract {
     allowPriorAssistantReferents: boolean;
     allowHindsight: boolean;
   };
+  /**
+   * Campaign-3 (2026-07-19, fix/answer-policy-engine): per-mode grounding
+   * strictness profile. Drives the Answer Policy Engine's behavior matrix
+   * (TurnPlanner.ts §2.3): `evidencePreference` controls how strongly the
+   * model is steered to use uploaded/reference evidence; `onNoEvidence`
+   * controls what happens when the evidence probe returns NONE — including
+   * the Seminar Mode's "not in your reference files — from general
+   * knowledge: ..." preamble. Defaults to `preferred` / `answer_general_labeled`
+   * for the 7 existing built-in modes when absent (read side uses `??`).
+   *
+   * Migration: legacy contracts without this field keep working — readers
+   * must default to `preferred` / `answer_general_labeled` on absence, and
+   * writers may set it only for Seminar Mode (or future strict modes).
+   * When `templateType === 'seminar'` and this field is absent, the
+   * reader should fall back to `required` / `say_not_found_then_answer_general`.
+   */
+  groundingProfile?: GroundingProfile;
+  /**
+   * Campaign-3 (2026-07-19): the strictness selector the user picked in
+   * the Modes Manager UI (Campaign 3 §3 step 2). One of three: Flexible
+   * (= `preferred` / `answer_general_labeled`), Prefer my files (= the
+   * same defaults but the probe is loaded more aggressively), Files only
+   * (= Seminar = `required` / `say_not_found_then_answer_general`).
+   * Persisted on the contract so a future read can recover the user's
+   * explicit choice. UI-side enum; not consulted by the kernel today
+   * (the kernel reads `groundingProfile` directly).
+   */
+  strictness?: 'flexible' | 'prefer_my_files' | 'files_only';
   /**
    * How this contract came to exist. Surfaced in the UI/telemetry so a
    * silently-migrated legacy mode is visibly distinguishable from a user's
@@ -105,6 +138,53 @@ export interface ModeSourceContract {
    * of template).
    */
   seededForTemplateType?: ContractTemplateType;
+}
+
+/**
+ * Campaign-3 (fix/answer-policy-engine, 2026-07-19, founder §2.3 + §3 step 2):
+ * the strictness profile carried on a {@link ModeSourceContract}. Mirrors
+ * `GroundingProfile` in `electron/llm/TurnPlanner.ts` but defined here too
+ * so the contract type is self-contained for lightweight contexts that
+ * don't import TurnPlanner. Drift is guarded by a TurnPlanner unit test
+ * (electron/llm/__tests__/TurnPlanner.test.mjs).
+ *
+ * Resolution order in TurnPlanner.groundingProfileFor() (iter12):
+ *   1. Explicit `sourceContract.groundingProfile` (per-mode override)
+ *   2. `sourceContract.templateType === 'seminar'` (per-mode signal)
+ *   3. `NATIVELY_SEMINAR_MODE` env flag (legacy / migration window)
+ *   4. `DEFAULT_GROUNDING_PROFILE` (the 7 built-in modes)
+ *
+ * @see {@link SEMINAR_GROUNDING_PROFILE} — the strictest preset (founder spec)
+ * @see {@link DEFAULT_GROUNDING_PROFILE} — the preferred/labeled preset (default)
+ * @see {@link SourceBadge.computeSourceBadge} — consumer that emits the
+ *      visible "Not in your reference files — from general knowledge:"
+ *      preamble when this profile is `required` + `say_not_found_then_answer_general`
+ * @see traces3/SEMINAR.md — the Seminar Mode user guide
+ */
+export interface GroundingProfile {
+  /**
+   * How strongly the model is steered toward using uploaded/reference
+   * evidence. `required` (Seminar) means off-evidence answers require
+   * the explicit preamble; `optional` (custom compliance modes) means
+   * evidence is used if available but not required.
+   */
+  evidencePreference: 'required' | 'preferred' | 'optional';
+  /**
+   * Behavior when the evidence probe returns NONE on a given turn.
+   * `answer_general_labeled` — the default; the model answers and
+   * the answer carries the "General knowledge" badge.
+   * `say_not_found_then_answer_general` — Seminar Mode; the answer
+   * is prefixed with "Not in your reference files — from general
+   * knowledge:" so the audience can tell.
+   * `refuse` — only for compliance custom modes; NEVER for built-ins.
+   */
+  onNoEvidence: 'answer_general_labeled' | 'say_not_found_then_answer_general' | 'refuse';
+  /**
+   * Visual style for the source badge in the overlay.
+   * Currently both styles render as a small pill; future work may
+   * add per-style colors / icons.
+   */
+  labelStyle: 'badge' | 'paragraph';
 }
 
 /**
@@ -207,7 +287,10 @@ function isContractTemplateType(s: string | undefined): s is ContractTemplateTyp
     || s === 'recruiting'
     || s === 'team-meet'
     || s === 'lecture'
-    || s === 'technical-interview';
+    || s === 'technical-interview'
+    // Campaign-3 (2026-07-19): add 'seminar' to the template-type whitelist
+    // so seededForTemplateType round-trips for the 8th mode.
+    || s === 'seminar';
 }
 
 /**

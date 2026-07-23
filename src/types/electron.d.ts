@@ -115,7 +115,7 @@ export interface ElectronAPI {
   onOpenSettingsTab: (callback: (tab: string) => void) => () => void
 
   // LLM Model Management
-  getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli"; model: string; isOllama: boolean }>
+  getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli"; /** @deprecated use `modelId` for selection, `displayName` for UI */ model: string; modelId: string; displayName: string; isOllama: boolean }>
   getAvailableOllamaModels: () => Promise<string[]>
   getProviderStatuses: () => Promise<any[]>
   getProviderStatus: (id: string) => Promise<any | null>
@@ -340,7 +340,7 @@ export interface ElectronAPI {
   // Intelligence Mode Events
   onIntelligenceAssistUpdate: (callback: (data: { insight: string }) => void) => () => void
   onIntelligenceSuggestedAnswerToken: (callback: (data: { token: string; question: string; confidence: number }) => void) => () => void
-  onIntelligenceSuggestedAnswer: (callback: (data: { answer: string; question: string; confidence: number }) => void) => () => void
+  onIntelligenceSuggestedAnswer: (callback: (data: { answer: string; question: string; confidence: number; generationId?: number }) => void) => () => void
   onIntelligenceSuggestedAnswerDiscard: (callback: (data: { reason: string }) => void) => () => void
   // Verified code execution (background): ✓ badge + corrected message.
   onIntelligenceCodeVerified: (callback: (data: { question: string; passed: number; total: number; language: string }) => void) => () => void

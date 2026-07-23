@@ -15,7 +15,7 @@
 //
 // PRIORITY (Natively-API is intentionally DEFERRED — see docs/HINDSIGHT_LOCAL_SETUP.md):
 //   Gemini → OpenAI → Claude → DeepSeek → Groq → Ollama
-//   Within Gemini: 3.5-flash → 3.1-flash-lite → 3.1-pro-preview.
+//   Within Gemini: 3.6-flash → 3.1-flash-lite → 3.1-pro-preview.
 //
 // Model names MIRROR electron/services/ModelVersionManager.ts:88-100 so Hindsight stays
 // in lockstep with the app's chosen models. Each is env-overridable.
@@ -38,7 +38,7 @@ function providerTable(env) {
     {
       provider: 'gemini', key: 'GEMINI_API_KEY',
       models: [
-        ov('HINDSIGHT_LLM_GEMINI_PRIMARY', 'gemini/gemini-3.5-flash'),
+        ov('HINDSIGHT_LLM_GEMINI_PRIMARY', 'gemini/gemini-3.6-flash'),
         ov('HINDSIGHT_LLM_GEMINI_LITE', 'gemini/gemini-3.1-flash-lite'),
         ov('HINDSIGHT_LLM_GEMINI_PRO', 'gemini/gemini-3.1-pro-preview'),
       ],

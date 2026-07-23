@@ -7,7 +7,7 @@ import { DatabaseManager } from '../db/DatabaseManager';
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
 import type { AnswerType } from '../llm/AnswerPlanner';
 import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks, type DocumentMap } from './modes/DocumentMap';
-import { EVIDENCE_USE_RULE, retrievalDiagnosticsEnabled, diagLog, isBroadDocumentQuery, computeEvidenceCoverage, classifyDocumentQuestionShape } from '../llm/documentGroundedPrompt';
+import { EVIDENCE_USE_RULE, retrievalDiagnosticsEnabled, diagLog, isBroadDocumentQuery, computeEvidenceCoverage, classifyDocumentQuestionShape, normalizeDocumentGroundedRetrievalQuery } from '../llm/documentGroundedPrompt';
 
 /**
  * Gate the mode's raw customContext blob by answer type (Phase 3). Returns only
@@ -908,9 +908,15 @@ export class ModeContextRetriever {
                 }
             }
         }
+        // Preserve the raw question outside retrieval. The derived scoring query
+        // removes only a sentence-initial conversational wrapper in document-
+        // grounded mode, so lexical and section planning see the factual payload.
+        const documentRetrievalQuery = forceDocumentGrounding
+            ? normalizeDocumentGroundedRetrievalQuery(options.query)
+            : options.query;
         const bareQueryText = forceDocumentGrounding
-            ? `${options.query}${referentEnrichment ? '\n' + referentEnrichment : ''}`.trim()
-            : `${options.query}\n${options.transcript ?? ''}${referentEnrichment ? '\n' + referentEnrichment : ''}`.trim();
+            ? `${documentRetrievalQuery}${referentEnrichment ? '\n' + referentEnrichment : ''}`.trim()
+            : `${documentRetrievalQuery}\n${options.transcript ?? ''}${referentEnrichment ? '\n' + referentEnrichment : ''}`.trim();
         const bareQueryWords = new Set(wordsOf(bareQueryText));
         const queryText = bareQueryWords.size >= 2
             ? bareQueryText
@@ -927,8 +933,8 @@ export class ModeContextRetriever {
                 ? queryWordsRaw.filter(w => !DOC_GROUNDED_STOPWORDS.has(w))
                 : queryWordsRaw,
         );
-        const queryShape = classifyDocumentQuestionShape(options.query || '', options.followUpReferentHint);
-        const broadQuery = isBroadDocumentQuery(options.query || '');
+        const queryShape = classifyDocumentQuestionShape(documentRetrievalQuery || '', options.followUpReferentHint);
+        const broadQuery = isBroadDocumentQuery(documentRetrievalQuery || '');
         const includeDocumentIdentity = forceDocumentGrounding && broadQuery;
         const documentIdentityBlock = includeDocumentIdentity ? buildDocumentIdentityBlock(mode, documentIdentities) : '';
         diagLog('DOC-RANK identity', { queryShape, broadQuery, identityIncluded: includeDocumentIdentity, reason: includeDocumentIdentity ? 'broad_overview_query' : 'specific_query_suppressed' });
@@ -1050,8 +1056,8 @@ export class ModeContextRetriever {
         // whose child §2.3.2 holds the Jetson controller. The enrichment is
         // retrieval-side only; it never enters the model-visible prompt.
         const plannerQuery = referentEnrichment
-            ? `${options.query} ${referentEnrichment}`
-            : options.query;
+            ? `${documentRetrievalQuery} ${referentEnrichment}`
+            : documentRetrievalQuery;
         if (forceDocumentGrounding && plannerQuery) {
             for (const source of sources) {
                 if (source.type !== 'reference_file') continue;
@@ -1169,7 +1175,7 @@ export class ModeContextRetriever {
 
         // Precompute the query's entity terms ONCE (was recomputed per chunk
         // inside scoreChunk across all three scoring loops).
-        const queryEntityTerms = precomputeEntityTerms(options.query, forceDocumentGrounding);
+        const queryEntityTerms = precomputeEntityTerms(documentRetrievalQuery, forceDocumentGrounding);
 
         // Within-section tiebreak (round-6 51-bench): when the planner targets a
         // long section EVERY window gets the same section boost, so the generic
@@ -1179,8 +1185,8 @@ export class ModeContextRetriever {
         // gets a tiny bonus so the right window surfaces. Matching is PREFIX-
         // based (≥4 chars) so "parameters"/"parameter" and "format"/"formats"
         // unify without a full stemmer.
-        const queryContentStems = forceDocumentGrounding && options.query
-            ? [...new Set(wordsOf(options.query))]
+        const queryContentStems = forceDocumentGrounding && documentRetrievalQuery
+            ? [...new Set(wordsOf(documentRetrievalQuery))]
                 .filter(w => w.length >= 4 && !DOC_GROUNDED_STOPWORDS.has(w))
                 .map(w => w.slice(0, Math.max(4, w.length - 1))) // crude stem: drop trailing plural/inflection
             : [];
@@ -1201,7 +1207,7 @@ export class ModeContextRetriever {
         for (const source of sources) {
             for (const chunk of chunksForSource(source)) {
                 const navigationMatch = isMatchingNavigationChunk(source.id, chunk);
-                let score = scoreChunk(queryWords, chunk, options.query, forceDocumentGrounding, queryEntityTerms);
+                let score = scoreChunk(queryWords, chunk, documentRetrievalQuery, forceDocumentGrounding, queryEntityTerms);
                 const boost = sectionBoost(chunkSectionNum(chunk));
                 if (boost > 0) score = Math.min(1, score + boost + contentWordBonus(chunk));
                 if (navigationMatch) score = Math.max(score, 0.9);
@@ -1271,7 +1277,7 @@ export class ModeContextRetriever {
             // by an "evaluation"/"metric" sentence). NO fixture-specific terms
             // (no "teleoperation"/"Success Rate"/"MSE") are hardcoded — the boost
             // only fires when the CHUNK itself contains the generic section word.
-            const ql = `${options.query ?? ''}`.toLowerCase();
+            const ql = documentRetrievalQuery.toLowerCase();
             const sectionHints: string[] = [];
             const addHint = (...terms: string[]) => sectionHints.push(...terms);
             if (/\bphase|phases|stage|stages|step|steps|main (?:parts|components)\b/.test(ql)) addHint('objective', 'phase', 'stage', 'step');
@@ -1309,8 +1315,8 @@ export class ModeContextRetriever {
                 // "Mercury X1"). Falls through to the synonym-only rescue when
                 // no entities are present in the query (broad / vague questions),
                 // so the original behaviour is preserved for entity-less questions.
-                const ownEntityTerms = forceDocumentGrounding && options.query
-                    ? extractHighSignalEntityTerms(options.query)
+                const ownEntityTerms = forceDocumentGrounding && documentRetrievalQuery
+                    ? extractHighSignalEntityTerms(documentRetrievalQuery)
                         .filter(t => !/^\d[\d.,]*$/.test(t.trim()))   // drop pure numbers
                         .map(t => t.toLowerCase())
                     : [];
@@ -1329,7 +1335,7 @@ export class ModeContextRetriever {
                             if (!entityHit) continue;
                         }
                         const key = `${source.id}::${chunk}`;
-                        let base = scoreChunk(queryWords, chunk, options.query, forceDocumentGrounding, queryEntityTerms);
+                        let base = scoreChunk(queryWords, chunk, documentRetrievalQuery, forceDocumentGrounding, queryEntityTerms);
                         // Carry forward the section-target boost so a rescued
                         // chunk in a TARGET section isn't demoted below its
                         // first-pass rank (consistency across the two passes).
@@ -1755,13 +1761,16 @@ export class ModeContextRetriever {
                 if (hintEntities.length > 0) referentEnrichment = '\n' + hintEntities.slice(0, 3).join(' ');
             }
         }
-        const queryText = `${options.query}\n${options.transcript ?? ''}${referentEnrichment}`.trim();
+        const retrievalQuery = options.forceDocumentGrounding
+            ? normalizeDocumentGroundedRetrievalQuery(options.query)
+            : options.query;
+        const queryText = `${retrievalQuery}\n${options.transcript ?? ''}${referentEnrichment}`.trim();
         // Doc-grounded retrieval must score against the actual question, not the
         // whole transcript. The transcript is useful conversational context, but in
         // a seminar session it contains generic words like "uploaded thesis material"
         // that swamp short precise queries (hardware/camera/self-awareness) and can
         // cause fallback/ranking to miss the answer-bearing reference chunk.
-        const hybridQuery = options.forceDocumentGrounding ? `${options.query}${referentEnrichment}`.trim() : queryText;
+        const hybridQuery = options.forceDocumentGrounding ? `${retrievalQuery}${referentEnrichment}`.trim() : queryText;
         const hasTranscript = !options.forceDocumentGrounding && !!options.transcript && options.transcript.trim().length > 0;
 
         const result = await this._hybridRetriever!.retrieve({

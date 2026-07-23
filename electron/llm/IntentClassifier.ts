@@ -390,6 +390,41 @@ class ZeroShotClassifier {
     }
 
     /**
+     * Campaign 2 longsession (2026-07-19): low-level raw zero-shot
+     * classification, reusing this SAME singleton's worker/ONNX session
+     * (and all its poison-sentinel/memory-gate/retry resilience machinery)
+     * for a DIFFERENT classification task than intent detection — a single
+     * arbitrary candidate label with a caller-supplied `hypothesisTemplate`.
+     * Used by AnswerRelevanceChecker to check "does this answer entail
+     * addressing this question" without spinning up a second ONNX session.
+     * Returns null (never throws, never blocks) exactly like `classify()`
+     * on any load/inference failure — the caller must treat null as
+     * "check unavailable, do not gate on it" the same way `classifyIntent`
+     * already falls through to its own next tier when this returns null.
+     */
+    async classifyRaw(text: string, labels: string[], hypothesisTemplate?: string): Promise<{ topLabel: string; topScore: number } | null> {
+        await this.ensureLoaded();
+        if (!this.loaded) return null;
+
+        try {
+            const result = await this.postToWorker<{ labels?: string[]; scores?: number[] }>({
+                type: 'classify',
+                text,
+                labels,
+                hypothesisTemplate,
+                ...this.workerConfig(),
+            });
+            const topLabel = result.labels?.[0];
+            const topScore = result.scores?.[0];
+            if (!topLabel || typeof topScore !== 'number') return null;
+            return { topLabel, topScore };
+        } catch (e) {
+            console.warn('[IntentClassifier] Raw zero-shot classification error:', e);
+            return null;
+        }
+    }
+
+    /**
      * Warm up the model in background (non-blocking).
      * Call this early in app lifecycle to avoid cold-start latency.
      */
@@ -414,7 +449,7 @@ function detectIntentByPattern(lastInterviewerTurn: string): IntentResult | null
         return { intent: 'clarification', confidence: 0.9, answerShape: INTENT_ANSWER_SHAPES.clarification };
     }
 
-    // Follow-up patterns  
+    // Follow-up patterns
     if (/(what happened|then what|and after that|what.s next|how did that go)/i.test(text)) {
         return { intent: 'follow_up', confidence: 0.85, answerShape: INTENT_ANSWER_SHAPES.follow_up };
     }
@@ -424,10 +459,49 @@ function detectIntentByPattern(lastInterviewerTurn: string): IntentResult | null
         return { intent: 'deep_dive', confidence: 0.85, answerShape: INTENT_ANSWER_SHAPES.deep_dive };
     }
 
+    // Grounding-campaign2 fix (2026-07-17): "how do you stack up (there/against
+    // the JD)?" is the comparison IDIOM ("measure up"), not the data-structure
+    // noun — but the bare `\bstack\b` two lines below matched it anyway,
+    // classifying a JD-comparison question ("The JD calls for 8+ years and
+    // deep Go or Java expertise — how do you stack up there?") as `coding`
+    // intent at 0.95 confidence. That intent flows into AnswerPlanner.planAnswer
+    // (electron/llm/AnswerPlanner.ts:2596's `input.intentResult?.intent ===
+    // 'coding'` check), which OVERRIDES the otherwise-correct jd_fit_answer
+    // routing (see the AnswerPlanner-level "stack up" fix in the same
+    // campaign) and forces `coding_question_answer` — forbidding resume/jd
+    // entirely. Live-confirmed on the real backend (test/harness-longsession
+    // script-a press A9): `candidateProfileChars:0` persisted even after the
+    // AnswerPlanner and category-hint fixes for this exact question, traced
+    // to `[IntelligenceEngine] Temporal RAG { ..., intent: 'coding', ... }`.
+    // Same idiom-neutralization shape as the sibling fixes in
+    // AnswerPlanner.ts/IntentClassifier.ts (premium)/HybridSearchEngine.ts.
+    const textNoStackUpIdiom = text.replace(/\bstack(s|ed)?\s+up\b/g, 'measure$1 up');
+
     // DSA/coding interview patterns. Keep this deterministic and run it
     // BEFORE behavioral/example matching so prompts like "give me an example
     // React component in TypeScript" still route to the coding contract.
-    if (/(two\s*sum|longest substring|reverse (a )?linked list|detect a cycle|binary search|sliding window|two pointers?|hash\s?(map|set|table)|stack|queue|heap|trie|union[- ]find|dynamic programming|\bdp\b|backtracking|recursion|graph|tree|\bbfs\b|\bdfs\b|time complexity|space complexity|big[- ]?o)/i.test(text)) {
+    //
+    // Campaign 2 longsession (2026-07-19, run-032/033 forensics): several of
+    // these data-structure nouns (stack, queue, heap, trie, graph, tree,
+    // recursion) were UN-anchored bare substrings — no `\b` word-boundary
+    // wrapping — so they matched inside ordinary English words that merely
+    // CONTAIN the substring. Live-confirmed root cause of script-b's near-
+    // total document-grounded answer-quality collapse: "how many identical
+    // layers are **stack**ed in the encoder?" (a real Transformer-paper
+    // question, nothing to do with the data structure) matched bare `stack`,
+    // classified as `coding` intent at 0.95 confidence, and routed to
+    // `coding_question_answer` — which bypasses the entire doc-grounded
+    // validation/retry/repair pipeline (`documentGroundedCustomModeActive`
+    // guards on `!isCoding` throughout IntelligenceEngine.ts), so a
+    // genuinely well-grounded question got a generic non-answer with none of
+    // that pipeline's safety nets. Wrapping the affected terms in `\b...\b`
+    // preserves every genuine DSA usage (a whole-word "stack"/"queue"/"tree"
+    // still matches) while excluding "stacked", "enqueued"/"queueing" past
+    // participles, "heaped", "retrieval" (contains no data-structure term but
+    // was never matched anyway), "subgraph"/"telegraph" style compounds, and
+    // "recursively"/"recursions" derivational forms that have nothing to do
+    // with a coding-interview ask.
+    if (/(two\s*sum|longest substring|reverse (a )?linked list|detect a cycle|binary search|sliding window|two pointers?|hash\s?(map|set|table)|\bstack\b|\bqueue\b|\bheap\b|\btrie\b|union[- ]find|dynamic programming|\bdp\b|backtracking|\brecursion\b|\bgraph\b|\btree\b|\bbfs\b|\bdfs\b|time complexity|space complexity|big[- ]?o)/i.test(textNoStackUpIdiom)) {
         return { intent: 'coding', confidence: 0.95, answerShape: INTENT_ANSWER_SHAPES.coding };
     }
 
@@ -608,4 +682,24 @@ export function clearIntentClassifierPoison(): void {
  */
 export function isIntentClassifierPoisoned(): boolean {
     return startupPoisoned;
+}
+
+/**
+ * Campaign 2 longsession (2026-07-19): public entry point for a raw
+ * zero-shot classification against the SAME shared worker/ONNX session
+ * this module already loads for intent classification, but for an
+ * arbitrary single label + custom hypothesis template rather than the
+ * fixed `ZERO_SHOT_LABEL_KEYS` intent set. See `AnswerRelevanceChecker.ts`
+ * for the concrete use (answer-relevance entailment checking). Returns
+ * null when the classifier isn't loaded/available or classification
+ * fails — callers MUST treat null as "skip this check", never as a
+ * negative/failing verdict.
+ */
+export async function classifyZeroShotRaw(
+    text: string,
+    labels: string[],
+    hypothesisTemplate?: string,
+): Promise<{ topLabel: string; topScore: number } | null> {
+    if (startupPoisoned) return null;
+    return ZeroShotClassifier.getInstance().classifyRaw(text, labels, hypothesisTemplate);
 }

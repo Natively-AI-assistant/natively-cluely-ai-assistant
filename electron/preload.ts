@@ -51,8 +51,21 @@ interface ElectronAPI {
 
   // LLM Model Management
   getCurrentLlmConfig: () => Promise<{
-    provider: 'ollama' | 'gemini';
+    provider: 'ollama' | 'gemini' | 'custom' | 'codex-cli';
+    /**
+     * @deprecated Use `modelId` for selection comparisons and `displayName`
+     * for UI labels. Kept as an alias of `modelId` for back-compat.
+     *
+     * **Behavior change**: prior to the display-name split, `model` returned
+     * the custom-provider *name* for custom providers and the *identifier*
+     * for everything else (an inconsistent surface). It now always returns
+     * the stable identifier — use `displayName` if you need the label.
+     */
     model: string;
+    /** Stable identifier suitable for equality checks and persistence. */
+    modelId: string;
+    /** Human-readable label suitable for UI rendering. */
+    displayName: string;
     isOllama: boolean;
   }>;
   getAvailableOllamaModels: () => Promise<string[]>;
@@ -311,7 +324,7 @@ interface ElectronAPI {
   onNativeAudioConnected: (callback: () => void) => () => void;
   onNativeAudioDisconnected: (callback: () => void) => () => void;
   onSuggestionGenerated: (
-    callback: (data: { question: string; suggestion: string; confidence: number }) => void,
+    callback: (data: { question: string; suggestion: string; confidence: number; sourceLabel?: string }) => void,
   ) => () => void;
   onSuggestionProcessingStart: (callback: () => void) => () => void;
   onSuggestionError: (callback: (error: { error: string }) => void) => () => void;
@@ -433,7 +446,7 @@ interface ElectronAPI {
   // Intelligence Mode Events
   onIntelligenceAssistUpdate: (callback: (data: { insight: string }) => void) => () => void;
   onIntelligenceSuggestedAnswer: (
-    callback: (data: { answer: string; question: string; confidence: number }) => void,
+    callback: (data: { answer: string; question: string; confidence: number; sourceLabel?: string; generationId?: number }) => void,
   ) => () => void;
   onIntelligenceSuggestedAnswerDiscard: (
     callback: (data: { reason: string }) => void,
@@ -1499,7 +1512,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   onSuggestionGenerated: (
-    callback: (data: { question: string; suggestion: string; confidence: number }) => void,
+    callback: (data: { question: string; suggestion: string; confidence: number; sourceLabel?: string }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('suggestion-generated', subscription);
@@ -1724,7 +1737,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   onIntelligenceSuggestedAnswer: (
-    callback: (data: { answer: string; question: string; confidence: number }) => void,
+    callback: (data: { answer: string; question: string; confidence: number; sourceLabel?: string; generationId?: number }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('intelligence-suggested-answer', subscription);

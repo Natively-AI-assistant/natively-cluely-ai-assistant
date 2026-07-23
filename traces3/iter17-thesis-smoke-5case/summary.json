@@ -1,0 +1,59 @@
+{
+  "runId": "c3-iter17-thesis-smoke",
+  "startedAt": "2026-07-20T05:28:06.911Z",
+  "modeId": "mode_cfe787dd-38b0-49bc-8c37-e0cf4d0ff060",
+  "source": {
+    "fileName": "institutional_thesis.pdf",
+    "binarySha256": "67e8206533b425d63cda1627ed9f6c2cbbcb2506051bf6c415c650026a28afb3",
+    "parser": "pdf-parse/PDFParse.getText",
+    "physicalPageCount": 66,
+    "extractedCharCount": 127403
+  },
+  "requestedSplits": [
+    "development"
+  ],
+  "casesRequested": 5,
+  "flags": {
+    "NATIVELY_CONTEXT_OS_BENCHMARK_AUDIT": "1",
+    "NATIVELY_CONTEXT_OS_PROMPT_AUDIT": "1",
+    "NATIVELY_CONTEXT_OS": "1",
+    "NATIVELY_CONTEXT_OS_MANUAL_CHAT": "1",
+    "NATIVELY_CONTEXT_OS_WTA": "1",
+    "NATIVELY_CONTEXT_OS_EVIDENCE_PACK": "1",
+    "NATIVELY_CONTEXT_OS_MEMORY_SAFETY": "1",
+    "NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES": "1",
+    "NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION": "1",
+    "NATIVELY_DOC_GROUNDED_STRICT_ISOLATION": "1",
+    "NATIVELY_OKF_KNOWLEDGE_PACKS": "1",
+    "NATIVELY_OKF_HYBRID_RETRIEVAL": "1",
+    "NATIVELY_RAG_CONFIDENCE_GATE": "1",
+    "NATIVELY_RAG_LOCAL_RERANK": "1"
+  },
+  "upload": {
+    "id": "ref_0a7450f2-7bd9-4e32-b444-9aee14b326d3",
+    "pageCount": 66,
+    "extractedPageCount": 66,
+    "binarySha256": "67e8206533b425d63cda1627ed9f6c2cbbcb2506051bf6c415c650026a28afb3",
+    "contentSha256": "5012df1fcc09379b6ff66596d9671ffb6701938f35e26c24bd3cde0f1d24e87b"
+  },
+  "indexStatuses": [
+    {
+      "fileId": "ref_0a7450f2-7bd9-4e32-b444-9aee14b326d3",
+      "fileName": "institutional_thesis.pdf",
+      "status": "ready",
+      "chunkCount": 200
+    }
+  ],
+  "finishedAt": "2026-07-20T05:28:13.751Z",
+  "resultCount": 5,
+  "providerCalls": 5,
+  "successes": 5,
+  "timedOut": 0,
+  "lineageFailures": [],
+  "contaminationFailures": [],
+  "deterministic": {
+    "passed": 5,
+    "total": 5
+  },
+  "resultsSha256": "d954a61e9708be1617bcd43e047d6e30ca3facc4525ca404fb2a4c4771755134"
+}

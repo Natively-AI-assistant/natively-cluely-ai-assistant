@@ -175,7 +175,7 @@ export interface EvidenceResolverDeps {
   getReferenceFiles: (modeId: string) => ReferenceFileLike[];
   hybridRetriever: HybridRetrieverLike;
   knowledgeManager: KnowledgeManagerLike;
-  classifyQuestion: (question: string) => { type: string; isSynthesis: boolean; targetEntities: string[] };
+  classifyQuestion: (question: string) => { type: string; isSynthesis: boolean; targetEntities: string[]; softEntities?: string[] };
   queryOkfCards: (
     pack: { cards: any[]; packVersion: number },
     question: string,
@@ -369,6 +369,16 @@ export class EvidenceResolver {
   ): EvidenceResolutionResult | null {
     const { question, sourceContract, requestedProperty, turnId } = request;
     const classification = this.deps.classifyQuestion(question);
+    const h4StageTrace = process.env.NATIVELY_E2E === '1'
+      && process.env.NATIVELY_H4_STAGE_TRACE === '1';
+    const markH4OkfStage = (stage: string, details: Record<string, unknown> = {}) => {
+      if (h4StageTrace) console.log('[TRACE:H4-OKF]', JSON.stringify({ stage, ...details }));
+    };
+    markH4OkfStage('classification', {
+      questionType: classification.type,
+      targetEntities: classification.targetEntities,
+      softEntities: classification.softEntities,
+    });
 
     const scoredAcrossFiles: Array<{ card: any; score: number; fileId: string }> = [];
     // All card bodies across the active files — used to measure query-term rarity
@@ -382,6 +392,17 @@ export class EvidenceResolver {
       for (const s of scored) scoredAcrossFiles.push({ ...s, fileId: file.id });
     }
     if (scoredAcrossFiles.length === 0) return null;
+    markH4OkfStage('scored_candidates', {
+      count: scoredAcrossFiles.length,
+      top: scoredAcrossFiles.slice()
+        .sort((left, right) => right.score - left.score)
+        .slice(0, 6)
+        .map((entry) => ({
+          score: Number(entry.score.toFixed(3)),
+          section: entry.card.sourceSections?.[0] || '',
+          entities: entry.card.entities || [],
+        })),
+    });
 
     // A synthesis question (main_topic/objectives/…) is satisfied by ALL
     // returned cards in document order — queryOkfCards already encodes that.
@@ -528,7 +549,14 @@ export class EvidenceResolver {
         forceDocumentGrounding: true,
         followUpReferentHint,
       });
-      markH4ResolverStage('hybrid_exit', { chunkCount: result.chunks?.length ?? 0, usedFallback: result.usedFallback });
+      markH4ResolverStage('hybrid_exit', {
+        chunkCount: result.chunks?.length ?? 0,
+        usedFallback: result.usedFallback,
+        propertyEvidence: result.chunks?.map((chunk) => ({
+          chunkIndex: chunk.chunkIndex,
+          provesRequestedProperty: textCanProveProperty(chunk.text, requestedProperty),
+        })),
+      });
     } catch (error: any) {
       markH4ResolverStage('hybrid_error', { message: error?.message || String(error) });
       return {

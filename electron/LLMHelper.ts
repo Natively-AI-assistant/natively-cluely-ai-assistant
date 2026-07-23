@@ -51,6 +51,7 @@ import { profileInterceptAllowedByRoute, modeAnswerType, type StreamRouteOptions
 import type { ActiveModeDocumentGroundingInfo } from "./services/ModesManager"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
 import { deepVariableReplacer, getByPath, injectImageIntoMessages } from './utils/curlUtils';
+import { getImageOptimizer } from './services/screen/ImageOptimizer';
 import curl2Json from "@bany/curl-to-json";
 import { CustomProvider, CurlProvider } from './services/CredentialsManager';
 import { TRIAL_SENTINEL_KEY } from './config/constants';
@@ -100,7 +101,7 @@ interface OllamaResponse {
 }
 
 // Model constants for Gemini (priority: flash-lite → flash → pro)
-const GEMINI_FLASH_MODEL = "gemini-3.5-flash"
+const GEMINI_FLASH_MODEL = "gemini-3.6-flash"
 const GEMINI_FLASH_LITE_MODEL = "gemini-3.1-flash-lite"
 const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 
@@ -177,7 +178,7 @@ function isCannedFallbackPhrase(text: string): boolean {
 }
 
 // ── Gemini thinking budget (THE dominant TTFT lever on Gemini 3.x Flash) ─────
-// Measured: gemini-3.5-flash with default (dynamic) thinking spent ~5.3s
+// Measured: gemini-3.6-flash with default (dynamic) thinking spent ~5.3s
 // "thinking" BEFORE the first content token on a tiny ~1.3K-token prompt — the
 // thinking phase is NOT streamed, so the user just sees a frozen UI for ~5s.
 // `thinkingBudget: 0` DISABLES thinking (SDK: "0 is DISABLED"), collapsing TTFT
@@ -2609,19 +2610,19 @@ const isMultimodal = !!(imagePaths?.length);
    */
   public async generateContentStructured(
     message: string,
-    // The Gemini block leads with flash-lite (fastest, cheapest) then 3.5-flash.
+    // The Gemini block leads with flash-lite (fastest, cheapest) then 3.6-flash.
     // `preferFast` no longer changes ordering (flash-lite is already first); it is
     // retained for API compatibility with latency-critical callers (live coaching).
     //
     // STRUCTURED-EXTRACTION ROUTING (resume/JD/other document ingestion): the
-    // Gemini chain here is intentionally flash-lite → 3.5-flash ONLY. A real
+    // Gemini chain here is intentionally flash-lite → 3.6-flash ONLY. A real
     // head-to-head on the actual extraction code showed flash-lite fully extracts
-    // (18 nodes) fastest; 3.5-flash is the correct single fallback; Gemini Pro
+    // (18 nodes) fastest; 3.6-flash is the correct single fallback; Gemini Pro
     // gives NO quality gain at ~4× latency; MiniMax-M3 severely UNDER-extracts. So
     // Pro/MiniMax/Groq are deliberately excluded from this path. Own-provider keys
     // (OpenAI/Claude/own-Gemini) are still tried first when present; the Natively
     // fallback carries `purpose:'extraction'` so the server runs its own
-    // flash-lite→3.5-flash-only loop (never MiniMax/Pro/Scout). The MAX_ROTATIONS
+    // flash-lite→3.6-flash-only loop (never MiniMax/Pro/Scout). The MAX_ROTATIONS
     // loop below gives the 3-cycle retry-then-fail behavior.
     opts?: { preferFast?: boolean },
   ): Promise<string> {
@@ -2661,14 +2662,14 @@ const isMultimodal = !!(imagePaths?.length);
       providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message) });
     }
 
-    // Priority 3: Gemini cascade — flash-lite → 3.5-flash ONLY (cheapest/fastest
+    // Priority 3: Gemini cascade — flash-lite → 3.6-flash ONLY (cheapest/fastest
     // first). Each model is a distinct provider so the rotation falls through
     // lite → flash on failure, and each carries its OWN circuit key so a saturated
     // tier (repeated 429s) trips independently without burning the other's backoff.
     // Gemini PRO is intentionally EXCLUDED from structured extraction: benchmarked
     // on the real extraction code it gave no quality gain over flash-lite at ~4×
     // latency. MiniMax is likewise excluded (it under-extracts). This is the
-    // flash-lite→3.5-flash extraction pattern.
+    // flash-lite→3.6-flash extraction pattern.
     if (this.client) {
       const buildGeminiProvider = (modelId: string): ProviderAttempt => ({
         name: `Gemini (${modelId})`,
@@ -2730,7 +2731,7 @@ const isMultimodal = !!(imagePaths?.length);
       providers.push({
         name: 'Natively API',
         // Structured extraction: tell the server this is an extraction request so
-        // it runs its dedicated flash-lite→3.5-flash-only loop (3 cycles then
+        // it runs its dedicated flash-lite→3.6-flash-only loop (3 cycles then
         // hard-fail) and NEVER falls through to MiniMax/Pro/Scout. Older servers
         // ignore the unknown field and route via their normal flash-first chain.
         execute: () => this.generateWithNatively(message, undefined, undefined, { purpose: 'extraction' })
@@ -2872,7 +2873,7 @@ const isMultimodal = !!(imagePaths?.length);
     if (this.groqFastTextMode) body.fast_mode = true;
 
     // EXTRACTION hint: opt-in signal that this is a structured document extraction
-    // (resume/JD). The server routes it through a dedicated flash-lite→3.5-flash
+    // (resume/JD). The server routes it through a dedicated flash-lite→3.6-flash
     // loop (3 cycles, then hard-fail) and NEVER escalates to MiniMax/Pro/Scout.
     // Advisory + backward-compatible: older servers drop the unknown field and use
     // their normal flash-first chain. Never combined with fast_mode (opposite intents).
@@ -3331,13 +3332,33 @@ const isMultimodal = !!(imagePaths?.length);
     const requestConfig = curl2Json(curlCommand);
 
     // 2. Prepare Image (if any)
+    //
+    // 2026-07-19 Custom Provider HTTP 400 fix: route the screenshot through
+    // getImageOptimizer() so retina-sized PNGs (often 3-15 MB → 4-20 MB after
+    // base64) get resized to <=1280px and recompressed as JPEG q85 with a 3.5
+    // MB cap. Anthropic rejects images larger than 10 MB base64-encoded, and
+    // OpenRouter forwards that rejection as a 400. Falls back to the raw read
+    // on optimizer failure so a Sharp crash never blocks a vision request.
     let base64Image = "";
     if (imagePath) {
       try {
-        const imageData = await fs.promises.readFile(imagePath);
-        base64Image = imageData.toString("base64");
+        const optimized = await getImageOptimizer().optimize(imagePath, {
+          profile: 'balanced',
+          provider: 'custom',
+          cacheKey: imagePath,
+        });
+        base64Image = await getImageOptimizer().getBase64(optimized);
       } catch (e) {
-        console.warn("Failed to read image for Custom Provider:", e);
+        console.warn(
+          "[LLMHelper] executeCustomProvider: image optimization failed, falling back to raw read:",
+          e,
+        );
+        try {
+          const imageData = await fs.promises.readFile(imagePath);
+          base64Image = imageData.toString("base64");
+        } catch (e2) {
+          console.warn("Failed to read image for Custom Provider:", e2);
+        }
       }
     }
 
@@ -3652,7 +3673,7 @@ const isMultimodal = !!(imagePaths?.length);
     // Each provider gets MAX_RETRIES_PER_PROVIDER attempts before moving on.
     // Providers are re-ordered dynamically when a provider is unavailable.
     // NOTE: ModelVersionManager folds flash-lite into the GEMINI_FLASH family
-    // (its baseline is 3.5-flash), so flash-lite never surfaces via tiers. We
+    // (its baseline is 3.6-flash), so flash-lite never surfaces via tiers. We
     // inject it explicitly ahead of the flash tier attempt below so the Gemini
     // cascade leads with the cheapest model.
     // ──────────────────────────────────────────────────────────────────
@@ -4428,7 +4449,14 @@ const isMultimodal = !!(imagePaths?.length);
     const documentGroundedCustomModeActive = (() => {
       try {
         const { ModesManager } = require('./services/ModesManager');
-        return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.().documentGroundedCustomModeActive === true;
+        // Grounding-campaign3 (2026-07-23): consult the t0-pinned mode id from
+        // the route options when the caller supplied one. The route's pin keeps
+        // LLMHelper's always-on document-grounded retrieval reading the SAME
+        // mode the request was planned against even when a mid-request
+        // `modes:set-active` lands while the request is parked at an await.
+        const mm = ModesManager.getInstance();
+        const pin = routeOptions?.pinnedModeId ?? null;
+        return mm.getActiveModeDocumentGroundingInfo?.(pin ?? undefined).documentGroundedCustomModeActive === true;
       } catch { return false; }
     })();
     if (documentGroundedCustomModeActive) {
@@ -4461,9 +4489,15 @@ const isMultimodal = !!(imagePaths?.length);
     if (documentGroundedCustomModeActive && !contextOsGovernedDocumentTurn) {
       try {
         const { ModesManager } = require('./services/ModesManager');
-        const groundingInfo = ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.();
-        const groundedContext = await ModesManager.getInstance()
-          .buildRetrievedActiveModeContextBlockHybrid(message, undefined, undefined, undefined, true);
+        const mm = ModesManager.getInstance();
+        // Same t0 pin as above — retrieve from the SAME mode the request was
+        // planned against, never the live mode that may have switched during
+        // an await (security audit 2026-07-23: unpinned live retrieval leaked
+        // a different mode's documents into an answer scoped to the first).
+        const pin = routeOptions?.pinnedModeId ?? undefined;
+        const groundingInfo = mm.getActiveModeDocumentGroundingInfo?.(pin);
+        const groundedContext = await mm
+          .buildRetrievedActiveModeContextBlockHybrid(message, undefined, undefined, undefined, true, pin);
         if (groundedContext && groundedContext.trim()) {
           const tagged = groundingInfo
             ? `[Document-grounded mode: ${groundingInfo.modeName}]\n${groundedContext}`
@@ -4574,17 +4608,24 @@ const isMultimodal = !!(imagePaths?.length);
     // root-cause trace.
     const isUniversalOverride = callerOriginallyPassedUniversalOverride;
     let modesMgrForInjection: {
-      getActiveModeDocumentGroundingInfo?: () => ActiveModeDocumentGroundingInfo;
-      getActiveModeSystemPromptSuffix: () => string;
+      getActiveModeDocumentGroundingInfo?: (pinnedModeId?: string) => ActiveModeDocumentGroundingInfo;
+      getActiveModeSystemPromptSuffix: (pinnedModeId?: string) => string;
+      getModeSnapshot?: (modeId: string) => unknown;
       buildRetrievedActiveModeContextBlock: (...args: any[]) => string;
       buildRetrievedActiveModeContextBlockHybrid?: (...args: any[]) => Promise<string>;
       getActiveModePinnedInstructions?: (...args: any[]) => string;
+      getReferenceFiles?: (modeId: string) => unknown[];
     } | null = null;
     let activeModeGroundingInfo: ActiveModeDocumentGroundingInfo | null = null;
     try {
       const { ModesManager } = require('./services/ModesManager');
       modesMgrForInjection = ModesManager.getInstance();
-      activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.();
+      // Grounding-campaign3 (2026-07-23): thread the t0 mode pin through every
+      // active-mode read below so the always-on injection cannot borrow a
+      // mid-request switch. When no pin is supplied the methods fall back to
+      // their existing live-singleton semantics (the pin field is optional).
+      const _pinnedModeId = routeOptions?.pinnedModeId ?? undefined;
+      activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.(_pinnedModeId);
     } catch { /* non-fatal: preserve legacy skip behavior if modes cannot load */ }
     const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
     const forceDocumentGrounding = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
@@ -4624,7 +4665,7 @@ const isMultimodal = !!(imagePaths?.length);
     if (!shouldSkipModeInjection) {
       try {
         const modesMgr = modesMgrForInjection || require('./services/ModesManager').ModesManager.getInstance();
-        const modePromptSuffix = modesMgr.getActiveModeSystemPromptSuffix();
+        const modePromptSuffix = modesMgr.getActiveModeSystemPromptSuffix(routeOptions?.pinnedModeId ?? undefined);
         // D1/R1: scope the mode's customContext by the REAL answer type when the
         // caller supplied one (modeAnswerType), so sensitive chunks (salary/
         // pricing) are correctly gated — included ONLY for a negotiation answer,
@@ -4681,7 +4722,17 @@ const isMultimodal = !!(imagePaths?.length);
             const { classifyQuestion } = require('./services/knowledge/QuestionClassifier');
             const { queryOkfCards } = require('./services/knowledge/OkfRetriever');
             const { KnowledgeManager } = require('./services/knowledge/KnowledgeManager');
-            const activeModeRow = modesMgr.getActiveMode?.();
+            // Grounding-campaign3 (2026-07-23): resolve the t0-pinned mode row.
+            // Live singleton read here was the third always-on unpinned read the
+            // security audit flagged; without this pin the entire Context-OS-
+            // governed path could leak a different mode's evidence after a mid-
+            // request mode switch. modeSnapshots are returned frozen by
+            // getModeSnapshot(); .getActiveMode() returns the live row, both
+            // supply the same row shape the EvidenceResolver expects.
+            const _pinnedModeIdEvidenceResolver = routeOptions?.pinnedModeId ?? null;
+            const activeModeRow = _pinnedModeIdEvidenceResolver
+              ? (modesMgr.getModeSnapshot?.(_pinnedModeIdEvidenceResolver) ?? modesMgr.getActiveMode?.())
+              : modesMgr.getActiveMode?.();
             if (activeModeRow) {
               const resolver = new EvidenceResolver({
                 getModeSnapshot: () => activeModeRow,
@@ -4791,7 +4842,7 @@ const isMultimodal = !!(imagePaths?.length);
             // Pass undefined for tokenBudget when doc-grounded — the retriever
             // auto-upgrades to DOC_GROUNDED_TOKEN_BUDGET (3600) internally.
             const hybridPromise = modesMgr.buildRetrievedActiveModeContextBlockHybrid(
-              message, context, forceDocumentGrounding ? undefined : 1800, modeAnswerType(routeOptions), true, undefined, /* allowRerank */ true,
+              message, context, forceDocumentGrounding ? undefined : 1800, modeAnswerType(routeOptions), true, routeOptions?.pinnedModeId ?? undefined, /* allowRerank */ true,
               { forceDocumentGrounding, followUpReferentHint: routeOptions?.followUpReferentHint },
             );
             const raced = await Promise.race([
@@ -4823,12 +4874,23 @@ const isMultimodal = !!(imagePaths?.length);
         if (!usedRerankPath && !governedEvidenceResolutionStarted) {
           // Pass undefined for tokenBudget when doc-grounded — the retriever
           // auto-upgrades to DOC_GROUNDED_TOKEN_BUDGET (3600) internally.
-          modeContextBlock = modesMgr.buildRetrievedActiveModeContextBlock(message, context, forceDocumentGrounding ? undefined : 1800, modeAnswerType(routeOptions), true, undefined, { forceDocumentGrounding, followUpReferentHint: routeOptions?.followUpReferentHint });
+          modeContextBlock = modesMgr.buildRetrievedActiveModeContextBlock(message, context, forceDocumentGrounding ? undefined : 1800, modeAnswerType(routeOptions), true, routeOptions?.pinnedModeId ?? undefined, { forceDocumentGrounding, followUpReferentHint: routeOptions?.followUpReferentHint });
+        }
+        // Root-cause fix (2026-07-23): surface the block this generation call
+        // actually used back to the caller, regardless of governance state
+        // (typed pack, legacy hybrid, or sync lexical) — see
+        // ContextOsGenerationContext.retrievedBlockRaw. Consolidates retrieval
+        // to a single call per turn: a post-stream validator (e.g.
+        // ipcHandlers.ts's doc-grounded gate) can reuse this instead of
+        // independently re-retrieving with different query/budget params.
+        if (modeContextBlock) {
+          const _cogRetrieved = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;
+          if (_cogRetrieved) (_cogRetrieved as any).retrievedBlockRaw = modeContextBlock;
         }
         // The mode's user-authored "Real-time prompt", deterministic — applies on
         // every answer instead of only when retrieval happened to score it.
         // Sensitivity-scoped by answer type inside the accessor.
-        const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions)) || '';
+        const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions), routeOptions?.pinnedModeId ?? undefined) || '';
 
         if (modePromptSuffix) {
           const baseForMode = systemPromptOverride || HARD_SYSTEM_PROMPT;
@@ -4947,7 +5009,17 @@ const isMultimodal = !!(imagePaths?.length);
         const { isOkfHybridRetrievalEnabled } = require('./intelligence/intelligenceFlags');
         if (isOkfHybridRetrievalEnabled()) {
           const modesMgr = modesMgrForInjection || require('./services/ModesManager').ModesManager.getInstance();
-          const activeMode = modesMgr.getActiveMode?.();
+          // Grounding-campaign3 (2026-07-23): honor the t0 pin. OKF card
+          // retrieval here is one of the three "always-on" unpinned reads the
+          // security audit flagged; without this guard a mid-request mode
+          // switch feeds the second mode's OKF cards into an answer scoped to
+          // the first. When no pin is supplied we deliberately fall through
+          // to the live singleton (legacy manual-chat callers don't carry
+          // routeOptions.pinnedModeId and must keep their existing behavior).
+          const pinnedModeId = routeOptions?.pinnedModeId ?? null;
+          const activeMode = pinnedModeId
+            ? modesMgr.getModeSnapshot?.(pinnedModeId) ?? null
+            : modesMgr.getActiveMode?.();
           if (activeMode) {
             const { KnowledgeManager } = require('./services/knowledge/KnowledgeManager');
             const { classifyQuestion } = require('./services/knowledge/QuestionClassifier');
@@ -6806,10 +6878,27 @@ const isMultimodal = !!(imagePaths?.length);
     let base64Image = "";
     if (imagePaths?.length) {
       try {
-        // Use the first image for custom providers (they typically only support one)
-        const data = await fs.promises.readFile(imagePaths[0]);
-        base64Image = data.toString("base64");
-      } catch (e) { }
+        // 2026-07-19: same image-size fix as executeCustomProvider (see that
+        // method for the full rationale). Optimize before base64-encoding so the
+        // wire payload stays under the 10 MB Anthropic per-image limit.
+        // Use the first image for custom providers (they typically only support one).
+        const sourcePath = imagePaths[0];
+        const optimized = await getImageOptimizer().optimize(sourcePath, {
+          profile: 'balanced',
+          provider: 'custom',
+          cacheKey: sourcePath,
+        });
+        base64Image = await getImageOptimizer().getBase64(optimized);
+      } catch (e) {
+        console.warn(
+          "[LLMHelper] streamWithCustom: image optimization failed, falling back to raw read:",
+          e,
+        );
+        try {
+          const data = await fs.promises.readFile(imagePaths[0]);
+          base64Image = data.toString("base64");
+        } catch (e2) { /* keep empty */ }
+      }
     }
 
     const combinedMessage = context ? `${context}\n\n${message}` : message;
@@ -7204,6 +7293,26 @@ const isMultimodal = !!(imagePaths?.length);
   }
 
   public getCurrentModel(): string {
+    return this.getCurrentModelDisplayName();
+  }
+
+  /**
+   * Always returns a stable identifier (model ID, ollama model name, or custom
+   * provider UUID) suitable for equality checks and persistence. Avoid using
+   * {@link getCurrentModel} / {@link getCurrentModelDisplayName} for selection
+   * comparisons — those return a display string that does not match option IDs.
+   */
+  public getCurrentModelId(): string {
+    if (this.customProvider) return this.customProvider.id;
+    if (this.activeCurlProvider) return this.activeCurlProvider.id;
+    return this.useOllama ? this.ollamaModel : this.currentModelId;
+  }
+
+  /**
+   * Human-readable label for the active model. Prefer this for UI rendering
+   * and never compare the result to option IDs (use {@link getCurrentModelId}).
+   */
+  public getCurrentModelDisplayName(): string {
     if (this.customProvider) return this.customProvider.name;
     if (this.activeCurlProvider) return this.activeCurlProvider.id;
     return this.useOllama ? this.ollamaModel : this.currentModelId;

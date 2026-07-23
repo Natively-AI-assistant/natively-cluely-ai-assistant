@@ -156,6 +156,9 @@ export class WhatToAnswerLLM {
         // so the two are now derived from the same t0 decision. Optional →
         // absent for existing callers/tests (backward compatible).
         requestSnapshot?: WhatToAnswerRequestSnapshot,
+        // The request-owned WTA controller. A newer WTA trigger aborts it so the
+        // provider request ends rather than continuing as a hidden stale stream.
+        abortSignal?: AbortSignal,
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
         let tStart = 0, tIntent = 0, tTemporal = 0, tMode = 0, tTrunc = 0, tPrompt = 0, tStreamStart = 0;
@@ -218,10 +221,18 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 initialContextOsGeneration?.govern
                 && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled'),
             );
-            let governedEvidencePack: import('../intelligence/context-os').EvidencePack | null = null;
+            // A multi-family coordinator may have already resolved one bounded
+            // packet before this generator begins. Preserve that exact packet by
+            // identity: re-running EvidenceResolver here would discard profile/JD
+            // items, create a second factual authority, and race the active mode.
+            // Legacy document-only WTA contexts arrive without a pack and retain
+            // the existing resolver path below.
+            let governedEvidencePack: import('../intelligence/context-os').EvidencePack | null =
+                initialContextOsGeneration?.evidencePack ?? null;
             // Skill mode owns the system prompt — skip the (potentially expensive
-            // hybrid retrieval) mode-context block fetch entirely.
-            if (!activeSkill) {
+            // hybrid retrieval) mode-context block fetch entirely. A pre-resolved
+            // governed packet likewise skips legacy/raw retrieval.
+            if (!activeSkill && !governedEvidencePack) {
                 try {
                     const modesManager = this.getModesManager();
                     // Phase 4 — prefer async hybrid retrieval (FTS + vector with
@@ -666,16 +677,43 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 || Boolean(!documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses && temporalContext.previousResponses.length > 0);
             if (hasProfileHistory) packetScopes.push('profile_history');
             // Coding/DSA answers get a small reasoning budget for correctness;
-            // everything else streams with thinking off (fastest TTFT). abortSignal
-            // is undefined here (WTA uses generation-id supersession, not a signal).
+            // everything else streams with thinking off (fastest TTFT). The WTA
+            // request signal is threaded to LLMHelper so generation supersession
+            // terminates the provider stream, not just its visible token delivery.
             // Optional-safe: older/stub helpers may not expose the resolver.
             const wtaThinkingBudget = this.llmHelper.thinkingBudgetForAnswerType?.(
                 Boolean(answerPlan && isCodingAnswerType(answerPlan.answerType)),
             );
-            const wtaRouteOptions = governedEvidencePack && requestSnapshot?.contextOsGeneration
-                ? { answerType: answerPlan?.answerType, contextOsGeneration: requestSnapshot.contextOsGeneration }
-                : { answerType: answerPlan?.answerType };
-            for await (const token of this.llmHelper.streamChat(packet.userMessage, imagePaths, undefined, finalPromptOverride, true, true, packetScopes, undefined, wtaThinkingBudget, wtaRouteOptions)) {
+            // Grounding-campaign3 (2026-07-23): thread the RESOLVED pack, not the
+            // local `governedEvidencePack` variable. A multi-family coordinator
+            // pre-built `_cog.evidencePack` for a non-doc-grounded turn skips the
+            // `governedEvidenceResolutionStarted` branch above, so this gate was
+            // silently dropping `contextOsGeneration` and skipping the final-prompt
+            // validator in LLMHelper. Reuse the same `pack` constant rendered into
+            // the prompt for parity with the governance block.
+            const governedWtaContextOs = requestSnapshot?.contextOsGeneration as
+                import('../intelligence/context-os').ContextOsGenerationContext | undefined;
+            const resolvedGovernedPack: import('../intelligence/context-os').EvidencePack | null = (
+                governedWtaContextOs && governedWtaContextOs.govern
+                    ? (governedEvidencePack ?? governedWtaContextOs.evidencePack ?? null)
+                    : null
+            );
+            const wtaRouteOptions = resolvedGovernedPack && governedWtaContextOs
+                ? {
+                    answerType: answerPlan?.answerType,
+                    contextOsGeneration: governedWtaContextOs,
+                    // Grounding-campaign3 (2026-07-23): thread the t0 mode pin so
+                    // LLMHelper._streamChatInner's always-on document-grounded
+                    // retrieval reads the SAME mode the request was planned
+                    // against. Without this, a mid-request mode switch could
+                    // leak a different mode's documents into the answer.
+                    pinnedModeId: requestSnapshot?.modeUniqueId ?? null,
+                }
+                : {
+                    answerType: answerPlan?.answerType,
+                    pinnedModeId: requestSnapshot?.modeUniqueId ?? null,
+                };
+            for await (const token of this.llmHelper.streamChat(packet.userMessage, imagePaths, undefined, finalPromptOverride, true, true, packetScopes, abortSignal, wtaThinkingBudget, wtaRouteOptions)) {
                 if (MEASURE) {
                     const now = performance.now();
                     if (!tFirstToken) tFirstToken = now;

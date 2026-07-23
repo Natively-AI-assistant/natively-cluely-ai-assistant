@@ -122,7 +122,16 @@ export class ProfileEvidenceService {
         const sourceRef = String((item as any)?.sourceRef ?? '');
         const isJd = (item as any)?.sourceKind === 'profile_jd'
           || /\bjd\b|job.?description/i.test(sourceRef);
-        const sourceKind = isJd ? 'profile_jd' as const : 'profile_resume' as const;
+        const isProject = !isJd && (item as any)?.sourceKind === 'projects';
+        // Preserve the legacy selector's project family as the canonical
+        // profile_project kind. Collapsing it into profile_resume makes the
+        // coordinator believe a required `projects` family is starved even
+        // when it retrieved the exact project evidence.
+        const sourceKind = isJd
+          ? 'profile_jd' as const
+          : isProject
+            ? 'profile_project' as const
+            : 'profile_resume' as const;
         const canProve = !isJd && textCanProveProperty(text, contract.requestedProperty);
         items.push({
           evidenceId: `${contract.turnId}:profile:${i++}`,

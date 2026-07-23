@@ -11,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const inputRoot = path.join(repoRoot, 'test-fixtures/modes-corpus/thesis');
 const thesisPath = path.join(inputRoot, 'institutional_thesis.pdf');
-const question = 'Hey, do you know how much Mercury X1 weighs?';
+const question = process.env.NATIVELY_H4_QUESTION || 'Hey, do you know how much Mercury X1 weighs?';
 const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-h4-stage-'));
 
 const env = {
@@ -95,7 +95,7 @@ const promptAudit = await invoke('__e2e__:context-os-prompt-audit');
 const benchmarkAudit = await invoke('__e2e__:context-os-benchmark-audit');
 const providerPayloads = await app.evaluate(() => globalThis.__contextOsProviderPayloadCapture || []);
 const stageLogs = mainLogs.join('').split('\n').filter((line) =>
-  line.includes('[TRACE:H4-STAGE]') || line.includes('[TRACE:H4-RESOLVER]') || line.includes('[TRACE:H4-HYBRID]'),
+  line.includes('[TRACE:H4-STAGE]') || line.includes('[TRACE:H4-RESOLVER]') || line.includes('[TRACE:H4-HYBRID]') || line.includes('[TRACE:H4-OKF]'),
 );
 
 console.log('H4_CONVERSATIONAL_STAGE_BEGIN');

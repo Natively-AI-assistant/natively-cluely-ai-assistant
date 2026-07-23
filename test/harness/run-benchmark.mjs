@@ -75,13 +75,20 @@ const scoreDeterministic = (testCase, answer) => {
   const anyOf = rubric.anyOfFacts || [];
   const forbidden = rubric.forbiddenFacts || [];
   const refusalExpected = rubric.refusalExpected === true;
+  const nonEmptyResponse = rubric.nonEmptyResponse === true;
   const hasAllRequired = required.every((fact) => text.includes(normal(fact)));
   const hasAnyOf = anyOf.length === 0 || anyOf.some((fact) => text.includes(normal(fact)));
   const hasForbidden = forbidden.some((fact) => normal(fact) && text.includes(normal(fact)));
   const isRefusal = /could not find that in the retrieved sections|not (?:directly )?(?:mentioned|stated|reported)|does not (?:state|claim|report)|no .*?(?:reported|mentioned|stated)/i.test(answer);
-  const pass = refusalExpected
-    ? isRefusal && !hasForbidden
-    : hasAllRequired && hasAnyOf && !hasForbidden;
+  // Pass logic: for refusalExpected cases, pass when the answer is a refusal
+  // and doesn't include any forbidden fact. For nonEmptyResponse cases (subjective
+  // or negative-knowledge questions that just need ANY substantive reply), pass when
+  // the answer is non-empty and not just a meta-refusal. For standard cases, pass
+  // when all required/anyOf facts appear and no forbidden fact appears.
+  let pass;
+  if (refusalExpected) pass = isRefusal && !hasForbidden;
+  else if (nonEmptyResponse) pass = !isRefusal && text.length >= 30;
+  else pass = hasAllRequired && hasAnyOf && !hasForbidden;
   return { pass, hasAllRequired, hasAnyOf, hasForbidden, isRefusal, required, anyOf, forbidden };
 };
 

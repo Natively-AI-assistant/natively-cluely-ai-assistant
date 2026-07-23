@@ -284,7 +284,7 @@ describe('KnowledgeOrchestrator — degenerate JD extraction quality gate', () =
 //
 // Reproduces the real user log: the extraction model returned VALID JSON with a
 // name but an EMPTY body, which parsed fine, so `Created 0 atomic nodes` and the
-// profile was effectively empty. Under the flash-lite→3.5-flash extraction
+// profile was effectively empty. Under the flash-lite→3.6-flash extraction
 // pattern there is NO stronger model to escalate to (Pro/MiniMax are excluded by
 // design), so on a degenerate-but-valid result the orchestrator falls to the
 // deterministic heuristic, which recovers name/experience/education from the raw
@@ -339,7 +339,7 @@ describe('KnowledgeOrchestrator — degenerate resume → heuristic fallback', (
         assert.equal(orchestrator.activeResume?.structured_data?._extraction_mode, 'heuristic');
     });
 
-    test('there is no strong-model escalation hook (extraction is flash-lite→3.5-flash only)', () => {
+    test('there is no strong-model escalation hook (extraction is flash-lite→3.6-flash only)', () => {
         // The stronger-model escalation was removed — extraction never escalates to
         // Pro/MiniMax. This guards against re-introducing a strong-fn setter.
         assert.equal(typeof orchestrator.setStrongGenerateContentFn, 'undefined');
