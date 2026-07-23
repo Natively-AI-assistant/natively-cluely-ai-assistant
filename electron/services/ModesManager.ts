@@ -460,6 +460,7 @@ export class ModesManager {
         'technical-interview',
         'team-meet',
         'lecture',
+        'seminar',
     ]);
 
     /**
@@ -739,6 +740,37 @@ export class ModesManager {
 
     public getReferenceFiles(modeId: string): ModeReferenceFile[] {
         return DatabaseManager.getInstance().getReferenceFiles(modeId).map(rowToFile);
+    }
+
+    /**
+     * Return one immutable mode record captured by an answer request at t0.
+     *
+     * `getActiveModeInfo()` intentionally returns a narrow planner snapshot; the
+     * governed EvidenceResolver additionally needs the mode's template/context
+     * fields. The only valid capture target is the current active mode at t0;
+     * reject a mismatched id instead of falling forward to a different active
+     * mode. This avoids a full mode-list scan on the latency-critical path.
+     */
+    public getModeSnapshot(modeId: string): Readonly<Mode> | null {
+        const mode = this.getActiveMode();
+        if (!mode || mode.id !== modeId) return null;
+        // Deep-freeze at runtime for genuine request-scoped immutability. The
+        // frozen arrays widen to `readonly T[]` which TS cannot assign back to
+        // the mutable `Mode` shape, so cast through unknown — the runtime object
+        // is strictly narrower (frozen) than the declared type, never wider.
+        const frozen = {
+            ...mode,
+            sourceContract: mode.sourceContract
+                ? Object.freeze({
+                    ...mode.sourceContract,
+                    allowedExplicitSwitches: Object.freeze([...mode.sourceContract.allowedExplicitSwitches]),
+                    groundingProfile: mode.sourceContract.groundingProfile
+                        ? Object.freeze({ ...mode.sourceContract.groundingProfile })
+                        : mode.sourceContract.groundingProfile,
+                  })
+                : null,
+        };
+        return Object.freeze(frozen) as unknown as Readonly<Mode>;
     }
 
     public addReferenceFile(params: {

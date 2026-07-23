@@ -85,6 +85,7 @@ export {
 export {
   TurnEvidenceCoordinator,
   allocateRequiredEvidenceFamilies,
+  DEFAULT_EVIDENCE_PACK_MAX_CHARS,
   type RequiredFamilyFailure,
   type TurnEvidenceCoordinatorInput,
   type TurnEvidenceCoordinatorResult,

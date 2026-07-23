@@ -48,6 +48,16 @@ export interface StreamRouteOptions {
    * narrows it to `ContextOsGenerationContext` at the use site. Absent → legacy.
    */
   contextOsGeneration?: unknown;
+  /**
+   * Grounding-campaign3 (2026-07-23): the t0-pinned mode id captured at request
+   * start. When set, LLMHelper's always-on document-grounded retrieval reads the
+   * SAME mode the request was planned against, even across awaits where the live
+   * `ModesManager` singleton might have flipped. Without this pin, a mid-
+   * request `modes:set-active` could leak a different mode's document content
+   * into an answer the contract declares is scoped to the first mode. Absent
+   * → legacy live singleton reads (see security audit 2026-07-23).
+   */
+  pinnedModeId?: string | null;
 }
 
 /**

@@ -4449,7 +4449,14 @@ const isMultimodal = !!(imagePaths?.length);
     const documentGroundedCustomModeActive = (() => {
       try {
         const { ModesManager } = require('./services/ModesManager');
-        return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.().documentGroundedCustomModeActive === true;
+        // Grounding-campaign3 (2026-07-23): consult the t0-pinned mode id from
+        // the route options when the caller supplied one. The route's pin keeps
+        // LLMHelper's always-on document-grounded retrieval reading the SAME
+        // mode the request was planned against even when a mid-request
+        // `modes:set-active` lands while the request is parked at an await.
+        const mm = ModesManager.getInstance();
+        const pin = routeOptions?.pinnedModeId ?? null;
+        return mm.getActiveModeDocumentGroundingInfo?.(pin ?? undefined).documentGroundedCustomModeActive === true;
       } catch { return false; }
     })();
     if (documentGroundedCustomModeActive) {
@@ -4482,9 +4489,15 @@ const isMultimodal = !!(imagePaths?.length);
     if (documentGroundedCustomModeActive && !contextOsGovernedDocumentTurn) {
       try {
         const { ModesManager } = require('./services/ModesManager');
-        const groundingInfo = ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.();
-        const groundedContext = await ModesManager.getInstance()
-          .buildRetrievedActiveModeContextBlockHybrid(message, undefined, undefined, undefined, true);
+        const mm = ModesManager.getInstance();
+        // Same t0 pin as above — retrieve from the SAME mode the request was
+        // planned against, never the live mode that may have switched during
+        // an await (security audit 2026-07-23: unpinned live retrieval leaked
+        // a different mode's documents into an answer scoped to the first).
+        const pin = routeOptions?.pinnedModeId ?? undefined;
+        const groundingInfo = mm.getActiveModeDocumentGroundingInfo?.(pin);
+        const groundedContext = await mm
+          .buildRetrievedActiveModeContextBlockHybrid(message, undefined, undefined, undefined, true, pin);
         if (groundedContext && groundedContext.trim()) {
           const tagged = groundingInfo
             ? `[Document-grounded mode: ${groundingInfo.modeName}]\n${groundedContext}`
@@ -4595,17 +4608,24 @@ const isMultimodal = !!(imagePaths?.length);
     // root-cause trace.
     const isUniversalOverride = callerOriginallyPassedUniversalOverride;
     let modesMgrForInjection: {
-      getActiveModeDocumentGroundingInfo?: () => ActiveModeDocumentGroundingInfo;
-      getActiveModeSystemPromptSuffix: () => string;
+      getActiveModeDocumentGroundingInfo?: (pinnedModeId?: string) => ActiveModeDocumentGroundingInfo;
+      getActiveModeSystemPromptSuffix: (pinnedModeId?: string) => string;
+      getModeSnapshot?: (modeId: string) => unknown;
       buildRetrievedActiveModeContextBlock: (...args: any[]) => string;
       buildRetrievedActiveModeContextBlockHybrid?: (...args: any[]) => Promise<string>;
       getActiveModePinnedInstructions?: (...args: any[]) => string;
+      getReferenceFiles?: (modeId: string) => unknown[];
     } | null = null;
     let activeModeGroundingInfo: ActiveModeDocumentGroundingInfo | null = null;
     try {
       const { ModesManager } = require('./services/ModesManager');
       modesMgrForInjection = ModesManager.getInstance();
-      activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.();
+      // Grounding-campaign3 (2026-07-23): thread the t0 mode pin through every
+      // active-mode read below so the always-on injection cannot borrow a
+      // mid-request switch. When no pin is supplied the methods fall back to
+      // their existing live-singleton semantics (the pin field is optional).
+      const _pinnedModeId = routeOptions?.pinnedModeId ?? undefined;
+      activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.(_pinnedModeId);
     } catch { /* non-fatal: preserve legacy skip behavior if modes cannot load */ }
     const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
     const forceDocumentGrounding = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
@@ -4645,7 +4665,7 @@ const isMultimodal = !!(imagePaths?.length);
     if (!shouldSkipModeInjection) {
       try {
         const modesMgr = modesMgrForInjection || require('./services/ModesManager').ModesManager.getInstance();
-        const modePromptSuffix = modesMgr.getActiveModeSystemPromptSuffix();
+        const modePromptSuffix = modesMgr.getActiveModeSystemPromptSuffix(routeOptions?.pinnedModeId ?? undefined);
         // D1/R1: scope the mode's customContext by the REAL answer type when the
         // caller supplied one (modeAnswerType), so sensitive chunks (salary/
         // pricing) are correctly gated — included ONLY for a negotiation answer,
@@ -4702,7 +4722,17 @@ const isMultimodal = !!(imagePaths?.length);
             const { classifyQuestion } = require('./services/knowledge/QuestionClassifier');
             const { queryOkfCards } = require('./services/knowledge/OkfRetriever');
             const { KnowledgeManager } = require('./services/knowledge/KnowledgeManager');
-            const activeModeRow = modesMgr.getActiveMode?.();
+            // Grounding-campaign3 (2026-07-23): resolve the t0-pinned mode row.
+            // Live singleton read here was the third always-on unpinned read the
+            // security audit flagged; without this pin the entire Context-OS-
+            // governed path could leak a different mode's evidence after a mid-
+            // request mode switch. modeSnapshots are returned frozen by
+            // getModeSnapshot(); .getActiveMode() returns the live row, both
+            // supply the same row shape the EvidenceResolver expects.
+            const _pinnedModeIdEvidenceResolver = routeOptions?.pinnedModeId ?? null;
+            const activeModeRow = _pinnedModeIdEvidenceResolver
+              ? (modesMgr.getModeSnapshot?.(_pinnedModeIdEvidenceResolver) ?? modesMgr.getActiveMode?.())
+              : modesMgr.getActiveMode?.();
             if (activeModeRow) {
               const resolver = new EvidenceResolver({
                 getModeSnapshot: () => activeModeRow,
@@ -4812,7 +4842,7 @@ const isMultimodal = !!(imagePaths?.length);
             // Pass undefined for tokenBudget when doc-grounded — the retriever
             // auto-upgrades to DOC_GROUNDED_TOKEN_BUDGET (3600) internally.
             const hybridPromise = modesMgr.buildRetrievedActiveModeContextBlockHybrid(
-              message, context, forceDocumentGrounding ? undefined : 1800, modeAnswerType(routeOptions), true, undefined, /* allowRerank */ true,
+              message, context, forceDocumentGrounding ? undefined : 1800, modeAnswerType(routeOptions), true, routeOptions?.pinnedModeId ?? undefined, /* allowRerank */ true,
               { forceDocumentGrounding, followUpReferentHint: routeOptions?.followUpReferentHint },
             );
             const raced = await Promise.race([
@@ -4844,12 +4874,12 @@ const isMultimodal = !!(imagePaths?.length);
         if (!usedRerankPath && !governedEvidenceResolutionStarted) {
           // Pass undefined for tokenBudget when doc-grounded — the retriever
           // auto-upgrades to DOC_GROUNDED_TOKEN_BUDGET (3600) internally.
-          modeContextBlock = modesMgr.buildRetrievedActiveModeContextBlock(message, context, forceDocumentGrounding ? undefined : 1800, modeAnswerType(routeOptions), true, undefined, { forceDocumentGrounding, followUpReferentHint: routeOptions?.followUpReferentHint });
+          modeContextBlock = modesMgr.buildRetrievedActiveModeContextBlock(message, context, forceDocumentGrounding ? undefined : 1800, modeAnswerType(routeOptions), true, routeOptions?.pinnedModeId ?? undefined, { forceDocumentGrounding, followUpReferentHint: routeOptions?.followUpReferentHint });
         }
         // The mode's user-authored "Real-time prompt", deterministic — applies on
         // every answer instead of only when retrieval happened to score it.
         // Sensitivity-scoped by answer type inside the accessor.
-        const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions)) || '';
+        const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions), routeOptions?.pinnedModeId ?? undefined) || '';
 
         if (modePromptSuffix) {
           const baseForMode = systemPromptOverride || HARD_SYSTEM_PROMPT;
@@ -4968,7 +4998,17 @@ const isMultimodal = !!(imagePaths?.length);
         const { isOkfHybridRetrievalEnabled } = require('./intelligence/intelligenceFlags');
         if (isOkfHybridRetrievalEnabled()) {
           const modesMgr = modesMgrForInjection || require('./services/ModesManager').ModesManager.getInstance();
-          const activeMode = modesMgr.getActiveMode?.();
+          // Grounding-campaign3 (2026-07-23): honor the t0 pin. OKF card
+          // retrieval here is one of the three "always-on" unpinned reads the
+          // security audit flagged; without this guard a mid-request mode
+          // switch feeds the second mode's OKF cards into an answer scoped to
+          // the first. When no pin is supplied we deliberately fall through
+          // to the live singleton (legacy manual-chat callers don't carry
+          // routeOptions.pinnedModeId and must keep their existing behavior).
+          const pinnedModeId = routeOptions?.pinnedModeId ?? null;
+          const activeMode = pinnedModeId
+            ? modesMgr.getModeSnapshot?.(pinnedModeId) ?? null
+            : modesMgr.getActiveMode?.();
           if (activeMode) {
             const { KnowledgeManager } = require('./services/knowledge/KnowledgeManager');
             const { classifyQuestion } = require('./services/knowledge/QuestionClassifier');

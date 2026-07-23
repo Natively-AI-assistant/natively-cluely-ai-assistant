@@ -32,6 +32,7 @@ import {
 } from './llm/documentGroundedPrompt';
 import type { ActiveModeInfo } from './llm/modeProfiles';
 import type { WhatToAnswerRequestSnapshot } from './llm/whatToAnswerRequestSnapshot';
+import { resolveCanonicalTurn } from './llm/resolveCanonicalTurn';
 import { buildGracefulRetry } from './llm/manualProfileIntelligence';
 import { CodingStreamGate } from './llm/codingStreamGate';
 import { isCodeVerificationEnabled } from './llm/codeVerification/verificationEnabled';
@@ -164,6 +165,14 @@ export class IntelligenceEngine extends EventEmitter {
 
     // Concurrency tracking
     private assistCancellationToken: AbortController | null = null;
+    /** The active What-to-Answer provider request. Replaced synchronously at t0
+     * so a newer WTA request terminates the prior network stream instead of only
+     * hiding its tokens with generation-id checks. */
+    private whatToAnswerCancellationToken: AbortController | null = null;
+    /** Background work (currently code verification) outlives a visible WTA
+     * answer, so it owns child controllers which a later WTA request/reset can
+     * still cancel after the foreground controller has been released. */
+    private readonly whatToAnswerBackgroundCancellationTokens = new Set<AbortController>();
     private currentGenerationId: number = 0;
 
     // Keep reference to LLMHelper for client access
@@ -809,6 +818,27 @@ export class IntelligenceEngine extends EventEmitter {
             this.assistCancellationToken = null;
         }
 
+        // A WTA request owns exactly one provider AbortSignal. Superseding it
+        // must cancel the upstream request immediately; generation IDs remain
+        // the delivery/persistence backstop for already queued work.
+        if (this.whatToAnswerCancellationToken) {
+            this.whatToAnswerCancellationToken.abort('superseded');
+        }
+        for (const controller of this.whatToAnswerBackgroundCancellationTokens) {
+            controller.abort('superseded');
+        }
+        this.whatToAnswerBackgroundCancellationTokens.clear();
+        const whatToAnswerCancellationToken = new AbortController();
+        this.whatToAnswerCancellationToken = whatToAnswerCancellationToken;
+        // Allocate the generation id before the first await. If an older request
+        // resumes after this point, it can only observe itself as superseded; it
+        // must never mint a newer id and overtake this request.
+        const generationId = ++this.currentGenerationId;
+        const isWtaSuperseded = () => (
+            this.whatToAnswerCancellationToken !== whatToAnswerCancellationToken
+            || this.currentGenerationId !== generationId
+        );
+
         this.setMode('what_to_say');
         // Speculative runs don't stamp lastTriggerTime at start — the cooldown slot
         // is reserved for the real trigger. We stamp it only on successful completion.
@@ -845,6 +875,58 @@ export class IntelligenceEngine extends EventEmitter {
         const snapshotModeInfo = this.getActiveModeInfo();
         const documentGroundedCustomModeActive = snapshotModeInfo?.documentGroundedCustomModeActive === true;
         const snapshotModeId = this.getActiveModeId();
+        // The narrow ActiveModeInfo snapshot is enough for planning, but a
+        // multi-family typed reference pack also needs the full mode row and its
+        // reference files. Capture both at the same t0 boundary: a later mode
+        // edit/switch/deletion must not change what the request considers source
+        // evidence. The mode resolver uses its exact persisted id (not the
+        // template-type marker above), and never falls forward to the live mode.
+        const snapshotModesManager = (() => {
+            try {
+                const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
+                return ModesManager.getInstance();
+            } catch { return null; }
+        })();
+        const snapshotMode = snapshotModesManager && snapshotModeInfo?.id
+            ? snapshotModesManager.getModeSnapshot(snapshotModeInfo.id)
+            : null;
+        const snapshotReferenceFiles = snapshotMode && snapshotModesManager
+            ? Object.freeze(snapshotModesManager.getReferenceFiles(snapshotMode.id)
+                .map((file) => Object.freeze({ ...file })))
+            : Object.freeze([]);
+        // Source availability is part of the same request snapshot as the mode. The
+        // canonical-turn observe seam below must not see a resume/JD load or mode
+        // edit that races in after a pre-stream await and turn one answer into a
+        // mixture of two source universes. Existing legacy adapters remain
+        // behavior-preserving for this slice; the frozen snapshot is their measured
+        // migration target.
+        const snapshotKnowledge = this.llmHelper.getKnowledgeOrchestrator?.();
+        // Keep the same loaded structured-data objects that informed source
+        // availability. The canonical evidence coordinator uses these snapshots,
+        // never a fresh orchestrator read after a pre-stream await.
+        const snapshotProfileFacts = (snapshotKnowledge as any)?.activeResume?.structured_data ?? null;
+        const snapshotJobDescriptionFacts = (snapshotKnowledge as any)?.activeJD?.structured_data ?? null;
+        const snapshotSourceAvailability = Object.freeze({
+            hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+            hasProfileFacts: Boolean(snapshotProfileFacts),
+            hasJobDescription: Boolean(snapshotJobDescriptionFacts),
+            hasLiveTranscript: true,
+            hasMeetingRag: false,
+        });
+        const rawSnapshotSourceContract = (snapshotModeInfo as any)?.sourceContract;
+        const snapshotSourceContract = rawSnapshotSourceContract
+            ? Object.freeze({
+                defaultOwner: rawSnapshotSourceContract.defaultOwner,
+                allowedExplicitSwitches: Object.freeze([
+                    ...(rawSnapshotSourceContract.allowedExplicitSwitches ?? []),
+                ]),
+                sourceAuthority: rawSnapshotSourceContract.sourceAuthority,
+                groundingProfile: rawSnapshotSourceContract.groundingProfile
+                    ? Object.freeze({ ...rawSnapshotSourceContract.groundingProfile })
+                    : undefined,
+                templateType: rawSnapshotSourceContract.templateType,
+            })
+            : null;
         const meetingMarker = this.currentSessionId
             ?? (this.session.getMeetingMetadata?.()?.calendarEventId)
             ?? undefined;
@@ -854,7 +936,20 @@ export class IntelligenceEngine extends EventEmitter {
             meetingId: meetingMarker,
             surface: 'what_to_answer',
             modeId: snapshotModeId,
+        }).lifecycle('created', {
+            surface: 'what_to_answer',
+            modeId: snapshotModeId ?? 'none',
         });
+        const recordWtaCancellation = () => {
+            try {
+                const reason = whatToAnswerCancellationToken.signal.reason === 'engine_reset'
+                    ? 'engine_reset'
+                    : 'superseded';
+                wtaTrace.setCorrelation({ aborted: true, errorCategory: reason })
+                    .lifecycle('cancelled', { reason, finalAction: 'discard' });
+                commitTrace(wtaTrace);
+            } catch { /* trace never affects cancellation */ }
+        };
 
         // Foreground gate (manual regression 2026-06-12): pause background
         // embedding/RAG drains while a live answer is in flight. Speculative
@@ -882,6 +977,11 @@ export class IntelligenceEngine extends EventEmitter {
         let openedStreamRow = false;
 
         try {
+            if (isWtaSuperseded()) {
+                recordWtaCancellation();
+                return null;
+            }
+
             if (!this.whatToAnswerLLM) {
                 if (!this.answerLLM) {
                     if (isSpeculative) { this.speculativeText = null; this.speculativeTextExpiry = Infinity; }
@@ -893,11 +993,15 @@ export class IntelligenceEngine extends EventEmitter {
                     // string WITHOUT emitting leaves the thinking-dots placeholder
                     // hanging forever — a silent dead-end. Emit so the message is
                     // actually shown. (Speculative runs have no placeholder.)
-                    if (!isSpeculative) this.emit('suggested_answer', noKeyMsg, question || 'inferred', confidence);
+                    if (!isSpeculative) this.emit('suggested_answer', noKeyMsg, question || 'inferred', confidence, generationId);
                     return noKeyMsg;
                 }
                 const context = this.session.getFormattedContext(180);
                 const answer = await this.answerLLM.generate(question || '', context);
+                if (isWtaSuperseded()) {
+                    recordWtaCancellation();
+                    return null;
+                }
                 if (isSpeculative) {
                     this.speculativeText = null;
                     this.speculativeTextExpiry = Infinity;
@@ -911,7 +1015,7 @@ export class IntelligenceEngine extends EventEmitter {
                 }
                 if (answer) {
                     this.session.addAssistantMessage(answer, undefined, 'what_to_answer');
-                    this.emit('suggested_answer', answer, question || 'inferred', confidence);
+                    this.emit('suggested_answer', answer, question || 'inferred', confidence, generationId);
                     this.setMode('idle');
                     return answer;
                 }
@@ -1088,7 +1192,7 @@ export class IntelligenceEngine extends EventEmitter {
                         killSwitch: lsmConfig.killSwitch,
                     });
                     if (lsmConfig.enabled) {
-                        const modeId = this.getActiveModeId();
+                        const modeId = snapshotModeId;
                         // CRITICAL (code-review 2026-06-07c): SessionMemory's half-life
                         // decay is defined in SECONDS, but SessionTracker timestamps are
                         // wall-clock MILLISECONDS — feeding ms would collapse a 1-hour
@@ -1142,10 +1246,14 @@ export class IntelligenceEngine extends EventEmitter {
                     // safe clarification deterministically — NEVER fall through to the
                     // LLM (which can self-identify as "an AI assistant" or dump the
                     // profile). No prior context exists, so there's nothing to answer.
+                    if (isWtaSuperseded()) {
+                        recordWtaCancellation();
+                        return null;
+                    }
                     if (fr.isClarification && fr.clarificationText && !isSpeculative) {
                         piTelemetry.emit('wta_context_free_clarification', { surface: 'what_to_answer', via: (fr as any).resolvedVia ?? 'clarification' });
                         this.session.addAssistantMessage(fr.clarificationText, undefined, 'what_to_answer');
-                        this.emit('suggested_answer', fr.clarificationText, extractedQuestion.latestQuestion || 'inferred', 0.9);
+                        this.emit('suggested_answer', fr.clarificationText, extractedQuestion.latestQuestion || 'inferred', 0.9, generationId);
                         this.setMode('idle');
                         trace.mark('repair_used', { reason: 'context_free_clarification' });
                         return fr.clarificationText;
@@ -1256,7 +1364,12 @@ export class IntelligenceEngine extends EventEmitter {
             // never trigger the résumé orchestrator. We hoist this BEFORE
             // the groundable-question block (line 1081) so both candidate-
             // profile gates consult the SAME canonical decision.
-            let _wtaTurnSourceDecision:
+            // Grounding-campaign3 (2026-07-23): hoisted via `var` so the multi-
+            // family coordinator + the final wtaTurnContract build below can
+            // consume the same decision without reference errors. The earlier
+            // `let` was trapped in the outer hoist block and silently disabled
+            // canonical governance on the non-doc-grounded multi-family path.
+            var _wtaTurnSourceDecision:
                 import('./llm/turnSourceDecision').TurnSourceDecision | null = null;
             try {
                 const _wtaQHoist = extractedQuestion.latestQuestion || lastInterviewerTurn || '';
@@ -1547,7 +1660,13 @@ export class IntelligenceEngine extends EventEmitter {
                 // The canonical decision is the authority for capability
                 // issuance. It is null only when no persisted contract exists
                 // (e.g. mid-boot) — the legacy path then runs.
-                const _wtaTurnSourceDecision = _wtaSourceContract
+                // Grounding-campaign3 (2026-07-23): this `var` makes the decision
+                // function-scoped so the multi-family coordinator block below
+                // (~line 1985) and the `wtaTurnContract` build can both consume
+                // it without ReferenceError — the earlier `const` silently
+                // dropped the value into an outer `try` and disabled the
+                // canonical governance on the multi-family path.
+                _wtaTurnSourceDecision = _wtaSourceContract
                     ? require('./llm/turnSourceDecision').resolveTurnSourceDecision({
                         sourceContract: _wtaSourceContract,
                         persistedSourceAuthority: _wtaSourceContract.sourceAuthority,
@@ -1766,26 +1885,63 @@ export class IntelligenceEngine extends EventEmitter {
             // grounding await it overlapped with has settled by now, so this is
             // usually instant; worst case is the classifier's own tail.
             const intentResult = await intentPromise;
+            if (isWtaSuperseded()) {
+                recordWtaCancellation();
+                return null;
+            }
             trace.mark('intent_classified', { intent: intentResult.intent, confidence: intentResult.confidence });
 
-            const answerPlan = planAnswer({
-                question: question || extractedQuestion.latestQuestion || lastInterviewerTurn,
-                source: question ? 'manual_input' : 'what_to_answer',
-                speakerPerspective: extractedQuestion.detectedSpeaker === 'interviewer' ? 'interviewer' : 'user',
-                extractedQuestion,
-                intentResult,
-                hasCandidateProfile: Boolean(candidateProfile),
-                // Snapshot read (#6): the routing prior captured at t0. WTA's prompt
-                // suffix / pinned instructions / reference retrieval read the SAME
-                // snapshot below, so the answer contract and the prompt can no longer
-                // be built from two different modes within one request.
-                activeMode: snapshotModeInfo,
+            // Canonical turn seam (observe-only for this first migration): freeze the
+            // answer plan, persisted source decision, and derived TurnPlan together.
+            // The legacy adapters below retain their established execution behavior,
+            // while this request-scoped snapshot is emitted to tracing and provides the
+            // parity anchor for replacing their duplicate authority reads in the next
+            // migration slice. It must be built after intent/profile availability is
+            // known but before the main answer plan is consumed downstream.
+            const canonicalTurn = resolveCanonicalTurn({
+                answerInput: {
+                    question: question || extractedQuestion.latestQuestion || lastInterviewerTurn,
+                    source: question ? 'manual_input' : 'what_to_answer',
+                    speakerPerspective: extractedQuestion.detectedSpeaker === 'interviewer' ? 'interviewer' : 'user',
+                    extractedQuestion,
+                    intentResult,
+                    hasCandidateProfile: Boolean(candidateProfile),
+                    activeMode: snapshotModeInfo,
+                },
+                sourceContract: snapshotSourceContract,
+                explicitRequests: (() => {
+                    try {
+                        const { resolveExplicitSourceRequests } = require('./intelligence/context-os/explicitSourceSwitch');
+                        return resolveExplicitSourceRequests(question || extractedQuestion.latestQuestion || lastInterviewerTurn || '');
+                    } catch { return []; }
+                })(),
+                availability: snapshotSourceAvailability,
             });
+            const answerPlan = canonicalTurn.answerPlan;
             trace.mark('answer_type_selected', {
                 answerType: answerPlan.answerType,
                 outputPerspective: answerPlan.outputPerspective,
                 isCoding: isCodingAnswerType(answerPlan.answerType),
                 forbiddenLayers: answerPlan.forbiddenContextLayers.length,
+                canonicalTurnReason: canonicalTurn.turnPlan.reasonCode,
+            });
+            wtaTrace.noteContext({
+                source: 'canonical_turn',
+                requested: true,
+                retrieved: true,
+                included: false,
+                reason: canonicalTurn.turnSourceDecision?.reasonCode ?? 'legacy_source_contract_absent',
+            });
+            wtaTrace.setRouting({
+                source: 'what_to_answer',
+                answerType: answerPlan.answerType,
+            }).lifecycle('planned', {
+                answerType: answerPlan.answerType,
+                // The canonical snapshot is now the observable decision for this
+                // execution. Legacy source adapters below remain compatibility-only
+                // until their retrieval/prompt consumers are migrated.
+                sourceAuthority: canonicalTurn.sourceAuthority ?? 'legacy',
+                sourceKinds: [...canonicalTurn.allowedEvidenceKinds],
             });
 
             // Deterministic context route (Phase 6): turn the plan's required/
@@ -1808,6 +1964,11 @@ export class IntelligenceEngine extends EventEmitter {
             // repair re-opened profile in doc-grounded turns — baseline §5.5).
             // Narrowing only: the contract can only REMOVE context, never add.
             let wtaTurnContract: import('./intelligence/context-os').TurnContextContract | null = null;
+            // The strict multi-family coordinator below replaces legacy raw profile
+            // injection only when it has resolved a complete packet. Kept separate
+            // from the document-only EvidenceResolver path until both populations
+            // share one bounded packet executor.
+            let wtaContextOsGeneration: import('./intelligence/context-os').ContextOsGenerationContext | undefined;
             // One immutable WTA question must drive contract classification,
             // resolver retrieval, and provider prompting. Never re-derive it in
             // downstream request assembly.
@@ -1819,6 +1980,10 @@ export class IntelligenceEngine extends EventEmitter {
                 const _hasProfile2 = Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data);
                 const { resolveExplicitSourceRequest: _wtaResolveSwitch2, toLegacyUserExplicitSource: _wtaToLegacySwitch2 } = require('./intelligence/context-os/explicitSourceSwitch');
                 const _wtaUserExplicitSource2 = _wtaToLegacySwitch2(_wtaResolveSwitch2(String(_wtaQ2)));
+                // Canonical turn owns answer classification and persisted source
+                // authority. The compatibility execution contract remains for its
+                // other legacy projections, but it must receive the already-frozen
+                // decision instead of independently resolving one.
                 const _legacyContract2 = _bldC({
                     question: String(_wtaQ2),
                     streamRoute: 'wta_live',
@@ -1827,27 +1992,36 @@ export class IntelligenceEngine extends EventEmitter {
                     answerType: answerPlan.answerType,
                     isCustomMode: snapshotModeInfo?.isCustom === true,
                     isDocGroundedCustomModeActive: documentGroundedCustomModeActive,
-                    hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                    hasReferenceFiles: snapshotSourceAvailability.hasReferenceFiles,
                     hasCustomPrompt: Boolean((snapshotModeInfo as any)?.hasCustomPrompt),
-                    hasLiveTranscript: true,
-                    hasProfileFacts: _hasProfile2,
-                    hasMeetingRag: false,
+                    hasLiveTranscript: snapshotSourceAvailability.hasLiveTranscript,
+                    hasProfileFacts: snapshotSourceAvailability.hasProfileFacts,
+                    hasMeetingRag: snapshotSourceAvailability.hasMeetingRag,
                     hasLongTermMemory: false,
-                    persistedSourceAuthority: (snapshotModeInfo as any)?.sourceContract?.sourceAuthority ?? null,
+                    persistedSourceAuthority: canonicalTurn.sourceAuthority,
                     userExplicitSource: _wtaUserExplicitSource2,
+                    turnSourceDecision: canonicalTurn.turnSourceDecision,
                 });
                 wtaTurnContract = buildTurnContractIfEnabled({
                     surface: 'what_to_answer',
                     question: String(_wtaQ2),
                     activeModeId: snapshotModeId ?? null,
                     activeModeName: snapshotModeInfo?.name ?? null,
-                    sourceAuthority: _legacyContract2.sourceAuthority,
+                    sourceAuthority: canonicalTurn.sourceAuthority ?? _legacyContract2.sourceAuthority,
                     answerType: answerPlan.answerType,
                     plannerVoicePerspective: answerPlan.voicePerspective,
-                    hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
-                    hasProfileFacts: _hasProfile2,
-                    hasLiveTranscript: true,
+                    hasReferenceFiles: snapshotSourceAvailability.hasReferenceFiles,
+                    hasProfileFacts: snapshotSourceAvailability.hasProfileFacts,
+                    hasLiveTranscript: snapshotSourceAvailability.hasLiveTranscript,
                     userExplicitSource: _wtaUserExplicitSource2,
+                    // Canonical governance for the multi-family coordinator:
+                    // thread the persisted decision + the contract's persisted
+                    // switch allowlist into the contract the generator keeps.
+                    // Without `turnSourceDecision`, validateFinalPromptEvidence
+                    // falls open (forbiddenFamilies=[]) for any non-doc-grounded
+                    // turn (LLMHelper.ts senior-review r1 fix).
+                    turnSourceDecision: _wtaTurnSourceDecision,
+                    allowedExplicitSwitches: snapshotSourceContract?.allowedExplicitSwitches ?? null,
                 });
                 if (wtaTurnContract) {
                     const { allowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
@@ -1877,6 +2051,156 @@ export class IntelligenceEngine extends EventEmitter {
                 // Context OS is additive — a kernel failure must never break WTA.
                 if (isIntelligenceFlagEnabled('trace')) {
                     console.warn('[CONTEXT-OS] WTA contract build skipped (non-fatal):', contextOsWtaErr?.message);
+                }
+            }
+
+            // ── CONTEXT OS MULTI-FAMILY EVIDENCE PACK (WTA) ─────────────────
+            // Manual chat already resolves one bounded, source-tagged pack through
+            // TurnEvidenceCoordinator. Apply the same strict, flag-gated adapter
+            // here for profile/JD-inclusive canonical decisions. It is deliberately
+            // excluded for transcript/meeting-RAG kinds and plain reference-only
+            // turns: those need their existing specialized retrievers until their
+            // source-tagged adapters are migrated. Any error/time budget overrun
+            // falls through to the established WTA path unchanged.
+            const WTA_COORDINATOR_KINDS = new Set(['reference_files', 'profile_resume', 'projects', 'profile_jd']);
+            const wtaCoordinatorInScope = Boolean(canonicalTurn.turnSourceDecision)
+                && canonicalTurn.requiredEvidenceKinds.length > 0
+                && canonicalTurn.requiredEvidenceKinds.every((kind) => WTA_COORDINATOR_KINDS.has(kind))
+                && canonicalTurn.requiredEvidenceKinds.some((kind) => (
+                    kind === 'profile_resume' || kind === 'projects' || kind === 'profile_jd'
+                ));
+            if (!isSpeculative
+                && !isCodingAnswerType(answerPlan.answerType)
+                && wtaTurnContract
+                && canonicalTurn.turnSourceDecision
+                && wtaCoordinatorInScope
+                && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
+                && isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled')) {
+                try {
+                    const { TurnEvidenceCoordinator, ProfileEvidenceService } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                    const { EvidenceResolver } = require('./intelligence/context-os/EvidenceResolver') as typeof import('./intelligence/context-os/EvidenceResolver');
+                    const { classifyQuestion } = require('./services/knowledge/QuestionClassifier') as typeof import('./services/knowledge/QuestionClassifier');
+                    const { queryOkfCards } = require('./services/knowledge/OkfRetriever') as typeof import('./services/knowledge/OkfRetriever');
+                    const { KnowledgeManager } = require('./services/knowledge/KnowledgeManager') as typeof import('./services/knowledge/KnowledgeManager');
+                    // The full mode row and its files were captured synchronously at
+                    // request t0 beside snapshotModeInfo. Do not re-query the active
+                    // mode here: it might now point at another source universe.
+                    const modesManager = snapshotModesManager;
+                    const profileService = new ProfileEvidenceService();
+                    const retrieveReferenceEvidence = canonicalTurn.requiredEvidenceKinds.includes('reference_files')
+                        ? async () => {
+                            if (!snapshotMode || snapshotReferenceFiles.length === 0) {
+                                const { emptyEvidencePack } = require('./intelligence/context-os/evidencePack') as typeof import('./intelligence/context-os/evidencePack');
+                                return emptyEvidencePack({
+                                    turnId: wtaTurnContract!.turnId,
+                                    sourceOwner: wtaTurnContract!.sourceOwner,
+                                    requestedProperty: wtaTurnContract!.requestedProperty,
+                                    answerPolicy: 'refuse_insufficient_evidence',
+                                });
+                            }
+                            if (!modesManager) {
+                                const { emptyEvidencePack } = require('./intelligence/context-os/evidencePack') as typeof import('./intelligence/context-os/evidencePack');
+                                return emptyEvidencePack({
+                                    turnId: wtaTurnContract!.turnId,
+                                    sourceOwner: wtaTurnContract!.sourceOwner,
+                                    requestedProperty: wtaTurnContract!.requestedProperty,
+                                    answerPolicy: 'refuse_insufficient_evidence',
+                                });
+                            }
+                            const resolver = new EvidenceResolver({
+                                // The t0 snapshot is deep-frozen; the resolver's
+                                // deps interface wants mutable shapes, so hand it
+                                // shallow copies. The resolver never mutates them.
+                                getModeSnapshot: () => ({ ...snapshotMode }) as any,
+                                getReferenceFiles: (modeId: string) => (
+                                    modeId === snapshotMode.id ? snapshotReferenceFiles.map((file) => ({ ...file })) : []
+                                ) as any,
+                                hybridRetriever: {
+                                    retrieveHybrid: (mode: any, files: any, options: any) => (
+                                        modesManager.retrieveHybridRaw(mode, files, options)
+                                    ),
+                                } as any,
+                                knowledgeManager: {
+                                    getPackForFile: (fileId: string) => KnowledgeManager.getInstance().getPackForFile(fileId),
+                                } as any,
+                                classifyQuestion,
+                                queryOkfCards,
+                            });
+                            return (await resolver.resolve({
+                                turnId: wtaTurnContract!.turnId,
+                                question: wtaTurnQuestion,
+                                sourceContract: wtaTurnContract!,
+                                activeMode: { modeId: snapshotMode.id, modeUniqueId: snapshotMode.id },
+                                requestedProperty: wtaTurnContract!.requestedProperty,
+                                transcript: preparedTranscript,
+                            })).pack;
+                        }
+                        : undefined;
+                    const coordinator = new TurnEvidenceCoordinator();
+                    // Track supersession so an in-flight coordinator never blocks
+                    // a newer WTA request. The owning controller already aborted
+                    // any prior provider stream — but this additional check
+                    // avoids completing a packet whose result no longer matters.
+                    const WTA_COORDINATOR_BUDGET_MS = documentGroundedCustomModeActive ? 2000 : 1000;
+                    const coordinatorResult = await Promise.race([
+                        coordinator.resolve({
+                            decision: canonicalTurn.turnSourceDecision,
+                            contract: wtaTurnContract,
+                            retrieveReferenceEvidence,
+                            retrieveProfileEvidence: () => profileService.retrieveEvidence({
+                                question: wtaTurnQuestion,
+                                contract: wtaTurnContract!,
+                                profile: snapshotProfileFacts,
+                                jobDescription: snapshotJobDescriptionFacts,
+                                answerType: answerPlan.answerType,
+                            }),
+                        }),
+                        new Promise<null>((resolve) => setTimeout(() => resolve(null), WTA_COORDINATOR_BUDGET_MS)),
+                    ]);
+                    if (!coordinatorResult) throw new Error(`TurnEvidenceCoordinator exceeded ${WTA_COORDINATOR_BUDGET_MS}ms budget`);
+                    if (isWtaSuperseded()) {
+                        // A newer request superseded this one mid-resolution.
+                        // Discard the packet; legacy pack handling on the next
+                        // request takes over. Never persist this result.
+                        wtaContextOsGeneration = undefined;
+                        recordWtaCancellation();
+                        return null;
+                    }
+                    wtaContextOsGeneration = {
+                        contract: wtaTurnContract,
+                        turnQuestion: wtaTurnQuestion,
+                        evidencePack: coordinatorResult.pack,
+                        modeSnapshot: {
+                            modeId: snapshotModeId ?? null,
+                            modeName: snapshotModeInfo?.name ?? null,
+                            sourceAuthority: canonicalTurn.sourceAuthority ?? 'ask_if_ambiguous',
+                        },
+                        // Grounding-campaign3 (2026-07-23): the persisted
+                        // decision is the authority for capability issuance
+                        // AND for LLMHelper's final-prompt validator. Without
+                        // this field, validateFinalPromptEvidence falls open
+                        // (`forbiddenFamilies=[]`) and a JD-only decision can
+                        // leak résumé content through the rendered pack.
+                        turnSourceDecision: canonicalTurn.turnSourceDecision,
+                        govern: true,
+                    };
+                    // The typed pack is now the sole factual injection. Do not also
+                    // pass the JIT's raw profile XML into WhatToAnswerLLM.
+                    candidateProfile = '';
+                    wtaTrace.noteContext({
+                        source: 'context_os_turn_evidence_coordinator',
+                        trustLevel: 'high',
+                        requested: true,
+                        retrieved: coordinatorResult.pack.items.length > 0,
+                        included: coordinatorResult.pack.answerPolicy === 'answer'
+                            || coordinatorResult.pack.answerPolicy === 'answer_with_uncertainty',
+                        reason: coordinatorResult.failures.length > 0
+                            ? `coordinator_failures:${coordinatorResult.failures.map((failure) => `${failure.family}:${failure.reason}`).join(',')}`
+                            : 'coordinator_multi_family_pack',
+                    });
+                } catch (coordinatorErr: any) {
+                    wtaContextOsGeneration = undefined;
+                    console.warn('[CONTEXT-OS] WTA TurnEvidenceCoordinator skipped (non-fatal):', coordinatorErr?.message || coordinatorErr);
                 }
             }
 
@@ -1911,13 +2235,10 @@ export class IntelligenceEngine extends EventEmitter {
                             hasLiveTranscript: true, // WTA is always transcript-driven
                         });
                     this.session.addAssistantMessage(clarify, undefined, 'what_to_answer');
-                    // Note: emit stays id-less here because this early
-                    // clarification path runs BEFORE `generationId` is minted
-                    // for this turn (line ~1803). The renderer treats id-less
-                    // emits as always-accepted — same as id-less token
-                    // batches today. Phase 4 defense-in-depth is preserved on
-                    // the main WTA emit + the post-`generationId` fallbacks.
-                    this.emit('suggested_answer', clarify, extractedQuestion.latestQuestion || question || 'inferred', 0.9);
+                    // Generation id is minted at request t0, before every
+                    // await or early-return branch, so even this clarification
+                    // participates in the renderer's newest-wins guard.
+                    this.emit('suggested_answer', clarify, extractedQuestion.latestQuestion || question || 'inferred', 0.9, generationId);
                     trace.mark('repair_used', { reason: 'context_os_clarification' });
                     if (isIntelligenceFlagEnabled('trace')) {
                         logContextOsTrace(buildContextOsTrace({
@@ -1928,6 +2249,11 @@ export class IntelligenceEngine extends EventEmitter {
                             finalAction: 'clarify',
                         }));
                     }
+                    wtaTrace.lifecycle('completed', {
+                        answerType: answerPlan.answerType,
+                        finalAction: 'clarify',
+                    });
+                    commitTrace(wtaTrace);
                     this.setMode('idle');
                     return clarify;
                 } catch (clarErr: any) {
@@ -1935,6 +2261,11 @@ export class IntelligenceEngine extends EventEmitter {
                         console.warn('[CONTEXT-OS] WTA clarification short-circuit skipped (non-fatal):', clarErr?.message);
                     }
                 }
+            }
+
+            if (isWtaSuperseded()) {
+                recordWtaCancellation();
+                return null;
             }
 
             const screenContext = options?.screenContext;
@@ -1947,7 +2278,6 @@ export class IntelligenceEngine extends EventEmitter {
                 screenOcrTextLength: screenContext?.ocrText?.length || 0,
             });
 
-            const generationId = ++this.currentGenerationId;
             let fullAnswer = "";
 
             // ── CODING SCAFFOLD GATE (REPORT hypothesis C1 / Phase 8) ──────────
@@ -1985,8 +2315,8 @@ export class IntelligenceEngine extends EventEmitter {
             // when the flag is on and this is a doc-grounded WTA turn with a
             // contract. The pack is built inside WhatToAnswerLLM from the mode
             // block (no double retrieval) and governs the factual prompt.
-            let wtaContextOsGeneration: import('./intelligence/context-os').ContextOsGenerationContext | undefined;
-            if (wtaTurnContract
+            if (!wtaContextOsGeneration
+                && wtaTurnContract
                 && documentGroundedCustomModeActive
                 && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
                 wtaContextOsGeneration = {
@@ -1998,6 +2328,7 @@ export class IntelligenceEngine extends EventEmitter {
                         modeName: snapshotModeInfo?.name ?? null,
                         sourceAuthority: wtaTurnContract.reason,
                     },
+                    turnSourceDecision: canonicalTurn.turnSourceDecision,
                     govern: true,
                 };
             }
@@ -2020,7 +2351,19 @@ export class IntelligenceEngine extends EventEmitter {
             // PI v3 (W5): modeContextPromise is the parallel-prefetched mode-context retrieval
             // (overlaps intent classification + profile grounding). Both args coexist —
             // generateStream's signature is (…activeSkill, domContext, candidateProfile, answerPlan, preFetchedModeContext).
-            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined, answerPlan, modeContextPromise, requestSnapshot);
+            wtaTrace.lifecycle('evidence_selected', {
+                selectedEvidenceCount: candidateProfile.trim() ? 1 : 0,
+                renderedEvidenceCount: candidateProfile.trim() ? 1 : 0,
+                hasDirectEvidence: Boolean(candidateProfile.trim()),
+                sourceKinds: _wtaTurnSourceDecision?.allowedEvidenceKinds ?? [],
+                sourceOwner: _wtaTurnSourceDecision?.owner ?? 'legacy',
+            }).lifecycle('prompt_built', {
+                answerType: answerPlan.answerType,
+                sourceAuthority: canonicalTurn.sourceAuthority ?? 'legacy',
+            }).lifecycle('provider_dispatched', {
+                providerAttempts: 1,
+            });
+            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined, answerPlan, modeContextPromise, requestSnapshot, whatToAnswerCancellationToken.signal);
             let streamAborted = false;
             let emittedStreamingToken = false;
             let streamingTokenBuffer = '';
@@ -2044,6 +2387,7 @@ export class IntelligenceEngine extends EventEmitter {
                 openedStreamRow = true;
                 if (trace.markFirstUseful({ via: 'stream', answerType: answerPlan.answerType })) {
                     trace.mark('first_visible_text', { via: 'stream' });
+                    wtaTrace.lifecycle('streaming');
                 }
                 // #3: stamp this request's generationId so a superseded answer's
                 // already-queued tokens can be dropped renderer-side.
@@ -2066,8 +2410,16 @@ export class IntelligenceEngine extends EventEmitter {
                 // first-useful timeout while the provider is healthy (code-review LOW).
                 isUsefulYet: () => emittedStreamingToken || fullAnswer.trim().length >= STREAMING_SAFE_PREFIX_CHARS,
                 shouldAbort: () => {
-                    if (this.currentGenerationId !== generationId) { streamAborted = true; return true; }
+                    if (whatToAnswerCancellationToken.signal.aborted || isWtaSuperseded()) {
+                        streamAborted = true;
+                        return true;
+                    }
                     return false;
+                },
+                onCleanup: (reason) => {
+                    if (reason !== 'done' && !whatToAnswerCancellationToken.signal.aborted) {
+                        whatToAnswerCancellationToken.abort(reason);
+                    }
                 },
                 onFirstUsefulTimeout: () => { liveDeadlineFired = true; trace.mark('provider_timeout', { budgetMs: firstUsefulDeadline, answerType: answerPlan.answerType }); },
                 onStallTimeout: () => { liveDeadlineFired = true; trace.mark('provider_timeout', { reason: 'inter_token_stall', answerType: answerPlan.answerType }); },
@@ -2090,7 +2442,16 @@ export class IntelligenceEngine extends EventEmitter {
                     }
                 },
             });
-            if (raceOutcome === 'aborted' && this.currentGenerationId !== generationId) {
+            // Deadline cleanup aborts the provider transport too, but a deadline
+            // still needs the established visible fallback below. Keep the owned
+            // controller's aborted state out of this decision: cleanup aborts that
+            // same signal for a genuine deadline, while isWtaSuperseded() identifies
+            // only a replaced/reset turn. The race driver returns `aborted` only for
+            // its own supersession predicate, so either case is safe to suppress.
+            if (raceOutcome === 'aborted' || isWtaSuperseded()) {
+                streamAborted = true;
+            }
+            if (streamAborted) {
                 console.log('[IntelligenceEngine] _what_to_say stream aborted by new generation');
             }
             trace.mark('response_completed', { chars: fullAnswer.length, coding: isCoding });
@@ -2102,7 +2463,13 @@ export class IntelligenceEngine extends EventEmitter {
             if (liveDeadlineFired && !emittedStreamingToken && !isSpeculative
                 && this.currentGenerationId === generationId) {
                 streamingTokenBuffer = '';
-                if (!fullAnswer.trim()) {
+                // `raceStreamWithDeadline` only declares the answer useful once
+                // this same safe-prefix threshold is reached. A provider can yield a
+                // short fragment and then stall; that fragment was never visible to
+                // the user, so do not let it bypass the latency fallback merely
+                // because it is non-empty (for example, finalizing "Sure," after
+                // an 8s first-useful timeout).
+                if (fullAnswer.trim().length < STREAMING_SAFE_PREFIX_CHARS) {
                     const safe = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
                         ? "I don't have enough context from the conversation to answer that yet."
                         : "The model did not produce an answer in time, so I won't guess from your profile.";
@@ -2118,6 +2485,7 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (streamAborted) {
+                recordWtaCancellation();
                 // Aborted mid-stream — don't update session or emit final event.
                 // If we opened a streaming row, discard it so the superseding
                 // generation's row is the only one (no orphaned partial answer).
@@ -2129,7 +2497,9 @@ export class IntelligenceEngine extends EventEmitter {
                     // doesn't allow a rapid second trigger within the cooldown window.
                     this.lastTriggerTime = Date.now();
                 }
-                this.setMode('idle');
+                if (this.whatToAnswerCancellationToken === whatToAnswerCancellationToken) {
+                    this.setMode('idle');
+                }
                 return null;
             }
 
@@ -2283,6 +2653,7 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             trace.mark('validation_started', { answerType: answerPlan.answerType });
+            wtaTrace.lifecycle('validating', { answerType: answerPlan.answerType });
             const structureValidation = validateAnswerStructure(answerPlan.answerType, fullAnswer);
             if (!structureValidation.ok && structureValidation.repaired) {
                 console.warn('[IntelligenceEngine] Repaired answer structure', {
@@ -2423,6 +2794,7 @@ export class IntelligenceEngine extends EventEmitter {
                         } catch (e) { console.warn('[TRACE:LONGCTX] scaffold_contamination_discard logging failed', e); }
                     }
                     trace.mark('repair_used', { reason: 'scaffold_contamination_detected', answerType: answerPlan.answerType });
+                    wtaTrace.lifecycle('repairing', { reason: 'scaffold_contamination', repairCount: 1 });
                     const safeScaffoldQuestion = IntelligenceEngine.sanitizeManualContextText(scaffoldQuestion, 1000);
                     const hasCandidateProfileForScaffold = Boolean(candidateProfile && candidateProfile.trim().length > 0);
                     const safeCandidateProfileForScaffold = hasCandidateProfileForScaffold
@@ -2445,11 +2817,22 @@ export class IntelligenceEngine extends EventEmitter {
                     let scaffoldRepaired = '';
                     try {
                         await raceStreamWithDeadline({
-                            stream: this.llmHelper.streamChat(scaffoldRepairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
+                            stream: this.llmHelper.streamChat(
+                                scaffoldRepairPrompt,
+                                undefined,
+                                undefined,
+                                undefined,
+                                true,
+                                true,
+                                [],
+                                whatToAnswerCancellationToken.signal,
+                            ) as AsyncGenerator<string>,
                             firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
                             interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
                             isUsefulYet: () => scaffoldRepaired.length >= 5,
-                            shouldAbort: () => scaffoldRepaired.length > 1800 || this.currentGenerationId !== generationId,
+                            shouldAbort: () => scaffoldRepaired.length > 1800
+                                || whatToAnswerCancellationToken.signal.aborted
+                                || isWtaSuperseded(),
                             onToken: (tok: string) => { scaffoldRepaired += tok; },
                         });
                     } catch { /* keep original fullAnswer on repair failure */ }
@@ -2560,6 +2943,7 @@ export class IntelligenceEngine extends EventEmitter {
                                 const missingLine = firstCheck.missing.length > 0
                                     ? `\nKnown missing values/items from the evidence: ${firstCheck.missing.join(', ')}`
                                     : '';
+                                wtaTrace.lifecycle('repairing', { reason: 'document_grounded', repairCount: 1 });
                                 const repairPrompt = [
                                     '<rewrite_instructions note="follow these; never repeat them">',
                                     `The previous answer failed document-grounded validation: ${firstCheck.reason}.`,
@@ -2575,11 +2959,22 @@ export class IntelligenceEngine extends EventEmitter {
                                 let repaired = '';
                                 try {
                                     await raceStreamWithDeadline({
-                                        stream: this.llmHelper.streamChat(repairPrompt, undefined, undefined, undefined, true, true, ['reference_files']) as AsyncGenerator<string>,
+                                        stream: this.llmHelper.streamChat(
+                                            repairPrompt,
+                                            undefined,
+                                            undefined,
+                                            undefined,
+                                            true,
+                                            true,
+                                            ['reference_files'],
+                                            whatToAnswerCancellationToken.signal,
+                                        ) as AsyncGenerator<string>,
                                         firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
                                         interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
                                         isUsefulYet: () => repaired.trim().length >= 5,
-                                        shouldAbort: () => repaired.length > 1800 || this.currentGenerationId !== generationId,
+                                        shouldAbort: () => repaired.length > 1800
+                                            || whatToAnswerCancellationToken.signal.aborted
+                                            || isWtaSuperseded(),
                                         onToken: (tok: string) => { repaired += tok; },
                                     });
                                 } catch { /* keep partial repaired */ }
@@ -2689,6 +3084,7 @@ export class IntelligenceEngine extends EventEmitter {
                                 && evidenceIsSubstantial)));
                     if (criticalViolation && this.currentGenerationId === generationId) {
                         trace.mark('repair_used', { reason: 'profile', code: criticalViolation.code });
+                        wtaTrace.lifecycle('repairing', { reason: 'profile', repairCount: 1 });
                         // The evidence validator pre-builds the corrective
                         // instruction (covers the metric/company lines the base
                         // builder doesn't know about).
@@ -2743,10 +3139,21 @@ export class IntelligenceEngine extends EventEmitter {
                         // `await iterator.return()` anti-pattern.
                         try {
                             await raceStreamWithDeadline({
-                                stream: this.llmHelper.streamChat(repairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
+                                stream: this.llmHelper.streamChat(
+                                    repairPrompt,
+                                    undefined,
+                                    undefined,
+                                    undefined,
+                                    true,
+                                    true,
+                                    [],
+                                    whatToAnswerCancellationToken.signal,
+                                ) as AsyncGenerator<string>,
                                 firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
                                 isUsefulYet: () => repaired.length >= 5,
-                                shouldAbort: () => repaired.length > 1200,
+                                shouldAbort: () => repaired.length > 1200
+                                    || whatToAnswerCancellationToken.signal.aborted
+                                    || isWtaSuperseded(),
                                 onToken: (tok: string) => { repaired += tok; },
                             });
                         } catch { /* keep partial repaired */ }
@@ -3034,6 +3441,7 @@ export class IntelligenceEngine extends EventEmitter {
                             } catch (e) { console.warn('[TRACE:LONGCTX] answer_relevance_discard logging failed', e); }
                         }
                         trace.mark('repair_used', { reason: 'answer_relevance', confidence: relevance.confidence });
+                        wtaTrace.lifecycle('repairing', { reason: 'answer_relevance', repairCount: 1 });
                         // Observe-only kill-switch (2026-07-19, see
                         // answerRelevanceGuardLive's doc comment in
                         // intelligenceFlags.ts): validation run-032 proved this guard's
@@ -3081,10 +3489,21 @@ export class IntelligenceEngine extends EventEmitter {
                         let repaired = '';
                         try {
                             await raceStreamWithDeadline({
-                                stream: this.llmHelper.streamChat(repairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
+                                stream: this.llmHelper.streamChat(
+                                    repairPrompt,
+                                    undefined,
+                                    undefined,
+                                    undefined,
+                                    true,
+                                    true,
+                                    [],
+                                    whatToAnswerCancellationToken.signal,
+                                ) as AsyncGenerator<string>,
                                 firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
                                 isUsefulYet: () => repaired.length >= 5,
-                                shouldAbort: () => repaired.length > 1200 || this.currentGenerationId !== generationId,
+                                shouldAbort: () => repaired.length > 1200
+                                    || whatToAnswerCancellationToken.signal.aborted
+                                    || isWtaSuperseded(),
                                 onToken: (tok: string) => { repaired += tok; },
                             });
                         } catch { /* keep original fullAnswer on repair failure */ }
@@ -3272,6 +3691,11 @@ export class IntelligenceEngine extends EventEmitter {
                 wtaTrace.setRouting({ source: 'what_to_answer', answerType: answerPlan.answerType });
                 wtaTrace.noteContext({ source: 'live_transcript', trustLevel: 'low', requested: true, retrieved: true, included: true, reason: 'wta_window' });
                 if (finalWtaAnswer !== fullAnswer) wtaTrace.noteFallback('output_shape_normalized');
+                wtaTrace.lifecycle('completed', {
+                    answerType: answerPlan.answerType,
+                    finalAction: 'answer',
+                    validationResult: 'accepted',
+                });
                 commitTrace(wtaTrace);
             } catch { /* trace never affects the answer */ }
 
@@ -3299,7 +3723,18 @@ export class IntelligenceEngine extends EventEmitter {
             // pass → 'code_verified' badge; on a re-verified fix → 'code_correction'
             // new message. Fire-and-forget; failures never affect this return.
             if (isCoding && isCodeVerificationEnabled()) {
-                void this.maybeVerifyCoding(rawAnswerForVerify, question || 'What to Answer', screenContext?.ocrText, trace, generationId);
+                const verificationCancellationToken = new AbortController();
+                this.whatToAnswerBackgroundCancellationTokens.add(verificationCancellationToken);
+                void this.maybeVerifyCoding(
+                    rawAnswerForVerify,
+                    question || 'What to Answer',
+                    screenContext?.ocrText,
+                    trace,
+                    generationId,
+                    verificationCancellationToken.signal,
+                ).finally(() => {
+                    this.whatToAnswerBackgroundCancellationTokens.delete(verificationCancellationToken);
+                });
             }
 
             trace.mark('ui_render_completed', { chars: fullAnswer.length });
@@ -3308,6 +3743,24 @@ export class IntelligenceEngine extends EventEmitter {
             return fullAnswer;
 
         } catch (error) {
+            // `raceStreamWithDeadline` self-aborts this request's controller when a
+            // first-token/stall deadline fires. That is transport cleanup, not a
+            // supersession: a later post-deadline exception must still reach the
+            // normal error fallback instead of being silently discarded as stale.
+            // Only controller ownership / generation identity prove that another
+            // request or reset replaced this turn.
+            if (isWtaSuperseded()) {
+                recordWtaCancellation();
+                if (isSpeculative) { this.speculativeText = null; this.speculativeTextExpiry = Infinity; }
+                if (openedStreamRow) this.emit('suggested_answer_discard', 'superseded');
+                return null;
+            }
+            try {
+                wtaTrace.setCorrelation({ errorCategory: (error as Error)?.name || 'handler_error' })
+                    .noteError((error as Error)?.name || 'handler_error')
+                    .lifecycle('failed', { errorCategory: (error as Error)?.name || 'handler_error', finalAction: 'retry' });
+                commitTrace(wtaTrace);
+            } catch { /* trace never affects the fallback */ }
             if (isSpeculative) { this.speculativeText = null; this.speculativeTextExpiry = Infinity; }
             // If we opened a partial streaming row, discard it (the catch returns a
             // non-null fallback, so the manual path's null-cleanup never runs and
@@ -3318,6 +3771,11 @@ export class IntelligenceEngine extends EventEmitter {
             this.setMode('idle');
             return buildGracefulRetry(question);
         } finally {
+            // Only the request that still owns the slot may clear it. An older
+            // cancelled request must not sever the newer request's controller.
+            if (this.whatToAnswerCancellationToken === whatToAnswerCancellationToken) {
+                this.whatToAnswerCancellationToken = null;
+            }
             // Resume background drains on EVERY exit path (answer, abort, error).
             releaseFg();
         }
@@ -3339,12 +3797,13 @@ export class IntelligenceEngine extends EventEmitter {
         screenText: string | undefined,
         trace: PiLatencyTrace,
         generationId: number,
+        abortSignal?: AbortSignal,
     ): Promise<void> {
         // Supersession guard: if the user fired a newer generation while this
         // background verification ran, its result belongs to a now-abandoned
         // answer. Bailing before each emit prevents badging/correcting the WRONG
         // (newer) message — a false-"verified" on code we didn't actually verify.
-        const superseded = () => this.currentGenerationId !== generationId;
+        const superseded = () => abortSignal?.aborted === true || this.currentGenerationId !== generationId;
         try {
             const { verifyCodingAnswer } = await import('./llm/codeVerification/verifyCodingAnswer');
             const outcome = await verifyCodingAnswer({
@@ -3360,9 +3819,19 @@ export class IntelligenceEngine extends EventEmitter {
                     // 6s) clears MiniMax's 4-6s first-token when it's the fallback.
                     let fixed = '';
                     await raceStreamWithDeadline({
-                        stream: this.llmHelper.streamChat(repairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
+                        stream: this.llmHelper.streamChat(
+                            repairPrompt,
+                            undefined,
+                            undefined,
+                            undefined,
+                            true,
+                            true,
+                            [],
+                            abortSignal,
+                        ) as AsyncGenerator<string>,
                         firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
                         isUsefulYet: () => fixed.length >= 5,
+                        shouldAbort: () => fixed.length > 1200 || superseded(),
                         onToken: (tok: string) => { fixed += tok; },
                     });
                     return fixed;
@@ -4037,6 +4506,14 @@ export class IntelligenceEngine extends EventEmitter {
     reset(): void {
         this.activeMode = 'idle';
         this.currentGenerationId++; // Increment to break all active LLM streams
+        if (this.whatToAnswerCancellationToken) {
+            this.whatToAnswerCancellationToken.abort('engine_reset');
+            this.whatToAnswerCancellationToken = null;
+        }
+        for (const controller of this.whatToAnswerBackgroundCancellationTokens) {
+            controller.abort('engine_reset');
+        }
+        this.whatToAnswerBackgroundCancellationTokens.clear();
         if (this.assistCancellationToken) {
             this.assistCancellationToken.abort();
             this.assistCancellationToken = null;
