@@ -27,7 +27,7 @@ const { buildCustomModeExecutionContract } = await import(
   pathToFileURL(path.join(distDir, 'llm/customModeExecutionContract.js')).href
 );
 const cjsRequire = (await import('node:module')).createRequire(import.meta.url);
-const { validateFinalPromptEvidence } = cjsRequire(
+const { validateFinalPromptEvidence, buildRenderedEvidenceManifest } = cjsRequire(
   path.resolve(distDir, 'intelligence/context-os/index.js'),
 );
 
@@ -177,9 +177,10 @@ test('CRITICAL #2: validateFinalPromptEvidence catches a JD grant when only JD i
     availability: fullAvailability,
   });
   const p = pack([jd]);
+  const manifest = buildRenderedEvidenceManifest(p);
   const rendered = '<evidence id="jd:session-recovery" />';
   const result = validateFinalPromptEvidence({
-    decision, contract: baseContract, pack: p, finalUserPrompt: rendered,
+    decision, contract: baseContract, pack: p, manifest, finalUserPrompt: rendered,
   });
   assert.equal(result.ok, true, `JD-only grant must pass; got reason: ${result.reason}`);
   assert.deepEqual(result.requiredFamilies, ['job_description']);
@@ -196,19 +197,21 @@ test('CRITICAL #2: validateFinalPromptEvidence forbids a résumé leak into a JD
     availability: fullAvailability,
   });
   const p = pack([jd, resume]);
+  const manifest = buildRenderedEvidenceManifest(p);
   const rendered = '<evidence id="jd:session-recovery" /><evidence id="resume:cedar-falcon" />';
   const result = validateFinalPromptEvidence({
-    decision, contract: baseContract, pack: p, finalUserPrompt: rendered,
+    decision, contract: baseContract, pack: p, manifest, finalUserPrompt: rendered,
   });
   assert.equal(result.ok, false, 'résumé must NOT render in a JD-only decision');
-  assert.equal(result.reason, 'forbidden_evidence_family_rendered:resume');
+  assert.equal(result.reason, 'forbidden_evidence_rendered:profile_resume');
 });
 
 test('CRITICAL #2: validateFinalPromptEvidence without decision is permissive (production default fail-open)', () => {
   const p = pack([jd, resume]);
+  const manifest = buildRenderedEvidenceManifest(p);
   const rendered = '<evidence id="jd:session-recovery" /><evidence id="resume:cedar-falcon" />';
   const result = validateFinalPromptEvidence({
-    decision: null, contract: baseContract, pack: p, finalUserPrompt: rendered,
+    decision: null, contract: baseContract, pack: p, manifest, finalUserPrompt: rendered,
   });
   assert.equal(result.forbiddenFamilies.length, 0, 'no decision ⇒ no forbidden families detected');
   assert.equal(result.ok, true, 'without a decision, validator cannot catch a forbidden leak');

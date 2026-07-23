@@ -805,7 +805,9 @@ const PROJECT_LINK_PATTERNS = [
   // "it's a source-available project right [share it]" — the user is angling for the
   // link. A BARE "is it source available" (no share/link cue) is a product-about
   // yes/no and is handled by PRODUCT_ABOUT instead, so require a share/right cue.
-  /\b(its|it'?s|so its|so it'?s)\s+an?\s+open[- ]?source\b|\bopensource (porject|project)\b|\bopen[- ]?source\b.{0,20}\bright\b/i,
+  // "source available" (a distinct, real licensing term from "open-source") is
+  // included alongside open-source in every alternative below.
+  /\b(its|it'?s|so its|so it'?s)\s+an?\s+(open[- ]?source|source[- ]?available)\b|\b(opensource|source[- ]?available) (porject|project)\b|\b(open[- ]?source|source[- ]?available)\b.{0,20}\bright\b/i,
   /\bwhy (can'?t|cant|wont|won'?t) (you )?share\b/i,    // "why can't you share, it's source available"
 ];
 
@@ -863,12 +865,12 @@ const PRODUCT_ABOUT_PATTERNS = [
   /\bhow(?:'?s| is| does)\s+(natively|nativley|nativly|it|the (app|product|backend|architecture|frontend|stack))\b/i,
   /\bwhat\s+(do you think about|about)\s+(natively|nativley|nativly)\b/i,
   /\bwhat (tech|technolog|stack|languages?|framework)\w*\s+(does|do)\s+(natively|nativley|it|this)\b/i,
-  /\bis (natively|nativley|it|this)\s+(local|cloud|open[- ]?source|privacy|low[- ]?distraction|on[- ]?device|transparent|accessib)\w*/i,
+  /\bis (natively|nativley|it|this)\s+(local|cloud|open[- ]?source|source[- ]?available|privacy|low[- ]?distraction|on[- ]?device|transparent|accessib)\w*/i,
   /\b(natively|nativley|nativly)'?s\s+(backend|architecture|stack|frontend|core)\b/i,
   // Safe product-attribute / behavior probes ("is it low-distraction?", "does it
   // process locally?", "is it privacy-first?", "does it use Ollama?", "what part
   // uses Rust?") — these are about the PRODUCT, grounded in loaded metadata.
-  /\b(is|are) (it|this|they)\s+(local|cloud[- ]?based|open[- ]?source|privacy[- ]?first|low[- ]?distraction|on[- ]?device|free|paid|safe|secure)\b/i,
+  /\b(is|are) (it|this|they)\s+(local|cloud[- ]?based|open[- ]?source|source[- ]?available|privacy[- ]?first|low[- ]?distraction|on[- ]?device|free|paid|safe|secure)\b/i,
   /\b(does|do)\s+(it|this|natively|nativley)\s+(process|run|store|work|use|have|support|need)\b/i,
   /\b(what|which) part (of (natively|nativley|it|the app))?\s*(uses|is in|runs|handles|does)\b|\b(does|do) (it|natively) (use|have) (a )?(backend|server|database|ollama|rust|electron|local)\b/i,
   // "what uses Rust", "what runs on Electron", "what's written in Go" — asking which

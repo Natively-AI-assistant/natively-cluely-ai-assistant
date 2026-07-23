@@ -54,6 +54,32 @@ describe('IntelligenceTrace', () => {
     assert.equal(rec.routerDecision.useProfileTree, true);
   });
 
+  test('records only allowlisted metadata in lifecycle events', () => {
+    enableTrace(true);
+    const t = beginTrace('never persist this question text');
+    t.lifecycle('created', { surface: 'manual', rawPrompt: 'must never be retained' })
+      .lifecycle('planned', { answerType: 'identity_answer', sourceKinds: ['profile_resume'] })
+      .lifecycle('evidence_selected', {
+        selectedEvidenceCount: 2,
+        renderedEvidenceCount: 1,
+        hasDirectEvidence: true,
+        evidenceText: 'must never be retained',
+      })
+      .lifecycle('completed', { finalAction: 'answer', validationResult: 'accepted' });
+
+    const rec = t.toRecord();
+    assert.deepEqual(rec.lifecycle.map((event) => event.stage), [
+      'created', 'planned', 'evidence_selected', 'completed',
+    ]);
+    assert.deepEqual(rec.lifecycle[1].data, {
+      answerType: 'identity_answer', sourceKinds: ['profile_resume'],
+    });
+    assert.deepEqual(rec.lifecycle[2].data, {
+      selectedEvidenceCount: 2, renderedEvidenceCount: 1, hasDirectEvidence: true,
+    });
+    assert.doesNotMatch(JSON.stringify(rec), /never persist|must never be retained/);
+  });
+
   test('records profile-routing diagnostic markers (Phase 3 bug-prevention fields)', () => {
     enableTrace(true);
     const t = beginTrace('what is my name?');

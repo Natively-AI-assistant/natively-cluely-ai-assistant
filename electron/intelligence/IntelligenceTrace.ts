@@ -52,6 +52,30 @@ export interface TraceStage {
   ms: number;
 }
 
+/**
+ * The shared, content-free turn lifecycle used to compare answer surfaces.
+ * `data` only accepts allowlisted metadata keys; raw prompt/evidence/answer text
+ * cannot enter this record through the lifecycle API.
+ */
+export type TraceLifecycleStage =
+  | 'created'
+  | 'planned'
+  | 'evidence_selected'
+  | 'prompt_built'
+  | 'provider_dispatched'
+  | 'streaming'
+  | 'validating'
+  | 'repairing'
+  | 'completed'
+  | 'cancelled'
+  | 'failed';
+
+export interface TraceLifecycleEvent {
+  stage: TraceLifecycleStage;
+  ms: number;
+  data?: Record<string, string | number | boolean | string[]>;
+}
+
 /** The full structured record for one answer (spec Phase 12). */
 export interface IntelligenceTraceRecord {
   /** sha256(query).slice(0,12) — never the raw query. */
@@ -91,6 +115,8 @@ export interface IntelligenceTraceRecord {
   contextInclusion: ContextInclusionEntry[];
   /** Latency by stage. */
   stages: TraceStage[];
+  /** Canonical turn lifecycle, including cancellation/failure terminals. */
+  lifecycle: TraceLifecycleEvent[];
   model?: string;
   provider?: string;
   firstTokenMs?: number;
@@ -107,7 +133,22 @@ export interface IntelligenceTraceRecord {
 const SOURCE_LABEL_RE = /^[\w.:_/+-]{1,40}$/;
 const MAX_INCLUSION_ENTRIES = 32;
 const MAX_STAGES = 64;
+const MAX_LIFECYCLE_EVENTS = 24;
 const MAX_LIST = 32;
+const LIFECYCLE_STAGES = new Set<TraceLifecycleStage>([
+  'created', 'planned', 'evidence_selected', 'prompt_built', 'provider_dispatched',
+  'streaming', 'validating', 'repairing', 'completed', 'cancelled', 'failed',
+]);
+const LIFECYCLE_MARKER_KEYS = new Set([
+  'answerType', 'surface', 'sourceOwner', 'sourceAuthority', 'provider',
+  'requestedModel', 'actualModel', 'planHash', 'evidenceHash', 'promptHash',
+  'validationResult', 'finalAction', 'reason', 'errorCategory', 'fallbackReason',
+  'modeId',
+]);
+const LIFECYCLE_COUNT_KEYS = new Set([
+  'selectedEvidenceCount', 'renderedEvidenceCount', 'providerAttempts', 'repairCount',
+]);
+const LIFECYCLE_LIST_KEYS = new Set(['sourceKinds']);
 
 function marker(v: string | undefined, max = 48): string | undefined {
   if (typeof v !== 'string') return undefined;
@@ -146,6 +187,7 @@ export interface IntelligenceTrace {
   }): IntelligenceTrace;
   noteContext(entry: ContextInclusionEntry): IntelligenceTrace;
   stage(stage: string, ms: number): IntelligenceTrace;
+  lifecycle(stage: TraceLifecycleStage, data?: Record<string, unknown>): IntelligenceTrace;
   setProvider(info: { provider?: string; model?: string }): IntelligenceTrace;
   setLatency(info: { firstTokenMs?: number; firstUsefulMs?: number; totalMs?: number }): IntelligenceTrace;
   noteFallback(label: string): IntelligenceTrace;
@@ -160,6 +202,7 @@ const NOOP: IntelligenceTrace = {
   setRouting() { return NOOP; },
   noteContext() { return NOOP; },
   stage() { return NOOP; },
+  lifecycle() { return NOOP; },
   setProvider() { return NOOP; },
   setLatency() { return NOOP; },
   noteFallback() { return NOOP; },
@@ -171,6 +214,7 @@ let SEQ = 0;
 
 class ActiveTrace implements IntelligenceTrace {
   readonly enabled = true;
+  private readonly startedAt = Date.now();
   private rec: IntelligenceTraceRecord;
 
   constructor(query: string) {
@@ -181,6 +225,7 @@ class ActiveTrace implements IntelligenceTrace {
       queryLength: typeof query === 'string' ? query.length : 0,
       contextInclusion: [],
       stages: [],
+      lifecycle: [],
       fallbacksUsed: [],
       errors: [],
       flags: safeFlagSnapshot(),
@@ -253,6 +298,19 @@ class ActiveTrace implements IntelligenceTrace {
     return this;
   }
 
+  lifecycle(stage: TraceLifecycleStage, data?: Record<string, unknown>): IntelligenceTrace {
+    try {
+      if (!LIFECYCLE_STAGES.has(stage) || this.rec.lifecycle.length >= MAX_LIFECYCLE_EVENTS) return this;
+      const safeData = sanitizeLifecycleData(data);
+      this.rec.lifecycle.push({
+        stage,
+        ms: Math.max(0, Date.now() - this.startedAt),
+        ...(Object.keys(safeData).length > 0 ? { data: safeData } : {}),
+      });
+    } catch { /* never throw */ }
+    return this;
+  }
+
   setProvider(info: { provider?: string; model?: string }): IntelligenceTrace {
     try {
       this.rec.provider = marker(info.provider, 40);
@@ -294,12 +352,38 @@ class ActiveTrace implements IntelligenceTrace {
       ...this.rec,
       contextInclusion: this.rec.contextInclusion.map((e) => ({ ...e })),
       stages: this.rec.stages.map((s) => ({ ...s })),
+      lifecycle: this.rec.lifecycle.map((event) => ({
+        ...event,
+        ...(event.data ? { data: { ...event.data } } : {}),
+      })),
       fallbacksUsed: [...this.rec.fallbacksUsed],
       errors: [...this.rec.errors],
       flags: { ...this.rec.flags },
       routerDecision: this.rec.routerDecision ? { ...this.rec.routerDecision } : undefined,
     };
   }
+}
+
+function sanitizeLifecycleData(data: Record<string, unknown> | undefined): Record<string, string | number | boolean | string[]> {
+  const safe: Record<string, string | number | boolean | string[]> = {};
+  if (!data || typeof data !== 'object') return safe;
+  for (const [key, value] of Object.entries(data)) {
+    if (LIFECYCLE_MARKER_KEYS.has(key) && typeof value === 'string') {
+      const sanitized = marker(value, 64);
+      if (sanitized) safe[key] = sanitized;
+    } else if (LIFECYCLE_COUNT_KEYS.has(key) && typeof value === 'number' && Number.isFinite(value)) {
+      safe[key] = Math.max(0, Math.round(value));
+    } else if (LIFECYCLE_LIST_KEYS.has(key) && Array.isArray(value)) {
+      safe[key] = value
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => marker(entry, 40))
+        .filter((entry): entry is string => Boolean(entry))
+        .slice(0, 8);
+    } else if (key === 'hasDirectEvidence' && typeof value === 'boolean') {
+      safe[key] = value;
+    }
+  }
+  return safe;
 }
 
 function numOrUndef(v: unknown): number | undefined {

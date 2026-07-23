@@ -126,13 +126,13 @@ export async function raceStreamWithDeadline(opts: {
   /** Bail predicate (e.g. superseded by a newer generation). */
   shouldAbort?: () => boolean;
   /**
-   * Called once when the loop ends for ANY reason (timeout/stall/abort/done).
-   * Use it to abort the underlying provider request (e.g. controller.abort()) so
-   * a timed-out HTTP stream doesn't keep running to its own network timeout —
-   * fire-and-forget iterator.return() alone cannot cancel a fetch parked in an
-   * await. Synchronous; must not throw.
+   * Called once when the loop ends. The reason distinguishes normal completion
+   * from a timeout/stall/supersession, so callers can abort an underlying HTTP
+   * request only when it still needs cancellation. Fire-and-forget iterator
+   * cleanup alone cannot interrupt a fetch parked in an await. Synchronous; it
+   * must not throw.
    */
-  onCleanup?: () => void;
+  onCleanup?: (reason: 'done' | 'first_useful_timeout' | 'stall_timeout' | 'aborted' | 'error') => void;
 }): Promise<'done' | 'first_useful_timeout' | 'stall_timeout' | 'aborted'> {
   const {
     stream, firstUsefulDeadlineMs: fuMs, interTokenStallMs = LIVE_INTER_TOKEN_STALL_MS,
@@ -147,14 +147,14 @@ export async function raceStreamWithDeadline(opts: {
   // must NOT `await` the cleanup on the deadline path — that would re-introduce
   // the multi-second hang we're guarding against. The underlying SDK stream
   // closes when the generator next checks its abort signal / yields.
-  const cleanup = () => {
-    try { onCleanup?.(); } catch { /* abort callback must not break cleanup */ }
+  const cleanup = (reason: 'done' | 'first_useful_timeout' | 'stall_timeout' | 'aborted' | 'error') => {
+    try { onCleanup?.(reason); } catch { /* abort callback must not break cleanup */ }
     try { const p = iterator.return?.(undefined); if (p && typeof (p as any).then === 'function') (p as Promise<unknown>).catch(() => {}); } catch { /* already closed */ }
   };
   try {
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      if (shouldAbort?.()) { cleanup(); return 'aborted'; }
+      if (shouldAbort?.()) { cleanup('aborted'); return 'aborted'; }
       let res: IteratorResult<string> | typeof DEADLINE;
       if (!isSpeculative) {
         if (!useful) useful = isUsefulYet();
@@ -173,20 +173,25 @@ export async function raceStreamWithDeadline(opts: {
         res = await Promise.race([nextP, deadline]);
         if (timer) clearTimeout(timer);
         if (res === DEADLINE) {
-          cleanup();
-          if (!useful) { onFirstUsefulTimeout?.(); return 'first_useful_timeout'; }
-          onStallTimeout?.(); return 'stall_timeout';
+          if (!useful) {
+            cleanup('first_useful_timeout');
+            onFirstUsefulTimeout?.();
+            return 'first_useful_timeout';
+          }
+          cleanup('stall_timeout');
+          onStallTimeout?.();
+          return 'stall_timeout';
         }
       } else {
         res = await iterator.next();
       }
-      if (res.done) { cleanup(); return 'done'; }
+      if (res.done) { cleanup('done'); return 'done'; }
       lastTokenAt = Date.now();
       await onToken(res.value);
       if (!useful) useful = isUsefulYet();
     }
   } catch (e) {
-    cleanup();
+    cleanup('error');
     throw e;
   }
 }

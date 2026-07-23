@@ -134,6 +134,64 @@ test('two sequential WTA turns emit final answers with DISTINCT, monotonically i
     `run B's id must exceed run A's id (A=${idsForA[0]}, B=${idsForB[0]})`);
 });
 
+test('a newer WTA request aborts the prior provider signal and suppresses its final result', async () => {
+  const { engine } = await makeEngine();
+  const receivedSignals = [];
+  const finals = [];
+  engine.on('suggested_answer', (answer) => finals.push(answer));
+
+  engine.whatToAnswerLLM = {
+    async *generateStream(...args) {
+      const signal = args.at(-1);
+      receivedSignals.push(signal);
+      if (receivedSignals.length === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        if (!signal.aborted) yield 'stale answer that must not be delivered';
+        return;
+      }
+      yield 'fresh answer from the second request';
+    },
+  };
+
+  const first = engine.runWhatShouldISay(undefined, 0.9, undefined, { skipCooldown: true });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const second = engine.runWhatShouldISay(undefined, 0.9, undefined, { skipCooldown: true });
+  await Promise.all([first, second]);
+
+  assert.equal(receivedSignals.length, 2, 'both requests must reach the WTA stream boundary');
+  assert.equal(receivedSignals[0].aborted, true, 'the first request signal must be aborted by the second request');
+  assert.equal(receivedSignals[1].aborted, false, 'the active request signal must remain usable');
+  assert.ok(finals.includes('fresh answer from the second request'));
+  assert.ok(!finals.includes('stale answer that must not be delivered'));
+});
+
+test('reset aborts an in-flight WTA request without delivering a final answer', async () => {
+  const { engine } = await makeEngine();
+  const receivedSignals = [];
+  const finals = [];
+  engine.on('suggested_answer', (answer) => finals.push(answer));
+
+  engine.whatToAnswerLLM = {
+    async *generateStream(...args) {
+      const signal = args.at(-1);
+      receivedSignals.push(signal);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      if (!signal.aborted) yield 'answer that reset must suppress';
+    },
+  };
+
+  const pending = engine.runWhatShouldISay(undefined, 0.9, undefined, { skipCooldown: true });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  engine.reset();
+  const result = await pending;
+
+  assert.equal(receivedSignals.length, 1);
+  assert.equal(receivedSignals[0].aborted, true);
+  assert.equal(receivedSignals[0].reason, 'engine_reset');
+  assert.equal(result, null);
+  assert.ok(!finals.includes('answer that reset must suppress'));
+});
+
 test('the type contract preserves generationId as an optional 4th arg (backward compatible)', () => {
   // Source-shape regression guard: every `emit('suggested_answer', …)`
   // call site in the WTA path now passes an extra 5th arg
@@ -151,8 +209,15 @@ test('the type contract preserves generationId as an optional 4th arg (backward 
   const wtaEmitsWithGen = src.match(emitCallPattern) || [];
   assert.ok(wtaEmitsWithGen.length >= 1,
     'expected the WTA path to emit at least one final with generationId');
-  // The legacy emit sites must still omit generationId (4 args).
-  const legacyEmits = src.match(/emit\(\s*'suggested_answer'\s*,\s*noKeyMsg\s*,\s*question[^)]*\)/g) || [];
-  assert.ok(legacyEmits.length >= 1,
-    'expected the legacy noKeyMsg emit to remain 4-arg (no generationId)');
+  // Every branch inside runWhatShouldISay, including legacy-provider and
+  // deterministic clarification exits, must now carry its t0 generationId.
+  // Id-less suggested-answer emissions remain valid for non-WTA features but
+  // must not bypass newest-wins delivery on this WTA surface.
+  const methodStart = src.indexOf('async runWhatShouldISay(');
+  const methodEnd = src.indexOf('async runFollowUp(', methodStart);
+  assert.ok(methodStart >= 0 && methodEnd > methodStart, 'runWhatShouldISay must be isolatable');
+  const wtaBody = src.slice(methodStart, methodEnd);
+  const idlessWtaEmits = wtaBody.match(/this\.emit\(\s*'suggested_answer'\s*,\s*[\s\S]*?\);/g) || [];
+  assert.equal(idlessWtaEmits.filter((emit) => !/generationId/.test(emit)).length, 0,
+    'every WTA final emit must carry its t0 generationId');
 });

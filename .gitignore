@@ -400,3 +400,14 @@ Sample thesis for testing.pdf
 # User-submitted crash reports / debug logs (device + session diagnostics — never commit)
 user log/
 *.ips
+
+# --- branch-integration safety hardening (2026-07-23) ---
+# Third-party dispute / billing evidence dirs — never push
+/dispute-evidence-*/
+/dispute-evidence-*
+/dispute_evidence/
+# Autopilot campaign prompts — internal docs, not source
+/HANDOFF*.md
+/NATIVELY_CONTEXT_SYSTEM_SIMPLIFICATION_PROMPT.md
+# Generated Vite build output that mirrors src/**/*.{tsx,ts}
+/src/**/*.js

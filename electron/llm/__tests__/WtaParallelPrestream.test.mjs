@@ -41,9 +41,9 @@ describe('W5: pipeline shape (source pins)', () => {
 
     test('mode retrieval is kicked as a promise and handed to generateStream', () => {
         assert.match(engineSrc, /const modeContextPromise: Promise<string>/);
-        // The prefetch promise is still threaded; the request snapshot (audit #6)
-        // is appended after it, so allow an optional trailing arg.
-        assert.match(engineSrc, /generateStream\([^)]*modeContextPromise(?:, requestSnapshot)?\)/s);
+        // The prefetch promise, request snapshot, and request-owned cancellation
+        // signal are all threaded to WTA generation.
+        assert.match(engineSrc, /generateStream\([^)]*modeContextPromise, requestSnapshot, whatToAnswerCancellationToken\.signal\)/s);
     });
 
     test('the floating intent promise carries an inline rejection handler', () => {
@@ -137,5 +137,27 @@ describe('W5: behavior through the real WhatToAnswerLLM', () => {
         // HYBRID_RETRIEVAL_BUDGET_MS is 1500 — generous margin for CI jitter.
         assert.ok(elapsed < 4000, `stalled ${elapsed.toFixed(0)}ms — budget race not applied to prefetch`);
         assert.doesNotMatch(helper.seen.userMessage, /PREFETCHED/);
+    });
+
+    test('threads the request AbortSignal to LLMHelper.streamChat', async () => {
+        const seen = { signal: null };
+        const helper = {
+            ...makeHelperStub(),
+            streamChat: async function* (_userMessage, _img, _ctx, _prompt, _ik, _sm, _scopes, signal) {
+                seen.signal = signal;
+                if (!signal?.aborted) yield 'ok';
+            },
+        };
+        const wta = new WhatToAnswerLLM(helper, modesManagerStub);
+        const plan = planAnswer({ question: 'Tell me about your projects.', source: 'what_to_answer', speakerPerspective: 'interviewer' });
+        const controller = new AbortController();
+        const out = await drain(wta.generateStream(
+            'interviewer: Tell me about your projects.',
+            undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+            plan, Promise.resolve(''), undefined, controller.signal,
+        ));
+
+        assert.equal(out, 'ok');
+        assert.equal(seen.signal, controller.signal);
     });
 });

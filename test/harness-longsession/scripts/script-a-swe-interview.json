@@ -61,7 +61,7 @@
       "press": {
         "id": "A5", "label": "datadog-throughput",
         "canonicalQuestion": "You re-architected that with a sharded RocksDB store — what throughput improvement did that get you?",
-        "expectedFacts": ["1.1M", "8.4M"],
+        "expectedFacts": ["1.1M|1.1 million|1.1m", "8.4M|8.4 million|8.4m"],
         "longRangeRecall": false
       }
     },

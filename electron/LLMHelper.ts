@@ -4876,6 +4876,17 @@ const isMultimodal = !!(imagePaths?.length);
           // auto-upgrades to DOC_GROUNDED_TOKEN_BUDGET (3600) internally.
           modeContextBlock = modesMgr.buildRetrievedActiveModeContextBlock(message, context, forceDocumentGrounding ? undefined : 1800, modeAnswerType(routeOptions), true, routeOptions?.pinnedModeId ?? undefined, { forceDocumentGrounding, followUpReferentHint: routeOptions?.followUpReferentHint });
         }
+        // Root-cause fix (2026-07-23): surface the block this generation call
+        // actually used back to the caller, regardless of governance state
+        // (typed pack, legacy hybrid, or sync lexical) — see
+        // ContextOsGenerationContext.retrievedBlockRaw. Consolidates retrieval
+        // to a single call per turn: a post-stream validator (e.g.
+        // ipcHandlers.ts's doc-grounded gate) can reuse this instead of
+        // independently re-retrieving with different query/budget params.
+        if (modeContextBlock) {
+          const _cogRetrieved = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;
+          if (_cogRetrieved) (_cogRetrieved as any).retrievedBlockRaw = modeContextBlock;
+        }
         // The mode's user-authored "Real-time prompt", deterministic — applies on
         // every answer instead of only when retrieval happened to score it.
         // Sensitivity-scoped by answer type inside the accessor.

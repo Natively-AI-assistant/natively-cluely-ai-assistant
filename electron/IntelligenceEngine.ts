@@ -28,8 +28,10 @@ import {
     completenessRegenFabricates,
     DOC_GROUNDED_ANSWER_TYPES,
     isDocGroundedAnswerType,
+    appendCustomModeSystemPromptLayer,
     type DocumentQuestionShape,
 } from './llm/documentGroundedPrompt';
+import { HARD_SYSTEM_PROMPT } from './llm/prompts';
 import type { ActiveModeInfo } from './llm/modeProfiles';
 import type { WhatToAnswerRequestSnapshot } from './llm/whatToAnswerRequestSnapshot';
 import { resolveCanonicalTurn } from './llm/resolveCanonicalTurn';
@@ -2956,6 +2958,26 @@ export class IntelligenceEngine extends EventEmitter {
                                     docContextBlock,
                                     'Output ONLY the corrected answer. No headings unless the question asks for a list.',
                                 ].join('\n');
+                                // Root-cause fix (2026-07-23): re-inject the custom mode's
+                                // own persona/behavioral instructions on the WTA doc-
+                                // grounded repair call (mirror of the manual-chat fix
+                                // in ipcHandlers.ts). Without this, any custom-mode
+                                // tone/scope/disclaimer is silently dropped on every
+                                // repair. Pure — only fires when a custom mode is
+                                // active, so non-doc-grounded/non-custom WTA paths
+                                // remain unchanged.
+                                let wtaRepairSystemPrompt: string | undefined;
+                                try {
+                                    const { appendCustomModeSystemPromptLayer } = require('./llm/documentGroundedPrompt');
+                                    const { isCustomMode } = require('./services/ModesManager');
+                                    const _activeModeRow = mm.getActiveMode?.();
+                                    wtaRepairSystemPrompt = appendCustomModeSystemPromptLayer({
+                                        baseSystemPrompt: HARD_SYSTEM_PROMPT,
+                                        modePromptSuffix: mm.getActiveModeSystemPromptSuffix?.(_activeModeRow?.id),
+                                        pinnedInstructions: mm.getActiveModePinnedInstructions?.(answerPlan.answerType, _activeModeRow?.id),
+                                        isActiveCustomMode: isCustomMode(_activeModeRow),
+                                    });
+                                } catch { wtaRepairSystemPrompt = undefined; }
                                 let repaired = '';
                                 try {
                                     await raceStreamWithDeadline({
@@ -2963,7 +2985,7 @@ export class IntelligenceEngine extends EventEmitter {
                                             repairPrompt,
                                             undefined,
                                             undefined,
-                                            undefined,
+                                            wtaRepairSystemPrompt,
                                             true,
                                             true,
                                             ['reference_files'],
@@ -2984,9 +3006,22 @@ export class IntelligenceEngine extends EventEmitter {
                                 // only calls isLeakedSchemaStub internally, not the
                                 // leaked-tag-block/JSON-envelope guards — a regeneration can
                                 // reproduce either of those failure shapes too.
+                                // NON-REGRESSION LENGTH FLOOR (root-cause fix, 2026-07-23,
+                                // mirrors the same guard added to ipcHandlers.ts's manual-
+                                // chat regen path): a repair that is drastically shorter than
+                                // the pre-repair answer it's replacing is unlikely to be an
+                                // improvement, even when it technically passes the shape
+                                // validator (which has no notion of the ORIGINAL answer's
+                                // length/coverage). Only applies when the original had
+                                // substantial content worth protecting — a short/empty
+                                // original has nothing to regress from.
+                                const wtaOriginalForCompare = (fullAnswer || '').trim();
+                                const wtaRepairIsLengthDowngrade = wtaOriginalForCompare.length >= 150
+                                    && repairedTrim.length < wtaOriginalForCompare.length * 0.6;
                                 if (repairedTrim.length >= 5
                                     && !isLeakedAnswerArtifact(repairedTrim)
                                     && !completenessRegenFabricates(repairedTrim, docContextBlock)
+                                    && !wtaRepairIsLengthDowngrade
                                     && validateDocumentGroundedAnswer({
                                         question: docQuestion,
                                         answer: repairedTrim,
@@ -2996,11 +3031,11 @@ export class IntelligenceEngine extends EventEmitter {
                                     }).ok) {
                                     fullAnswer = repairedTrim;
                                     trace.mark('repair_used', { reason: 'doc_grounded_repair_applied', originalReason: firstCheck.reason });
-                                } else if (firstCheck.reason === 'empty_or_greeting' || firstCheck.reason === 'false_refusal_evidence_exists') {
+                                } else if (firstCheck.reason === 'empty_or_greeting' || firstCheck.reason === 'false_refusal_evidence_exists' || wtaRepairIsLengthDowngrade) {
                                     // Keep the original for non-fabrication-sensitive failures if
-                                    // repair failed validation; the normal cleanup/misfire guards below
-                                    // may still improve it. For absent facts and unsupported claims we
-                                    // fail closed instead.
+                                    // repair failed validation (or would be a length regression);
+                                    // the normal cleanup/misfire guards below may still improve it.
+                                    // For absent facts and unsupported claims we fail closed instead.
                                     trace.mark('validation_completed', { reason: 'doc_grounded_repair_rejected_keep_original', originalReason: firstCheck.reason });
                                 } else {
                                     fullAnswer = 'I could not find that in the retrieved sections of the document.';
