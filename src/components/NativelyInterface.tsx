@@ -797,6 +797,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   useEffect(() => {
     if (!autoScroll) return;
     if (messages.length === 0) return;
+    // Don't auto-scroll if the user has manually scrolled up to read history
+    if (isScrolledUpRef.current) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
   }, [messages, autoScroll]);
 
@@ -936,6 +938,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // bottom of the conversation stays visually pinned as scrollMaxH grows.
   // iMessage does the same when its window resizes.
   const wasAtBottomRef = useRef<boolean>(true);
+  const isScrolledUpRef = useRef<boolean>(false);
   // Captures data from onCaptureAndProcess before the React state flush so
   // handleWhatToSay() can access it even in React 18 concurrent mode (where
   // a plain setTimeout(0) may fire before setAttachedContext flushes).
@@ -2120,6 +2123,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       rafId = requestAnimationFrame(() => {
         rafId = null;
         checkCodeVisibility();
+        
+        // Track if user manually scrolled up so we pause auto-scroll
+        if (container) {
+          const distanceFromBottom = container.scrollHeight - (container.scrollTop + container.clientHeight);
+          isScrolledUpRef.current = distanceFromBottom > 24; // 24px threshold
+        }
       });
     };
     container.addEventListener('scroll', onScroll, { passive: true });
