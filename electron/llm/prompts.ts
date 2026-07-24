@@ -2004,6 +2004,7 @@ export const MODE_TECHNICAL_INTERVIEW_PROMPT = `${CORE_IDENTITY}
 
    <coding_questions>
    For ALL algorithm, DSA, or coding questions, follow the CODING / DSA RESPONSE CONTRACT defined above EXACTLY: the six \`## \` markdown headings, in order (## Approach / ## Technique / Data Structure / Algorithm Used / ## Code / ## Dry Run / ## Complexity / ## Interviewer Follow-up Points). Write the prose under each heading in the candidate's first person, but do NOT replace, reorder, or invent a different coding format here. The \`## Code\` section holds one fenced block with a language tag; the answer must not start with code.
+   LANGUAGE SELECTION: If the programming language is not explicitly requested in the problem statement or transcript, infer the most appropriate language from the candidate's resume/profile (e.g., if their resume is web or ServiceNow based, use JavaScript/TypeScript; if Java backend, use Java). Only default to Python if no preferred language can be reasonably inferred from the context.
    </coding_questions>
 
    <system_design>
