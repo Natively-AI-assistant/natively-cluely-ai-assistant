@@ -452,8 +452,8 @@ const COMMON_CODING_PROBLEM_PATTERNS = [
 ];
 
 const CODING_PATTERNS = [
-  /\b(write|implement|code|program|function|class|method|solve)\b/i,
-  /\bcode for\b|\bprogram for\b|\bfunction for\b|\balgorithm for\b/i,
+  /\b(write|implement|code|program|function|class|method|solve|script|snippet)\b/i,
+  /\bcode for\b|\bprogram for\b|\bfunction for\b|\balgorithm for\b|\bscript for\b|\bsnippet for\b/i,
   /\balgorithm\b|\bdebug this\b|\bfix (this|the) bug\b/i,
   // A bare language name is NOT a coding signal on its own — "how would you use
   // SQL", "explain SQL", "have you used Python" are concept/experience asks, not
@@ -1793,17 +1793,17 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   // Explicit code-writing verbs. NOTE: "query" is intentionally EXCLUDED — "how
   // would you use a GraphQL query" / "query data using GraphQL" is a hypothetical
   // concept ask, not a code-writing task. A genuine "write a SQL query" is caught
-  // by the write/COMMON_CODING patterns instead.
+  // by the write/COMMON_CODING/DSA patterns instead.
   // NOTE: compute/return/print are EXCLUDED here (code-review 2026-06-05, MED) —
   // they'd wrongly veto a real comp question ("compute my total compensation").
   // Genuine SQL/coding "salary" cases are caught by the write/COMMON_CODING/DSA
   // signals instead.
-  const hasExplicitCodingVerb = /\b(write|implement|code|program|function|solve)\b/i.test(text)
+  const hasExplicitCodingVerb = /\b(write|implement|code|program|function|solve|script|snippet|create)\b/i.test(text)
     || includesAny(text, COMMON_CODING_PROBLEM_PATTERNS) || includesAny(textNoTechStack, DSA_PATTERNS);
   // Strict "write code" verbs only (no DSA-term inference). Used to gate the
   // HYPOTHETICAL branch: "how would you use BFS?" is a concept (BFS is a DSA term
   // but there's no write-verb), so it must NOT be blocked from technical_concept.
-  const hasWriteCodeVerb = /\b(write|implement|code|program|solve)\b/i.test(text)
+  const hasWriteCodeVerb = /\b(write|implement|code|program|solve|script|snippet|create)\b/i.test(text)
     || includesAny(text, COMMON_CODING_PROBLEM_PATTERNS);
   // A CLEAR past/present EXPERIENCE probe ("have you implemented X before", "where
   // have you used X", "did you actually use X") is about the CANDIDATE — it must
