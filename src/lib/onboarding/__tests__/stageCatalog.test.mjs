@@ -3,13 +3,49 @@
 // Decision-engine tests for the stage catalog. Validates each stage's
 // shouldShowToaster behavior against fixture contexts.
 //
-// Run: node --test src/lib/onboarding/__tests__/stageCatalog.test.mjs
+// Run: node --experimental-strip-types --test src/lib/onboarding/__tests__/stageCatalog.test.mjs
+// (--experimental-strip-types is required: this file imports stageCatalog.ts
+// directly, see the drain-loop invariant below.)
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { shouldShowToaster } from '../orchestrator.mjs';
-import { STAGES } from '../stageCatalog.mjs';
+import { STAGES, QUIET_WINDOW_STAGE } from '../stageCatalog.mjs';
+import { STAGES as STAGES_TS, QUIET_WINDOW_STAGE as QUIET_WINDOW_STAGE_TS } from '../stageCatalog.ts';
+
+// ─── Drain-loop safety invariant ────────────────────────────────────
+// A gate-only stage is auto-completed inside evaluateAndDispatch()'s
+// `do { … } while (progressMade && !activeToasterId)` loop. completeToaster()
+// records completion, but shouldShowToaster() only suppresses a completed stage
+// when `onceEver` is set. So a gate-only stage WITHOUT onceEver stays eligible
+// after completing, keeps setting progressMade=true, and the loop spins
+// synchronously forever — pegging the renderer main thread and OOM-crashing it
+// (the 2026-07-19 quiet_window regression: RSS → ~9 GB, exitCode-5 crash).
+// This invariant makes that misconfiguration a failing test, not a field crash.
+//
+// Checked against BOTH catalogs: stageCatalog.mjs is a hand-maintained mirror
+// used only so this suite can run under `node --test` without a build step —
+// stageCatalog.ts is what the app actually ships. A test that only checked
+// the .mjs mirror could stay green while the real .ts catalog regresses.
+function assertEveryGateOnlyStageIsOnceEver(stages, label) {
+  for (const s of stages) {
+    if (s.isGateOnly) {
+      assert.equal(
+        s.onceEver, true,
+        `[${label}] gate-only stage "${s.id}" must set onceEver:true or evaluateAndDispatch spins forever`,
+      );
+    }
+  }
+}
+
+test('INVARIANT: every gate-only stage is onceEver — stageCatalog.mjs (test mirror)', () => {
+  assertEveryGateOnlyStageIsOnceEver([...STAGES, QUIET_WINDOW_STAGE], 'stageCatalog.mjs');
+});
+
+test('INVARIANT: every gate-only stage is onceEver — stageCatalog.ts (production)', () => {
+  assertEveryGateOnlyStageIsOnceEver([...STAGES_TS, QUIET_WINDOW_STAGE_TS], 'stageCatalog.ts');
+});
 
 // ─── Fixtures ──────────────────────────────────────────────────────
 

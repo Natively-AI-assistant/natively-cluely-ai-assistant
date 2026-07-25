@@ -56,6 +56,16 @@ jobs:
       - name: Run intelligence unit tests
         run: npm run test:intelligence
 
+      # Covers src/lib/__tests__ and src/lib/onboarding/__tests__ (renderer-side
+      # onboarding orchestrator/stageCatalog, overlay state, etc.). Previously
+      # unwired: no CI job ran these, including the regression invariant added
+      # for the quiet_window drain-loop OOM crash. --experimental-strip-types
+      # lets the suite import stageCatalog.ts directly (not just its .mjs test
+      # mirror), so a real production-catalog regression fails CI, not just the
+      # hand-maintained mirror.
+      - name: Run src/lib unit tests
+        run: npm run test:lib
+
   api-smoke:
     # Runs weekly (Monday 09:00 UTC) and on demand via workflow_dispatch.
     # Requires secrets: NATIVELY_API_KEY (or NATIVELY_TRIAL_TOKEN) set in repo.
