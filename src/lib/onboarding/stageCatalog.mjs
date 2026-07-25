@@ -133,6 +133,10 @@ export const QUIET_WINDOW_STAGE = {
   id: 'quiet_window',
   order: 99,
   isGateOnly: true,
+  // Parity with stageCatalog.ts: gate-only stages MUST be onceEver or the
+  // orchestrator's evaluateAndDispatch drain loop re-completes them forever
+  // (synchronous infinite loop → native OOM). See the .ts for the full note.
+  onceEver: true,
   triggers: {},
   customPredicate: (ctx) => ctx.turnCount - (ctx.completed._turnCountAtQuietStart ?? 0) >= 3,
 };

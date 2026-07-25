@@ -188,6 +188,18 @@ export const QUIET_WINDOW_STAGE: StageConfig = {
   id: 'quiet_window',
   order: 99, // not used in static ordering
   isGateOnly: true, // No UI — auto-resolves once predicate is satisfied
+  // MUST be onceEver like every other gate-only stage (profile_intelligence,
+  // modes_manager). Without it, evaluateAndDispatch()'s auto-complete branch
+  // re-completes this stage on EVERY pass of its `do { … } while (progressMade
+  // && !activeToasterId)` drain loop: completeToaster() records completion, but
+  // shouldShowToaster() only suppresses a completed stage when `onceEver` is set
+  // (see orchestrator.ts step 2), so without it the stage stays eligible, keeps
+  // setting progressMade=true, and the loop spins synchronously forever — each
+  // pass calling persist()+notify(), churning unbounded native memory. That
+  // pegged the launcher renderer's main thread and grew its RSS to ~9 GB before
+  // an exitCode-5 OOM crash (2026-07-19). It resolves exactly once (3 user turns
+  // after trial_promo), so once-ever is also the correct semantics.
+  onceEver: true,
   triggers: {},
   customPredicate: (ctx: Ctx) => {
     const baseline = ctx.completed['_turnCountAtQuietStart'] ?? 0;
