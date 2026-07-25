@@ -21,6 +21,7 @@ import { test, expect } from '@playwright/test';
 
 const CI = process.env.CI === 'true';
 const APP_PORT = parseInt(process.env.ELECTRON_APP_PORT ?? '0', 10);
+const SCROLL_SEL = '[data-testid="assistant-scroll"]';
 
 test.describe('Cmd+B chat-scroll persistence', () => {
   test.beforeEach(async ({ page }) => {
@@ -35,7 +36,7 @@ test.describe('Cmd+B chat-scroll persistence', () => {
   });
 
   test('scrollTop survives toggle-expand (Cmd+B hide then show)', async ({ page }) => {
-    await page.goto(`http://localhost:${APP_PORT}`);
+    await page.goto(`http://localhost:${APP_PORT}/?window=overlay`);
     await page.waitForLoadState('networkidle');
 
     // Wait for the meeting overlay shell to mount. After the always-mounted
@@ -47,10 +48,8 @@ test.describe('Cmd+B chat-scroll persistence', () => {
     // scrollTop persists at a non-bottom position. We use DOM seeding via
     // page.evaluate so the test does not depend on STT/LLM wiring — the
     // bug is purely about shell mount lifecycle.
-    await page.evaluate(() => {
-      const scrollEl = document.querySelector(
-        '.flex-1.overflow-y-auto.p-4.space-y-3.no-drag.isolate'
-      ) as HTMLElement | null;
+    await page.evaluate((sel) => {
+      const scrollEl = document.querySelector(sel) as HTMLElement | null;
       if (!scrollEl) throw new Error('scroll container not found');
       // 200 dummy rows ≈ 8000px tall, well past clientHeight.
       for (let i = 0; i < 200; i++) {
@@ -59,23 +58,19 @@ test.describe('Cmd+B chat-scroll persistence', () => {
         row.textContent = `row ${i}`;
         scrollEl.appendChild(row);
       }
-    });
+    }, SCROLL_SEL);
 
     // Scroll the chat to a known non-bottom position.
-    await page.evaluate(() => {
-      const scrollEl = document.querySelector(
-        '.flex-1.overflow-y-auto.p-4.space-y-3.no-drag.isolate'
-      ) as HTMLElement | null;
+    await page.evaluate((sel) => {
+      const scrollEl = document.querySelector(sel) as HTMLElement | null;
       if (!scrollEl) throw new Error('scroll container not found');
       scrollEl.scrollTop = 1234;
-    });
+    }, SCROLL_SEL);
 
-    const before = await page.evaluate(() => {
-      const scrollEl = document.querySelector(
-        '.flex-1.overflow-y-auto.p-4.space-y-3.no-drag.isolate'
-      ) as HTMLElement | null;
+    const before = await page.evaluate((sel) => {
+      const scrollEl = document.querySelector(sel) as HTMLElement | null;
       return scrollEl?.scrollTop ?? null;
-    });
+    }, SCROLL_SEL);
     expect(before).toBe(1234);
 
     // Fire Cmd+B twice (hide + show). The 400ms hideWindow grace period
@@ -86,12 +81,10 @@ test.describe('Cmd+B chat-scroll persistence', () => {
     // Allow fade-in + any post-show auto-scroll effect to settle.
     await page.waitForTimeout(700);
 
-    const after = await page.evaluate(() => {
-      const scrollEl = document.querySelector(
-        '.flex-1.overflow-y-auto.p-4.space-y-3.no-drag.isolate'
-      ) as HTMLElement | null;
+    const after = await page.evaluate((sel) => {
+      const scrollEl = document.querySelector(sel) as HTMLElement | null;
       return scrollEl?.scrollTop ?? null;
-    });
+    }, SCROLL_SEL);
 
     // The bug: after returns to 0 because the shell unmounted.
     // The fix: after returns 1234 because the shell stays mounted and the
@@ -100,7 +93,7 @@ test.describe('Cmd+B chat-scroll persistence', () => {
   });
 
   test('shell stays mounted across toggle-expand (DOM identity)', async ({ page }) => {
-    await page.goto(`http://localhost:${APP_PORT}`);
+    await page.goto(`http://localhost:${APP_PORT}/?window=overlay`);
     await page.waitForLoadState('networkidle');
 
     const shell = page.locator('[data-shell-root]').first();
@@ -143,13 +136,11 @@ test.describe('Cmd+B chat-scroll persistence', () => {
   // false-pass. The previous version only scrolled away and never established
   // the expanded baseline, so a dead listener could pass on the weak checks.
   test('scroll listener is live (code-width auto-resize responds to scroll)', async ({ page }) => {
-    await page.goto(`http://localhost:${APP_PORT}`);
+    await page.goto(`http://localhost:${APP_PORT}/?window=overlay`);
     await page.waitForLoadState('networkidle');
 
     const shell = page.locator('[data-shell-root]').first();
     await shell.waitFor({ state: 'attached', timeout: 10_000 });
-
-    const SCROLL_SEL = '.flex-1.overflow-y-auto.p-4.space-y-3.no-drag.isolate';
 
     // Seed a tall code block at the TOP of the chat, then filler below it so
     // it can be scrolled off-screen. The block is taller than the viewport so

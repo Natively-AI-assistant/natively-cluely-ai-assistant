@@ -112,3 +112,37 @@ test('onSessionReset does NOT call setIsExpanded(false) (would hide the just-sta
     'BUG: onSessionReset must NOT call setIsExpanded(false) — that hides the overlay window of a meeting that just started. Collapse the code-width state (shellWidth/codeExpandedRef) instead.',
   );
 });
+
+test('onSessionReset clears transcript and returns workspace to tabs', () => {
+  assert.match(body, /dispatchTranscript\(\{\s*type:\s*['"]reset['"]\s*\}\)/);
+  assert.match(body, /setWorkspaceResetKey\(\(value\)\s*=>\s*value\s*\+\s*1\)/);
+  assert.match(body, /setWorkspaceMode\(\s*['"]tabs['"]\s*\)/);
+});
+
+test('onSessionReset invalidates width callbacks before stopping the active animation', () => {
+  const invalidateIndex = body.indexOf('layoutTransitionGenerationRef.current += 1');
+  const stopIndex = body.indexOf('animationControlsRef.current.stop()');
+  assert.ok(invalidateIndex >= 0, 'reset must invalidate the active width-transition generation');
+  assert.ok(stopIndex >= 0, 'reset must stop the active width animation');
+  assert.ok(
+    invalidateIndex < stopIndex,
+    'reset must invalidate stale callbacks before stopping the active width animation',
+  );
+});
+
+test('width animation onUpdate rejects a stale generation before any DOM restoration or measurement', () => {
+  const transitionIndex = source.indexOf('const startTransition = useCallback(');
+  assert.ok(transitionIndex >= 0, 'could not locate startTransition');
+  const marker = 'onUpdate: () => {';
+  const onUpdateIndex = source.indexOf(marker, transitionIndex);
+  const onCompleteIndex = source.indexOf('onComplete: () => {', onUpdateIndex);
+  assert.ok(onUpdateIndex >= 0 && onCompleteIndex > onUpdateIndex, 'could not isolate width onUpdate');
+  const onUpdateBody = stripLineComments(
+    source.slice(onUpdateIndex + marker.length, onCompleteIndex),
+  ).trim();
+  assert.match(
+    onUpdateBody,
+    /^if\s*\(generation\s*!==\s*layoutTransitionGenerationRef\.current\)\s*return;/,
+    'onUpdate must reject stale generations before restoreWorkspaceAnchors, pinning, or height measurement',
+  );
+});

@@ -1848,8 +1848,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <MessageSquare size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Interviewer Transcript')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Show real-time transcription of the interviewer')}</p>
+                                                            <h3 className="text-sm font-bold text-text-primary">Live Transcript</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">Show real-time meeting and microphone transcription</p>
                                                         </div>
                                                     </div>
                                                     <div

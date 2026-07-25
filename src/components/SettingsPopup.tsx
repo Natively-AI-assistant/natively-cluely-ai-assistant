@@ -280,7 +280,7 @@ const SettingsPopup = () => {
                             className={`w-3.5 h-3.5 transition-colors ${showTranscript ? 'text-emerald-400' : inactiveIconColorClass}`}
                             fill={showTranscript ? "currentColor" : "none"}
                         />
-                        <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Transcript</span>
+                        <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Live Transcript</span>
                     </div>
                     <button
                         onClick={() => {

@@ -5161,6 +5161,29 @@ html[data-platform="linux"] body {
    The global scrollbar is hidden (width:0). The code hero needs a discreet
    horizontal scrollbar so long lines are reachable; it stays near-invisible
    until the card is hovered. Scoped to .code-scroll so nothing else changes. */
+/* Copilot text must stay inside its column even when an answer contains an
+   unbroken URL, hash, or identifier. Keep the policy scoped to Markdown text:
+   fenced code explicitly restores no-wrap behavior and retains its own local
+   horizontal scroller. */
+.copilot-pane-content .markdown-content {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.copilot-pane-content .markdown-content pre {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.copilot-pane-content .markdown-content pre * {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 .code-scroll {
   scrollbar-width: thin;                       /* Firefox */
   scrollbar-color: transparent transparent;
@@ -5187,4 +5210,23 @@ html[data-platform="linux"] body {
 }
 .code-scroll::-webkit-scrollbar-track {
   background: transparent;
+}
+
+.meeting-pane-scroll {
+  overflow-anchor: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--overlay-border) transparent;
+}
+
+.meeting-pane-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.meeting-pane-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.meeting-pane-scroll::-webkit-scrollbar-thumb {
+  background: var(--overlay-border);
+  border-radius: 999px;
 }
