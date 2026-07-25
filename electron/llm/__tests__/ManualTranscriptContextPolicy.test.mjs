@@ -141,6 +141,10 @@ describe('manual transcript context policy wiring', () => {
       /else if \(!context && autoContextSnapshot && shouldAutoAttachManualTranscriptContext\(message, answerPlan\)\) \{[\s\S]*let snapshotForContext = autoContextSnapshot;[\s\S]*stripPriorAssistantTurns\(autoContextSnapshot\);[\s\S]*context = snapshotForContext;/,
     );
     assert.match(ipcSrc, /Skipped 100s transcript context for standalone manual chat/);
+    assert.match(
+      ipcSrc,
+      /else if \(!context && autoContextSnapshot && isRefinementFollowUp\(message\)\s*&& !isTranscriptBoundManualQuestion\(message\)\s*&& \(!turnContract \|\| turnContract\.memoryReadPolicy\.allowPriorAssistantFacts\)\)/,
+    );
     assert.match(ipcSrc, /extractLatestPriorAssistantTurn\(autoContextSnapshot\)/);
     assert.match(ipcSrc, /Injected latest prior assistant answer for manual refinement; rolling transcript excluded/);
   });
@@ -152,6 +156,10 @@ describe('manual transcript context policy wiring', () => {
     assert.match(ipcSrc, /shouldAutoAttachManualTranscriptContext\(message, phoneAnswerPlan\)/);
     assert.match(ipcSrc, /const _pMode = phoneActiveMode;/);
     assert.match(ipcSrc, /\[PhoneMirror\] Skipped 100s transcript context for standalone manual chat/);
+    assert.match(
+      ipcSrc,
+      /if \(snap && snap\.trim\(\)\.length > 0 && isRefinementFollowUp\(message\)\s*&& !isTranscriptBoundManualQuestion\(message\) && !phoneDocGrounded\)/,
+    );
     assert.match(ipcSrc, /extractLatestPriorAssistantTurn\(snap\)/);
     assert.match(ipcSrc, /\[PhoneMirror\] Injected latest prior assistant answer for refinement; rolling transcript excluded/);
   });
