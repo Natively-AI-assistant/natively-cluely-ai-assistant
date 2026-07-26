@@ -112,4 +112,39 @@ describe('Phase 3 item 4 / Phase 6 Slice 0 item 2: doubled-question client-side 
     );
     assert.equal(result, 'the quick brown fox jumps over the lazy dog');
   });
+
+  test('Greptile PR #392 finding: a word that is merely a character prefix of a longer base word is not treated as a startsWith match', () => {
+    // "category".startsWith("cat") is true at the character level, but "cat"
+    // and "category" are unrelated words — the merge must not replace base
+    // with addition just because addition's first word happens to contain
+    // base's only word as a character prefix.
+    const result = mergeTranscriptChunks('cat', 'category is broad');
+    assert.equal(result, 'cat category is broad');
+  });
+
+  test('Greptile PR #392 finding: a word that is merely a character suffix of a longer base word is not silently dropped', () => {
+    // "chocolate".endsWith("late") is true at the character level, but "late"
+    // is a genuinely new word, not a stale trailing fragment of "chocolate".
+    const result = mergeTranscriptChunks('a lot of chocolate', 'late at night');
+    assert.equal(result, 'a lot of chocolate late at night');
+  });
+
+  test('Greptile PR #392 finding: an unpunctuated interim chunk still matches a punctuated corrected final (double-final replace path)', () => {
+    // Interim STT chunks are typically unpunctuated; the corrected/complete
+    // final for the same words usually carries automatic punctuation. The
+    // replace-with-addition path must still recognize these as the same
+    // words rather than falling through to concatenation.
+    const unpunctuatedPartial = 'What is a race condition Show how';
+    const result = mergeTranscriptChunks(unpunctuatedPartial, FULL_QUESTION);
+    assert.equal(result, FULL_QUESTION);
+  });
+
+  test('Greptile PR #392 finding: a punctuated final already contains an unpunctuated stale trailing partial (drop path)', () => {
+    // The reverse direction: base already committed the final, punctuated
+    // text; a leftover unpunctuated partial tail must still be recognized
+    // as already-present and dropped, not appended as new content.
+    const staleUnpunctuatedTail = 'backend service';
+    const result = mergeTranscriptChunks(FULL_QUESTION, staleUnpunctuatedTail);
+    assert.equal(result, FULL_QUESTION);
+  });
 });
