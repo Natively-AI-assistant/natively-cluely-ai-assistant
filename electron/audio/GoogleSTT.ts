@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { RECOGNITION_LANGUAGES, EnglishVariant, googleAutoDetectAlternates } from '../config/languages';
+import { DEFAULT_TECH_PHRASE_HINTS } from '../config/sttPhraseHints';
 
 /**
  * GoogleSTT
@@ -52,6 +53,15 @@ export class GoogleSTT extends EventEmitter {
     private autoMode = false;
     private languageMismatchStreak = 0;
     private static readonly LANGUAGE_REPIN_FINALS = 2;
+
+    // Speech adaptation: bias recognition toward these exact tokens so English
+    // tech terms embedded in non-English speech ("Stateless Widget" inside a
+    // Russian sentence) come out verbatim instead of phonetically mangled by
+    // the primary language's model. Google v1 caps: 500 phrases, 100 chars.
+    // Boost 10 is deliberately moderate — higher values start hallucinating
+    // these terms in ordinary speech.
+    private phraseHints: string[] = DEFAULT_TECH_PHRASE_HINTS;
+    private static readonly PHRASE_HINT_BOOST = 10;
 
     constructor(label?: string) {
         super();
@@ -438,6 +448,9 @@ export class GoogleSTT extends EventEmitter {
                     model: 'latest_long',
                     useEnhanced: true,
                     alternativeLanguageCodes: this.alternativeLanguageCodes,
+                    speechContexts: this.phraseHints.length
+                        ? [{ phrases: this.phraseHints, boost: GoogleSTT.PHRASE_HINT_BOOST }]
+                        : [],
                 },
                 interimResults: true,
             })
