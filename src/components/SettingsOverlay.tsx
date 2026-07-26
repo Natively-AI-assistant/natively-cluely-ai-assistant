@@ -19,7 +19,7 @@ import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
-import { NativelyLogoMark } from './NativelyLogoMark';
+import nativelyLogo from '../assets/logo.webp';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { isMac } from '../utils/platformUtils';
@@ -1464,14 +1464,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         onClick={() => setActiveTab('natively-api')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'natively-api' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
-                                        <NativelyLogoMark size={16} className={activeTab === 'natively-api' ? 'text-text-primary' : 'text-text-secondary'} />
+                                        <img src={nativelyLogo} alt="" className={`w-4 h-4 object-contain ${activeTab === 'natively-api' ? 'opacity-100' : 'opacity-70'}`} draggable={false} />
                                         <span>Natively API</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('natively-pro')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'natively-pro' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
-                                        <NativelyLogoMark size={16} className={activeTab === 'natively-pro' ? 'text-text-primary' : 'text-text-secondary'} />
+                                        <img src={nativelyLogo} alt="" className={`w-4 h-4 object-contain ${activeTab === 'natively-pro' ? 'opacity-100' : 'opacity-70'}`} draggable={false} />
                                         <span>Natively Pro</span>
                                     </button>
                                     <button

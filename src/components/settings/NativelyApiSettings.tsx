@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
-import { NativelyLogoMark } from '../NativelyLogoMark';
+import nativelyLogo from '../../assets/logo.webp';
 import { FreeTrialModal } from '../trial/FreeTrialModal';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -1006,7 +1006,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                 {/* Header — same layout as "Try Natively API free" start card */}
                 <div className="flex items-start gap-3.5">
                   <div className="w-10 h-10 rounded-[11px] bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
-                    <NativelyLogoMark size={18} className="text-violet-400" />
+                    <img src={nativelyLogo} alt="Natively" className="w-[18px] h-[18px] object-contain" draggable={false} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
@@ -1079,11 +1079,11 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
               <div className="px-5 pt-5 pb-4 flex flex-col items-center justify-center text-center">
                 {/* Apple Promo Icon */}
                 <div className="w-[42px] h-[42px] mb-3 rounded-[12px] bg-bg-input border border-border-subtle shadow-[inset_0_1px_rgba(255,255,255,0.06),0_2px_8px_rgba(0,0,0,0.04)] flex items-center justify-center relative overflow-hidden">
-                  <NativelyLogoMark
-                    size={20}
-                    className={
-                      isClaimed ? 'text-text-tertiary' : 'text-text-primary drop-shadow-sm'
-                    }
+                  <img
+                    src={nativelyLogo}
+                    alt="Natively"
+                    className={`w-5 h-5 object-contain ${isClaimed ? 'opacity-50' : 'drop-shadow-sm'}`}
+                    draggable={false}
                   />
                 </div>
 
@@ -1169,7 +1169,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         <div className="flex items-center gap-3 px-5 pt-5 pb-4">
           {/* Tinted icon well — Apple style */}
           <div className="w-9 h-9 rounded-xl bg-accent-subtle border border-accent-border flex items-center justify-center shrink-0">
-            <NativelyLogoMark size={18} className="text-accent-strong" />
+            <img src={nativelyLogo} alt="Natively" className="w-[18px] h-[18px] object-contain" draggable={false} />
           </div>
           <div className="min-w-0">
             <p className="text-[13px] font-semibold text-text-primary">API Key</p>
