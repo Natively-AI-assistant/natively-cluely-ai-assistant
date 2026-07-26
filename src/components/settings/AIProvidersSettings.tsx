@@ -176,7 +176,23 @@ const CodexCliModelField: React.FC<{
     );
 };
 
-export const AIProvidersSettings: React.FC = () => {
+interface AIProvidersSettingsProps {
+    aiResponseLanguage: string;
+    availableAiLanguages: any[];
+    isAiLangDropdownOpen: boolean;
+    onToggleAiLangDropdown: () => void;
+    onSelectAiLanguage: (code: string) => void;
+    aiLangDropdownRef: React.RefObject<HTMLDivElement | null>;
+}
+
+export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
+    aiResponseLanguage,
+    availableAiLanguages,
+    isAiLangDropdownOpen,
+    onToggleAiLangDropdown,
+    onSelectAiLanguage,
+    aiLangDropdownRef,
+}) => {
     const t = useT();
     // --- Standard Providers ---
     const [apiKey, setApiKey] = useState('');
@@ -980,9 +996,51 @@ export const AIProvidersSettings: React.FC = () => {
                             // @ts-ignore
                             await window.electronAPI?.setGroqFastTextMode(newState);
                         }}
-                        className={`shrink-0 w-11 h-6 rounded-full relative cursor-pointer transition-colors ${!canUseFastMode ? 'cursor-not-allowed bg-bg-toggle-switch' : fastResponseMode ? 'bg-orange-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                        className={`shrink-0 w-11 h-6 rounded-full relative cursor-pointer transition-colors ${!canUseFastMode ? 'cursor-not-allowed bg-bg-toggle-switch' : fastResponseMode ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
                     >
                         <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${fastResponseMode ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </div>
+                </div>
+
+                {/* AI Response Language */}
+                <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle flex items-center justify-between gap-4">
+                    <div>
+                        <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">{t('AI Response Language')}</label>
+                        <p className="text-[10px] text-text-secondary mt-0.5">
+                            {aiResponseLanguage === 'auto'
+                                ? t('Mirrors user\'s language automatically')
+                                : t('Language for AI suggestions and notes')
+                            }
+                        </p>
+                    </div>
+                    <div className="relative" ref={aiLangDropdownRef}>
+                        <button
+                            onClick={onToggleAiLangDropdown}
+                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
+                        >
+                            <span className="capitalize text-ellipsis overflow-hidden whitespace-nowrap flex items-center gap-1">
+                                {aiResponseLanguage === 'auto' ? t('Auto') : aiResponseLanguage}
+                            </span>
+                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isAiLangDropdownOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isAiLangDropdownOpen && (
+                            <div className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none max-h-60 overflow-y-auto custom-scrollbar">
+                                {availableAiLanguages.map((option) => (
+                                    <button
+                                        key={option.code}
+                                        onClick={() => onSelectAiLanguage(option.code)}
+                                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${aiResponseLanguage === option.code ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                    >
+                                        {option.code === 'auto' ? (
+                                            <span className="font-medium">{t('Auto')}</span>
+                                        ) : (
+                                            <span className="font-medium">{option.label}</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -1156,7 +1214,7 @@ export const AIProvidersSettings: React.FC = () => {
                                 type="button"
                                 onClick={handleSaveLitellm}
                                 disabled={!litellmBaseURL.trim() || !!savingStatus.litellm}
-                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent-primary text-white disabled:opacity-50 transition-opacity"
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg disabled:opacity-50 transition-opacity"
                             >
                                 {savingStatus.litellm ? t('Saving…') : savedStatus.litellm ? t('Saved ✓') : t('Save')}
                             </button>
@@ -1230,7 +1288,7 @@ export const AIProvidersSettings: React.FC = () => {
                                 type="button"
                                 onClick={() => handleCodexAuthAction('login')}
                                 disabled={codexOauthInProgress || codexAuthAction !== 'idle'}
-                                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-accent-primary hover:bg-accent-primary/90 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-60"
+                                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg rounded-lg text-xs font-semibold transition-colors disabled:opacity-60"
                             >
                                 {codexOauthInProgress || codexAuthAction === 'login'
                                     ? <><Loader2 size={13} className="animate-spin" /> {t('Waiting for browser…')}</>
@@ -1593,7 +1651,7 @@ export const AIProvidersSettings: React.FC = () => {
                                 </button>
                                 <button
                                     onClick={handleSaveCustom}
-                                    className="px-4 py-2 rounded-lg text-xs font-medium bg-accent-primary text-white hover:bg-accent-secondary transition-colors flex items-center gap-2"
+                                    className="px-4 py-2 rounded-lg text-xs font-medium bg-legacy-action-bg text-legacy-action-fg hover:bg-legacy-action-hover transition-colors flex items-center gap-2"
                                 >
                                     <Save size={14} /> {t('Save Provider')}
                                 </button>
@@ -1679,16 +1737,16 @@ export const AIProvidersSettings: React.FC = () => {
                                     setScreenUnderstandingMode(value);
                                     window.electronAPI?.setScreenUnderstandingMode?.(value);
                                 }}
-                                className={`px-3 py-2 rounded-lg border cursor-pointer transition-colors ${selected ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-border-subtle hover:border-border-muted bg-bg-elevated/50'}`}
+                                className={`px-3 py-2 rounded-lg border cursor-pointer transition-colors ${selected ? 'border-accent-primary bg-accent-subtle' : 'border-border-subtle hover:border-border-muted bg-bg-elevated/50'}`}
                                 role="radio"
                                 aria-checked={selected}
                             >
                                 <div className="flex items-center justify-between gap-3">
                                     <div className="flex flex-col">
-                                        <span className={`text-xs font-semibold ${selected ? 'text-emerald-300' : 'text-text-primary'}`}>{label}</span>
+                                        <span className={`text-xs font-semibold ${selected ? 'text-accent-primary' : 'text-text-primary'}`}>{label}</span>
                                         <span className="text-[11px] text-text-secondary leading-snug mt-0.5">{description}</span>
                                     </div>
-                                    <div className={`w-4 h-4 rounded-full border-2 shrink-0 ${selected ? 'border-emerald-400 bg-emerald-400' : 'border-border-muted'}`} />
+                                    <div className={`w-4 h-4 rounded-full border-2 shrink-0 ${selected ? 'border-accent-primary bg-accent-primary' : 'border-border-muted'}`} />
                                 </div>
                             </div>
                         );
@@ -1709,7 +1767,7 @@ export const AIProvidersSettings: React.FC = () => {
                                     window.electronAPI?.setTechnicalInterviewDirectVision?.(next);
                                 }
                             }}
-                            className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer shrink-0 ${technicalInterviewVisionFirst ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                            className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer shrink-0 ${technicalInterviewVisionFirst ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
                             role="switch"
                             aria-checked={technicalInterviewVisionFirst}
                         >
@@ -1744,7 +1802,7 @@ export const AIProvidersSettings: React.FC = () => {
                                         setProviderDataScopes(next);
                                         window.electronAPI?.setProviderDataScopes?.(next);
                                     }}
-                                    className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${allowed ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                    className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${allowed ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                     role="switch"
                                     aria-checked={allowed}
                                     aria-label={`${t('Allow')} ${label} ${t('to cloud providers')}`}
