@@ -964,6 +964,7 @@ import { ProcessingHelper } from "./ProcessingHelper"
 import { IntelligenceManager } from "./IntelligenceManager"
 import { SystemAudioCapture } from "./audio/SystemAudioCapture"
 import { MicrophoneCapture } from "./audio/MicrophoneCapture"
+import { AudioMeetingRecorder } from "./audio/AudioMeetingRecorder"
 import { AudioDevices } from "./audio/AudioDevices"
 import { loadNativeModule } from "./audio/nativeModuleLoader"
 import { GoogleSTT } from "./audio/GoogleSTT"
@@ -1157,6 +1158,7 @@ export class AppState {
   // before booting a new session so the shared STT instances are not torn down
   // mid-meeting by a stale teardown task.
   private _pendingTeardown: Promise<void> | null = null;
+  private _pendingCriticalMeetingTeardown: Promise<string | null> | null = null;
   // Tracks meeting IDs currently being processed by processCompletedMeetingForRAG.
   // Without this guard, a rapid stop→start→stop cycle could enqueue the same
   // meeting for RAG twice (e.g. recovery retry + normal completion), duplicating
@@ -1918,6 +1920,37 @@ export class AppState {
     this._isQuitting = value;
   }
 
+  public hasPendingMeetingTeardown(): boolean {
+    return this._endMeetingInFlight || this._pendingCriticalMeetingTeardown !== null || this._pendingTeardown !== null;
+  }
+
+  public async prepareForShutdown(): Promise<void> {
+    this._isQuitting = true;
+    this.stopDefaultOutputWatcher();
+    if (this.isMeetingActive) await this.endMeeting();
+    // If Stop already entered the short window where it is awaiting aborted
+    // audio initialization, wait for that shared promise to settle. The
+    // endMeeting continuation then synchronously installs the critical
+    // persistence promise before this continuation resumes.
+    if (this._endMeetingInFlight && this._audioInitPromise) {
+      await this._audioInitPromise.catch((): void => {});
+    }
+    if (this._pendingCriticalMeetingTeardown) {
+      await this._pendingCriticalMeetingTeardown;
+    }
+    if (this._pendingTeardown) {
+      await Promise.race([
+        this._pendingTeardown,
+        new Promise<void>((resolve) => setTimeout(resolve, 1_500)),
+      ]);
+    }
+  }
+
+  public discardActiveMeetingRecording(): void {
+    this.audioMeetingRecorder?.discard();
+    this.audioMeetingRecorder = null;
+  }
+
   private broadcastMeetingState(): void {
     this.broadcast('meeting-state-changed', { isActive: this.isMeetingActive });
   }
@@ -2640,6 +2673,7 @@ export class AppState {
   // New Property for System Audio & Microphone
   private systemAudioCapture: SystemAudioCapture | null = null;
   private microphoneCapture: MicrophoneCapture | null = null;
+  private audioMeetingRecorder: AudioMeetingRecorder | null = null;
   private audioTestCapture: MicrophoneCapture | null = null; // For audio settings test
   private _audioTestStarting = false;               // P2-12: in-flight guard against concurrent calls
   private googleSTT: STTProvider | null = null; // Interviewer
@@ -3114,6 +3148,7 @@ export class AppState {
     capture.on('data', (chunk: Buffer) => {
       const now = Date.now();
       handleSystemAudioHealthDecision(systemAudioHealth.handle({ kind: 'chunk', nowMs: now, chunk }));
+      this.audioMeetingRecorder?.addChunk('system', chunk, capture.getSampleRate(), now);
       chunkCount++;
       if (chunkCount === 1 && stuckTimer) {
         clearTimeout(stuckTimer);
@@ -3203,6 +3238,7 @@ export class AppState {
     let hfpDegradationChecked = false;
     capture.on('data', (chunk: Buffer) => {
       const now = Date.now();
+      this.audioMeetingRecorder?.addChunk('mic', chunk, capture.getSampleRate(), now);
       if (lastChunkAt > 0) {
         const gap = now - lastChunkAt;
         if (gap > 2000 && gap < 8000) {
@@ -5063,10 +5099,23 @@ export class AppState {
     this.windowHelper.setWindowMode('overlay');
 
     const meetingGeneration = ++this._meetingGeneration;
+    const meetingStartTime = Date.now();
     this.isMeetingActive = true;
     this.broadcastMeetingState()
-    if (metadata) {
-      this.intelligenceManager.setMeetingMetadata(metadata);
+    this.intelligenceManager.startMeeting(metadata);
+    const shouldSaveRecording = SettingsManager.getInstance().get('saveMeetingRecordings') === true
+      && SettingsManager.getInstance().get('meetingRetention') !== 'never'
+      && metadata?.doNotPersist !== true;
+    if (shouldSaveRecording) {
+      try {
+        this.audioMeetingRecorder = new AudioMeetingRecorder(app.getPath('userData'));
+        this.audioMeetingRecorder.start(meetingStartTime);
+      } catch (error) {
+        this.audioMeetingRecorder = null;
+        console.error('[Main] Meeting recording could not start; continuing without local audio:', error);
+      }
+    } else {
+      this.audioMeetingRecorder = null;
     }
 
     // Phase 3 — bind dynamic action engine to this meeting + active mode.
@@ -5418,7 +5467,9 @@ export class AppState {
     // sequence awaits this completion in startMeeting() before booting a new
     // session on the (still-shared) STT instances.
     const ragManager = this.ragManager;
-    this._pendingTeardown = (async () => {
+    const meetingRecorder = this.audioMeetingRecorder;
+    this.audioMeetingRecorder = null;
+    const criticalTeardown = (async (): Promise<string | null> => {
       // CRITICAL ORDERING: await the native capture teardown FIRST, before any
       // of the STT/RAG drain below. startMeeting() awaits this whole
       // _pendingTeardown promise before it constructs/starts a new capture, so
@@ -5427,8 +5478,8 @@ export class AppState {
       // next meeting opens it — closing the HAL-lock deadlock window. It is
       // awaited up front (not in parallel) so even a slow native release blocks
       // the next start rather than racing it.
-      await captureTeardownPromise;
       try {
+        await captureTeardownPromise;
         // 0. Revert to Default Model. Moved into BG: getDefaultModel() and the
         //    provider list reads touch disk, and the 'model-changed' broadcast
         //    re-renders all open windows — both block the main thread/renderer
@@ -5462,6 +5513,34 @@ export class AppState {
         //    intelligenceManager.stopMeeting itself runs LLM in background.
         const meetingId = await this.intelligenceManager.stopMeeting();
 
+        // 4. Finalize the mixed local WAV only after the meeting row exists.
+        // Recording failure never blocks transcript/history persistence.
+        if (meetingId && meetingRecorder) {
+          const recording = await meetingRecorder.finalize(meetingId);
+          if (recording) {
+            const saved = DatabaseManager.getInstance().publishMeetingAudioRecording(meetingId, recording);
+            if (saved) {
+              this.broadcast('meetings-updated');
+            } else {
+              console.error(`[Main] Recording could not be associated with meeting ${meetingId}; startup reconciliation will retry or remove it safely.`);
+            }
+          }
+        } else {
+          meetingRecorder?.discard();
+        }
+
+        return meetingId;
+      } catch (err) {
+        meetingRecorder?.discard();
+        console.error('[Main] Critical meeting teardown failed:', err);
+        return null;
+      }
+    })();
+    this._pendingCriticalMeetingTeardown = criticalTeardown;
+
+    this._pendingTeardown = (async () => {
+      const meetingId = await criticalTeardown;
+      try {
         // 5. RAG cleanup — same logic as before, just inside the BG IIFE.
         if (meetingId) {
           if (ragManager) {
@@ -5482,8 +5561,11 @@ export class AppState {
           }
         }
       } catch (err) {
-        console.error('[Main] Background meeting teardown failed:', err);
+        console.error('[Main] Background RAG teardown failed:', err);
       } finally {
+        if (this._pendingCriticalMeetingTeardown === criticalTeardown) {
+          this._pendingCriticalMeetingTeardown = null;
+        }
         this._isDraining = false;
         this.clearTranscriptThrottle();
       }
@@ -7616,8 +7698,24 @@ if (process.env.THINKING_MATRIX === '1') {
     logToFile('[DIAG:gpu-info-update] GPU process info changed');
   });
 
+  let meetingShutdownReady = false;
+  let meetingShutdownPromise: Promise<void> | null = null;
+
   // Scrub API keys from memory on quit to minimize exposure window
   app.on("before-quit", (event) => {
+    if (!meetingShutdownReady && (appState.getIsMeetingActive() || appState.hasPendingMeetingTeardown())) {
+      event.preventDefault();
+      if (!meetingShutdownPromise) {
+        meetingShutdownPromise = appState.prepareForShutdown()
+          .catch((error) => console.error('[main] Failed to persist the active meeting before quit:', error))
+          .finally(() => {
+            meetingShutdownReady = true;
+            app.quit();
+          });
+      }
+      return;
+    }
+
     console.log("App is quitting, cleaning up resources...");
     appState.setQuitting(true);
 

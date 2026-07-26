@@ -208,30 +208,38 @@ test('endMeeting tears down captures via destroy() (not fire-and-forget stop())'
     );
 });
 
-test('endMeeting threads capture teardown into _pendingTeardown, awaited UP FRONT', () => {
+test('endMeeting threads capture teardown into critical persistence, awaited UP FRONT', () => {
     assert.ok(
         /captureTeardownPromise/.test(endMeetingBody),
         'BUG: endMeeting must capture the combined destroy() promise as captureTeardownPromise.',
     );
 
-    // The _pendingTeardown IIFE must `await captureTeardownPromise` and it must
-    // do so BEFORE the STT.stop() drain (ordering = native release fully
-    // settles before anything else, and before the next meeting which awaits
-    // this whole promise constructs a capture).
-    const pendingIdx = endMeetingBody.search(/this\._pendingTeardown\s*=\s*\(\s*async/);
-    assert.ok(pendingIdx >= 0, 'sanity: endMeeting assigns this._pendingTeardown to an async IIFE');
-    const pendingBody = endMeetingBody.slice(pendingIdx);
+    // The critical persistence IIFE must await native teardown before STT
+    // drain/save. The broader _pendingTeardown awaits that same critical
+    // promise, so startMeeting's existing _pendingTeardown wait still serializes
+    // the next capture after the previous native handle is fully released.
+    const criticalIdx = endMeetingBody.search(/const\s+criticalTeardown\s*=\s*\(\s*async/);
+    assert.ok(criticalIdx >= 0, 'sanity: endMeeting assigns criticalTeardown to an async IIFE');
+    const criticalBody = endMeetingBody.slice(criticalIdx);
 
-    const awaitCapIdx = pendingBody.search(/await\s+captureTeardownPromise/);
-    const sttStopIdx = pendingBody.search(/this\.googleSTT\?\.\s*stop\s*\(\s*\)/);
+    const awaitCapIdx = criticalBody.search(/await\s+captureTeardownPromise/);
+    const sttStopIdx = criticalBody.search(/this\.googleSTT\?\.\s*stop\s*\(\s*\)/);
     assert.ok(
         awaitCapIdx >= 0,
-        'BUG: the _pendingTeardown IIFE must `await captureTeardownPromise` so the next startMeeting (which awaits _pendingTeardown) cannot open the device before the prior native handle is released.',
+        'BUG: criticalTeardown must await captureTeardownPromise before persistence.',
     );
     assert.ok(sttStopIdx >= 0, 'sanity: the _pendingTeardown IIFE stops STT later');
     assert.ok(
         awaitCapIdx < sttStopIdx,
-        'BUG: captureTeardownPromise must be awaited UP FRONT in the _pendingTeardown IIFE (before the STT drain) so a slow native release blocks the next start rather than racing it.',
+        'BUG: captureTeardownPromise must be awaited before the STT drain.',
+    );
+
+    const pendingIdx = endMeetingBody.search(/this\._pendingTeardown\s*=\s*\(\s*async/);
+    assert.ok(pendingIdx >= 0, 'sanity: endMeeting assigns this._pendingTeardown');
+    assert.match(
+        endMeetingBody.slice(pendingIdx),
+        /const\s+meetingId\s*=\s*await\s+criticalTeardown/,
+        'BUG: _pendingTeardown must await criticalTeardown so next-meeting serialization includes native release and meeting persistence.',
     );
 });
 

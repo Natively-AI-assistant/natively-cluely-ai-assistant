@@ -143,6 +143,13 @@ export class SessionTracker {
         this.currentMeetingMetadata = metadata;
     }
 
+    public startMeeting(metadata?: any): void {
+        // Anchor duration and context to the user's Start action, not app launch
+        // or the end of the previous meeting.
+        this.reset();
+        this.currentMeetingMetadata = metadata ?? null;
+    }
+
     public getMeetingMetadata() {
         return this.currentMeetingMetadata;
     }
