@@ -3,6 +3,7 @@
 // Extracted from IntelligenceManager to decouple state management from LLM orchestration.
 
 import { RecapLLM } from './llm';
+import type { RequirementsArtifact } from './llm/sdRequirementsGate';
 import { isVerboseLogging } from './verboseLog';
 
 // Canned-fallback phrases that mean the model gave up entirely, not phrases
@@ -99,10 +100,19 @@ export class SessionTracker {
 
     // Meeting metadata
     private currentMeetingMetadata: {
+        id?: string;
+        meetingId?: string;
         title?: string;
         calendarEventId?: string;
         source?: 'manual' | 'calendar';
+        doNotPersist?: boolean;
     } | null = null;
+
+    // SD Requirements grilling gate — live working copy (ticket 09).
+    // Keyed by active meeting id; checkpointed to meeting DB separately.
+    // Cleared on meeting end / reset; never owned by ModesManager.
+    private sdRequirementsArtifact: RequirementsArtifact | null = null;
+    private sdRequirementsBoundMeetingId: string | null = null;
 
     // Full Session Tracking (Persisted)
     private fullTranscript: TranscriptSegment[] = [];
@@ -147,8 +157,66 @@ export class SessionTracker {
         return this.currentMeetingMetadata;
     }
 
+    public getActiveMeetingId(): string | null {
+        const meta = this.currentMeetingMetadata;
+        if (!meta) return null;
+        const id = meta.id || meta.meetingId;
+        return id ? String(id) : null;
+    }
+
     public clearMeetingMetadata(): void {
         this.currentMeetingMetadata = null;
+        // Meeting end / clear: drop live Requirements working copy only.
+        // DB checkpoint for this meeting (if any) is retained as history.
+        this.clearSdRequirementsLive();
+    }
+
+    // ============================================
+    // SD Requirements artifact (working copy)
+    // ============================================
+
+    getSdRequirementsArtifact(): RequirementsArtifact | null {
+        return this.sdRequirementsArtifact;
+    }
+
+    setSdRequirementsArtifact(artifact: RequirementsArtifact | null): void {
+        this.sdRequirementsArtifact = artifact;
+    }
+
+    /**
+     * Bind live Requirements state to a meeting id. On first bind / meeting-id
+     * change: clear prior live state, then optionally hydrate from that
+     * meeting's own checkpoint (never cross-meeting).
+     */
+    bindSdRequirementsMeeting(
+        meetingId: string | null,
+        loadCheckpoint?: () => RequirementsArtifact | null | undefined,
+    ): void {
+        const nextId = meetingId ? String(meetingId) : null;
+        if (nextId === this.sdRequirementsBoundMeetingId) {
+            // Same meeting already bound — keep working copy (mid-meeting).
+            if (this.sdRequirementsArtifact == null && nextId && loadCheckpoint) {
+                const cp = loadCheckpoint();
+                if (cp) this.sdRequirementsArtifact = cp;
+            }
+            return;
+        }
+        this.sdRequirementsBoundMeetingId = nextId;
+        this.sdRequirementsArtifact = null;
+        if (nextId && loadCheckpoint) {
+            try {
+                const cp = loadCheckpoint();
+                if (cp) this.sdRequirementsArtifact = cp;
+            } catch (err: any) {
+                console.warn('[SessionTracker] SD Requirements checkpoint restore failed:', err?.message || err);
+            }
+        }
+    }
+
+    /** Clear live working copy only (meeting end / session reset). */
+    clearSdRequirementsLive(): void {
+        this.sdRequirementsArtifact = null;
+        this.sdRequirementsBoundMeetingId = null;
     }
 
     // ============================================
@@ -227,6 +295,8 @@ export class SessionTracker {
         this.lastAssistantMessage = null;
         this.assistantResponseHistory = [];
         this.lastInterimInterviewer = null;
+        // Requirements gate is meeting-scoped, not mode-scoped — do NOT clear
+        // the artifact on mode switch (ticket 09: ModesManager excluded).
         console.log('[SessionTracker] Mode-specific session context cleared');
     }
 
@@ -692,6 +762,9 @@ export class SessionTracker {
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        // Live Requirements working copy ends with the session (ticket 09).
+        // Meeting DB checkpoint is retained separately as historical metadata.
+        this.clearSdRequirementsLive();
     }
 
     // ============================================

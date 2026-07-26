@@ -5072,9 +5072,15 @@ export class AppState {
     const meetingGeneration = ++this._meetingGeneration;
     this.isMeetingActive = true;
     this.broadcastMeetingState()
-    if (metadata) {
-      this.intelligenceManager.setMeetingMetadata(metadata);
+    // Stamp a stable meeting id at start so SD Requirements checkpoints can
+    // key the working copy before stopMeeting creates the meetings row.
+    const meetingMeta = metadata && typeof metadata === 'object' ? { ...metadata } : {};
+    if (!meetingMeta.id && !meetingMeta.meetingId) {
+      meetingMeta.id = crypto.randomUUID();
+    } else if (!meetingMeta.id && meetingMeta.meetingId) {
+      meetingMeta.id = meetingMeta.meetingId;
     }
+    this.intelligenceManager.setMeetingMetadata(meetingMeta);
 
     // Phase 3 — bind dynamic action engine to this meeting + active mode.
     // Action store is per-(sessionId, modeId), so a fresh sessionId here gives

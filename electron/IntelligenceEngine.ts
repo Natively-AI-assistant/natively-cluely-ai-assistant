@@ -20,7 +20,9 @@ import {
     LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub,
     isProviderTransportError,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE,
-    buildProfileJitPrompt, decideSessionWritePolicy
+    buildProfileJitPrompt, decideSessionWritePolicy,
+    prepareSdRequirementsForAnswerPlan,
+    detectAdvanceSignal,
 } from './llm';
 import {
     validateDocumentGroundedAnswer,
@@ -1576,7 +1578,7 @@ export class IntelligenceEngine extends EventEmitter {
             const intentResult = await intentPromise;
             trace.mark('intent_classified', { intent: intentResult.intent, confidence: intentResult.confidence });
 
-            const answerPlan = planAnswer({
+            const answerPlanRaw = planAnswer({
                 question: question || extractedQuestion.latestQuestion || lastInterviewerTurn,
                 source: question ? 'manual_input' : 'what_to_answer',
                 speakerPerspective: extractedQuestion.detectedSpeaker === 'interviewer' ? 'interviewer' : 'user',
@@ -1589,11 +1591,30 @@ export class IntelligenceEngine extends EventEmitter {
                 // be built from two different modes within one request.
                 activeMode: snapshotModeInfo,
             });
+
+            // SD Requirements grilling gate (live path): SessionTracker working
+            // copy → derive sdPhase → stamp answerPlan so WhatToAnswerLLM's
+            // LESSON allowlist + structural truncate actually run in interviews.
+            const sdPrepared = this.applySdRequirementsGate(
+                answerPlanRaw,
+                question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+            );
+            const answerPlan = sdPrepared.answerPlan;
+            if (sdPrepared.softRefuseSpoken) {
+                const refuse = sdPrepared.softRefuseSpoken;
+                this.session.addAssistantMessage(refuse, undefined, 'what_to_answer');
+                this.emit('suggested_answer', refuse, extractedQuestion.latestQuestion || question || 'inferred', 0.95);
+                trace.mark('repair_used', { reason: 'sd_requirements_soft_refuse' });
+                this.setMode('idle');
+                return refuse;
+            }
+
             trace.mark('answer_type_selected', {
                 answerType: answerPlan.answerType,
                 outputPerspective: answerPlan.outputPerspective,
                 isCoding: isCodingAnswerType(answerPlan.answerType),
                 forbiddenLayers: answerPlan.forbiddenContextLayers.length,
+                sdPhase: (answerPlan as any).sdPhase || null,
             });
 
             // Deterministic context route (Phase 6): turn the plan's required/
@@ -3029,12 +3050,21 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             const activeModeInfo = this.getActiveModeInfo();
-            const answerPlan = planAnswer({
+            const answerPlanRaw = planAnswer({
                 question,
                 source: 'manual_input',
                 speakerPerspective: 'user',
                 activeMode: activeModeInfo,
             });
+            const sdPrepared = this.applySdRequirementsGate(answerPlanRaw, question);
+            const answerPlan = sdPrepared.answerPlan;
+            if (sdPrepared.softRefuseSpoken) {
+                const refuse = sdPrepared.softRefuseSpoken;
+                this.session.addAssistantMessage(refuse, undefined, 'manual_chat');
+                this.emit('manual_answer_result', refuse, question);
+                this.setMode('idle');
+                return refuse;
+            }
             const context = activeModeInfo?.documentGroundedCustomModeActive === true || isCodingAnswerType(answerPlan.answerType)
                 ? undefined
                 : this.session.getFormattedContext(120);
@@ -3245,6 +3275,70 @@ export class IntelligenceEngine extends EventEmitter {
     // ============================================
     // State Management
     // ============================================
+
+    /**
+     * SD Requirements grilling gate — live path.
+     * Reads/writes SessionTracker working copy, checkpoints to meeting DB,
+     * stamps answerPlan.sdPhase so WhatToAnswerLLM enforcement is active.
+     */
+    private applySdRequirementsGate(
+        answerPlan: import('./llm/AnswerPlanner').AnswerPlan,
+        problemQuestion: string,
+    ): { answerPlan: import('./llm/AnswerPlanner').AnswerPlan; softRefuseSpoken: string | null } {
+        if (answerPlan.answerType !== 'system_design_answer') {
+            return { answerPlan, softRefuseSpoken: null };
+        }
+        try {
+            const ctx = this.session.getContextWithInterim?.(180) || this.session.getContext?.(180) || [];
+            const interviewerTexts = (ctx as ContextItem[])
+                .filter((it) => it.role === 'interviewer')
+                .map((it) => it.text);
+            const candidateTexts = (ctx as ContextItem[])
+                .filter((it) => it.role === 'user')
+                .map((it) => it.text)
+                .slice(-1);
+            // Only treat the current question as advance when it itself matches
+            // an advance phrase (manual "let's move on") — never re-scan the
+            // whole window as a sticky soft-refuse.
+            const prepared = prepareSdRequirementsForAnswerPlan({
+                answerPlan,
+                artifact: this.session.getSdRequirementsArtifact?.() ?? null,
+                problemQuestion,
+                interviewerTexts,
+                candidateTexts,
+                assistantAdvanceTexts: detectAdvanceSignal(problemQuestion, 'mic')
+                    ? [problemQuestion]
+                    : undefined,
+            });
+
+            if (prepared.artifact) {
+                this.session.setSdRequirementsArtifact?.(prepared.artifact);
+                this.checkpointSdRequirements(prepared.artifact);
+            }
+
+            return {
+                answerPlan: prepared.answerPlan,
+                softRefuseSpoken: prepared.softRefuseSpoken,
+            };
+        } catch (err: any) {
+            console.warn('[IntelligenceEngine] SD Requirements gate skipped (non-fatal):', err?.message || err);
+            return { answerPlan, softRefuseSpoken: null };
+        }
+    }
+
+    /** Persist Requirements artifact for same-meeting crash restore (ticket 09). */
+    private checkpointSdRequirements(artifact: import('./llm/sdRequirementsGate').RequirementsArtifact): void {
+        try {
+            const meta = this.session.getMeetingMetadata?.();
+            if (meta && (meta as any).doNotPersist === true) return;
+            const meetingId = this.session.getActiveMeetingId?.() || null;
+            if (!meetingId) return;
+            const { DatabaseManager } = require('./db/DatabaseManager') as typeof import('./db/DatabaseManager');
+            DatabaseManager.getInstance().saveSdRequirementsCheckpoint(meetingId, artifact);
+        } catch (err: any) {
+            console.warn('[IntelligenceEngine] SD Requirements checkpoint skipped:', err?.message || err);
+        }
+    }
 
     private setMode(mode: IntelligenceMode): void {
         if (this.activeMode !== mode) {

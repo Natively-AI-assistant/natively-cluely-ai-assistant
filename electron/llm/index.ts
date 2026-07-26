@@ -88,6 +88,17 @@ export type {
     MissingSlot,
     AdvanceChannel,
 } from "./sdRequirementsGate";
+export {
+    prepareSdRequirementsForAnswerPlan,
+    normalizeSdProblemKey,
+    detectProblemClassFromText,
+    fillArtifactFromInterviewerText,
+    SLOT_EXTRACTORS,
+} from "./sdRequirementsLive";
+export type {
+    PrepareSdRequirementsInput,
+    PrepareSdRequirementsResult,
+} from "./sdRequirementsLive";
 export { applyModeFallback, MODE_CONTEXT_PROFILES } from "./modeProfiles";
 export type { ActiveModeInfo, ModeContextProfile, ModeTemplateType } from "./modeProfiles";
 export { resolveFollowUp, resolveFollowUpOrClarify, isBareFollowUp, isRefinementFollowUp, isSameSessionFollowUp, buildContextFreeClarification } from "./FollowUpResolver";
