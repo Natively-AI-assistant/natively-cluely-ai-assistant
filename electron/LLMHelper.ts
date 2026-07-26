@@ -963,6 +963,27 @@ export class LLMHelper {
     return modelId === "codex-cli" || modelId.startsWith("codex-cli:");
   }
 
+  /**
+   * Returns true when the currently-selected model should be routed through
+   * the OpenRouter client. OpenRouter model IDs use a namespaced
+   * `provider/model` format (e.g. `anthropic/claude-3.5-sonnet`,
+   * `openai/gpt-4o`, `openrouter/auto`).  A slash in the id is the primary
+   * signal; we additionally require that the openrouterClient is initialised
+   * so we never route when the key is absent.
+   *
+   * Note: Groq-hosted OpenAI OSS ids like `openai/gpt-oss-120b` are
+   * intentionally excluded because isGroqModel() already captures them via
+   * the `openai/gpt-oss-` prefix check in refreshRuntimeDefaultIfUnavailable,
+   * and this helper is only consulted AFTER the Groq guard.
+   */
+  private isOpenRouterModel(modelId: string): boolean {
+    if (!this.openrouterClient) return false;
+    // Groq-hosted OpenAI OSS models use openai/gpt-oss-* — keep them on Groq.
+    if (modelId.startsWith('openai/gpt-oss-')) return false;
+    // Namespaced provider/model format used exclusively by OpenRouter.
+    return modelId.includes('/') || modelId === 'openrouter/auto';
+  }
+
   private isCodexAvailable(): boolean {
     if (!this.codexCliConfig.enabled) return false;
     try {
@@ -2458,6 +2479,18 @@ const isMultimodal = !!(imagePaths?.length);
         }
         // No key or call failed — fall through to default routing
       }
+      // OpenRouter — must be checked BEFORE the generic OpenAI guard because
+      // OpenRouter IDs like `openai/gpt-4o` would otherwise be misrouted to
+      // api.openai.com via isOpenAiModel()'s .includes('openai') catch-all.
+      if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
+        return await this.generateWithOpenai(
+          cloudUserContent,
+          openaiSystemPrompt,
+          cloudIsMultimodal ? cloudImagePaths : undefined,
+          this.currentModelId,
+          this.openrouterClient,
+        );
+      }
       if (this.isOpenAiModel(this.currentModelId) && this.openaiClient) {
         return await this.generateWithOpenai(cloudUserContent, openaiSystemPrompt, cloudImagePaths);
       }
@@ -3050,9 +3083,10 @@ const isMultimodal = !!(imagePaths?.length);
    * Non-streaming OpenAI generation with proper system/user separation.
    * PREFIX CACHING: see streamWithOpenai for the caching contract.
    */
-  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string, clientOverride?: OpenAI): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
-    if (!this.openaiClient) throw new Error("OpenAI client not initialized");
+    const client = clientOverride || this.openaiClient;
+    if (!client) throw new Error("OpenAI client not initialized");
     this.assertOutboundScopes('openai', userMessage, imagePaths);
 
     await this.rateLimiters.openai.acquire();
@@ -3091,7 +3125,7 @@ const isMultimodal = !!(imagePaths?.length);
       provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
     });
     const response = await this.withTimeout(
-      this.withRetry(() => this.openaiClient!.chat.completions.create(request)),
+      this.withRetry(() => client!.chat.completions.create(request)),
       60000,
       `OpenAI (${model})`
     );
@@ -5491,6 +5525,24 @@ const isMultimodal = !!(imagePaths?.length);
 
     // 3. Cloud Provider Routing
 
+    // OpenRouter — checked BEFORE the generic OpenAI guard so that namespaced
+    // ids like `openai/gpt-4o` or `anthropic/claude-3.5-sonnet` are sent to
+    // openrouter.ai/api/v1 rather than being misrouted to openai.com.
+    if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
+      const openRouterSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
+      const finalOpenRouterSystem = this.injectLanguageInstruction(openRouterSystem);
+      if (isMultimodal && imagePaths) {
+        yield* this.streamWithOpenaiMultimodal(
+          userContent, imagePaths, finalOpenRouterSystem, this.currentModelId, abortSignal, this.openrouterClient,
+        );
+      } else {
+        yield* this.streamWithOpenai(
+          userContent, finalOpenRouterSystem, this.currentModelId, abortSignal, this.openrouterClient,
+        );
+      }
+      return;
+    }
+
     // OpenAI
     if (this.isOpenAiModel(this.currentModelId) && this.openaiClient) {
       const openAiSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
@@ -6216,9 +6268,10 @@ const isMultimodal = !!(imagePaths?.length);
    * the cache hits naturally. Do NOT inline per-request data into the system
    * string above the static body, or the cache prefix will be invalidated.
    */
-  private async * streamWithOpenai(userMessage: string, systemPrompt?: string, modelId?: string, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  private async * streamWithOpenai(userMessage: string, systemPrompt?: string, modelId?: string, abortSignal?: AbortSignal, clientOverride?: OpenAI): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
-    if (!this.openaiClient) throw new Error("OpenAI client not initialized");
+    const client = clientOverride || this.openaiClient;
+    if (!client) throw new Error("OpenAI client not initialized");
     this.assertOutboundScopes('openai', userMessage);
 
     await this.rateLimiters.openai.acquire();
@@ -6248,7 +6301,7 @@ const isMultimodal = !!(imagePaths?.length);
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
     });
-    const stream = await this.openaiClient.chat.completions.create(request, { signal: abortSignal });
+    const stream = await client.chat.completions.create(request, { signal: abortSignal });
 
     try {
       for await (const chunk of stream) {
@@ -6407,9 +6460,10 @@ const isMultimodal = !!(imagePaths?.length);
   /**
    * Stream multimodal (image + text) response from OpenAI with system/user separation
    */
-  private async * streamWithOpenaiMultimodal(userMessage: string, imagePaths: string[], systemPrompt?: string, modelId?: string, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  private async * streamWithOpenaiMultimodal(userMessage: string, imagePaths: string[], systemPrompt?: string, modelId?: string, abortSignal?: AbortSignal, clientOverride?: OpenAI): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
-    if (!this.openaiClient) throw new Error("OpenAI client not initialized");
+    const client = clientOverride || this.openaiClient;
+    if (!client) throw new Error("OpenAI client not initialized");
     this.assertOutboundScopes('openai', userMessage, imagePaths);
 
     await this.rateLimiters.openai.acquire();
@@ -6433,7 +6487,7 @@ const isMultimodal = !!(imagePaths?.length);
 
     const cacheKey = this.getOpenAiPromptCacheKey(systemPrompt);
     if (abortSignal?.aborted) return;
-    const stream = await this.openaiClient.chat.completions.create({
+    const stream = await client.chat.completions.create({
       model,
       messages,
       stream: true,

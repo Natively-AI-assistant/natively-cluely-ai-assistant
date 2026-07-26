@@ -5479,6 +5479,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setDisabledProviders(providers);
+      // If the currently-active model belongs to a provider that was just disabled,
+      // fall back to the next available provider immediately so the live LLMHelper
+      // instance stays in sync (not just the credential store).
+      await refreshRuntimeDefaultIfUnavailable();
       broadcastCredentialsChanged();
       return { success: true };
     } catch (error: any) {
@@ -5510,6 +5514,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setCloudEnabledModels(provider, models);
+      // If the active model was removed from the enabled list, reset the live
+      // LLMHelper so it doesn't keep routing to a model the user de-selected.
+      await refreshRuntimeDefaultIfUnavailable();
       broadcastCredentialsChanged();
       return { success: true };
     } catch (error: any) {

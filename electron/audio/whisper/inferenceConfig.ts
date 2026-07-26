@@ -182,7 +182,8 @@ export function resolveInferenceConfig(): InferenceConfig {
         const { getAvailableMemoryGB } = require('../../utils/onnxThreadConfig');
         let availGB = 99; // fail-open (use DML) if measurement throws
         try { availGB = getAvailableMemoryGB(); } catch { /* ignore */ }
-        const DML_MIN_AVAIL_GB = Number(process.env.NATIVELY_DML_MIN_AVAIL_GB ?? 8);
+        const _dmlEnvRaw = Number(process.env.NATIVELY_DML_MIN_AVAIL_GB);
+        const DML_MIN_AVAIL_GB = Number.isFinite(_dmlEnvRaw) && _dmlEnvRaw > 0 ? _dmlEnvRaw : 8;
         if (availGB >= DML_MIN_AVAIL_GB) {
             return { executionProviders: ['dml', 'cpu'], dtype: WHISPER_SAFE_DTYPE };
         }

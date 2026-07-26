@@ -1481,13 +1481,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('stt-config-changed', subscription);
     };
   },
-  onCredentialsChanged: (callback: () => void) => {
-    const subscription = () => callback();
-    ipcRenderer.on('credentials-changed', subscription);
-    return () => {
-      ipcRenderer.removeListener('credentials-changed', subscription);
-    };
-  },
   // Hindsight: the app-managed companion server inherited the OLD AI-provider env at
   // spawn and won't pick up new keys until restart. HindsightManager.notifyHindsightOfKeyChange
   // broadcasts this event after every AI key save; the Intelligence Settings panel surfaces
