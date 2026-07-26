@@ -1,9 +1,9 @@
 // scripts/lib/sd-requirements-gate-harness.js
 //
-// Pure helpers for the Electron Requirements-gate core matrix (ticket 13).
-// Separates fixture I/O, SessionTracker inject, transcript→slot fill, and
-// stub streamChat from the Electron boot script — mirrors sd-grounding-harness
-// separation. Does NOT extend benchmark-sd-grounding.
+// Electron Requirements-gate core matrix helpers (ticket 13).
+// Injects fixtures into SessionTracker, then drives the PRODUCTION
+// prepareSdRequirementsForAnswerPlan + working-copy APIs (live path).
+// Stub streamChat only for structural heading asserts — never a live model.
 
 'use strict';
 
@@ -18,31 +18,6 @@ const CORE_MATRIX_IDS = [
   'lesson-allowlist-gated',
   'new-sd-problem-reset',
   'pipeline-data-flow-stages',
-];
-
-/** Slot extractors: map interviewer transcript text → slot fills (thin e2e stub). */
-const SLOT_EXTRACTORS = [
-  {
-    id: 'functional_requirements',
-    re: /\b(?:functional(?:\s*requirements?)?\s*[:\-–]?\s*)((?:create|shorten|ingest|produce|redirect)[^.]{0,120})/i,
-    alt: /\b((?:create\s+short\s+links?\s+and\s+redirect|ingest\s+clicks?\s+and\s+produce\s+dashboards?)[^.]*)/i,
-  },
-  {
-    id: 'scale_qps',
-    re: /\b(?:scale|qps|throughput|events?\/sec)[^.\d]{0,40}(\d[\d,]*(?:\s*[kKmM])?(?:\s*(?:QPS|qps|events?\/sec))?)/i,
-  },
-  {
-    id: 'latency',
-    re: /\b(?:latency|p99)[^.\d]{0,40}((?:under\s+)?\d[\d.]*(?:\s*ms|\s*s(?:ec(?:onds?)?)?)?(?:\s*p99)?)/i,
-  },
-  {
-    id: 'consistency_availability',
-    re: /\b((?:prefer\s+)?(?:availability|consistency)(?:\s+over\s+(?:strong\s+)?(?:consistency|availability))?)/i,
-  },
-  {
-    id: 'data_flow_stages',
-    re: /\b(?:data\s*flow\s*stages?\s*[:\-–]?\s*)([^.]{10,200})/i,
-  },
 ];
 
 function loadFixture(id) {
@@ -90,27 +65,15 @@ function readInterviewerContext(sessionTracker, lastSeconds = 180) {
   return { items: items || [], interviewer, lastInterviewerTurn: last };
 }
 
-/**
- * Fill Requirements artifact slots from interviewer-role transcript text
- * (transcript → slot path for Electron e2e). Returns { artifact, fills }.
- */
-function fillArtifactFromInterviewerTranscript(gate, artifact, interviewerItems) {
+/** Thin wrapper kept for callers; prefers production live.fill when available. */
+function fillArtifactFromInterviewerTranscript(gate, artifact, interviewerItems, live) {
   const blob = (interviewerItems || []).map((it) => it.text).join('\n');
-  let next = artifact;
-  const fills = [];
-  for (const ex of SLOT_EXTRACTORS) {
-    if (next.slots[ex.id]?.filled) continue;
-    // Skip data_flow_stages when class does not require it.
-    if (ex.id === 'data_flow_stages' && !gate.isDataFlowRequired(next)) continue;
-    let m = ex.re.exec(blob);
-    if (!m && ex.alt) m = ex.alt.exec(blob);
-    if (m && m[1] && String(m[1]).trim()) {
-      const value = String(m[1]).trim();
-      next = gate.fillSlotFromInterviewer(next, ex.id, value);
-      fills.push({ id: ex.id, value });
-    }
+  if (live?.fillArtifactFromInterviewerText) {
+    const filled = live.fillArtifactFromInterviewerText(artifact, blob);
+    return { ...filled, interviewerBlob: blob };
   }
-  return { artifact: next, fills, interviewerBlob: blob };
+  // Fallback: should not run once live module is required by e2e.
+  throw new Error('fillArtifactFromInterviewerTranscript requires sdRequirementsLive');
 }
 
 /**
@@ -118,17 +81,9 @@ function fillArtifactFromInterviewerTranscript(gate, artifact, interviewerItems)
  * for structural asserts. Never calls a live model.
  */
 function createStubStreamChat(gate, getArtifact) {
-  return async function* streamChat(userMessage) {
+  return async function* streamChat(_userMessage) {
     const artifact = getArtifact();
     const phase = gate.deriveSdPhase(artifact);
-    const msg = String(userMessage || '');
-
-    // Soft-refuse path when advance while incomplete.
-    const refuse = gate.softRefuseIfPrematureAdvance(artifact, msg, 'mic');
-    if (refuse.refused) {
-      yield refuse.spoken;
-      return;
-    }
 
     if (phase === 'requirements') {
       // Deliberately leak later headings — structural gate must strip them.
@@ -169,23 +124,31 @@ async function collectStream(gen) {
   return out;
 }
 
+const SD_PLAN = { answerType: 'system_design_answer', forbiddenContextLayers: [] };
+
+function commitWorkingCopy(sessionTracker, prepared) {
+  if (prepared.artifact && sessionTracker.setSdRequirementsArtifact) {
+    sessionTracker.setSdRequirementsArtifact(prepared.artifact);
+  }
+  return prepared;
+}
+
 /**
- * Drive one matrix scenario against SessionTracker + gate helpers + stub LLM.
- * `gate` = required compiled sdRequirementsGate module.
+ * Drive one matrix scenario against SessionTracker + PRODUCTION prepare.
+ * `gate` = compiled sdRequirementsGate; `live` = compiled sdRequirementsLive.
  */
-async function runMatrixScenario(gate, sessionTracker, fixture) {
+async function runMatrixScenario(gate, sessionTracker, fixture, live) {
+  if (!live || typeof live.prepareSdRequirementsForAnswerPlan !== 'function') {
+    throw new Error(
+      'runMatrixScenario requires compiled sdRequirementsLive — rebuild electron and pass live module',
+    );
+  }
+
   const failures = [];
   const notes = [];
 
   sessionTracker.reset?.();
-
-  let artifact = gate.createEmptyRequirementsArtifact(
-    fixture.problemKey || fixture.id,
-    fixture.problemClass || 'crud_product',
-  );
-  if (fixture.problemClass) {
-    artifact = gate.setProblemClass(artifact, fixture.problemClass);
-  }
+  sessionTracker.clearSdRequirementsLive?.();
 
   injectTranscriptTurns(sessionTracker, fixture.turns || []);
   const ctx = readInterviewerContext(sessionTracker);
@@ -193,63 +156,92 @@ async function runMatrixScenario(gate, sessionTracker, fixture) {
     failures.push('SessionTracker returned no interviewer rows after fixture inject');
   }
   notes.push(`interviewerRows=${ctx.interviewer.length}`);
+  notes.push('prepare=sdRequirementsLive');
 
-  const filled = fillArtifactFromInterviewerTranscript(gate, artifact, ctx.interviewer);
-  artifact = filled.artifact;
-  notes.push(`fills=${filled.fills.map((f) => f.id).join(',') || '-'}`);
-
-  const getArtifact = () => artifact;
-  const stubChat = createStubStreamChat(gate, getArtifact);
-
-  // Candidate advance utterances (user-role turns).
+  const interviewerTexts = ctx.interviewer.map((it) => it.text);
+  const problemQuestion = fixture.problemKey || fixture.id;
   const advanceTurns = (fixture.turns || []).filter((t) => t.role === 'user' || t.speaker === 'user');
+  const latestAdvance = advanceTurns.length
+    ? [String(advanceTurns[advanceTurns.length - 1].text || '')]
+    : [];
+
+  const getArtifact = () =>
+    sessionTracker.getSdRequirementsArtifact?.() ||
+    gate.createEmptyRequirementsArtifact(problemQuestion);
+
+  const stubChat = createStubStreamChat(gate, getArtifact);
 
   let softRefused = false;
   let lastSpoken = '';
-  let lastPhase = gate.deriveSdPhase(artifact);
+  let lastPhase = 'requirements';
+  let artifact = null;
+  let fills = [];
 
   if (fixture.id === 'new-sd-problem-reset') {
-    // First: fill + advance to close gate.
-    for (const t of advanceTurns) {
-      const refuse = gate.softRefuseIfPrematureAdvance(artifact, t.text, 'mic');
-      if (refuse.refused) {
-        softRefused = true;
-        lastSpoken = refuse.spoken;
-        artifact = refuse.artifact;
-      } else {
-        artifact = refuse.artifact;
-        lastSpoken = await collectStream(stubChat(t.text));
-        lastSpoken = gate.enforceStructuralGate(lastSpoken, gate.deriveSdPhase(artifact));
-      }
+    // Fill + advance via production prepare (working copy on SessionTracker).
+    let prepared = commitWorkingCopy(
+      sessionTracker,
+      live.prepareSdRequirementsForAnswerPlan({
+        answerPlan: { ...SD_PLAN },
+        artifact: sessionTracker.getSdRequirementsArtifact?.() ?? null,
+        problemQuestion,
+        interviewerTexts,
+        candidateTexts: latestAdvance,
+      }),
+    );
+    fills = prepared.fills || [];
+    notes.push(`fills=${fills.map((f) => f.id).join(',') || '-'}`);
+
+    if (prepared.softRefuseSpoken) {
+      softRefused = true;
+      lastSpoken = prepared.softRefuseSpoken;
+    } else {
+      lastSpoken = await collectStream(stubChat(latestAdvance[0] || 'Continue'));
+      lastSpoken = gate.enforceStructuralGate(lastSpoken, prepared.sdPhase);
     }
-    const phaseAfterFirst = gate.deriveSdPhase(artifact);
+
+    const phaseAfterFirst = prepared.sdPhase;
     if (phaseAfterFirst !== fixture.expect.sdPhaseAfterFirstAdvance) {
       failures.push(
         `after first advance expected sdPhase=${fixture.expect.sdPhaseAfterFirstAdvance}, got ${phaseAfterFirst}`,
       );
     }
 
-    // Reset on new problem key.
-    const reset = gate.resetArtifactForNewSdProblem(artifact, fixture.newProblemKey);
-    artifact = reset;
-    lastPhase = gate.deriveSdPhase(artifact);
+    // New SD problem → production prepare resets working copy.
+    prepared = commitWorkingCopy(
+      sessionTracker,
+      live.prepareSdRequirementsForAnswerPlan({
+        answerPlan: { ...SD_PLAN },
+        artifact: sessionTracker.getSdRequirementsArtifact?.() ?? null,
+        problemQuestion: fixture.newProblemKey,
+        interviewerTexts: [],
+        candidateTexts: [],
+      }),
+    );
+    artifact = prepared.artifact;
+    lastPhase = prepared.sdPhase;
+
     if (lastPhase !== fixture.expect.sdPhaseAfterReset) {
       failures.push(`after reset expected sdPhase=${fixture.expect.sdPhaseAfterReset}, got ${lastPhase}`);
     }
-    if (Boolean(artifact.gateClosed) !== Boolean(fixture.expect.gateClosedAfterReset)) {
-      failures.push(`after reset gateClosed=${artifact.gateClosed}`);
+    if (Boolean(artifact?.gateClosed) !== Boolean(fixture.expect.gateClosedAfterReset)) {
+      failures.push(`after reset gateClosed=${artifact?.gateClosed}`);
     }
     if (gate.isChecklistComplete(artifact) !== Boolean(fixture.expect.checklistCompleteAfterReset)) {
       failures.push(`after reset checklistComplete=${gate.isChecklistComplete(artifact)}`);
     }
-    if (fixture.expect.priorSlotsCleared && artifact.slots.functional_requirements?.filled) {
+    if (fixture.expect.priorSlotsCleared && artifact?.slots?.functional_requirements?.filled) {
       failures.push('prior FR fill survived new-SD-problem reset');
     }
 
-    // Inject the "new problem" interviewer turn already in fixtures; prove context readable.
     const afterResetCtx = readInterviewerContext(sessionTracker);
     if (!afterResetCtx.interviewer.some((it) => /rate limiter/i.test(it.text))) {
       failures.push('new SD problem interviewer turn not visible in SessionTracker context');
+    }
+
+    // Prove working copy is the SessionTracker artifact.
+    if (sessionTracker.getSdRequirementsArtifact?.() !== artifact) {
+      failures.push('SessionTracker working copy not updated after prepare reset');
     }
 
     return {
@@ -264,31 +256,39 @@ async function runMatrixScenario(gate, sessionTracker, fixture) {
     };
   }
 
-  // Soft-refuse / advance handling for remaining scenarios.
-  for (const t of advanceTurns) {
-    const refuse = gate.softRefuseIfPrematureAdvance(artifact, t.text, 'mic');
-    if (refuse.refused) {
-      softRefused = true;
-      lastSpoken = refuse.spoken;
-      artifact = refuse.artifact;
-      // Soft-refuse must never include later headings.
-      if (gate.hasLaterFrameworkHeadings(lastSpoken)) {
-        failures.push('soft-refuse spoken contains later framework headings');
-      }
-    } else {
-      artifact = refuse.artifact;
-      lastSpoken = await collectStream(stubChat(t.text));
-      lastSpoken = gate.enforceStructuralGate(lastSpoken, gate.deriveSdPhase(artifact));
+  // Core path: production prepare stamps sdPhase from transcript + advance.
+  const prepared = commitWorkingCopy(
+    sessionTracker,
+    live.prepareSdRequirementsForAnswerPlan({
+      answerPlan: { ...SD_PLAN },
+      artifact: sessionTracker.getSdRequirementsArtifact?.() ?? null,
+      problemQuestion,
+      interviewerTexts,
+      candidateTexts: latestAdvance,
+    }),
+  );
+  artifact = prepared.artifact;
+  fills = prepared.fills || [];
+  notes.push(`fills=${fills.map((f) => f.id).join(',') || '-'}`);
+  lastPhase = prepared.sdPhase;
+
+  if (prepared.softRefuseSpoken) {
+    softRefused = true;
+    lastSpoken = prepared.softRefuseSpoken;
+    if (gate.hasLaterFrameworkHeadings(lastSpoken)) {
+      failures.push('soft-refuse spoken contains later framework headings');
     }
+  } else {
+    lastSpoken = await collectStream(
+      stubChat(latestAdvance[0] || 'Continue requirements grilling.'),
+    );
+    lastSpoken = gate.enforceStructuralGate(lastSpoken, lastPhase);
   }
 
-  // If no advance turn, still run stub chat once to exercise structural gate.
-  if (advanceTurns.length === 0) {
-    lastSpoken = await collectStream(stubChat('Continue requirements grilling.'));
-    lastSpoken = gate.enforceStructuralGate(lastSpoken, gate.deriveSdPhase(artifact));
+  if (sessionTracker.getSdRequirementsArtifact?.()?.problemKey !== artifact?.problemKey) {
+    failures.push('SessionTracker working copy missing after prepare');
   }
 
-  lastPhase = gate.deriveSdPhase(artifact);
   const expect = fixture.expect || {};
 
   if (expect.sdPhaseAfter && lastPhase !== expect.sdPhaseAfter) {
@@ -299,8 +299,8 @@ async function runMatrixScenario(gate, sessionTracker, fixture) {
       `expected checklistComplete=${expect.checklistComplete}, got ${gate.isChecklistComplete(artifact)}`,
     );
   }
-  if (typeof expect.gateClosed === 'boolean' && Boolean(artifact.gateClosed) !== expect.gateClosed) {
-    failures.push(`expected gateClosed=${expect.gateClosed}, got ${artifact.gateClosed}`);
+  if (typeof expect.gateClosed === 'boolean' && Boolean(artifact?.gateClosed) !== expect.gateClosed) {
+    failures.push(`expected gateClosed=${expect.gateClosed}, got ${artifact?.gateClosed}`);
   }
   if (typeof expect.softRefused === 'boolean' && softRefused !== expect.softRefused) {
     failures.push(`expected softRefused=${expect.softRefused}, got ${softRefused}`);
@@ -314,18 +314,16 @@ async function runMatrixScenario(gate, sessionTracker, fixture) {
   }
   if (Array.isArray(expect.requiredSlotsFilled)) {
     for (const id of expect.requiredSlotsFilled) {
-      if (!artifact.slots[id]?.filled) failures.push(`required slot not filled from transcript: ${id}`);
+      if (!artifact?.slots?.[id]?.filled) failures.push(`required slot not filled from transcript: ${id}`);
     }
   }
   if (expect.dataFlowRequired && !gate.isDataFlowRequired(artifact)) {
     failures.push('expected data_flow_stages required for pipeline class');
   }
 
-  // Later-section allow / block on stubbed spoken output.
   if (typeof expect.laterSectionsAllowed === 'boolean') {
     const hasLater = gate.hasLaterFrameworkHeadings(lastSpoken);
     if (expect.laterSectionsAllowed && !hasLater && lastPhase === 'post_requirements') {
-      // Re-run stub in post phase to assert allow path.
       const post = gate.enforceStructuralGate(
         await collectStream(stubChat('Walk High-Level Design now.')),
         'post_requirements',
@@ -339,7 +337,6 @@ async function runMatrixScenario(gate, sessionTracker, fixture) {
     }
   }
 
-  // LESSON allowlist scenario.
   if (fixture.lessonChunks) {
     const filtered = gate.filterLessonChunksForPhase(fixture.lessonChunks, lastPhase);
     const text = filtered.map((c) => c.text).join('\n');

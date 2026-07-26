@@ -13,10 +13,8 @@
 // SessionTracker via addTranscript; slot fill reads getContextWithInterim /
 // getLastInterviewerTurn (production APIs).
 //
-// Dependency: electron/llm/sdRequirementsGate.ts (shared with Tier 0 / ticket 12).
-// If ticket 12's WTA wiring is not in this tree yet, this script still runs
-// against the pure gate helpers + SessionTracker — thin stubs live in
-// scripts/lib/sd-requirements-gate-harness.js.
+// Dependency: electron/llm/sdRequirementsGate.ts + sdRequirementsLive.ts
+// (production prepare stamps sdPhase onto SessionTracker working copy).
 //
 // Skip (exit 0): when dist-electron is missing (build not run).
 //
@@ -35,6 +33,7 @@ const os = require('node:os');
 const repoRoot = path.resolve(__dirname, '..');
 const distRoot = path.join(repoRoot, 'dist-electron', 'electron');
 const distGate = path.join(distRoot, 'llm', 'sdRequirementsGate.js');
+const distLive = path.join(distRoot, 'llm', 'sdRequirementsLive.js');
 const distSession = path.join(distRoot, 'SessionTracker.js');
 
 function skip(msg) {
@@ -42,10 +41,15 @@ function skip(msg) {
   process.exit(0);
 }
 
-if (!fs.existsSync(distRoot) || !fs.existsSync(distGate) || !fs.existsSync(distSession)) {
+if (
+  !fs.existsSync(distRoot) ||
+  !fs.existsSync(distGate) ||
+  !fs.existsSync(distLive) ||
+  !fs.existsSync(distSession)
+) {
   skip(
-    `dist-electron missing required modules (need ${path.relative(repoRoot, distGate)} ` +
-      `and SessionTracker). Run: npm run build:electron`,
+    `dist-electron missing required modules (need ${path.relative(repoRoot, distGate)}, ` +
+      `${path.relative(repoRoot, distLive)}, and SessionTracker). Run: npm run build:electron`,
   );
 }
 
@@ -65,22 +69,26 @@ async function main() {
   await app.whenReady();
 
   const gate = require(distGate);
+  const live = require(distLive);
   const sessionMod = require(distSession);
   const SessionTracker = sessionMod.SessionTracker || sessionMod.default;
   if (!SessionTracker) {
     throw new Error('SessionTracker not exported from dist — rebuild electron');
+  }
+  if (typeof live.prepareSdRequirementsForAnswerPlan !== 'function') {
+    throw new Error('sdRequirementsLive.prepareSdRequirementsForAnswerPlan missing — rebuild electron');
   }
 
   const session = new SessionTracker();
   const fixtures = loadCoreMatrixFixtures();
   console.log(
     `[req-gate-e2e] NATIVELY_E2E=${process.env.NATIVELY_E2E} ` +
-      `userData=${tmpUserData} scenarios=${fixtures.length}`,
+      `userData=${tmpUserData} scenarios=${fixtures.length} prepare=live`,
   );
 
   let failed = 0;
   for (const fixture of fixtures) {
-    const result = await runMatrixScenario(gate, session, fixture);
+    const result = await runMatrixScenario(gate, session, fixture, live);
     if (result.ok) {
       console.log(
         `PASS  ${result.id}  sdPhase=${result.sdPhase}  ` +
