@@ -3,6 +3,8 @@ import { useStreamBuffer } from '../hooks/useStreamBuffer';
 import { X, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
+import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
+import { registerPrismLanguages } from '../utils/registerPrismLanguages';
 import nativelyIcon from './icon.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
@@ -13,95 +15,8 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import python from 'react-syntax-highlighter/dist/esm/languages/prism/python';
-import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript';
-import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
-import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
-import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml';
-import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
-import go from 'react-syntax-highlighter/dist/esm/languages/prism/go';
-import rust from 'react-syntax-highlighter/dist/esm/languages/prism/rust';
-import cpp from 'react-syntax-highlighter/dist/esm/languages/prism/cpp';
-import csharp from 'react-syntax-highlighter/dist/esm/languages/prism/csharp';
-import css from 'react-syntax-highlighter/dist/esm/languages/prism/css';
-import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
-import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown';
-import markup from 'react-syntax-highlighter/dist/esm/languages/prism/markup';
 
-SyntaxHighlighter.registerLanguage('python', python);
-SyntaxHighlighter.registerLanguage('py', python);
-SyntaxHighlighter.registerLanguage('javascript', javascript);
-SyntaxHighlighter.registerLanguage('js', javascript);
-SyntaxHighlighter.registerLanguage('typescript', typescript);
-SyntaxHighlighter.registerLanguage('ts', typescript);
-SyntaxHighlighter.registerLanguage('bash', bash);
-SyntaxHighlighter.registerLanguage('sh', bash);
-SyntaxHighlighter.registerLanguage('shell', bash);
-SyntaxHighlighter.registerLanguage('yaml', yaml);
-SyntaxHighlighter.registerLanguage('yml', yaml);
-SyntaxHighlighter.registerLanguage('sql', sql);
-SyntaxHighlighter.registerLanguage('go', go);
-SyntaxHighlighter.registerLanguage('rust', rust);
-SyntaxHighlighter.registerLanguage('rs', rust);
-SyntaxHighlighter.registerLanguage('cpp', cpp);
-SyntaxHighlighter.registerLanguage('c++', cpp);
-SyntaxHighlighter.registerLanguage('csharp', csharp);
-SyntaxHighlighter.registerLanguage('cs', csharp);
-SyntaxHighlighter.registerLanguage('css', css);
-SyntaxHighlighter.registerLanguage('json', json);
-SyntaxHighlighter.registerLanguage('markdown', markdown);
-SyntaxHighlighter.registerLanguage('md', markdown);
-SyntaxHighlighter.registerLanguage('markup', markup);
-SyntaxHighlighter.registerLanguage('html', markup);
-
-const mapLanguageForPrism = (lang: string, code: string): string => {
-  if (!lang) {
-    if (code.includes('def ') || code.includes('import ') || code.includes('elif ') || code.includes('print(') || code.includes(':\n')) {
-      return 'python';
-    }
-    return 'javascript';
-  }
-  const lower = lang.toLowerCase().trim();
-  const mapper: Record<string, string> = {
-    'js': 'javascript',
-    'javascript': 'javascript',
-    'ts': 'typescript',
-    'typescript': 'typescript',
-    'py': 'python',
-    'python': 'python',
-    'rb': 'ruby',
-    'ruby': 'ruby',
-    'sh': 'bash',
-    'bash': 'bash',
-    'shell': 'bash',
-    'zsh': 'bash',
-    'go': 'go',
-    'golang': 'go',
-    'rs': 'rust',
-    'rust': 'rust',
-    'cs': 'csharp',
-    'csharp': 'csharp',
-    'cpp': 'cpp',
-    'c++': 'cpp',
-    'h': 'cpp',
-    'c': 'c',
-    'java': 'java',
-    'kt': 'kotlin',
-    'kotlin': 'kotlin',
-    'swift': 'swift',
-    'yml': 'yaml',
-    'yaml': 'yaml',
-    'xml': 'markup',
-    'html': 'markup',
-    'svg': 'markup',
-    'json': 'json',
-    'css': 'css',
-    'md': 'markdown',
-    'markdown': 'markdown',
-    'sql': 'sql',
-  };
-  return mapper[lower] || lower;
-};
+registerPrismLanguages();
 
 // ============================================
 // Types 
@@ -138,21 +53,13 @@ type ChatState = 'idle' | 'opening' | 'waiting_for_llm' | 'streaming_response' |
 // ============================================
 
 const TypingIndicator: React.FC = () => {
-    const isLightTheme = useResolvedTheme() === 'light';
-    const isModernTheme = !!document.querySelector('[data-interface-theme="modern"]');
-    const isGlassTheme = !!document.querySelector('[data-interface-theme="liquid-glass"]');
-    const isWhiteDots = isModernTheme || isGlassTheme;
-    const cardBgBorderClass = isLightTheme
-        ? 'bg-emerald-500/10 backdrop-blur-md border border-emerald-500/20 text-emerald-900'
-        : 'bg-emerald-600/20 backdrop-blur-md border border-emerald-500/30 text-emerald-100';
-
     return (
-        <div className={`w-fit rounded-[20px] rounded-tl-[4px] px-[16.5px] py-[12.5px] ${cardBgBorderClass} my-2.5 flex items-center justify-center`}>
-            <div className="flex items-center gap-1.5 py-0.5">
+        <div className="flex items-center gap-1 py-4">
+            <div className="flex items-center gap-1">
                 {[0, 1, 2].map((i) => (
                     <motion.div
                         key={i}
-                        className={`w-2 h-2 rounded-full ${isWhiteDots ? 'bg-white' : 'bg-emerald-400'}`}
+                        className="w-2 h-2 rounded-full bg-text-tertiary"
                         animate={{ opacity: [0.4, 1, 0.4] }}
                         transition={{
                             duration: 0.6,
@@ -186,10 +93,6 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => (
 
 const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({ content, isStreaming }) => {
     const [copied, setCopied] = useState(false);
-    const isLightTheme = useResolvedTheme() === 'light';
-    const cardBgBorderClass = isLightTheme
-        ? 'bg-emerald-500/10 backdrop-blur-md border border-emerald-500/20 text-emerald-900'
-        : 'bg-emerald-600/20 backdrop-blur-md border border-emerald-500/30 text-emerald-100';
 
     const handleCopy = async () => {
         try {
@@ -206,15 +109,15 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.15 }}
-            className="flex flex-col items-start mb-6 w-full"
+            className="flex flex-col items-start mb-6"
         >
-            <div className={`w-full max-w-[85%] rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5`}>
+            <div className="text-text-primary text-[15px] leading-relaxed max-w-[85%]">
                 {/* Minimal Copy Button (no AI response header) */}
                 {!isStreaming && content && (
                     <div className="flex justify-end mb-2 select-none w-full">
                         <button
                             onClick={handleCopy}
-                            className="flex items-center gap-1.5 text-[11px] text-text-tertiary hover:text-[#4ade80] transition-colors"
+                            className="flex items-center gap-1.5 text-[11px] text-text-tertiary hover:text-text-secondary transition-colors"
                         >
                             {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
                             {copied ? 'Copied' : 'Copy'}
@@ -229,7 +132,7 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                         rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false, errorColor: '#cc0000' }]]}
                         components={{
                             p: ({ node, ...props }: any) => <p className="mb-[6px] last:mb-0 leading-relaxed whitespace-pre-wrap text-[13.5px]" {...props} />,
-                            a: ({ node, ...props }: any) => <a className="text-[#4ade80] hover:underline" {...props} />,
+                            a: ({ node, ...props }: any) => <a className="text-blue-500 hover:underline" {...props} />,
                             h1: ({ node, ...props }: any) => <h1 className="text-sm font-bold mt-2 mb-[4.5px] leading-relaxed uppercase tracking-wide" {...props} />,
                             h2: ({ node, ...props }: any) => <h2 className="text-xs font-bold mt-1.5 mb-[4.5px] leading-relaxed uppercase tracking-wide" {...props} />,
                             h3: ({ node, ...props }: any) => <h3 className="text-xs font-semibold mt-1.5 mb-[4.5px] leading-relaxed" {...props} />,
@@ -237,21 +140,22 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                             ol: ({ node, ...props }: any) => <ol className="list-decimal pl-4 mt-[4.5px] mb-[4.5px] space-y-0 leading-relaxed text-[13.5px]" {...props} />,
                             li: ({ node, ...props }: any) => <li className="pl-1 mb-[4.5px] last:mb-0 leading-relaxed text-[13.5px]" {...props} />,
                             pre: ({ children }: any) => <div className="not-prose mb-3 mt-1.5">{children}</div>,
-                            code: ({ node, inline, className, children, ...props }: any) => {
-                                const match = /language-(\w+)/.exec(className || '');
-                                const isInline = inline ?? false;
+                            code: ({ node, className, children, ...props }: any) => {
+                                const match = /language-([\w+#-]+)/.exec(className || '');
+                                const isBlock = isBlockCode(className, String(children));
                                 const lang = match ? match[1] : '';
+                                const resolved = mapLanguageForPrism(lang, String(children));
 
-                                return !isInline ? (
+                                return isBlock ? (
                                     <div className="my-2 rounded-xl overflow-hidden border border-white/[0.08] shadow-lg bg-zinc-800/60 backdrop-blur-md">
                                         <div className="bg-white/[0.04] px-3 py-1 border-b border-white/[0.08]">
                                             <span className="text-[9px] uppercase tracking-widest font-semibold text-white/40 font-mono">
-                                                {lang || 'CODE'}
+                                                {resolved || 'CODE'}
                                             </span>
                                         </div>
                                         <div className="bg-transparent">
                                             <SyntaxHighlighter
-                                                language={mapLanguageForPrism(lang, String(children))}
+                                                language={resolved}
                                                 style={vscDarkPlus}
                                                 customStyle={{
                                                     margin: 0,
@@ -281,13 +185,6 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                     >
                         {content}
                     </ReactMarkdown>
-                    {isStreaming && (
-                        <motion.span
-                            className="inline-block w-0.5 h-3.5 bg-[#fbbf24] ml-1 align-middle"
-                            animate={{ opacity: [1, 0] }}
-                            transition={{ duration: 0.5, repeat: Infinity }}
-                        />
-                    )}
                 </div>
             </div>
         </motion.div>
@@ -312,6 +209,10 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const chatWindowRef = useRef<HTMLDivElement>(null);
     const streamBuffer = useStreamBuffer();
+    // Match the modes manager's `--mm-bg` exactly so the expanded chat
+    // card looks like the same dark grey surface.
+    const isLightTheme = useResolvedTheme() === 'light';
+    const chatWindowBg = isLightTheme ? '#f9f9f9' : '#111111';
 
     // Submit initial query when overlay opens
     useEffect(() => {
@@ -411,6 +312,14 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
 
         const assistantMessageId = genMessageId();
 
+        // Track active listener cleanups so the finally block can always
+        // remove them — even if the IPC done/error events never arrive.
+        // Without this, a hung stream leaves `chatState` stuck at
+        // 'waiting_for_llm' / 'streaming_response' and the guard at the
+        // top of submitQuestion silently drops every subsequent message
+        // (no user-message push, no response).
+        let activeCleanups: Array<() => void> = [];
+
         try {
             // Add typing indicator delay (200ms) - makes the AI feel "thoughtful"
             await new Promise(resolve => setTimeout(resolve, 200));
@@ -462,6 +371,10 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
                 errorCleanup?.();
             });
 
+            if (tokenCleanup) activeCleanups.push(tokenCleanup);
+            if (doneCleanup) activeCleanups.push(doneCleanup);
+            if (errorCleanup) activeCleanups.push(errorCleanup);
+
             // Get meeting ID from context for RAG queries
             const meetingId = meetingContext.id;
 
@@ -476,6 +389,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
                     tokenCleanup?.();
                     doneCleanup?.();
                     errorCleanup?.();
+                    activeCleanups = [];
 
                     // FALLBACK LOGIC
                     const contextString = buildContextString();
@@ -502,6 +416,7 @@ ${contextString}`;
                                 ? { ...msg, content: finalContent, isStreaming: false }
                                 : msg
                         ));
+                        setChatState('idle');
                         streamBuffer.reset();
                         oldTokenCleanup?.();
                         oldDoneCleanup?.();
@@ -518,6 +433,10 @@ ${contextString}`;
                         oldDoneCleanup?.();
                         oldErrorCleanup?.();
                     });
+
+                    if (oldTokenCleanup) activeCleanups.push(oldTokenCleanup);
+                    if (oldDoneCleanup) activeCleanups.push(oldDoneCleanup);
+                    if (oldErrorCleanup) activeCleanups.push(oldErrorCleanup);
 
                     await window.electronAPI?.streamGeminiChat(
                         question,
@@ -571,6 +490,10 @@ ${contextString}`;
                     oldErrorCleanup?.();
                 });
 
+                if (oldTokenCleanup) activeCleanups.push(oldTokenCleanup);
+                if (oldDoneCleanup) activeCleanups.push(oldDoneCleanup);
+                if (oldErrorCleanup) activeCleanups.push(oldErrorCleanup);
+
                 await window.electronAPI?.streamGeminiChat(
                     question,
                     undefined,
@@ -584,6 +507,17 @@ ${contextString}`;
             setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
             setErrorMessage("Something went wrong. Please try again.");
             setChatState('error');
+        } finally {
+            // Always remove listeners and reset chatState — even if the
+            // IPC done/error callbacks never fired. Without this, a single
+            // hung stream leaves chatState stuck and silently drops every
+            // subsequent submitQuestion (no user-message push, no response).
+            activeCleanups.forEach(fn => fn());
+            activeCleanups = [];
+            // Preserve an explicit 'error' state if one was set; otherwise
+            // fall back to 'idle' so the next submit can proceed.
+            setChatState(prev => (prev === 'error' ? prev : 'idle'));
+            streamBuffer.reset();
         }
     }, [chatState, buildContextString, meetingContext]);
 
@@ -591,6 +525,7 @@ ${contextString}`;
         <AnimatePresence>
             {isOpen && (
                 <motion.div
+                    key="meeting-chat-modal"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -617,7 +552,8 @@ ${contextString}`;
                             height: { type: "spring", stiffness: 300, damping: 30, mass: 0.8 },
                             opacity: { duration: 0.2 }
                         }}
-                        className="relative mx-auto w-full max-w-[680px] mb-0 bg-bg-secondary rounded-t-[24px] border-t border-x border-border-subtle shadow-2xl overflow-hidden flex flex-col"
+                        className="relative mx-auto w-full max-w-[680px] mb-0 rounded-t-[24px] border-t border-x border-border-subtle shadow-2xl overflow-hidden flex flex-col"
+                        style={{ backgroundColor: chatWindowBg }}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Header with close button */}

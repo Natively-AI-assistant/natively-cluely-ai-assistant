@@ -32,9 +32,33 @@ export interface AppSettings {
     hindsightAutoStart?: boolean;
     hindsightServerCommand?: string;
     hindsightLlmProvider?: string;
+    // Explicit opt-out sentinel for "I do not want Hindsight at all". Distinct from
+    // "hindsightBaseUrl is empty" — that condition means "user hasn't configured yet"
+    // (synthetic default applies). `true` here means "user has actively disabled Hindsight"
+    // and getHindsightConfig() must return null. Set via the `hindsight:disable` IPC; the
+    // renderer offers a "Don't use Hindsight" link in the setup card.
+    hindsightExplicitlyDisabled?: boolean;
+    // Persisted override for the `hindsightMemory` intelligence flag (see
+    // electron/intelligence/intelligenceFlags.ts). HindsightManager.start() flips this ON
+    // when the user has a baseUrl configured + autoStart on, so the `memoryFlagOn()` gate
+    // inside start() doesn't early-return on the flag's default-OFF registry value. The
+    // flag's setting key in the registry is `hindsightMemoryEnabled` — keep them aligned.
+    hindsightMemoryEnabled?: boolean;
+    // True when the user has explicitly set the hindsightMemory flag to a non-default
+    // value. Distinguishes "default OFF, user hasn't touched it" from "user explicitly
+    // set OFF" — without this, the auto-flip on every Settings save would silently
+    // re-enable a flag the user intentionally disabled. Written by `setIntelligenceFlag`
+    // whenever value !== registry default. NAME MUST MATCH the runtime key: the registry
+    // setting is `hindsightMemoryEnabled`, so the explicit sibling is
+    // `<setting>Explicit` = `hindsightMemoryEnabledExplicit` (read by
+    // HindsightManager.hindsightMemoryExplicitlyOff()).
+    hindsightMemoryEnabledExplicit?: boolean;
     knowledgeMode?: boolean;
     phoneMirrorEnabled?: boolean;
     phoneMirrorExposeOnLan?: boolean;
+    // External optional provider. Default false: do not spawn Ollama unless
+    // the user selects an Ollama model or explicitly opts into auto-start.
+    autoStartOllama?: boolean;
     // ── Smart Browser Context v2 ───────────────────────────────────────────
     // Manual browser capture is always available (no flag). These control the
     // AUTOMATIC behaviour. Defaults (read at the use sites): coding auto-detect

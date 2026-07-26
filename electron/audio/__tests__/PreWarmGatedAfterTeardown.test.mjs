@@ -41,13 +41,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../../dist-electron/electron/audio');
 
 let micConstructorCalls = 0;
+let lastMicDataCb = null;
 function makeFakeMic() {
     micConstructorCalls++;
     return {
         startCalls: 0,
         stopCalls: 0,
         torndown: false,
-        start(_cb) { this.startCalls++; },
+        start(cb) { this.startCalls++; lastMicDataCb = cb; },
         stop() { this.stopCalls++; this.torndown = true; },
         getSampleRate() { return 48000; },
     };
@@ -95,8 +96,15 @@ async function drainPostTeardown() {
 test('default stop() pre-warms — constructor count increments by exactly 1 after teardown', async () => {
     micConstructorCalls = 0;
     const cap = new MicrophoneCapture('default-prewarm');
-    assert.equal(micConstructorCalls, 1, 'constructor (eager init) should fire exactly once');
+    // LAZY INIT: constructor does NOT construct the native monitor. Construction
+    // is deferred to start(). Without start(), pre-warm would not be enabled
+    // either (preWarmEnabled flips to true inside start()), so an instance that
+    // never started must not pre-warm. The assertion below would have been 2
+    // under the old eager-init pattern; under lazy init it remains 2 because
+    // start() enables pre-warm and stop() then exercises the pre-warm path.
+    assert.equal(micConstructorCalls, 0, 'constructor (lazy init) must not construct the native monitor');
     cap.start();
+    assert.equal(micConstructorCalls, 1, 'start() must construct the native monitor exactly once');
 
     await cap.stop();
     // After await stop(), the native HAL is released but the pre-warm runs
@@ -106,7 +114,7 @@ test('default stop() pre-warms — constructor count increments by exactly 1 aft
     assert.equal(
         micConstructorCalls,
         2,
-        `BUG: default stop() must pre-warm by constructing exactly 1 fresh native instance. Got ${micConstructorCalls} total constructions (expected 2 — eager init + 1 pre-warm).`,
+        `BUG: default stop() must pre-warm by constructing exactly 1 fresh native instance. Got ${micConstructorCalls} total constructions (expected 2 — start-construction + 1 pre-warm).`,
     );
 
     await cap.destroy();
@@ -115,8 +123,9 @@ test('default stop() pre-warms — constructor count increments by exactly 1 aft
 test('destroy() does NOT pre-warm', async () => {
     micConstructorCalls = 0;
     const cap = new MicrophoneCapture('destroy-no-prewarm');
-    assert.equal(micConstructorCalls, 1);
+    assert.equal(micConstructorCalls, 0, 'constructor (lazy init) must not construct');
     cap.start();
+    assert.equal(micConstructorCalls, 1, 'start() must construct once');
 
     await cap.destroy();
     await drainPostTeardown();
@@ -124,15 +133,16 @@ test('destroy() does NOT pre-warm', async () => {
     assert.equal(
         micConstructorCalls,
         1,
-        `BUG: destroy() must suppress the post-teardown pre-warm. Got ${micConstructorCalls} constructions (expected 1 — only the eager init).`,
+        `BUG: destroy() must suppress the post-teardown pre-warm. Got ${micConstructorCalls} constructions (expected 1 — only the start-construction).`,
     );
 });
 
 test('disablePreWarm() before stop() suppresses the pre-warm', async () => {
     micConstructorCalls = 0;
     const cap = new MicrophoneCapture('disable-prewarm-test');
-    assert.equal(micConstructorCalls, 1);
+    assert.equal(micConstructorCalls, 0);
     cap.start();
+    assert.equal(micConstructorCalls, 1);
 
     cap.disablePreWarm();
     await cap.stop();
@@ -161,8 +171,9 @@ test('pre-warm is queued, not run, during the synchronous portion of stop()', as
     // inline. Then we drain and verify it fires.
     micConstructorCalls = 0;
     const cap = new MicrophoneCapture('ordering-test');
-    assert.equal(micConstructorCalls, 1, 'eager init only');
+    assert.equal(micConstructorCalls, 0, 'constructor (lazy init) only');
     cap.start();
+    assert.equal(micConstructorCalls, 1, 'start() constructs once');
 
     const stopP = cap.stop();          // synchronous return, promise pending
     assert.equal(
@@ -193,14 +204,16 @@ test('start() racing pre-warm: a fast start() before the .then() fires construct
     //      resolves the teardown promise.
     //   4. .then() body runs — sees this.monitor !== null (start() grabbed
     //      it), skips its own constructor call.
-    // Invariant: total constructions = eager init + 1 from start() racing
-    // pre-warm + 0 from pre-warm itself = 2.
+    // Invariant: total constructions = 1 from start() (post-ctor, pre-warm
+    // skipped because start() raced ahead) + 0 from pre-warm itself = 1.
+    // (Under the old eager-init pattern this was 2: eager + start-race.)
     micConstructorCalls = 0;
     const cap = new MicrophoneCapture('start-races-prewarm');
-    cap.start();
+    cap.start();        // first construction: instance A
+    assert.equal(micConstructorCalls, 1);
 
     cap.stop();         // synchronously nulls this.monitor; sets isRecording=false
-    cap.start();        // races ahead: constructs B, monitor.start(B)
+    cap.start();        // races ahead: constructs B, monitor.start(B) — instance #2
 
     // Drain teardown + pre-warm .then().
     await drainPostTeardown();
@@ -210,8 +223,32 @@ test('start() racing pre-warm: a fast start() before the .then() fires construct
         micConstructorCalls,
         2,
         `BUG: pre-warm should have skipped because start() raced ahead and grabbed a fresh native handle. ` +
-        `Total constructions = ${micConstructorCalls} (expected 2: eager + start-race; ` +
+        `Total constructions = ${micConstructorCalls} (expected 2: start + start-race; ` +
         `3 would mean pre-warm built a third instance despite this.monitor !== null).`,
+    );
+
+    await cap.destroy();
+});
+test('runtime callback error disables pre-warm before stop()', async () => {
+    micConstructorCalls = 0;
+    lastMicDataCb = null;
+    const cap = new MicrophoneCapture('runtime-error-prewarm-gate');
+    cap.on('error', () => {}); // suppress EventEmitter unhandled-error semantics
+
+    cap.start();
+    assert.equal(micConstructorCalls, 1, 'start() constructs once');
+    assert.equal(typeof lastMicDataCb, 'function', 'fake native start() should receive a data callback');
+
+    lastMicDataCb(new Error('simulated runtime callback failure'));
+    assert.equal(cap.preWarmEnabled, false, 'runtime callback errors must disable pre-warm');
+
+    await cap.stop();
+    await drainPostTeardown();
+
+    assert.equal(
+        micConstructorCalls,
+        1,
+        `BUG: runtime callback error should disable pre-warm; got ${micConstructorCalls} constructions (expected only the start-construction).`,
     );
 
     await cap.destroy();

@@ -32,7 +32,7 @@ describe('GeminiPromptCache.getCachedOrWarmInBackground', () => {
   test('returns null SYNCHRONOUSLY on a miss (does not await create)', () => {
     const cache = new GeminiPromptCache();
     const { client, createStarted } = makeSlowClient();
-    const result = cache.getCachedOrWarmInBackground(client, 'gemini-3.5-flash', BIG_PROMPT);
+    const result = cache.getCachedOrWarmInBackground(client, 'gemini-3.6-flash', BIG_PROMPT);
     // Synchronous return value is null (miss) — even though create hasn't resolved.
     assert.equal(result, null);
     // The background create was kicked off (started) but we did NOT wait for it.

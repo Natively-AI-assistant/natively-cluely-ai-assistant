@@ -78,6 +78,9 @@ const distDir = (() => {
 
 const llmHelperPath = path.resolve(distDir, 'electron/LLMHelper.js');
 const modesPath = path.resolve(distDir, 'electron/services/ModesManager.js');
+const whatToAnswerPath = path.resolve(distDir, 'electron/llm/WhatToAnswerLLM.js');
+const settingsPath = path.resolve(distDir, 'electron/services/SettingsManager.js');
+const providerRouterPath = path.resolve(distDir, 'electron/llm/ProviderRouter.js');
 
 const cjsRequire = createRequire(import.meta.url);
 
@@ -109,26 +112,67 @@ try { cjsRequire.cache[cjsRequire.resolve('electron')] = electronStubModule; } c
 // resolved path.
 const { ModesManager } = cjsRequire(modesPath);
 const { LLMHelper } = cjsRequire(llmHelperPath);
+const { WhatToAnswerLLM } = cjsRequire(whatToAnswerPath);
+const { DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE } = cjsRequire(providerRouterPath);
 
 const PAYLOAD_SENTINEL = { phase: 'gate-test', amount: '$0', tone: 'firm' };
 
-function installActiveMode(templateType) {
+function installActiveMode(templateType, modeName = templateType) {
   const manager = ModesManager.getInstance();
-  manager.getActiveMode = () => {
-    if (!templateType) return null;
-    return {
-      id: `${templateType}-mode`,
-      name: templateType,
-      templateType,
-      customContext: '',
-      isActive: true,
-      createdAt: '2026-05-26T00:00:00.000Z',
-    };
-  };
+  const mode = templateType ? {
+    id: `${templateType}-mode`,
+    name: modeName,
+    templateType,
+    customContext: '',
+    isActive: true,
+    createdAt: '2026-05-26T00:00:00.000Z',
+  } : null;
+  manager.getActiveMode = () => mode;
   // Neutralize mode-context injection that runs AFTER the gate so the
   // streaming path doesn't try to retrieve real reference files.
   manager.getActiveModeSystemPromptSuffix = () => '';
   manager.buildRetrievedActiveModeContextBlock = () => '';
+  manager.buildActiveModeContextBlock = () => '';
+  manager.getActiveModeDocumentGroundingInfo = () => ({
+    isCustom: Boolean(mode && mode.templateType === 'general' && mode.name !== 'General'),
+    hasReferenceFiles: false,
+    documentGrounded: false,
+    modeId: mode?.id,
+    modeName: mode?.name,
+    hasCustomPrompt: false,
+  });
+}
+
+function installCustomDocumentMode({ documentGrounded = true } = {}) {
+  const manager = ModesManager.getInstance();
+  const mode = {
+    id: 'custom-seminar-mode',
+    name: 'Seminar mode',
+    templateType: 'general',
+    customContext: 'Use only uploaded seminar files as the source of truth.',
+    isActive: true,
+    createdAt: '2026-05-26T00:00:00.000Z',
+  };
+  manager.getActiveMode = () => mode;
+  manager.getActiveModeDocumentGroundingInfo = () => ({
+    isCustom: true,
+    hasReferenceFiles: true,
+    documentGrounded,
+    modeId: mode.id,
+    modeName: mode.name,
+    hasCustomPrompt: true,
+    // Mirror ModesManager line ~922: documentGroundedCustomModeActive is computed
+    // from (custom && hasCustomPrompt && documentGrounded && hasReferenceFiles).
+    // Without this, all doc-grounded tests in this file silently skip the
+    // mode-injection block (the stub returned a partial payload).
+    documentGroundedCustomModeActive: documentGrounded,
+  });
+  manager.getActiveModeSystemPromptSuffix = () => 'GENERAL_MODE_SENTINEL';
+  manager.getActiveModePinnedInstructions = () => 'PINNED_CUSTOM_MODE_SENTINEL';
+  manager.buildRetrievedActiveModeContextBlock = (_query, _ctx, _budget, _answerType, _exclude, _pinned, options) => {
+    return options?.forceDocumentGrounding ? 'REFERENCE_FILE_CONTEXT_SENTINEL' : '';
+  };
+  manager.buildRetrievedActiveModeContextBlockHybrid = async () => '';
   manager.buildActiveModeContextBlock = () => '';
 }
 
@@ -410,6 +454,166 @@ function attachDispatchSpy(helper) {
   return calls;
 }
 
+test('streamChat: custom CHAT_MODE_PROMPT still injects custom mode prompt and reference context', async () => {
+  const helper = buildHelper();
+  const calls = attachDispatchSpy(helper);
+
+  installCustomDocumentMode({ documentGrounded: true });
+  await drainStream(helper.streamChat(
+    'What is the main topic?',
+    undefined,
+    'LOW_PRIORITY_PRIOR_CHAT_CONTEXT',
+    cjsRequire(path.resolve(distDir, 'electron/llm/prompts.js')).CHAT_MODE_PROMPT,
+    true,
+    false,
+    [],
+    undefined,
+    undefined,
+    { answerType: 'unknown_answer' },
+  ));
+
+  const dispatched = calls.find(c => c.via === 'streamWithCustom');
+  assert.ok(dispatched, 'streamWithCustom must be reached');
+  assert.ok(
+    dispatched.systemPrompt.includes('PINNED_CUSTOM_MODE_SENTINEL'),
+    'custom mode pinned instructions must be injected even for CHAT_MODE_PROMPT + unknown_answer',
+  );
+  assert.ok(
+    dispatched.systemPrompt.includes('supplemental behavioral layer for this mode'),
+    'custom mode instructions must be elevated above default templates without overriding immutable safety rules',
+  );
+  assert.ok(
+    dispatched.context.startsWith('REFERENCE_FILE_CONTEXT_SENTINEL'),
+    `reference file context must outrank prior chat context; saw ${JSON.stringify(dispatched.context)}`,
+  );
+});
+
+test('streamChat: document-grounded custom mode fails closed if reference-file scope is denied', async () => {
+  const helper = buildHelper();
+  helper.customProvider = { id: 'spy-provider', name: 'spy', curlCommand: 'noop' };
+  helper.getDeniedOutboundScopes = () => ['reference_files'];
+
+  installCustomDocumentMode({ documentGrounded: true });
+  const chunks = await drainStream(helper.streamChat(
+    'What is the main topic?',
+    undefined,
+    undefined,
+    cjsRequire(path.resolve(distDir, 'electron/llm/prompts.js')).CHAT_MODE_PROMPT,
+    true,
+    false,
+    [],
+    undefined,
+    undefined,
+    { answerType: 'unknown_answer' },
+  ));
+
+  assert.equal(
+    chunks.join(''),
+    DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE,
+    'must not silently erase uploaded-file context and answer from general knowledge',
+  );
+});
+
+test('WhatToAnswerLLM: document-grounded custom mode fails closed when reference-files scope is denied before provider dispatch', async () => {
+  const { SettingsManager } = cjsRequire(settingsPath);
+  const originalGetInstance = SettingsManager.getInstance;
+  SettingsManager.getInstance = () => ({
+    get: key => key === 'providerDataScopes' ? { reference_files: false } : undefined,
+  });
+
+  try {
+    let streamChatCalled = false;
+    const helper = {
+      canUseLocalFallback: async () => false,
+      getCapabilities: () => ({ outputBudgetTokens: 2000 }),
+      getPromptTier: () => 'standard',
+      fitContextForCurrentModel: text => text,
+      thinkingBudgetForAnswerType: () => 0,
+      streamChat: async function* () {
+        streamChatCalled = true;
+        yield 'SHOULD_NOT_REACH_PROVIDER';
+      },
+    };
+    const modesManager = {
+      getActiveModeDocumentGroundingInfo: () => ({
+        isCustom: true,
+        hasReferenceFiles: true,
+        documentGrounded: true,
+        modeId: 'custom-doc-mode',
+        modeName: 'Custom doc mode',
+        hasCustomPrompt: true,
+      }),
+      buildRetrievedActiveModeContextBlock: () => 'REFERENCE_FILE_CONTEXT_SENTINEL',
+      getActiveModePinnedInstructions: () => '',
+      getActiveModeSystemPromptSuffix: () => '',
+    };
+
+    const wta = new WhatToAnswerLLM(helper, modesManager);
+    const chunks = await drainStream(wta.generateStream('What is the main topic?'));
+
+    assert.equal(chunks.join(''), DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE);
+    assert.equal(streamChatCalled, false, 'WTA must not dispatch to LLMHelper after fail-closed denial');
+  } finally {
+    SettingsManager.getInstance = originalGetInstance;
+  }
+});
+
+test('streamChat: denied reference-file scope scrubs retrieved blocks from message before cloud/custom dispatch', async () => {
+  const helper = buildHelper();
+  helper.customProvider = { id: 'spy-provider', name: 'spy', curlCommand: 'noop' };
+  helper.getDeniedOutboundScopes = () => ['reference_files'];
+  const calls = [];
+  helper.streamWithCustom = async function* (message, context) {
+    calls.push({ message, context: context || '' });
+    yield 'ok';
+  };
+
+  installCustomDocumentMode({ documentGrounded: false });
+  const chunks = await drainStream(helper.streamChat(
+    '<active_mode_retrieved_context>REFERENCE_FILE_CONTEXT_SENTINEL</active_mode_retrieved_context>\n\nWhat is the main topic?',
+    undefined,
+    undefined,
+    cjsRequire(path.resolve(distDir, 'electron/llm/prompts.js')).CHAT_MODE_PROMPT,
+    true,
+    true,
+    [],
+    undefined,
+    undefined,
+    { answerType: 'unknown_answer' },
+  ));
+
+  assert.deepEqual(chunks, ['ok']);
+  assert.equal(calls.length, 1, 'custom dispatch must be reached with scrubbed payload');
+  assert.doesNotMatch(calls[0].message, /REFERENCE_FILE_CONTEXT_SENTINEL|active_mode_retrieved_context/);
+  assert.match(calls[0].message, /What is the main topic\?/);
+});
+
+test('streamChat: seeded General mode still skips CHAT_MODE_PROMPT mode injection for unknown answers', async () => {
+  const helper = buildHelper();
+  const calls = attachDispatchSpy(helper);
+
+  installActiveMode('general', 'General');
+  await drainStream(helper.streamChat(
+    'What is the main topic?',
+    undefined,
+    undefined,
+    cjsRequire(path.resolve(distDir, 'electron/llm/prompts.js')).CHAT_MODE_PROMPT,
+    true,
+    false,
+    [],
+    undefined,
+    undefined,
+    { answerType: 'unknown_answer' },
+  ));
+
+  const dispatched = calls.find(c => c.via === 'streamWithCustom');
+  assert.ok(dispatched, 'streamWithCustom must be reached');
+  assert.ok(
+    !dispatched.systemPrompt.includes('PINNED_CUSTOM_MODE_SENTINEL'),
+    'default General mode must remain neutral and not get custom-mode injection',
+  );
+});
+
 test('streamChat: premium context block REACHES dispatch in looking-for-work (positive control)', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildInjectionOrchestratorStub());
@@ -532,4 +736,113 @@ test('streamChat: premium prompt injection STILL FIRES in looking-for-work (regr
     1,
     'intercept body must run in looking-for-work; coaching handler proves it',
   );
+});
+
+// ----------------------------------------------------------------
+// chatWithGemini (non-streaming) mode-injection regression (2026-07-05)
+// The non-streaming chatWithGemini path was silently dropping the active
+// custom mode's voice + reference-file context + pinned instructions because
+// the signature lacked routeOptions/skipModeInjection args AND the function
+// body had no mode-injection block. This regression pins the new behavior
+// for both doc-grounded and non-doc-grounded custom modes.
+// See code-reviewer audit finding #1 (2026-07-04).
+
+test('chatWithGemini: doc-grounded custom mode injects pinned instructions + reference context at dispatch', async () => {
+  const helper = buildHelper();
+  const calls = attachDispatchSpy(helper);
+
+  installCustomDocumentMode({ documentGrounded: true });
+  const result = await helper.chatWithGemini(
+    'What is the main topic?',
+    undefined,
+    'LOW_PRIORITY_PRIOR_CHAT_CONTEXT',
+    false,
+    undefined,
+    { answerType: 'lecture_answer' },
+    false,
+  );
+
+  const dispatched = calls.find(c => c.via === 'executeCustomProvider');
+  assert.ok(dispatched, 'executeCustomProvider must be reached');
+  assert.ok(
+    dispatched.systemPrompt.includes('PINNED_CUSTOM_MODE_SENTINEL'),
+    `custom mode pinned instructions must be injected into chatWithGemini system prompt; saw ${JSON.stringify(dispatched.systemPrompt).slice(0, 200)}`,
+  );
+  assert.ok(
+    dispatched.context.startsWith('REFERENCE_FILE_CONTEXT_SENTINEL'),
+    `reference file context must outrank prior chat context; saw ${JSON.stringify(dispatched.context).slice(0, 200)}`,
+  );
+  assert.equal(result, 'spy-response', 'dispatch must have produced the spy response');
+});
+
+test('chatWithGemini: non-doc-grounded custom mode still injects pinned instructions (no doc-grounding dependency)', async () => {
+  const helper = buildHelper();
+  const calls = attachDispatchSpy(helper);
+
+  installCustomDocumentMode({ documentGrounded: false });
+  await helper.chatWithGemini(
+    'Walk me through your approach.',
+    undefined,
+    undefined,
+    false,
+    undefined,
+    undefined,
+    undefined,
+  );
+
+  const dispatched = calls.find(c => c.via === 'executeCustomProvider');
+  assert.ok(dispatched, 'executeCustomProvider must be reached');
+  assert.ok(
+    dispatched.systemPrompt.includes('PINNED_CUSTOM_MODE_SENTINEL'),
+    `non-doc-grounded custom mode still gets pinned instructions; saw ${JSON.stringify(dispatched.systemPrompt).slice(0, 200)}`,
+  );
+});
+
+test('chatWithGemini: skipModeInjection:true preserves legacy skip (no mode shaping reaches dispatch)', async () => {
+  const helper = buildHelper();
+  const calls = attachDispatchSpy(helper);
+
+  installCustomDocumentMode({ documentGrounded: true });
+  await helper.chatWithGemini(
+    'What is the main topic?',
+    undefined,
+    undefined,
+    false,
+    undefined,
+    undefined,
+    true,
+  );
+
+  const dispatched = calls.find(c => c.via === 'executeCustomProvider');
+  assert.ok(dispatched, 'executeCustomProvider must be reached');
+  assert.ok(
+    !dispatched.systemPrompt.includes('PINNED_CUSTOM_MODE_SENTINEL'),
+    `explicit skipModeInjection must suppress pinned instructions; saw ${JSON.stringify(dispatched.systemPrompt).slice(0, 200)}`,
+  );
+  assert.ok(
+    !dispatched.context.includes('REFERENCE_FILE_CONTEXT_SENTINEL'),
+    `explicit skipModeInjection must suppress reference-file context; saw ${JSON.stringify(dispatched.context).slice(0, 200)}`,
+  );
+});
+
+test('chatWithGemini: legacy callers with no routeOptions + no skipModeInjection still work (backward compat)', async () => {
+  const helper = buildHelper();
+  const calls = attachDispatchSpy(helper);
+
+  installActiveMode('technical-interview');
+  const result = await helper.chatWithGemini(
+    'Explain CAP theorem.',
+    undefined,
+    'PRIOR_CONTEXT',
+    false,
+    undefined,
+  );
+
+  const dispatched = calls.find(c => c.via === 'executeCustomProvider');
+  assert.ok(dispatched, 'executeCustomProvider must be reached for legacy callers');
+  assert.ok(
+    !dispatched.systemPrompt.includes('PINNED_CUSTOM_MODE_SENTINEL'),
+    'non-custom mode + no routeOptions → no custom mode shaping (legacy behavior)',
+  );
+  assert.equal(result, 'spy-response');
 });

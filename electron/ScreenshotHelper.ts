@@ -95,6 +95,77 @@ function getDisplayContainingRect(rect: Electron.Rectangle): Electron.Display {
   return screen.getPrimaryDisplay();
 }
 
+/**
+ * Upper bound on the thumbnail↔bounds ratio. Guards against a NaN/Infinity or an
+ * absurd ratio when sourceSize >> bounds due to a DPI mismatch (see the historical
+ * fix in getDisplaysIntersectingSelection). 10 comfortably covers every real HiDPI
+ * factor (macOS 3×, Windows 3×) while still catching garbage.
+ */
+const MAX_THUMBNAIL_RATIO = 10;
+
+/**
+ * Maps an absolute-screen selection rectangle into crop coordinates in a
+ * desktopCapturer thumbnail's pixel space.
+ *
+ * This is the single source of truth for crop-coordinate math shared by BOTH the
+ * single-display path (captureWithDesktopCapturer) and the multi-display path
+ * (getDisplaysIntersectingSelection). It exists to prevent the two paths from
+ * drifting: the single-display path previously multiplied by display.scaleFactor
+ * (correct only if Electron returns a native-pixel thumbnail), while the
+ * multi-display path derived the ratio from the actual thumbnail size. When macOS
+ * returned a 1× thumbnail the scaleFactor assumption produced an out-of-bounds crop
+ * that silently degraded to a full-screen capture.
+ *
+ * The ratio is derived from the ACTUAL returned thumbnail size vs the display
+ * bounds, so it is correct whether Electron hands back a 1× (logical) or a
+ * native-2×/3× thumbnail.
+ *
+ * @param sourceSize   Size of the thumbnail actually returned by desktopCapturer, in pixels.
+ * @param displayBounds The display's logical bounds (screen coordinates).
+ * @param areaAbs      The selection rectangle in absolute screen coordinates.
+ * @returns A crop rect in thumbnail-pixel coordinates, clamped into [0, sourceSize].
+ *          May be empty (width or height 0) when the selection does not overlap the
+ *          thumbnail — callers decide whether that is an error or a tolerable partial
+ *          intersection.
+ */
+export function computeThumbnailCrop(
+  sourceSize: { width: number; height: number },
+  displayBounds: Electron.Rectangle,
+  areaAbs: Electron.Rectangle
+): { x: number; y: number; width: number; height: number } {
+  // Ratio between thumbnail pixels and logical display units. Derived from the
+  // real returned size — NOT assumed from scaleFactor — so a 1× thumbnail and a
+  // native-2× thumbnail both map correctly.
+  let ratioX = displayBounds.width > 0 ? sourceSize.width / displayBounds.width : 1;
+  let ratioY = displayBounds.height > 0 ? sourceSize.height / displayBounds.height : 1;
+
+  // Guard against NaN/Infinity (e.g. zero bounds) and absurd ratios.
+  if (!isFinite(ratioX) || ratioX > MAX_THUMBNAIL_RATIO) {
+    ratioX = MAX_THUMBNAIL_RATIO;
+  }
+  if (!isFinite(ratioY) || ratioY > MAX_THUMBNAIL_RATIO) {
+    ratioY = MAX_THUMBNAIL_RATIO;
+  }
+
+  // Convert the absolute selection into thumbnail pixel coordinates relative to
+  // this display's top-left corner.
+  const rawX = (areaAbs.x - displayBounds.x) * ratioX;
+  const rawY = (areaAbs.y - displayBounds.y) * ratioY;
+  const rawWidth = areaAbs.width * ratioX;
+  const rawHeight = areaAbs.height * ratioY;
+
+  // Clamp the origin into [0, sourceSize]. Using Math.min against the source size
+  // (not just Math.max(0, ...)) is what prevents cropX + width from ever exceeding
+  // the image: once the origin is clamped, the remaining width/height are derived
+  // FROM the clamped origin so they can only ever shrink, never go negative.
+  const x = Math.round(Math.max(0, Math.min(rawX, sourceSize.width)));
+  const y = Math.round(Math.max(0, Math.min(rawY, sourceSize.height)));
+  const width = Math.round(Math.max(0, Math.min(rawWidth, sourceSize.width - x)));
+  const height = Math.round(Math.max(0, Math.min(rawHeight, sourceSize.height - y)));
+
+  return { x, y, width, height };
+}
+
 
 /**
  * Represents a portion of the selection that lies on a specific display.
@@ -214,52 +285,20 @@ async function getDisplaysIntersectingSelection(
     // Get source thumbnail info
     const sourceSize = source.thumbnail.getSize();
     console.log(`[ScreenshotHelper] Source thumbnail size: ${sourceSize.width}x${sourceSize.height}, display bounds: ${display.bounds.width}x${display.bounds.height}`);
-    
+
     // CRITICAL: desktopCapturer returns thumbnail in DISPLAY'S NATIVE resolution
     // NOT scaled to a common size. Different displays may have different resolutions.
-    // 
+    //
     // We need to normalize crop coordinates to the thumbnail's coordinate system.
-    // The ratio sourceSize / display.bounds gives us the scaling factor.
-    
-    // Calculate the ratio between thumbnail and display bounds
-    // This accounts for any difference in how desktopCapturer captures each display
-    let thumbnailToBoundsRatioX = display.bounds.width > 0 ? sourceSize.width / display.bounds.width : 1;
-    let thumbnailToBoundsRatioY = display.bounds.height > 0 ? sourceSize.height / display.bounds.height : 1;
-    
-    // Guard against Infinity values (e.g., if sourceSize >> bounds due to DPI mismatch)
-    const MAX_RATIO = 10;
-    if (!isFinite(thumbnailToBoundsRatioX)) {
-      console.warn(`[ScreenshotHelper] thumbnailToBoundsRatioX is ${thumbnailToBoundsRatioX}, clamping to ${MAX_RATIO}`);
-      thumbnailToBoundsRatioX = MAX_RATIO;
-    }
-    if (!isFinite(thumbnailToBoundsRatioY)) {
-      console.warn(`[ScreenshotHelper] thumbnailToBoundsRatioY is ${thumbnailToBoundsRatioY}, clamping to ${MAX_RATIO}`);
-      thumbnailToBoundsRatioY = MAX_RATIO;
-    }
-    
-    console.log(`[ScreenshotHelper] Thumbnail to bounds ratio: ${thumbnailToBoundsRatioX}x${thumbnailToBoundsRatioY}`);
-    
-    // Intersection coordinates are in screen coordinates (physical pixels)
-    // We need to convert them to thumbnail coordinates
-    const cropX = Math.round((intersection.x - display.bounds.x) * thumbnailToBoundsRatioX);
-    const cropY = Math.round((intersection.y - display.bounds.y) * thumbnailToBoundsRatioY);
-    const cropWidth = Math.round(intersection.width * thumbnailToBoundsRatioX);
-    const cropHeight = Math.round(intersection.height * thumbnailToBoundsRatioY);
-    
-    console.log(`[ScreenshotHelper] Crop params: x=${cropX}, y=${cropY}, w=${cropWidth}, h=${cropHeight}`);
-    
-    // Ensure crop is within image bounds
-    const clampedX = Math.max(0, Math.min(cropX, sourceSize.width));
-    const clampedY = Math.max(0, Math.min(cropY, sourceSize.height));
-    const clampedWidth = Math.max(0, Math.min(cropWidth, sourceSize.width - clampedX));
-    const clampedHeight = Math.max(0, Math.min(cropHeight, sourceSize.height - clampedY));
-    
-    const cropped = source.thumbnail.crop({
-      x: clampedX,
-      y: clampedY,
-      width: clampedWidth,
-      height: clampedHeight
-    });
+    // computeThumbnailCrop() derives the ratio from the ACTUAL thumbnail size vs
+    // the display bounds (density-agnostic) and clamps the result into image bounds
+    // — the shared helper both this path and the single-display path now use so
+    // their crop math can never diverge again.
+    const clampedCrop = computeThumbnailCrop(sourceSize, display.bounds, intersection);
+
+    console.log(`[ScreenshotHelper] Crop params: x=${clampedCrop.x}, y=${clampedCrop.y}, w=${clampedCrop.width}, h=${clampedCrop.height}`);
+
+    const cropped = source.thumbnail.crop(clampedCrop);
     
     captures.push({
       display,
@@ -463,12 +502,19 @@ export class ScreenshotHelper {
     let sources: Electron.DesktopCapturerSource[];
 
     try {
-      // thumbnailSize: use the display's logical resolution.
-      // Electron's DesktopCapturer already returns native-pixel-density images
-      // regardless of the requested size. Requesting w×scaleFactor forces it to
-      // decode a 2×–3× larger texture (e.g. 5120×3200 on a Retina 2× display)
-      // in a blocking main-thread call, adding 50–200ms of latency with zero
-      // image-quality benefit since we immediately write the result to PNG.
+      // thumbnailSize: request the display's LOGICAL resolution as a latency hint.
+      // Requesting w×scaleFactor would force Electron to decode a 2×–3× larger
+      // texture (e.g. 5120×3200 on a Retina 2× display) in a blocking main-thread
+      // call, adding 50–200ms with zero quality benefit since we immediately write
+      // the result to PNG.
+      //
+      // IMPORTANT: the actual pixel size of the returned thumbnail is NOT guaranteed
+      // to equal what we request, and whether Electron returns a 1× (logical) or a
+      // native-2×/3× image is a version- and OS-dependent behaviour. Do NOT assume a
+      // density here. The crop math below reads image.getSize() and derives the ratio
+      // from the real returned size (via computeThumbnailCrop), so it is correct for
+      // either case. (Assuming native pixels + multiplying by scaleFactor is exactly
+      // the latent bug that turned right/bottom selections into full-screen captures.)
       const thumbnailSize = {
         width: displayBounds.width,
         height: displayBounds.height
@@ -523,9 +569,14 @@ export class ScreenshotHelper {
       }
     }
     
-    // Last resort: use first source
+    // Last resort: use first source. This means we may be capturing the WRONG
+    // display — surface it at error level with the counts so a mismatch is obvious
+    // in field logs (control flow unchanged: sources[0] is the only fallback we have).
     if (!selectedSource) {
-      console.warn(`[ScreenshotHelper] display_id ${targetDisplayId} not found in sources, using first available`);
+      console.error(
+        `[ScreenshotHelper] display_id ${targetDisplayId} not matched in ${sources.length} source(s) ` +
+        `for ${screen.getAllDisplays().length} display(s) — falling back to sources[0] (may be the wrong display)`
+      );
       selectedSource = sources[0];
     }
     
@@ -534,37 +585,41 @@ export class ScreenshotHelper {
     let image = selectedSource.thumbnail;
 
     if (area) {
-      // Crop rect: area is in absolute screen coordinates. The returned thumbnail
-      // is in native device pixels (Electron scales it up internally), so we
-      // must apply scaleFactor to map from logical screen coords to pixel coords.
-      const cropX = Math.round((area.x - displayBounds.x) * scaleFactor);
-      const cropY = Math.round((area.y - displayBounds.y) * scaleFactor);
+      // Crop rect: area is in absolute screen coordinates. Derive the crop from the
+      // ACTUAL returned thumbnail size (not the assumed scaleFactor) via the shared
+      // helper, so a 1× or a native-2×/3× thumbnail both map correctly. Multiplying
+      // by scaleFactor assuming native pixels is exactly what silently turned
+      // right/bottom selections into full-screen captures.
+      const sourceSize = image.getSize();
 
-      const croppedArea = {
-        x: Math.max(0, cropX),
-        y: Math.max(0, cropY),
-        width: Math.round(area.width * scaleFactor),
-        height: Math.round(area.height * scaleFactor)
-      };
-      
+      // Field diagnostic: a density mismatch between the returned thumbnail and the
+      // logical bounds is immediately visible here. ratioX≈1 means Electron handed
+      // back a 1× image; ratioX≈scaleFactor means native pixels. Log-only — behaviour
+      // does NOT branch on this.
+      console.log(
+        `[ScreenshotHelper] Crop density check: sourceSize=${sourceSize.width}x${sourceSize.height}, ` +
+        `displayBounds=${displayBounds.width}x${displayBounds.height}, scaleFactor=${scaleFactor}, ` +
+        `ratioX=${(displayBounds.width > 0 ? sourceSize.width / displayBounds.width : 0).toFixed(3)}`
+      );
+
+      const croppedArea = computeThumbnailCrop(sourceSize, displayBounds, area);
+
       console.log(`[ScreenshotHelper] Cropping relative to display: ${JSON.stringify(croppedArea)}`);
-      
-      // Ensure crop area is within image bounds
-      const imgWidth = image.getSize().width;
-      const imgHeight = image.getSize().height;
-      
-      if (croppedArea.x + croppedArea.width > imgWidth) {
-        croppedArea.width = imgWidth - croppedArea.x;
+
+      // Fail LOUDLY on an empty/invalid crop. A region capture that cannot be cropped
+      // must NEVER fall through to writing the uncropped full thumbnail — that is both
+      // the "entire screen" symptom and a privacy footgun. The thrown message is
+      // deliberately distinct from "Selection cancelled" so the IPC layer surfaces it
+      // as a real failure rather than mislabelling it as a user cancel.
+      if (croppedArea.width <= 0 || croppedArea.height <= 0) {
+        throw new Error(
+          `Region capture failed: selection did not map to a valid crop ` +
+          `(area=${JSON.stringify(area)}, thumbnail=${sourceSize.width}x${sourceSize.height}, ` +
+          `computed=${JSON.stringify(croppedArea)}).`
+        );
       }
-      if (croppedArea.y + croppedArea.height > imgHeight) {
-        croppedArea.height = imgHeight - croppedArea.y;
-      }
-      
-      if (croppedArea.width > 0 && croppedArea.height > 0) {
-        image = image.crop(croppedArea);
-      } else {
-        console.warn('[ScreenshotHelper] Invalid crop area, skipping crop');
-      }
+
+      image = image.crop(croppedArea);
     }
 
     try {

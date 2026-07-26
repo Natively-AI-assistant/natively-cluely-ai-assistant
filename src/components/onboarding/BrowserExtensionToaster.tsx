@@ -12,16 +12,13 @@
 // extension connects while visible.
 //
 // Chrome Web Store URL canonical source: src/components/settings/HelpSettings.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { X, ArrowRight } from 'lucide-react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { isToasterAllowed, markToasterAsShown } from '../../lib/toasterGating';
 import { BrowserExtensionIcon } from './BrowserExtensionIcon';
 
 const DISMISS_KEY         = 'natively_ext_connect_dismissed_v1';
-const TOASTER_ID          = 'extension_connect';
-const STARTUP_DELAY_MS    = 12_000;   // trial is 10s; support is 10s
 const MIN_VERSION         = '2.8.0';
 
 // Canonical Chrome Web Store URL (also in HelpSettings.tsx).
@@ -65,13 +62,16 @@ function versionGte(a: string, b: string): boolean {
   return true;
 }
 
-export const BrowserExtensionToaster: React.FC = () => {
-  const [visible, setVisible]     = useState(false);
+interface Props {
+  isOpen:    boolean;
+  onDismiss: () => void;
+  onSkip?:   () => void;
+}
+
+export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, onSkip: _onSkip }) => {
   const [opening, setOpening]     = useState(false);
   const reduced = useReducedMotion() ?? false;
   const isLight = useResolvedTheme() === 'light';
-  const statusUnsubRef = useRef<(() => void) | null>(null);
-  const timerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Color tokens (verbatim TrialPromoToaster pattern).
   const t1 = isLight ? '#111111' : '#FFFFFF';
@@ -81,93 +81,38 @@ export const BrowserExtensionToaster: React.FC = () => {
   const rule = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.08)';
   const glass = isLight ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.02)';
 
-  // ─── Trigger logic ──────────────────────────────────────────
+  // ─── Visibility driven by orchestrator (isOpen) ────────────────
+  // Test hook: ?extToaster=force bypasses orchestrator and shows immediately.
+  const testForceShow = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('extToaster') === 'force';
+
   useEffect(() => {
-    // 0. TEST HOOK: ?extToaster=force in the URL bypasses ALL gating
-    //    (permanent-dismiss flag, version gate, central gating, connection
-    //    check, startup delay) and shows the toaster immediately.
-    //    Also clears the dismiss flag + cooldown so re-renders are clean.
-    //    Usage: append `?extToaster=force` to the launcher / overlay URL.
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('extToaster') === 'force') {
-        try {
-          localStorage.removeItem(DISMISS_KEY);
-          localStorage.removeItem('last_shown_time_extension_connect');
-          localStorage.removeItem('last_shown_opens_extension_connect');
-          sessionStorage.removeItem('natively_session_toaster_shown');
-        } catch { /* ignore */ }
-        setVisible(true);
-        return;
+    // Auto-dismiss silently the moment the extension connects while visible.
+    if (!isOpen || testForceShow) return;
+    const unsub = window.electronAPI?.onPhoneMirrorStatus?.(info => {
+      if (info?.extensionConnected) {
+        try { localStorage.setItem(DISMISS_KEY, '1'); } catch { /* ignore */ }
+        onDismiss();
       }
-    }
-
-    // 1. Skip if permanently dismissed
-    if (localStorage.getItem(DISMISS_KEY)) return;
-
-    // 2. Skip if app version is below 2.8.0
-    const appVer = (import.meta.env.VITE_APP_VERSION as string | undefined) || '';
-    if (appVer && appVer !== 'unknown' && !versionGte(appVer, MIN_VERSION)) return;
-
-    // 3. Honor central gating (session + 24h/5-opens cooldown)
-    if (!isToasterAllowed(TOASTER_ID)) return;
-
-    // 4. Query phone-mirror state — skip if extension already connected.
-    let cancelled = false;
-    const queryAndSchedule = async () => {
-      try {
-        const info = await window.electronAPI?.phoneMirrorGetInfo?.();
-        if (cancelled) return;
-        if (!info || info.extensionConnected) return;
-      } catch {
-        // Phone Mirror service not ready yet — silently skip this session.
-        return;
-      }
-      if (cancelled) return;
-
-      timerRef.current = setTimeout(() => {
-        if (cancelled) return;
-        setVisible(true);
-        markToasterAsShown(TOASTER_ID);
-      }, STARTUP_DELAY_MS);
-    };
-    queryAndSchedule();
-
-    // 5. Auto-dismiss silently the moment the extension connects.
-    if (window.electronAPI?.onPhoneMirrorStatus) {
-      statusUnsubRef.current = window.electronAPI?.onPhoneMirrorStatus(info => {
-        if (info?.extensionConnected) handleDismissSilently();
-      });
-    }
-
-    return () => {
-      cancelled = true;
-      if (timerRef.current) clearTimeout(timerRef.current);
-      statusUnsubRef.current?.();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    });
+    return () => { unsub?.(); };
+  }, [isOpen, testForceShow, onDismiss]);
 
   // ─── Escape key ─────────────────────────────────────────────
   useEffect(() => {
-    if (!visible) return;
+    if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') handlePermanentDismiss();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  }, [isOpen]);
 
   // ─── Dismiss handlers ───────────────────────────────────────
-  const handleDismissSilently = () => {
-    setVisible(false);
-    if (timerRef.current) clearTimeout(timerRef.current);
-  };
-
   const handlePermanentDismiss = () => {
     try { localStorage.setItem(DISMISS_KEY, '1'); } catch { /* ignore */ }
-    setVisible(false);
+    onDismiss();
   };
 
   const handleInstall = async () => {
@@ -179,10 +124,13 @@ export const BrowserExtensionToaster: React.FC = () => {
     } finally {
       // Close immediately — user is in Chrome store now. Don't permanently
       // dismiss so they can return next launch if they didn't install.
-      setVisible(false);
+      onDismiss();
     }
   };
 
+  // Pure presentational: visibility is driven by orchestrator's isOpen prop
+  // (or the ?extToaster=force test hook).
+  const visible = isOpen || testForceShow;
   if (!visible) return null;
 
   return (
@@ -330,7 +278,15 @@ export const BrowserExtensionToaster: React.FC = () => {
                     reduced={reduced}
                   />
 
-                  <button onClick={handlePermanentDismiss}
+                  <button onClick={() => {
+                      // "I don't want to" = explicit skip — distinct from
+                      // background click or X (which counts as plain dismiss).
+                      // For now both end up at the same handler since the
+                      // extension's re-eligibility is controlled by the
+                      // permanent DISMISS_KEY flag.
+                      handlePermanentDismiss();
+                      _onSkip?.();
+                    }}
                     aria-label="Dismiss browser extension invitation"
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer',

@@ -28,7 +28,7 @@ export const BUILT_IN_RECIPES: Array<{ id: RecipeType; label: string; modes?: st
 
 export function generateRecipe(summary: MeetingSummaryV3, recipe: RecipeType): string {
   switch (recipe) {
-    case 'follow-up-email': return summary.followUpDraft?.body || buildFollowUpBody(summary.decisions, summary.actionItems);
+    case 'follow-up-email': return summary.followUpDraft?.body || buildFollowUpBody(summary.decisions, summary.actionItems, summary.mode?.summaryModeUsed || summary.mode?.selectedModeId);
     case 'slack-update': return slackUpdate(summary);
     case 'project-update': return projectUpdate(summary);
     case 'crm-note': return crmNote(summary);

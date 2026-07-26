@@ -15,7 +15,7 @@
 //
 // PRIORITY (Natively-API is intentionally DEFERRED — see docs/HINDSIGHT_LOCAL_SETUP.md):
 //   Gemini → OpenAI → Claude → DeepSeek → Groq → Ollama
-//   Within Gemini: 3.5-flash → 3.1-flash-lite → 3.1-pro-preview.
+//   Within Gemini: 3.6-flash → 3.1-flash-lite → 3.1-pro-preview.
 //
 // Model names MIRROR electron/services/ModelVersionManager.ts:88-100 so Hindsight stays
 // in lockstep with the app's chosen models. Each is env-overridable.
@@ -38,14 +38,25 @@ function providerTable(env) {
     {
       provider: 'gemini', key: 'GEMINI_API_KEY',
       models: [
-        ov('HINDSIGHT_LLM_GEMINI_PRIMARY', 'gemini/gemini-3.5-flash'),
+        ov('HINDSIGHT_LLM_GEMINI_PRIMARY', 'gemini/gemini-3.6-flash'),
         ov('HINDSIGHT_LLM_GEMINI_LITE', 'gemini/gemini-3.1-flash-lite'),
         ov('HINDSIGHT_LLM_GEMINI_PRO', 'gemini/gemini-3.1-pro-preview'),
       ],
     },
     {
+      // OpenAI-compatible: real OpenAI OR a LiteLLM gateway (any base URL passed via
+      // OPENAI_API_BASE / LITELLM_BASE_URL). The shell launcher forwards OPENAI_API_BASE
+      // (and also LITELLM_BASE_URL as a fallback); litellm reads OPENAI_API_BASE and
+      // routes calls to the gateway instead of api.openai.com. Without this entry the
+      // LiteLLM gateway user gets retain/reflect calls silently routed to api.openai.com
+      // — the most surprising failure mode for a user who set up a gateway to AVOID
+      // talking to OpenAI.
       provider: 'openai', key: 'OPENAI_API_KEY',
       models: [ov('HINDSIGHT_LLM_OPENAI', 'openai/gpt-5.4')],
+      // OPENAI_API_BASE is the litellm-canonical env var. LITELLM_BASE_URL is a
+      // convenience alias some users set in their own shell — we honor it as a
+      // fallback so the UI-documented `export LITELLM_BASE_URL=...` actually works.
+      apiBase: ov('OPENAI_API_BASE', '') || ov('LITELLM_BASE_URL', '') || undefined,
     },
     {
       provider: 'anthropic', key: 'ANTHROPIC_API_KEY',

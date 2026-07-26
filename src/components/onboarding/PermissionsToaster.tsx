@@ -15,7 +15,6 @@ import nativelyIcon from '../../../assets/icon.png';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 
 const STORAGE_KEY  = 'natively_perms_shown_v1';
-const STARTUP_DELAY_MS = 1_200;
 
 // ─── Design tokens ────────────────────────────────────────────
 const T = {
@@ -131,11 +130,9 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
 
   useEffect(() => {
     if (!isOpen) { setVisible(false); return; }
-    const t = setTimeout(async () => {
-      await refreshStatus();
-      setVisible(true);
-    }, STARTUP_DELAY_MS);
-    return () => clearTimeout(t);
+    // Pure presentational: orchestrator already gated on the homepage-mounted
+    // duration predicate. We just refresh status and become visible.
+    refreshStatus().then(() => setVisible(true));
   }, [isOpen, refreshStatus]);
 
   useEffect(() => {

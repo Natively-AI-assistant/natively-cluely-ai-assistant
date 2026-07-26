@@ -46,16 +46,15 @@ export class EmbeddingPipeline {
     }
 
     /**
-     * Initialize with provider config (picks best available provider)
-     * Idempotent: re-initialization only runs if the new config adds at least one
-     * key/URL that was not present in the last config (e.g., Ollama becomes available,
-     * or a cloud API key is loaded from CredentialsManager after startup).
-     * If the config is unchanged or strictly worse, the existing initPromise is returned.
+     * Initialize with provider config (picks best available provider).
+     * Idempotent when the effective config is unchanged, but reinitializes on
+     * removals as well as additions. A removed Settings key must demote the stale
+     * provider immediately instead of keeping the old client alive until restart.
      */
     async initialize(config: AppAPIConfig): Promise<void> {
-        // Skip if config is identical or has no new information
-        if (this._lastConfig && !this._isConfigImprovement(this._lastConfig, config)) {
-            console.log('[EmbeddingPipeline] Config unchanged or no new keys — skipping re-initialization');
+        // Skip only if the effective config is truly unchanged.
+        if (this._lastConfig && !this._isConfigChanged(this._lastConfig, config)) {
+            console.log('[EmbeddingPipeline] Config unchanged — skipping re-initialization');
             return this.initPromise ?? Promise.resolve();
         }
         this._lastConfig = { ...config };
@@ -73,16 +72,23 @@ export class EmbeddingPipeline {
     }
 
     /**
-     * Returns true if `next` provides at least one credential that `prev` did not have.
-     * Prevents redundant re-initialization when the same keys are passed again.
+     * Returns true when any provider-selection input changed in either direction.
+     * Removals are as important as additions: clearing a Settings-managed key must
+     * re-resolve away from that provider rather than keeping the stale instance.
      */
-    private _isConfigImprovement(prev: AppAPIConfig, next: AppAPIConfig): boolean {
-        const hasNew = (prevVal: string | undefined, nextVal: string | undefined) =>
-            !prevVal && !!nextVal;
+    private _isConfigChanged(prev: AppAPIConfig, next: AppAPIConfig): boolean {
+        const norm = (value?: string) => (value || '').trim();
+        const normList = (values?: string[]) => (values || []).map(norm).filter(Boolean).join('\n');
+        const normScopes = (value: AppAPIConfig['providerDataScopes']) => JSON.stringify(value || {});
         return (
-            hasNew(prev.openaiKey, next.openaiKey) ||
-            hasNew(prev.geminiKey, next.geminiKey) ||
-            hasNew(prev.ollamaUrl, next.ollamaUrl)
+            norm(prev.openaiKey) !== norm(next.openaiKey) ||
+            norm(prev.geminiKey) !== norm(next.geminiKey) ||
+            norm(prev.ollamaUrl) !== norm(next.ollamaUrl) ||
+            normList(prev.geminiKeys) !== normList(next.geminiKeys) ||
+            norm(prev.geminiEmbeddingModel) !== norm(next.geminiEmbeddingModel) ||
+            (prev.geminiEmbeddingDims || 0) !== (next.geminiEmbeddingDims || 0) ||
+            normScopes(prev.providerDataScopes) !== normScopes(next.providerDataScopes) ||
+            Boolean(prev.explicitKeyManagement) !== Boolean(next.explicitKeyManagement)
         );
     }
 
@@ -130,15 +136,20 @@ export class EmbeddingPipeline {
 
         } catch (err) {
             console.error('[EmbeddingPipeline] Failed to initialize primary provider:', err);
-            console.warn('[EmbeddingPipeline] Falling back to local-only mode for all meetings.');
-            // Promote fallback as the primary so isReady() returns true and queueing works.
-            // The local model still loads lazily on the first embed call.
-            this.provider = this.fallbackProvider;
-            // Persist the fallback provider's space so the next launch does not fire a
-            // false-positive incompatible-space warning (e.g. openai space vs local space).
-            try {
-                this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(this.provider.space);
-            } catch (_) { /* non-fatal — DB may not have app_state yet in edge cases */ }
+            if (!this.fallbackProvider) {
+                console.warn('[EmbeddingPipeline] No embedding provider available — pipeline idle.');
+                this.provider = null;
+            } else {
+                console.warn('[EmbeddingPipeline] Falling back to local-only mode for all meetings.');
+                // Promote fallback as the primary so isReady() returns true and queueing works.
+                // The local model still loads lazily on the first embed call.
+                this.provider = this.fallbackProvider;
+                // Persist the fallback provider's space so the next launch does not fire a
+                // false-positive incompatible-space warning (e.g. openai space vs local space).
+                try {
+                    this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(this.provider.space);
+                } catch (_) { /* non-fatal — DB may not have app_state yet in edge cases */ }
+            }
         }
 
         // Flush any queue items submitted during the startup race window (i.e. before the
@@ -151,10 +162,26 @@ export class EmbeddingPipeline {
     }
 
     /**
-     * Check if pipeline is ready
+     * Check if pipeline is ready to serve an embed() call WITHOUT a slow
+     * cold-load first.
+     *
+     * 2026-07-05 fix: previously this only checked `provider !== null`, which
+     * is true the instant _doInitialize() assigns LocalEmbeddingProvider as a
+     * fallback — before its ONNX worker has actually loaded the model (that
+     * only happens lazily on the first real embed() call, and can take up to
+     * 60s cold). Callers using isReady() as a synchronous "is it safe to use
+     * this right now" gate (ModeHybridRetriever.isEmbeddingAvailable(), used
+     * inside a live per-query retrieval budget) would see `true`, take the
+     * hybrid-retrieval branch, then stall for up to 60s on the first query
+     * during that narrow startup window.
+     * `provider.isLoaded?.()` is optional — cloud HTTP providers (Gemini/
+     * OpenAI/Ollama) have no meaningful "warm-up" state (every embed() call
+     * is already just a network round-trip), so they simply don't implement
+     * it and this defaults to true for them, preserving existing behavior for
+     * every provider except the local fallback.
      */
     isReady(): boolean {
-        return this.provider !== null;
+        return this.provider !== null && (this.provider.isLoaded?.() ?? true);
     }
 
     /**
@@ -381,8 +408,9 @@ export class EmbeddingPipeline {
                         error.message
                     );
 
-                    if (!useFallback && newRetryCount >= MAX_RETRIES && this.fallbackProvider) {
-                        // Primary provider exhausted. Downgrade the meeting to local fallback.
+                    if (!useFallback && (newRetryCount >= MAX_RETRIES || error?.permanentAuthFailure) && this.fallbackProvider) {
+                        // Primary provider exhausted, or failed with an auth/account error
+                        // that cannot self-heal on retry. Downgrade the meeting to local fallback.
                         await this.activateMeetingFallback(pending.meeting_id);
                     } else {
                         // Still have retries remaining — back-off and retry.
@@ -468,10 +496,38 @@ export class EmbeddingPipeline {
      * Routes through embedWithTimeout() so a frozen API cannot stall the live indexer.
      */
     async getEmbedding(text: string): Promise<number[]> {
-        if (!this.provider) {
+        const result = await this.getEmbeddingWithFallback(text);
+        return result.embedding;
+    }
+
+    /**
+     * Get a single document embedding with metadata from the provider that actually
+     * produced the vector. Callers that persist vectors MUST prefer this over the
+     * bare getEmbedding() when they also persist an embedding_space label: a
+     * primary→fallback promotion can happen inside this call.
+     */
+    async getEmbeddingWithFallback(text: string): Promise<{ embedding: number[]; space: string; provider?: string; dimensions?: number }> {
+        const active = this.provider;
+        if (!active) {
             throw new Error('Embedding provider not initialized');
         }
-        return this.embedWithTimeout(this.provider, text, 'live-chunk');
+        try {
+            const embedding = await this.embedWithTimeout(active, text, 'live-chunk');
+            const space = active.space;
+            if (!space) throw new Error('Embedding provider has no active space');
+            return { embedding, space, provider: active.name, dimensions: active.dimensions };
+        } catch (primaryError) {
+            const fallback = this.fallbackProvider;
+            if (!fallback || fallback === active) throw primaryError;
+            console.warn(
+                `[EmbeddingPipeline] Primary single embedding failed via ${active.name}; ` +
+                `falling back to ${fallback.name}:`,
+                primaryError instanceof Error ? primaryError.message : primaryError
+            );
+            const embedding = await this.embedWithTimeout(fallback, text, 'fallback-live-chunk');
+            this.promoteFallbackProvider(fallback);
+            return { embedding, space: fallback.space, provider: fallback.name, dimensions: fallback.dimensions };
+        }
     }
 
     /**
@@ -504,27 +560,122 @@ export class EmbeddingPipeline {
         });
     }
 
+    async getEmbeddingsWithFallback(texts: string[]): Promise<{ embeddings: number[][]; space: string; provider?: string; dimensions?: number }> {
+        // Capture the active provider BEFORE the await. A concurrent
+        // promoteFallbackProvider() (triggered by another caller failing over)
+        // can reassign this.provider while getEmbeddings() is in flight; re-reading
+        // this.provider / getActiveSpaceKey() afterward would stamp embeddings that
+        // were produced by the OLD provider with the NEW provider's space label,
+        // corrupting cosine comparability of persisted vectors. Derive ALL returned
+        // metadata from the same reference that produced the embeddings — mirroring
+        // what the fallback path below already does with its local `fallback` ref.
+        const active = this.provider;
+        try {
+            if (!active) throw new Error('Embedding provider not initialized');
+            const embeddings = await this.getEmbeddings(texts);
+            const space = active.space;
+            if (!space) throw new Error('Embedding provider has no active space');
+            return { embeddings, space, provider: active.name, dimensions: active.dimensions };
+        } catch (primaryError) {
+            const fallback = this.fallbackProvider;
+            // If no fallback is configured, or the primary IS already the fallback
+            // (local-only mode where `this.provider === this.fallbackProvider`),
+            // re-running the same call would silently double-embed and re-trigger
+            // the same timeout. Surface the original failure instead.
+            if (!fallback || fallback === this.provider) throw primaryError;
+            console.warn(
+                `[EmbeddingPipeline] Primary batch embedding failed via ${this.provider?.name ?? 'unknown'}; ` +
+                `falling back to ${fallback.name}:`,
+                primaryError instanceof Error ? primaryError.message : primaryError
+            );
+            const embeddings = await new Promise<number[][]>((resolve, reject) => {
+                const timer = setTimeout(() => {
+                    reject(new Error(
+                        `[EmbeddingPipeline] fallback embedBatch() timed out after ${EMBED_TIMEOUT_MS}ms for ${texts.length} chunks via ${fallback.name}`
+                    ));
+                }, EMBED_TIMEOUT_MS);
+                fallback.embedBatch(texts).then(
+                    (results) => { clearTimeout(timer); resolve(results); },
+                    (err)     => { clearTimeout(timer); reject(err); }
+                );
+            });
+            this.promoteFallbackProvider(fallback);
+            return { embeddings, space: fallback.space, provider: fallback.name, dimensions: fallback.dimensions };
+        }
+    }
+
+    private promoteFallbackProvider(fallback: IEmbeddingProvider): void {
+        // Promote fallback for subsequent mode query embeddings. Persisted mode
+        // vectors are only comparable within one active space; keeping the
+        // exhausted cloud provider active would make freshly-local vectors look
+        // perpetually pending and unusable. The promotion guard is a no-op when
+        // already promoted (idempotent under concurrent indexFile callers).
+        if (this.provider === fallback) return;
+        this.provider = fallback;
+        try {
+            this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(fallback.space);
+        } catch (dbErr: any) {
+            console.warn('[EmbeddingPipeline] Failed to persist fallback space:', dbErr?.message || dbErr);
+            // MEDIUM #4: a swallowed persist failure means next launch can't
+            // read back the promoted space, leaving freshly-local vectors
+            // perpetually "pending" with no UI signal. Surface it so the
+            // renderer can warn the user that a re-index may be required.
+            try {
+                const { BrowserWindow } = require('electron');
+                BrowserWindow.getAllWindows().forEach((win: any) => {
+                    if (!win.isDestroyed()) {
+                        win.webContents.send('embedding:space-persist-failed', {
+                            fallbackProvider: fallback.name,
+                            space: fallback.space,
+                            reason: dbErr?.message || String(dbErr),
+                        });
+                    }
+                });
+            } catch { /* non-fatal — best-effort renderer notice */ }
+        }
+    }
+
     /**
      * Get embedding for a search query (may use different prefix for asymmetric models).
      * Routes through embedWithTimeout() so a frozen API cannot stall the query path.
      */
     async getEmbeddingForQuery(text: string): Promise<number[]> {
-        if (!this.provider) {
+        const provider = this.provider;
+        if (!provider) {
             throw new Error('Embedding provider not initialized');
         }
+        // Capture `provider` before the await boundary — if a concurrent
+        // getEmbeddingsWithFallback() promotes the fallback while this call is
+        // pending, the captured reference still points to the provider that was
+        // active at the start of the query and matches its space.
         // embedQuery() uses a query-specific prefix for asymmetric models (e.g. Nomic).
         // Wrap with a manual timeout since embedQuery is not covered by embedWithTimeout directly.
-        return new Promise<number[]>((resolve, reject) => {
+        const runQuery = (p: IEmbeddingProvider, label: string) => new Promise<number[]>((resolve, reject) => {
             const timer = setTimeout(() => {
                 reject(new Error(
-                    `[EmbeddingPipeline] embedQuery() timed out after ${EMBED_TIMEOUT_MS}ms for live-query via ${this.provider!.name}`
+                    `[EmbeddingPipeline] embedQuery() timed out after ${EMBED_TIMEOUT_MS}ms for ${label} via ${p.name}`
                 ));
             }, EMBED_TIMEOUT_MS);
-            this.provider!.embedQuery(text).then(
+            p.embedQuery(text).then(
                 (result) => { clearTimeout(timer); resolve(result); },
                 (err)    => { clearTimeout(timer); reject(err); }
             );
         });
+
+        try {
+            return await runQuery(provider, 'live-query');
+        } catch (primaryError) {
+            const fallback = this.fallbackProvider;
+            if (!fallback || fallback === provider) throw primaryError;
+            console.warn(
+                `[EmbeddingPipeline] Primary query embedding failed via ${provider.name}; ` +
+                `falling back to ${fallback.name}:`,
+                primaryError instanceof Error ? primaryError.message : primaryError
+            );
+            const embedding = await runQuery(fallback, 'fallback-live-query');
+            this.promoteFallbackProvider(fallback);
+            return embedding;
+        }
     }
 
     /**
@@ -554,6 +705,22 @@ export class EmbeddingPipeline {
      */
     get localSpaceKey(): string | null {
         return this.fallbackProvider?.space ?? null;
+    }
+
+    /**
+     * Fraction (0-1) of the active provider's key pool that is currently healthy
+     * (not cooling from a 429), or null when the provider doesn't expose pool
+     * health (e.g. a single-key or non-Gemini provider — treat as healthy).
+     * Lets a caller doing an indexing burst then an immediate query decide
+     * whether to settle a moment first, rather than a blind delay every time.
+     */
+    get primaryPoolHealth(): number | null {
+        const p = this.provider as any;
+        if (p && typeof p.healthyKeyCount === 'function' && typeof p.keyPoolSize === 'function') {
+            const total = p.keyPoolSize();
+            return total > 0 ? p.healthyKeyCount() / total : null;
+        }
+        return null;
     }
 
     async getEmbeddingForQueryLocalOnly(text: string): Promise<number[] | null> {

@@ -11,6 +11,7 @@ import { useShortcuts } from '../../hooks/useShortcuts';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { isMac, getModifierSymbol } from '../../utils/platformUtils';
 import nativelyIcon from '../icon.png';
+import zoomCaptureModeScreenshot from '../../assets/zoom-capture-mode.png';
 
 // ----------------------
 // Animations & Mocks
@@ -897,22 +898,19 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
     return (
         <div className="w-full h-full flex flex-col animated fadeIn pb-10">
-            <div className="mb-6 shrink-0">
-                <h2 className={`text-2xl font-bold text-text-primary flex items-center gap-3`}>
-                    <HelpCircle className="w-6 h-6 text-accent-primary" />
-                    Help & Setup Guide
-                </h2>
-                <p className={`text-sm text-text-secondary mt-3 max-w-2xl`}>
+            <header className="mb-2 shrink-0">
+                <h3 className="text-lg font-bold text-text-primary mb-1">Help & Setup Guide</h3>
+                <p className="text-xs text-text-secondary mb-2">
                     Learn how to deeply configure Natively. Everything from providing the right API scopes to executing conversational interviews seamlessly is covered below.
                 </p>
-            </div>
+            </header>
 
             <div className="flex-1 space-y-2">
 
                 {onNavigate && (
                     <div
                         onClick={() => onNavigate('natively-api')}
-                        className="mb-8 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
+                        className="mb-6 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
                     >
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 flex-1">
                             <div className="w-10 h-10 shrink-0 rounded-xl bg-bg-item-surface border border-border-subtle flex items-center justify-center group-hover:bg-bg-elevated transition-colors">
@@ -1574,7 +1572,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <FileText size={14} /> Custom Context Notes
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    In addition to your Resume and JD, type any free-form context into the <strong>Custom Context</strong> textarea — sales stats, product details, LeetCode solutions, personal preferences. Injected as a <code className="bg-bg-elevated px-1 rounded text-[10px]">&lt;user_context&gt;</code> block into every AI call, across all modes and providers.
+                                    Free-form context — sales stats, product details, LeetCode solutions, personal preferences — now lives per-mode in <strong>Modes Manager</strong> instead of a single global field. Each mode's <strong>Real-time prompt</strong> is injected into every AI call while that mode is active, so different contexts stay scoped to the situations where they're relevant. See <strong>Modes Manager</strong> below.
                                 </p>
                             </div>
                             <div className="grid md:grid-cols-2 gap-3">
@@ -1583,10 +1581,10 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         <Upload className="w-4 h-4 text-emerald-500" /> How to Use
                                     </h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Open <strong>Settings → Profile Intelligence</strong></li>
-                                        <li>Scroll to the <strong>Custom Context</strong> textarea</li>
-                                        <li>Type anything — auto-saved after 800 ms</li>
-                                        <li>Up to 4,000 characters with a live counter</li>
+                                        <li>Open <strong>Modes Manager</strong></li>
+                                        <li>Select or create a mode, then scroll to <strong>Real-time prompt</strong></li>
+                                        <li>Type anything — auto-saved as you go</li>
+                                        <li>Only active while that mode is selected</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
@@ -1817,6 +1815,26 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         <strong>⚠️ Warning:</strong> This renders the Natively overlay completely unclickable. You MUST memorize the Global Hotkeys (e.g. <strong>{isMac ? 'Cmd' : 'Ctrl'}+Shift+Arrows</strong> to move, <strong>{isMac ? 'Cmd' : 'Ctrl'}+B</strong> to hide, <strong>{isMac ? 'Cmd' : 'Ctrl'}+1-7</strong> for actions) to control the application once this is active.
                                     </p>
                                 </div>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <EyeOff className="w-4 h-4 text-text-secondary" /> Zoom Screen Share (One Setting Required)
+                                </h4>
+                                <p className="text-[11px] text-text-secondary mb-3">
+                                    Google Meet, Microsoft Teams, and QuickTime hide Natively automatically — nothing to configure. Zoom is the one exception: whether it respects Natively's "don't capture me" flag depends on a single setting.
+                                </p>
+                                <p className="text-[11px] text-text-secondary mb-3">
+                                    Go to <strong>Zoom → Settings → Share Screen → Advanced → Screen capture mode</strong> and choose <strong>"Advanced capture with window filtering."</strong>
+                                </p>
+                                <img
+                                    src={zoomCaptureModeScreenshot}
+                                    alt="Zoom Settings → Share Screen → Screen capture mode set to Advanced capture with window filtering"
+                                    className="w-full max-w-[480px] mx-auto rounded-lg border border-border-subtle shadow-sm block mb-3"
+                                />
+                                <p className="text-[11px] text-text-secondary mb-0">
+                                    The "...with window filtering" modes tell Zoom to leave out windows that mark themselves as private, which is exactly what Natively does. <strong>"Advanced capture without window filtering"</strong> grabs the raw screen and will show Natively, so avoid it.
+                                </p>
                             </div>
                         </div>
                     </div>

@@ -5,6 +5,25 @@
 import { RecapLLM } from './llm';
 import { isVerboseLogging } from './verboseLog';
 
+// Canned-fallback phrases that mean the model gave up entirely, not phrases
+// that might legitimately appear inside a real answer. Matched only when the
+// ENTIRE (trimmed, punctuation-stripped) message consists of one of these —
+// never as a substring — so honest answers like "I'm not sure of his exact
+// title, but he's on the platform team" are kept in session history instead
+// of being silently dropped from contextItems/fullTranscript/history.
+// Mirrors the equivalent guard in LLMHelper.processResponse (kept as a
+// separate local copy here to avoid a cross-module import for one helper).
+const CANNED_FALLBACK_PHRASES = [
+    "i'm not sure",
+    "it depends",
+    "i can't answer",
+    "i don't know",
+];
+function isCannedFallbackPhrase(text: string): boolean {
+    const normalized = text.trim().toLowerCase().replace(/^[\s"'.!?]+|[\s"'.!?]+$/g, '');
+    return CANNED_FALLBACK_PHRASES.includes(normalized);
+}
+
 export interface TranscriptSegment {
     marker?: string;
     speaker: string;
@@ -31,20 +50,49 @@ export interface ContextItem {
     timestamp: number;
 }
 
+/**
+ * Which conversational surface produced/consumes a turn (real-app
+ * source-switch repair, 2026-07-14, Phase 9 — surface isolation). Manual chat,
+ * What-to-Answer (live suggestions), and meeting auto-answer are DISTINCT
+ * conversations that happen to share this session's transcript/meeting
+ * context; a turn from one must not silently look like a prior turn of
+ * another when resolving a follow-up referent ("what about that?"). Optional
+ * (absent = legacy/unknown caller) so this is purely additive — no existing
+ * write site is required to change.
+ */
+export type ConversationSurface = 'manual_chat' | 'what_to_answer' | 'screenshot' | 'meeting_auto_answer' | 'phone_mirror';
+
 export interface AssistantResponse {
     text: string;
     timestamp: number;
     questionContext: string;
+    /** Which surface produced this turn. Absent for legacy callers. */
+    surface?: ConversationSurface;
 }
 
 export class SessionTracker {
     // Context management (mirrors Swift ContextManager)
     private contextItems: ContextItem[] = [];
-    private readonly contextWindowDuration: number = 120; // 120 seconds
+    // Grounding-campaign2 fix (H7, 2026-07-17): this eviction bound must be >=
+    // the largest `lastSeconds` any live call site actually requests, or
+    // getContext(N) silently truncates to whatever this value is regardless of
+    // N. Every live caller (IntelligenceEngine.runWhatShouldISay/
+    // planSuggestionTrigger, LiveTranscriptBrain's DEFAULT_ANSWER_WINDOW_SECONDS,
+    // main.ts's comp-evidence provider) requests 180s — this was hard-coded to
+    // 120, so getContext(180) returned only the last ~120s of a 180s window and
+    // called it a match. Raised to 180 so the write-side retention actually
+    // covers every documented 180s read. Fixture-proven: traces2/... (H7).
+    private readonly contextWindowDuration: number = 180; // seconds
     private readonly maxContextItems: number = 500;
 
     // Last assistant message for follow-up mode
     private lastAssistantMessage: string | null = null;
+    // Per-surface last assistant message (Phase 9 surface isolation,
+    // 2026-07-14) — populated ADDITIVELY alongside the shared
+    // `lastAssistantMessage` above, never replacing it (existing meeting/WTA
+    // continuity that intentionally reads the shared field is unaffected).
+    // Keyed by ConversationSurface; a surface with no turns yet is simply absent.
+    private lastAssistantMessageBySurface: Partial<Record<ConversationSurface, string>> = {};
 
     // Temporal RAG: Track all assistant responses in session for anti-repetition
     private assistantResponseHistory: AssistantResponse[] = [];
@@ -261,8 +309,23 @@ export class SessionTracker {
     /**
      * Add assistant-generated message to context
      */
-    addAssistantMessage(text: string): void {
-        console.log(`[SessionTracker] addAssistantMessage called`, { length: text.length });
+    addAssistantMessage(
+        text: string,
+        writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean },
+        // Phase 9 surface isolation (2026-07-14): OPTIONAL — absent means the
+        // caller hasn't been updated yet, and this write behaves exactly as
+        // before (shared lastAssistantMessage / assistantResponseHistory
+        // only). Passing a surface additionally populates the per-surface map
+        // a same-surface-only reader (getLastAssistantMessage(surface)) can
+        // consult, without changing what the shared, cross-surface state sees.
+        surface?: ConversationSurface,
+    ): void {
+        console.log(`[SessionTracker] addAssistantMessage called`, { length: text.length, policy: writeDecision?.policy || 'store_conversational_only', surface: surface ?? 'unspecified' });
+
+        if (writeDecision?.policy === 'do_not_store' || writeDecision?.blockedFromSessionTracker) {
+            console.warn(`[SessionTracker] Blocked assistant message by write policy`, { reason: writeDecision?.reason || 'unspecified' });
+            return;
+        }
 
         // Natively-style filtering
         if (!text) return;
@@ -273,7 +336,7 @@ export class SessionTracker {
             return;
         }
 
-        if (cleanText.includes("I'm not sure") || cleanText.includes("I can't answer")) {
+        if (isCannedFallbackPhrase(cleanText)) {
             console.warn(`[SessionTracker] Ignored fallback message`);
             return;
         }
@@ -300,12 +363,16 @@ export class SessionTracker {
         );
 
         this.lastAssistantMessage = cleanText;
+        if (surface) {
+            this.lastAssistantMessageBySurface[surface] = cleanText;
+        }
 
         // Temporal RAG: Track response history for anti-repetition
         this.assistantResponseHistory.push({
             text: cleanText,
             timestamp: Date.now(),
-            questionContext: this.getLastInterviewerTurn() || 'unknown'
+            questionContext: this.getLastInterviewerTurn() || 'unknown',
+            surface,
         });
 
         // Keep history bounded (last 10 responses)
@@ -409,11 +476,30 @@ export class SessionTracker {
         return out;
     }
 
-    getLastAssistantMessage(): string | null {
+    /**
+     * The last assistant message. With NO argument, returns the shared,
+     * cross-surface value (unchanged legacy behavior — meeting/WTA continuity
+     * that intentionally wants "the last thing said on ANY surface" keeps
+     * working exactly as before).
+     *
+     * With a `surface` argument (Phase 9 surface isolation, 2026-07-14),
+     * returns ONLY that surface's own last message — `null` if that surface
+     * has never written one, even if a DIFFERENT surface has. Use this for a
+     * follow-up-referent resolution that must not treat a WTA/meeting answer
+     * as the user's own prior manual-chat turn (the reported "concatenated/
+     * unrelated WTA responses leaking into manual chat" defect).
+     */
+    getLastAssistantMessage(surface?: ConversationSurface): string | null {
+        if (surface) {
+            return this.lastAssistantMessageBySurface[surface] ?? null;
+        }
         return this.lastAssistantMessage;
     }
 
-    getAssistantResponseHistory(): AssistantResponse[] {
+    getAssistantResponseHistory(surface?: ConversationSurface): AssistantResponse[] {
+        if (surface) {
+            return this.assistantResponseHistory.filter((r) => r.surface === surface);
+        }
         return this.assistantResponseHistory;
     }
 

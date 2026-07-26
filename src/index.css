@@ -1901,6 +1901,71 @@ body {
 .stt-wave-dot:nth-child(3) { animation-delay: 0.3s; }
 .stt-wave-dot:nth-child(4) { animation-delay: 0.45s; }
 
+@keyframes aurora {
+  0% { box-shadow: 0 0 0 0 rgba(167, 139, 250, 0); }
+  35% { box-shadow: 0 0 0 4px rgba(167, 139, 250, 0.12), 0 0 18px 2px rgba(99, 102, 241, 0.18); }
+  100% { box-shadow: 0 0 0 0 rgba(167, 139, 250, 0); }
+}
+
+/* Liquid Glass and Modern own box-shadow with !important, so animate filter
+   instead. The glow follows the rounded input silhouette without an outer ring. */
+@keyframes aurora-theme {
+  0% { filter: drop-shadow(0 0 0 rgba(167, 139, 250, 0)); }
+  35% { filter: drop-shadow(0 0 5px rgba(167, 139, 250, 0.18)) drop-shadow(0 0 12px rgba(99, 102, 241, 0.12)); }
+  72% { filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.10)) drop-shadow(0 0 18px rgba(99, 102, 241, 0.05)); }
+  100% { filter: drop-shadow(0 0 0 rgba(167, 139, 250, 0)); }
+}
+
+.aurora-focus {
+  position: relative;
+  transform: translateZ(0);
+  transition:
+    background-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.aurora-focus:hover {
+  transform: translateY(-0.5px) translateZ(0);
+  will-change: transform, box-shadow;
+}
+
+.aurora-focus:focus {
+  animation: aurora 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  outline: none;
+  transform: translateY(-0.5px) translateZ(0);
+  will-change: transform, box-shadow;
+}
+
+[data-interface-theme="liquid-glass"] .aurora-focus:focus {
+  animation-name: aurora-theme;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.14) 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(255, 255, 255, 0.08) 100%),
+    rgba(255, 255, 255, 0.06) !important;
+  will-change: transform, filter;
+}
+
+[data-interface-theme="modern"] .aurora-focus:focus {
+  animation-name: aurora-theme;
+  background: rgba(255, 255, 255, 0.13) !important;
+  will-change: transform, filter;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-focus,
+  .aurora-focus:hover,
+  .aurora-focus:focus {
+    transition: background-color 200ms ease, border-color 200ms ease;
+    transform: none;
+    animation: none;
+    filter: none;
+  }
+}
+
 /* ─── STT Error Panel — matches overlay surface pattern with red accent ── */
 .stt-error-surface {
     background: var(--overlay-panel-bg);
@@ -5091,4 +5156,35 @@ html[data-platform="linux"] body {
   margin-bottom: 4.5px !important;
   line-height: 1.6 !important;
   font-weight: 700 !important;
+}
+/* ── Usage-section code block: thin horizontal scrollbar, revealed on hover ──
+   The global scrollbar is hidden (width:0). The code hero needs a discreet
+   horizontal scrollbar so long lines are reachable; it stays near-invisible
+   until the card is hovered. Scoped to .code-scroll so nothing else changes. */
+.code-scroll {
+  scrollbar-width: thin;                       /* Firefox */
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 200ms ease;
+}
+.code-scroll:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.code-scroll::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+  background: transparent;
+}
+.code-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  transition: background 200ms ease;
+}
+.code-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+}
+.code-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+.code-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }

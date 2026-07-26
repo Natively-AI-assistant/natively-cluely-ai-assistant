@@ -1,6 +1,7 @@
-import { AlertTriangle, Check, ChevronDown, Cpu, Loader2, Wifi, WifiOff } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, Copy, Cpu, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useT } from '../../i18n';
 
 // Label + one-line description + group + TIER for each Intelligence OS flag. Keyed by flag
 // key; an unknown key falls back to the raw key so a newly-added flag still renders.
@@ -67,6 +68,25 @@ const TRY_IT_TOGGLE: Record<'lecture' | 'diagram' | 'search', { flag: string; la
   search: { flag: 'inMeetingSearchV2', label: 'Search current meeting' },
 };
 
+// AI provider detected from the encrypted CredentialsManager — drives the Hindsight setup
+// card's manual-launch env-export snippet. Priority order MUST match
+// `scripts/hindsight-llm-config.mjs` providerTable() so the snippet shown matches the entry
+// the litellm router picks first. `'litellm'` covers users routing through their own
+// gateway (`hasLitellmBaseURL === true` with no direct provider key); `'other'` is the
+// catch-all (no provider saved yet, or unrecognized).
+type DetectedProvider = 'gemini' | 'openai' | 'claude' | 'deepseek' | 'groq' | 'litellm' | 'other';
+
+// Per-provider env-var name + friendly label for the setup card snippet. Env var names
+// must match `providerTable.key` byte-for-byte — a typo here is a silent failure mode.
+type ProviderEnvHint = { env: string; label: string; snippetLabel: string };
+const PROVIDER_ENV_HINTS: Record<Exclude<DetectedProvider, 'litellm' | 'other'>, ProviderEnvHint> = {
+  gemini:   { env: 'GEMINI_API_KEY',    label: 'Gemini',            snippetLabel: 'Gemini:' },
+  openai:   { env: 'OPENAI_API_KEY',    label: 'OpenAI',            snippetLabel: 'OpenAI:' },
+  claude:   { env: 'ANTHROPIC_API_KEY', label: 'Claude (Anthropic)', snippetLabel: 'Claude:' },
+  deepseek: { env: 'DEEPSEEK_API_KEY',  label: 'DeepSeek',          snippetLabel: 'DeepSeek:' },
+  groq:     { env: 'GROQ_API_KEY',      label: 'Groq',              snippetLabel: 'Groq:' },
+};
+
 interface FlagRow { key: string; enabled: boolean; setting: string; env: string; default: boolean }
 
 // One feature row: label + plain-language description + its toggle. Shared by the
@@ -107,7 +127,7 @@ const TryResult: React.FC<{ out: { kind: string; text: string } | null }> = ({ o
   );
 };
 
-interface HindsightCfg { baseUrl: string; hasApiKey: boolean; autoStart: boolean; serverCommand: string; llmProvider: string; available: boolean }
+interface HindsightCfg { baseUrl: string; hasApiKey: boolean; autoStart: boolean; serverCommand: string; llmProvider: string; available: boolean; mode: 'local' | 'cloud'; synthetic: boolean; explicitlyDisabled: boolean; authFailed: boolean }
 
 // Render a millisecond transcript offset as m:ss (e.g. 83400 → "1:23").
 const formatStamp = (ms: number): string => {
@@ -159,6 +179,38 @@ const DisclosureChevron: React.FC<{ open: boolean }> = ({ open }) => (
   <ChevronDown size={14} className={`shrink-0 transition-transform duration-200 ease-apple-ease motion-reduce:transition-none ${open ? 'rotate-0' : '-rotate-90'}`} />
 );
 
+// Inline copyable command/snippet block — same idiom as UpdateModal's CopyBlock. Used in the
+// Hindsight setup card so a non-technical user can grab the install / launch / env-export
+// commands with one click instead of typing them by hand.
+const CopyBlock: React.FC<{ text: string; label?: string }> = ({ text, label }) => {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    try {
+      navigator.clipboard?.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard unavailable — swallow; the text is selectable anyway */ }
+  }, [text]);
+  return (
+    <div className="mt-1 flex items-center justify-between gap-2 rounded-md border border-border-subtle bg-bg-main px-2.5 py-1.5">
+      <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-primary" title={text}>
+        {label ? <span className="mr-1.5 text-text-tertiary">{label}</span> : null}
+        {text}
+      </code>
+      <button
+        type="button"
+        onClick={handleCopy}
+        aria-label={`${t('Copy')} ${text}`}
+        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border-subtle bg-bg-input px-2 py-0.5 text-[10px] font-medium text-text-secondary transition-colors hover:text-text-primary active:scale-[0.97] motion-reduce:active:scale-100"
+      >
+        {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
+        {copied ? t('Copied') : t('Copy')}
+      </button>
+    </div>
+  );
+};
+
 // One-shot fade-up for a row as it first mounts, with a short per-index delay so the core
 // feature rows cascade in when "Customize" opens — reinforcing that these are the switches the
 // master fans out to. Only the initial mount animates; flipping a toggle later mutates the
@@ -180,8 +232,9 @@ const StaggerRow: React.FC<{ index: number; children: React.ReactNode }> = ({ in
 // Connection status pill with four distinct states, so the user can tell "I haven't set
 // this up" apart from "I set it up but it's offline" — the old single chip showed the same
 // "Not running" for both. The unreachable state offers an inline Retry.
-type ConnStatus = 'not-configured' | 'checking' | 'connected' | 'unreachable';
+type ConnStatus = 'not-configured' | 'checking' | 'connected' | 'unreachable' | 'auth-failed';
 const StatusChip: React.FC<{ status: ConnStatus; testing: boolean; onRetry: () => void }> = ({ status, testing, onRetry }) => {
+  const t = useT();
   const reduce = useReducedMotion();
   // Resolve the chip to a single keyed visual state. The 4-state derivation (status + testing)
   // is unchanged — only the presentation is keyed so AnimatePresence can transition between
@@ -192,26 +245,32 @@ const StatusChip: React.FC<{ status: ConnStatus; testing: boolean; onRetry: () =
   if (visual === 'connected') {
     body = (
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/15 px-2.5 py-0.5 text-[11px] font-medium text-green-400">
-        <Wifi size={12} /> Connected
+        <Wifi size={12} /> {t('Connected')}
       </span>
     );
   } else if (visual === 'checking') {
     body = (
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border-subtle bg-bg-input px-2.5 py-0.5 text-[11px] font-medium text-text-secondary">
-        <Loader2 size={12} className="animate-spin" /> Checking…
+        <Loader2 size={12} className="animate-spin" /> {t('Checking…')}
       </span>
     );
   } else if (visual === 'unreachable') {
     body = (
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-medium text-amber-400">
-        <WifiOff size={12} /> Can’t connect
-        <button type="button" onClick={onRetry} className="ml-0.5 underline hover:no-underline">Retry</button>
+        <WifiOff size={12} /> {t('Can’t connect')}
+        <button type="button" onClick={onRetry} className="ml-0.5 underline hover:no-underline">{t('Retry')}</button>
+      </span>
+    );
+  } else if (visual === 'auth-failed') {
+    body = (
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/15 px-2.5 py-0.5 text-[11px] font-medium text-red-400">
+        <WifiOff size={12} /> {t('Cloud key rejected')}
       </span>
     );
   } else {
     body = (
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border-subtle bg-bg-input px-2.5 py-0.5 text-[11px] font-medium text-text-tertiary">
-        Not set up
+        {t('Not set up')}
       </span>
     );
   }
@@ -240,6 +299,7 @@ const StatusChip: React.FC<{ status: ConnStatus; testing: boolean; onRetry: () =
 };
 
 export const IntelligenceSettings: React.FC = () => {
+  const t = useT();
   const [flags, setFlags] = useState<FlagRow[]>([]);
   const [cfg, setCfg] = useState<HindsightCfg | null>(null);
   const [baseUrl, setBaseUrl] = useState('');
@@ -254,11 +314,16 @@ export const IntelligenceSettings: React.FC = () => {
   const [showCustomize, setShowCustomize] = useState(false);
   const [masterBusy, setMasterBusy] = useState(false);
   // While the panel first opens, the auto-started local server may still be loading its
-  // embedding models (~15-20s). Treat a not-yet-healthy server as "starting up" (→ Checking…)
-  // during this grace window instead of alarming the user with "Can't connect". After it
-  // elapses, a still-down server correctly reads as unreachable. `tick` forces a re-render
-  // when the window expires so the chip updates even if no poll lands exactly then.
-  const [graceUntil] = useState(() => Date.now() + 25000);
+  // embedding models (~15-20s on a warm cache, 2-3min cold). Treat a not-yet-healthy
+  // server as "starting up" (→ Checking…) during this grace window instead of alarming
+  // the user with "Can't connect". After it elapses, a still-down server correctly reads
+  // as unreachable. CRITICAL: re-derive on every mount via useMemo keyed to a per-mount
+  // timestamp — otherwise a user who opens the panel 60s after restart (when the server
+  // is still booting) sees graceUntil already in the past and the chip flips to
+  // "Can't connect" immediately. `tick` forces a re-render when the window expires so
+  // the chip updates even if no poll lands exactly then.
+  const [mountAt] = useState(() => Date.now());
+  const graceUntil = useMemo(() => mountAt + 25_000, [mountAt]);
   const [, setTick] = useState(0);
   // "Try it" feature runners (lecture notes / diagram / in-meeting search). These call the
   // real IPCs against the CURRENT meeting transcript, so they need an active meeting + the
@@ -266,6 +331,18 @@ export const IntelligenceSettings: React.FC = () => {
   const [tryBusy, setTryBusy] = useState<null | 'lecture' | 'diagram' | 'search'>(null);
   const [tryOut, setTryOut] = useState<{ kind: string; text: string } | null>(null);
   const [searchQ, setSearchQ] = useState('');
+  // When the user saves a NEW AI provider key while an app-managed Hindsight server is
+  // already running, the server inherited the OLD key at spawn and won't see the new one
+  // until restart. HindsightManager.notifyHindsightOfKeyChange broadcasts this event from the
+  // main process; surface it as a small inline nudge so the user knows what to do.
+  const [restartHint, setRestartHint] = useState<{ provider: string; at: number } | null>(null);
+  // The setup card's manual-launch hint shows a per-provider env-export snippet. We pick
+  // the snippet based on which provider the user has actually configured in AI Providers —
+  // copy-pasting the wrong env var name is the #1 cause of "manual launch silently fails".
+  // The type + hint map are hoisted to module scope (see PROVIDER_ENV_HINTS above) — env
+  // var names must match `scripts/hindsight-llm-config.mjs` providerTable so the litellm
+  // router picks the right chain entry.
+  const [detectedProvider, setDetectedProvider] = useState<DetectedProvider | null>(null);
 
   const flagOn = useCallback((key: string) => flags.find((f) => f.key === key)?.enabled ?? false, [flags]);
 
@@ -276,8 +353,8 @@ export const IntelligenceSettings: React.FC = () => {
       if (res && res.enabled === false) {
         // Point the user at the EXACT toggle. These advanced toggles live inside the
         // "Customize individual features" disclosure under Smart features.
-        const t = TRY_IT_TOGGLE[kind];
-        setTryOut({ kind, text: `“${t.label}” is off. Open “Customize individual features” under Smart features, turn it on, then try again.` });
+        const toggle = TRY_IT_TOGGLE[kind];
+        setTryOut({ kind, text: `“${toggle.label}” ${t('is off. Open “Customize individual features” under Smart features, turn it on, then try again.')}` });
         return;
       }
       // Search returns structured rows — render them as readable timestamped quotes
@@ -285,7 +362,7 @@ export const IntelligenceSettings: React.FC = () => {
       if (kind === 'search') {
         const rows: Array<{ snippet?: string; timestampMs?: number; speaker?: string }> = Array.isArray(res?.results) ? res.results : [];
         if (!rows.length) {
-          setTryOut({ kind, text: 'No matches — is a meeting active with a transcript?' });
+          setTryOut({ kind, text: t('No matches — is a meeting active with a transcript?') });
           return;
         }
         const text = rows.slice(0, 20).map((r) => {
@@ -298,9 +375,9 @@ export const IntelligenceSettings: React.FC = () => {
       }
       const payload = res?.notes ?? res?.diagram ?? res;
       const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
-      setTryOut({ kind, text: text && text !== 'null' ? text : 'No result — is a meeting active with a transcript?' });
+      setTryOut({ kind, text: text && text !== 'null' ? text : t('No result — is a meeting active with a transcript?') });
     } catch (e: any) {
-      setTryOut({ kind, text: `Failed: ${e?.message || 'error'}` });
+      setTryOut({ kind, text: `${t('Failed:')} ${e?.message || 'error'}` });
     } finally { setTryBusy(null); }
   }, []);
 
@@ -312,15 +389,69 @@ export const IntelligenceSettings: React.FC = () => {
       ]);
       if (Array.isArray(f)) setFlags(f);
       if (c) {
-        setCfg(c);
+        // The IPC payload now carries mode/synthetic/explicitlyDisabled/authFailed. The
+        // type in electron.d.ts is the new shape, but a small cast covers the case where
+        // an older renderer (pre-this-change) somehow passes the old shape.
+        setCfg(c as HindsightCfg);
         setBaseUrl(c.baseUrl || '');
         setAutoStart(c.autoStart !== false);
         setHealthy(c.available);
+        setCfg((prev) => prev ? { ...prev, authFailed: Boolean((c as HindsightCfg).authFailed) } : prev);
       }
     } catch { /* settings panel never throws */ }
   }, []);
 
+  // Detect which AI provider the user has configured (from the encrypted CredentialsManager)
+  // so the setup card's manual-launch hint can show the matching env-var snippet. Order
+  // matches `scripts/hindsight-llm-config.mjs` providerTable (Gemini first = highest priority
+  // chain entry). Users with multiple providers see the first configured one — they can
+  // always swap the env var name manually. `null` = not yet loaded; `'litellm'` = the
+  // user routes through their own gateway (no direct provider key, but `litellmBaseURL`
+  // is set in AI Providers); `'other'` = nothing configured or unrecognized.
+  const detectProvider = useCallback(async () => {
+    try {
+      const c = await window.electronAPI.getStoredCredentials?.();
+      if (!c) return;
+      if (c.hasGeminiKey)   return setDetectedProvider('gemini');
+      if (c.hasOpenaiKey)   return setDetectedProvider('openai');
+      if (c.hasClaudeKey)   return setDetectedProvider('claude');
+      if (c.hasDeepseekKey) return setDetectedProvider('deepseek');
+      if (c.hasGroqKey)     return setDetectedProvider('groq');
+      // No direct provider key, but the user has configured a LiteLLM gateway. Render the
+      // LiteLLM-specific branch instead of dumping the 5-block fallback — the gateway is
+      // already wired and the launcher reads LITELLM_BASE_URL.
+      if (c.hasLitellmBaseURL) return setDetectedProvider('litellm');
+      setDetectedProvider('other');
+    } catch {
+      setDetectedProvider('other');
+    }
+  }, []);
+  useEffect(() => { detectProvider(); }, [detectProvider]);
+
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Hindsight restart hint — listen for the IPC event the main process broadcasts when an AI
+  // provider key changes while an app-managed server is up. Surface a small inline nudge so
+  // the user knows what to do. Auto-clears after 30s so it doesn't linger past action.
+  // IMPORTANT: kick `detectProvider()` SYNCHRONOUSLY before `setRestartHint` — otherwise the
+  // banner shows the NEW provider name while the snippet below still renders the OLD one for
+  // ~50-200ms until the re-detect IPC completes. Re-detect is fire-and-forget; React batches
+  // the setState calls.
+  useEffect(() => {
+    const handler = (data: { provider: string }) => {
+      void detectProvider(); // re-detect first so snippet is current by the time the banner mounts
+      setRestartHint({ provider: String(data?.provider || 'AI'), at: Date.now() });
+    };
+    const off = window.electronAPI?.onHindsightRestartNeeded?.(handler);
+    return () => { try { off?.(); } catch { /* unmount */ } };
+  }, [detectProvider]);
+
+  // Auto-clear the restart hint after 30s so it doesn't linger after the user restarts.
+  useEffect(() => {
+    if (!restartHint) return;
+    const id = setTimeout(() => setRestartHint(null), 30_000);
+    return () => clearTimeout(id);
+  }, [restartHint]);
 
   // The local memory server can take ~15-20s to load its embedding models before /health
   // answers, and the app auto-starts it at launch. So when the panel opens with a baseUrl
@@ -344,7 +475,15 @@ export const IntelligenceSettings: React.FC = () => {
     } catch { await refresh(); }
   }, [refresh]);
 
+  // Declared before onSaveHindsight so the save can cancel a pending auto-save timer.
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const onSaveHindsight = useCallback(async () => {
+    // Cancel any pending debounced auto-save — otherwise an explicit Apply click followed
+    // by the timer firing would send TWO setHindsightConfig IPCs (double-save race: the
+    // "Applied" indicator double-flashes and the second save's result can clobber the
+    // first's error). The explicit save is authoritative; drop the pending one.
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     setSaving(true); setSavedAt(false);
     try {
       const res = await window.electronAPI.setHindsightConfig?.({ baseUrl, apiKey, autoStart });
@@ -355,6 +494,34 @@ export const IntelligenceSettings: React.FC = () => {
       await refresh();
     } catch { /* noop */ } finally { setSaving(false); }
   }, [baseUrl, apiKey, autoStart, refresh]);
+
+  // Debounced auto-save — fires 400ms after the last edit to any Hindsight field. The
+  // explicit Apply button (force) bypasses + cancels the debounce. Auto-save means the
+  // "no save needed at all" UX works: the user just types their Cloud URL or flips a
+  // toggle and walks away; the value persists without an Apply click.
+  const scheduleAutoSave = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      void onSaveHindsight();
+    }, 400);
+  }, [onSaveHindsight]);
+  // Flush any pending auto-save on unmount — a user who types a Cloud URL and closes
+  // the panel inside the 400ms window must NOT lose the edit. The IPC is
+  // fire-and-forget (we don't await); the renderer is unmounting anyway so any
+  // post-await setState calls would warn but not break anything.
+  useEffect(() => () => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+      // Fire synchronously — best effort. Uses window.electronAPI directly because
+      // onSaveHindsight closes over state setters (and may run after unmount).
+      try {
+        void window.electronAPI.setHindsightConfig?.({ baseUrl, apiKey, autoStart });
+        // Don't reset apiKey to '' here — that's a UI-only concern handled in onSaveHindsight.
+      } catch { /* swallow — renderer is unmounting */ }
+    }
+  }, []);
 
   const onTest = useCallback(async () => {
     setTesting(true);
@@ -412,14 +579,15 @@ export const IntelligenceSettings: React.FC = () => {
   //                    while the auto-started server loads its embedding models)
   //   connected      → last health check passed
   //   unreachable    → a URL exists, the grace window elapsed, and the server still didn't answer
-  const status: 'not-configured' | 'checking' | 'connected' | 'unreachable' = useMemo(() => {
+  const status: 'not-configured' | 'checking' | 'connected' | 'unreachable' | 'auth-failed' = useMemo(() => {
+    if (cfg?.authFailed) return 'auth-failed';
     if (healthy === true) return 'connected';
     if (!baseUrl.trim()) return 'not-configured';
     if (healthy === null) return 'checking';
     // Down, but still within the startup grace window → show "Checking…" (it's likely booting),
     // not the alarming "Can't connect". After the window, report the real unreachable state.
     return Date.now() < graceUntil ? 'checking' : 'unreachable';
-  }, [healthy, baseUrl, graceUntil]);
+  }, [healthy, baseUrl, graceUntil, cfg?.authFailed]);
 
   // When the grace window expires, force one re-render so a still-down server flips from
   // "Checking…" to "Can't connect" promptly (otherwise it'd wait for the next 4s poll).
@@ -442,20 +610,22 @@ export const IntelligenceSettings: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div className="flex items-center gap-2">
-        <Cpu size={18} className="text-accent-primary" />
-        <h2 className="text-base font-semibold text-text-primary">Intelligence</h2>
-      </div>
+      <header>
+        <h3 className="text-lg font-bold text-text-primary mb-1">{t('Intelligence')}</h3>
+        <p className="text-xs text-text-secondary mb-5">
+          {t('Tune features that surface during real-time conversations, lectures, and meetings.')}
+        </p>
+      </header>
 
       {/* ── Long-term memory (Hindsight) ─────────────────────────── */}
       <section className="rounded-xl border border-border-subtle bg-bg-item-surface p-5 space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-text-primary">Long-term memory</h3>
-              <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-400">Beta</span>
+              <h3 className="text-sm font-semibold text-text-primary">{t('Long-term memory')}</h3>
+              <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-400">{t('Beta')}</span>
             </div>
-            <p className="mt-1 text-xs leading-relaxed text-text-secondary">Remember what was discussed in past meetings and surface it automatically. Needs a free companion app — about 5 minutes to set up.</p>
+            <p className="mt-1 text-xs leading-relaxed text-text-secondary">{t('Remember what was discussed in past meetings and surface it automatically. Needs a free companion app — about 5 minutes to set up.')}</p>
           </div>
           <StatusChip status={status} onRetry={onTest} testing={testing} />
         </div>
@@ -465,72 +635,200 @@ export const IntelligenceSettings: React.FC = () => {
           onClick={() => setShowSetup((v) => !v)}
           className="text-xs font-medium text-accent-primary transition-colors hover:text-accent-secondary active:scale-[0.98]"
         >
-          {showSetup ? 'Hide setup' : (status === 'connected' ? 'Edit setup' : 'Set up long-term memory →')}
+          {showSetup ? t('Hide setup') : (status === 'connected' ? t('Edit setup') : t('Set up long-term memory →'))}
         </button>
 
         <Disclosure open={showSetup}>
           <div className="space-y-3 rounded-lg border border-border-subtle bg-bg-main/40 p-4">
-            {/* Step-by-step install — the companion server is a separate app the user installs. */}
-            <ol className="space-y-2 text-xs leading-relaxed text-text-secondary">
+            {/* Mode-aware setup disclosure. Local: 3-step pip-install + start + paste (the
+                user does nothing because we auto-spawn). Cloud: 2-step paste URL + paste key.
+                No `pip install` for Cloud (the server is user-managed). */}
+            <ol className="space-y-3 text-xs leading-relaxed text-text-secondary">
+              {(cfg?.mode === 'cloud' || (baseUrl && !baseUrl.includes('localhost') && !baseUrl.startsWith('http://127.'))) ? (
+                // CLOUD FLOW — no install, just paste URL + key
+                <>
+                  <li>
+                    <span className="font-medium text-text-primary">{t('1. Paste your Hindsight Cloud address below.')}</span> {t("If you don’t have one, sign up at")}{' '}
+                    <button type="button" onClick={() => openExternal('https://hindsight.vectorize.io')} className="text-accent-primary underline hover:no-underline">hindsight.vectorize.io</button>.
+                  </li>
+                  <li>
+                    <span className="font-medium text-text-primary">{t('2. Paste your Cloud account key.')}</span> {t('Found in your Hindsight Cloud dashboard. The app saves it automatically — no Apply needed.')}
+                  </li>
+                </>
+              ) : (
+                // LOCAL FLOW — 3 steps. Step 3 is fully automatic when the companion is installed.
+                <>
               <li>
-                <span className="font-medium text-text-primary">1. Install the companion app.</span> In your Terminal, run:
-                <code className="mt-1 block rounded-md border border-border-subtle bg-bg-main px-2.5 py-2 font-mono text-[11px] text-text-primary">pip install hindsight-all</code>
-                Requires Python 3.11 or later. Your AI provider key (from the AI Providers screen) is used automatically — no extra key needed.
+                <span className="font-medium text-text-primary">{t('1. Install the companion app.')}</span> {t('In your Terminal, run:')}
+                <CopyBlock text="pip install hindsight-all" />
+                <span className="mt-1 block">{t('Requires Python 3.11 or later.')}</span>
               </li>
               <li>
-                <span className="font-medium text-text-primary">2. Start it.</span> From the Natively project folder, run the bundled launcher and keep it running while you use the app:
-                <code className="mt-1 block rounded-md border border-border-subtle bg-bg-main px-2.5 py-2 font-mono text-[11px] text-text-primary">bash scripts/hindsight-start.sh</code>
-                This starts the embedded memory server on port 8888 and wires your AI provider chain automatically.
+                <span className="font-medium text-text-primary">{t('2. Start it.')}</span>{' '}
+                {t('From the Natively project folder, run the bundled launcher and keep it running while you use the app:')}
+                <CopyBlock text="bash scripts/hindsight-start.sh" />
+                <span className="mt-1.5 block">
+                  {t('Starts the embedded memory server on port 8888.')}
+                </span>
+                <span className="mt-1 block">
+                  <span className="font-medium text-text-primary">{t('If you start it from inside Natively')}</span> {t('(autoStart toggle ON below), your AI provider key from the AI Providers screen is forwarded to the server automatically — nothing else to do.')}
+                </span>
+                <span className="mt-1 block">
+                  <span className="font-medium text-text-primary">{t('If you run the script yourself')}</span> {t('in a Terminal, also export your AI provider key so the server can use it (the script reads your shell environment, not the app’s stored credentials):')}
+                </span>
+                {detectedProvider && detectedProvider !== 'other' && detectedProvider !== 'litellm' ? (
+                  // Auto-detected: show the env-var snippet that matches the user's
+                  // configured AI provider. Prevents the "wrong env var name → silent
+                  // failure" footgun. The label tells them which provider this is for.
+                  <>
+                    <CopyBlock
+                      text={`export ${PROVIDER_ENV_HINTS[detectedProvider].env}=your-key-here`}
+                      label={PROVIDER_ENV_HINTS[detectedProvider].snippetLabel}
+                    />
+                    <span className="mt-1 block text-text-tertiary">
+                      {t('We detected your AI Providers key for')} <span className="font-medium">{PROVIDER_ENV_HINTS[detectedProvider].label}</span> {t('— the env var name above is the one the launcher reads.')}
+                    </span>
+                  </>
+                ) : detectedProvider === 'litellm' ? (
+                  // User is routing through their own LiteLLM gateway (a base URL is set in
+                  // AI Providers, no direct provider key). Render a single LiteLLM-specific
+                  // snippet instead of the 5-block fallback — the gateway is already
+                  // configured and the launcher reads LITELLM_BASE_URL.
+                  <>
+                    <CopyBlock
+                      text="export LITELLM_BASE_URL=your-gateway-url"
+                      label="LiteLLM gateway:"
+                    />
+                    <span className="mt-1 block text-text-tertiary">
+                      {t('We detected a LiteLLM gateway URL in AI Providers. The launcher forwards it automatically when started from inside Natively; if you run the script yourself, also export the URL above.')}
+                    </span>
+                  </>
+                ) : detectedProvider === 'other' ? (
+                  // No provider configured yet (or unrecognized) — render every supported
+                  // env var name as its own copyable block so the user can pick the right
+                  // one for whatever key they save. Each is a one-click copy.
+                  <>
+                    <span className="mt-1 block text-text-tertiary">
+                      {t('No AI provider key is configured yet. Save one in the AI Providers screen, then copy the matching line below:')}
+                    </span>
+                    <div className="mt-1.5 space-y-1.5 rounded-lg border border-border-subtle bg-bg-main/40 p-2.5">
+                      <div className="px-1 text-[10px] font-medium uppercase tracking-wide text-text-tertiary">{t('Pick the one that matches your key')}</div>
+                      {(Object.keys(PROVIDER_ENV_HINTS) as Array<keyof typeof PROVIDER_ENV_HINTS>).map((k) => (
+                        <CopyBlock
+                          key={k}
+                          text={`export ${PROVIDER_ENV_HINTS[k].env}=your-key-here`}
+                          label={PROVIDER_ENV_HINTS[k].snippetLabel}
+                        />
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  // Still loading (detectedProvider === null). Show a neutral placeholder so
+                  // the panel doesn't pop in empty; replaced on the next render once the
+                  // credentials IPC resolves.
+                  <CopyBlock text="export GEMINI_API_KEY=your-key-here" label={t("Loading provider…")} />
+                )}
               </li>
-              <li><span className="font-medium text-text-primary">3. Paste the address below</span> (the local default is already filled in), then press Save.</li>
+              <li>
+                <span className="font-medium text-text-primary">{t('3. Paste the address below')}</span> {t('(the local default is already filled in). The app connects automatically — no Apply needed.')}
+              </li>
+                </>
+              )}
             </ol>
             <button type="button" onClick={() => openExternal('https://hindsight.vectorize.io/developer/installation')} className="text-[11px] font-medium text-accent-primary transition-colors hover:text-accent-secondary">
-              Full setup guide &amp; troubleshooting →
+              {t('Full setup guide & troubleshooting →')}
             </button>
 
             <label className="block space-y-1">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-text-secondary">Server address</span>
+              <span className="text-[10px] font-medium uppercase tracking-wide text-text-secondary">{t('Server address')}</span>
               <input
                 type="text"
                 value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
+                onChange={(e) => { setBaseUrl(e.target.value); scheduleAutoSave(); }}
                 placeholder="http://localhost:8888"
                 className="w-full rounded-lg border border-border-subtle bg-bg-input px-3 py-2 text-xs text-text-primary transition-colors focus:outline-none focus:border-accent-primary"
               />
+              {cfg?.synthetic && baseUrl === 'http://localhost:8888' && (
+                <span className="mt-1 block text-[11px] text-text-tertiary">
+                  {t('Using local default. Type your Cloud URL (e.g.')} <span className="font-mono">https://api.hindsight.vectorize.io</span>{t(') to switch to Hindsight Cloud.')}
+                </span>
+              )}
             </label>
 
             {/* Cloud is the alternative to running local software. The API key here is the
                 Hindsight Cloud ACCOUNT key — explicitly NOT the user's AI provider key, which
-                already lives in the AI Providers screen and is forwarded automatically. */}
+                already lives in the AI Providers screen and is forwarded automatically.
+                Hidden entirely for local mode to reduce noise — the user only sees it when
+                they've typed a non-localhost URL. */}
+            {(cfg?.mode === 'cloud' || baseUrl && !baseUrl.includes('localhost') && !baseUrl.startsWith('http://127.')) && (
             <label className="block space-y-1">
               <span className="text-[10px] font-medium uppercase tracking-wide text-text-secondary">
-                Hindsight Cloud account key <span className="normal-case text-text-tertiary">(not your AI key)</span>
-                {cfg?.hasApiKey ? ' — saved, leave blank to keep' : ''}
+                {t('Hindsight Cloud account key')} <span className="normal-case text-text-tertiary">{t('(not your AI key)')}</span>
+                {cfg?.hasApiKey ? t(' — saved, leave blank to keep') : ''}
               </span>
               <input
                 type="password"
                 value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={cfg?.hasApiKey ? '••••••••  saved' : 'Only if you use Hindsight Cloud instead of local'}
+                onChange={(e) => { setApiKey(e.target.value); scheduleAutoSave(); }}
+                placeholder={cfg?.hasApiKey ? t('••••••••  saved') : t('Required for Hindsight Cloud')}
                 className="w-full rounded-lg border border-border-subtle bg-bg-input px-3 py-2 text-xs text-text-primary transition-colors focus:outline-none focus:border-accent-primary"
               />
               <span className="block text-[11px] leading-relaxed text-text-secondary">
-                Only needed for Hindsight Cloud. Your AI provider key stays on this device and is used separately.
+                {t('Required for Hindsight Cloud. Your AI provider key stays on this device and is used separately.')}
               </span>
             </label>
+            )}
 
             <label className="flex items-center justify-between gap-3">
               <span className="text-xs text-text-primary">
-                Start memory server automatically at launch
-                <span className="mt-0.5 block text-[11px] leading-relaxed text-text-secondary">Only works after setup is complete. No effect if the companion app isn’t installed.</span>
+                {t('Start memory server automatically at launch')}
+                <span className="mt-0.5 block text-[11px] leading-relaxed text-text-secondary">
+                  {t('When ON and the companion is installed, Natively starts it for you at launch and forwards your AI provider key automatically. Turn OFF to manage the server yourself.')}
+                </span>
               </span>
-              <Toggle on={autoStart} onClick={() => setAutoStart((v) => !v)} />
+              <Toggle on={autoStart} onClick={() => { setAutoStart((v) => !v); scheduleAutoSave(); }} />
             </label>
+
+            {/* "Don't use Hindsight" opt-out — sets the explicit-disable sentinel so the
+                synthetic default can't silently re-enable Hindsight on next launch. */}
+            <button
+              type="button"
+              onClick={async () => {
+                if (window.electronAPI?.disableHindsight) {
+                  await window.electronAPI.disableHindsight();
+                  await refresh();
+                }
+              }}
+              className="text-[11px] font-medium text-text-tertiary transition-colors hover:text-text-primary text-left"
+            >
+              {t("Don't use Hindsight at all")}
+            </button>
+
+            {/* Inline nudge surfaced when the user just saved a new AI provider key while an
+                app-managed server is already up. The server inherited the OLD env at spawn
+                and won't see the new key until restart — tell the user what to do. */}
+            <AnimatePresence initial={false}>
+              {restartHint ? (
+                <motion.div
+                  key="restart-hint"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -2 }}
+                  transition={{ duration: 0.18 }}
+                  className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[11px] leading-relaxed text-amber-300/90"
+                >
+                  <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-400" />
+                  <span>
+                    {t('You just saved a new')} <span className="font-medium">{restartHint.provider}</span> {t('key, but the running Hindsight server still has the old one. Quit and relaunch Natively, or toggle autoStart off and on to restart the server.')}
+                  </span>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
 
             {/* Privacy disclosure ABOVE the Save action so it's seen before any data is sent. */}
             <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[11px] leading-relaxed text-amber-300/90">
               <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-400" />
-              <span>Local keeps memory on this device. Choosing Cloud sends meeting summaries to Hindsight’s servers — a privacy trade-off for an otherwise local-first app.</span>
+              <span>{t('Local keeps memory on this device. Choosing Cloud sends meeting summaries to Hindsight’s servers — a privacy trade-off for an otherwise local-first app.')}</span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -551,7 +849,7 @@ export const IntelligenceSettings: React.FC = () => {
                     </motion.span>
                   ) : null}
                 </AnimatePresence>
-                {savedAt ? 'Saved' : 'Save'}
+                {savedAt ? t('Applied') : t('Apply now')}
               </button>
               <button
                 type="button"
@@ -560,7 +858,7 @@ export const IntelligenceSettings: React.FC = () => {
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 motion-reduce:active:scale-100"
               >
                 {testing ? <Loader2 size={14} className="animate-spin" /> : null}
-                Test connection
+                {t('Test connection')}
               </button>
             </div>
           </div>
@@ -576,11 +874,11 @@ export const IntelligenceSettings: React.FC = () => {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <Cpu size={15} className="shrink-0 text-accent-primary" />
-                <div className="text-sm font-semibold text-text-primary">Smart features</div>
+                <div className="text-sm font-semibold text-text-primary">{t('Smart features')}</div>
               </div>
               <div className="mt-1 text-xs leading-relaxed text-text-secondary">
-                Better answers, meeting notes, and follow-ups — all running on your device.
-                {masterState === 'mixed' ? <span className="ml-1 font-medium text-accent-primary">Customized.</span> : null}
+                {t('Better answers, meeting notes, and follow-ups — all running on your device.')}
+                {masterState === 'mixed' ? <span className="ml-1 font-medium text-accent-primary">{t('Customized.')}</span> : null}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -608,7 +906,7 @@ export const IntelligenceSettings: React.FC = () => {
             className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-accent-primary transition-colors hover:text-accent-secondary active:scale-[0.98]"
           >
             <DisclosureChevron open={showCustomize} />
-            {showCustomize ? 'Hide individual features' : 'Customize individual features'}
+            {showCustomize ? t('Hide individual features') : t('Customize individual features')}
           </button>
 
           <Disclosure open={showCustomize}>
@@ -616,7 +914,7 @@ export const IntelligenceSettings: React.FC = () => {
               {/* Core features individually — same switches the master fans out to. */}
               {byTier.core.length ? (
                 <div className="space-y-1.5">
-                  <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Meeting notes</div>
+                  <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">{t('Meeting notes')}</div>
                   {byTier.core.map((row, i) => (
                     <StaggerRow key={row.key} index={i}><FlagRowView row={row} onToggle={onToggleFlag} /></StaggerRow>
                   ))}
@@ -642,7 +940,7 @@ export const IntelligenceSettings: React.FC = () => {
                     className="inline-flex items-center gap-1 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary active:scale-[0.98]"
                   >
                     <DisclosureChevron open={showDev} />
-                    {showDev ? 'Hide developer options' : 'Developer options (for testing only)'}
+                    {showDev ? t('Hide developer options') : t('Developer options (for testing only)')}
                   </button>
                   <Disclosure open={showDev}>
                     <div className="mt-2 space-y-1.5">
@@ -661,8 +959,8 @@ export const IntelligenceSettings: React.FC = () => {
       {/* ── Try it (runs against the current meeting) ────────────── */}
       <section className="rounded-xl border border-border-subtle bg-bg-item-surface p-5 space-y-3">
         <div>
-          <div className="text-sm font-semibold text-text-primary">Try it</div>
-          <div className="mt-1 text-xs leading-relaxed text-text-secondary">These run on the meeting you’re currently in — not a saved recording. Turn the feature on under “Customize individual features” above, then join an active meeting.</div>
+          <div className="text-sm font-semibold text-text-primary">{t('Try it')}</div>
+          <div className="mt-1 text-xs leading-relaxed text-text-secondary">{t('These run on the meeting you’re currently in — not a saved recording. Turn the feature on under “Customize individual features” above, then join an active meeting.')}</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -671,7 +969,7 @@ export const IntelligenceSettings: React.FC = () => {
             onClick={() => runTry('lecture', () => window.electronAPI.generateLectureNotes?.())}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-[colors,transform] hover:text-text-primary active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 motion-reduce:active:scale-100"
           >
-            {tryBusy === 'lecture' ? <Loader2 size={14} className="animate-spin" /> : null} Lecture notes
+            {tryBusy === 'lecture' ? <Loader2 size={14} className="animate-spin" /> : null} {t('Lecture notes')}
           </button>
           <button
             type="button"
@@ -679,7 +977,7 @@ export const IntelligenceSettings: React.FC = () => {
             onClick={() => runTry('diagram', () => window.electronAPI.generateDiagram?.())}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-[colors,transform] hover:text-text-primary active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 motion-reduce:active:scale-100"
           >
-            {tryBusy === 'diagram' ? <Loader2 size={14} className="animate-spin" /> : null} Diagram
+            {tryBusy === 'diagram' ? <Loader2 size={14} className="animate-spin" /> : null} {t('Diagram')}
           </button>
         </div>
         <div className="flex items-center gap-2">
@@ -687,7 +985,7 @@ export const IntelligenceSettings: React.FC = () => {
             type="text"
             value={searchQ}
             onChange={(e) => setSearchQ(e.target.value)}
-            placeholder="Search the current meeting…"
+            placeholder={t("Search the current meeting…")}
             disabled={!flagOn('inMeetingSearchV2')}
             className="flex-1 rounded-lg border border-border-subtle bg-bg-input px-3 py-2 text-xs text-text-primary transition-colors focus:outline-none focus:border-accent-primary disabled:opacity-40"
           />
@@ -697,7 +995,7 @@ export const IntelligenceSettings: React.FC = () => {
             onClick={() => runTry('search', () => window.electronAPI.searchInMeeting?.(searchQ.trim()))}
             className="inline-flex items-center gap-1.5 rounded-lg bg-accent-primary px-3 py-1.5 text-xs font-medium text-white transition-[opacity,transform] active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 motion-reduce:active:scale-100"
           >
-            {tryBusy === 'search' ? <Loader2 size={14} className="animate-spin" /> : null} Search
+            {tryBusy === 'search' ? <Loader2 size={14} className="animate-spin" /> : null} {t('Search')}
           </button>
         </div>
         <TryResult out={tryOut} />

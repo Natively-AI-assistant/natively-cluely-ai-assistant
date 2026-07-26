@@ -5,6 +5,8 @@ export type ProviderUnavailableReason = 'missing_api_key' | 'missing_config' | '
 export type ProviderDataScope = 'transcript' | 'screenshots' | 'reference_files' | 'profile_history' | 'embeddings' | 'post_call_summary';
 export type ProviderDataScopePolicy = Partial<Record<ProviderDataScope, boolean>>;
 
+export const DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE = "I can't answer that from the uploaded reference files because the selected provider is not allowed to receive reference-file context. Enable reference-file access for this provider or switch to a local provider, then ask again.";
+
 export class ProviderScopeError extends Error {
     constructor(
         public readonly provider: string,
@@ -332,7 +334,7 @@ export class ProviderRouter {
             // All providers down, return lowest priority
             return {
                 provider: 'gemini',
-                model: 'gemini-3.5-flash',
+                model: 'gemini-3.6-flash',
                 reason: 'all providers unhealthy, using Gemini as last resort'
             };
         }
@@ -416,7 +418,7 @@ export class ProviderRouter {
 
     private getDefaultModel(provider: string): string {
         const models: Record<string, string> = {
-            'gemini': 'gemini-3.5-flash',
+            'gemini': 'gemini-3.6-flash',
             'groq': 'llama-3.3-70b-versatile',
             'openai': 'gpt-5.4',
             'claude': 'claude-sonnet-4-6',

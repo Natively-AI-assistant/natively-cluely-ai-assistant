@@ -77,6 +77,36 @@ const EXPECTED_KEYS = [
   'ragLocalRerank',
   'ragRrfFusion',
   'ragSpeculativeRerank',
+  // OKF document knowledge system flags.
+  'okfKnowledgePacks',
+  'okfMarkdownExport',
+  'okfHybridRetrieval',
+  'okfGraphExpansion',
+  'okfKnowledgeUi',
+  'okfUserEditableCards',
+  // OKF Profile Intelligence upgrade flags (2026-07-02).
+  'okfProfilePacks',
+  'okfProfileHybridRetrieval',
+  'okfProfileMarkdownExport',
+  'okfProfileGraphExpansion',
+  'okfProfileKnowledgeUi',
+  // Document-grounded safety isolation gates.
+  'docGroundedStrictIsolation',
+  'docGroundedFalseRefusalRepair',
+  // Custom-Mode Source Isolation (2026-07-06).
+  'customModeSourceEnforcement',
+  // Full-JIT final-answer law (2026-07-07).
+  'jitFinalAnswerEnforced',
+  // Context OS / Source Authority Kernel (2026-07-10) — docs/context-os/.
+  'contextOsEnabled',
+  'contextOsManualChatEnabled',
+  'contextOsWtaEnabled',
+  'contextOsRecapFollowupEnabled',
+  'contextOsEvidencePackEnabled',
+  'contextOsMemorySafetyEnabled',
+  'contextOsEnforceSourceCapabilities',
+  'contextOsPropertyValidation',
+  'contextOsMultiFamilyEvidenceEnabled',
 ];
 
 // All NATIVELY_* env vars these flags read — cleared before/after so a leaked env from the
@@ -87,6 +117,28 @@ const DEFAULT_ON_KEYS = new Set([
   'followUpDraftV2',
   'speakerLabelsV1',
   'meetingSummaryLlmPolish',
+  // Safety isolation gates — ON everywhere by default. (The okf*/okfProfile* dev/
+  // test-default flags resolve to isInternalDevTestContext(), which is FALSE when
+  // NODE_ENV is unset as it is under this bare `node --test` harness, so they are
+  // NOT default-ON here.)
+  'docGroundedStrictIsolation',
+  'docGroundedFalseRefusalRepair',
+  // Full-JIT final-answer law — unconditionally `true` everywhere (the intended
+  // production policy, not a dev/test-only experiment), restored 2026-07-14
+  // after the 2026-07-09 stability rollback was resolved.
+  'jitFinalAnswerEnforced',
+  // Context OS core pipeline — promoted from dev/test-only to unconditional
+  // production default-ON (2026-07-18, grounding campaign) after live
+  // verification (H4/NEW-3/THESIS-091/C8 traces, real MiniMax-M3, real
+  // documents). contextOsEnforceSourceCapabilities/contextOsPropertyValidation/
+  // contextOsMultiFamilyEvidenceEnabled are SEPARATE stricter flags not
+  // covered by this promotion — they stay dev/test-only (isInternalDevTestContext).
+  'contextOsEnabled',
+  'contextOsManualChatEnabled',
+  'contextOsWtaEnabled',
+  'contextOsRecapFollowupEnabled',
+  'contextOsEvidencePackEnabled',
+  'contextOsMemorySafetyEnabled',
 ]);
 
 const ALL_ENV_VARS = [
@@ -114,6 +166,34 @@ const ALL_ENV_VARS = [
   'NATIVELY_HINDSIGHT_MEMORY',
   'NATIVELY_HINDSIGHT_LIVE_RECALL',
   'NATIVELY_HINDSIGHT_POST_MEETING_RETAIN',
+  'NATIVELY_RAG_CONFIDENCE_GATE',
+  'NATIVELY_RAG_LOCAL_RERANK',
+  'NATIVELY_RAG_RRF_FUSION',
+  'NATIVELY_RAG_SPECULATIVE_RERANK',
+  'NATIVELY_OKF_KNOWLEDGE_PACKS',
+  'NATIVELY_OKF_MARKDOWN_EXPORT',
+  'NATIVELY_OKF_HYBRID_RETRIEVAL',
+  'NATIVELY_OKF_GRAPH_EXPANSION',
+  'NATIVELY_OKF_KNOWLEDGE_UI',
+  'NATIVELY_OKF_USER_EDITABLE_CARDS',
+  'NATIVELY_OKF_PROFILE_PACKS',
+  'NATIVELY_OKF_PROFILE_HYBRID_RETRIEVAL',
+  'NATIVELY_OKF_PROFILE_MARKDOWN_EXPORT',
+  'NATIVELY_OKF_PROFILE_GRAPH_EXPANSION',
+  'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI',
+  'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION',
+  'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR',
+  'NATIVELY_CUSTOM_MODE_SOURCE_ENFORCEMENT',
+  'NATIVELY_JIT_FINAL_ANSWER_ENFORCED',
+  'NATIVELY_CONTEXT_OS',
+  'NATIVELY_CONTEXT_OS_MANUAL_CHAT',
+  'NATIVELY_CONTEXT_OS_WTA',
+  'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP',
+  'NATIVELY_CONTEXT_OS_EVIDENCE_PACK',
+  'NATIVELY_CONTEXT_OS_MEMORY_SAFETY',
+  'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES',
+  'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION',
+  'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE',
 ];
 
 function clearAllEnv() {

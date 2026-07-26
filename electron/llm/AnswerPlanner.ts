@@ -1,9 +1,10 @@
 import type { IntentResult } from './IntentClassifier';
 import type { ExtractedQuestion } from './transcriptQuestionExtractor';
-import { CODING_CONTRACT, CODING_VERIFICATION_INSTRUCTION } from './codingContract';
+import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION } from './codingContract';
 import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
 import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords } from './speakability';
 import { applyModeFallback, type ActiveModeInfo } from './modeProfiles';
+import { classifyDocumentQuestionShape } from './documentGroundedPrompt';
 
 export type AnswerType =
   | 'identity_answer'
@@ -14,6 +15,17 @@ export type AnswerType =
   | 'experience_answer'
   | 'jd_fit_answer'
   | 'gap_analysis_answer'
+  // JD-SOURCE answer shapes (2026-07-07, JD/Resume JIT pipeline fix). The JD is
+  // the TARGET-ROLE source, not the candidate's biography. These route the `jd`
+  // layer as the PRIMARY source so "what does this role require?" no longer
+  // falls to unknown/skills (which forbid jd) and drops the JD before any prompt
+  // is built. `sourceOwner` for these is profile_jd (jd_*) or a resume+jd mix.
+  | 'jd_summary_answer'        // "what kind of candidate / role does the JD want?"
+  | 'jd_requirements_answer'   // "top skills / responsibilities / requirements in the JD"
+  | 'jd_fact_answer'           // "does the JD mention salary / relocation / location?"
+  | 'resume_jd_fit_answer'     // "which of MY projects best matches this JD?" (resume+jd)
+  | 'resume_jd_gap_answer'     // "my gaps for this JD / lack of experience in a requirement"
+  | 'resume_jd_intro_answer'   // "tell me about myself FOR THIS ROLE" (identity+resume+jd)
   | 'behavioral_interview_answer'
   | 'project_followup_answer'
   | 'coding_question_answer'
@@ -25,6 +37,12 @@ export type AnswerType =
   | 'sales_answer'
   | 'product_candidate_mix_answer'
   | 'lecture_answer'
+  | 'definitional_answer'
+  | 'list_answer'
+  | 'exact_numeric_answer'
+  | 'document_structure_answer'
+  | 'document_absent_fact_refusal'
+  | 'document_followup_answer'
   | 'follow_up_answer'
   | 'unknown_answer'
   | 'general_meeting_answer'
@@ -128,6 +146,8 @@ export interface AnswerPlan {
   answerStyle: AnswerStyle;
   /** Soft spoken-length target in seconds (0 = no explicit constraint). */
   answerStyleTargetSeconds: number;
+  /** True when a user-created custom mode requires uploaded/reference files as source of truth. */
+  documentGroundedCustomModeActive?: boolean;
 }
 
 export interface PlanAnswerInput {
@@ -163,6 +183,18 @@ ${CODING_CONTRACT}
 Additional rules:
 - Do not include resume, JD, salary, negotiation, or unrelated profile context unless explicitly asked.
 - NEVER mention "Natively", the assistant, the product, or the candidate's profile/projects anywhere in the answer — not in the explanation, not in a closing remark, not in an example. This is a pure technical answer about the algorithm only.`;
+
+// General implementation tasks (React components, scripts, utilities) get the
+// IMPL contract: code-first with the correct fence tag, short explanation, NO
+// DSA interview walkthrough. dsa_question_answer keeps CODING_TEMPLATE — named
+// algorithm problems ("reverse a linked list") still want the six sections.
+const CODING_IMPL_TEMPLATE = `You are generating a complete implementation for a coding task.
+
+${CODING_CONTRACT_IMPL}
+
+Additional rules:
+- Do not include resume, JD, salary, negotiation, or unrelated profile context.
+- NEVER mention "Natively", the assistant, the product, or the candidate's profile anywhere in the answer.`;
 
 const BEHAVIORAL_TEMPLATE = `Use exactly these sections:
 
@@ -248,6 +280,71 @@ How I'd Close It:
 Speakable Final Answer:
 [A confident-but-honest first-person answer the candidate can say out loud: gap first, then mitigation. Do not say "let me come back to that".]`;
 
+// ── JD-SOURCE templates (2026-07-07) ────────────────────────────────────────
+// These answer FROM the job description (the target role). They must never
+// invent JD content and never turn JD requirements into the candidate's claimed
+// experience. When a requested JD field is absent, they state that honestly
+// ("the JD does not specify …") rather than refusing or asking for an upload.
+
+const JD_SUMMARY_TEMPLATE = `You are describing the TARGET ROLE from the job description, to the user. Neutral, second-person/explanatory voice (not first-person candidate).
+
+Answer concisely:
+- What kind of role/candidate the JD is looking for (seniority, focus, the core of the role).
+- Ground EVERY claim in the JD evidence provided. Do not invent responsibilities or requirements that are not in the JD.
+- If a detail the user asked about is not in the JD, say plainly it is not specified. Do not ask the user to upload or paste the JD — it is already provided as evidence.
+- 2-4 sentences, speakable.`;
+
+const JD_REQUIREMENTS_TEMPLATE = `You are listing what the job description REQUIRES (skills, responsibilities, requirements), to the user. Neutral, explanatory voice.
+
+Answer:
+- Pull the requested items (top skills / requirements / responsibilities / technologies) DIRECTLY from the JD evidence provided.
+- Do not add requirements that are not in the JD. Do not map them onto the candidate's resume here — this is about the role only.
+- If the JD does not list the requested category, say so honestly.
+- Prefer a short, scannable list; keep it tight.`;
+
+const JD_FACT_TEMPLATE = `You are answering a specific FACTUAL question about the job description (e.g. salary, relocation, location, employment type, years required).
+
+Answer:
+- If the JD evidence contains the fact, state it directly.
+- If the JD does NOT contain the fact, say plainly: "The JD does not specify [that]." Never say the JD is not loaded, never ask for an upload, and never pivot into salary negotiation advice unless the user explicitly asked how to negotiate.
+- One or two sentences. No filler.`;
+
+const RESUME_JD_FIT_TEMPLATE = `Use exactly these sections. Resume evidence describes the CANDIDATE; JD evidence describes the TARGET ROLE — keep them distinct and never present a JD requirement as the candidate's experience.
+
+Short Fit Summary:
+[Concise first-person fit statement for THIS role.]
+
+Matching Experience & Projects:
+[Only the candidate's real resume experience/projects that map to the JD's needs. Name the specific project/role. Never invent experience the resume does not show.]
+
+Where I'm Strongest For This JD:
+[The 1-2 requirements from the JD the candidate most clearly meets, tied to concrete resume evidence.]
+
+Speakable Final Answer:
+[A polished 2-4 sentence first-person answer.]`;
+
+const RESUME_JD_GAP_TEMPLATE = `This is a GAP question about the candidate vs THIS JD. Lead with the honest gap. Resume evidence = the candidate; JD evidence = the role. If the JD asks for something the resume does not show, that is the gap — name it; do NOT fabricate the experience.
+Use exactly these sections:
+
+The Honest Gap:
+[ONE specific JD requirement the candidate's resume shows less of. Concrete. Do not pretend there is no gap; do not turn this into a fit-summary.]
+
+Why It's Manageable:
+[Adjacent, REAL resume experience that makes closing the gap credible — no invented experience.]
+
+How I'd Close It:
+[A specific, realistic ramp/mitigation plan.]
+
+Speakable Final Answer:
+[Confident-but-honest first person: gap first, then mitigation. Never stall.]`;
+
+const RESUME_JD_INTRO_TEMPLATE = `You are giving a first-person self-introduction TAILORED TO THIS ROLE. Use the candidate's real identity + resume, and steer the emphasis toward what the JD values. Resume evidence = the candidate; JD evidence = the role — do not claim JD requirements as experience you don't have.
+
+Answer:
+- Open with who the candidate is (name + current focus), then 2-3 of the most role-relevant experiences/projects/skills from the resume, framed toward the JD's priorities.
+- First person, natural, speakable (about 4-6 sentences). No headers.
+- Never invent experience; if the JD wants something the resume lacks, simply emphasize the closest real strength instead of fabricating.`;
+
 const NEGOTIATION_TEMPLATE = `Use exactly these sections:
 
 Polite Opening:
@@ -310,6 +407,12 @@ const DIRECT_SHORT_TEMPLATE = `Answer directly in 1-2 sentences. Do not include 
 // loaded experience; speak to the user about their own skill.
 const SKILL_RATING_TEMPLATE = `Answer in 1-2 sentences as the candidate. If asked to rate a skill (e.g. "out of 10"), GIVE a concrete number grounded in the loaded experience and add one phrase of justification. Never refuse, never say you are an AI or that you "cannot assign ratings". Do not mention the profile/context explicitly — just answer confidently.`;
 const GENERAL_TEMPLATE = `Answer naturally and directly. Use only relevant context. Keep it predictable and concise.`;
+const DOCUMENT_DEFINITION_TEMPLATE = `Answer from the uploaded document evidence only. Give a concise definition in 1-3 sentences. Prefer text that explicitly defines the term ("is", "are", "refers to", "represents") and do not drift into procedures or training details unless the question asks for them.`;
+const DOCUMENT_LIST_TEMPLATE = `Answer from the uploaded document evidence only. Return the complete list the question asks for. Scan every retrieved excerpt before answering; include all listed items, phases, questions, models, objects, or components that are literally present. Do not stop at the first matching excerpt and do not invent missing list items.`;
+const DOCUMENT_NUMERIC_TEMPLATE = `Answer from the uploaded document evidence only. Report exact values with units and the entity they belong to. If multiple related values are present (training/peak/inference, control/sampling, per-model rates), include all of them. Do not infer numbers that are not written in the evidence.`;
+const DOCUMENT_ABSENT_FACT_TEMPLATE = `Answer from the uploaded document evidence only. If the requested fact is not supported by the selected evidence after retrieval, say exactly and briefly that it is not directly mentioned in the uploaded seminar material. Do not provide a plausible estimate or use general knowledge.`;
+const DOCUMENT_STRUCTURE_TEMPLATE = `Answer from the uploaded document's table-of-contents / heading evidence only. These are navigation questions — a chapter or section title, the page a section begins on, or how many chapters/sections/pages there are. Report the exact title or number as written in the evidence. Do not summarize the section's content and do not infer a title or page that is not literally present.`;
+const DOCUMENT_FOLLOWUP_TEMPLATE = `Answer the follow-up from the uploaded document evidence only. Resolve pronouns like "it", "that", and "they" using the immediately previous topic, but treat the prior answer only as a referent hint — facts must come from the retrieved document excerpts.`;
 
 // Generic technical-concept answers (what is Redis / JWT / CORS / caching / REST) were
 // coming back as long beginner TUTORIALS. In an interview the user needs a short, confident
@@ -446,15 +549,43 @@ const COMMON_CODING_PROBLEM_PATTERNS = [
   /\banagram\b|\bsubarray\b|\bsubstring\b/i,
   /\bmerge (?:two )?(?:sorted )?(?:arrays?|lists?)\b/i,
   /\b(?:detect|find)\b.*\bcycle\b|\blinked list cycle\b/i,
-  /\blevel order\b|\bin\s?order\b|\bpre\s?order\b|\bpost\s?order\b|\btraversal\b/i,
+  // Grounding-campaign fix (2026-07-17): bare "in order"/"level order"/etc.
+  // false-positived on ordinary English ("what companies have you worked at,
+  // IN ORDER?", "list your certifications in order of date") — a confirmed
+  // live incident where a résumé question got misrouted to
+  // coding_question_answer (which forbids the resume context layer per spec
+  // §8.3), so the model got zero evidence for a "coding" answer type and
+  // fabricated a fictional employment history instead of grounding correctly.
+  // "traversal" alone is unambiguous DSA vocabulary and stays a bare match;
+  // the order-word variants now require an explicit tree/traversal-adjacent
+  // co-occurrence (checked via lookahead so word order in the sentence
+  // doesn't matter), mirroring the class/method narrowing above in this file.
+  /\btraversal\b/i,
+  /(?=.*\b(?:tree|node|binary|bst)\b)(?=.*\b(?:level|in|pre|post)\s?order\b)/i,
   /\bgcd\b|\blcm\b|\bgreatest common divisor\b/i,
   /\bbubble sort\b|\bquick\s?sort\b|\bmerge sort\b|\binsertion sort\b/i,
 ];
 
 const CODING_PATTERNS = [
-  /\b(write|implement|code|program|function|class|method|solve)\b/i,
+  // Real-custom-mode-repair (2026-07-11): dropped bare `method` and `class`
+  // from this line — both are extremely common non-coding English nouns
+  // ("What fine-tuning METHOD was used?", "teaching method", "what CLASS of
+  // algorithm is this", "business class") and produced a confirmed P0
+  // incident (a document-grounded thesis question about a fine-tuning
+  // method was misrouted to coding_question_answer and answered with an
+  // unrelated Two Sum LeetCode solution — see docs/context-os/
+  // real-custom-mode-repair/06_ROOT_CAUSE_REPORT.md). `class`/`method` alone
+  // are now handled ONLY by the paired-with-coding-object pattern two lines
+  // below (e.g. "write a class for X", "implement a method to Y") — bare
+  // occurrence of either word no longer trips the coding route on its own.
+  /\b(write|implement|code|program|solve)\b/i,
   /\bcode for\b|\bprogram for\b|\bfunction for\b|\balgorithm for\b/i,
   /\balgorithm\b|\bdebug this\b|\bfix (this|the) bug\b/i,
+  // `class`/`method` count as a coding signal ONLY when paired with an
+  // explicit coding verb or a function/algorithm noun in the same clause —
+  // "write a class that…", "implement the method for sorting…" — never bare.
+  /\b(write|implement|code|create|define)\b[\w ,'-]{0,20}\b(class|method|function)\b/i,
+  /\b(class|method|function)\b[\w ,'-]{0,20}\bto\s+(sort|search|traverse|reverse|parse|compute|calculate|return)\b/i,
   // A bare language name is NOT a coding signal on its own — "how would you use
   // SQL", "explain SQL", "have you used Python" are concept/experience asks, not
   // "write code" tasks. Only treat a language as coding when paired with an
@@ -467,7 +598,18 @@ const CODING_PATTERNS = [
 
 const SYSTEM_DESIGN_PATTERNS = [
   /\bsystem design\b|\bdesign (a|an|the)\b/i,
-  /\bscalable\b|\bscale\b|\barchitecture\b|\bdistributed\b/i,
+  // Bare technology nouns (scalable / scale / architecture / distributed) only
+  // signal a SYSTEM-DESIGN ASK when paired with a design/build imperative. Without
+  // this guard, a candidate EXPERIENCE probe that merely mentions the technology —
+  // "how many years have you worked on DISTRIBUTED systems?", "tell me about your
+  // SCALABLE services experience" — misrouted to a system_design_answer (profile
+  // FORBIDDEN, assistant voice), so it got the "Clarify Requirements / High-Level
+  // Design" template instead of a first-person experience answer AND could not be
+  // grounded in the résumé (E2E campaign Round 1, F-ROUTE). A real design ask
+  // ("design a scalable system", "how would you architect a distributed cache")
+  // still matches via the design verb.
+  /\b(design|architect|build|scale|structure|lay ?out)\b[^.?!]{0,40}\b(scalable|architecture|distributed|high[- ]?throughput|fault[- ]?toleran\w+)\b/i,
+  /\b(scalable|distributed|high[- ]?throughput)\b[^.?!]{0,40}\b(system|service|architecture|design)\b[^.?!]{0,40}\b(design|build|architect|handle|scale to|support)\b/i,
   /\brate limiter\b|\burl shortener\b|\bchat system\b|\bnotification system\b/i,
 ];
 
@@ -532,7 +674,19 @@ const IDENTITY_PATTERNS = [
   // Natural intro/identity phrasings (benchmark 2026-06-05): "give me a quick
   // introduction", "what should I call you?", "how would you describe yourself
   // (professionally)?", "(can you )summarize who you are", "introduce yourself".
-  /\b(give|tell)\s+(me\s+)?(a\s+)?(quick\s+|brief\s+|short\s+)?(introduction|intro|overview of yourself|rundown)\b/i,
+  /\b(give|tell|provide|share)\s+(me\s+|us\s+|the team\s+|everyone\s+)?(a\s+)?(quick\s+|brief\s+|short\s+|little\s+)?(self[- ]?introduction|introduction|intro|overview of yourself|rundown)\b/i,
+  // bare "(quick) self-introduction" / "self intro" anywhere (E2E F-VOICE Q1:
+  // "could you give us a quick self-introduction?" fell to general_meeting).
+  /\bself[- ]?(introduc(tion|e)|intro)\b/i,
+  // "tell me a little about yourself and your background", "tell us about yourself
+  // and what you do" — the classic opener. The "about yourself" anchor makes it an
+  // intro even when it trails into "and your background/experience" (which would
+  // otherwise pull it to experience_answer). E2E MiniMax campaign, F-VOICE Q1.
+  // `(?![-\w])` stops "yourself" matching the "your self" in a hyphenated
+  // compound ("tell me about your self-attention / self-hosted / self-driving
+  // project") — those are technical/project asks, NOT an intro. (Code review.)
+  /\btell (me|us)\b.{0,25}\babout your ?self\b(?![-\w])/i,
+  /\b(quick|brief|short|little)\s+(bit\s+)?(about|on)\s+your ?self\b(?![-\w])/i,
   /\bwhat should (i|we) call you\b/i,
   /\b(how (would|do) you )?describe yourself\b/i,
   /\b(summari[sz]e|describe|tell me about) who you are\b/i,
@@ -651,7 +805,9 @@ const PROJECT_LINK_PATTERNS = [
   // "it's a source-available project right [share it]" — the user is angling for the
   // link. A BARE "is it source available" (no share/link cue) is a product-about
   // yes/no and is handled by PRODUCT_ABOUT instead, so require a share/right cue.
-  /\b(its|it'?s|so its|so it'?s)\s+an?\s+open[- ]?source\b|\bopensource (porject|project)\b|\bopen[- ]?source\b.{0,20}\bright\b/i,
+  // "source available" (a distinct, real licensing term from "open-source") is
+  // included alongside open-source in every alternative below.
+  /\b(its|it'?s|so its|so it'?s)\s+an?\s+(open[- ]?source|source[- ]?available)\b|\b(opensource|source[- ]?available) (porject|project)\b|\b(open[- ]?source|source[- ]?available)\b.{0,20}\bright\b/i,
   /\bwhy (can'?t|cant|wont|won'?t) (you )?share\b/i,    // "why can't you share, it's source available"
 ];
 
@@ -709,12 +865,12 @@ const PRODUCT_ABOUT_PATTERNS = [
   /\bhow(?:'?s| is| does)\s+(natively|nativley|nativly|it|the (app|product|backend|architecture|frontend|stack))\b/i,
   /\bwhat\s+(do you think about|about)\s+(natively|nativley|nativly)\b/i,
   /\bwhat (tech|technolog|stack|languages?|framework)\w*\s+(does|do)\s+(natively|nativley|it|this)\b/i,
-  /\bis (natively|nativley|it|this)\s+(local|cloud|open[- ]?source|privacy|low[- ]?distraction|on[- ]?device|transparent|accessib)\w*/i,
+  /\bis (natively|nativley|it|this)\s+(local|cloud|open[- ]?source|source[- ]?available|privacy|low[- ]?distraction|on[- ]?device|transparent|accessib)\w*/i,
   /\b(natively|nativley|nativly)'?s\s+(backend|architecture|stack|frontend|core)\b/i,
   // Safe product-attribute / behavior probes ("is it low-distraction?", "does it
   // process locally?", "is it privacy-first?", "does it use Ollama?", "what part
   // uses Rust?") — these are about the PRODUCT, grounded in loaded metadata.
-  /\b(is|are) (it|this|they)\s+(local|cloud[- ]?based|open[- ]?source|privacy[- ]?first|low[- ]?distraction|on[- ]?device|free|paid|safe|secure)\b/i,
+  /\b(is|are) (it|this|they)\s+(local|cloud[- ]?based|open[- ]?source|source[- ]?available|privacy[- ]?first|low[- ]?distraction|on[- ]?device|free|paid|safe|secure)\b/i,
   /\b(does|do)\s+(it|this|natively|nativley)\s+(process|run|store|work|use|have|support|need)\b/i,
   /\b(what|which) part (of (natively|nativley|it|the app))?\s*(uses|is in|runs|handles|does)\b|\b(does|do) (it|natively) (use|have) (a )?(backend|server|database|ollama|rust|electron|local)\b/i,
   // "what uses Rust", "what runs on Electron", "what's written in Go" — asking which
@@ -842,6 +998,12 @@ const JD_FIT_PATTERNS = [
   // description", "tailor it to the JD") — a role-fit answer grounded in the JD
   // (Issue 7). The salary negation is handled separately so this stays jd_fit.
   /\b(use|using|with|from|tailor (it|the answer) to|against) (the )?(jd|job description)\b/i,
+  // "The JD calls for/requires X — how do you stack/measure up (there)?" — an
+  // explicit JD-requirement comparison (grounding-campaign2 fix, 2026-07-17).
+  // Matches both the raw idiom ("stack up") and its textNoTechStack-neutralized
+  // form ("measure up") so this fires whichever text this list happens to be
+  // tested against. Resume+JD grounded self-assessment, not a generic concept.
+  /\b(jd|role|position|job) (calls for|requires|wants|needs|is (looking|asking) for)\b.{0,80}\bhow (do|does|would) (you|i) (stack|measure)(s|ed)?\s+up\b/i,
 ];
 
 // GAP / weakness-for-the-role asks (release 2026-06-09). These must produce an HONEST
@@ -878,6 +1040,86 @@ const SKILLS_PATTERNS = [
   /\bwhat(?:'s| is) (your|my) strongest (skill|area|tech|language|domain)\b/i,
   /\bwhere do (you|i) special/i,
 ];
+
+// ── JD-SOURCE cue predicates (2026-07-07, JD/Resume JIT pipeline fix) ─────────
+//
+// GENERALIZED, benchmark-free cues. They key off SHAPE — "does the question
+// refer to the target role / job description?" vs "does it claim first-person
+// candidate ownership (my / I / me)?" — never off any specific JD title,
+// company, or question string. The routing rule (applied in planAnswer):
+//   JD-reference cue WITHOUT candidate cue  → JD-source shape (jd_* )
+//   JD-reference cue WITH candidate cue     → resume+JD shape (resume_jd_*)
+//   candidate cue, no JD cue                → existing profile route (unchanged)
+//   no cue                                  → existing route (unchanged)
+
+// The question references the TARGET ROLE / JD as a source. Deliberately broad
+// on role/JD nouns but requires the JD framing, not just any occurrence of
+// "role" (a bare "your role in the project" is candidate-owned, handled by the
+// candidate cue winning the mix).
+const JD_REFERENCE_CUE_RE = /\bjd\b|\b(this|the)\s+(job\s*description|role|position|job|posting|listing|opening|vacancy)\b|\bjob\s*description\b|\bfor\s+(this|the)\s+(role|position|job)\b|\brequired\s+for\s+(the|this)\s+(role|position|job)\b|\b(they|the\s+employer|the\s+company|the\s+recruiter|the\s+hiring\s+manager)\s+(want|wants|require|requires|need|needs|are\s+looking\s+for|is\s+looking\s+for|expect|expects)\b|\blooking\s+for\s+in\s+(a|the|this)\b/i;
+
+// First-person candidate ownership: "my / I / me / mine / myself" over a
+// candidate-ish noun, OR the bare first-person pronouns in an interview frame.
+// Reuses the same shape sourceOwnership.ts uses so the two stay consistent.
+const CANDIDATE_OWNERSHIP_CUE_RE = /\b(my|mine|myself)\b|\bi\s+(have|had|did|do|am|was|worked|built|made|led|used|studied|know)\b|\b(should|do|would|can)\s+i\b|\bam\s+i\b|\bfor\s+me\b/i;
+
+// A JD FACTUAL lookup — a specific field of the JD (salary, relocation,
+// location, employment type, years required, a named technology requirement).
+const JD_FACT_CUE_RE = /\b(salary|compensation|pay|wage|stipend|ctc|relocat(?:e|ion)|location|remote|onsite|on-site|hybrid|employment\s*type|full[- ]?time|part[- ]?time|contract|years?\s+of\s+experience|experience\s+(required|needed)|visa|sponsor(?:ship)?|benefits?)\b/i;
+
+// The JD asks for its own requirements/skills/responsibilities (role-directed,
+// not the candidate's skills). "skills required for this role", "what does the
+// role require", "responsibilities in the JD", "technologies the JD lists".
+const JD_REQUIREMENTS_CUE_RE = /\b(require(?:d|ment|ments)?|responsibilit(?:y|ies)|skills?\s+(required|needed|listed|for\s+(the|this))|technolog(?:y|ies)|qualifications?|must[- ]haves?|duties|expect(?:ed|ations?)?)\b/i;
+
+// The JD-summary shape: "what kind of candidate/engineer/analyst/person does
+// the JD want", "what is this role", "what are they looking for".
+const JD_SUMMARY_CUE_RE = /\bwhat\s+(kind|type|sort)\s+of\s+(candidate|engineer|developer|analyst|person|role|hire|profile)\b|\bwhat\s+(is|kind of)\s+(this|the)\s+(role|job|position)\b|\bwhat\s+(are|is)\s+(they|the\s+employer|the\s+company)\s+looking\s+for\b|\bwhat\s+does\s+(this|the)\s+(role|job|position)\s+(involve|entail|need|want)\b/i;
+
+// A JD-tailored INTRO ("tell me about yourself / walk me through my resume FOR
+// THIS ROLE / WITH THIS JD in mind"). Needs BOTH an intro cue and a JD cue.
+const INTRO_SHAPE_CUE_RE = /\b(tell me about (yourself|myself)|introduce (yourself|myself)|walk me through (your|my) (resume|cv|background)|give me (a|an) (intro|introduction)|30[- ]?second (intro|introduction|pitch)|elevator pitch)\b/i;
+
+// A JD-relative RESUME selector ("most relevant PROJECT / internship / experience
+// FOR THIS JD/role", "which of my X best matches"). Needs a candidate-owned
+// artifact noun AND a JD cue.
+const RESUME_JD_SELECTOR_CUE_RE = /\b(most|best|strongest)\s+(relevant\s+)?(project|projects|internship|internships|experience|role|work)\b|\bwhich\s+(of\s+)?(my\s+)?(project|projects|internship|internships|experience|role|skill)s?\b/i;
+
+// A gap/lack-of-experience cue explicitly relative to the JD's requirements.
+// This must be checked BEFORE isHypotheticalTech so "how would you explain your
+// lack of experience in [a JD requirement]" stops routing to technical_concept.
+const RESUME_JD_GAP_CUE_RE = /\b(lack|lacking|missing|gap|gaps|weak|weakness|don'?t\s+have|do\s+not\s+have|no\s+experience|less\s+experience|not\s+experienced|short\s+on)\b/i;
+
+// Explicit "how to negotiate" steer — the ONLY thing that keeps a salary
+// question on the negotiation route instead of jd_fact.
+const NEGOTIATION_ADVICE_CUE_RE = /\b(how\s+(should|do|would|can)\s+i\s+(negotiate|ask\s+for|counter)|negotiat(?:e|ing|ion)\s+(advice|tips|strategy|script)|counter[- ]?offer|how\s+much\s+should\s+i\s+ask)\b/i;
+
+/** Does the question reference the target role / JD as a source? */
+const hasJdReferenceCue = (text: string): boolean => JD_REFERENCE_CUE_RE.test(text);
+/** Does the question claim first-person candidate ownership? */
+const hasCandidateOwnershipCue = (text: string): boolean => CANDIDATE_OWNERSHIP_CUE_RE.test(text);
+
+// Grounding-campaign fix (2026-07-17): a bare comp keyword ("compensation",
+// "salary") in a question that ALSO frames the JD as the source ("what's the
+// compensation range for THIS ROLE?") is a factual JD lookup — planAnswer's
+// own resolveJdSourceType correctly routes it to jd_fact_answer. But
+// IntelligenceEngine.ts's live WTA grounding gate uses a separate, cruder
+// classifier (transcriptQuestionExtractor.classifyType) that has no JD-frame
+// awareness and routes ANY comp keyword straight to 'negotiation' —
+// excluding ALL candidate-profile/JD grounding for that turn, including a
+// pure "what does the document literally state" lookup. Confirmed live
+// (test/harness case C4-002): the model then falsely claimed the JD "does
+// not specify the company name" and "does not state a salary range" when
+// both were literally present in the real JD text.
+// This helper reuses the SAME jd-reference-cue + negotiation-advice-cue
+// signals resolveJdSourceType already relies on, without duplicating its
+// full JD-shape resolution logic — narrowly answering just the one question
+// IntelligenceEngine.ts's gate needs: "is this JD-framed and NOT asking for
+// negotiation advice/strategy?" A true negotiation-coaching ask ("how should
+// I negotiate my salary", "what should I counter with") still routes through
+// the existing negotiation channel untouched.
+export const isJdFactualLookupNotNegotiationAdvice = (text: string): boolean =>
+  hasJdReferenceCue(text) && !NEGOTIATION_ADVICE_CUE_RE.test(text);
 // A PEOPLE / leadership / conflict OBJECT after a lead/manage/handle verb marks a behavioral
 // STORY (not a skill probe). This ONE source is interpolated into the behavioral matcher AND
 // its two skill-side guards so the guard is always a superset of the matcher and the three lists
@@ -895,7 +1137,20 @@ const SKILL_EXPERIENCE_PATTERNS = [
   // PEOPLE / a TEAM" is a behavioral STORY, not a skill — the negative lookahead lets those
   // fall through to BEHAVIORAL_PATTERNS (code-review caveat 2026-06-16). A tech object after
   // managed/handled (e.g. "have you managed a database/cluster") still routes to skills.
-  new RegExp(`\\bhave you (ever )?(?:(?:managed|handled|led)\\b(?!\\s+(?:a\\s+|an\\s+|the\\s+|your\\s+|some\\s+|any\\s+)?${PEOPLE_OR_CONFLICT_OBJECT}\\b)|(?:used|worked with|worked on|built|built with|written|coded in|programmed in|implemented|done|created|analy[sz]ed|normali[sz]ed|deployed|designed))\\b`, 'i'),
+  //
+  // Grounding-campaign2 fix (2026-07-17): "what scale have you OPERATED it at?"
+  // (script-a press A14, canonical: "What scale have you operated Kubernetes
+  // at?") fell through this whole pattern list — "operated" was missing from
+  // the verb group — and ended up at `general_meeting_answer` (forbids
+  // resume), giving candidateProfileChars:0 for a clearly candidate-directed
+  // operational-scale question. Live-confirmed on the real backend
+  // (test/harness-longsession script-a run-018): the answer was 92 ALL-CAPS
+  // words with no résumé grounding at all — a distinct symptom from the
+  // "stack up" idiom bugs (fix#14/#15/#17), but the same root shape (a
+  // legitimate candidate-experience verb missing from a keyword list).
+  // Added operated/run/scaled/maintained — common "have you run/scaled/
+  // maintained X at scale" interview phrasings for infra/ops experience.
+  new RegExp(`\\bhave you (ever )?(?:(?:managed|handled|led)\\b(?!\\s+(?:a\\s+|an\\s+|the\\s+|your\\s+|some\\s+|any\\s+)?${PEOPLE_OR_CONFLICT_OBJECT}\\b)|(?:used|worked with|worked on|built|built with|written|coded in|programmed in|implemented|done|created|analy[sz]ed|normali[sz]ed|deployed|designed|operated|run|scaled|maintained))\\b`, 'i'),
   /\bdo you (know|have experience (with|in)|use)\b/i,
   /\bare you (familiar|comfortable|proficient|experienced) (with|in)\b/i,
   // "Are you good/strong/skilled at X?", "are you any good with React?" — a
@@ -917,6 +1172,13 @@ const SKILL_EXPERIENCE_PATTERNS = [
   // (release 2026-06-07c: live stale-vs-fresh skill follow-up).
   /\bhow (is|are|s) (your|ur) (python|sql|java(?:script)?|typescript|react|node(?:\.?js)?|c\+\+|go(?:lang)?|rust|aws|gcp|azure|docker|kubernetes|graphql|rest|fastapi|django|flask|spring|pandas|numpy|spark|hadoop|tableau|power\s?bi|excel|tensorflow|pytorch|backend|frontend|full[\s-]?stack|databases?|machine learning|sql skills|coding skills)\b/i,
   /\bhow many years (of|with)\b.{0,30}\b(do you have|experience|you got)\b/i,
+  // "how many years have you (been) working on/with/in X", "how long have you
+  // worked with X" — a duration/experience probe about the USER phrased with a
+  // work verb instead of "experience"/"do you have". Without this, e.g. "how many
+  // years have you been working directly on distributed systems?" missed
+  // skill-experience framing and fell to a forbidden general/system-design route
+  // (E2E Round 1, F-ROUTE).
+  /\bhow (many years|long) have you (been )?(work(ed|ing)?|do(ing|ne)?|us(e|ed|ing)|build(ing)?|built|develop(ed|ing)?|cod(e|ed|ing)|programm(ed|ing))\b/i,
   /\bhow (much|many years) (of )?experience\b/i,
   /\byour experience (with|in|using)\b/i,
   /\bhow (much |many years )?(experience|familiar).*\b(with|in|using)\b/i,
@@ -1060,6 +1322,17 @@ const EXPERIENCE_PATTERNS = [
 ];
 const BEHAVIORAL_PATTERNS = [
   /\btell me about a time\b|\bdescribe a situation\b|\bexample of when\b|\bconflict\b|\bfailure\b|\bchallenge\b/i,
+  // "biggest / greatest / proudest achievement/accomplishment", "what are you most
+  // proud of", "your proudest/best work at <Company>" — an accomplishment probe
+  // about the CANDIDATE. Without this it fell to general_meeting_answer (profile
+  // FORBIDDEN, assistant voice) when phrased with an employer ("...at Stripe?"),
+  // so the answer could not name the employer or speak in first person (E2E Round
+  // 1, F-ROUTE + the "answer omits employer" F-FACT root for achievement Qs).
+  // Accomplishment nouns ONLY (NOT "project"/"work" — those belong to
+  // project_answer; "best project" must stay a project ask).
+  /\b(biggest|greatest|proudest|best|most (significant|impactful|notable))\s+(achievement|accomplishment|win|success|contribution|impact)\b/i,
+  /\bwhat (are|were) you most proud of\b|\bwhat achievement\b|\bproudest (achievement|accomplishment|moment)\b/i,
+  /\bwhat (did|have) you (accomplish|achieve|deliver)\w*\b.{0,30}\bat\b/i,
   // Past-experience war stories about a specific artifact — "tell me about a
   // difficult BUG you solved", "the hardest issue you ever faced" (manual
   // regression 2026-06-12, stress seq_056: the bare \bbug\b debugging pattern
@@ -1136,7 +1409,7 @@ const MEETING_PATTERNS = [
 const PROFILE_FACT_PATTERNS = [
   /\bwhere did (you|i) (study|go to (school|college|university)|graduate)\b/i,
   /\bwhat (role|job|position) (are|am) (you|i) (applying|interviewing) for\b/i,
-  /\bwhat(?:'s| is) (your|my) (degree|major|gpa|qualification)\b/i,
+  /\bwhat(?:'s| is) (your|my) (degree|major|gpa|cgpa|grade\s*point|qualification)\b/i,
   // Recruiter logistics / factual probes (release 2026-06-07 multimode-1000):
   // qualification, graduation, location, relocation, notice period, current title,
   // years of experience, last company, area of focus.
@@ -1352,9 +1625,10 @@ const classifyStandaloneFragment = (text: string): AnswerType | null => {
 
 const templateFor = (answerType: AnswerType): string => {
   switch (answerType) {
-    case 'coding_question_answer':
     case 'dsa_question_answer':
       return CODING_TEMPLATE;
+    case 'coding_question_answer':
+      return CODING_IMPL_TEMPLATE;
     case 'behavioral_interview_answer':
     case 'experience_answer':
       return BEHAVIORAL_TEMPLATE;
@@ -1368,6 +1642,18 @@ const templateFor = (answerType: AnswerType): string => {
       return JD_FIT_TEMPLATE;
     case 'gap_analysis_answer':
       return GAP_ANALYSIS_TEMPLATE;
+    case 'jd_summary_answer':
+      return JD_SUMMARY_TEMPLATE;
+    case 'jd_requirements_answer':
+      return JD_REQUIREMENTS_TEMPLATE;
+    case 'jd_fact_answer':
+      return JD_FACT_TEMPLATE;
+    case 'resume_jd_fit_answer':
+      return RESUME_JD_FIT_TEMPLATE;
+    case 'resume_jd_gap_answer':
+      return RESUME_JD_GAP_TEMPLATE;
+    case 'resume_jd_intro_answer':
+      return RESUME_JD_INTRO_TEMPLATE;
     case 'negotiation_answer':
       return NEGOTIATION_TEMPLATE;
     case 'system_design_answer':
@@ -1388,6 +1674,18 @@ const templateFor = (answerType: AnswerType): string => {
       return SALES_TEMPLATE;
     case 'lecture_answer':
       return GENERAL_TEMPLATE;
+    case 'definitional_answer':
+      return DOCUMENT_DEFINITION_TEMPLATE;
+    case 'list_answer':
+      return DOCUMENT_LIST_TEMPLATE;
+    case 'exact_numeric_answer':
+      return DOCUMENT_NUMERIC_TEMPLATE;
+    case 'document_structure_answer':
+      return DOCUMENT_STRUCTURE_TEMPLATE;
+    case 'document_absent_fact_refusal':
+      return DOCUMENT_ABSENT_FACT_TEMPLATE;
+    case 'document_followup_answer':
+      return DOCUMENT_FOLLOWUP_TEMPLATE;
     case 'ethical_usage_answer':
       return ETHICAL_USAGE_TEMPLATE;
     case 'project_link_answer':
@@ -1401,7 +1699,7 @@ const templateFor = (answerType: AnswerType): string => {
   }
 };
 
-const requiredLayersFor = (answerType: AnswerType): ContextLayer[] => {
+const requiredLayersFor = (answerType: AnswerType, documentGroundedCustomModeActive = false): ContextLayer[] => {
   switch (answerType) {
     case 'identity_answer':
       return ['stable_identity', 'resume'];
@@ -1419,6 +1717,24 @@ const requiredLayersFor = (answerType: AnswerType): ContextLayer[] => {
     case 'jd_fit_answer':
     case 'gap_analysis_answer':
       return ['resume', 'jd', 'custom_context', 'ai_persona'];
+    // JD-SOURCE shapes. The JD is the PRIMARY source (target role), so `jd` is
+    // required. jd_summary may also use custom_context (a user preference like
+    // "I care about remote"), but never the resume as a mandatory source — these
+    // describe the ROLE, not the candidate.
+    case 'jd_summary_answer':
+      return ['jd', 'custom_context'];
+    case 'jd_requirements_answer':
+    case 'jd_fact_answer':
+      return ['jd'];
+    // Resume+JD MIX shapes. Both the candidate resume AND the target JD ground
+    // the answer; the prompt keeps them in SEPARATE labelled blocks so JD
+    // requirements never become candidate claims.
+    case 'resume_jd_fit_answer':
+      return ['resume', 'jd', 'custom_context', 'ai_persona'];
+    case 'resume_jd_gap_answer':
+      return ['resume', 'jd'];
+    case 'resume_jd_intro_answer':
+      return ['stable_identity', 'resume', 'jd', 'custom_context', 'ai_persona'];
     case 'coding_question_answer':
     case 'dsa_question_answer':
     case 'technical_concept_answer':
@@ -1434,8 +1750,25 @@ const requiredLayersFor = (answerType: AnswerType): ContextLayer[] => {
       // NOT the résumé (no full profile dump in a selling answer).
       return ['custom_context', 'reference_files', 'active_mode', 'ai_persona'];
     case 'lecture_answer':
+    case 'definitional_answer':
+    case 'list_answer':
+    case 'exact_numeric_answer':
+    case 'document_structure_answer':
+    case 'document_absent_fact_refusal':
+    case 'document_followup_answer':
       return ['live_transcript', 'screen_context', 'reference_files', 'active_mode'];
     case 'follow_up_answer':
+      // Document-grounded custom mode (audit 2026-06-27): drop
+      // `prior_assistant_responses` from the follow-up layer. A wrong prior
+      // assistant answer about the uploaded material would otherwise become
+      // truth on the next follow-up via `live_transcript`. The transcript
+      // layer is preserved so pronoun resolution ("that", "it") still works,
+      // but factual claims must come from the document, not from a
+      // previously-emitted answer. Non-document-grounded follow-ups keep
+      // the original layer set so chat-style continuity is preserved.
+      if (documentGroundedCustomModeActive) {
+        return ['live_transcript', 'active_mode'];
+      }
       return ['live_transcript', 'prior_assistant_responses', 'active_mode'];
     case 'project_about_answer':
       // Grounded in the loaded project metadata (résumé projects) + custom context
@@ -1488,6 +1821,19 @@ const forbiddenLayersFor = (answerType: AnswerType): ContextLayer[] => {
     case 'jd_fit_answer':
     case 'gap_analysis_answer':
       return ['negotiation'];
+    case 'jd_summary_answer':
+    case 'jd_requirements_answer':
+    case 'jd_fact_answer':
+      // JD-source answers describe the TARGET ROLE only — never the salary/
+      // negotiation layer (jd_fact reports an absent comp field honestly instead
+      // of negotiating) and never reference_files (the JD is structured, not an
+      // uploaded doc in a custom mode).
+      return ['negotiation', 'reference_files'];
+    case 'resume_jd_fit_answer':
+    case 'resume_jd_gap_answer':
+    case 'resume_jd_intro_answer':
+      // Resume+JD answers never pull the negotiation/salary layer.
+      return ['negotiation'];
     case 'negotiation_answer':
       return ['reference_files'];
     case 'sales_answer':
@@ -1498,7 +1844,13 @@ const forbiddenLayersFor = (answerType: AnswerType): ContextLayer[] => {
       // comes from persona/custom-context framing, not a profile list.
       return ['resume', 'jd', 'negotiation'];
     case 'lecture_answer':
-      // Lecture answers must not pull resume/JD/negotiation.
+    case 'definitional_answer':
+    case 'list_answer':
+    case 'exact_numeric_answer':
+    case 'document_structure_answer':
+    case 'document_absent_fact_refusal':
+    case 'document_followup_answer':
+      // Document/lecture answers must not pull resume/JD/negotiation.
       return ['resume', 'jd', 'negotiation'];
     case 'general_meeting_answer':
       // Meeting recap ("action items?", "what did we decide?", "what was the
@@ -1541,6 +1893,10 @@ const CANDIDATE_VOICE_TYPES: ReadonlySet<AnswerType> = new Set<AnswerType>([
   'identity_answer', 'profile_fact_answer', 'project_answer', 'project_followup_answer',
   'skills_answer', 'skill_experience_answer', 'experience_answer', 'jd_fit_answer',
   'gap_analysis_answer', 'behavioral_interview_answer', 'negotiation_answer',
+  // Resume+JD mixes are answered in the candidate's own voice (fit/gap/intro
+  // for THIS role). JD-only shapes (jd_summary/requirements/fact) are NOT here —
+  // they describe the role to the user in neutral assistant voice.
+  'resume_jd_fit_answer', 'resume_jd_gap_answer', 'resume_jd_intro_answer',
 ]);
 
 // Phase 2: the profile-context policy per answer type. `forbidden` is the hard
@@ -1557,6 +1913,12 @@ export const profileContextPolicyFor = (answerType: AnswerType): ProfileContextP
     case 'sales_answer':
     case 'product_candidate_mix_answer':
     case 'lecture_answer':
+    case 'definitional_answer':
+    case 'list_answer':
+    case 'exact_numeric_answer':
+    case 'document_structure_answer':
+    case 'document_absent_fact_refusal':
+    case 'document_followup_answer':
     case 'general_meeting_answer':
       // Meeting recap is about the conversation, not the candidate — no profile.
       return 'forbidden';
@@ -1574,9 +1936,22 @@ export const profileContextPolicyFor = (answerType: AnswerType): ProfileContextP
     case 'gap_analysis_answer':
     case 'behavioral_interview_answer':
     case 'project_about_answer':
+    case 'resume_jd_fit_answer':
+    case 'resume_jd_gap_answer':
+    case 'resume_jd_intro_answer':
+      // Resume+JD mixes are ABOUT the candidate (in the context of the role) —
+      // profile grounding is required, same as jd_fit.
       // Product-about answers MUST be grounded in the loaded project metadata
       // (no overclaim) — same as a project answer.
       return 'required';
+    case 'jd_summary_answer':
+    case 'jd_requirements_answer':
+    case 'jd_fact_answer':
+      // JD-source answers describe the TARGET ROLE, not the candidate. The
+      // profile is NOT required (and must not be forced in); the JD layer is the
+      // source. 'allowed' keeps the profile from being mandated while the `jd`
+      // layer (required above) carries the actual grounding.
+      return 'allowed';
     case 'project_link_answer':
     case 'source_code_evidence_answer':
       // The link/source comes from loaded metadata/reference files; grounding is
@@ -1715,6 +2090,117 @@ const normalizeSms = (s: string): string => {
   return out;
 };
 
+// ── JD-SOURCE resolver (2026-07-07, JD/Resume JIT pipeline fix) ──────────────
+//
+// The SINGLE, generalized decision for "is this a JD-source or resume+JD
+// question, and which shape?". Returns one of the 6 new answer types or null.
+// Keyed purely off SHAPE cues (JD-reference vs candidate-ownership vs
+// fact/requirement/intro/gap/selector) — never off any specific JD/company/
+// project/question string. Runs EARLY in planAnswer (before negotiation/
+// identity/skills/technical/unknown) so a JD question can no longer have its
+// `jd` layer dropped by a candidate-centric branch.
+//
+// Precedence inside a JD context:
+//   1. JD-tailored intro (intro cue + JD cue)          → resume_jd_intro_answer
+//   2. JD-relative resume gap (gap cue + JD cue)        → resume_jd_gap_answer
+//   3. JD-relative resume selector (my-artifact + JD)   → resume_jd_fit_answer
+//   4. Candidate-owned fit inside a JD frame            → resume_jd_fit_answer
+//   5. JD factual field lookup (no candidate cue)       → jd_fact_answer
+//   6. JD requirements/skills/responsibilities          → jd_requirements_answer
+//   7. JD summary ("what role/candidate do they want")  → jd_summary_answer
+// A coding/write verb ALWAYS vetoes (a JD-shaped coding task is still coding).
+// The resolver is deliberately CONSERVATIVE: it only claims questions the
+// existing branches MISS (JD-only → unknown/skills, which forbid jd) or
+// MISROUTE (JD-tailored intro → identity; gap-for-JD phrased as "how would you
+// explain your lack…" → technical_concept). Questions the established
+// GAP_PATTERNS / JD_FIT_PATTERNS branches already route correctly (both emit
+// resume+jd) are DEFERRED (return null) so their proven regression guards stay
+// authoritative. `matchesJdFitPattern`/`matchesGapPattern`/`isHypotheticalTechAsk`
+// are passed in from planAnswer so this stays a pure function of the same text.
+const resolveJdSourceType = (
+  text: string,
+  hasWriteCodeVerb: boolean,
+  isHypotheticalTechAsk: boolean,
+  matchesJdFitPattern: boolean,
+  matchesGapPattern: boolean,
+): AnswerType | null => {
+  if (hasWriteCodeVerb) return null;
+  const jdRef = hasJdReferenceCue(text);
+  // First-person candidate ownership ("my resume", "I built", "should I").
+  const firstPerson = hasCandidateOwnershipCue(text);
+  // Second-person address to the candidate ("you/your").
+  const secondPerson = /\b(you|your|yourself|u|ur)\b/i.test(text);
+  const candidateAddressed = firstPerson || secondPerson;
+  const introShape = INTRO_SHAPE_CUE_RE.test(text);
+
+  // (1) JD-tailored intro: an intro request tied to the role. Needs BOTH the
+  // intro shape and a JD reference so a plain "tell me about yourself" (no JD
+  // cue) still routes to the existing identity path. Fixes "tell me about
+  // yourself FOR THIS ROLE" / "walk me through my resume WITH THIS JD" collapsing
+  // to identity_answer (which forbids jd).
+  if (introShape && jdRef) return 'resume_jd_intro_answer';
+
+  // Everything below requires a JD reference cue — no JD framing, no JD route.
+  if (!jdRef) return null;
+
+  // (2) Gap-for-JD phrased as a HYPOTHETICAL ("how would you explain your lack
+  // of experience in [a JD requirement]"). This is the ONLY gap shape we claim:
+  // it is the one the existing GAP_PATTERNS branch never sees because
+  // isHypotheticalTech steals it into technical_concept FIRST. A plain gap ask
+  // ("what gap do you have for this role") does NOT match isHypotheticalTech, so
+  // it falls through to the proven GAP_PATTERNS→gap_analysis_answer route.
+  if (isHypotheticalTechAsk && RESUME_JD_GAP_CUE_RE.test(text) && candidateAddressed) {
+    return 'resume_jd_gap_answer';
+  }
+
+  // (3) JD-relative resume SELECTOR ("most relevant project/internship for this
+  // JD", "which of my projects best matches"). Fixes "most relevant project for
+  // this JD" → project_answer (drops jd). Defer if the existing jd_fit patterns
+  // already claim it (they route resume+jd correctly).
+  if (!matchesJdFitPattern && RESUME_JD_SELECTOR_CUE_RE.test(text) && candidateAddressed) {
+    return 'resume_jd_fit_answer';
+  }
+
+  // A candidate-addressed question the existing GAP/JD_FIT patterns already
+  // handle → defer to them (they route resume+jd; their guards are proven).
+  if (candidateAddressed && (matchesJdFitPattern || matchesGapPattern)) return null;
+
+  // (4) A FIRST-PERSON question in a JD frame that the existing patterns MISSED
+  // is an explicit resume+JD FIT ask ("how do I align with this role").
+  if (firstPerson) return 'resume_jd_fit_answer';
+
+  // A bare second-person motivation/fit question the existing patterns missed is
+  // still deferred (return null) — the JD-ONLY shapes below are only for
+  // questions that do NOT address the candidate at all.
+  if (secondPerson) return null;
+
+  // ── JD-ONLY shapes (the question does not address the candidate) ──
+  // (5) A factual field lookup about the JD ("does the JD mention salary?",
+  // "is relocation required?", "how many years does the role need?"). Reported
+  // from the JD's fields, or an honest absence — NOT negotiation. GUARD: a
+  // "use the JD but NOT salary" fit STEER negates the field — it is not a salary
+  // FACT lookup, so defer it to the jd_fit route. A genuine fact question ("does
+  // the JD mention salary?") does not negate the field and still routes here.
+  if (JD_FACT_CUE_RE.test(text)) {
+    const negatesTheFact = /\b(not|no|without|never|skip|avoid|exclude|but no|but not)\s+(?:any\s+|the\s+|give\s+|giving\s+|mention(?:ing)?\s+|talk(?:ing)?\s+about\s+|discuss(?:ing)?\s+)?(salary|compensation|package|ctc|pay|money|relocat(?:e|ion))\b/i.test(text);
+    if (negatesTheFact) return matchesJdFitPattern ? null : 'jd_summary_answer';
+    return 'jd_fact_answer';
+  }
+
+  // (6) The JD's own requirements/skills/responsibilities/technologies.
+  if (JD_REQUIREMENTS_CUE_RE.test(text)) return 'jd_requirements_answer';
+
+  // (7) A summary of the role / what kind of candidate the JD wants.
+  if (JD_SUMMARY_CUE_RE.test(text)) return 'jd_summary_answer';
+
+  // A JD reference the existing jd_fit patterns already claim → defer.
+  if (matchesJdFitPattern) return null;
+
+  // A JD reference with no more specific shape and not claimed elsewhere →
+  // summarize the role.
+  return 'jd_summary_answer';
+};
+
 export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   const rawQuestion = input.question || input.extractedQuestion?.latestQuestion || '';
   const question = rawQuestion.trim();
@@ -1725,10 +2211,27 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   // Neutralize "tech stack" / "technology stack" AND bare "full-stack" so the
   // DSA `\bstack\b` data-structure pattern can't fire on them ("you said full
   // stack, but this is data analyst" must not become a stack/DSA question).
+  // Grounding-campaign2 fix (2026-07-17): "how do you stack up (there/against
+  // the JD)?" is the comparison IDIOM ("measure up"), not the data-structure
+  // noun — but the bare `\bstack\b` in DSA_PATTERNS/TECHNICAL_SUBJECT_PATTERNS
+  // matched it anyway, misrouting a JD-fit self-assessment question ("The JD
+  // calls for 8+ years and deep Go or Java expertise — how do you stack up
+  // there?") into technical_concept_answer. That answer type FORBIDS the
+  // resume/jd context layers (it's meant for "what is Redis?"-style neutral
+  // explanations), so the candidate's own profile/JD never reached the prompt
+  // and the model answered from CORE_IDENTITY's blanket "reveal internals"
+  // refusal instead ("I can't share that information.") — live-confirmed on
+  // run-014/verify_fix10 (press A9). Neutralize the idiom the same way the
+  // tech-stack/full-stack phrases are neutralized above, before any DSA/
+  // technical-concept pattern sees the text.
   const textNoTechStack = text
     .replace(/\b(tech|technology|technical)\s+stack\b/g, 'techstack')
-    .replace(/\bfull[- ]?stack\b/g, 'fullstack');
+    .replace(/\bfull[- ]?stack\b/g, 'fullstack')
+    .replace(/\bstack(s|ed)?\s+up\b/g, 'measure$1 up');
   const extractedType = input.extractedQuestion?.questionType;
+  const documentGroundedCustomModeActive = input.activeMode?.documentGroundedCustomModeActive === true;
+  const explicitDocumentModeCodingAsk = /\b(write|implement|code|coding interview|dsa|dry run|time complexity|space complexity|big[-\s]?o|algorithm(?:ic)?|solution code|source code)\b/i.test(text);
+  const explicitDocumentModeProfileAsk = /\b(resume|cv|profile|job description|\bjd\b|career|work experience|candidate profile|my background|your background|my projects?|your projects?|my skills?|your skills?)\b/i.test(text);
 
   let answerType: AnswerType = 'general_meeting_answer';
 
@@ -1782,6 +2285,39 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     || /\brate\s+(your|my)\s+[\w ]*\b(fit|suitabilit|match|readiness|data analyst|analyst)\b/i.test(text);
   const hasSkillRatingFraming = includesAny(text, SKILL_RATING_PATTERNS) && !ratesRoleFit;
 
+  // "solve" alone is a false-positive coding signal for a PRODUCT/PROJECT
+  // question ("What's RedisMart and what problem does it SOLVE?", "What
+  // problem does Natively solve?") — a bare project-description ask that
+  // shares the word "solve" with a genuine coding task ("solve two sum",
+  // "can you solve this problem"), but is never asking for code. Without
+  // this guard the bare `\bsolve\b` in CODING_PATTERNS (and the
+  // hasExplicitCodingVerb/hasWriteCodeVerb checks below) hijacked the
+  // question into coding_question_answer — profile FORBIDDEN, so the model
+  // never named the actual project and instead answered a generic invented
+  // Redis-concept essay (Phase 0 replay finding, real-session desync bug).
+  // Scoped narrowly to "what problem(s) does <it/this/that/a project name/
+  // your/my/the> solve" so a genuine coding ask ("how did you solve the
+  // caching problem in RedisMart", "solve two sum") is unaffected.
+  //
+  // COMPOUND-MESSAGE FIX (code-review 2026-07-05 HIGH + debugger-confirmed):
+  // the original fix computed isProductProblemSolveQuestion as a whole-message
+  // boolean and, once true, narrowed hasExplicitCodingVerb/hasWriteCodeVerb's
+  // verb regex for the ENTIRE message — so a compound message pairing the
+  // product-solve phrase with a SEPARATE, genuine coding request ("What
+  // problem does RedisMart solve? Also please write a function that reverses
+  // a linked list.") lost its `write` signal too and fell through to
+  // unknown_answer/profileContextPolicy:'allowed' instead of
+  // coding_question_answer/forbidden — silently dropping the coding-answer
+  // safety nets (structure validation, contract injection) for a genuine
+  // coding ask. Fixed by stripping ONLY the matched product-solve CLAUSE from
+  // a working copy of the text before testing for the bare `solve` verb, so a
+  // `write`/`implement`/DSA signal ELSEWHERE in the same message still fires
+  // normally — the guard now suppresses just its own clause, not the whole
+  // message.
+  const productProblemSolveMatch = text.match(/\bwhat\s+(problem|issue|pain\s?point)s?\s+(does|do|did)\s+(it|this|that|he|she|they|natively|redismart|talentscope|your|my|the|his|her)\b[\w '-]{0,20}\bsolves?\b/i);
+  const textWithoutProductSolveClause = productProblemSolveMatch
+    ? (text.slice(0, productProblemSolveMatch.index) + text.slice((productProblemSolveMatch.index || 0) + productProblemSolveMatch[0].length))
+    : text;
   // A CODING TASK that merely mentions a comp word as DATA ("write a SQL query
   // for the second highest SALARY", "function to compute BONUS") is NOT a
   // negotiation question — the explicit code verb wins. Guard the negotiation
@@ -1795,12 +2331,12 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   // they'd wrongly veto a real comp question ("compute my total compensation").
   // Genuine SQL/coding "salary" cases are caught by the write/COMMON_CODING/DSA
   // signals instead.
-  const hasExplicitCodingVerb = /\b(write|implement|code|program|function|solve)\b/i.test(text)
+  const hasExplicitCodingVerb = /\b(write|implement|code|program|function|solve)\b/i.test(textWithoutProductSolveClause)
     || includesAny(text, COMMON_CODING_PROBLEM_PATTERNS) || includesAny(textNoTechStack, DSA_PATTERNS);
   // Strict "write code" verbs only (no DSA-term inference). Used to gate the
   // HYPOTHETICAL branch: "how would you use BFS?" is a concept (BFS is a DSA term
   // but there's no write-verb), so it must NOT be blocked from technical_concept.
-  const hasWriteCodeVerb = /\b(write|implement|code|program|solve)\b/i.test(text)
+  const hasWriteCodeVerb = /\b(write|implement|code|program|solve)\b/i.test(textWithoutProductSolveClause)
     || includesAny(text, COMMON_CODING_PROBLEM_PATTERNS);
   // A CLEAR past/present EXPERIENCE probe ("have you implemented X before", "where
   // have you used X", "did you actually use X") is about the CANDIDATE — it must
@@ -1871,6 +2407,20 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   // PROJECT LINK: a repo/url/website ask. Win over unknown so it never false-refuses.
   const wantsProjectLink = includesAny(text, PROJECT_LINK_PATTERNS);
 
+  // JD-SOURCE routing decision (2026-07-07). Computed once; consulted in the
+  // chain BELOW so JD/resume+JD questions never have their `jd` layer dropped by
+  // a candidate-centric or fallback branch. A negotiation-ADVICE cue ("how
+  // should I negotiate salary") keeps the negotiation route; a bare JD salary
+  // FACT ("does the JD mention salary") routes jd_fact instead of negotiation.
+  const jdSourceType = resolveJdSourceType(
+    text,
+    hasWriteCodeVerb,
+    isHypotheticalTech(text),
+    includesAny(text, JD_FIT_PATTERNS),
+    includesAny(text, GAP_PATTERNS),
+  );
+  const wantsNegotiationAdvice = NEGOTIATION_ADVICE_CUE_RE.test(text);
+
   if (!question) {
     answerType = 'unknown_answer';
   } else if (isStealthEvasion) {
@@ -1881,6 +2431,14 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     answerType = 'project_link_answer';
   } else if (metaDirective) {
     answerType = metaDirective;
+  } else if (jdSourceType && !wantsNegotiationAdvice) {
+    // A JD-source / resume+JD question. Placed before negotiation/identity/
+    // skills/technical/unknown so the JD layer is routed as the primary source.
+    // The one carve-out: an explicit "how do I negotiate / counter" steer keeps
+    // the question on the negotiation route (falls through to the branch below),
+    // so a JD-framed comp question that ASKS FOR NEGOTIATION ADVICE isn't
+    // swallowed by the JD-source route.
+    answerType = jdSourceType;
   } else if (includesAny(text, NEGOTIATION_PATTERNS) && !hasExplicitCodingVerb && !negatesSalary) {
     // A salary word that is explicitly NEGATED ("use JD but no salary", "rate me
     // but not compensation") is a steer AWAY from negotiation — never a comp ask.
@@ -2024,17 +2582,56 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     answerType = 'technical_concept_answer';
   } else if (includesAny(text, TECHNICAL_CONCEPT_PATTERNS) &&
              !includesAny(text, CODING_PATTERNS) &&
-             (includesAny(textNoTechStack, DSA_PATTERNS) || isLikelyTechnicalConcept(text))) {
+             (includesAny(textNoTechStack, DSA_PATTERNS) || isLikelyTechnicalConcept(textNoTechStack))) {
     // "Explain BFS", "what is a deadlock", "difference between TCP and UDP" —
     // generic technical CONCEPT, NO profile (spec Case F). Checked before
     // DSA/coding: a DSA noun with explain/what-is framing and NO coding verb is a
     // concept, not a coding task.
+    // Grounding-campaign2 fix (2026-07-17): use the SAME textNoTechStack (which
+    // now also neutralizes the "stack up" idiom, see its definition above) that
+    // the DSA_PATTERNS check on this line already uses — isLikelyTechnicalConcept
+    // wraps TECHNICAL_SUBJECT_PATTERNS, which independently contains a bare
+    // \bstack\b, so calling it against the raw `text` let "how do you stack up
+    // there?" slip through this branch even after the DSA_PATTERNS check itself
+    // was fixed.
     answerType = 'technical_concept_answer';
   } else if (includesAny(textNoTechStack, DSA_PATTERNS)) {
     // Named DSA problem ("two sum", "reverse a linked list", "solve two sum").
     // Kept BEFORE generic CODING so the specific DSA label/template wins.
     answerType = 'dsa_question_answer';
-  } else if (includesAny(text, CODING_PATTERNS) || input.intentResult?.intent === 'coding') {
+  } else if (
+    // "What problem does RedisMart/Natively/it solve?" trips the bare
+    // `\bsolve\b` inside CODING_PATTERNS — that's a project-description ask,
+    // never a coding task. CODING_PATTERNS is tested against the
+    // clause-stripped text (textWithoutProductSolveClause) so a genuine
+    // coding request ELSEWHERE in the same message still routes correctly
+    // (compound-message fix, code-review 2026-07-05 HIGH: the original whole-
+    // message boolean silently swallowed a real "write a function..." coding
+    // ask appended after a "what problem does X solve" clause).
+    (includesAny(textWithoutProductSolveClause, CODING_PATTERNS) || input.intentResult?.intent === 'coding')
+    // Guard: a very short addend phrase like "with code?", "show code?", "include code?",
+    // "add code?", "can you give code?" is a conversational follow-up requesting a code
+    // example from the prior context — NOT a new standalone coding problem. Only suppress
+    // the coding route when ALL three conditions hold:
+    //   (1) the message is short (≤5 words, punctuation stripped)
+    //   (2) the only coding signal is the bare noun "code" (no stronger cue:
+    //       write/implement/program/function/class/method/solve/algorithm/debug/snippet)
+    //   (3) the message starts with a modifier/preposition typical of addends
+    //       (with, show, include, add, give, can you, using, just)
+    // A genuine coding ask like "write code for bubble sort" fails condition (2) and
+    // passes through normally. This guard does NOT touch the DSA_PATTERNS path above.
+    && !((() => {
+      const wordCount = text.replace(/[?.!,]/g, '').split(/\s+/).filter(Boolean).length;
+      if (wordCount > 5) return false; // not short enough to be an addend
+      const hasStrongCodingCue = /\b(write|implement|program|function|class|method|solve|algorithm|debug|snippet|script)\b/i.test(text)
+        || includesAny(text, COMMON_CODING_PROBLEM_PATTERNS)
+        || includesAny(textNoTechStack, DSA_PATTERNS);
+      if (hasStrongCodingCue) return false; // real coding ask — don't suppress
+      // Only the bare word "code" triggered the match. Check for addend preposition.
+      const isAddend = /^(?:with|show|include|add|give|can\s+you|using|just|also|and)\b/i.test(text.trim());
+      return isAddend;
+    })())
+  ) {
     answerType = 'coding_question_answer';
   } else if (includesAny(text, GAP_PATTERNS)) {
     // Honest gap + mitigation for the role (checked BEFORE jd_fit so a gap ask isn't
@@ -2078,7 +2675,13 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // context and cascades into route/voice failures. Route it to the nearest
     // SAFE profile answer type. Generic non-candidate questions still go to
     // unknown (profileContextPolicy 'allowed', no forced profile).
-    const fb = classifyUnmatchedFallback(text, input);
+    // Grounding-campaign2 fix (2026-07-17): pass textNoTechStack, not raw
+    // text — classifyUnmatchedFallback's own project-vs-jd_fit lean (below)
+    // has the SAME bare \bstack\b collision as DSA_PATTERNS/
+    // TECHNICAL_SUBJECT_PATTERNS above ("how do you stack up there?" tripped
+    // its project_answer branch via the "stack" keyword instead of the
+    // intended jd_fit_answer route for a JD-comparison question).
+    const fb = classifyUnmatchedFallback(textNoTechStack, input);
     answerType = fb;
     // MODE PRIOR (PI v3, W1): nothing explicit matched AND the profile-aware
     // fallback landed on a floor type (unknown/general). In a sales call that
@@ -2088,6 +2691,17 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // or any explicitly-matched type above is never touched, so every leak
     // invariant (coding/identity/negotiation routing) is preserved.
     answerType = applyModeFallback(answerType, true, input.source, input.activeMode);
+  }
+
+  if (documentGroundedCustomModeActive && !explicitDocumentModeCodingAsk && !explicitDocumentModeProfileAsk) {
+    // A user-created document-grounded custom mode makes uploaded/reference files
+    // the primary source. Do not let generic coding/profile heuristics steal normal
+    // seminar/thesis questions into contracts that forbid reference_files. Within
+    // that safe document lane, preserve the QUESTION SHAPE so retrieval/packing and
+    // validators can prefer definitions, lists, exact values, absent-fact refusals,
+    // and follow-up referents instead of collapsing every turn to lecture_answer.
+    const docShape = classifyDocumentQuestionShape(question, input.extractedQuestion?.isFollowUp ? input.extractedQuestion?.followUpTarget || 'prior' : undefined);
+    answerType = docShape === 'broad_overview' ? 'lecture_answer' : docShape;
   }
 
   const speakerPerspective = input.speakerPerspective
@@ -2168,7 +2782,7 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     voicePerspective,
     profileContextPolicy,
     resolvedEntity,
-    requiredContextLayers: requiredLayersFor(answerType),
+    requiredContextLayers: requiredLayersFor(answerType, documentGroundedCustomModeActive),
     forbiddenContextLayers: forbiddenLayersFor(answerType),
     responseTemplate: templateFor(answerType),
     maxFirstUsefulTokenMs: latencyMs,
@@ -2180,6 +2794,7 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     confidence: Math.max(input.intentResult?.confidence || input.extractedQuestion?.confidence || 0.7, 0),
     answerStyle: detectAnswerStyle(question).style,
     answerStyleTargetSeconds: detectAnswerStyle(question).targetSeconds,
+    documentGroundedCustomModeActive,
   };
 };
 
@@ -2271,11 +2886,13 @@ export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationS
         // sales sessions (manual regression 2026-06-12).
         ? 'Speak in the FIRST PERSON as the product\'s seller/representative ("our product", "we"). Never identify as an AI assistant.'
         : 'Answer in a neutral, explanatory voice. Do not roleplay as the candidate.';
-  const policyLine = plan.profileContextPolicy === 'required'
-    ? 'Ground every concrete claim in the provided profile facts. Never invent names, numbers, metrics, companies, or technologies that are not in those facts.'
-    : plan.profileContextPolicy === 'forbidden'
-      ? 'Do NOT use or reference the resume, JD, projects, or any personal profile context. Answer from general knowledge only.'
-      : 'Use profile facts only where directly relevant; never fabricate.';
+  const policyLine = plan.documentGroundedCustomModeActive
+    ? 'Ground every concrete claim in the uploaded/reference files for this custom mode. If the answer is not supported by the uploaded material, say plainly that the requested information is not in the uploaded material. Do not reconstruct it from general knowledge, prior assistant answers, profile, resume, JD, or persona context.'
+    : plan.profileContextPolicy === 'required'
+      ? 'Ground every concrete claim in the provided profile facts. Never invent names, numbers, metrics, companies, or technologies that are not in those facts.'
+      : plan.profileContextPolicy === 'forbidden'
+        ? 'Do NOT use or reference the resume, JD, projects, or any personal profile context. Answer from general knowledge only.'
+        : 'Use profile facts only where directly relevant; never fabricate.';
   const entityLine = plan.resolvedEntity
     ? `\nresolvedEntity: ${plan.resolvedEntity} (answer about THIS project; stay on it)`
     : '';

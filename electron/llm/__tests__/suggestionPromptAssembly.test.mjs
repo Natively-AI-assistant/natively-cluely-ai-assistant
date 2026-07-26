@@ -24,9 +24,16 @@ test('generateSuggestion loads active mode prompt suffix and retrieved active mo
   assert.ok(generateSuggestionStart >= 0, 'generateSuggestion should exist');
   assert.match(generateSuggestionSource, /require\('\.\/services\/ModesManager'\)/);
   assert.match(generateSuggestionSource, /getActiveModeSystemPromptSuffix\(\)/);
-  // Retrieved mode context is scoped by a non-negotiation answer type so the
-  // mode's sensitive customContext (salary/pricing) is dropped on this path.
-  assert.match(generateSuggestionSource, /buildRetrievedActiveModeContextBlock\(lastQuestion, context, 1800, 'general_meeting_answer'\)/);
+  // Retrieved mode context is scoped by answer type. Since the 2026-06-27
+  // document-grounded fix, generateSuggestion picks the answer type
+  // conditionally ('document_grounded_suggestion' when the active mode is
+  // document-grounded, else 'general_meeting_answer') and threads
+  // forceDocumentGrounding through the retrievalOptions position. Assert the
+  // call uses lastQuestion + the conditional retrieveAnswerType, not the old
+  // hardcoded 'general_meeting_answer' literal.
+  assert.match(generateSuggestionSource, /buildRetrievedActiveModeContextBlock\(\s*lastQuestion,/);
+  assert.match(generateSuggestionSource, /retrieveAnswerType/);
+  assert.match(generateSuggestionSource, /documentGroundedCustomModeActive/);
   assert.doesNotMatch(generateSuggestionSource, /\|\| modesMgr\.buildActiveModeContextBlock\(\)/);
 });
 
@@ -36,14 +43,14 @@ test('generateSuggestion prepends mode context before transcript context', () =>
 
 test('generateSuggestion keeps active mode suffix in system prompt without user context', () => {
   assert.match(generateSuggestionSource, /const basePrompt = activeModePrompt[\s\S]*\? `\$\{HARD_SYSTEM_PROMPT\}\\n\\n## ACTIVE MODE\\n\$\{activeModePrompt\}`/);
-  assert.doesNotMatch(generateSuggestionSource, /\$\{activeModePrompt\}\$\{customNotesBlock\}/);
 });
 
-test('generateSuggestion sends custom notes and mode context as user message content', () => {
-  // INVARIANT (not exact source shape): custom notes + retrieved mode context are
-  // combined into `suggestionContext` and passed as the USER-content arg, while
-  // `basePrompt` (the trusted system prompt) carries only the mode persona suffix.
-  assert.match(generateSuggestionSource, /const suggestionContext = \[customNotesBlock, enrichedContext\]\.filter\(Boolean\)\.join\('\\n\\n'\);/);
+test('generateSuggestion sends mode context as user message content', () => {
+  // INVARIANT (not exact source shape): the retrieved mode context is passed
+  // through as `suggestionContext` (the USER-content arg), while `basePrompt`
+  // (the trusted system prompt) carries only the mode persona suffix. The
+  // global "Custom Context" textarea that used to be folded in here was removed.
+  assert.match(generateSuggestionSource, /const suggestionContext = enrichedContext;/);
   // The streaming providers receive suggestionContext as the 3rd (context) arg
   // and basePrompt as the 4th (systemPrompt) arg — context is NOT folded into the
   // system prompt. Two streaming branches (custom/curl provider + default client).
@@ -56,11 +63,6 @@ test('generateSuggestion sends custom notes and mode context as user message con
   // the raw promptMessage concatenated into it.
   assert.doesNotMatch(generateSuggestionSource, /generateWithFlash\(\[\{ text: `\$\{systemPrompt\}/);
   assert.doesNotMatch(generateSuggestionSource, /\$\{systemPrompt\}\\n\\n\$\{promptMessage\}/);
-});
-
-test('generateSuggestion does not append custom notes to any system prompt branch', () => {
-  assert.doesNotMatch(generateSuggestionSource, /basePrompt[\s\S]*customNotesBlock/);
-  assert.doesNotMatch(generateSuggestionSource, /Never hedge\. Never say "it depends"\.\$\{customNotesBlock\}/);
 });
 
 test('WhatToAnswerLLM does not append active mode context to system prompt override', () => {

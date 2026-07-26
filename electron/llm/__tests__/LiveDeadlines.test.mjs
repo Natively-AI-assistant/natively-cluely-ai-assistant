@@ -202,4 +202,28 @@ describe('Issue 1: live-deadline harness aborts stalled providers', () => {
     assert.equal(r, 'first_useful_timeout');
     assert.equal(cleanupCalls, 1, 'onCleanup must fire exactly once to abort the request');
   });
+
+  test('onCleanup distinguishes a normal completion from a cancellation', async () => {
+    const reasons = [];
+    const completed = await raceStreamWithDeadline({
+      stream: fakeStream(['done']),
+      firstUsefulDeadlineMs: 1000,
+      isUsefulYet: () => true,
+      onToken: () => {},
+      onCleanup: (reason) => { reasons.push(reason); },
+    });
+    assert.equal(completed, 'done');
+    assert.deepEqual(reasons, ['done']);
+
+    const cancelled = await raceStreamWithDeadline({
+      stream: fakeStream([], 2000),
+      firstUsefulDeadlineMs: 1000,
+      isUsefulYet: () => false,
+      shouldAbort: () => true,
+      onToken: () => {},
+      onCleanup: (reason) => { reasons.push(reason); },
+    });
+    assert.equal(cancelled, 'aborted');
+    assert.deepEqual(reasons, ['done', 'aborted']);
+  });
 });

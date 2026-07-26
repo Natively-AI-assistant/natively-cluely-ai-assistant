@@ -1,0 +1,12 @@
+diff --git a/node_modules/keytar/package.json b/node_modules/keytar/package.json
+index 12cbafc..4c97ef0 100644
+--- a/node_modules/keytar/package.json
++++ b/node_modules/keytar/package.json
+@@ -30,6 +30,7 @@
+   ],
+   "types": "./keytar.d.ts",
+   "scripts": {
++    "preinstall": "node ../../scripts/verify-native-arch.js || (echo '[nativeArch] keytar install BLOCKED: arch mismatch (see fix above)' && exit 1)",
+     "install": "prebuild-install || npm run build",
+     "build": "node-gyp rebuild",
+     "lint": "npm run cpplint",

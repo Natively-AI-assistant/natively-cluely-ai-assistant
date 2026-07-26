@@ -72,7 +72,16 @@ export const buildContextRoute = (plan: AnswerPlan): ContextRoute => {
   const required = new Set(plan.requiredContextLayers);
   const forbidden = new Set(plan.forbiddenContextLayers);
 
+  const documentGroundedCustomModeActive = plan.documentGroundedCustomModeActive === true;
   const layers: ContextRouteLayer[] = ALL_LAYERS.map((layer) => {
+    if (documentGroundedCustomModeActive && layer === 'reference_files') {
+      return { layer, selected: true, reason: 'document_grounded_custom_mode_primary_source', tokenBudget: LAYER_BUDGET[layer] ?? 1200 };
+    }
+    if (documentGroundedCustomModeActive
+        && (layer === 'resume' || layer === 'jd' || layer === 'negotiation' || layer === 'ai_persona')
+        && !required.has(layer)) {
+      return { layer, selected: false, reason: 'suppressed_by_document_grounded_custom_mode', tokenBudget: 0 };
+    }
     if (forbidden.has(layer)) {
       return { layer, selected: false, reason: 'forbidden_by_answer_type', tokenBudget: 0 };
     }
@@ -97,8 +106,14 @@ export const buildContextRoute = (plan: AnswerPlan): ContextRoute => {
  * layer may be included for this plan. Forbidden always wins. Use this instead
  * of re-deriving include/exclude logic per call site.
  */
-export const isLayerAllowed = (plan: AnswerPlan, layer: ContextLayer): boolean =>
-  !plan.forbiddenContextLayers.includes(layer);
+export const isLayerAllowed = (plan: AnswerPlan, layer: ContextLayer): boolean => {
+  if (plan.documentGroundedCustomModeActive === true) {
+    if (layer === 'reference_files') return true;
+    if ((layer === 'resume' || layer === 'jd' || layer === 'negotiation' || layer === 'ai_persona')
+        && !plan.requiredContextLayers.includes(layer)) return false;
+  }
+  return !plan.forbiddenContextLayers.includes(layer);
+};
 
 /**
  * Compact, PII-free summary of the route for safe debug metadata / telemetry.

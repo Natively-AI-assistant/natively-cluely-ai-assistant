@@ -83,6 +83,11 @@ const PROFILE_ANSWER_TYPES: ReadonlySet<AnswerType> = new Set<AnswerType>([
   'identity_answer', 'profile_fact_answer', 'project_answer', 'project_followup_answer',
   'skills_answer', 'skill_experience_answer', 'experience_answer', 'jd_fit_answer',
   'behavioral_interview_answer', 'negotiation_answer',
+  // JD-source + resume+JD shapes (2026-07-07). These are profile/JD answers too,
+  // so the false-refusal repair (no "I don't have the JD" when the JD is loaded)
+  // must cover them.
+  'jd_summary_answer', 'jd_requirements_answer', 'jd_fact_answer',
+  'resume_jd_fit_answer', 'resume_jd_gap_answer', 'resume_jd_intro_answer',
 ]);
 
 const isProfileAnswerType = (t: AnswerType): boolean => PROFILE_ANSWER_TYPES.has(t);
@@ -506,7 +511,21 @@ export function sanitizeCandidateAnswer(answer: string): CandidateSanitizeResult
   const repaired = (removed.size > 0 || perspectiveFlipped) && text !== original.trim();
   // If stripping emptied the answer (the whole thing was assistant-meta) or left a
   // fragment too short to be useful, the caller must fall back deterministically.
-  const needsFallback = text.length < 15;
+  //
+  // Code-review 2026-07-18 HIGH (campaign2 longsession, wiring this into
+  // IntelligenceEngine.ts's live WTA path surfaced a pre-existing latent bug
+  // shared with the manual path's identical needsFallback branch in
+  // ipcHandlers.ts): the ORIGINAL `text.length < 15` check fires on ANY short
+  // answer, not just one that was actually meta — live-reproduced with
+  // sanitizeCandidateAnswer("Python.") returning needsFallback:true despite
+  // removedMarkers being empty (nothing was ever stripped; "Python." IS the
+  // real, correct, complete answer to e.g. "what's your primary language?").
+  // A caller treating needsFallback as "substitute a deterministic fallback"
+  // would silently discard a genuinely short-but-correct answer. Require that
+  // something was ACTUALLY removed (or the original was empty, handled by the
+  // early return above) before claiming the caller needs a fallback — an
+  // untouched short answer is not evidence of an all-meta answer.
+  const needsFallback = removed.size > 0 && text.length < 15;
   return { text, repaired, needsFallback, removedMarkers: Array.from(removed) };
 }
 

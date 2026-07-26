@@ -4,7 +4,7 @@
 // flash-lite tail-latency HEDGE timing contract (2026-06-06, Issue 8). That
 // hedge has since been REMOVED: the live text path (LLMHelper.streamGeminiTextCascade)
 // now runs a SERIAL Gemini cascade — full ladder gemini-3.1-flash-lite →
-// gemini-3.5-flash → gemini-3.1-pro-preview — with NO parallel racing.
+// gemini-3.6-flash → gemini-3.1-pro-preview — with NO parallel racing.
 //
 // The user's selected Gemini model is honored as the STARTING rung and the
 // cascade falls FORWARD (toward more capable) from there:
@@ -40,7 +40,7 @@ const {
 } = await import(pathToFileURL(modPath).href);
 
 const FLASH_LITE = 'gemini-3.1-flash-lite';
-const FLASH = 'gemini-3.5-flash';
+const FLASH = 'gemini-3.6-flash';
 const PRO = 'gemini-3.1-pro-preview';
 
 // The full ladder, cheapest → most capable (priority encodes order).

@@ -42,6 +42,10 @@ change.md
 
 # Generated migration patches — private, not for public repo
 *.patch
+# Exception: the patches/ directory holds patch-package commits that MUST
+# be checked in (they re-apply automatically in postinstall). This line
+# keeps them tracked.
+!/patches/*.patch
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
@@ -79,6 +83,10 @@ node_modules/
 jspm_packages/
 dist-electron/
 dist/
+
+# husky auto-generated machinery — only the user-facing hook files
+# (e.g. .husky/pre-commit) are committed.
+.husky/_
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
@@ -375,3 +383,59 @@ docs/
 # Large model binary files
 *.onnx
 *.onnx_data
+
+# Round-7 cleanup (2026-07-01, hardened after senior review): large
+# reference PDFs and debug artifacts should NEVER be committed. Keep
+# patterns narrow — broad patterns like `Sample*.pdf` and `*thesis*.pdf`
+# would silently ignore legitimate PDFs (invoices, resumes, etc.). Use
+# the exact filename + the debug-artifacts directory + a single specific
+# pattern for the `Sample thesis for testing.pdf` filename family.
+debug-artifacts/
+Sample thesis for testing.pdf
+"Sample thesis for testing.pdf"
+
+# Live-smoke harness scratch dir (created at runtime by scripts/smoke-document-grounded.js)
+/.smoke-sandbox/
+
+# User-submitted crash reports / debug logs (device + session diagnostics — never commit)
+user log/
+*.ips
+
+# --- branch-integration safety hardening (2026-07-23) ---
+# Third-party dispute / billing evidence dirs — never push
+/dispute-evidence-*/
+/dispute-evidence-*
+/dispute_evidence/
+# Autopilot campaign prompts — internal docs, not source
+/HANDOFF*.md
+/NATIVELY_CONTEXT_SYSTEM_SIMPLIFICATION_PROMPT.md
+# Generated Vite build output that mirrors src/**/*.{tsx,ts}
+/src/**/*.js
+
+# --- User requested exclusions (2026-07-23) ---
+PRODUCTION_HARDENING_FINAL_REPORT.md
+loop.md
+loop2.md
+AUDIT_AI_CONTEXT_OWNERSHIP.md
+AUDIT_ARCHITECTURE_MAP.md
+AUDIT_AUDIO_REALTIME_PIPELINE.md
+AUDIT_BACKEND_SECURITY_STABILITY.md
+AUDIT_DEPENDENCIES_PACKAGING.md
+AUDIT_ELECTRON_SECURITY.md
+AUDIT_ERROR_OBSERVABILITY.md
+AUDIT_FRONTEND_STATE_REACT.md
+AUDIT_MEMORY_AND_LOOPS.md
+AUDIT_PRIVACY_SECRETS_LOGGING.md
+AUDIT_VERIFICATION_REPORT.md
+campaign-log.md
+campaign2-log.md
+campaign3-log.md
+contextauthresearchdoc.md
+test/
+test-fixtures/
+traces/
+traces2/
+traces3/
+--help/
+.remember/
+

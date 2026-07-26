@@ -858,14 +858,19 @@ Return ONLY valid JSON (no markdown code blocks):
             const { FollowUpDraftGenerator } = require('./services/meeting/FollowUpDraftGenerator');
             const draft = await new FollowUpDraftGenerator(this.llmHelper).generate({
                 summary: {
+                    title: detailed.title,
                     overview: detailed.overview || '',
-                    decisions: detailed.decisions || [],
-                    // Fall back to actionItemsStructured for V3 rows saved by earlier builds
-                    // that predate actionItemsV3 (same fields the generator reads).
-                    actionItems: detailed.actionItemsV3 || detailed.actionItemsStructured || [],
-                    openQuestions: detailed.openQuestions || [],
                     tldr: detailed.tldr || [],
                     whatChanged: detailed.whatChanged || [],
+                    decisions: detailed.decisions || [],
+                    actionItems: detailed.actionItemsV3 || detailed.actionItemsStructured || [],
+                    openQuestions: detailed.openQuestions || [],
+                    // These are the new rich fields the widened generator consumes — without them,
+                    // the regenerated draft would lose every mode-specific note section (sales
+                    // objections, recruiting concerns, interview approach/complexity, etc.) and
+                    // regress to the original "doesn't understand the meeting" symptom.
+                    risks: detailed.risks || [],
+                    sections: detailed.sectionsV3 || detailed.sections || [],
                 },
                 mode: detailed.mode?.selectedTemplateType,
                 tone,
