@@ -1,0 +1,38 @@
+{
+  "id": "pipeline-data-flow-stages",
+  "title": "Pipeline class requires data_flow_stages before advance",
+  "problemKey": "clickstream-pipeline",
+  "problemClass": "data_pipeline_streaming_analytics",
+  "turns": [
+    {
+      "role": "interviewer",
+      "speaker": "system",
+      "text": "Design a real-time clickstream analytics pipeline."
+    },
+    {
+      "role": "interviewer",
+      "speaker": "system",
+      "text": "Functional: ingest clicks and produce dashboards. Scale 50k events/sec. Latency under 2s end-to-end. Prefer availability. Data flow stages: ingest → Kafka → Flink → warehouse → BI."
+    },
+    {
+      "role": "user",
+      "speaker": "user",
+      "text": "Checklist looks full — let's move on to the design."
+    }
+  ],
+  "expect": {
+    "sdPhaseAfter": "post_requirements",
+    "checklistComplete": true,
+    "gateClosed": true,
+    "laterSectionsAllowed": true,
+    "softRefused": false,
+    "requiredSlotsFilled": [
+      "functional_requirements",
+      "scale_qps",
+      "latency",
+      "consistency_availability",
+      "data_flow_stages"
+    ],
+    "dataFlowRequired": true
+  }
+}
