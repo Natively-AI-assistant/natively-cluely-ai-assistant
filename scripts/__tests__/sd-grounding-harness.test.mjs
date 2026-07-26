@@ -14,20 +14,45 @@ const require = createRequire(import.meta.url);
 const H = require('../lib/sd-grounding-harness.js');
 
 describe('sd-grounding-harness skip gate', () => {
-  test('shouldRunRealApi is false when RUN_NATIVELY_API_E2E is absent', () => {
-    assert.equal(H.shouldRunRealApi({ NATIVELY_API_KEY: 'secret' }), false);
+  test('shouldRunRealApi is false when opt-in flags are absent', () => {
+    assert.equal(H.shouldRunRealApi({ GEMINI_API_KEY: 'secret', NATIVELY_API_KEY: 'secret' }), false);
   });
 
-  test('shouldRunRealApi is false when NATIVELY_API_KEY is absent', () => {
+  test('shouldRunRealApi is false when opted in but no keys', () => {
+    assert.equal(H.shouldRunRealApi({ RUN_SD_GROUNDING_E2E: '1' }), false);
+    assert.equal(H.shouldRunRealApi({ RUN_SD_REQUIREMENTS_GATE_E2E: '1' }), false);
     assert.equal(H.shouldRunRealApi({ RUN_NATIVELY_API_E2E: '1' }), false);
   });
 
-  test('shouldRunRealApi is false when NATIVELY_API_KEY is blank', () => {
-    assert.equal(H.shouldRunRealApi({ RUN_NATIVELY_API_E2E: '1', NATIVELY_API_KEY: '  ' }), false);
+  test('shouldRunRealApi is false when keys are blank', () => {
+    assert.equal(
+      H.shouldRunRealApi({ RUN_SD_GROUNDING_E2E: '1', GEMINI_API_KEY: '  ', NATIVELY_API_KEY: '  ' }),
+      false,
+    );
   });
 
-  test('shouldRunRealApi is true when both flags are set', () => {
+  test('shouldRunRealApi is true with RUN_SD_GROUNDING_E2E + GEMINI_API_KEY', () => {
+    assert.equal(H.shouldRunRealApi({ RUN_SD_GROUNDING_E2E: '1', GEMINI_API_KEY: 'g-test' }), true);
+  });
+
+  test('shouldRunRealApi is true with RUN_SD_REQUIREMENTS_GATE_E2E + GEMINI_API_KEY', () => {
+    assert.equal(
+      H.shouldRunRealApi({ RUN_SD_REQUIREMENTS_GATE_E2E: '1', GEMINI_API_KEY: 'g-test' }),
+      true,
+    );
+  });
+
+  test('shouldRunRealApi is true with RUN_NATIVELY_API_E2E + NATIVELY_API_KEY', () => {
     assert.equal(H.shouldRunRealApi({ RUN_NATIVELY_API_E2E: '1', NATIVELY_API_KEY: 'sk-test' }), true);
+  });
+
+  test('resolveGeminiApiKey prefers GEMINI_API_KEY over GOOGLE_API_KEY', () => {
+    assert.equal(
+      H.resolveGeminiApiKey({ GEMINI_API_KEY: 'g1', GOOGLE_API_KEY: 'g2' }),
+      'g1',
+    );
+    assert.equal(H.resolveGeminiApiKey({ GOOGLE_API_KEY: 'g2' }), 'g2');
+    assert.equal(H.resolveGeminiApiKey({}), '');
   });
 });
 

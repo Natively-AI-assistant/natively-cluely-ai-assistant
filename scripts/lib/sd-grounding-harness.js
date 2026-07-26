@@ -158,8 +158,39 @@ const ALL_QUESTIONS = [
   },
 ];
 
+/** Ordered Gemini / Google key env names (same pool as EmbeddingProviderResolver). */
+const GEMINI_KEY_ENV_NAMES = [
+  'GEMINI_API_KEY',
+  'GEMINI_API_KEY_2',
+  'GEMINI_API_KEY_3',
+  'GEMINI_API_KEY_4',
+  'GEMINI_API_KEY_5',
+  'GEMINI_API_KEY_6',
+  'GOOGLE_API_KEY',
+];
+
+/** First non-blank Gemini/Google key from env, or ''. */
+function resolveGeminiApiKey(env = process.env) {
+  for (const name of GEMINI_KEY_ENV_NAMES) {
+    const v = (env[name] || '').trim();
+    if (v) return v;
+  }
+  return '';
+}
+
+/**
+ * Opt-in gate for real-API harnesses (SD grounding + Requirements-gate smoke).
+ * Requires one of:
+ *   RUN_SD_GROUNDING_E2E=1 | RUN_SD_REQUIREMENTS_GATE_E2E=1 | RUN_NATIVELY_API_E2E=1
+ * plus either a Gemini key (preferred) or NATIVELY_API_KEY.
+ */
 function shouldRunRealApi(env = process.env) {
-  return env.RUN_NATIVELY_API_E2E === '1' && Boolean((env.NATIVELY_API_KEY || '').trim());
+  const optedIn =
+    env.RUN_NATIVELY_API_E2E === '1' ||
+    env.RUN_SD_GROUNDING_E2E === '1' ||
+    env.RUN_SD_REQUIREMENTS_GATE_E2E === '1';
+  if (!optedIn) return false;
+  return Boolean(resolveGeminiApiKey(env) || (env.NATIVELY_API_KEY || '').trim());
 }
 
 function resolveBenchmarkModel(env = process.env) {
@@ -252,6 +283,8 @@ module.exports = {
   DEFAULT_MODEL,
   DEFAULT_QUESTION_TIMEOUT_MS,
   DEFAULT_MAX_ATTEMPTS,
+  GEMINI_KEY_ENV_NAMES,
+  resolveGeminiApiKey,
   shouldRunRealApi,
   resolveBenchmarkModel,
   resolveSplit,
