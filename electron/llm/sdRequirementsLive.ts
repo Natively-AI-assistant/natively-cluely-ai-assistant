@@ -19,6 +19,9 @@ import {
   softRefuseIfPrematureAdvance,
   deriveSdPhase,
   isDataFlowRequired,
+  nextEligibleSlots,
+  clarifierBudgetFor,
+  markSlotAsked,
 } from './sdRequirementsGate';
 
 /** Slot extractors: interviewer-attributed text → checklist fills (consume-only). */
@@ -183,8 +186,27 @@ export function prepareSdRequirementsForAnswerPlan(
   }
 
   const sdPhase = deriveSdPhase(artifact);
+
+  // Grill pacing (SPEC 05): next slot(s) + clarifier budget for this turn.
+  const latestInterviewer = [...(input.interviewerTexts || [])].filter(Boolean).slice(-1)[0] || '';
+  const clarifierBudget = sdPhase === 'requirements' ? clarifierBudgetFor(latestInterviewer) : 1;
+  const nextSlots =
+    sdPhase === 'requirements'
+      ? nextEligibleSlots(artifact, { limit: clarifierBudget, pursueOptionals: false })
+      : [];
+  if (sdPhase === 'requirements' && nextSlots[0]) {
+    artifact = markSlotAsked(artifact, nextSlots[0]);
+  }
+
   return {
-    answerPlan: { ...answerPlan, sdPhase },
+    answerPlan: {
+      ...answerPlan,
+      sdPhase,
+      sdGrill:
+        sdPhase === 'requirements'
+          ? { nextSlots, clarifierBudget }
+          : undefined,
+    },
     artifact,
     softRefuseSpoken,
     sdPhase,

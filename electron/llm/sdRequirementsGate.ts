@@ -378,6 +378,128 @@ Do not emit Core Entities, API / Interface, Data Flow, High-Level Design, or Dee
 If LESSON / reference_file material is present, use it only to choose clarifiers and FR/NFR draft wording — not architecture, APIs, or deep dives.
 </requirements_phase_contract>`;
 
-export function requirementsPhaseContractFor(sdPhase: SdPhase | undefined | null): string {
-  return sdPhase === 'requirements' ? REQUIREMENTS_PHASE_CONTRACT : '';
+const SLOT_PRIORITY: SlotId[] = [
+  'functional_requirements',
+  'scale_qps',
+  'latency',
+  'consistency_availability',
+  'durability',
+  'read_write_ratio',
+  'data_flow_stages',
+];
+
+const BATCH_INVITE_RE =
+  /\b(?:ask\s+(?:your|me\s+your|all\s+(?:your|the))\s+clarifying\s+questions|what\s+do\s+you\s+need\s+from\s+me|fire\s+away\s+with\s+(?:your\s+)?questions|go\s+ahead\s+and\s+ask)\b/i;
+
+export interface NextSlotOptions {
+  /** When true, optional durability / R/W are eligible after mandatory NFRs. Default false. */
+  pursueOptionals?: boolean;
+  /** How many next slots to return (1 default, ≤3 on batch invite). */
+  limit?: number;
+}
+
+/**
+ * Pure next-slot priority helper (SPEC 05).
+ * FR → scale → latency → CAP → (optionals if pursued) → data_flow_stages if class-required.
+ * Skips filled slots; never picks data_flow_stages for CRUD.
+ */
+export function nextEligibleSlots(
+  artifact: RequirementsArtifact,
+  opts: NextSlotOptions = {},
+): SlotId[] {
+  const pursueOptionals = Boolean(opts.pursueOptionals);
+  const limit = Math.max(1, Math.min(3, opts.limit ?? 1));
+  const out: SlotId[] = [];
+  for (const id of SLOT_PRIORITY) {
+    if (out.length >= limit) break;
+    const slot = artifact.slots[id];
+    if (!slot || slot.filled) continue;
+    if (id === 'durability' || id === 'read_write_ratio') {
+      if (!pursueOptionals) continue;
+    }
+    if (id === 'data_flow_stages' && !isDataFlowRequired(artifact)) continue;
+    out.push(id);
+  }
+  return out;
+}
+
+/** Batch invite detection — bias false-negative (stay one-Q) when ambiguous. */
+export function detectBatchInvite(interviewerText: string): boolean {
+  return BATCH_INVITE_RE.test(String(interviewerText || ''));
+}
+
+export function clarifierBudgetFor(interviewerText: string): number {
+  return detectBatchInvite(interviewerText) ? 3 : 1;
+}
+
+/**
+ * Count interviewer-facing clarifiers in spoken output.
+ * Heuristic: sentences ending with `?` that are not pure draft/ack lines.
+ */
+export function countClarifierQuestions(spoken: string): number {
+  const t = String(spoken || '').trim();
+  if (!t) return 0;
+  const parts = t.split(/(?<=[?])\s+/).map((s) => s.trim()).filter(Boolean);
+  let n = 0;
+  for (const p of parts) {
+    if (!/\?\s*$/.test(p)) continue;
+    // Skip rhetorical draft narration that happens to use a question mark rarely;
+    // require an interrogative aimed at gathering a requirement.
+    if (/^(?:here'?s|so\s+far|got\s+it|thanks|okay|ok)\b/i.test(p)) continue;
+    n += 1;
+  }
+  // Also count mid-paragraph `?` when split missed (single block with multiple ?).
+  if (n === 0) {
+    const marks = (t.match(/\?/g) || []).length;
+    if (marks > 0 && !/^(?:here'?s|so\s+far)\b/i.test(t)) n = marks;
+  }
+  return n;
+}
+
+/**
+ * Soft-enforce clarifier budget while gated: keep draft prose + first N questions.
+ * post_requirements / ungated → identity.
+ */
+export function enforceClarifierPacing(
+  text: string,
+  sdPhase: SdPhase | undefined | null,
+  budget: number,
+): string {
+  if (sdPhase !== 'requirements') return String(text || '');
+  const t = String(text || '');
+  const maxQ = Math.max(1, Math.min(3, budget || 1));
+  if (countClarifierQuestions(t) <= maxQ) return t;
+
+  // Keep through the Nth `?` only; drop later clarifiers (and their trailing prose).
+  let seen = 0;
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] === '?') {
+      seen += 1;
+      if (seen >= maxQ) {
+        return t.slice(0, i + 1).trim();
+      }
+    }
+  }
+  return t;
+}
+
+export function requirementsPhaseContractFor(
+  sdPhase: SdPhase | undefined | null,
+  grill?: { nextSlots?: SlotId[]; clarifierBudget?: number } | null,
+): string {
+  if (sdPhase !== 'requirements') return '';
+  const budget = Math.max(1, Math.min(3, grill?.clarifierBudget ?? 1));
+  const next = (grill?.nextSlots || []).filter(Boolean);
+  const nextLabels = next.map((id) => SLOT_LABELS[id] || id);
+  const nextLine =
+    nextLabels.length === 0
+      ? 'Checklist looks complete on required slots — confirm readiness to advance; do not invent extra mandatory clarifiers.'
+      : budget === 1
+        ? `Ask exactly ONE clarifying question this turn, targeting: ${nextLabels[0]}. Tie it to the problem or the interviewer's last answer — never bare checklist voice ("Next: latency?").`
+        : `The interviewer invited clarifying questions — ask at most ${budget} related clarifiers this turn, in order: ${nextLabels.join(' → ')}. Keep conversational glue; no bare checklist voice.`;
+  return `${REQUIREMENTS_PHASE_CONTRACT}
+<requirements_grill_pacing>
+${nextLine}
+You may still refresh the live Requirements draft in the same turn. Draft narration does not count as a clarifier.
+</requirements_grill_pacing>`;
 }

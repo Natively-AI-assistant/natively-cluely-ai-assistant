@@ -462,7 +462,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                             modeContextBlock = modeContextBlock ? `${modeContextBlock}\n\n${lessonBlock}` : lessonBlock;
                         }
                     }
-                    const phaseContract = requirementsPhaseContractFor(sdPhase);
+                    const phaseContract = requirementsPhaseContractFor(sdPhase, answerPlan?.sdGrill);
                     if (phaseContract) {
                         modeContextBlock = modeContextBlock
                             ? `${modeContextBlock}\n\n${phaseContract}`
@@ -747,8 +747,13 @@ ANSWER SHAPE: ${intentResult.answerShape}
 
             if (requirementsGated) {
                 try {
-                    const { enforceStructuralGate } = require('./sdRequirementsGate') as typeof import('./sdRequirementsGate');
-                    const gatedAnswer = enforceStructuralGate(streamedBuffer.join(''), 'requirements');
+                    const {
+                        enforceStructuralGate,
+                        enforceClarifierPacing,
+                    } = require('./sdRequirementsGate') as typeof import('./sdRequirementsGate');
+                    let gatedAnswer = enforceStructuralGate(streamedBuffer.join(''), 'requirements');
+                    const budget = answerPlan?.sdGrill?.clarifierBudget ?? 1;
+                    gatedAnswer = enforceClarifierPacing(gatedAnswer, 'requirements', budget);
                     streamedBuffer.length = 0;
                     streamedBuffer.push(gatedAnswer);
                     yield gatedAnswer;

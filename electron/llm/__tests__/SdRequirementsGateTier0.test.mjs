@@ -363,3 +363,65 @@ describe('WhatToAnswerLLM Requirements gate wiring', () => {
     assert.doesNotMatch(out, /requirements_phase_contract/);
   });
 });
+
+// ── Pure: grill pacing (SPEC 05) ─────────────────────────────────────────────
+
+describe('Grill pacing — next slot + clarifier budget', () => {
+  test('priority is FR → scale → latency → CAP; skips filled', () => {
+    let a = gate.createEmptyRequirementsArtifact('p');
+    assert.deepEqual(gate.nextEligibleSlots(a, { limit: 1 }), ['functional_requirements']);
+    a = gate.fillSlotFromInterviewer(a, 'functional_requirements', 'fr');
+    assert.deepEqual(gate.nextEligibleSlots(a, { limit: 1 }), ['scale_qps']);
+    a = gate.fillSlotFromInterviewer(a, 'scale_qps', '1k');
+    assert.deepEqual(gate.nextEligibleSlots(a, { limit: 3 }), ['latency', 'consistency_availability']);
+  });
+
+  test('optionals skipped unless pursueOptionals; data_flow only when class-required', () => {
+    let a = gate.createEmptyRequirementsArtifact('p');
+    for (const id of ['functional_requirements', 'scale_qps', 'latency', 'consistency_availability']) {
+      a = gate.fillSlotFromInterviewer(a, id, 'ok');
+    }
+    assert.deepEqual(gate.nextEligibleSlots(a, { limit: 2 }), []);
+    assert.deepEqual(gate.nextEligibleSlots(a, { limit: 2, pursueOptionals: true }), [
+      'durability',
+      'read_write_ratio',
+    ]);
+    a = gate.setProblemClass(a, 'data_pipeline_streaming_analytics');
+    assert.deepEqual(gate.nextEligibleSlots(a, { limit: 1 }), ['data_flow_stages']);
+  });
+
+  test('batch invite raises budget to 3; ambiguous stays 1', () => {
+    assert.equal(gate.clarifierBudgetFor('Ask your clarifying questions.'), 3);
+    assert.equal(gate.clarifierBudgetFor('What do you need from me?'), 3);
+    assert.equal(gate.clarifierBudgetFor('Scale is about 1k QPS.'), 1);
+    assert.equal(gate.detectBatchInvite('fire away with questions'), true);
+  });
+
+  test('enforceClarifierPacing keeps first N questions while gated', () => {
+    const multi = [
+      'What is the expected QPS?',
+      'And latency target?',
+      'Consistency or availability?',
+    ].join(' ');
+    const one = gate.enforceClarifierPacing(multi, 'requirements', 1);
+    assert.equal(gate.countClarifierQuestions(one), 1);
+    assert.match(one, /QPS/);
+    assert.doesNotMatch(one, /latency target/);
+
+    const three = gate.enforceClarifierPacing(multi, 'requirements', 3);
+    assert.equal(gate.countClarifierQuestions(three), 3);
+
+    const post = gate.enforceClarifierPacing(multi, 'post_requirements', 1);
+    assert.equal(post, multi);
+  });
+
+  test('phase contract injects next-slot pacing hint', () => {
+    const c = gate.requirementsPhaseContractFor('requirements', {
+      nextSlots: ['scale_qps'],
+      clarifierBudget: 1,
+    });
+    assert.match(c, /requirements_grill_pacing/);
+    assert.match(c, /scale \/ QPS/i);
+    assert.match(c, /exactly ONE/i);
+  });
+});

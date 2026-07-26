@@ -77,6 +77,11 @@ export {
     requirementsPhaseContractFor,
     REQUIREMENTS_PHASE_CONTRACT,
     LATER_FRAMEWORK_HEADING_PATTERNS,
+    nextEligibleSlots,
+    detectBatchInvite,
+    clarifierBudgetFor,
+    countClarifierQuestions,
+    enforceClarifierPacing,
 } from "./sdRequirementsGate";
 export type {
     SdPhase,
@@ -87,6 +92,7 @@ export type {
     RequirementsArtifact,
     MissingSlot,
     AdvanceChannel,
+    NextSlotOptions,
 } from "./sdRequirementsGate";
 export {
     prepareSdRequirementsForAnswerPlan,

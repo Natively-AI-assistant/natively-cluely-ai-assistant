@@ -154,6 +154,22 @@ export interface AnswerPlan {
    * Delivery Framework heading soft-truncate. Omitted → legacy full SD path.
    */
   sdPhase?: 'requirements' | 'post_requirements';
+  /**
+   * Grill pacing hint (SPEC 05): next checklist slot(s) and clarifier budget for
+   * this turn. Set by prepareSdRequirementsForAnswerPlan while gated.
+   */
+  sdGrill?: {
+    nextSlots: Array<
+      | 'functional_requirements'
+      | 'scale_qps'
+      | 'latency'
+      | 'consistency_availability'
+      | 'durability'
+      | 'read_write_ratio'
+      | 'data_flow_stages'
+    >;
+    clarifierBudget: number;
+  };
 }
 
 export interface PlanAnswerInput {
