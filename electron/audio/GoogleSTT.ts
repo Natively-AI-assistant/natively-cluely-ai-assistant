@@ -45,6 +45,14 @@ export class GoogleSTT extends EventEmitter {
     private languageCode = 'en-US';
     private alternativeLanguageCodes: string[] = ['en-IN', 'en-GB']; // Default fallbacks
 
+    // Auto-detect mode: Google identifies the language per utterance, but
+    // primary-language recognition is faster and more accurate than the
+    // alternativeLanguageCodes path. Track the per-result languageCode and
+    // re-pin the primary once the speaker has clearly switched languages.
+    private autoMode = false;
+    private languageMismatchStreak = 0;
+    private static readonly LANGUAGE_REPIN_FINALS = 2;
+
     constructor(label?: string) {
         super();
         if (label) this.label = label;
@@ -122,6 +130,8 @@ export class GoogleSTT extends EventEmitter {
                 } catch { /* unavailable in tests / before app ready */ }
                 this.languageCode = 'en-US';
                 this.alternativeLanguageCodes = googleAutoDetectAlternates(preferred);
+                this.autoMode = true;
+                this.languageMismatchStreak = 0;
                 console.log(`[GoogleSTT/${this.label}] Language set to auto-detect (en-US + ${this.alternativeLanguageCodes.join('/')} alternates)`);
             } else {
                 const config = RECOGNITION_LANGUAGES[key];
@@ -132,6 +142,8 @@ export class GoogleSTT extends EventEmitter {
 
                 console.log(`[GoogleSTT/${this.label}] Updating recognition language to: ${key} (${config.bcp47})`);
                 this.languageCode = config.bcp47;
+                this.autoMode = false;
+                this.languageMismatchStreak = 0;
 
                 if ('alternates' in config) {
                     this.alternativeLanguageCodes = (config as EnglishVariant).alternates;
@@ -145,11 +157,12 @@ export class GoogleSTT extends EventEmitter {
                 }
             }
 
-            // Restart if active
-            if (this.isStreaming || this.isActive) {
-                console.log(`[GoogleSTT/${this.label}] Language changed while active. Restarting stream...`);
-                this.stop();
-                this.start();
+            // Restart if active. swapStream (not stop()+start()) so the old
+            // stream flushes the final of whatever was being said when the
+            // language changed instead of destroying it mid-flight.
+            if (this.isActive) {
+                console.log(`[GoogleSTT/${this.label}] Language changed while active. Swapping stream...`);
+                this.swapStream();
             }
 
             this.pendingLanguageChange = undefined;
@@ -354,6 +367,53 @@ export class GoogleSTT extends EventEmitter {
         }
     }
 
+    /**
+     * Auto mode: when consecutive FINAL results come back in a non-primary
+     * language, the speaker has switched — re-pin the stream so the detected
+     * language becomes primary (the old primary joins the alternates).
+     * Alternates are kept so a later switch back re-pins again.
+     */
+    private maybeRepinLanguage(rawDetected?: string): void {
+        if (!this.autoMode || !rawDetected) return;
+        // Google returns lowercase codes (e.g. 'ru-ru') — canonicalize against
+        // our language table; anything unknown is ignored.
+        const detected = Object.values(RECOGNITION_LANGUAGES)
+            .find(l => l.bcp47.toLowerCase() === rawDetected.toLowerCase())?.bcp47;
+        if (!detected) return;
+
+        if (detected === this.languageCode) {
+            this.languageMismatchStreak = 0;
+            return;
+        }
+        if (++this.languageMismatchStreak < GoogleSTT.LANGUAGE_REPIN_FINALS) return;
+        this.languageMismatchStreak = 0;
+
+        const alternates = [this.languageCode, ...this.alternativeLanguageCodes]
+            .filter(l => l !== detected)
+            .slice(0, 3);
+        console.log(`[GoogleSTT/${this.label}] Auto mode: re-pinning primary language ${this.languageCode} → ${detected} (alternates: ${alternates.join('/')})`);
+        this.languageCode = detected;
+        this.alternativeLanguageCodes = alternates;
+        this.swapStream();
+    }
+
+    /**
+     * Replace the live gRPC stream without dropping the tail: end() the old
+     * stream (no destroy) so Google flushes its pending finals — the stale
+     * guards in the event handlers keep those late events from clobbering the
+     * new stream's state — and start the new stream immediately; audio that
+     * arrives during the swap is buffered and flushed by startStream().
+     */
+    private swapStream(): void {
+        const old = this.stream;
+        this.stream = null;
+        this.isStreaming = false;
+        if (old) {
+            try { old.end(); } catch { /* flush-only — old stream is abandoned either way */ }
+        }
+        if (this.isActive) this.startStream();
+    }
+
     private startStream(): void {
         this.lastConnectAttempt = Date.now();
         this.isStreaming = true;
@@ -361,7 +421,13 @@ export class GoogleSTT extends EventEmitter {
 
         console.log(`[GoogleSTT/${this.label}] Creating gRPC stream (rate=${this.sampleRateHertz}Hz, ch=${this.audioChannelCount}, lang=${this.languageCode})...`);
 
-        this.stream = this.client
+        // Captured so each handler can tell whether it belongs to the CURRENT
+        // stream. Without this guard, the old stream's async 'close'/'end'
+        // events fire AFTER a restart has already created the new stream and
+        // null out this.stream — audio then buffers until the lazy reconnect
+        // in write() (throttled to 1/s) fires, losing 1s+ of transcription on
+        // every language change and every 4:30 proactive restart.
+        const s = this.client
             .streamingRecognize({
                 config: {
                     encoding: this.encoding,
@@ -376,6 +442,12 @@ export class GoogleSTT extends EventEmitter {
                 interimResults: true,
             })
             .on('error', (err: Error) => {
+                if (this.stream !== s) {
+                    // Stale event from a stream already replaced by swapStream()/
+                    // restart — the abandoned stream erroring out (e.g. CANCELLED)
+                    // must not clobber the new stream's state or alarm main.ts.
+                    return;
+                }
                 this.isConnecting = false;
                 this.isStreaming = false;
                 this.stream = null;
@@ -419,12 +491,14 @@ export class GoogleSTT extends EventEmitter {
                 this.emit('error', err);
             })
             .on('end', () => {
+                if (this.stream !== s) return; // stale — a newer stream owns the state
                 console.log(`[GoogleSTT/${this.label}] Stream ended server-side (idle timeout)`);
                 this.isConnecting = false;
                 this.isStreaming = false;
                 this.stream = null;
             })
             .on('close', () => {
+                if (this.stream !== s) return; // stale — a newer stream owns the state
                 console.log(`[GoogleSTT/${this.label}] Stream closed server-side`);
                 this.isConnecting = false;
                 this.isStreaming = false;
@@ -439,14 +513,24 @@ export class GoogleSTT extends EventEmitter {
 
                     if (transcript) {
                         console.log(`[GoogleSTT/${this.label}] Transcript received`, { final: isFinal, length: transcript.length });
+                        // Late finals from an abandoned stream are still real
+                        // speech (the tail from before a swap) — always forward.
                         this.emit('transcript', {
                             text: transcript,
                             isFinal,
                             confidence: alt.confidence
                         });
                     }
+
+                    // Only the CURRENT stream may trigger a language re-pin —
+                    // a stale stream's finals describe pre-swap speech.
+                    if (isFinal && this.stream === s) {
+                        this.maybeRepinLanguage(result.languageCode);
+                    }
                 }
             });
+
+        this.stream = s;
 
         // gRPC streams are writable immediately — no handshake needed.
         const bufferedCount = this.buffer.length;
@@ -463,13 +547,10 @@ export class GoogleSTT extends EventEmitter {
             this.proactiveRestartTimer = null;
             if (!this.isActive) return;
             console.log(`[GoogleSTT/${this.label}] Proactive stream restart at 4:30 to preempt Google's 305s limit`);
-            if (this.stream) {
-                this.stream.end();
-                this.stream.destroy();
-                this.stream = null;
-            }
-            this.isStreaming = false;
-            this.startStream();
+            // swapStream (end without destroy) lets the old stream flush its
+            // pending finals instead of killing them mid-flight; the stale
+            // guards keep its late events away from the new stream's state.
+            this.swapStream();
         }, GoogleSTT.PROACTIVE_RESTART_MS);
     }
 }
