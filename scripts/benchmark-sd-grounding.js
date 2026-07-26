@@ -6,13 +6,17 @@
 // Interview mode, and runs canonical SD questions against the Natively API
 // (server model = gemini-3.1-flash-lite via BENCHMARK_MODEL).
 //
-// Gate (exit 0 skip when either is absent):
+// Preferred path (Gemini direct — same key for embeddings + chat):
+//   RUN_SD_GROUNDING_E2E=1  (or RUN_NATIVELY_API_E2E=1 / RUN_SD_REQUIREMENTS_GATE_E2E=1)
+//   GEMINI_API_KEY=<key>
+//
+// Fallback path (Natively gateway):
 //   RUN_NATIVELY_API_E2E=1
 //   NATIVELY_API_KEY=<key>
 //
 // Run:
 //   npm run build:electron
-//   RUN_NATIVELY_API_E2E=1 NATIVELY_API_KEY=<key> \
+//   RUN_SD_GROUNDING_E2E=1 GEMINI_API_KEY=<key> \
 //     [BENCHMARK_MODEL=gemini-3.1-flash-lite] \
 //     [SD_BENCHMARK_SPLIT=development|full] \
 //     [SD_LESSONS_DIR=/path/to/lessons] \
@@ -26,12 +30,18 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
+
+try {
+  require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+} catch { /* optional */ }
+
 const { app } = require('electron');
 
 const repoRoot = path.resolve(__dirname, '..');
 const distRoot = path.join(repoRoot, 'dist-electron', 'electron');
 const {
   shouldRunRealApi,
+  resolveGeminiApiKey,
   resolveBenchmarkModel,
   resolveSplit,
   selectQuestions,
@@ -49,9 +59,13 @@ const {
 // as package.json benchmark:* scripts).
 process.env.BENCHMARK_MODEL = resolveBenchmarkModel(process.env);
 
-const KEY = (process.env.NATIVELY_API_KEY || '').trim();
+const GEMINI_KEY = resolveGeminiApiKey(process.env);
+const NATIVELY_KEY = (process.env.NATIVELY_API_KEY || '').trim();
 if (!shouldRunRealApi(process.env)) {
-  console.log('[sd-bench] SKIP — set RUN_NATIVELY_API_E2E=1 + NATIVELY_API_KEY to run the real-API SD grounding harness');
+  console.log(
+    '[sd-bench] SKIP — set RUN_SD_GROUNDING_E2E=1 (or RUN_NATIVELY_API_E2E=1) ' +
+    '+ GEMINI_API_KEY (preferred) or NATIVELY_API_KEY',
+  );
   process.exit(0);
 }
 
@@ -207,11 +221,17 @@ async function main() {
   mm.setActiveMode(mode.id);
 
   const llm = appState.processingHelper.getLLMHelper();
-  // Real-API path: Natively gateway (same as e2e-thesis-real-path). BENCHMARK_MODEL
-  // is already set in process.env for intelligence flags; gateway serves flash-lite.
-  llm.setNativelyKey(KEY);
-  llm.setModel('natively');
-  console.log(`[sd-bench] BENCHMARK_MODEL=${MODEL} clientModel=natively`);
+  // Prefer Gemini direct (embeddings + chat share GEMINI_API_KEY). Fall back to
+  // Natively gateway when only NATIVELY_API_KEY is present.
+  if (GEMINI_KEY) {
+    llm.setApiKey(GEMINI_KEY);
+    llm.setModel(MODEL);
+    console.log(`[sd-bench] BENCHMARK_MODEL=${MODEL} clientModel=gemini (direct)`);
+  } else {
+    llm.setNativelyKey(NATIVELY_KEY);
+    llm.setModel('natively');
+    console.log(`[sd-bench] BENCHMARK_MODEL=${MODEL} clientModel=natively`);
+  }
 
   const allQuestions = selectQuestions(SPLIT);
   const checkpoint = loadCheckpoint(CHECKPOINT_PATH);
