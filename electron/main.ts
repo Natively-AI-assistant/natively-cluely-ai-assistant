@@ -5789,13 +5789,13 @@ export class AppState {
     const { CredentialsManager } = require('./services/CredentialsManager');
     CredentialsManager.getInstance().setSttLanguage(key);
 
-    // 'auto' is only meaningful for NativelyProSTT — other providers fall back to en-US.
-    const sttProvider = CredentialsManager.getInstance().getSttProvider();
-    const effectiveKey = (key === 'auto' && sttProvider !== 'natively') ? 'english-us' : key;
-
-    this.googleSTT?.setRecognitionLanguage(effectiveKey);
-    this.googleSTT_User?.setRecognitionLanguage(effectiveKey);
-    this.processingHelper.getLLMHelper().setSttLanguage(effectiveKey);
+    // Every provider handles 'auto' natively (Google: locale-aware alternates,
+    // Deepgram: 'multi', Soniox/ElevenLabs: omit hint, NativelyPro: server-side
+    // detection), and the createSTTProvider path already passes the raw key —
+    // so no substitution here either.
+    this.googleSTT?.setRecognitionLanguage(key);
+    this.googleSTT_User?.setRecognitionLanguage(key);
+    this.processingHelper.getLLMHelper().setSttLanguage(key);
   }
 
   public static getInstance(): AppState {

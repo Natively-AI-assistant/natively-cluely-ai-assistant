@@ -3,7 +3,7 @@ import { EventEmitter } from 'events';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { RECOGNITION_LANGUAGES, EnglishVariant } from '../config/languages';
+import { RECOGNITION_LANGUAGES, EnglishVariant, googleAutoDetectAlternates } from '../config/languages';
 
 /**
  * GoogleSTT
@@ -114,10 +114,15 @@ export class GoogleSTT extends EventEmitter {
         this.pendingLanguageChange = setTimeout(() => {
             if (key === 'auto') {
                 // Google STT v1 supports up to 3 alternativeLanguageCodes.
-                // Use en-US as primary with the most common languages as alternates.
+                // Use en-US as primary with the user's OS preferred languages
+                // as alternates (fr/es/de only as fill when none match).
+                let preferred: string[] = [];
+                try {
+                    preferred = require('electron').app.getPreferredSystemLanguages();
+                } catch { /* unavailable in tests / before app ready */ }
                 this.languageCode = 'en-US';
-                this.alternativeLanguageCodes = ['fr-FR', 'es-ES', 'de-DE'];
-                console.log(`[GoogleSTT/${this.label}] Language set to auto-detect (en-US + fr/es/de alternates)`);
+                this.alternativeLanguageCodes = googleAutoDetectAlternates(preferred);
+                console.log(`[GoogleSTT/${this.label}] Language set to auto-detect (en-US + ${this.alternativeLanguageCodes.join('/')} alternates)`);
             } else {
                 const config = RECOGNITION_LANGUAGES[key];
                 if (!config) {
