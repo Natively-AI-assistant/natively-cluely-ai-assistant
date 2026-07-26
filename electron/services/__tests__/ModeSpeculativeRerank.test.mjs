@@ -53,8 +53,13 @@ const RERANK = 'NATIVELY_RAG_LOCAL_RERANK';
 const SPEC = 'NATIVELY_RAG_SPECULATIVE_RERANK';
 
 function multiChunkFile() {
-  const filler = (w) => new Array(140).fill(w).join(' ');
-  const content = [filler('intro'), filler('payload'), filler('appendix')].join(' ');
+  // Exceed the production chunk window so the reranker has multiple candidates.
+  const filler = (w) => new Array(700).fill(`${w}.`).join(' ');
+  const content = [
+    `1. Intro\n${filler('intro')}`,
+    `2. Payload\n${filler('payload')}`,
+    `3. Appendix\n${filler('appendix')}`,
+  ].join('\n');
   return [{ id: 'fileA', modeId: 'mode1', fileName: 'doc.txt', content, createdAt: new Date().toISOString() }];
 }
 
@@ -74,6 +79,9 @@ describe('Phase 3: live-path speculative rerank', () => {
     const { mockDb, mockVectorStore, mockEmbeddingPipeline } = mockDeps();
     const retriever = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
 
+    // The rerank decision is normally score-distribution dependent. This test
+    // exercises the live-caller contract after that gate has opened.
+    retriever.computeConfidence = () => ({ lowConfidence: true });
     let observed = null;
     retriever.__setRerankerForTests({
       rerank: async (_q, passages) => {
@@ -87,8 +95,9 @@ describe('Phase 3: live-path speculative rerank', () => {
     const result = await retriever.retrieve({
       query: 'intro payload appendix', modeId: 'mode1', files: multiChunkFile(),
       tokenBudget: 4000, topK: 6, allowRerank: true, // live caller passes this when speculative flag on
+      forceDocumentGrounding: true,
     });
-    assert.ok(observed, 'reranker consulted on the live path when allowRerank true');
+    assert.ok(observed, `reranker consulted on the live path when allowRerank true; chunks=${result.chunks.length}`);
     assert.ok(result.chunks[0].text.includes('payload'), 'payload chunk promoted');
   });
 
@@ -109,6 +118,25 @@ describe('Phase 3: live-path speculative rerank', () => {
     assert.equal(called, false, 'live path must not rerank when allowRerank is false');
   });
 
+  test('a stalled optional reranker cannot consume the manual-answer deadline', async () => {
+    process.env[RERANK] = '1';
+    const { ModeHybridRetriever } = await loadRetriever();
+    const { mockDb, mockVectorStore, mockEmbeddingPipeline } = mockDeps();
+    const retriever = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
+    retriever.__setRerankerForTests({ rerank: async () => new Promise(() => {}) });
+
+    const result = await Promise.race([
+      retriever.retrieve({
+        query: 'intro payload appendix', modeId: 'mode1', files: multiChunkFile(),
+        tokenBudget: 4000, topK: 6, allowRerank: true,
+        forceDocumentGrounding: true,
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('rerank did not respect its latency budget')), 1800)),
+    ]);
+
+    assert.ok(result.chunks.length > 0, 'the lexical candidates remain usable when reranking stalls');
+  });
+
   // (B) SOURCE-GUARDS — the live callsites forward the speculative flag.
   describe('live callsites are wired to the speculative flag (source guard)', () => {
     test('IntelligenceEngine prefetch gates allowRerank on isRagSpeculativeRerankEnabled', () => {
@@ -124,6 +152,12 @@ describe('Phase 3: live-path speculative rerank', () => {
       assert.match(src, /buildRetrievedActiveModeContextBlockHybrid\([\s\S]*?allowRerank[\s\S]*?\)/);
     });
 
+    test('the governed EvidenceResolver also requires the speculative rollout flag', () => {
+      const src = fs.readFileSync(path.resolve(__dirname, '../../intelligence/context-os/EvidenceResolver.ts'), 'utf8');
+      assert.match(src, /isRagSpeculativeRerankEnabled/);
+      assert.match(src, /allowRerank:\s*isRagLocalRerankEnabled\(\)\s*&&\s*isRagSpeculativeRerankEnabled\(\)/);
+    });
+
     test('rerank stays inside the existing raceWithBudget envelope (no new unbounded await)', () => {
       const src = fs.readFileSync(path.resolve(__dirname, '../../llm/WhatToAnswerLLM.ts'), 'utf8');
       // The hybrid call must still be wrapped by raceWithBudget(...) — the
@@ -137,9 +171,9 @@ describe('Phase 3: live-path speculative rerank', () => {
     test('prewarmModeReferenceIndex prewarms the reranker only when enabled', () => {
       const src = fs.readFileSync(path.resolve(__dirname, '../ModesManager.ts'), 'utf8');
       const fn = src.slice(src.indexOf('prewarmModeReferenceIndex'));
-      const body = fn.slice(0, 1200);
+      const body = fn.slice(0, 2200);
       assert.match(body, /isRagLocalRerankEnabled/, 'prewarm must check the reranker flag');
-      assert.match(body, /getLocalReranker\(\)\.prewarm/, 'prewarm must call reranker.prewarm()');
+      assert.match(body, /reranker\.prewarm/, 'prewarm must call reranker.prewarm()');
     });
   });
 });

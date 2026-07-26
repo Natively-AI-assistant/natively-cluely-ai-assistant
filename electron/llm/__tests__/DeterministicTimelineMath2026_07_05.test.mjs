@@ -16,6 +16,12 @@
  * BETWEEN two tenures (a March-end role followed by a June-start role
  * leaves April+May unaccounted for — 2 months, not 3).
  *
+ * Since the Full-JIT policy (2026-07-07/08, commit 6e6189b4), this deterministic
+ * timeline math no longer renders a final `.answer` string — it SELECTS the
+ * computed duration/gap facts as structured evidence (`items`/`selectedFacts`)
+ * for a downstream JIT prompt to phrase. These tests assert against that
+ * evidence-selection shape instead of the old rendered-string contract.
+ *
  * Requires: npm run build:electron.
  */
 import { test, describe } from 'node:test';
@@ -44,8 +50,10 @@ describe('duration at a specific company (inclusive tenure)', () => {
   test('"How long were you at EstroTech Robotics?" -> 3 months (Jun, Jul, Aug)', () => {
     const r = fast('How long were you at EstroTech Robotics?');
     assert.ok(r, 'must fast-path deterministically');
-    assert.match(r.answer, /EstroTech Robotics/);
-    assert.match(r.answer, /3 months/);
+    assert.equal(r.answer, undefined, 'Full-JIT policy: must not render a final answer string');
+    assert.ok(r.items.some((f) => f.field === 'experience.company' && f.value === 'EstroTech Robotics'));
+    assert.ok(r.items.some((f) => f.field === 'experience.duration_months' && f.value === 3));
+    assert.ok(r.items.some((f) => f.field === 'experience.duration_text' && f.value === '3 months'));
   });
 });
 
@@ -53,8 +61,9 @@ describe('total internship experience', () => {
   test('"What\'s your total internship experience?" -> 7 months across 2 internships (3 + 4)', () => {
     const r = fast("What's your total internship experience?");
     assert.ok(r);
-    assert.match(r.answer, /2 internships/);
-    assert.match(r.answer, /7 months/);
+    assert.ok(r.items.some((f) => f.field === 'experience.total_months' && f.value === 7));
+    assert.ok(r.items.some((f) => f.field === 'experience.total_duration_text' && f.value === '7 months'));
+    assert.ok(r.items.some((f) => f.field === 'experience.role_count' && f.value === 2));
   });
 });
 
@@ -62,9 +71,10 @@ describe('gap between two named roles (exclusive — months strictly between)', 
   test('"What\'s the gap between your Aetherbot and EstroTech roles?" -> 2 months (April, May)', () => {
     const r = fast("What's the gap between your Aetherbot and EstroTech roles?");
     assert.ok(r);
-    assert.match(r.answer, /Aetherbot AI/);
-    assert.match(r.answer, /EstroTech Robotics/);
-    assert.match(r.answer, /2 months/);
+    assert.ok(r.items.some((f) => f.field === 'experience_gap.earlier_company' && f.value === 'Aetherbot AI'));
+    assert.ok(r.items.some((f) => f.field === 'experience_gap.later_company' && f.value === 'EstroTech Robotics'));
+    assert.ok(r.items.some((f) => f.field === 'experience_gap.months' && f.value === 2));
+    assert.ok(r.items.some((f) => f.field === 'experience_gap.duration_text' && f.value === '2 months'));
   });
 
   test('back-to-back roles (no gap) are called out honestly', () => {
@@ -80,7 +90,8 @@ describe('gap between two named roles (exclusive — months strictly between)', 
       source: 'manual_input',
     });
     assert.ok(r);
-    assert.match(r.answer, /no gap|back-to-back/i);
+    assert.ok(r.items.some((f) => f.field === 'experience_gap.months' && f.value === 0));
+    assert.ok(r.items.some((f) => f.field === 'experience_gap.duration_text' && f.value === 'no gap'));
   });
 });
 

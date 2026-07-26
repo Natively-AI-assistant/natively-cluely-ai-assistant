@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useT } from '../../i18n';
 import {
     Check,
     CheckCircle,
@@ -63,6 +64,7 @@ const buildFilePayload = async (file: File): Promise<SkillUploadPayload> => ({
 });
 
 export const SkillsSettings: React.FC = () => {
+    const t = useT();
     const [skills, setSkills] = useState<SkillSummary[]>([]);
     const [skillsPath, setSkillsPath] = useState<string>('');
     const [loading, setLoading] = useState(false);
@@ -384,9 +386,9 @@ export const SkillsSettings: React.FC = () => {
         <div className="space-y-5 animated fadeIn select-text pb-4">
             <div className="flex items-start justify-between gap-4">
                 <div>
-                    <h3 className="text-lg font-bold text-text-primary mb-1">Skills</h3>
+                    <h3 className="text-lg font-bold text-text-primary mb-1">{t('Skills')}</h3>
                     <p className="text-xs text-text-secondary">
-                        Local SKILL.md instructions. Invoke a skill in the overlay chat by typing /skill-name or $skill-name at the start of your message.
+                        {t('Local SKILL.md instructions. Invoke a skill in the overlay chat by typing /skill-name or $skill-name at the start of your message.')}
                     </p>
                 </div>
                 <button
@@ -395,7 +397,7 @@ export const SkillsSettings: React.FC = () => {
                     className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-border-subtle bg-bg-subtle/30 hover:bg-bg-subtle transition-all duration-200 text-xs font-medium text-text-secondary hover:text-text-primary active:scale-95 mt-1 disabled:opacity-60"
                 >
                     <RefreshCw size={13} strokeWidth={2.5} className={loading ? 'animate-spin' : ''} />
-                    Refresh
+                    {t('Refresh')}
                 </button>
             </div>
 
@@ -428,13 +430,13 @@ export const SkillsSettings: React.FC = () => {
                     <div className="min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                             <FileUp size={15} className="text-text-secondary" />
-                            <h4 className="text-sm font-semibold text-text-primary">Upload skill</h4>
+                            <h4 className="text-sm font-semibold text-text-primary">{t('Upload skill')}</h4>
                         </div>
                         <p className="text-xs text-text-secondary">
-                            Drop a SKILL.md file here, or click Upload to pick one. For folders, use the Advanced option below.
+                            {t('Drop a SKILL.md file here, or click Upload to pick one. For folders, use the Advanced option below.')}
                         </p>
                         {uploading && (
-                            <p className="text-[11px] text-text-tertiary animate-pulse mt-2">Uploading…</p>
+                            <p className="text-[11px] text-text-tertiary animate-pulse mt-2">{t('Uploading…')}</p>
                         )}
                     </div>
                     <label className="cursor-pointer shrink-0">
@@ -456,7 +458,7 @@ export const SkillsSettings: React.FC = () => {
                                 uploading ? 'opacity-60 pointer-events-none' : '',
                             ].join(' ')}
                         >
-                            Upload
+                            {t('Upload')}
                         </span>
                     </label>
                 </div>
@@ -490,17 +492,17 @@ export const SkillsSettings: React.FC = () => {
 
                     <div className="flex items-center gap-3 flex-wrap text-[11px] text-text-tertiary">
                         <span>
-                            <span className="text-text-secondary font-medium">{preview.preview.referenceCount}</span> reference
+                            <span className="text-text-secondary font-medium">{preview.preview.referenceCount}</span> {t('reference')}
                         </span>
                         <span>
-                            <span className="text-text-secondary font-medium">{preview.preview.assetCount}</span> asset
+                            <span className="text-text-secondary font-medium">{preview.preview.assetCount}</span> {t('asset')}
                         </span>
                         <span>
-                            <span className="text-text-secondary font-medium">{preview.preview.scriptCount}</span> script
+                            <span className="text-text-secondary font-medium">{preview.preview.scriptCount}</span> {t('script')}
                         </span>
                         {preview.preview.otherCount > 0 && (
                             <span>
-                                <span className="text-text-secondary font-medium">{preview.preview.otherCount}</span> other
+                                <span className="text-text-secondary font-medium">{preview.preview.otherCount}</span> {t('other')}
                             </span>
                         )}
                         <span className="ml-auto font-mono">
@@ -511,7 +513,7 @@ export const SkillsSettings: React.FC = () => {
                     {preview.preview.fileTree.length > 0 && (
                         <details className="text-[11px] text-text-tertiary">
                             <summary className="cursor-pointer hover:text-text-secondary">
-                                {preview.preview.fileTree.length} files
+                                {preview.preview.fileTree.length} {t('files')}
                             </summary>
                             <ul className="mt-2 font-mono space-y-0.5 max-h-32 overflow-y-auto">
                                 {preview.preview.fileTree.map((p) => (
@@ -530,7 +532,7 @@ export const SkillsSettings: React.FC = () => {
                             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-primary hover:bg-accent-primary/90 text-white text-xs font-semibold transition-colors disabled:opacity-60"
                         >
                             <Check size={13} strokeWidth={2.5} />
-                            {installing ? 'Installing…' : 'Install'}
+                            {installing ? t('Installing…') : t('Install')}
                         </button>
                         <button
                             onClick={handleCancel}
@@ -538,7 +540,7 @@ export const SkillsSettings: React.FC = () => {
                             className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border-subtle bg-bg-input hover:bg-bg-elevated text-xs font-medium text-text-secondary transition-colors disabled:opacity-60"
                         >
                             <X size={13} strokeWidth={2.5} />
-                            Cancel
+                            {t('Cancel')}
                         </button>
                     </div>
                 </div>
@@ -559,11 +561,11 @@ export const SkillsSettings: React.FC = () => {
             <div>
                 <div className="flex items-center justify-between mb-2">
                     <h4 className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-                        Installed skills
+                        {t('Installed skills')}
                     </h4>
                     {!loading && skills.length > 0 && (
                         <span className="text-[11px] text-text-tertiary">
-                            {skills.length} {skills.length === 1 ? 'skill' : 'skills'}
+                            {skills.length} {skills.length === 1 ? t('skill') : t('skills')}
                         </span>
                     )}
                 </div>
@@ -608,22 +610,22 @@ export const SkillsSettings: React.FC = () => {
                                                 className="flex items-center gap-2 select-none"
                                             >
                                                 <span className="text-[11px] text-text-secondary hidden sm:inline">
-                                                    Delete <span className="font-medium text-text-primary">{skill.name}</span>?
+                                                    {t('Delete')} <span className="font-medium text-text-primary">{skill.name}</span>?
                                                 </span>
                                                 <button
                                                     onClick={() => setConfirmingId(null)}
                                                     className="px-2.5 py-1 rounded-md border border-border-subtle bg-bg-input text-text-secondary text-[11px] font-medium hover:bg-bg-elevated hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-border-muted transition-colors"
-                                                    title="Cancel (Escape)"
+                                                    title={t("Cancel (Escape)")}
                                                 >
-                                                    Cancel
+                                                    {t('Cancel')}
                                                 </button>
                                                 <button
                                                     onClick={() => commitDeleteSkill(skill.id, skill.name)}
                                                     disabled={deletingIds.has(skill.id)}
                                                     className="px-2.5 py-1 rounded-md bg-red-500 text-white text-[11px] font-semibold hover:bg-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                                                    title="Delete this skill"
+                                                    title={t("Delete this skill")}
                                                 >
-                                                    {deletingIds.has(skill.id) ? 'Deleting…' : 'Delete'}
+                                                    {deletingIds.has(skill.id) ? t('Deleting…') : t('Delete')}
                                                 </button>
                                             </div>
                                         ) : (
@@ -632,7 +634,7 @@ export const SkillsSettings: React.FC = () => {
                                                     onClick={() => requestDeleteSkill(skill.id)}
                                                     disabled={deletingIds.has(skill.id)}
                                                     className="p-1.5 rounded-lg text-text-secondary hover:text-red-400 hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                                                    title="Delete skill"
+                                                    title={t("Delete skill")}
                                                     aria-label={`Delete ${skill.name}`}
                                                 >
                                                     <Trash2 size={14} />
@@ -653,9 +655,9 @@ export const SkillsSettings: React.FC = () => {
                     {!loading && skills.length === 0 && (
                         <div className="bg-bg-card rounded-lg border border-dashed border-border-subtle p-5 text-center">
                             <FileCode size={18} className="mx-auto mb-1.5 text-text-tertiary" />
-                            <p className="text-xs font-medium text-text-primary">No skills installed</p>
+                            <p className="text-xs font-medium text-text-primary">{t('No skills installed')}</p>
                             <p className="text-[11px] text-text-secondary mt-0.5">
-                                Upload a SKILL.md above, or use the Advanced option.
+                                {t('Upload a SKILL.md above, or use the Advanced option.')}
                             </p>
                         </div>
                     )}
@@ -669,7 +671,7 @@ export const SkillsSettings: React.FC = () => {
                     onClick={() => setShowAdvanced((s) => !s)}
                     className="text-xs font-semibold uppercase tracking-wider text-text-tertiary hover:text-text-secondary transition-colors"
                 >
-                    {showAdvanced ? '▾' : '▸'} Advanced: open skills folder
+                    {showAdvanced ? '▾' : '▸'} {t('Advanced: open skills folder')}
                 </button>
                 {showAdvanced && (
                     <div className="mt-2 bg-bg-card rounded-xl border border-border-subtle p-4">
@@ -677,10 +679,10 @@ export const SkillsSettings: React.FC = () => {
                             <div className="min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
                                     <FolderOpen size={15} className="text-text-secondary" />
-                                    <h4 className="text-sm font-semibold text-text-primary">Skills Folder</h4>
+                                    <h4 className="text-sm font-semibold text-text-primary">{t('Skills Folder')}</h4>
                                 </div>
                                 <p className="text-xs text-text-secondary">
-                                    Manually drop a folder containing SKILL.md here. Used as a fallback for non-upload workflows.
+                                    {t('Manually drop a folder containing SKILL.md here. Used as a fallback for non-upload workflows.')}
                                 </p>
                                 {skillsPath && (
                                     <p className="mt-2 text-[11px] text-text-tertiary font-mono truncate">{skillsPath}</p>
@@ -690,7 +692,7 @@ export const SkillsSettings: React.FC = () => {
                                 onClick={openFolder}
                                 className="px-4 py-2 rounded-lg bg-accent-primary hover:bg-accent-primary/90 text-white text-xs font-semibold transition-colors shrink-0"
                             >
-                                Open Folder
+                                {t('Open Folder')}
                             </button>
                         </div>
                     </div>

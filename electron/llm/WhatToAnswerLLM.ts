@@ -69,6 +69,9 @@ type ModesManagerType = {
         // split one answer across two modes. Optional everywhere → omitting it
         // (older builds / stubs) reads the active mode exactly as before.
         getActiveModeSystemPromptSuffix: (pinnedModeId?: string) => string;
+        getActiveMode?: () => { id: string; templateType: string; customContext: string } | null;
+        getReferenceFiles?: (modeId: string) => Array<{ id: string; fileName: string; content: string }>;
+        retrieveHybridRaw?: (mode: any, files: any, options: any) => Promise<any>;
         buildActiveModeContextBlock: () => string;
         buildRetrievedActiveModeContextBlock: (query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType, excludeCustomContext?: boolean, pinnedModeId?: string, retrievalOptions?: ModeRetrievalOptions) => string;
         // Phase 4: optional async hybrid retrieval (FTS + vector). Backwards
@@ -153,6 +156,9 @@ export class WhatToAnswerLLM {
         // so the two are now derived from the same t0 decision. Optional →
         // absent for existing callers/tests (backward compatible).
         requestSnapshot?: WhatToAnswerRequestSnapshot,
+        // The request-owned WTA controller. A newer WTA trigger aborts it so the
+        // provider request ends rather than continuing as a hidden stale stream.
+        abortSignal?: AbortSignal,
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
         let tStart = 0, tIntent = 0, tTemporal = 0, tMode = 0, tTrunc = 0, tPrompt = 0, tStreamStart = 0;
@@ -210,9 +216,23 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // fitContextForCurrentModel only shrinks for cloud models; tiny-tier
             // returns unchanged so we must estimate conservatively.
             let modeContextBlock = '';
+            const initialContextOsGeneration = requestSnapshot?.contextOsGeneration as import('../intelligence/context-os').ContextOsGenerationContext | undefined;
+            const governedEvidenceResolutionStarted = Boolean(
+                initialContextOsGeneration?.govern
+                && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled'),
+            );
+            // A multi-family coordinator may have already resolved one bounded
+            // packet before this generator begins. Preserve that exact packet by
+            // identity: re-running EvidenceResolver here would discard profile/JD
+            // items, create a second factual authority, and race the active mode.
+            // Legacy document-only WTA contexts arrive without a pack and retain
+            // the existing resolver path below.
+            let governedEvidencePack: import('../intelligence/context-os').EvidencePack | null =
+                initialContextOsGeneration?.evidencePack ?? null;
             // Skill mode owns the system prompt — skip the (potentially expensive
-            // hybrid retrieval) mode-context block fetch entirely.
-            if (!activeSkill) {
+            // hybrid retrieval) mode-context block fetch entirely. A pre-resolved
+            // governed packet likewise skips legacy/raw retrieval.
+            if (!activeSkill && !governedEvidencePack) {
                 try {
                     const modesManager = this.getModesManager();
                     // Phase 4 — prefer async hybrid retrieval (FTS + vector with
@@ -279,6 +299,44 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         referenceFilesAllowed = true;
                     }
                     if (referenceFilesAllowed) {
+                        const _cog = requestSnapshot?.contextOsGeneration as import('../intelligence/context-os').ContextOsGenerationContext | undefined;
+                        const governedWtaTurn = Boolean(_cog?.govern && forceDocumentGrounding && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled'));
+                        if (governedWtaTurn) {
+                            const activeMode = modesManager.getActiveMode?.();
+                            if (!activeMode || !modesManager.getReferenceFiles || !modesManager.retrieveHybridRaw) {
+                                throw new Error('governed WTA turn missing canonical resolver dependencies');
+                            }
+                            const { EvidenceResolver } = require('../intelligence/context-os/EvidenceResolver') as typeof import('../intelligence/context-os/EvidenceResolver');
+                            const { classifyQuestion } = require('../services/knowledge/QuestionClassifier');
+                            const { queryOkfCards } = require('../services/knowledge/OkfRetriever');
+                            const { KnowledgeManager } = require('../services/knowledge/KnowledgeManager');
+                            const resolver = new EvidenceResolver({
+                                getModeSnapshot: () => activeMode,
+                                getReferenceFiles: (modeId: string) => modesManager.getReferenceFiles!(modeId),
+                                hybridRetriever: { retrieveHybrid: (mode: any, files: any, options: any) => modesManager.retrieveHybridRaw!(mode, files, options) },
+                                knowledgeManager: { getPackForFile: (fileId: string) => KnowledgeManager.getInstance().getPackForFile(fileId) },
+                                classifyQuestion,
+                                queryOkfCards,
+                            });
+                            const { allowsEvidence, isReferentOnly } = require('../intelligence/context-os') as typeof import('../intelligence/context-os');
+                            const transcriptIsEvidence = allowsEvidence(_cog!.contract, 'live_transcript');
+                            const transcriptIsReferentOnly = isReferentOnly(_cog!.contract, 'live_transcript');
+                            const resolution = await resolver.resolve({
+                                turnId: _cog!.contract.turnId,
+                                question: answerPlan?.question?.trim() || cleanedTranscript,
+                                sourceContract: _cog!.contract,
+                                activeMode: { modeId: activeMode.id, modeUniqueId: activeMode.id },
+                                requestedProperty: _cog!.contract.requestedProperty,
+                                transcript: transcriptIsEvidence ? cleanedTranscript : undefined,
+                                followUpReferentHint: transcriptIsReferentOnly
+                                    ? temporalContext?.previousResponses?.slice(-1)?.[0]
+                                    : undefined,
+                            });
+                            governedEvidencePack = resolution.pack;
+                            _cog!.evidencePack = resolution.pack;
+                            (_cog as any).resolutionStrategy = resolution.strategy;
+                            modeContextBlock = resolution.pack.items.map((item) => `[Section: ${item.pointer?.section || item.sourceId}]\n${item.text}`).join('\n\n');
+                        } else {
                         // PI v3 (W5): prefer the caller's PREFETCHED retrieval
                         // (kicked in parallel with intent classification +
                         // grounding) — by the time we get here it has usually
@@ -345,6 +403,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                             const okfQuery = answerPlan?.question?.trim() || cleanedTranscript;
                             modeContextBlock = modesManager.buildOkfAugmentedContextBlock(modeContextBlock, okfQuery, requestSnapshot?.modeUniqueId);
                         }
+                        }
                     } else if (await this.llmHelper.canUseLocalFallback(false)) {
                         console.warn('[ScopeFallback] reference_files denied; local fallback available, routing via streamChat');
                         const retrievalQuery = answerPlan?.question?.trim() || cleanedTranscript;
@@ -357,6 +416,18 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         }
                     }
                 } catch (_err: any) {
+                    if (governedEvidenceResolutionStarted && initialContextOsGeneration) {
+                        const { emptyEvidencePack } = require('../intelligence/context-os/evidencePack') as typeof import('../intelligence/context-os/evidencePack');
+                        governedEvidencePack = emptyEvidencePack({
+                            turnId: initialContextOsGeneration.contract.turnId,
+                            sourceOwner: initialContextOsGeneration.contract.sourceOwner,
+                            requestedProperty: initialContextOsGeneration.contract.requestedProperty,
+                            answerPolicy: initialContextOsGeneration.contract.sourceOwner === 'clarify'
+                                ? 'ask_clarification'
+                                : 'refuse_insufficient_evidence',
+                        });
+                        initialContextOsGeneration.evidencePack = governedEvidencePack;
+                    }
                     console.warn('[WhatToAnswerLLM] ModesManager unavailable:', _err?.message);
                 }
             }
@@ -448,16 +519,53 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     : basePrompt;
 
             const assembler = new PromptAssembler();
+            // ── CONTEXT OS H1: typed EvidencePack GOVERNS the WTA factual prompt ──
+            // When a ContextOsGenerationContext is present (doc-grounded WTA +
+            // flag on), REPLACE the raw mode block with the typed pack (built from
+            // that same block — no re-retrieval) and suppress the candidate_profile
+            // factual block. One factual pipeline. Flag off / absent → legacy.
+            let typedModeContext = modeContextBlock;
+            let typedCandidateProfile = effectiveCandidateProfile;
+            let transcriptForPrompt = workingTranscript;
+            try {
+                const _cog = requestSnapshot?.contextOsGeneration as import('../intelligence/context-os').ContextOsGenerationContext | undefined;
+                const { isIntelligenceFlagEnabled } = require('../intelligence/intelligenceFlags');
+                if (_cog && _cog.govern && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
+                    const { buildInsufficientPropertyAnswer, renderGoverningFactualBlock } = require('../intelligence/context-os') as typeof import('../intelligence/context-os');
+                    const pack = governedEvidencePack ?? _cog.evidencePack;
+                    if (!pack) throw new Error('governed WTA turn missing canonical EvidencePack');
+                    if (pack.answerPolicy === 'ask_clarification') {
+                        yield _cog.contract.reason || 'Which source should I use for that answer?';
+                        return;
+                    }
+                    if (pack.answerPolicy === 'refuse_insufficient_evidence') {
+                        yield buildInsufficientPropertyAnswer({ property: pack.requestedProperty });
+                        return;
+                    }
+                    const rendered = renderGoverningFactualBlock({ ..._cog, evidencePack: pack });
+                    if (!rendered) throw new Error('governed WTA EvidencePack did not render');
+                    typedModeContext = rendered;
+                    typedCandidateProfile = '';
+                    // A reference-file-owned WTA turn may use transcript only for
+                    // retrieval pronouns; it never enters the provider packet as facts.
+                    if (_cog.contract.sourceOwner === 'reference_files') transcriptForPrompt = '';
+                    (_cog as any).evidencePack = pack;
+                }
+            } catch (cogErr: any) {
+                if (governedEvidenceResolutionStarted) throw cogErr;
+                console.warn('[WhatToAnswerLLM] Context OS evidence-pack governance skipped (non-fatal):', cogErr?.message);
+            }
+
             const packet = assembler.assemble({
-                transcript: workingTranscript,
+                transcript: transcriptForPrompt,
                 modeTemplateType: 'active',
                 screenContext,
                 domContext: processedDomContext,
                 priorResponses: !documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses ? temporalContext.previousResponses : undefined,
                 intentContext,
-                retrievedModeContext: modeContextBlock || undefined,
+                retrievedModeContext: typedModeContext || undefined,
                 pinnedModeInstructions: pinnedModeInstructions || undefined,
-                candidateProfile: effectiveCandidateProfile || undefined,
+                candidateProfile: typedCandidateProfile || undefined,
                 tokenBudget: Math.max(1000, assemblerBudget),
                 systemPrompt: finalPromptOverride,
             });
@@ -498,6 +606,59 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 }
             } catch { /* shadow V2 assembly is observe-only; never affects the real packet/answer */ }
 
+            // [TRACE:LONGCTX] Campaign 2 forensics (temporary, R10: removed before
+            // production). Dumps the COMPLETE final prompt sent to the provider —
+            // system message, question, transcript, retrieved context, history —
+            // plus per-section token counts, so the Golden Trace driver can prove
+            // (or refute) whether the extracted question survives assembly at long
+            // context (H1/H2) and diff a working minute-2 press against a failing
+            // minute-24 press.
+            if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
+                try {
+                    const caps = this.llmHelper.getCapabilities();
+                    console.log('[TRACE:LONGCTX] prompt_assembled', JSON.stringify({
+                        systemPromptChars: finalPromptOverride.length,
+                        systemPromptTokensEst: estimateTokens(finalPromptOverride),
+                        userMessageChars: packet.userMessage.length,
+                        userMessageTokensEst: estimateTokens(packet.userMessage),
+                        transcriptForPromptChars: transcriptForPrompt.length,
+                        workingTranscriptChars: workingTranscript.length,
+                        cleanedTranscriptChars: cleanedTranscript.length,
+                        modeContextBlockChars: modeContextBlock.length,
+                        pinnedModeInstructionsChars: pinnedModeInstructions.length,
+                        candidateProfileChars: (typedCandidateProfile || '').length,
+                        assemblerBudget,
+                        blockCount: packet.blocks.length,
+                        blockTypes: packet.blocks.map((b: any) => ({ type: b.type, trustLevel: b.trustLevel, chars: (b.content || '').length })),
+                        totalTokensUsedByAssembler: packet.metadata?.totalTokensUsed,
+                        maxContextTokens: caps.maxContextTokens,
+                        outputBudgetTokens: caps.outputBudgetTokens,
+                        modelId: (this.llmHelper as any).currentModelId,
+                        // Does the extracted question text actually survive into the
+                        // final userMessage sent to the provider? This is the direct
+                        // H1 check — compared against the question dumped by the
+                        // [TRACE:LONGCTX] question_extracted line in IntelligenceEngine.
+                        answerPlanQuestion: answerPlan?.question || null,
+                        // Long-session harness campaign2 (2026-07-17): transcript turns are
+                        // XML-escaped (escapeUserContent — apostrophes become &apos;, etc.)
+                        // before being embedded in the prompt, so a literal, un-normalized
+                        // substring check false-negatives on ANY extracted question containing
+                        // an apostrophe/quote/&/<>  even though the question's semantic content
+                        // is genuinely present (live-proven: "let's talk about your open-source
+                        // work — tell me about tinroof." reported false, though the escaped form
+                        // "let&apos;s talk..." is right there in userMessage). Check both the raw
+                        // and escaped forms so this real R8 regression gate
+                        // (short-session-smoke.cjs) can't false-negative on ordinary punctuation.
+                        answerPlanQuestionSurvivesInPrompt: answerPlan?.question
+                            ? (packet.userMessage.includes(answerPlan.question.trim())
+                                || packet.userMessage.includes(escapeUserContent(answerPlan.question.trim())))
+                            : null,
+                        userMessageTail: packet.userMessage.slice(-800),
+                        systemPromptTail: finalPromptOverride.slice(-400),
+                    }));
+                } catch (e) { console.warn('[TRACE:LONGCTX] prompt_assembled logging failed', e); }
+            }
+
             if (MEASURE) tPrompt = performance.now();
             if (MEASURE) tStreamStart = performance.now();
 
@@ -516,13 +677,43 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 || Boolean(!documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses && temporalContext.previousResponses.length > 0);
             if (hasProfileHistory) packetScopes.push('profile_history');
             // Coding/DSA answers get a small reasoning budget for correctness;
-            // everything else streams with thinking off (fastest TTFT). abortSignal
-            // is undefined here (WTA uses generation-id supersession, not a signal).
+            // everything else streams with thinking off (fastest TTFT). The WTA
+            // request signal is threaded to LLMHelper so generation supersession
+            // terminates the provider stream, not just its visible token delivery.
             // Optional-safe: older/stub helpers may not expose the resolver.
             const wtaThinkingBudget = this.llmHelper.thinkingBudgetForAnswerType?.(
                 Boolean(answerPlan && isCodingAnswerType(answerPlan.answerType)),
             );
-            for await (const token of this.llmHelper.streamChat(packet.userMessage, imagePaths, undefined, finalPromptOverride, true, true, packetScopes, undefined, wtaThinkingBudget)) {
+            // Grounding-campaign3 (2026-07-23): thread the RESOLVED pack, not the
+            // local `governedEvidencePack` variable. A multi-family coordinator
+            // pre-built `_cog.evidencePack` for a non-doc-grounded turn skips the
+            // `governedEvidenceResolutionStarted` branch above, so this gate was
+            // silently dropping `contextOsGeneration` and skipping the final-prompt
+            // validator in LLMHelper. Reuse the same `pack` constant rendered into
+            // the prompt for parity with the governance block.
+            const governedWtaContextOs = requestSnapshot?.contextOsGeneration as
+                import('../intelligence/context-os').ContextOsGenerationContext | undefined;
+            const resolvedGovernedPack: import('../intelligence/context-os').EvidencePack | null = (
+                governedWtaContextOs && governedWtaContextOs.govern
+                    ? (governedEvidencePack ?? governedWtaContextOs.evidencePack ?? null)
+                    : null
+            );
+            const wtaRouteOptions = resolvedGovernedPack && governedWtaContextOs
+                ? {
+                    answerType: answerPlan?.answerType,
+                    contextOsGeneration: governedWtaContextOs,
+                    // Grounding-campaign3 (2026-07-23): thread the t0 mode pin so
+                    // LLMHelper._streamChatInner's always-on document-grounded
+                    // retrieval reads the SAME mode the request was planned
+                    // against. Without this, a mid-request mode switch could
+                    // leak a different mode's documents into the answer.
+                    pinnedModeId: requestSnapshot?.modeUniqueId ?? null,
+                }
+                : {
+                    answerType: answerPlan?.answerType,
+                    pinnedModeId: requestSnapshot?.modeUniqueId ?? null,
+                };
+            for await (const token of this.llmHelper.streamChat(packet.userMessage, imagePaths, undefined, finalPromptOverride, true, true, packetScopes, abortSignal, wtaThinkingBudget, wtaRouteOptions)) {
                 if (MEASURE) {
                     const now = performance.now();
                     if (!tFirstToken) tFirstToken = now;

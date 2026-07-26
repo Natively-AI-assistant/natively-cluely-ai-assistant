@@ -154,8 +154,12 @@ test('ipcHandlers: false-refusal repair gated on document entity/title overlap (
     'ipcHandlers false-refusal must gate on whole-name-hit OR >=2 distinct title tokens',
   );
   assert.ok(
-    ipcHandlersSrc.includes('const shouldRepair = hasStrongEvidence;'),
-    'shouldRepair must derive from the entity-evidence-based hasStrongEvidence',
+    // Governance-integrity fix (2026-07-13, ffbc193) added `&& !governedRefusal`
+    // so an explicit governed evidence-refusal is trusted instead of being
+    // overridden by this legacy, ungoverned repair — shouldRepair must still
+    // derive from hasStrongEvidence as its base signal.
+    ipcHandlersSrc.includes('const shouldRepair = hasStrongEvidence && !governedRefusal;'),
+    'shouldRepair must derive from the entity-evidence-based hasStrongEvidence (and respect a governed refusal)',
   );
 });
 

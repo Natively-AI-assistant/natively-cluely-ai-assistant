@@ -364,6 +364,11 @@ export class WindowHelper {
 
     try {
       this.launcherWindow = new BrowserWindow(launcherSettings);
+      this.appState.recordNativeOomTrace('launcher-window-created', {
+        window: 'launcher',
+        webContentsId: this.launcherWindow.webContents.id,
+        rendererPid: this.launcherWindow.webContents.getOSProcessId(),
+      });
       console.log('[WindowHelper] BrowserWindow created successfully');
     } catch (err) {
       console.error('[WindowHelper] Failed to create BrowserWindow:', err);
@@ -372,15 +377,91 @@ export class WindowHelper {
 
     this.launcherWindow.setContentProtection(this.contentProtection);
 
+    // A/B KILL-SWITCH (2026-07-10): NATIVELY_DISABLE_ONBOARDING_ORCH=1 appends
+    // ?noorch=1, which makes App.tsx skip orch.start() entirely (no drain loop,
+    // no onboarding toasters). The onboarding orchestrator's drain loop was
+    // bisected to the 2026-07-04 native-memory-leak regression; this switch lets
+    // the same build be run with the orchestrator ON vs OFF to confirm the leak
+    // source in the field. The loop is now setTimeout-based (fixed), so this is
+    // a confirmation/rollback lever, not the fix itself.
+    const noOrchSuffix = process.env.NATIVELY_DISABLE_ONBOARDING_ORCH === '1' ? '&noorch=1' : '';
+    if (noOrchSuffix) console.warn('[LeakTest] NATIVELY_DISABLE_ONBOARDING_ORCH=1 → launcher with ?noorch=1 (onboarding orchestrator OFF)');
+
+    // DEV-ONLY launcher mount isolation for native-OOM bisection. This preserves
+    // the launcher shell and normal production behavior while allowing a valid
+    // Vite run to exclude either onboarding alone, all root-level surfaces, or
+    // (via 'shell') skip the React root entirely (src/main.tsx).
+    const requestedIsolation = process.env.NATIVELY_LAUNCHER_ISOLATION;
+    const launcherIsolation = isDev && (
+      requestedIsolation === 'shell' ||
+      requestedIsolation === 'onboarding' ||
+      requestedIsolation === 'global-surfaces' ||
+      requestedIsolation === 'permissions-toaster' ||
+      requestedIsolation === 'no-modals'
+    ) ? requestedIsolation : '';
+    const isolationSuffix = launcherIsolation ? `&isolate=${launcherIsolation}` : '';
+    if (launcherIsolation) {
+      this.appState.recordNativeOomTrace('launcher-isolation-selected', {
+        window: 'launcher',
+        isolation: launcherIsolation,
+      });
+      console.warn(`[LeakTest] NATIVELY_LAUNCHER_ISOLATION=${launcherIsolation} → launcher isolation enabled`);
+    }
+
+    // The review modal deliberately force-opens in development for UI iteration.
+    // This switch keeps every other launcher surface unchanged while excluding
+    // only that dev convenience mount during a native-memory A/B run.
+    const reviewOffSuffix = isDev && process.env.NATIVELY_DISABLE_DEV_REVIEW === '1' ? '&review=off' : '';
+    if (reviewOffSuffix) console.warn('[LeakTest] NATIVELY_DISABLE_DEV_REVIEW=1 → dev review modal disabled');
+
+    const launcherUrl = `${startUrl}?window=launcher${noOrchSuffix}${isolationSuffix}${reviewOffSuffix}`;
+
     this.launcherWindow
-      .loadURL(`${startUrl}?window=launcher`)
+      .loadURL(launcherUrl)
       .then(() => console.log('[WindowHelper] loadURL success'))
       .catch((e) => {
         console.error('[WindowHelper] Failed to load URL:', e);
       });
 
-    this.launcherWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    let launcherLoadRetries = 0;
+    const MAX_LAUNCHER_LOAD_RETRIES = 10;
+    this.launcherWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
       console.error(`[WindowHelper] did-fail-load: ${errorCode} ${errorDescription}`);
+      // DEV SELF-HEAL (2026-07-10): in dev, the renderer loads from the Vite
+      // server at http://localhost:5180. If that server is momentarily
+      // unavailable (a slow first `npm start`, an HMR reconnect, or a stale
+      // server from a prior run being replaced), the load fails and — with no
+      // retry — the window stays permanently black (its native backgroundColor).
+      // That is the "loads fine the first time, then stuck at the logo/black
+      // screen on subsequent launches" symptom on Windows dev. A bounded retry
+      // converts "permanent black" into "black for ~1s, then loads."
+      //
+      // errorCode -3 = ERR_ABORTED (a superseded/intentional nav — do NOT retry).
+      if (isDev && errorCode !== -3 && launcherLoadRetries < MAX_LAUNCHER_LOAD_RETRIES) {
+        launcherLoadRetries += 1;
+        console.warn(`[WindowHelper] dev: retrying launcher load (${launcherLoadRetries}/${MAX_LAUNCHER_LOAD_RETRIES}) in 1s…`);
+        setTimeout(() => {
+          if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
+            this.launcherWindow.loadURL(launcherUrl).catch(() => { /* next did-fail-load retries */ });
+          }
+        }, 1000);
+      }
+    });
+
+    // Reset the retry counter once a load actually succeeds, so a LATER
+    // transient failure (e.g. an HMR blip mid-session) gets its own fresh
+    // retry budget instead of being starved by earlier retries.
+    this.launcherWindow.webContents.on('did-finish-load', () => {
+      launcherLoadRetries = 0;
+      const launcher = this.launcherWindow;
+      if (!launcher || launcher.isDestroyed()) return;
+      const rendererPid = launcher.webContents.getOSProcessId();
+      this.appState.recordNativeOomTrace('launcher-did-finish-load', {
+        window: 'launcher',
+        webContentsId: launcher.webContents.id,
+        rendererPid,
+      });
+      this.appState.armNativeOomContentTrace(rendererPid);
     });
 
     // Pipe renderer-side diagnostics into the main-process log file. Without
@@ -391,9 +472,21 @@ export class WindowHelper {
     // line naming the exact failing module/line on the user's machine.
     this.attachRendererDiagnostics(this.launcherWindow, 'launcher');
 
-    // if (isDev) {
-    //   this.launcherWindow.webContents.openDevTools({ mode: 'detach' }); // DEBUG: Open DevTools
-    // }
+    // DIAGNOSTIC (2026-07-11): NATIVELY_OPEN_DEVTOOLS=1 force-opens the launcher
+    // DevTools DETACHED (survives a renderer hang, unlike an in-window panel).
+    // For debugging the "window appears then freezes / renderer not responsive"
+    // report: open the Performance tab and record during the freeze — a single
+    // long yellow Scripting block = a JS main-thread loop; a flat gap with no JS
+    // = a compositor/GPU stall (the software-compositing blur path). Detached so
+    // it stays usable even when the launcher renderer stops pumping its loop.
+    if (process.env.NATIVELY_OPEN_DEVTOOLS === '1') {
+      try {
+        this.launcherWindow.webContents.openDevTools({ mode: 'detach' });
+        console.warn('[Diag] NATIVELY_OPEN_DEVTOOLS=1 → launcher DevTools opened (detached)');
+      } catch (e: any) {
+        console.warn('[Diag] openDevTools failed:', e?.message || e);
+      }
+    }
 
     // --- 2. Create Overlay Window (Hidden initially) ---
     // Always start centered on the primary display so the OS (macOS NSUserDefaults /
@@ -557,17 +650,51 @@ export class WindowHelper {
         console.log(`[Renderer:${tag}] dom-ready`);
       });
 
-      wc.on('console-message', (_event, level, message, line, sourceId) => {
-        // 0=verbose 1=info 2=warning 3=error. Only surface warning+ to avoid
-        // flooding the log with routine info/verbose renderer chatter.
-        if (level < 2) return;
-        const label = level === 3 ? 'ERROR' : 'WARN';
+      // console-message event: Electron changed this signature in v35. Old API
+      // (≤34) passed positional args (event, level:number, message, line,
+      // sourceId); new API (≥35) passes a single Event object with string
+      // `level` ('info'|'warning'|'error'|'debug'), `message`, `lineNumber`,
+      // `sourceId`. Support BOTH so this works whether or not the Electron bump
+      // is merged. Only surface warning+ to avoid flooding the log.
+      wc.on('console-message', (...args: any[]) => {
+        let label: 'WARN' | 'ERROR' | null = null;
+        let message = '';
+        let line: number | undefined;
+        let sourceId: unknown;
+        const first = args[0];
+        if (first && typeof first === 'object' && ('level' in first) && typeof first.level === 'string') {
+          // New (≥35) object form.
+          const lvl = first.level as string;
+          if (lvl !== 'warning' && lvl !== 'error') return;
+          label = lvl === 'error' ? 'ERROR' : 'WARN';
+          message = first.message ?? '';
+          line = first.lineNumber;
+          sourceId = first.sourceId;
+        } else {
+          // Old (≤34) positional form: (event, level, message, line, sourceId).
+          const level = args[1] as number;
+          if (typeof level !== 'number' || level < 2) return;
+          label = level === 3 ? 'ERROR' : 'WARN';
+          message = args[2] ?? '';
+          line = args[3];
+          sourceId = args[4];
+        }
         // sourceId can be a long file:// path; keep only the tail for readability.
         const src = typeof sourceId === 'string' ? sourceId.split('/').pop() : sourceId;
         console.error(`[Renderer:${tag}] console.${label} ${message} (${src}:${line})`);
       });
 
       wc.on('render-process-gone', (_event, details) => {
+        if (tag === 'launcher') {
+          this.appState.recordNativeOomTrace('launcher-render-process-gone', {
+            window: 'launcher',
+            webContentsId: wc.id,
+            rendererPid: wc.getOSProcessId(),
+            reason: typeof details?.reason === 'string' ? details.reason : 'unknown',
+            exitCode: typeof details?.exitCode === 'number' ? details.exitCode : 0,
+          });
+          this.appState.stopNativeOomContentTrace('launcher-render-process-gone');
+        }
         console.error(
           `[Renderer:${tag}] RENDER-PROCESS-GONE reason=${details?.reason} exitCode=${details?.exitCode}`,
         );
@@ -621,8 +748,22 @@ export class WindowHelper {
 
     // On Windows/Linux: intercept close and hide to tray instead of quitting,
     // unless the app is actually quitting (e.g. from tray "Quit" menu).
+    //
+    // DEV EXCEPTION (2026-07-10): in dev, hide-to-tray leaves a headless
+    // electron process alive after you close the window. When you then Ctrl+C
+    // the `npm start` terminal, Windows does not reliably deliver SIGINT/SIGTERM
+    // to that GUI process, so it survives as a ZOMBIE holding the single-instance
+    // lock, port 5180, and open natively.db-wal/-shm handles. The NEXT `npm start`
+    // then either self-exits on the lost lock or loads a dead dev server →
+    // "loads once, then stuck at logo/black forever." In dev we therefore let a
+    // window close actually quit the app, so no zombie survives between runs.
     if (process.platform !== 'darwin') {
       this.launcherWindow.on('close', (e) => {
+        if (isDev) {
+          // Let the close proceed and quit — no hide-to-tray in dev.
+          this.appState.setQuitting(true);
+          return;
+        }
         if (!this.appState.isQuitting()) {
           e.preventDefault();
           this.launcherWindow?.hide();
@@ -632,14 +773,24 @@ export class WindowHelper {
 
       // Sync maximize state to renderer so WindowControls stays in sync (Windows/Linux only)
       this.launcherWindow.on('maximize', () => {
-        this.launcherWindow?.webContents.send('window-maximized-changed', true);
+        const launcher = this.launcherWindow;
+      if (launcher && !launcher.isDestroyed()) {
+        this.appState.recordNativeOomOutboundIpc(launcher.webContents.id, 'window-maximized-changed', [true]);
+        launcher.webContents.send('window-maximized-changed', true);
+      }
       });
       this.launcherWindow.on('unmaximize', () => {
-        this.launcherWindow?.webContents.send('window-maximized-changed', false);
+        const launcher = this.launcherWindow;
+      if (launcher && !launcher.isDestroyed()) {
+        this.appState.recordNativeOomOutboundIpc(launcher.webContents.id, 'window-maximized-changed', [false]);
+        launcher.webContents.send('window-maximized-changed', false);
+      }
       });
     }
 
     this.launcherWindow.on('closed', () => {
+      this.appState.recordNativeOomTrace('launcher-window-closed', { window: 'launcher' });
+      this.appState.stopNativeOomContentTrace('launcher-window-closed');
       this.launcherWindow = null;
       // If launcher closes, we should probably quit app or close overlay
       if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
@@ -919,6 +1070,7 @@ export class WindowHelper {
 
       this.overlayWindow.setBounds(targetBounds);
       this.overlayBounds = this.overlayWindow.getBounds();
+      this.appState.recordNativeOomOutboundIpc(this.overlayWindow.webContents.id, 'ensure-expanded', []);
       this.overlayWindow.webContents.send('ensure-expanded');
 
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).
@@ -1029,6 +1181,28 @@ export class WindowHelper {
     // Hide Overlay SECOND
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
       this.overlayWindow.hide();
+    }
+
+    // ─── RE-ASSERT STEALTH AFTER THE ACTIVATING SHOW ───────────────────────
+    // The launcher is a REGULAR macOS window (no `type: 'panel'`, no
+    // skipTaskbar). show()+focus() above re-activates the app as a foreground
+    // app, which on macOS re-registers it and REVEALS the dock tile that
+    // app.dock.hide() had suppressed — silently breaking undetectable mode.
+    // This is the root cause of "the Natively icon appears in the dock after
+    // Stop meeting" (endMeeting swaps overlay→launcher via this method). It is
+    // intermittent because macOS coalesces/drops activation-policy changes.
+    //
+    // Fix it HERE — at the single choke point every launcher show funnels
+    // through (Stop meeting, screenshot restore, cold-start convergence) — so no
+    // caller can leak the tile. reassertUndetectableStealth() no-ops unless we
+    // are on darwin AND currently undetectable, and drives the dock back to
+    // hidden through the self-verifying _enforceDockState() loop (polls the OS
+    // ground truth app.dock.isVisible() and retries until it sticks), so a
+    // dropped or late dock op cannot defeat it. `inactive` shows (showInactive,
+    // no focus) don't foreground the app, but we re-assert anyway: it's cheap,
+    // idempotent, and guards against macOS revealing the tile on a bare show.
+    if (process.platform === 'darwin' && this.appState.getUndetectable()) {
+      this.appState.reassertUndetectableStealth();
     }
   }
 

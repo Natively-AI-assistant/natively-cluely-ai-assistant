@@ -17,7 +17,7 @@ const repoRoot = path.resolve(__dirname, '../../..');
 const src = fs.readFileSync(path.join(repoRoot, 'premium/electron/knowledge/ContextAssembler.ts'), 'utf8');
 
 describe('generateCandidateIntro leads with the candidate name', () => {
-  const fn = src.slice(src.indexOf('function generateCandidateIntro'), src.indexOf('function generateCandidateIntro') + 3400);
+  const fn = src.slice(src.indexOf('function generateCandidateIntro'), src.indexOf('function generateCandidateIntro') + 4200);
   test('the generation prompt requires opening with the name', () => {
     assert.match(fn, /OPEN WITH THE CANDIDATE'?S NAME/i, 'explicit name-lead rule present');
     assert.match(fn, /self-INTRODUCTION; omitting the name is wrong/i, 'rationale present');

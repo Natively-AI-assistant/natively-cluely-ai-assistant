@@ -100,3 +100,37 @@ describe('ProfileJitPromptBuilder', () => {
     assert.match(prompt.userPrompt, /&lt;unsafe &amp; value&gt;/);
   });
 });
+
+describe('ProfileJitPromptBuilder: seeder-leash (Campaign 3 founder §2.5)', () => {
+  test('seedCandidateBackground=false (default undefined omitted) emits NO seeder_leash block', () => {
+    const evidence = selectManualProfileEvidence({ question: 'what is your salary expectation', profile: PROFILE, jobDescription: null, source: 'manual_input' });
+    assert.ok(evidence);
+    const prompt = buildProfileJitPrompt({
+      question: 'what is your salary expectation',
+      answerType: evidence.answerType,
+      answerShape: evidence.answerShape,
+      sourceOwner: evidence.sourceOwner,
+      evidence,
+      seedCandidateBackground: false,
+    });
+    assert.match(prompt.userPrompt, /<seeder_leash>/,
+      'seeder-leash block MUST appear when seedCandidateBackground=false');
+    assert.match(prompt.userPrompt, /Do NOT open with a candidate self-introduction/,
+      'seeder-leash block must explicitly suppress candidate bio dumping');
+  });
+
+  test('seedCandidateBackground=true (legacy default) emits NO seeder_leash block', () => {
+    const evidence = selectManualProfileEvidence({ question: 'what is your name', profile: PROFILE, jobDescription: null, source: 'manual_input' });
+    assert.ok(evidence);
+    const prompt = buildProfileJitPrompt({
+      question: 'what is your name',
+      answerType: evidence.answerType,
+      answerShape: evidence.answerShape,
+      sourceOwner: evidence.sourceOwner,
+      evidence,
+      seedCandidateBackground: true,
+    });
+    assert.doesNotMatch(prompt.userPrompt, /<seeder_leash>/,
+      'seeder-leash block MUST be suppressed when seedCandidateBackground=true (legacy profile/jd behavior)');
+  });
+});

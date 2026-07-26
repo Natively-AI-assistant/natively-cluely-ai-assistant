@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useT } from '../../i18n';
 import { AlertCircle, ArrowRight, Loader, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getCalendarConnectErrorMessage } from '../../lib/calendarConnectError';
@@ -16,6 +17,7 @@ interface ConnectCalendarButtonProps extends React.ButtonHTMLAttributes<HTMLButt
 }
 
 const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className = '', variant = 'default', onConnect, ...props }) => {
+    const t = useT();
     const [loading, setLoading] = useState(false);
     const [connected, setConnected] = useState(false);
     const [connectError, setConnectError] = useState('');
@@ -209,7 +211,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                         </svg>
                     )}
 
-                    {loading ? 'Connecting...' : 'Connect calendar'}
+                    {loading ? t('Connecting...') : t('Connect calendar')}
 
                     {!loading && (
                         <ArrowRight

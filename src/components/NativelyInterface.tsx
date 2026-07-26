@@ -86,6 +86,7 @@ const CardCopyButton = ({
   isModernTheme?: boolean;
   isGlassTheme?: boolean;
 }) => {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     onCopy(text);
@@ -101,7 +102,7 @@ const CardCopyButton = ({
     <button
       onClick={handleCopy}
       className={`p-1 transition-colors duration-200 flex items-center justify-center ${buttonColorClass}`}
-      title="Copy answer"
+      title={t("Copy answer")}
     >
       {copied ? (
         <Check className="w-3.5 h-3.5 text-emerald-400" />
@@ -169,6 +170,7 @@ import 'katex/dist/katex.min.css';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import ReactMarkdown from 'react-markdown';
+import { useT } from '../i18n';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -314,8 +316,13 @@ const HighlightedCode = React.memo(
         </div>
         {/* No-wrap horizontal scroll: code line layout stays stable as the
                 canvas grows/shrinks. Without this, wrapped lines re-flow at every
-                spring tick, the block height jitters, and content below shifts. */}
-        <div className="bg-transparent overflow-x-auto">
+                spring tick, the block height jitters, and content below shifts.
+                w-full + min-w-0 keep the inner scroller contained — a flex/grid
+                child defaults to min-width:auto, which lets the <pre>'s intrinsic
+                min-content width stretch the surrounding card and ultimately the
+                chat viewport sideways. See MeetingDetails.tsx CodeHero for the
+                same pattern. */}
+        <div className="w-full min-w-0 bg-transparent overflow-x-auto">
           <SyntaxHighlighter
             language={resolved}
             style={codeTheme}
@@ -491,6 +498,7 @@ const MessageRow = React.memo(
     onCopy: _onCopy,
     renderMessageText,
   }: MessageRowProps) {
+    const t = useT();
     const isCodeMsg = msg.role === 'system' && (msg.isCode || msg.text.includes('```'));
     // bubbleMaxClass: user bubbles are tighter; system + code use the same width.
     const bubbleMaxClass =
@@ -500,13 +508,13 @@ const MessageRow = React.memo(
         ? 'max-w-[85%] p-0'
         : 'max-w-[85%] px-4 py-3';
     return (
-      <div className="w-full" {...(isCodeMsg ? { 'data-code-msg': 'true' } : {})}>
+      <div className="w-full min-w-0" {...(isCodeMsg ? { 'data-code-msg': 'true' } : {})}>
         <div
-          className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          className={`flex min-w-0 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
         >
           <div
             className={`
-              ${bubbleMaxClass} text-[15px] leading-relaxed relative group whitespace-pre-wrap
+              min-w-0 ${bubbleMaxClass} text-[15px] leading-relaxed relative group whitespace-pre-wrap
               ${
                 msg.role === 'user'
                   ? isLightTheme
@@ -525,7 +533,7 @@ const MessageRow = React.memo(
           >
             {msg.role === 'interviewer' && (
               <div className="flex items-center gap-1.5 mb-1 text-[10px] font-medium uppercase tracking-wider overlay-text-muted">
-                Interviewer
+                {t('Interviewer')}
                 {msg.isStreaming && (
                   <span className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />
                 )}
@@ -536,14 +544,14 @@ const MessageRow = React.memo(
                 className={`flex items-center gap-1 text-[10px] opacity-70 mb-1 border-b pb-1 ${isLightTheme ? 'border-black/10' : 'border-white/10'}`}
               >
                 <Image className="w-2.5 h-2.5" />
-                <span>Screenshot attached</span>
+                <span>{t('Screenshot attached')}</span>
               </div>
             )}
             {/* Correction header: this message fixes an earlier wrong answer. */}
             {msg.role === 'system' && msg.isCorrection && (
               <div className="flex items-center gap-1.5 mb-1.5 text-[11px] font-medium text-amber-500">
                 <span aria-hidden>↻</span>
-                <span>Corrected answer{msg.correctionNote ? ` — ${msg.correctionNote}` : ''}</span>
+                <span>{t('Corrected answer')}{msg.correctionNote ? ` — ${msg.correctionNote}` : ''}</span>
               </div>
             )}
             {renderMessageText(msg)}
@@ -553,7 +561,7 @@ const MessageRow = React.memo(
                 <span aria-hidden>✓</span>
                 <span>
                   {msg.codeVerified.language === 'verified'
-                    ? 'verified by running the code'
+                    ? t('verified by running the code')
                     : `verified · ${msg.codeVerified.passed}/${msg.codeVerified.total} test case${msg.codeVerified.total === 1 ? '' : 's'} passed`}
                 </span>
               </div>
@@ -580,6 +588,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const isGlassTheme = interfaceTheme === 'liquid-glass';
   const isModernTheme = interfaceTheme === 'modern';
   const shellRef = React.useRef<HTMLDivElement>(null);
+  const t = useT();
   const [isExpanded, setIsExpanded] = useState(true);
   const [inputValue, setInputValue] = useState('');
   const [availableSkills, setAvailableSkills] = useState<SkillSummary[]>([]);
@@ -1097,6 +1106,38 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   // Model Selection State
   const [currentModel, setCurrentModel] = useState<string>('gemini-3-flash-preview');
+  // Human-readable label for `currentModel`. Authoritative source is the
+  // `getCurrentLlmConfig.displayName` IPC field (always fresh, including for
+  // custom-provider UUIDs whose user-defined name can change while the
+  // overlay is open). Falls back to `currentModel` itself if the IPC has not
+  // resolved yet.
+  const [currentModelDisplayName, setCurrentModelDisplayName] = useState<string>('gemini-3-flash-preview');
+
+  const refreshCurrentModel = useCallback(async () => {
+    try {
+      const config = await window.electronAPI?.getCurrentLlmConfig?.();
+      if (!config) return;
+      // `modelId` is the stable identifier (UUID for custom providers).
+      setCurrentModel(config.modelId);
+      if (config.displayName) setCurrentModelDisplayName(config.displayName);
+    } catch {
+      // Non-fatal: keep last known values.
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshCurrentModel();
+  }, [refreshCurrentModel]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onModelChanged) return;
+    const unsubscribe = window.electronAPI.onModelChanged(() => {
+      // Re-fetch so displayName stays in sync with the active model — covers
+      // custom-provider renames that don't otherwise trigger a refresh.
+      refreshCurrentModel();
+    });
+    return () => unsubscribe();
+  }, [refreshCurrentModel]);
 
   // Dynamic Action Button Mode (Recap vs Brainstorm)
   const [actionButtonMode, setActionButtonMode] = useState<'recap' | 'brainstorm'>('recap');
@@ -1136,7 +1177,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const codeHeaderClass = 'overlay-code-header-surface';
   const codeHeaderTextClass = 'overlay-text-muted';
   const quickActionClass = 'overlay-chip-surface overlay-text-interactive';
-  const inputClass = `${isLightTheme ? 'focus:ring-black/10' : 'focus:ring-white/10'} overlay-input-surface overlay-input-text`;
+  const inputClass = `aurora-focus overlay-input-surface overlay-input-text`;
   const controlSurfaceClass = 'overlay-control-surface overlay-text-interactive';
 
   // PERF: hoist ReactMarkdown `components` maps for every streaming intent
@@ -1488,15 +1529,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       .setModel(modelId)
       .catch((err: any) => console.error('Failed to set model:', err));
   };
-
-  // Listen for default model changes from Settings
-  useEffect(() => {
-    if (!window.electronAPI?.onModelChanged) return;
-    const unsubscribe = window.electronAPI.onModelChanged((modelId: string) => {
-      setCurrentModel((prev) => (prev === modelId ? prev : modelId));
-    });
-    return () => unsubscribe();
-  }, []);
 
   // Global State Sync
   useEffect(() => {
@@ -2488,6 +2520,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const streamingRafRef    = useRef<number | null>(null);
   const streamingRenderModeRef = useRef<'imperative' | 'react-code'>('imperative');
   const streamingCodeRafRef = useRef<number | null>(null);
+  // PERF: onRAGStreamChunk previously called setMessages() (full array clone +
+  // per-token re-render) on every chunk — the same per-token cost the Gemini
+  // token stream above was already fixed for via rAF coalescing. RAG chunks
+  // come from the same SSE-derived async generator (ipcHandlers.ts `for await
+  // (const chunk of stream) event.sender.send(...)`), so a long meeting-recall
+  // answer hit the identical N-renders-per-answer cost. Buffer chunks in a ref
+  // and flush to state at most once per animation frame.
+  const ragChunkBufRef = useRef<string>('');
+  const ragChunkRafRef = useRef<number | null>(null);
   // Active chat stream id (audit finding #3). The main process emits chat tokens
   // on one channel from both the desktop and phone-mirror paths; this lets us drop
   // tokens/done from a superseded stream. null = no id adopted yet (back-compat).
@@ -3077,6 +3118,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceSuggestedAnswer((data) => {
+        // Phase 4 defense-in-depth (forensic-report §6b): drop a final answer
+        // belonging to a generation that's already been superseded by a newer
+        // one — same supersession guard the streaming token path applies via
+        // resolveLiveAnswerBatch. Id-less final answers (legacy answerLLM,
+        // code-hint, brainstorm) are always accepted.
+        const decision = resolveLiveAnswerBatch(
+          liveAnswerGenIdRef.current,
+          (data as { generationId?: number }).generationId,
+        );
+        liveAnswerGenIdRef.current = decision.activeId;
+        if (!decision.accept) return;
         setIsProcessing(false);
         pinAnswerPanel();
         finalizeStreamingByIntent('what_to_answer', data.answer);
@@ -3917,22 +3969,43 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     );
 
     // JIT RAG Stream listeners (for live meeting RAG responses)
+    //
+    // rAF-coalesced (see ragChunkBufRef/ragChunkRafRef decl above): chunks
+    // accumulate in a ref and flush to React state at most once per frame,
+    // instead of one setMessages() (full array clone) per chunk.
+    const cancelRagChunkRaf = () => {
+      if (ragChunkRafRef.current !== null) {
+        cancelAnimationFrame(ragChunkRafRef.current);
+        ragChunkRafRef.current = null;
+      }
+    };
+    const flushRagChunkBuffer = () => {
+      cancelRagChunkRaf();
+      if (!ragChunkBufRef.current) return;
+      const pending = ragChunkBufRef.current;
+      ragChunkBufRef.current = '';
+      setMessages((prev) => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg && lastMsg.isStreaming && lastMsg.role === 'system') {
+          const updated = [...prev];
+          const text = lastMsg.text + pending;
+          updated[prev.length - 1] = { ...lastMsg, text, isCode: text.includes('```') };
+          return updated;
+        }
+        return prev;
+      });
+    };
+
     if (window.electronAPI.onRAGStreamChunk) {
       cleanups.push(
         window.electronAPI.onRAGStreamChunk((data: { chunk: string }) => {
-          setMessages((prev) => {
-            const lastMsg = prev[prev.length - 1];
-            if (lastMsg && lastMsg.isStreaming && lastMsg.role === 'system') {
-              const updated = [...prev];
-              updated[prev.length - 1] = {
-                ...lastMsg,
-                text: lastMsg.text + data.chunk,
-                isCode: (lastMsg.text + data.chunk).includes('```'),
-              };
-              return updated;
-            }
-            return prev;
-          });
+          ragChunkBufRef.current += data.chunk;
+          if (ragChunkRafRef.current === null) {
+            ragChunkRafRef.current = requestAnimationFrame(() => {
+              ragChunkRafRef.current = null;
+              flushRagChunkBuffer();
+            });
+          }
         }),
       );
     }
@@ -3940,6 +4013,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (window.electronAPI.onRAGStreamComplete) {
       cleanups.push(
         window.electronAPI.onRAGStreamComplete(() => {
+          // Flush any chunk(s) still buffered for the current frame BEFORE
+          // marking the stream as done, so the final commit never drops the
+          // last few characters of the answer.
+          flushRagChunkBuffer();
           setIsProcessing(false);
           requestStartTimeRef.current = null;
           setMessages((prev) => {
@@ -3961,6 +4038,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (window.electronAPI.onRAGStreamError) {
       cleanups.push(
         window.electronAPI.onRAGStreamError((data: { error: string }) => {
+          flushRagChunkBuffer();
           setIsProcessing(false);
           requestStartTimeRef.current = null;
           setMessages((prev) => {
@@ -3979,6 +4057,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         }),
       );
     }
+    // Cleanup: cancel any pending RAF and drop buffered (unflushed) text if
+    // this effect tears down mid-stream (component unmount, deps change).
+    cleanups.push(() => {
+      cancelRagChunkRaf();
+      ragChunkBufRef.current = '';
+    });
 
     return () => cleanups.forEach((fn) => fn());
   }, [currentModel, queueToken, flushToken]); // Ensure tracking captures correct model
@@ -5731,8 +5815,8 @@ Provide only the answer, nothing else.`;
                     </span>
                     <button
                       type="button"
-                      aria-label="Pick a different browser tab"
-                      title="Capture a different tab"
+                      aria-label={t("Pick a different browser tab")}
+                      title={t("Capture a different tab")}
                       className="ml-0.5 rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-opacity"
                       onClick={() => { void openTabPicker(); }}
                     >
@@ -5740,7 +5824,7 @@ Provide only the answer, nothing else.`;
                     </button>
                     <button
                       type="button"
-                      aria-label="Dismiss captured page context"
+                      aria-label={t("Dismiss captured page context")}
                       className="ml-0.5 rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-opacity"
                       onClick={() => {
                         setPageContext(null);
@@ -5763,11 +5847,11 @@ Provide only the answer, nothing else.`;
                 <div className="relative no-drag mx-4 mt-1 mb-1 rounded-[12px] border border-white/10 bg-black/30 backdrop-blur-xl p-2 shadow-sm">
                   <div className="flex items-center justify-between px-1 pb-1.5">
                     <span className="text-[11px] font-medium overlay-text-primary">
-                      {tabPickerLoading ? 'Finding open tabs…' : 'Pick a tab to capture'}
+                      {tabPickerLoading ? t('Finding open tabs…') : t('Pick a tab to capture')}
                     </span>
                     <button
                       type="button"
-                      aria-label="Close tab picker"
+                      aria-label={t("Close tab picker")}
                       className="rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-white/10 transition-opacity"
                       onClick={() => setTabPicker(null)}
                     >
@@ -5776,7 +5860,7 @@ Provide only the answer, nothing else.`;
                   </div>
                   {!tabPickerLoading && tabPicker.length === 0 && (
                     <div className="px-1 py-1 text-[10px] overlay-text-muted">
-                      No capturable tabs — is the browser open and the extension connected?
+                      {t('No capturable tabs — is the browser open and the extension connected?')}
                     </div>
                   )}
                   <div className="flex flex-col gap-0.5 max-h-44 overflow-y-auto">
@@ -5820,8 +5904,8 @@ Provide only the answer, nothing else.`;
                       </div>
                       <span>
                         {systemAudioWarning.kind === 'screen-recording-permission'
-                          ? 'Screen Recording Permission Denied'
-                          : 'Audio Capture Issue'}
+                          ? t('Screen Recording Permission Denied')
+                          : t('Audio Capture Issue')}
                       </span>
                     </div>
                     <p className="text-[11px] text-yellow-600/70 dark:text-yellow-400/60 leading-snug pl-[26px]">
@@ -5868,16 +5952,16 @@ Provide only the answer, nothing else.`;
                             title={
                               deepLinkUrl
                                 ? wantsMicrophonePane
-                                  ? 'Open macOS Microphone privacy settings'
-                                  : 'Open macOS Screen Recording privacy settings'
-                                : 'Open Natively Settings'
+                                  ? t('Open macOS Microphone privacy settings')
+                                  : t('Open macOS Screen Recording privacy settings')
+                                : t('Open Natively Settings')
                             }
                           >
                             {deepLinkUrl
                               ? wantsMicrophonePane
-                                ? 'Open Mic Settings'
-                                : 'Open Screen Settings'
-                              : 'Open Settings'}
+                                ? t('Open Mic Settings')
+                                : t('Open Screen Settings')
+                              : t('Open Settings')}
                           </button>
                           {/*
                             UX2: in-app TCC repair button. macOS only.
@@ -5914,9 +5998,9 @@ Provide only the answer, nothing else.`;
                               }}
                               disabled={tccRepairing}
                               className="px-3 py-1.5 rounded-lg bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-700 dark:text-yellow-500 text-[11px] font-medium transition-all active:scale-95 border border-yellow-500/15 disabled:opacity-60 disabled:cursor-not-allowed"
-                              title="Reset macOS permission entries for Natively (you will need to grant them again after relaunch)"
+                              title={t("Reset macOS permission entries for Natively (you will need to grant them again after relaunch)")}
                             >
-                              {tccRepairing ? 'Resetting…' : 'Repair Permissions'}
+                              {tccRepairing ? t('Resetting…') : t('Repair Permissions')}
                             </button>
                           )}
                         </>
@@ -5925,7 +6009,7 @@ Provide only the answer, nothing else.`;
                     <button
                       onClick={() => setSystemAudioWarning(null)}
                       className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-yellow-600/50 hover:text-yellow-700 dark:text-yellow-500/50 dark:hover:text-yellow-400 transition-colors absolute top-1 right-1 opacity-0 group-hover/warning:opacity-100"
-                      title="Dismiss"
+                      title={t("Dismiss")}
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -5953,10 +6037,10 @@ Provide only the answer, nothing else.`;
                           />
                         </svg>
                       </div>
-                      <span>Transcription Not Configured</span>
+                      <span>{t('Transcription Not Configured')}</span>
                     </div>
                     <p className="text-[11px] text-orange-600/70 dark:text-orange-400/60 leading-snug pl-[26px]">
-                      No STT provider selected. Open Settings → Audio to pick one.
+                      {t('No STT provider selected. Open Settings → Audio to pick one.')}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -5966,12 +6050,12 @@ Provide only the answer, nothing else.`;
                       }}
                       className="px-3 py-1.5 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 text-orange-700 dark:text-orange-500 text-[11px] font-semibold transition-all active:scale-95 border border-orange-500/20 shadow-sm"
                     >
-                      Open Settings
+                      {t('Open Settings')}
                     </button>
                     <button
                       onClick={() => setSttNotConfigured(false)}
                       className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-orange-600/50 hover:text-orange-700 dark:text-orange-500/50 dark:hover:text-orange-400 transition-colors absolute top-1 right-1 opacity-0 group-hover/stt-warning:opacity-100"
-                      title="Dismiss"
+                      title={t("Dismiss")}
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -6015,7 +6099,7 @@ Provide only the answer, nothing else.`;
               {showAnswerPanel && (
                 <motion.div
                   ref={scrollContainerRef}
-                  className="relative z-10 flex-1 overflow-y-auto p-4 space-y-3 no-drag isolate"
+                  className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 no-drag isolate"
                   layout={false}
                   style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH }}
                 >
@@ -6072,7 +6156,7 @@ Provide only the answer, nothing else.`;
                           className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
                           style={{ animationDelay: '300ms' }}
                         />
-                        <span className="text-[10px] text-emerald-400/70 ml-1">Listening...</span>
+                        <span className="text-[10px] text-emerald-400/70 ml-1">{t('Listening...')}</span>
                       </div>
                     </div>
                   )}
@@ -6128,14 +6212,14 @@ Provide only the answer, nothing else.`;
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
                   style={appearance.chipStyle}
                 >
-                  <Pencil className="w-3 h-3 opacity-70" /> What to answer?
+                  <Pencil className="w-3 h-3 opacity-70" /> {t('What to answer?')}
                 </button>
                 <button
                   onClick={handleClarify}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
                   style={appearance.chipStyle}
                 >
-                  <MessageSquare className="w-3 h-3 opacity-70" /> Clarify
+                  <MessageSquare className="w-3 h-3 opacity-70" /> {t('Clarify')}
                 </button>
                 <button
                   onClick={actionButtonMode === 'brainstorm' ? handleBrainstorm : handleRecap}
@@ -6144,11 +6228,11 @@ Provide only the answer, nothing else.`;
                 >
                   {actionButtonMode === 'brainstorm' ? (
                     <>
-                      <Lightbulb className="w-3 h-3 opacity-70" /> Brainstorm
+                      <Lightbulb className="w-3 h-3 opacity-70" /> {t('Brainstorm')}
                     </>
                   ) : (
                     <>
-                      <RefreshCw className="w-3 h-3 opacity-70" /> Recap
+                      <RefreshCw className="w-3 h-3 opacity-70" /> {t('Recap')}
                     </>
                   )}
                 </button>
@@ -6157,7 +6241,7 @@ Provide only the answer, nothing else.`;
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
                   style={appearance.chipStyle}
                 >
-                  <HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question
+                  <HelpCircle className="w-3 h-3 opacity-70" /> {t('Follow Up Question')}
                 </button>
                 <button
                   onClick={handleAnswerNow}
@@ -6171,11 +6255,11 @@ Provide only the answer, nothing else.`;
                   {isManualRecording ? (
                     <>
                       <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                      Stop
+                      {t('Stop')}
                     </>
                   ) : (
                     <>
-                      <Zap className="w-3 h-3 opacity-70" /> Answer
+                      <Zap className="w-3 h-3 opacity-70" /> {t('Answer')}
                     </>
                   )}
                 </button>
@@ -6197,7 +6281,7 @@ Provide only the answer, nothing else.`;
                       <button
                         onClick={() => setAttachedContext([])}
                         className="p-1 rounded-full transition-colors overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
-                        title="Remove all"
+                        title={t("Remove all")}
                         style={appearance.iconStyle}
                       >
                         <X className="w-3.5 h-3.5" />
@@ -6216,7 +6300,7 @@ Provide only the answer, nothing else.`;
                               setAttachedContext((prev) => prev.filter((_, i) => i !== idx))
                             }
                             className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
-                            title="Remove"
+                            title={t("Remove")}
                           >
                             <X className="w-2.5 h-2.5 text-white" />
                           </button>
@@ -6224,7 +6308,7 @@ Provide only the answer, nothing else.`;
                       ))}
                     </div>
                     <span className="text-[10px] overlay-text-muted">
-                      Ask a question or click Answer
+                      {t('Ask a question or click Answer')}
                     </span>
                   </div>
                 )}
@@ -6240,23 +6324,23 @@ Provide only the answer, nothing else.`;
                     data-stealth-ignore="true"
                   >
                     <span className="overlay-text-primary flex-1">
-                      Stealth typing hotkey{' '}
+                      {t('Stealth typing hotkey')}{' '}
                       <kbd className="px-1 py-0.5 rounded bg-white/10 font-mono text-[10px]">
                         {stealthHotkeyConflict}
                       </kbd>{' '}
-                      is already in use. Click the input to activate, or rebind in Settings.
+                      {t('is already in use. Click the input to activate, or rebind in Settings.')}
                     </span>
                     <button
                       onClick={() => window.electronAPI.openSettingsTab('keybinds')}
                       className="px-2 py-1 rounded-md bg-rose-500/20 hover:bg-rose-500/30 transition-colors text-[11px] font-medium overlay-text-primary whitespace-nowrap"
                       data-stealth-ignore="true"
                     >
-                      Rebind
+                      {t('Rebind')}
                     </button>
                     <button
                       onClick={() => setStealthHotkeyConflict(null)}
                       className="px-1.5 py-1 rounded-md hover:bg-white/10 transition-colors text-[11px] overlay-text-muted"
-                      aria-label="Dismiss"
+                      aria-label={t("Dismiss")}
                       data-stealth-ignore="true"
                     >
                       ×
@@ -6276,20 +6360,19 @@ Provide only the answer, nothing else.`;
                     data-stealth-ignore="true"
                   >
                     <span className="overlay-text-primary flex-1">
-                      Stealth typing needs Accessibility access. Grant it in System Settings, then
-                      restart Natively.
+                      {t('Stealth typing needs Accessibility access. Grant it in System Settings, then restart Natively.')}
                     </span>
                     <button
                       onClick={() => window.electronAPI.stealthTapOpenSettings()}
                       className="px-2 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 transition-colors text-[11px] font-medium overlay-text-primary whitespace-nowrap"
                       data-stealth-ignore="true"
                     >
-                      Open Settings
+                      {t('Open Settings')}
                     </button>
                     <button
                       onClick={() => setStealthPermissionMissing(false)}
                       className="px-1.5 py-1 rounded-md hover:bg-white/10 transition-colors text-[11px] overlay-text-muted"
-                      aria-label="Dismiss"
+                      aria-label={t("Dismiss")}
                       data-stealth-ignore="true"
                     >
                       ×
@@ -6346,7 +6429,7 @@ Provide only the answer, nothing else.`;
                     // the CGEventTap, so typing routes through that path.
                     onMouseDown={blockInputFocus}
                     readOnly={stealthTapActive}
-                    className={`w-full border focus:ring-1 rounded-xl pl-3 pr-10 py-2.5 focus:outline-none transition-all duration-200 ease-sculpted text-[13px] leading-relaxed ${inputClass} ${stealthTapActive ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
+                    className={`w-full border rounded-xl pl-3 pr-10 py-2.5 text-[13px] leading-relaxed ${inputClass} ${stealthTapActive ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
                     style={appearance.inputStyle}
                   />
 
@@ -6366,7 +6449,7 @@ Provide only the answer, nothing else.`;
                   {/* Custom Rich Placeholder */}
                   {!inputValue && (
                     <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] overlay-text-muted">
-                      <span>Ask anything on screen or conversation, or</span>
+                      <span>{t('Ask anything on screen or conversation, or')}</span>
                       <div className="flex items-center gap-1 opacity-80">
                         {(
                           shortcuts.selectiveScreenshot || [getModifierSymbol('cmd'), 'Shift', 'H']
@@ -6382,7 +6465,7 @@ Provide only the answer, nothing else.`;
                           </React.Fragment>
                         ))}
                       </div>
-                      <span>for selective screenshot</span>
+                      <span>{t('for selective screenshot')}</span>
                     </div>
                   )}
 
@@ -6425,7 +6508,16 @@ Provide only the answer, nothing else.`;
                           const codexCliName = getCodexCliModelDisplayName(m);
                           if (codexCliName) return codexCliName;
                           if (m.startsWith('ollama-')) return m.replace('ollama-', '');
-                          if (m === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
+                          // For everything else, prefer the authoritative
+                          // displayName from `getCurrentLlmConfig` (handles
+                          // custom-provider UUIDs and any future model aliases
+                          // without each consumer needing its own resolver).
+                          // Falls back to the raw identifier if the IPC has
+                          // not yet resolved.
+                          if (currentModelDisplayName && currentModelDisplayName !== m) {
+                            return currentModelDisplayName;
+                          }
+                          if (m === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
                           if (m === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
                           if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
                           if (m === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';

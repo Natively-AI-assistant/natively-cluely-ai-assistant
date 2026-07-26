@@ -153,6 +153,10 @@ export class DatabaseManager {
      * methods are no-ops (db is null). Idempotent. Safe to call from
      * `before-quit` AND from the `window-all-closed` handler so the
      * launcher hides-to-tray path also releases the connection.
+     *
+     * This path DOES checkpoint (TRUNCATE) because it runs from a HEALTHY
+     * process (clean quit). Do NOT call this from a crash handler — use
+     * `closeWithoutCheckpoint()` there instead (see below).
      */
     public close(): void {
         if (!this.db) return;
@@ -163,6 +167,38 @@ export class DatabaseManager {
             this.db.close();
         } catch (e: any) {
             console.warn('[DatabaseManager] close failed:', e?.message || e);
+        }
+        this.db = null;
+    }
+
+    /**
+     * Crash-safe close: release the connection WITHOUT running a
+     * wal_checkpoint(TRUNCATE).
+     *
+     * REGRESSION FIX (2026-07-10): v2.8.1 wired an emergency
+     * checkpoint+close into every crash handler (uncaughtException,
+     * unhandledRejection, SIGTERM/SIGINT, render-process-gone, …). But a
+     * TRUNCATE checkpoint run from a CRASHING or half-initialized process
+     * — or interrupted by the macOS SIGTERM→SIGKILL race — can leave
+     * `natively.db-wal` / `natively.db-shm` half-truncated, which then
+     * BLOCKS the next `new Database()` open (SQLITE_BUSY on Windows'
+     * mandatory locks, or an unreconcilable WAL on macOS). That converted a
+     * one-time crash into a permanent "app never boots again" brick on both
+     * platforms. v2.7.0 never checkpointed on crash — it let SQLite's own
+     * automatic WAL recovery replay the log safely on the next open, which
+     * is exactly what we restore here.
+     *
+     * So on a crash we ONLY close the handle (to drop the OS lock) and let
+     * SQLite auto-recover the WAL next launch. `better_sqlite3`'s `close()`
+     * itself does NOT checkpoint (only our `close()` wrapper above does), so
+     * calling the raw handle close is checkpoint-free.
+     */
+    public closeWithoutCheckpoint(): void {
+        if (!this.db) return;
+        try {
+            this.db.close();
+        } catch (e: any) {
+            console.warn('[DatabaseManager] closeWithoutCheckpoint failed:', e?.message || e);
         }
         this.db = null;
     }
@@ -205,6 +241,56 @@ export class DatabaseManager {
         }
     }
 
+    /**
+     * Open the better-sqlite3 connection, self-healing a poisoned WAL sidecar
+     * left by an unclean prior exit / interrupted crash-time checkpoint.
+     *
+     * On the first open failure whose code indicates lock contention or a torn
+     * WAL (SQLITE_BUSY / SQLITE_IOERR / SQLITE_CORRUPT / SQLITE_NOTADB /
+     * SQLITE_CANTOPEN / SQLITE_PROTOCOL), delete the `-wal` and `-shm` sidecars
+     * (NOT the main `.db`, which holds the last committed state) and retry the
+     * open exactly once. If the retry also fails, the original error propagates
+     * so the ctor's catch degrades to `db: null` (meeting history/modes
+     * disabled) instead of hanging — same as before, but only as a last resort.
+     *
+     * See the REGRESSION FIX note on closeWithoutCheckpoint() for the root cause.
+     */
+    private openWithWalSelfHeal(): Database.Database {
+        try {
+            return new Database(this.dbPath);
+        } catch (openErr: any) {
+            const code = String(openErr?.code || '');
+            const healable =
+                /SQLITE_BUSY|SQLITE_IOERR|SQLITE_CORRUPT|SQLITE_NOTADB|SQLITE_CANTOPEN|SQLITE_PROTOCOL/.test(code) ||
+                /database is locked|disk I\/O error|file is not a database|malformed/i.test(String(openErr?.message || ''));
+            if (!healable) throw openErr;
+
+            console.warn(
+                `[DB-RECOVERY] initial open failed (${code || openErr?.message}); ` +
+                `clearing stale WAL sidecars (-wal/-shm) and retrying once. ` +
+                `This recovers an install bricked by an interrupted crash-time checkpoint.`
+            );
+            for (const suffix of ['-wal', '-shm'] as const) {
+                const sidecar = `${this.dbPath}${suffix}`;
+                try {
+                    if (fs.existsSync(sidecar)) {
+                        fs.unlinkSync(sidecar);
+                        console.warn(`[DB-RECOVERY] removed stale ${suffix} sidecar at ${sidecar}`);
+                    }
+                } catch (rmErr: any) {
+                    // If we cannot remove the sidecar (permissions, or a zombie
+                    // process still holds the handle on Windows), the retry will
+                    // fail and the original error propagates. Log and continue.
+                    console.warn(`[DB-RECOVERY] could not remove ${suffix} sidecar: ${rmErr?.message || rmErr}`);
+                }
+            }
+            // Retry ONCE. Let any error here propagate to the ctor catch.
+            const db = new Database(this.dbPath);
+            console.warn('[DB-RECOVERY] reopened successfully after clearing WAL sidecars ✅');
+            return db;
+        }
+    }
+
     private init() {
         try {
             console.log(`[DatabaseManager] Initializing database at ${this.dbPath}`);
@@ -230,12 +316,39 @@ export class DatabaseManager {
                 }
             }
 
-            this.db = new Database(this.dbPath);
+            // SELF-HEAL (2026-07-10): open the DB, and if the open fails
+            // because a prior crash left a poisoned WAL sidecar, clear the
+            // stale -wal/-shm and retry ONCE. Background: v2.8.1 ran a
+            // wal_checkpoint(TRUNCATE) from crash handlers; if that was
+            // interrupted it left natively.db-wal/-shm in a state that made
+            // this very open throw (SQLITE_BUSY on Windows' mandatory locks,
+            // SQLITE_IOERR/CORRUPT/NOTADB on a torn WAL) — permanently bricking
+            // every subsequent launch. The main .db holds the last COMMITTED
+            // state; a dirty/uncheckpointed WAL only contains not-yet-merged
+            // frames, so deleting the sidecars and reopening recovers the DB to
+            // its last consistent commit rather than leaving the app unbootable.
+            // Any user already bricked by a shipped v2.8.x build self-heals on
+            // the next launch with this — they do NOT need to hand-delete files.
+            this.db = this.openWithWalSelfHeal();
             this.db.pragma('journal_mode = WAL');
             // Hotfix 2026-07-09: with WAL enabled, background indexing workers
             // and foreground chat reads/writes can briefly contend. Waiting is
             // safer than throwing SQLITE_BUSY during startup or active sessions.
             this.db.pragma('busy_timeout = 5000');
+            // Enforce foreign keys on the shared connection. Several delete paths
+            // (deleteMeeting, deleteMode, deleteKnowledgePack) do a bare parent-row
+            // DELETE and rely ENTIRELY on `ON DELETE CASCADE` to reap child rows
+            // (transcripts, ai_interactions, chunks, chunk_summaries). SQLite ships
+            // with foreign_keys OFF per-connection, so those cascades are inert
+            // unless something enables the pragma. Historically the ONLY place that
+            // did was the premium KnowledgeDatabaseManager's constructor — meaning
+            // FK enforcement silently depended on the premium module loading. If
+            // premium failed to load (source-available build, packaging regression),
+            // every meeting/mode/pack delete would orphan its children. Enable it
+            // here, unconditionally, on the one shared connection all writes use.
+            // Must run OUTSIDE any transaction (SQLite no-ops `foreign_keys` if set
+            // mid-transaction) and BEFORE migrations — both hold here.
+            this.db.pragma('foreign_keys = ON');
             // Leave synchronous = FULL (the WAL default). NORMAL trades crash
             // durability for throughput — a power loss between commit and
             // fsync loses the transaction. The emergency-close path added in
@@ -255,7 +368,7 @@ export class DatabaseManager {
                 const walBytes = fs.existsSync(walPath) ? fs.statSync(walPath).size : 0;
                 const shmExists = fs.existsSync(shmPath);
                 if (walBytes >= 50 * 1024 * 1024) {
-                    console.warn(`[DB-RECOVERY] large WAL on open: ${walBytes} bytes at ${walPath} (previous session likely died mid-transaction). A TRUNCATE checkpoint is being run automatically.`);
+                    console.warn(`[DB-RECOVERY] large WAL on open: ${walBytes} bytes at ${walPath} (previous session likely died mid-transaction). SQLite will auto-recover it on this open; a manual TRUNCATE checkpoint runs only on the next clean quit.`);
                 } else if (walBytes >= 5 * 1024 * 1024) {
                     console.log(`[DB-RECOVERY] non-trivial WAL on open: ${walBytes} bytes at ${walPath}`);
                 }
@@ -743,6 +856,8 @@ export class DatabaseManager {
             this.db.pragma('user_version = 13');
         }
 
+        // NOTE: profile_custom_notes and profile_persona (v13→14, v14→15 below) are orphaned —
+        // the Custom Context / AI Persona feature they backed was removed. Kept non-destructively.
         // Version 13 → 14: Add profile_custom_notes table
         if (version < 14) {
             console.log('[DatabaseManager] Applying migration v13 → v14: Add profile_custom_notes table');
@@ -1154,65 +1269,178 @@ export class DatabaseManager {
             this.db.pragma('user_version = 23');
         }
 
+        // Version 23 → 24: Context OS memory safety (docs/context-os/, Phase 9).
+        // assistant_claims separates factual CLAIMS from conversational assistant
+        // messages: a claim starts `unverified` and only `verified` claims (with
+        // evidence pointers) may ever be re-used as evidence in a later turn.
+        // turn_context_contracts persists the privacy-safe per-turn source
+        // decision so contamination incidents can be reproduced from the trace.
+        // Both tables are ADDITIVE — no existing table or write path changes.
+        if (version < 24) {
+            console.log('[DatabaseManager] Applying migration v23 → v24: Context OS assistant_claims + turn_context_contracts');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS assistant_claims (
+                    claim_id TEXT PRIMARY KEY,
+                    turn_id TEXT NOT NULL,
+                    claim_text TEXT NOT NULL,
+                    source_owner TEXT NOT NULL,
+                    requested_property TEXT,
+                    validation_status TEXT NOT NULL DEFAULT 'unverified',
+                    evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    contradicted_by_claim_id TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_assistant_claims_turn ON assistant_claims(turn_id);
+                CREATE INDEX IF NOT EXISTS idx_assistant_claims_status ON assistant_claims(validation_status);
+
+                CREATE TABLE IF NOT EXISTS turn_context_contracts (
+                    turn_id TEXT PRIMARY KEY,
+                    surface TEXT NOT NULL,
+                    active_mode_id TEXT,
+                    answer_shape TEXT NOT NULL,
+                    source_owner TEXT NOT NULL,
+                    requested_property TEXT,
+                    allowed_sources_json TEXT NOT NULL DEFAULT '[]',
+                    forbidden_sources_json TEXT NOT NULL DEFAULT '[]',
+                    memory_write_policy_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_turn_contracts_surface ON turn_context_contracts(surface);
+            `);
+            this.db.pragma('user_version = 24');
+        }
+
+        // Version 24 → 25: persisted ModeSourceContract (real-custom-mode-repair,
+        // 2026-07-11). Closes the root cause of the P0 contamination incident:
+        // `documentGrounded`/`sourceAuthority` were previously RE-DERIVED on every
+        // turn by regex-matching the mode's free-text prompt, so a real user's
+        // natural phrasing silently failed to satisfy the detector and modes
+        // defaulted to `general_mixed` (everything allowed) with no user
+        // visibility. `source_contract_json` stores the explicit, typed,
+        // user-editable ModeSourceContract (electron/services/modeSourceContract.ts).
+        // NULL means "not yet migrated" — ModesManager migrates it once on first
+        // read and persists the result (never re-derives per-turn again).
+        if (version < 25) {
+            console.log('[DatabaseManager] Applying migration v24 → v25: Add modes.source_contract_json');
+            const hasColumn = this.db.prepare(`PRAGMA table_info(modes)`).all()
+                .some((col: any) => col.name === 'source_contract_json');
+            if (!hasColumn) {
+                this.db.exec(`ALTER TABLE modes ADD COLUMN source_contract_json TEXT`);
+            }
+            this.db.pragma('user_version = 25');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
     // ============================================
-    // Profile Custom Notes
+    // Context OS — assistant claims + turn contracts (v24, Phase 9)
     // ============================================
 
-    public getCustomNotes(): string {
-        if (!this.db) return '';
+    /** Insert an extracted assistant claim (default validation_status='unverified'). */
+    public saveAssistantClaim(claim: {
+        claimId: string;
+        turnId: string;
+        claimText: string;
+        sourceOwner: string;
+        requestedProperty?: string | null;
+        validationStatus?: 'unverified' | 'verified' | 'contradicted';
+        evidenceIds?: string[];
+    }): void {
+        if (!this.db) return;
+        // Context OS invariant (Phase 7): a VERIFIED claim MUST carry evidence
+        // IDs — a verified claim with no provenance is exactly the contamination
+        // trap the claims table exists to prevent. Enforce fail-closed at the DAO
+        // boundary: downgrade rather than store an unprovable "verified" row.
+        let status = claim.validationStatus ?? 'unverified';
+        const evidenceIds = claim.evidenceIds ?? [];
+        if (status === 'verified' && evidenceIds.length === 0) {
+            console.warn('[DatabaseManager] refusing to store verified claim without evidence IDs — downgrading to unverified');
+            status = 'unverified';
+        }
         try {
-            const row = this.db.prepare('SELECT content FROM profile_custom_notes WHERE id = 1').get() as { content: string } | undefined;
-            return row?.content ?? '';
+            this.db.prepare(`
+                INSERT OR REPLACE INTO assistant_claims
+                    (claim_id, turn_id, claim_text, source_owner, requested_property, validation_status, evidence_ids_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                claim.claimId,
+                claim.turnId,
+                claim.claimText,
+                claim.sourceOwner,
+                claim.requestedProperty ?? null,
+                status,
+                JSON.stringify(evidenceIds),
+            );
         } catch (e) {
-            console.error('[DatabaseManager] getCustomNotes failed:', e);
-            return '';
+            console.error('[DatabaseManager] saveAssistantClaim failed:', e);
         }
     }
 
-    public saveCustomNotes(content: string): void {
+    /** Only VERIFIED claims may be re-used as evidence (memory-safety invariant). */
+    public getVerifiedAssistantClaims(limit = 50): any[] {
+        if (!this.db) return [];
+        try {
+            return this.db.prepare(`
+                SELECT * FROM assistant_claims
+                WHERE validation_status = 'verified'
+                ORDER BY created_at DESC LIMIT ?
+            `).all(limit);
+        } catch (e) {
+            console.error('[DatabaseManager] getVerifiedAssistantClaims failed:', e);
+            return [];
+        }
+    }
+
+    /** Mark a stored claim contradicted by newer evidence (never deleted — audit trail). */
+    public markAssistantClaimContradicted(claimId: string, contradictedByClaimId?: string | null): void {
         if (!this.db) return;
         try {
-            this.db.prepare(
-                'INSERT INTO profile_custom_notes (id, content, updated_at) VALUES (1, ?, datetime(\'now\')) ON CONFLICT(id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at'
-            ).run(content);
+            this.db.prepare(`
+                UPDATE assistant_claims
+                SET validation_status = 'contradicted', contradicted_by_claim_id = ?
+                WHERE claim_id = ?
+            `).run(contradictedByClaimId ?? null, claimId);
         } catch (e) {
-            console.error('[DatabaseManager] saveCustomNotes failed:', e);
+            console.error('[DatabaseManager] markAssistantClaimContradicted failed:', e);
         }
     }
 
-    public getPersona(): string {
-        if (!this.db) return '';
-        try {
-            const row = this.db.prepare('SELECT content FROM profile_persona WHERE id = 1').get() as { content: string } | undefined;
-            return row?.content ?? '';
-        } catch (e) {
-            console.error('[DatabaseManager] getPersona failed:', e);
-            return '';
-        }
-    }
-
-    public savePersona(content: string): void {
+    /** Persist the privacy-safe per-turn contract snapshot (no content, source kinds only). */
+    public saveTurnContextContract(row: {
+        turnId: string;
+        surface: string;
+        activeModeId?: string | null;
+        answerShape: string;
+        sourceOwner: string;
+        requestedProperty?: string | null;
+        allowedSources: string[];
+        forbiddenSources: string[];
+        memoryWritePolicy: Record<string, boolean>;
+    }): void {
         if (!this.db) return;
         try {
-            this.db.prepare(
-                'INSERT INTO profile_persona (id, content, updated_at) VALUES (1, ?, datetime(\'now\')) ON CONFLICT(id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at'
-            ).run(content);
+            this.db.prepare(`
+                INSERT OR REPLACE INTO turn_context_contracts
+                    (turn_id, surface, active_mode_id, answer_shape, source_owner, requested_property,
+                     allowed_sources_json, forbidden_sources_json, memory_write_policy_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                row.turnId,
+                row.surface,
+                row.activeModeId ?? null,
+                row.answerShape,
+                row.sourceOwner,
+                row.requestedProperty ?? null,
+                JSON.stringify(row.allowedSources),
+                JSON.stringify(row.forbiddenSources),
+                JSON.stringify(row.memoryWritePolicy),
+            );
         } catch (e) {
-            console.error('[DatabaseManager] savePersona failed:', e);
+            console.error('[DatabaseManager] saveTurnContextContract failed:', e);
         }
     }
 
-    public clearProfilePersona(): void {
-        if (!this.db) return;
-        try {
-            this.db.prepare('UPDATE profile_persona SET content = \'\', updated_at = datetime(\'now\') WHERE id = 1').run();
-        } catch (e) {
-            console.error('[DatabaseManager] clearProfilePersona failed:', e);
-        }
-    }
 
     // ============================================
     // Modes CRUD
@@ -1238,19 +1466,19 @@ export class DatabaseManager {
         }
     }
 
-    public createMode(mode: { id: string; name: string; templateType: string; customContext: string }): void {
+    public createMode(mode: { id: string; name: string; templateType: string; customContext: string; sourceContractJson?: string }): void {
         if (!this.db) return;
         try {
             this.db.prepare(`
-                INSERT INTO modes (id, name, template_type, custom_context, is_active)
-                VALUES (?, ?, ?, ?, 0)
-            `).run(mode.id, mode.name, mode.templateType, mode.customContext);
+                INSERT INTO modes (id, name, template_type, custom_context, is_active, source_contract_json)
+                VALUES (?, ?, ?, ?, 0, ?)
+            `).run(mode.id, mode.name, mode.templateType, mode.customContext, mode.sourceContractJson ?? null);
         } catch (e) {
             console.error('[DatabaseManager] createMode failed:', e);
         }
     }
 
-    public updateMode(id: string, updates: { name?: string; templateType?: string; customContext?: string }): void {
+    public updateMode(id: string, updates: { name?: string; templateType?: string; customContext?: string; sourceContractJson?: string | null }): void {
         if (!this.db) return;
         try {
             if (updates.name !== undefined) {
@@ -1261,6 +1489,9 @@ export class DatabaseManager {
             }
             if (updates.customContext !== undefined) {
                 this.db.prepare('UPDATE modes SET custom_context = ? WHERE id = ?').run(updates.customContext, id);
+            }
+            if (updates.sourceContractJson !== undefined) {
+                this.db.prepare('UPDATE modes SET source_contract_json = ? WHERE id = ?').run(updates.sourceContractJson, id);
             }
         } catch (e) {
             console.error('[DatabaseManager] updateMode failed:', e);
@@ -1390,16 +1621,15 @@ export class DatabaseManager {
     /**
      * Explicit cascade delete for a knowledge_sources row and everything
      * hanging off it (packs, cards, entities, relations, index versions).
-     * This codebase never enables `PRAGMA foreign_keys = ON` (confirmed:
-     * zero references anywhere in electron/), so the `ON DELETE CASCADE`
-     * clauses declared on these tables in the v19→v20/v20→v21 migrations are
-     * inert — SQLite silently ignores FK actions when enforcement is off. A
-     * bare `DELETE FROM knowledge_sources` would leave every dependent row
-     * permanently orphaned (unreclaimable disk growth, since a re-upload
-     * mints a fresh random file id that never matches the orphaned rows).
-     * Deletes in dependency order (children before the pack, pack before
-     * the source) inside one transaction so a mid-delete failure can't
-     * leave a partially-cleaned pack.
+     *
+     * NOTE (2026-07-10): `PRAGMA foreign_keys = ON` is now enabled directly in
+     * initialize() on the shared connection, so the `ON DELETE CASCADE` clauses
+     * on these tables ARE enforced at runtime and a bare parent delete would
+     * cascade. This method's manual, dependency-ordered delete is kept as
+     * belt-and-suspenders: it is harmless with FK enforcement on, and it keeps
+     * this path correct (and self-documenting about the reap order) regardless of
+     * pragma state. Deletes children before the pack, pack before the source,
+     * inside one transaction so a mid-delete failure can't leave a partial pack.
      */
     public deleteKnowledgeSource(id: string): void {
         if (!this.db) return;

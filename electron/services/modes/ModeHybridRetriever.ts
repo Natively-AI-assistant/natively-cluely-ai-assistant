@@ -7,7 +7,7 @@ import { ModeReferenceFile } from '../ModesManager';
 import { VectorStore, ScoredChunk } from '../../rag/VectorStore';
 import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import Database from 'better-sqlite3';
-import { buildDocumentMap, sectionAwareChunksFromMap, sentenceAwareWindows, tabularChunks } from './DocumentMap';
+import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks } from './DocumentMap';
 // Round-8 (seminar-fix-2): use the SHARED 6-clause evidence rule so the hybrid
 // (live) path gives the model the SAME completeness + off-topic-redirect guidance
 // as the lexical path. Previously formatContext had a stale 1-sentence copy.
@@ -19,6 +19,7 @@ import {
     computeDocumentAnswerabilityScore,
     computeEvidenceCoverage,
     isBroadDocumentQuery,
+    normalizeDocumentGroundedRetrievalQuery,
     type DocumentQuestionShape,
 } from '../../llm/documentGroundedPrompt';
 
@@ -771,7 +772,20 @@ export class ModeHybridRetriever {
         candidateCount: number,
         usedFallback: boolean
     ): RetrievalConfidence {
-        const scoreOf = (c: ChunkCandidate) => this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT);
+        // Include the POSITIVE answerability contribution (2026-07-13), matching
+        // rankScore() and the score reported to the resolver. A chunk selected by
+        // a strong structural signal — e.g. a Table-of-Contents navigation chunk
+        // promoted for a "title of Chapter N" question, which has zero lexical or
+        // vector overlap with the query — is genuinely high-confidence. Judging it
+        // on bare combined(fts,vector) alone reported `weak_top`, which tripped the
+        // low-confidence gate and escalated to the local cross-encoder reranker for
+        // a query that did not need it (and, when the reranker model is unavailable
+        // in a headless/benchmark environment, that escalation stalls the turn).
+        // Adding only the positive answerability term never LOWERS a chunk's
+        // confidence, so a genuinely weak retrieval still trips the gate. Generic:
+        // no document, entity, or question text is special-cased.
+        const scoreOf = (c: ChunkCandidate) =>
+            this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT) + Math.max(0, c.answerabilityScore ?? 0);
         const topScore = sorted.length > 0 ? scoreOf(sorted[0]) : 0;
         const secondScore = sorted.length > 1 ? scoreOf(sorted[1]) : 0;
         const margin = topScore - secondScore;
@@ -962,8 +976,12 @@ export class ModeHybridRetriever {
             };
         }
 
-        // Get query words for FTS scoring
-        const queryText = query.trim();
+        // Keep the raw user question outside this retriever. Document-grounded
+        // ranking uses only its derived factual query so a conversational wrapper
+        // cannot dilute lexical, semantic, or section-planner relevance.
+        const queryText = (forceDocumentGrounding
+            ? normalizeDocumentGroundedRetrievalQuery(query)
+            : query).trim();
         const queryWords = new Set(wordsOf(queryText));
 
         // Zero-token query short-circuit: if the user input collapses to no
@@ -1014,13 +1032,23 @@ export class ModeHybridRetriever {
 
         const usingLexicalForLocalManualQuery = this.shouldUseLexicalForLocalManualQuery(hasTranscript);
 
+        const h4StageTrace = process.env.NATIVELY_E2E === '1'
+            && process.env.NATIVELY_H4_STAGE_TRACE === '1';
+        const h4StartedAt = Date.now();
+        const markH4HybridStage = (stage: string, details: Record<string, unknown> = {}) => {
+            if (h4StageTrace) console.log('[TRACE:H4-HYBRID]', JSON.stringify({ stage, atMs: Date.now() - h4StartedAt, ...details }));
+        };
         // Try hybrid retrieval first, fall back to lexical-only. Keyless/manual
         // local-ONNX query embedding is intentionally treated like an unavailable
         // embedding provider to reduce crash-prone native memory pressure.
+        markH4HybridStage('ranking_enter', { embeddingAvailable: this.isEmbeddingAvailable(), usingLexicalForLocalManualQuery });
         if (this.isEmbeddingAvailable() && !usingLexicalForLocalManualQuery) {
             try {
+                markH4HybridStage('perform_hybrid_enter', { candidateCount: allCandidates.length });
                 candidates = await this.performHybridRetrieval(allCandidates, queryWords, queryText, adaptiveThreshold, files);
+                markH4HybridStage('perform_hybrid_exit', { candidateCount: candidates.length });
             } catch (error) {
+                markH4HybridStage('perform_hybrid_error', { message: error instanceof Error ? error.message : String(error) });
                 console.warn('[ModeHybridRetriever] Hybrid retrieval failed, falling back to lexical:', error);
                 this.emitFallbackTelemetry({
                     reason: 'hybrid_threw',
@@ -1046,8 +1074,105 @@ export class ModeHybridRetriever {
             candidates = this.performLexicalRetrieval(allCandidates, queryWords, adaptiveThreshold);
         }
 
+        markH4HybridStage('ranking_complete', { candidateCount: candidates.length });
         if (forceDocumentGrounding) {
-            candidates = this.applyAnswerabilityScores(candidates, queryText, queryShape);
+            // Preserve the Document Map's structural routing in the hybrid path.
+            // The lexical retriever already uses this advisory section signal; omitting
+            // it here meant the canonical Context OS resolver could retrieve a
+            // topically similar section while excluding the exact table/subsection.
+            markH4HybridStage('document_map_enter', { fileCount: files.length });
+            const sectionTargets = files.flatMap((file) => {
+                const map = buildDocumentMap(file.content);
+                return map.hasToc ? resolveTargetSections(queryText, map) : [];
+            });
+            const uniqueSectionTargets = [...new Set(sectionTargets)];
+            markH4HybridStage('document_map_exit', {
+                targetCount: uniqueSectionTargets.length,
+                targets: uniqueSectionTargets,
+            });
+
+            // Targeted-section restore (2026-07-13): resolveTargetSections is a
+            // strong, precise routing signal — it maps "what working voltage is
+            // listed for Mercury X1?" to §2.3.2 (Technical Specifications). But a
+            // TABLE section has low natural-language embedding similarity to the
+            // question, so its chunk can fall below the admission floor and be
+            // dropped BEFORE the section-target boost in applyAnswerabilityScores
+            // can act on it (the boost cannot rescue a non-admitted chunk). Restore
+            // any targeted section's chunks from the full pool so the boost applies.
+            // Mirrors the navigation restore below; generic (no document/entity text).
+            if (uniqueSectionTargets.length > 0) {
+                const admitted = new Set(candidates.map((c) => `${c.sourceId}:${c.chunkIndex}`));
+                const matchesTarget = (text: string): boolean => {
+                    const section = text.match(/^\[Section\s+([\d.]+)\s*\|/)?.[1];
+                    if (!section) return false;
+                    return uniqueSectionTargets.some((t) => section === t || section.startsWith(`${t}.`));
+                };
+                for (const candidate of allCandidates) {
+                    if (!matchesTarget(candidate.text)) continue;
+                    const key = `${candidate.sourceId}:${candidate.chunkIndex}`;
+                    if (admitted.has(key)) continue;
+                    candidates.push({ ...candidate });
+                    admitted.add(key);
+                }
+            }
+
+            markH4HybridStage('answerability_enter', { candidateCount: candidates.length });
+            candidates = this.applyAnswerabilityScores(candidates, queryText, queryShape, uniqueSectionTargets);
+            markH4HybridStage('answerability_exit', { candidateCount: candidates.length });
+
+            // A Table of Contents is navigation evidence, not topical evidence.
+            // It is excluded from routine section ranking above, then explicitly
+            // promoted only when the question directly identifies an entry or a
+            // chapter number. This gives chapter-title and printed-page questions
+            // their source while preserving the ToC-fragment protections for all
+            // ordinary document questions.
+            //
+            // GATE (2026-07-13): only a genuine STRUCTURAL/navigation question may
+            // promote the ToC chunk. `selectTableOfContentsEntries` matches on a
+            // shared title word, so a topical question that merely names a section
+            // ("What working voltage is listed for Mercury X1?" — "Mercury X1" is a
+            // ToC entry title) would otherwise pull the navigation chunk to the top
+            // (+1.2) and starve the real spec section that actually holds the value.
+            // classifyDocumentQuestionShape cleanly separates the two: title/page/
+            // chapter-count questions are 'document_structure_answer'; a spec-value
+            // question is 'lecture_answer'. Generic — no document/entity/title text
+            // is referenced.
+            const isStructuralQuery = queryShape === 'document_structure_answer';
+            const navigationEntriesByFile = new Map<string, Set<string>>();
+            if (isStructuralQuery) {
+                for (const file of files) {
+                    const entries = selectTableOfContentsEntries(queryText, buildDocumentMap(file.content));
+                    if (entries.length > 0) navigationEntriesByFile.set(file.id, new Set(entries));
+                }
+            }
+            if (navigationEntriesByFile.size > 0) {
+                // The lexical/vector admission floor runs before answerability
+                // scoring. A question such as "What is the title of Chapter 3?"
+                // may have no literal overlap with its `3 Research Methodology`
+                // entry, so restore that directly-matched navigation candidate
+                // from the complete pool before applying the routing boost.
+                const admitted = new Set(candidates.map((candidate) => `${candidate.sourceId}:${candidate.chunkIndex}`));
+                for (const candidate of allCandidates) {
+                    if (!candidate.text.startsWith('[Table of Contents |')) continue;
+                    const entries = navigationEntriesByFile.get(candidate.sourceId);
+                    if (!entries || ![...entries].some((entry) => candidate.text.includes(entry))) continue;
+                    const key = `${candidate.sourceId}:${candidate.chunkIndex}`;
+                    if (!admitted.has(key)) {
+                        candidates.push({ ...candidate, ftsScore: 0, vectorScore: 0 });
+                        admitted.add(key);
+                    }
+                }
+                candidates = candidates.map((candidate) => {
+                    if (!candidate.text.startsWith('[Table of Contents |')) return candidate;
+                    const entries = navigationEntriesByFile.get(candidate.sourceId);
+                    if (!entries || ![...entries].some((entry) => candidate.text.includes(entry))) return candidate;
+                    return {
+                        ...candidate,
+                        answerabilityScore: (candidate.answerabilityScore ?? 0) + 1.2,
+                        answerabilityBoosts: [...(candidate.answerabilityBoosts ?? []), 'table_of_contents_navigation_match'],
+                    };
+                });
+            }
         }
 
         // Sort by combined score descending, layered with answerability for
@@ -1085,11 +1210,34 @@ export class ModeHybridRetriever {
         if (allowRerank) {
             const gate = confidence
                 ?? this.computeConfidence(candidates, queryWords.size, allCandidates.length, usedFallback);
-            if (gate.lowConfidence) {
-                const escalated = await this.maybeRerankCandidates(queryText, candidates);
-                if (escalated) {
-                    candidates = escalated;
-                    reranked = true;
+            const lowConfidence = gate.lowConfidence === true;
+            markH4HybridStage('rerank_gate', { lowConfidence, candidateCount: candidates.length, hasOverride: Boolean(this.rerankerOverride) });
+            if (lowConfidence) {
+                // A manual-chat answer has a fixed first-useful deadline. The local
+                // cross-encoder is optional ranking refinement, so it must never
+                // consume that whole deadline and prevent a lexical/evidence-pack
+                // answer from reaching the provider. Keep its late result isolated
+                // rather than awaiting it on the critical path.
+                const RERANK_BUDGET_MS = 1200;
+                markH4HybridStage('rerank_enter', { candidateCount: candidates.length, budgetMs: RERANK_BUDGET_MS });
+                const rerankPromise = this.maybeRerankCandidates(queryText, candidates);
+                let rerankTimer: NodeJS.Timeout | undefined;
+                const raced = await Promise.race([
+                    rerankPromise.then((value) => ({ value, timedOut: false })),
+                    new Promise<{ value: ChunkCandidate[] | null; timedOut: boolean }>((resolve) => {
+                        rerankTimer = setTimeout(() => resolve({ value: null, timedOut: true }), RERANK_BUDGET_MS);
+                    }),
+                ]);
+                if (rerankTimer) clearTimeout(rerankTimer);
+                if (raced.timedOut) {
+                    markH4HybridStage('rerank_timeout', { budgetMs: RERANK_BUDGET_MS });
+                    rerankPromise.catch(() => { /* late optional rerank never rejects the turn */ });
+                } else {
+                    markH4HybridStage('rerank_exit', { reranked: Boolean(raced.value), candidateCount: raced.value?.length ?? candidates.length });
+                    if (raced.value) {
+                        candidates = raced.value;
+                        reranked = true;
+                    }
                 }
             }
         }
@@ -1097,12 +1245,14 @@ export class ModeHybridRetriever {
         // Deduplicate: keep highest-scoring chunk per file (default), or per
         // section when document-grounded (preserves multi-section answers).
         const deduped = this.deduplicateChunks(candidates, reranked, forceDocumentGrounding);
+        markH4HybridStage('dedupe_complete', { candidateCount: deduped.length });
 
         // Enforce token budget. For document-grounded modes with MULTIPLE files,
         // guarantee each file contributes its best chunk so a large dataset can't
         // starve a small one out of the retrieved set.
         const guaranteePerFile = forceDocumentGrounding && files.length > 1;
         const selected = this.enforceTokenBudget(deduped, tokenBudget, reranked, topK, guaranteePerFile, forceDocumentGrounding);
+        markH4HybridStage('selection_complete', { chunkCount: selected.length });
 
         // Format output with citations
         const formattedContext = this.formatContext(selected);
@@ -1143,7 +1293,7 @@ export class ModeHybridRetriever {
                     fileName: c.fileName,
                     text: c.text,
                     chunkIndex: c.chunkIndex,
-                    score: this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT),
+                    score: this.reportedDocGroundedScore(c),
                     ftsScore: c.ftsScore,
                     vectorScore: c.vectorScore,
                     trustLevel: 'untrusted_reference',
@@ -1452,17 +1602,30 @@ export class ModeHybridRetriever {
         candidates: ChunkCandidate[],
         queryText: string,
         queryShape: DocumentQuestionShape,
+        sectionTargets: string[] = [],
     ): ChunkCandidate[] {
+        const sectionBoost = (text: string): number => {
+            const section = text.match(/^\[Section\s+([\d.]+)\s*\|/)?.[1];
+            if (!section) return 0;
+            const targetIndex = sectionTargets.findIndex((target) => section === target || section.startsWith(`${target}.`));
+            if (targetIndex < 0) return 0;
+            const depth = Math.max(0, section.split('.').length - sectionTargets[targetIndex].split('.').length);
+            const depthWeight = depth === 0 ? 1 : depth === 1 ? 1.1 : Math.pow(0.7, depth);
+            return Math.min(0.4, 0.35 * Math.pow(0.6, targetIndex) * depthWeight);
+        };
         const scored = candidates.map(c => {
             const a = computeDocumentAnswerabilityScore({
                 question: queryText,
                 queryShape,
                 candidateText: c.text,
             });
+            const targetBoost = sectionBoost(c.text);
             return {
                 ...c,
-                answerabilityScore: a.score,
-                answerabilityBoosts: a.boosts,
+                answerabilityScore: a.score + targetBoost,
+                answerabilityBoosts: targetBoost > 0
+                    ? [...a.boosts, `target_section:${targetBoost.toFixed(2)}`]
+                    : a.boosts,
                 answerabilityPenalties: a.penalties,
             };
         });
@@ -1499,6 +1662,32 @@ export class ModeHybridRetriever {
             return typeof c.rerankScore === 'number' ? c.rerankScore : Number.NEGATIVE_INFINITY;
         }
         return this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT) + (c.answerabilityScore ?? 0);
+    }
+
+    /**
+     * Confidence reported to the caller (Context OS EvidenceResolver) for a
+     * document-grounded chunk.
+     *
+     * WHY THIS EXISTS (2026-07-13): the doc-grounded path selects chunks by
+     * `rankScore` = combined(fts,vector) + answerabilityScore, but historically
+     * REPORTED only combined(fts,vector). Structural-navigation evidence — a
+     * Table-of-Contents chunk promoted purely by the answerability boost — is
+     * admitted with ftsScore/vectorScore = 0 (it has no lexical overlap with a
+     * query like "the title of Chapter 2"), so it was reported to the resolver
+     * with confidence 0 and fell below MIN_ANSWER_CONFIDENCE → the turn refused
+     * a fact the ToC plainly contains. The page-number ToC questions only
+     * survived because their entity string overlapped the ToC text lexically.
+     *
+     * FIX: report the composite score that actually selected the chunk, adding
+     * ONLY the positive answerability contribution. This restores the dropped
+     * structural/answerability confidence without ever LOWERING a chunk's score
+     * — an absent-fact chunk (whose answerability is zero or negative) still
+     * reports its bare retrieval score and still refuses. Generic: no document,
+     * entity, or question text is referenced.
+     */
+    private reportedDocGroundedScore(c: ChunkCandidate): number {
+        const base = this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT);
+        return base + Math.max(0, c.answerabilityScore ?? 0);
     }
 
     /**

@@ -1,6 +1,7 @@
 import React from "react"
 import ReactDOM from "react-dom/client"
 import App from "./App"
+import { LanguageProvider } from "./i18n"
 import "./index.css"
 
 // ── Renderer crash/hang diagnostics ─────────────────────────────────────────
@@ -27,6 +28,12 @@ window.addEventListener('unhandledrejection', (event) => {
 console.log('[renderer] main.tsx evaluating');
 
 const THEME_CACHE_KEY = 'natively_resolved_theme';
+const launcherIsolation = new URLSearchParams(window.location.search).get('isolate');
+
+if (launcherIsolation === 'shell') {
+  // eslint-disable-next-line no-console
+  console.warn('[LeakTest] launcher shell isolation active — React root intentionally skipped');
+} else {
 
 // Set platform attribute synchronously — before React renders — so CSS selectors
 // like html[data-platform="win32"] work immediately without a flash on first paint.
@@ -61,7 +68,9 @@ try {
   } else {
     ReactDOM.createRoot(rootEl).render(
       <React.StrictMode>
-        <App />
+        <LanguageProvider>
+          <App />
+        </LanguageProvider>
       </React.StrictMode>
     );
     // eslint-disable-next-line no-console
@@ -72,4 +81,5 @@ try {
   // Log it so the failure has a trace in natively_debug.log instead of nothing.
   // eslint-disable-next-line no-console
   console.error('[renderer] FATAL: React mount threw', err?.stack ?? err?.message ?? String(err));
+}
 }

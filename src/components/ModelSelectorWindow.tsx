@@ -144,9 +144,12 @@ const ModelSelectorWindow = () => {
 
                 // 4. Get Current Active Model
                 const config = await window.electronAPI?.getCurrentLlmConfig?.(); // Get runtime model
-                if (config && config.model) {
-                    setCurrentModel(config.model);
-                    localStorage.setItem('cached-current-model', config.model);
+                if (config && config.modelId) {
+                    // Compare on `modelId` (stable identifier) — using `displayName`
+                    // or the legacy `model` would mismatch against option IDs and
+                    // hide the selected checkmark on the custom-provider row.
+                    setCurrentModel(config.modelId);
+                    localStorage.setItem('cached-current-model', config.modelId);
                 }
 
             } catch (err) {

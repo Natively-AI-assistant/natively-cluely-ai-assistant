@@ -22,6 +22,7 @@
 // trivially testable and safe on the hot path.
 
 import type { AnswerType, AnswerSource } from './AnswerPlanner';
+import type { ModeSourceContract } from '../services/modeSourceContract';
 
 /** Mirror of ModesManager's ModeTemplateType (kept local so this module stays
  *  pure and AnswerPlanner never imports from services/). Structurally identical
@@ -33,7 +34,15 @@ export type ModeTemplateType =
     | 'recruiting'
     | 'team-meet'
     | 'lecture'
-    | 'technical-interview';
+    | 'technical-interview'
+    // Campaign-3 (fix/answer-policy-engine, 2026-07-19): 8th built-in mode.
+    // 'seminar' enforces `evidencePreference=required` + `say_not_found_then_answer_general`
+    // (the founder's strictest profile). Mirrored in three places:
+    // electron/services/ModesManager.ts (canonical) and
+    // electron/services/modeSourceContract.ts (ContractTemplateType).
+    // Drift is guarded by the type system — a fourth site that uses the
+    // union without updating would compile-error.
+    | 'seminar';
 
 /** The slice of the active mode the planner needs. Built by
  *  ModesManager.getActiveModeInfo() (cached) and threaded through
@@ -53,6 +62,8 @@ export interface ActiveModeInfo {
      * files authoritative and at least one reference file is available.
      */
     documentGroundedCustomModeActive?: boolean;
+    /** The mode's persisted, explicit source policy (real-custom-mode-repair). */
+    sourceContract?: ModeSourceContract;
 }
 
 export interface ModeContextProfile {
@@ -89,6 +100,11 @@ const NEUTRAL: ModeContextProfile = {
  *   existing profile-aware fallback already routes candidate-directed questions
  *   to profile types (resume/JD grounded), which is the right behavior in an
  *   interview context; forcing a type here would only lose information.
+ * - seminar: NEUTRAL-equivalent (lecture_answer floor) — the existing
+ *   reference_files_primary authority for document-grounded modes is what we
+ *   want (lecture_answer floor also fits). Strictness is owned by
+ *   `groundingProfile` on the contract, not by a separate answerType here.
+ *   (Campaign-3, 2026-07-19.)
  */
 export const MODE_CONTEXT_PROFILES: Record<ModeTemplateType, ModeContextProfile> = {
     'general': NEUTRAL,
@@ -109,6 +125,15 @@ export const MODE_CONTEXT_PROFILES: Record<ModeTemplateType, ModeContextProfile>
     'team-meet': {
         fallbackLiveAnswerType: 'general_meeting_answer',
         fallbackManualAnswerType: 'general_meeting_answer',
+    },
+    'seminar': {
+        // Ambiguous live turns in Seminar mode default to file-grounded
+        // lecture_answer (which requires reference_files and forbids resume/jd/
+        // negotiation — exactly the strictest contract). The groundingProfile
+        // (required / say_not_found_then_answer_general) is layered on top by
+        // TurnPlanner, not by changing this answerType.
+        fallbackLiveAnswerType: 'lecture_answer',
+        fallbackManualAnswerType: 'lecture_answer',
     },
 };
 

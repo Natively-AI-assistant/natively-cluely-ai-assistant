@@ -1,0 +1,4955 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "fileName": "institutional_thesis.pdf",
+    "binarySha256": "67e8206533b425d63cda1627ed9f6c2cbbcb2506051bf6c415c650026a28afb3",
+    "parser": "pdf-parse/PDFParse.getText",
+    "physicalPageCount": 66,
+    "extractedCharCount": 127403
+  },
+  "splitCounts": {
+    "development": 140,
+    "validation": 30,
+    "holdout": 30
+  },
+  "cases": [
+    {
+      "id": "THESIS-001",
+      "sourceFactId": "fact:meta-author",
+      "question": "Who is the author of the thesis?",
+      "split": "development",
+      "category": "metadata",
+      "rubric": {
+        "requiredFacts": [
+          "Alberto Dian"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          1
+        ]
+      }
+    },
+    {
+      "id": "THESIS-002",
+      "sourceFactId": "fact:meta-title",
+      "question": "What is the full title of the thesis?",
+      "split": "development",
+      "category": "metadata",
+      "rubric": {
+        "requiredFacts": [
+          "Towards Connected Intelligence"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          1
+        ]
+      }
+    },
+    {
+      "id": "THESIS-003",
+      "sourceFactId": "fact:meta-programme",
+      "question": "What degree programme is listed for the thesis?",
+      "split": "development",
+      "category": "metadata",
+      "rubric": {
+        "requiredFacts": [
+          "ICT Innovation"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          3
+        ]
+      }
+    },
+    {
+      "id": "THESIS-004",
+      "sourceFactId": "fact:meta-major",
+      "question": "What is the listed major or specialization?",
+      "split": "development",
+      "category": "metadata",
+      "rubric": {
+        "requiredFacts": [
+          "Autonomous systems and Intelligent Robots"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          3
+        ]
+      }
+    },
+    {
+      "id": "THESIS-005",
+      "sourceFactId": "fact:meta-supervisor",
+      "question": "Who supervised the thesis?",
+      "split": "development",
+      "category": "metadata",
+      "rubric": {
+        "requiredFacts": [
+          "Ville Kyrki"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          3
+        ]
+      }
+    },
+    {
+      "id": "THESIS-006",
+      "sourceFactId": "fact:meta-advisor-one",
+      "question": "Name one advisor listed on the thesis title page.",
+      "split": "development",
+      "category": "metadata",
+      "rubric": {
+        "requiredFacts": [
+          "Massimiliano Maule"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          3
+        ]
+      }
+    },
+    {
+      "id": "THESIS-007",
+      "sourceFactId": "fact:meta-advisor-two",
+      "question": "Name the other advisor listed on the thesis title page.",
+      "split": "development",
+      "category": "metadata",
+      "rubric": {
+        "requiredFacts": [
+          "Davide Brunelli"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          3
+        ]
+      }
+    },
+    {
+      "id": "THESIS-008",
+      "sourceFactId": "fact:meta-partner",
+      "question": "What collaborative partner is named on the title page?",
+      "split": "development",
+      "category": "metadata",
+      "rubric": {
+        "requiredFacts": [
+          "Huawei Munich Research Center"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          3
+        ]
+      }
+    },
+    {
+      "id": "THESIS-009",
+      "sourceFactId": "fact:meta-date",
+      "question": "What date is listed for the thesis?",
+      "split": "development",
+      "category": "metadata",
+      "rubric": {
+        "requiredFacts": [
+          "21 June 2025"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          3
+        ]
+      }
+    },
+    {
+      "id": "THESIS-010",
+      "sourceFactId": "fact:meta-language",
+      "question": "What language is the thesis written in?",
+      "split": "development",
+      "category": "metadata",
+      "rubric": {
+        "requiredFacts": [
+          "English"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          3
+        ]
+      }
+    },
+    {
+      "id": "THESIS-011",
+      "sourceFactId": "fact:meta-license",
+      "question": "What Creative Commons license covers this work?",
+      "split": "development",
+      "category": "metadata",
+      "rubric": {
+        "requiredFacts": [
+          "Attribution-NonCommercial-ShareAlike",
+          "4.0 Interna"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          2
+        ]
+      }
+    },
+    {
+      "id": "THESIS-012",
+      "sourceFactId": "fact:meta-keywords",
+      "question": "Name two keywords listed for the thesis.",
+      "split": "development",
+      "category": "metadata",
+      "rubric": {
+        "requiredFacts": [
+          "Embodied AI",
+          "Robotics"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          3
+        ]
+      }
+    },
+    {
+      "id": "THESIS-013",
+      "sourceFactId": "fact:meta-robot-abstract",
+      "question": "What robot platform does the abstract say AgenticVLA is deployed on?",
+      "split": "development",
+      "category": "metadata",
+      "rubric": {
+        "requiredFacts": [
+          "Mercury X1"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          3
+        ]
+      }
+    },
+    {
+      "id": "THESIS-014",
+      "sourceFactId": "fact:toc-chapter-one",
+      "question": "What is the title of Chapter 1?",
+      "split": "development",
+      "category": "structure",
+      "rubric": {
+        "requiredFacts": [
+          "Introduction"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          5
+        ]
+      }
+    },
+    {
+      "id": "THESIS-015",
+      "sourceFactId": "fact:toc-chapter-two",
+      "question": "What is the title of Chapter 2?",
+      "split": "development",
+      "category": "structure",
+      "rubric": {
+        "requiredFacts": [
+          "State of The Art and Background Overview"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          5
+        ]
+      }
+    },
+    {
+      "id": "THESIS-016",
+      "sourceFactId": "fact:toc-chapter-three",
+      "question": "What is the title of Chapter 3?",
+      "split": "development",
+      "category": "structure",
+      "rubric": {
+        "requiredFacts": [
+          "Research Methodology"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          5
+        ]
+      }
+    },
+    {
+      "id": "THESIS-017",
+      "sourceFactId": "fact:toc-chapter-four",
+      "question": "What is the title of Chapter 4?",
+      "split": "development",
+      "category": "structure",
+      "rubric": {
+        "requiredFacts": [
+          "Experiments and Results"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          6
+        ]
+      }
+    },
+    {
+      "id": "THESIS-018",
+      "sourceFactId": "fact:toc-chapter-five",
+      "question": "What is the title of Chapter 5?",
+      "split": "development",
+      "category": "structure",
+      "rubric": {
+        "requiredFacts": [
+          "Conclusions"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          6
+        ]
+      }
+    },
+    {
+      "id": "THESIS-019",
+      "sourceFactId": "fact:toc-vla-page",
+      "question": "According to the table of contents, what page begins Visual-Language-Action Models?",
+      "split": "development",
+      "category": "structure",
+      "rubric": {
+        "requiredFacts": [
+          "10"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          5
+        ]
+      }
+    },
+    {
+      "id": "THESIS-020",
+      "sourceFactId": "fact:toc-conversational-page",
+      "question": "According to the table of contents, what page begins the Conversational Agent section?",
+      "split": "development",
+      "category": "structure",
+      "rubric": {
+        "requiredFacts": [
+          "38"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          5
+        ]
+      }
+    },
+    {
+      "id": "THESIS-021",
+      "sourceFactId": "fact:toc-self-awareness-page",
+      "question": "According to the table of contents, what page begins Self-awareness capabilities?",
+      "split": "development",
+      "category": "structure",
+      "rubric": {
+        "requiredFacts": [
+          "52"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          6
+        ]
+      }
+    },
+    {
+      "id": "THESIS-022",
+      "sourceFactId": "fact:intro-embodied-origin",
+      "question": "Which fields does the introduction say embodied cognition originates from?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "Cognitive science",
+          "philosophy of mind"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          7
+        ]
+      }
+    },
+    {
+      "id": "THESIS-023",
+      "sourceFactId": "fact:intro-vla-models",
+      "question": "Name two notable VLA models named in the introduction.",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "Octo",
+          "OpenVLA"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          7
+        ]
+      }
+    },
+    {
+      "id": "THESIS-024",
+      "sourceFactId": "fact:intro-open-x",
+      "question": "What robotics-manipulation dataset is named in the introduction?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "Open X-Embodiment"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          7
+        ]
+      }
+    },
+    {
+      "id": "THESIS-025",
+      "sourceFactId": "fact:intro-rq1",
+      "question": "What does RQ1 ask about combining an Agentic AI Framework with a VLA model?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "towards achieving AGI"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          8
+        ]
+      }
+    },
+    {
+      "id": "THESIS-026",
+      "sourceFactId": "fact:intro-rq2",
+      "question": "What capability does RQ2 ask a network of AI agents to improve?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "perception and decision-making"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          8
+        ]
+      }
+    },
+    {
+      "id": "THESIS-027",
+      "sourceFactId": "fact:intro-duration",
+      "question": "Over what period was the project structured?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "six-month"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          9
+        ]
+      }
+    },
+    {
+      "id": "THESIS-028",
+      "sourceFactId": "fact:intro-phases",
+      "question": "List the four main phases of the project.",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "Teleoperation",
+          "Data collection",
+          "Training the VLA",
+          "Agentic AI integration"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          9
+        ]
+      }
+    },
+    {
+      "id": "THESIS-029",
+      "sourceFactId": "fact:intro-headset",
+      "question": "What VR headset is named in the project structure?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "Meta Quest 3"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          9
+        ]
+      }
+    },
+    {
+      "id": "THESIS-030",
+      "sourceFactId": "fact:intro-framework",
+      "question": "Which agent framework was combined with the VLA in Phase 4?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "AutoGen"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          9
+        ]
+      }
+    },
+    {
+      "id": "THESIS-031",
+      "sourceFactId": "fact:intro-metric",
+      "question": "What metric quantifies comparative improvements in reasoning, adaptability, and task performance?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "Success Rate"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          9
+        ]
+      }
+    },
+    {
+      "id": "THESIS-032",
+      "sourceFactId": "fact:vla-components",
+      "question": "What three parts do recent VLM architectures generally consist of?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "visual encoder",
+          "projector",
+          "LLM backbone"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          12
+        ]
+      }
+    },
+    {
+      "id": "THESIS-033",
+      "sourceFactId": "fact:openvla-params",
+      "question": "How many parameters does OpenVLA have?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "7B"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          12
+        ]
+      }
+    },
+    {
+      "id": "THESIS-034",
+      "sourceFactId": "fact:openvla-trajectories",
+      "question": "How many robot manipulation trajectories was OpenVLA fine-tuned on?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "970k"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          12
+        ]
+      }
+    },
+    {
+      "id": "THESIS-035",
+      "sourceFactId": "fact:openvla-rt2",
+      "question": "What larger model does OpenVLA outperform according to the thesis?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "55B-parameter RT-2-X"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          12
+        ]
+      }
+    },
+    {
+      "id": "THESIS-036",
+      "sourceFactId": "fact:openvla-vlm",
+      "question": "What VLM does OpenVLA extend?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "Prismatic-7B"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          13
+        ]
+      }
+    },
+    {
+      "id": "THESIS-037",
+      "sourceFactId": "fact:openvla-encoder",
+      "question": "Which two visual models are combined in OpenVLA's visual encoder?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "SigLIP",
+          "DinoV2"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          13
+        ]
+      }
+    },
+    {
+      "id": "THESIS-038",
+      "sourceFactId": "fact:openvla-bins",
+      "question": "Into how many bins is each OpenVLA action dimension quantized?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "256"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          13
+        ]
+      }
+    },
+    {
+      "id": "THESIS-039",
+      "sourceFactId": "fact:openvla-image",
+      "question": "What image resolution is called training-efficient with little gain from higher resolution?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "224x224"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          13
+        ]
+      }
+    },
+    {
+      "id": "THESIS-040",
+      "sourceFactId": "fact:oft-decoding",
+      "question": "What decoding approach does OpenVLA-OFT use instead of autoregressive decoding?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "Parallel decoding"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          13
+        ]
+      }
+    },
+    {
+      "id": "THESIS-041",
+      "sourceFactId": "fact:oft-throughput",
+      "question": "How much faster throughput does OpenVLA-OFT achieve than base OpenVLA?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "43x"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          13
+        ]
+      }
+    },
+    {
+      "id": "THESIS-042",
+      "sourceFactId": "fact:oft-robot",
+      "question": "What robot demonstrated OpenVLA-OFT dual-arm capability?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "ALOHA"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          13
+        ]
+      }
+    },
+    {
+      "id": "THESIS-043",
+      "sourceFactId": "fact:agent-core",
+      "question": "What are the three core components of an AI agent in the thesis?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "Model",
+          "Tools",
+          "Instructions"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          15
+        ]
+      }
+    },
+    {
+      "id": "THESIS-044",
+      "sourceFactId": "fact:autogen-company",
+      "question": "What organization developed AutoGen?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "Microsoft"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          15
+        ]
+      }
+    },
+    {
+      "id": "THESIS-045",
+      "sourceFactId": "fact:agent-frameworks",
+      "question": "Name two other agent frameworks named alongside AutoGen.",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "LangChain",
+          "CrewAI"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          14
+        ]
+      }
+    },
+    {
+      "id": "THESIS-046",
+      "sourceFactId": "fact:robot-maker",
+      "question": "What company developed the Mercury X1 robot?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "Elephant Robotics"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          16
+        ]
+      }
+    },
+    {
+      "id": "THESIS-047",
+      "sourceFactId": "fact:robot-location",
+      "question": "Where is Elephant Robotics based?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "Shenzhen, China"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          16
+        ]
+      }
+    },
+    {
+      "id": "THESIS-048",
+      "sourceFactId": "fact:robot-height",
+      "question": "How tall is Mercury X1?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "1.18"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          16
+        ]
+      }
+    },
+    {
+      "id": "THESIS-049",
+      "sourceFactId": "fact:robot-components",
+      "question": "What two components make up Mercury X1?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "Mercury B1",
+          "wheeled mobile base"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-050",
+      "sourceFactId": "fact:robot-dof",
+      "question": "How many degrees of freedom does Mercury X1 have?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "19"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-051",
+      "sourceFactId": "fact:robot-weight",
+      "question": "What is the total weight of Mercury X1?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "55 kg"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-052",
+      "sourceFactId": "fact:robot-payload",
+      "question": "What is the maximum payload of Mercury X1?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "1 kg"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-053",
+      "sourceFactId": "fact:robot-speed",
+      "question": "What is Mercury X1's maximum operating speed?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "1.2 m/s"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-054",
+      "sourceFactId": "fact:robot-incline",
+      "question": "What incline can Mercury X1 navigate?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "15 degrees"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-055",
+      "sourceFactId": "fact:robot-obstacle",
+      "question": "What obstacle height can Mercury X1 navigate?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "2 cm"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-056",
+      "sourceFactId": "fact:robot-voltage",
+      "question": "What working voltage is listed for Mercury X1?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "24 V"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-057",
+      "sourceFactId": "fact:robot-battery",
+      "question": "What battery life is listed for Mercury X1?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "8 hours"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-058",
+      "sourceFactId": "fact:robot-repeatability",
+      "question": "What repeatability specification is listed for Mercury X1?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "0.05 mm"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-059",
+      "sourceFactId": "fact:robot-storage",
+      "question": "What storage space is listed for Mercury X1?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "15 L"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-060",
+      "sourceFactId": "fact:robot-control",
+      "question": "What main control system is listed for Mercury X1?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "NVIDIA Jetson Xavier"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-061",
+      "sourceFactId": "fact:robot-aux-control",
+      "question": "What auxiliary control system is listed for Mercury X1?",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "Jetson Nano"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-062",
+      "sourceFactId": "fact:robot-perception",
+      "question": "Name two perception systems listed for Mercury X1.",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "LiDAR",
+          "ultrasonic"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-063",
+      "sourceFactId": "fact:robot-software",
+      "question": "Name two software technologies listed for Mercury X1.",
+      "split": "development",
+      "category": "hardware",
+      "rubric": {
+        "requiredFacts": [
+          "Python",
+          "MoveIt"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "THESIS-064",
+      "sourceFactId": "fact:open-teach-headset",
+      "question": "What headset does the OPEN TEACH framework use?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "Meta Quest 3"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          19
+        ]
+      }
+    },
+    {
+      "id": "THESIS-065",
+      "sourceFactId": "fact:open-teach-rate",
+      "question": "At what frequency can OPEN TEACH operate?",
+      "split": "development",
+      "category": "background",
+      "rubric": {
+        "requiredFacts": [
+          "90Hz"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          19
+        ]
+      }
+    },
+    {
+      "id": "THESIS-066",
+      "sourceFactId": "fact:ros-sharp",
+      "question": "What is ROS# used for?",
+      "split": "development",
+      "category": "software",
+      "rubric": {
+        "requiredFacts": [
+          "communicating with ROS from .NET applications"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          20
+        ]
+      }
+    },
+    {
+      "id": "THESIS-067",
+      "sourceFactId": "fact:unity-reason",
+      "question": "Name two capabilities that made Unity a good fit for the project.",
+      "split": "development",
+      "category": "software",
+      "rubric": {
+        "requiredFacts": [
+          "High-quality rendering",
+          "native VR support"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          20
+        ]
+      }
+    },
+    {
+      "id": "THESIS-068",
+      "sourceFactId": "fact:sixg-year",
+      "question": "When did the ITU finalize the 6G Vision framework?",
+      "split": "development",
+      "category": "networking",
+      "rubric": {
+        "requiredFacts": [
+          "June 2023"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          21
+        ]
+      }
+    },
+    {
+      "id": "THESIS-069",
+      "sourceFactId": "fact:sixg-urllc",
+      "question": "What does URLLC stand for?",
+      "split": "development",
+      "category": "networking",
+      "rubric": {
+        "requiredFacts": [
+          "Ultra-Reliable and Low-Latency Communications"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          21
+        ]
+      }
+    },
+    {
+      "id": "THESIS-070",
+      "sourceFactId": "fact:sixg-isac",
+      "question": "What does ISAC stand for?",
+      "split": "development",
+      "category": "networking",
+      "rubric": {
+        "requiredFacts": [
+          "Integrated Sensing and Communication"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          21
+        ]
+      }
+    },
+    {
+      "id": "THESIS-071",
+      "sourceFactId": "fact:sixg-formula",
+      "question": "What equation describes Connected Intelligence in Figure 7?",
+      "split": "development",
+      "category": "networking",
+      "rubric": {
+        "requiredFacts": [
+          "AGI for 6G + 6G for AGI"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          21
+        ]
+      }
+    },
+    {
+      "id": "THESIS-072",
+      "sourceFactId": "fact:sixg-bodies",
+      "question": "Which two standards bodies identify robotics as a key vertical for 6G?",
+      "split": "development",
+      "category": "networking",
+      "rubric": {
+        "requiredFacts": [
+          "ITU",
+          "3GPP"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          22
+        ]
+      }
+    },
+    {
+      "id": "THESIS-073",
+      "sourceFactId": "fact:sixg-autonomy",
+      "question": "What company proposed meta-level autonomy in robotics?",
+      "split": "development",
+      "category": "networking",
+      "rubric": {
+        "requiredFacts": [
+          "Huawei"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          22
+        ]
+      }
+    },
+    {
+      "id": "THESIS-074",
+      "sourceFactId": "fact:sixg-challenges",
+      "question": "Name two networking challenges Agentic AI for 6G aims to bypass.",
+      "split": "development",
+      "category": "networking",
+      "rubric": {
+        "requiredFacts": [
+          "Network capacity",
+          "AI model flexibility"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          23
+        ]
+      }
+    },
+    {
+      "id": "THESIS-075",
+      "sourceFactId": "fact:method-strategy",
+      "question": "What overall strategy does the methodology follow?",
+      "split": "development",
+      "category": "methodology",
+      "rubric": {
+        "requiredFacts": [
+          "bottom-up strategy"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          25
+        ]
+      }
+    },
+    {
+      "id": "THESIS-076",
+      "sourceFactId": "fact:teleop-input",
+      "question": "What headset and controllers were used to interface with teleoperation?",
+      "split": "development",
+      "category": "teleoperation",
+      "rubric": {
+        "requiredFacts": [
+          "Meta Quest 3",
+          "hand controllers"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          27
+        ]
+      }
+    },
+    {
+      "id": "THESIS-077",
+      "sourceFactId": "fact:teleop-feeds",
+      "question": "How many video feeds were captured during teleoperation?",
+      "split": "development",
+      "category": "teleoperation",
+      "rubric": {
+        "requiredFacts": [
+          "Three"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          27
+        ]
+      }
+    },
+    {
+      "id": "THESIS-078",
+      "sourceFactId": "fact:teleop-main-camera",
+      "question": "What camera model was used for the head-mounted view?",
+      "split": "development",
+      "category": "teleoperation",
+      "rubric": {
+        "requiredFacts": [
+          "Orbbec Deeyea 3D"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          27
+        ]
+      }
+    },
+    {
+      "id": "THESIS-079",
+      "sourceFactId": "fact:teleop-usb-camera",
+      "question": "What camera model was used for the USB camera views?",
+      "split": "development",
+      "category": "teleoperation",
+      "rubric": {
+        "requiredFacts": [
+          "Logitech C920"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          27
+        ]
+      }
+    },
+    {
+      "id": "THESIS-080",
+      "sourceFactId": "fact:teleop-unity-ros",
+      "question": "What library bridged Unity with the robot's ROS?",
+      "split": "development",
+      "category": "teleoperation",
+      "rubric": {
+        "requiredFacts": [
+          "ROS#"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          27
+        ]
+      }
+    },
+    {
+      "id": "THESIS-081",
+      "sourceFactId": "fact:teleop-python",
+      "question": "What Python library translated messages into control signals?",
+      "split": "development",
+      "category": "teleoperation",
+      "rubric": {
+        "requiredFacts": [
+          "pymycobot"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          27
+        ]
+      }
+    },
+    {
+      "id": "THESIS-082",
+      "sourceFactId": "fact:teleop-frequency",
+      "question": "What control frequency did the control pipeline maintain?",
+      "split": "development",
+      "category": "teleoperation",
+      "rubric": {
+        "requiredFacts": [
+          "50 Hz"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          28
+        ]
+      }
+    },
+    {
+      "id": "THESIS-083",
+      "sourceFactId": "fact:teleop-target-pose",
+      "question": "How many bytes is target_pose_right and what does it represent?",
+      "split": "development",
+      "category": "teleoperation",
+      "rubric": {
+        "requiredFacts": [
+          "24",
+          "Right arm pose"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          28
+        ]
+      }
+    },
+    {
+      "id": "THESIS-084",
+      "sourceFactId": "fact:teleop-command-id",
+      "question": "What data type and byte size is command_id?",
+      "split": "development",
+      "category": "teleoperation",
+      "rubric": {
+        "requiredFacts": [
+          "int32",
+          "4"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          28
+        ]
+      }
+    },
+    {
+      "id": "THESIS-085",
+      "sourceFactId": "fact:teleop-actuator-rate",
+      "question": "What data rate range is estimated for closed-loop actuator control?",
+      "split": "development",
+      "category": "teleoperation",
+      "rubric": {
+        "requiredFacts": [
+          "1–10 Mb/s"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          28
+        ]
+      }
+    },
+    {
+      "id": "THESIS-086",
+      "sourceFactId": "fact:teleop-camera-rate",
+      "question": "What estimated data rate is given for the compressed camera stream?",
+      "split": "development",
+      "category": "teleoperation",
+      "rubric": {
+        "requiredFacts": [
+          "620 Kb/s"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          29
+        ]
+      }
+    },
+    {
+      "id": "THESIS-087",
+      "sourceFactId": "fact:teleop-joint-rate",
+      "question": "What estimated data rate is given for joint states?",
+      "split": "development",
+      "category": "teleoperation",
+      "rubric": {
+        "requiredFacts": [
+          "10 Kb/s"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          29
+        ]
+      }
+    },
+    {
+      "id": "THESIS-088",
+      "sourceFactId": "fact:data-openx-limit",
+      "question": "Why was Open X-Embodiment insufficient for this thesis?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "dual-arm interaction capabilities"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          30
+        ]
+      }
+    },
+    {
+      "id": "THESIS-089",
+      "sourceFactId": "fact:data-task",
+      "question": "What task is performed in each recorded episode?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "pick-and-place"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          30
+        ]
+      }
+    },
+    {
+      "id": "THESIS-090",
+      "sourceFactId": "fact:data-instruction",
+      "question": "What instruction template is used for the dataset?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "Put the [color] [object] on the [color] plate"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          30
+        ]
+      }
+    },
+    {
+      "id": "THESIS-091",
+      "sourceFactId": "fact:data-example",
+      "question": "What example instruction is given for the dataset template?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "yellow banana on the red plate"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          30
+        ]
+      }
+    },
+    {
+      "id": "THESIS-092",
+      "sourceFactId": "fact:data-objects",
+      "question": "What two objects are actually interacted with in the dataset?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "yellow banana",
+          "purple grapes"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          30
+        ]
+      }
+    },
+    {
+      "id": "THESIS-093",
+      "sourceFactId": "fact:data-visible-only",
+      "question": "What two objects are visible but never interacted with?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "apple",
+          "orange"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          30
+        ]
+      }
+    },
+    {
+      "id": "THESIS-094",
+      "sourceFactId": "fact:data-episodes",
+      "question": "How many total episodes make up the Mercury X1 dataset?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "480"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          30
+        ]
+      }
+    },
+    {
+      "id": "THESIS-095",
+      "sourceFactId": "fact:data-surfaces",
+      "question": "What three surfaces were objects picked up from?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "Table",
+          "red plate",
+          "wooden plate"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          31
+        ]
+      }
+    },
+    {
+      "id": "THESIS-096",
+      "sourceFactId": "fact:data-duration",
+      "question": "What is the average duration of each episode?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "9 seconds"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          31
+        ]
+      }
+    },
+    {
+      "id": "THESIS-097",
+      "sourceFactId": "fact:data-combination-episodes",
+      "question": "How many episodes correspond to each Table 5 task/arm/surface combination?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "30"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          32
+        ]
+      }
+    },
+    {
+      "id": "THESIS-098",
+      "sourceFactId": "fact:data-sample-rate",
+      "question": "At what frame rate was each trajectory sampled for training?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "25 Hz"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          32
+        ]
+      }
+    },
+    {
+      "id": "THESIS-099",
+      "sourceFactId": "fact:data-standard",
+      "question": "Which dataset's sampling standard does the 25 Hz rate follow?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "ALOHA"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          32
+        ]
+      }
+    },
+    {
+      "id": "THESIS-100",
+      "sourceFactId": "fact:data-elements",
+      "question": "Name two types of information contained in each dataset step.",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "RGB images",
+          "joint angles"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          32
+        ]
+      }
+    },
+    {
+      "id": "THESIS-101",
+      "sourceFactId": "fact:data-format",
+      "question": "What format do stored episodes follow?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "Reinforcement Learning Dataset"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          34
+        ]
+      }
+    },
+    {
+      "id": "THESIS-102",
+      "sourceFactId": "fact:data-lerobot",
+      "question": "What organization developed the LeRobot dataset format?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "HuggingFace"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          34
+        ]
+      }
+    },
+    {
+      "id": "THESIS-103",
+      "sourceFactId": "fact:data-frame",
+      "question": "What image format and resolution is used for each metadata frame?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "PNG",
+          "640x480"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          34
+        ]
+      }
+    },
+    {
+      "id": "THESIS-104",
+      "sourceFactId": "fact:data-action-vector",
+      "question": "Why is the action vector 10-dimensional?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "Rotation information",
+          "not recorded"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          34
+        ]
+      }
+    },
+    {
+      "id": "THESIS-105",
+      "sourceFactId": "fact:data-origin",
+      "question": "What does the origin in the end-effector reference frame correspond to?",
+      "split": "development",
+      "category": "dataset",
+      "rubric": {
+        "requiredFacts": [
+          "robot's wheels"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          34
+        ]
+      }
+    },
+    {
+      "id": "THESIS-106",
+      "sourceFactId": "fact:training-vram",
+      "question": "How much VRAM was used for single-GPU training?",
+      "split": "development",
+      "category": "training",
+      "rubric": {
+        "requiredFacts": [
+          "96 gigabytes"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          35
+        ]
+      }
+    },
+    {
+      "id": "THESIS-107",
+      "sourceFactId": "fact:training-batch",
+      "question": "What batch size was used for fine-tuning?",
+      "split": "development",
+      "category": "training",
+      "rubric": {
+        "requiredFacts": [
+          "4"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          35
+        ]
+      }
+    },
+    {
+      "id": "THESIS-108",
+      "sourceFactId": "fact:training-lr",
+      "question": "What learning rate was used for training?",
+      "split": "development",
+      "category": "training",
+      "rubric": {
+        "requiredFacts": [
+          "2 × 10"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          35
+        ]
+      }
+    },
+    {
+      "id": "THESIS-109",
+      "sourceFactId": "fact:training-decay",
+      "question": "After how many steps did the learning rate decay by a factor of ten?",
+      "split": "development",
+      "category": "training",
+      "rubric": {
+        "requiredFacts": [
+          "75,000"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          35
+        ]
+      }
+    },
+    {
+      "id": "THESIS-110",
+      "sourceFactId": "fact:training-steps",
+      "question": "How many total training steps were run?",
+      "split": "development",
+      "category": "training",
+      "rubric": {
+        "requiredFacts": [
+          "150,005"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          35
+        ]
+      }
+    },
+    {
+      "id": "THESIS-111",
+      "sourceFactId": "fact:training-checkpoint",
+      "question": "How often was a checkpoint saved?",
+      "split": "development",
+      "category": "training",
+      "rubric": {
+        "requiredFacts": [
+          "20,000"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          35
+        ]
+      }
+    },
+    {
+      "id": "THESIS-112",
+      "sourceFactId": "fact:training-film",
+      "question": "What technique conditions visual features with language input?",
+      "split": "development",
+      "category": "training",
+      "rubric": {
+        "requiredFacts": [
+          "FiLM"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          35
+        ]
+      }
+    },
+    {
+      "id": "THESIS-113",
+      "sourceFactId": "fact:training-proprio",
+      "question": "Was proprioceptive input used in the experiment?",
+      "split": "development",
+      "category": "training",
+      "rubric": {
+        "requiredFacts": [
+          "disabled"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          35
+        ]
+      }
+    },
+    {
+      "id": "THESIS-114",
+      "sourceFactId": "fact:training-lora",
+      "question": "What LoRA rank and dropout were used?",
+      "split": "development",
+      "category": "training",
+      "rubric": {
+        "requiredFacts": [
+          "32",
+          "0.0"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          35
+        ]
+      }
+    },
+    {
+      "id": "THESIS-115",
+      "sourceFactId": "fact:training-peak",
+      "question": "What peak VRAM usage occurred during fine-tuning?",
+      "split": "development",
+      "category": "training",
+      "rubric": {
+        "requiredFacts": [
+          "62 GB"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          36
+        ]
+      }
+    },
+    {
+      "id": "THESIS-116",
+      "sourceFactId": "fact:training-deploy",
+      "question": "What VRAM size did the consumer-grade inference GPU have?",
+      "split": "development",
+      "category": "training",
+      "rubric": {
+        "requiredFacts": [
+          "24 GB"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          36
+        ]
+      }
+    },
+    {
+      "id": "THESIS-117",
+      "sourceFactId": "fact:training-inference",
+      "question": "Approximately how much VRAM did inference occupy?",
+      "split": "development",
+      "category": "training",
+      "rubric": {
+        "requiredFacts": [
+          "16 GB"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          36
+        ]
+      }
+    },
+    {
+      "id": "THESIS-118",
+      "sourceFactId": "fact:agent-main-llm",
+      "question": "What LLM is the core reasoning unit in the AutoGen architecture?",
+      "split": "development",
+      "category": "architecture",
+      "rubric": {
+        "requiredFacts": [
+          "LLaMA 3.2 7B"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          38
+        ]
+      }
+    },
+    {
+      "id": "THESIS-119",
+      "sourceFactId": "fact:agent-vla-role",
+      "question": "How is the VLA treated within the agent architecture?",
+      "split": "development",
+      "category": "architecture",
+      "rubric": {
+        "requiredFacts": [
+          "callable function"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          38
+        ]
+      }
+    },
+    {
+      "id": "THESIS-120",
+      "sourceFactId": "fact:agent-name",
+      "question": "What is the hybrid system combining language, vision, and action called?",
+      "split": "development",
+      "category": "architecture",
+      "rubric": {
+        "requiredFacts": [
+          "AgenticVLA"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          38
+        ]
+      }
+    },
+    {
+      "id": "THESIS-121",
+      "sourceFactId": "fact:agent-conversational-when",
+      "question": "When is the Conversational Agent used?",
+      "split": "development",
+      "category": "architecture",
+      "rubric": {
+        "requiredFacts": [
+          "no action-oriented intent"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          38
+        ]
+      }
+    },
+    {
+      "id": "THESIS-122",
+      "sourceFactId": "fact:agent-conversational-llm",
+      "question": "What backbone does the Conversational Agent use?",
+      "split": "development",
+      "category": "architecture",
+      "rubric": {
+        "requiredFacts": [
+          "LLaMA 3.2 7B"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          39
+        ]
+      }
+    },
+    {
+      "id": "THESIS-123",
+      "sourceFactId": "fact:agent-act-verbs",
+      "question": "Name two example intent-triggering verbs for the Act Agent.",
+      "split": "development",
+      "category": "architecture",
+      "rubric": {
+        "requiredFacts": [
+          "pick up",
+          "move"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          39
+        ]
+      }
+    },
+    {
+      "id": "THESIS-124",
+      "sourceFactId": "fact:agent-act-modules",
+      "question": "What two submodules does the Act Agent use before execution?",
+      "split": "development",
+      "category": "architecture",
+      "rubric": {
+        "requiredFacts": [
+          "Reasoning Tool",
+          "Self-Awareness Tool"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          39
+        ]
+      }
+    },
+    {
+      "id": "THESIS-125",
+      "sourceFactId": "fact:agent-deploy-server",
+      "question": "Where is the refined instruction sent after Act Agent processing?",
+      "split": "development",
+      "category": "architecture",
+      "rubric": {
+        "requiredFacts": [
+          "server where the OpenVLA-OFT model is deployed"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          39
+        ]
+      }
+    },
+    {
+      "id": "THESIS-126",
+      "sourceFactId": "fact:agent-reason-limit",
+      "question": "What VLA limitation does the Reasoning Tool address?",
+      "split": "development",
+      "category": "architecture",
+      "rubric": {
+        "requiredFacts": [
+          "restricted ability to generalize from natural language"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          40
+        ]
+      }
+    },
+    {
+      "id": "THESIS-127",
+      "sourceFactId": "fact:agent-reason-llm",
+      "question": "What LLM performs reasoning and rephrasing in the Reasoning Tool?",
+      "split": "development",
+      "category": "architecture",
+      "rubric": {
+        "requiredFacts": [
+          "LLaMA 3.2 7B"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          41
+        ]
+      }
+    },
+    {
+      "id": "THESIS-128",
+      "sourceFactId": "fact:agent-reason-format",
+      "question": "What output format must the Reasoning Tool produce?",
+      "split": "development",
+      "category": "architecture",
+      "rubric": {
+        "requiredFacts": [
+          "put the [color] [object] on the [color] plate"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          41
+        ]
+      }
+    },
+    {
+      "id": "THESIS-129",
+      "sourceFactId": "fact:agent-self-model",
+      "question": "What model is the visual backbone for the Self-Awareness Tool?",
+      "split": "development",
+      "category": "architecture",
+      "rubric": {
+        "requiredFacts": [
+          "Gemma 3 12B"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          41
+        ]
+      }
+    },
+    {
+      "id": "THESIS-130",
+      "sourceFactId": "fact:agent-self-functions",
+      "question": "What two functions does the Self-Awareness Tool perform?",
+      "split": "development",
+      "category": "architecture",
+      "rubric": {
+        "requiredFacts": [
+          "objects currently visible",
+          "potential failures"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          41
+        ]
+      }
+    },
+    {
+      "id": "THESIS-131",
+      "sourceFactId": "fact:agent-self-camera",
+      "question": "What camera perspective does the Self-Awareness Tool use?",
+      "split": "development",
+      "category": "architecture",
+      "rubric": {
+        "requiredFacts": [
+          "Third-person"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          41
+        ]
+      }
+    },
+    {
+      "id": "THESIS-132",
+      "sourceFactId": "fact:results-models",
+      "question": "What three systems are compared in each experiment?",
+      "split": "development",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "OpenVLA",
+          "Finetuned OpenVLA-OFT",
+          "AgenticVLA"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          43
+        ]
+      }
+    },
+    {
+      "id": "THESIS-133",
+      "sourceFactId": "fact:results-finetuned",
+      "question": "How was the Finetuned OpenVLA-OFT model obtained?",
+      "split": "development",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "LoRA"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          43
+        ]
+      }
+    },
+    {
+      "id": "THESIS-134",
+      "sourceFactId": "fact:results-metrics",
+      "question": "What two metrics evaluate the experiments?",
+      "split": "development",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "Success Rate",
+          "Mean Squared Error"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          44
+        ]
+      }
+    },
+    {
+      "id": "THESIS-135",
+      "sourceFactId": "fact:results-sr-definition",
+      "question": "How is Success Rate defined?",
+      "split": "development",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "successfully completed tasks",
+          "total number of tasks"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          44
+        ]
+      }
+    },
+    {
+      "id": "THESIS-136",
+      "sourceFactId": "fact:results-mse-unit",
+      "question": "In what unit is average MSE measured?",
+      "split": "development",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "millimeters"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          44
+        ]
+      }
+    },
+    {
+      "id": "THESIS-137",
+      "sourceFactId": "fact:results-episodes-one",
+      "question": "Over how many episodes were the first and third benchmarks carried out?",
+      "split": "development",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "100"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          44
+        ]
+      }
+    },
+    {
+      "id": "THESIS-138",
+      "sourceFactId": "fact:results-episodes-two",
+      "question": "Over how many episodes was the second benchmark carried out?",
+      "split": "development",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "90"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          44
+        ]
+      }
+    },
+    {
+      "id": "THESIS-139",
+      "sourceFactId": "fact:result-one-instruction",
+      "question": "What instruction was used for the semantic-relationship benchmark?",
+      "split": "development",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "put the fruits on the plate"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          45
+        ]
+      }
+    },
+    {
+      "id": "THESIS-140",
+      "sourceFactId": "fact:result-one-fruits",
+      "question": "What two fruits were used in the first benchmark?",
+      "split": "development",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "banana",
+          "grapes"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          45
+        ]
+      }
+    },
+    {
+      "id": "THESIS-141",
+      "sourceFactId": "fact:result-one-agent-sr",
+      "question": "What success rate did AgenticVLA achieve in the first benchmark?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "44%"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          45
+        ]
+      }
+    },
+    {
+      "id": "THESIS-142",
+      "sourceFactId": "fact:result-one-openvla-sr",
+      "question": "What success rate did OpenVLA achieve in Table 7?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "0%"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          46
+        ]
+      }
+    },
+    {
+      "id": "THESIS-143",
+      "sourceFactId": "fact:result-one-oft-sr",
+      "question": "What success rate did Finetuned OpenVLA-OFT achieve in Table 7?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "0%"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          46
+        ]
+      }
+    },
+    {
+      "id": "THESIS-144",
+      "sourceFactId": "fact:result-one-openvla-mrse",
+      "question": "What MRSE did OpenVLA have in Table 7?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "7016"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          46
+        ]
+      }
+    },
+    {
+      "id": "THESIS-145",
+      "sourceFactId": "fact:result-one-oft-mrse",
+      "question": "What MRSE did Finetuned OpenVLA-OFT have in Table 7?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "5505"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          46
+        ]
+      }
+    },
+    {
+      "id": "THESIS-146",
+      "sourceFactId": "fact:result-one-agent-mrse",
+      "question": "What MRSE did AgenticVLA have in Table 7?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "2369"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          46
+        ]
+      }
+    },
+    {
+      "id": "THESIS-147",
+      "sourceFactId": "fact:result-one-split",
+      "question": "How did AgenticVLA handle the pick up the fruits instruction?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "banana",
+          "grapes"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          45
+        ]
+      }
+    },
+    {
+      "id": "THESIS-148",
+      "sourceFactId": "fact:result-one-failures",
+      "question": "Name two failure modes observed for AgenticVLA in the first benchmark.",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "Dropping the object",
+          "failing to pick it up"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          45
+        ]
+      }
+    },
+    {
+      "id": "THESIS-149",
+      "sourceFactId": "fact:result-two-easy",
+      "question": "What is the Easy prompt-complexity instruction?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "put banana on plate"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          47
+        ]
+      }
+    },
+    {
+      "id": "THESIS-150",
+      "sourceFactId": "fact:result-two-medium",
+      "question": "What is the Medium prompt-complexity instruction?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "move banana from table to plate"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          47
+        ]
+      }
+    },
+    {
+      "id": "THESIS-151",
+      "sourceFactId": "fact:result-two-hard",
+      "question": "What is the Hard prompt-complexity instruction?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "if possible"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          47
+        ]
+      }
+    },
+    {
+      "id": "THESIS-152",
+      "sourceFactId": "fact:result-two-oft-easy",
+      "question": "What success rate did Finetuned OpenVLA-OFT achieve in the Easy scenario?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "82%"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          48
+        ]
+      }
+    },
+    {
+      "id": "THESIS-153",
+      "sourceFactId": "fact:result-two-agent-easy",
+      "question": "What success rate did AgenticVLA achieve in the Easy scenario?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "84%"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          48
+        ]
+      }
+    },
+    {
+      "id": "THESIS-154",
+      "sourceFactId": "fact:result-two-oft-medium",
+      "question": "What success rate did Finetuned OpenVLA-OFT achieve in the Medium scenario?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "61%"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          48
+        ]
+      }
+    },
+    {
+      "id": "THESIS-155",
+      "sourceFactId": "fact:result-two-agent-medium",
+      "question": "What success rate did AgenticVLA achieve in the Medium scenario?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "83%"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          48
+        ]
+      }
+    },
+    {
+      "id": "THESIS-156",
+      "sourceFactId": "fact:result-two-oft-hard",
+      "question": "What success rate did Finetuned OpenVLA-OFT achieve in the Hard scenario?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "42%"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          48
+        ]
+      }
+    },
+    {
+      "id": "THESIS-157",
+      "sourceFactId": "fact:result-two-agent-hard",
+      "question": "What success rate did AgenticVLA achieve in the Hard scenario?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "84%"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          48
+        ]
+      }
+    },
+    {
+      "id": "THESIS-158",
+      "sourceFactId": "fact:result-two-base",
+      "question": "What success rate did base OpenVLA achieve across Easy, Medium, and Hard prompt-complexity scenarios?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "0%"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          48
+        ]
+      }
+    },
+    {
+      "id": "THESIS-159",
+      "sourceFactId": "fact:result-two-oft-easy-mrse",
+      "question": "What MRSE did Finetuned OpenVLA-OFT have in the Easy scenario?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "523"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          48
+        ]
+      }
+    },
+    {
+      "id": "THESIS-160",
+      "sourceFactId": "fact:result-two-oft-hard-mrse",
+      "question": "What MRSE did Finetuned OpenVLA-OFT have in the Hard scenario?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "8826"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          48
+        ]
+      }
+    },
+    {
+      "id": "THESIS-161",
+      "sourceFactId": "fact:result-two-agent-hard-mrse",
+      "question": "What MRSE did AgenticVLA have in the Hard scenario?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "880"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          48
+        ]
+      }
+    },
+    {
+      "id": "THESIS-162",
+      "sourceFactId": "fact:result-two-openvla-medium-mrse",
+      "question": "What MRSE did OpenVLA have in the Medium scenario?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "6111"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          48
+        ]
+      }
+    },
+    {
+      "id": "THESIS-163",
+      "sourceFactId": "fact:result-two-reasoning",
+      "question": "How did the Reasoning Tool translate the Medium instruction?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "put banana on plate"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          47
+        ]
+      }
+    },
+    {
+      "id": "THESIS-164",
+      "sourceFactId": "fact:result-three-instruction",
+      "question": "What instruction was used for the self-awareness benchmark?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "put banana on plate"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": []
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          52
+        ]
+      }
+    },
+    {
+      "id": "THESIS-165",
+      "sourceFactId": "fact:result-three-delay",
+      "question": "After how many seconds was the banana introduced in the self-awareness benchmark?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "three seconds"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          52
+        ]
+      }
+    },
+    {
+      "id": "THESIS-166",
+      "sourceFactId": "fact:result-three-oft-sr",
+      "question": "What success rate did Finetuned OpenVLA-OFT achieve in the self-awareness benchmark?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "43%"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          53
+        ]
+      }
+    },
+    {
+      "id": "THESIS-167",
+      "sourceFactId": "fact:result-three-agent-sr",
+      "question": "What success rate did AgenticVLA achieve in the self-awareness benchmark?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "85%"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          53
+        ]
+      }
+    },
+    {
+      "id": "THESIS-168",
+      "sourceFactId": "fact:result-three-base-sr",
+      "question": "What success rate did OpenVLA achieve in the self-awareness benchmark?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "0%"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          53
+        ]
+      }
+    },
+    {
+      "id": "THESIS-169",
+      "sourceFactId": "fact:result-three-openvla-mrse",
+      "question": "What MRSE did OpenVLA have in Table 9?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "3477"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          53
+        ]
+      }
+    },
+    {
+      "id": "THESIS-170",
+      "sourceFactId": "fact:result-three-oft-mrse",
+      "question": "What MRSE did Finetuned OpenVLA-OFT have in Table 9?",
+      "split": "validation",
+      "category": "results",
+      "rubric": {
+        "requiredFacts": [
+          "5156"
+        ],
+        "forbiddenFacts": [],
+        "refusalExpected": false,
+        "correctionExpected": false,
+        "formatConstraints": [
+          "states the relevant number and unit when stated"
+        ]
+      },
+      "expected": {
+        "answerPolicy": "answer",
+        "sourceOwner": "reference_files",
+        "allowedSourceKinds": [
+          "mode_reference_chunk",
+          "okf_document_card"
+        ],
+        "sourcePages": [
+          53
+        ]
+      }
+    },
+    {
+      "id": "THESIS-171",
+      "question": "What MRSE did AgenticVLA have in Table 9?",
+      "split": "holdout",
+      "category": "results"
+    },
+    {
+      "id": "THESIS-172",
+      "question": "How did the Self-Awareness Tool improve the third benchmark result?",
+      "split": "holdout",
+      "category": "results"
+    },
+    {
+      "id": "THESIS-173",
+      "question": "What data-acquisition tool underpinned reliability and internal-validity claims?",
+      "split": "holdout",
+      "category": "discussion"
+    },
+    {
+      "id": "THESIS-174",
+      "question": "What data format is credited with compatibility with modern VLA pipelines?",
+      "split": "holdout",
+      "category": "discussion"
+    },
+    {
+      "id": "THESIS-175",
+      "question": "What factor limited external validity or generalizability?",
+      "split": "holdout",
+      "category": "discussion"
+    },
+    {
+      "id": "THESIS-176",
+      "question": "Name two factors proposed for standalone OpenVLA and OpenVLA-OFT limitations.",
+      "split": "holdout",
+      "category": "discussion"
+    },
+    {
+      "id": "THESIS-177",
+      "question": "Why was OpenVLA included despite its limitations?",
+      "split": "holdout",
+      "category": "discussion"
+    },
+    {
+      "id": "THESIS-178",
+      "question": "Did the thesis attribute AgenticVLA improvement to low-level manipulation or decision-making?",
+      "split": "holdout",
+      "category": "discussion"
+    },
+    {
+      "id": "THESIS-179",
+      "question": "Does the thesis claim to advance toward AGI in any general sense?",
+      "split": "holdout",
+      "category": "conclusion"
+    },
+    {
+      "id": "THESIS-180",
+      "question": "What three areas still need development for a substantial step toward general intelligence?",
+      "split": "holdout",
+      "category": "conclusion"
+    },
+    {
+      "id": "THESIS-181",
+      "question": "Does the thesis claim a fully distributed multi-agent system across devices?",
+      "split": "holdout",
+      "category": "conclusion"
+    },
+    {
+      "id": "THESIS-182",
+      "question": "What framework enabled structured communication between agents?",
+      "split": "holdout",
+      "category": "conclusion"
+    },
+    {
+      "id": "THESIS-183",
+      "question": "Name two future decentralized multi-agent directions proposed.",
+      "split": "holdout",
+      "category": "conclusion"
+    },
+    {
+      "id": "THESIS-184",
+      "question": "What does Section 5.3 propose about multiple smaller VLAs?",
+      "split": "holdout",
+      "category": "conclusion"
+    },
+    {
+      "id": "THESIS-185",
+      "question": "Name two open challenges raised in Section 5.4.",
+      "split": "holdout",
+      "category": "conclusion"
+    },
+    {
+      "id": "THESIS-186",
+      "question": "How does the thesis describe current implementations regarding state?",
+      "split": "holdout",
+      "category": "conclusion"
+    },
+    {
+      "id": "THESIS-187",
+      "question": "What can Agentic AI frameworks partially compensate for?",
+      "split": "holdout",
+      "category": "conclusion"
+    },
+    {
+      "id": "THESIS-188",
+      "question": "How many numbered references are in the bibliography?",
+      "split": "holdout",
+      "category": "references"
+    },
+    {
+      "id": "THESIS-189",
+      "question": "What year and arXiv identifier are listed for the OpenVLA paper?",
+      "split": "holdout",
+      "category": "references"
+    },
+    {
+      "id": "THESIS-190",
+      "question": "What is the title of the AutoGen paper reference?",
+      "split": "holdout",
+      "category": "references"
+    },
+    {
+      "id": "THESIS-191",
+      "question": "What arXiv identifier is cited for the AutoGen paper?",
+      "split": "holdout",
+      "category": "references"
+    },
+    {
+      "id": "THESIS-192",
+      "question": "What is the title of the OpenVLA-OFT paper reference?",
+      "split": "holdout",
+      "category": "references"
+    },
+    {
+      "id": "THESIS-193",
+      "question": "Who publishes the Gemma 3 documentation reference?",
+      "split": "holdout",
+      "category": "references"
+    },
+    {
+      "id": "THESIS-194",
+      "question": "Who funded this research?",
+      "split": "holdout",
+      "category": "refusal_correction"
+    },
+    {
+      "id": "THESIS-195",
+      "question": "What was the total project budget?",
+      "split": "holdout",
+      "category": "refusal_correction"
+    },
+    {
+      "id": "THESIS-196",
+      "question": "What quarterly revenue did the company report?",
+      "split": "holdout",
+      "category": "refusal_correction"
+    },
+    {
+      "id": "THESIS-197",
+      "question": "How many hours did training take?",
+      "split": "holdout",
+      "category": "refusal_correction"
+    },
+    {
+      "id": "THESIS-198",
+      "question": "What physical joystick was used for the project data collection?",
+      "split": "holdout",
+      "category": "refusal_correction"
+    },
+    {
+      "id": "THESIS-199",
+      "question": "Which benchmark did AgenticVLA complete with a 100% success rate?",
+      "split": "holdout",
+      "category": "refusal_correction"
+    },
+    {
+      "id": "THESIS-200",
+      "question": "Which experiment proves the thesis achieved AGI?",
+      "split": "holdout",
+      "category": "refusal_correction"
+    }
+  ]
+}

@@ -40,6 +40,7 @@ export type AnswerType =
   | 'definitional_answer'
   | 'list_answer'
   | 'exact_numeric_answer'
+  | 'document_structure_answer'
   | 'document_absent_fact_refusal'
   | 'document_followup_answer'
   | 'follow_up_answer'
@@ -410,6 +411,7 @@ const DOCUMENT_DEFINITION_TEMPLATE = `Answer from the uploaded document evidence
 const DOCUMENT_LIST_TEMPLATE = `Answer from the uploaded document evidence only. Return the complete list the question asks for. Scan every retrieved excerpt before answering; include all listed items, phases, questions, models, objects, or components that are literally present. Do not stop at the first matching excerpt and do not invent missing list items.`;
 const DOCUMENT_NUMERIC_TEMPLATE = `Answer from the uploaded document evidence only. Report exact values with units and the entity they belong to. If multiple related values are present (training/peak/inference, control/sampling, per-model rates), include all of them. Do not infer numbers that are not written in the evidence.`;
 const DOCUMENT_ABSENT_FACT_TEMPLATE = `Answer from the uploaded document evidence only. If the requested fact is not supported by the selected evidence after retrieval, say exactly and briefly that it is not directly mentioned in the uploaded seminar material. Do not provide a plausible estimate or use general knowledge.`;
+const DOCUMENT_STRUCTURE_TEMPLATE = `Answer from the uploaded document's table-of-contents / heading evidence only. These are navigation questions — a chapter or section title, the page a section begins on, or how many chapters/sections/pages there are. Report the exact title or number as written in the evidence. Do not summarize the section's content and do not infer a title or page that is not literally present.`;
 const DOCUMENT_FOLLOWUP_TEMPLATE = `Answer the follow-up from the uploaded document evidence only. Resolve pronouns like "it", "that", and "they" using the immediately previous topic, but treat the prior answer only as a referent hint — facts must come from the retrieved document excerpts.`;
 
 // Generic technical-concept answers (what is Redis / JWT / CORS / caching / REST) were
@@ -547,15 +549,43 @@ const COMMON_CODING_PROBLEM_PATTERNS = [
   /\banagram\b|\bsubarray\b|\bsubstring\b/i,
   /\bmerge (?:two )?(?:sorted )?(?:arrays?|lists?)\b/i,
   /\b(?:detect|find)\b.*\bcycle\b|\blinked list cycle\b/i,
-  /\blevel order\b|\bin\s?order\b|\bpre\s?order\b|\bpost\s?order\b|\btraversal\b/i,
+  // Grounding-campaign fix (2026-07-17): bare "in order"/"level order"/etc.
+  // false-positived on ordinary English ("what companies have you worked at,
+  // IN ORDER?", "list your certifications in order of date") — a confirmed
+  // live incident where a résumé question got misrouted to
+  // coding_question_answer (which forbids the resume context layer per spec
+  // §8.3), so the model got zero evidence for a "coding" answer type and
+  // fabricated a fictional employment history instead of grounding correctly.
+  // "traversal" alone is unambiguous DSA vocabulary and stays a bare match;
+  // the order-word variants now require an explicit tree/traversal-adjacent
+  // co-occurrence (checked via lookahead so word order in the sentence
+  // doesn't matter), mirroring the class/method narrowing above in this file.
+  /\btraversal\b/i,
+  /(?=.*\b(?:tree|node|binary|bst)\b)(?=.*\b(?:level|in|pre|post)\s?order\b)/i,
   /\bgcd\b|\blcm\b|\bgreatest common divisor\b/i,
   /\bbubble sort\b|\bquick\s?sort\b|\bmerge sort\b|\binsertion sort\b/i,
 ];
 
 const CODING_PATTERNS = [
-  /\b(write|implement|code|program|function|class|method|solve)\b/i,
+  // Real-custom-mode-repair (2026-07-11): dropped bare `method` and `class`
+  // from this line — both are extremely common non-coding English nouns
+  // ("What fine-tuning METHOD was used?", "teaching method", "what CLASS of
+  // algorithm is this", "business class") and produced a confirmed P0
+  // incident (a document-grounded thesis question about a fine-tuning
+  // method was misrouted to coding_question_answer and answered with an
+  // unrelated Two Sum LeetCode solution — see docs/context-os/
+  // real-custom-mode-repair/06_ROOT_CAUSE_REPORT.md). `class`/`method` alone
+  // are now handled ONLY by the paired-with-coding-object pattern two lines
+  // below (e.g. "write a class for X", "implement a method to Y") — bare
+  // occurrence of either word no longer trips the coding route on its own.
+  /\b(write|implement|code|program|solve)\b/i,
   /\bcode for\b|\bprogram for\b|\bfunction for\b|\balgorithm for\b/i,
   /\balgorithm\b|\bdebug this\b|\bfix (this|the) bug\b/i,
+  // `class`/`method` count as a coding signal ONLY when paired with an
+  // explicit coding verb or a function/algorithm noun in the same clause —
+  // "write a class that…", "implement the method for sorting…" — never bare.
+  /\b(write|implement|code|create|define)\b[\w ,'-]{0,20}\b(class|method|function)\b/i,
+  /\b(class|method|function)\b[\w ,'-]{0,20}\bto\s+(sort|search|traverse|reverse|parse|compute|calculate|return)\b/i,
   // A bare language name is NOT a coding signal on its own — "how would you use
   // SQL", "explain SQL", "have you used Python" are concept/experience asks, not
   // "write code" tasks. Only treat a language as coding when paired with an
@@ -775,7 +805,9 @@ const PROJECT_LINK_PATTERNS = [
   // "it's a source-available project right [share it]" — the user is angling for the
   // link. A BARE "is it source available" (no share/link cue) is a product-about
   // yes/no and is handled by PRODUCT_ABOUT instead, so require a share/right cue.
-  /\b(its|it'?s|so its|so it'?s)\s+an?\s+open[- ]?source\b|\bopensource (porject|project)\b|\bopen[- ]?source\b.{0,20}\bright\b/i,
+  // "source available" (a distinct, real licensing term from "open-source") is
+  // included alongside open-source in every alternative below.
+  /\b(its|it'?s|so its|so it'?s)\s+an?\s+(open[- ]?source|source[- ]?available)\b|\b(opensource|source[- ]?available) (porject|project)\b|\b(open[- ]?source|source[- ]?available)\b.{0,20}\bright\b/i,
   /\bwhy (can'?t|cant|wont|won'?t) (you )?share\b/i,    // "why can't you share, it's source available"
 ];
 
@@ -833,12 +865,12 @@ const PRODUCT_ABOUT_PATTERNS = [
   /\bhow(?:'?s| is| does)\s+(natively|nativley|nativly|it|the (app|product|backend|architecture|frontend|stack))\b/i,
   /\bwhat\s+(do you think about|about)\s+(natively|nativley|nativly)\b/i,
   /\bwhat (tech|technolog|stack|languages?|framework)\w*\s+(does|do)\s+(natively|nativley|it|this)\b/i,
-  /\bis (natively|nativley|it|this)\s+(local|cloud|open[- ]?source|privacy|low[- ]?distraction|on[- ]?device|transparent|accessib)\w*/i,
+  /\bis (natively|nativley|it|this)\s+(local|cloud|open[- ]?source|source[- ]?available|privacy|low[- ]?distraction|on[- ]?device|transparent|accessib)\w*/i,
   /\b(natively|nativley|nativly)'?s\s+(backend|architecture|stack|frontend|core)\b/i,
   // Safe product-attribute / behavior probes ("is it low-distraction?", "does it
   // process locally?", "is it privacy-first?", "does it use Ollama?", "what part
   // uses Rust?") — these are about the PRODUCT, grounded in loaded metadata.
-  /\b(is|are) (it|this|they)\s+(local|cloud[- ]?based|open[- ]?source|privacy[- ]?first|low[- ]?distraction|on[- ]?device|free|paid|safe|secure)\b/i,
+  /\b(is|are) (it|this|they)\s+(local|cloud[- ]?based|open[- ]?source|source[- ]?available|privacy[- ]?first|low[- ]?distraction|on[- ]?device|free|paid|safe|secure)\b/i,
   /\b(does|do)\s+(it|this|natively|nativley)\s+(process|run|store|work|use|have|support|need)\b/i,
   /\b(what|which) part (of (natively|nativley|it|the app))?\s*(uses|is in|runs|handles|does)\b|\b(does|do) (it|natively) (use|have) (a )?(backend|server|database|ollama|rust|electron|local)\b/i,
   // "what uses Rust", "what runs on Electron", "what's written in Go" — asking which
@@ -966,6 +998,12 @@ const JD_FIT_PATTERNS = [
   // description", "tailor it to the JD") — a role-fit answer grounded in the JD
   // (Issue 7). The salary negation is handled separately so this stays jd_fit.
   /\b(use|using|with|from|tailor (it|the answer) to|against) (the )?(jd|job description)\b/i,
+  // "The JD calls for/requires X — how do you stack/measure up (there)?" — an
+  // explicit JD-requirement comparison (grounding-campaign2 fix, 2026-07-17).
+  // Matches both the raw idiom ("stack up") and its textNoTechStack-neutralized
+  // form ("measure up") so this fires whichever text this list happens to be
+  // tested against. Resume+JD grounded self-assessment, not a generic concept.
+  /\b(jd|role|position|job) (calls for|requires|wants|needs|is (looking|asking) for)\b.{0,80}\bhow (do|does|would) (you|i) (stack|measure)(s|ed)?\s+up\b/i,
 ];
 
 // GAP / weakness-for-the-role asks (release 2026-06-09). These must produce an HONEST
@@ -1060,6 +1098,28 @@ const NEGOTIATION_ADVICE_CUE_RE = /\b(how\s+(should|do|would|can)\s+i\s+(negotia
 const hasJdReferenceCue = (text: string): boolean => JD_REFERENCE_CUE_RE.test(text);
 /** Does the question claim first-person candidate ownership? */
 const hasCandidateOwnershipCue = (text: string): boolean => CANDIDATE_OWNERSHIP_CUE_RE.test(text);
+
+// Grounding-campaign fix (2026-07-17): a bare comp keyword ("compensation",
+// "salary") in a question that ALSO frames the JD as the source ("what's the
+// compensation range for THIS ROLE?") is a factual JD lookup — planAnswer's
+// own resolveJdSourceType correctly routes it to jd_fact_answer. But
+// IntelligenceEngine.ts's live WTA grounding gate uses a separate, cruder
+// classifier (transcriptQuestionExtractor.classifyType) that has no JD-frame
+// awareness and routes ANY comp keyword straight to 'negotiation' —
+// excluding ALL candidate-profile/JD grounding for that turn, including a
+// pure "what does the document literally state" lookup. Confirmed live
+// (test/harness case C4-002): the model then falsely claimed the JD "does
+// not specify the company name" and "does not state a salary range" when
+// both were literally present in the real JD text.
+// This helper reuses the SAME jd-reference-cue + negotiation-advice-cue
+// signals resolveJdSourceType already relies on, without duplicating its
+// full JD-shape resolution logic — narrowly answering just the one question
+// IntelligenceEngine.ts's gate needs: "is this JD-framed and NOT asking for
+// negotiation advice/strategy?" A true negotiation-coaching ask ("how should
+// I negotiate my salary", "what should I counter with") still routes through
+// the existing negotiation channel untouched.
+export const isJdFactualLookupNotNegotiationAdvice = (text: string): boolean =>
+  hasJdReferenceCue(text) && !NEGOTIATION_ADVICE_CUE_RE.test(text);
 // A PEOPLE / leadership / conflict OBJECT after a lead/manage/handle verb marks a behavioral
 // STORY (not a skill probe). This ONE source is interpolated into the behavioral matcher AND
 // its two skill-side guards so the guard is always a superset of the matcher and the three lists
@@ -1077,7 +1137,20 @@ const SKILL_EXPERIENCE_PATTERNS = [
   // PEOPLE / a TEAM" is a behavioral STORY, not a skill — the negative lookahead lets those
   // fall through to BEHAVIORAL_PATTERNS (code-review caveat 2026-06-16). A tech object after
   // managed/handled (e.g. "have you managed a database/cluster") still routes to skills.
-  new RegExp(`\\bhave you (ever )?(?:(?:managed|handled|led)\\b(?!\\s+(?:a\\s+|an\\s+|the\\s+|your\\s+|some\\s+|any\\s+)?${PEOPLE_OR_CONFLICT_OBJECT}\\b)|(?:used|worked with|worked on|built|built with|written|coded in|programmed in|implemented|done|created|analy[sz]ed|normali[sz]ed|deployed|designed))\\b`, 'i'),
+  //
+  // Grounding-campaign2 fix (2026-07-17): "what scale have you OPERATED it at?"
+  // (script-a press A14, canonical: "What scale have you operated Kubernetes
+  // at?") fell through this whole pattern list — "operated" was missing from
+  // the verb group — and ended up at `general_meeting_answer` (forbids
+  // resume), giving candidateProfileChars:0 for a clearly candidate-directed
+  // operational-scale question. Live-confirmed on the real backend
+  // (test/harness-longsession script-a run-018): the answer was 92 ALL-CAPS
+  // words with no résumé grounding at all — a distinct symptom from the
+  // "stack up" idiom bugs (fix#14/#15/#17), but the same root shape (a
+  // legitimate candidate-experience verb missing from a keyword list).
+  // Added operated/run/scaled/maintained — common "have you run/scaled/
+  // maintained X at scale" interview phrasings for infra/ops experience.
+  new RegExp(`\\bhave you (ever )?(?:(?:managed|handled|led)\\b(?!\\s+(?:a\\s+|an\\s+|the\\s+|your\\s+|some\\s+|any\\s+)?${PEOPLE_OR_CONFLICT_OBJECT}\\b)|(?:used|worked with|worked on|built|built with|written|coded in|programmed in|implemented|done|created|analy[sz]ed|normali[sz]ed|deployed|designed|operated|run|scaled|maintained))\\b`, 'i'),
   /\bdo you (know|have experience (with|in)|use)\b/i,
   /\bare you (familiar|comfortable|proficient|experienced) (with|in)\b/i,
   // "Are you good/strong/skilled at X?", "are you any good with React?" — a
@@ -1607,6 +1680,8 @@ const templateFor = (answerType: AnswerType): string => {
       return DOCUMENT_LIST_TEMPLATE;
     case 'exact_numeric_answer':
       return DOCUMENT_NUMERIC_TEMPLATE;
+    case 'document_structure_answer':
+      return DOCUMENT_STRUCTURE_TEMPLATE;
     case 'document_absent_fact_refusal':
       return DOCUMENT_ABSENT_FACT_TEMPLATE;
     case 'document_followup_answer':
@@ -1678,6 +1753,7 @@ const requiredLayersFor = (answerType: AnswerType, documentGroundedCustomModeAct
     case 'definitional_answer':
     case 'list_answer':
     case 'exact_numeric_answer':
+    case 'document_structure_answer':
     case 'document_absent_fact_refusal':
     case 'document_followup_answer':
       return ['live_transcript', 'screen_context', 'reference_files', 'active_mode'];
@@ -1771,6 +1847,7 @@ const forbiddenLayersFor = (answerType: AnswerType): ContextLayer[] => {
     case 'definitional_answer':
     case 'list_answer':
     case 'exact_numeric_answer':
+    case 'document_structure_answer':
     case 'document_absent_fact_refusal':
     case 'document_followup_answer':
       // Document/lecture answers must not pull resume/JD/negotiation.
@@ -1839,6 +1916,7 @@ export const profileContextPolicyFor = (answerType: AnswerType): ProfileContextP
     case 'definitional_answer':
     case 'list_answer':
     case 'exact_numeric_answer':
+    case 'document_structure_answer':
     case 'document_absent_fact_refusal':
     case 'document_followup_answer':
     case 'general_meeting_answer':
@@ -2133,9 +2211,23 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   // Neutralize "tech stack" / "technology stack" AND bare "full-stack" so the
   // DSA `\bstack\b` data-structure pattern can't fire on them ("you said full
   // stack, but this is data analyst" must not become a stack/DSA question).
+  // Grounding-campaign2 fix (2026-07-17): "how do you stack up (there/against
+  // the JD)?" is the comparison IDIOM ("measure up"), not the data-structure
+  // noun — but the bare `\bstack\b` in DSA_PATTERNS/TECHNICAL_SUBJECT_PATTERNS
+  // matched it anyway, misrouting a JD-fit self-assessment question ("The JD
+  // calls for 8+ years and deep Go or Java expertise — how do you stack up
+  // there?") into technical_concept_answer. That answer type FORBIDS the
+  // resume/jd context layers (it's meant for "what is Redis?"-style neutral
+  // explanations), so the candidate's own profile/JD never reached the prompt
+  // and the model answered from CORE_IDENTITY's blanket "reveal internals"
+  // refusal instead ("I can't share that information.") — live-confirmed on
+  // run-014/verify_fix10 (press A9). Neutralize the idiom the same way the
+  // tech-stack/full-stack phrases are neutralized above, before any DSA/
+  // technical-concept pattern sees the text.
   const textNoTechStack = text
     .replace(/\b(tech|technology|technical)\s+stack\b/g, 'techstack')
-    .replace(/\bfull[- ]?stack\b/g, 'fullstack');
+    .replace(/\bfull[- ]?stack\b/g, 'fullstack')
+    .replace(/\bstack(s|ed)?\s+up\b/g, 'measure$1 up');
   const extractedType = input.extractedQuestion?.questionType;
   const documentGroundedCustomModeActive = input.activeMode?.documentGroundedCustomModeActive === true;
   const explicitDocumentModeCodingAsk = /\b(write|implement|code|coding interview|dsa|dry run|time complexity|space complexity|big[-\s]?o|algorithm(?:ic)?|solution code|source code)\b/i.test(text);
@@ -2490,11 +2582,18 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     answerType = 'technical_concept_answer';
   } else if (includesAny(text, TECHNICAL_CONCEPT_PATTERNS) &&
              !includesAny(text, CODING_PATTERNS) &&
-             (includesAny(textNoTechStack, DSA_PATTERNS) || isLikelyTechnicalConcept(text))) {
+             (includesAny(textNoTechStack, DSA_PATTERNS) || isLikelyTechnicalConcept(textNoTechStack))) {
     // "Explain BFS", "what is a deadlock", "difference between TCP and UDP" —
     // generic technical CONCEPT, NO profile (spec Case F). Checked before
     // DSA/coding: a DSA noun with explain/what-is framing and NO coding verb is a
     // concept, not a coding task.
+    // Grounding-campaign2 fix (2026-07-17): use the SAME textNoTechStack (which
+    // now also neutralizes the "stack up" idiom, see its definition above) that
+    // the DSA_PATTERNS check on this line already uses — isLikelyTechnicalConcept
+    // wraps TECHNICAL_SUBJECT_PATTERNS, which independently contains a bare
+    // \bstack\b, so calling it against the raw `text` let "how do you stack up
+    // there?" slip through this branch even after the DSA_PATTERNS check itself
+    // was fixed.
     answerType = 'technical_concept_answer';
   } else if (includesAny(textNoTechStack, DSA_PATTERNS)) {
     // Named DSA problem ("two sum", "reverse a linked list", "solve two sum").
@@ -2576,7 +2675,13 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // context and cascades into route/voice failures. Route it to the nearest
     // SAFE profile answer type. Generic non-candidate questions still go to
     // unknown (profileContextPolicy 'allowed', no forced profile).
-    const fb = classifyUnmatchedFallback(text, input);
+    // Grounding-campaign2 fix (2026-07-17): pass textNoTechStack, not raw
+    // text — classifyUnmatchedFallback's own project-vs-jd_fit lean (below)
+    // has the SAME bare \bstack\b collision as DSA_PATTERNS/
+    // TECHNICAL_SUBJECT_PATTERNS above ("how do you stack up there?" tripped
+    // its project_answer branch via the "stack" keyword instead of the
+    // intended jd_fit_answer route for a JD-comparison question).
+    const fb = classifyUnmatchedFallback(textNoTechStack, input);
     answerType = fb;
     // MODE PRIOR (PI v3, W1): nothing explicit matched AND the profile-aware
     // fallback landed on a floor type (unknown/general). In a sales call that

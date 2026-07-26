@@ -64,6 +64,25 @@ export interface CustomModeExecutionContract {
 
   // Source policy
   sourceAuthority: SourceAuthority;
+  /**
+   * How `sourceAuthority` was determined this turn — observability field
+   * (Knowledge Source canonical-gate repair, 2026-07-16):
+   *   - 'persisted' = came directly from the mode's persisted
+   *     ModeSourceContract (Knowledge Source UI selection or per-template
+   *     default seed). This is the desired, audited path.
+   *   - 'legacy_fallback' = no persisted contract reachable (or the caller
+   *     didn't thread it through); the legacy heuristic chain in
+   *     `buildCustomModeExecutionContract` inferred an authority from live
+   *     signals. Surfaces in `[SOURCE-ARBITER]` telemetry so a regression
+   *     where persistedSourceAuthority silently stops reaching the call site
+   *     becomes visible instead of silently flipping mode behavior. Not used
+   *     as a security boundary itself — the contract's allowedSources are
+   *     still authoritative.
+   *   - 'canonical_decision' = the lossless TurnSourceDecision was supplied;
+   *     its allowedEvidenceKinds fully drove allowedSources/forbiddenSources,
+   *     and `sourceAuthority` mirrors the decision's owner.
+   */
+  sourceAuthorityOrigin: 'persisted' | 'legacy_fallback' | 'canonical_decision';
   allowedSources: SourceKind[];
   forbiddenSources: SourceKind[];
   referentOnlySources: SourceKind[];
@@ -83,6 +102,11 @@ export interface CustomModeExecutionContract {
 
 export type SourceAuthority =
   | 'reference_files_only'
+  /** Real-custom-mode-repair: reference files own ambiguous nouns by default,
+   *  but explicit résumé/JD/transcript switches are still allowed (unlike
+   *  `reference_files_only`, which forbids them). Mirrors
+   *  ModeSourceContract.sourceAuthority — see electron/services/modeSourceContract.ts. */
+  | 'reference_files_primary'
   | 'profile_only'
   | 'transcript_only'
   | 'reference_files_plus_transcript'
@@ -120,6 +144,26 @@ export interface ContractBuildInput {
   // When set, `project` disambiguates to that source. When unset, the contract
   // marks `sourceAuthority = 'ask_if_ambiguous'` and `evidenceRequired = false`.
   userExplicitSource?: 'reference_files' | 'profile' | 'transcript' | null;
+  /**
+   * Real-custom-mode-repair (2026-07-11): the mode's PERSISTED
+   * ModeSourceContract.sourceAuthority (electron/services/modeSourceContract.ts),
+   * when the caller has it available. When present, this is AUTHORITATIVE —
+   * it replaces the legacy heuristic chain below (isDocGroundedCustomModeActive
+   * + hasProfileFacts + hasLiveTranscript inference) entirely, closing the root
+   * cause of the P0 contamination incident: a mode's source authority silently
+   * re-derived (and could flip) on every turn from a live regex match against
+   * the prompt text, defaulting to `general_mixed` (everything allowed) with no
+   * user visibility whenever the regex pair didn't match. Absent → legacy
+   * heuristic (backward compatible for callers that haven't been updated yet).
+   */
+  persistedSourceAuthority?: SourceAuthority | null;
+  /**
+   * Lossless canonical decision (electron/llm/turnSourceDecision). When
+   * supplied, this is the AUTHORITATIVE answer for allowedSources/forbiddenSources;
+   * the switch-on-sourceAuthority fallback below only runs when the decision is
+   * null (legacy callers).
+   */
+  turnSourceDecision?: import('./turnSourceDecision').TurnSourceDecision | null;
 }
 
 // ── Construction ──────────────────────────────────────────────────────────
@@ -162,10 +206,15 @@ export function buildCustomModeExecutionContract(input: ContractBuildInput): Cus
     hasMeetingRag,
     hasLongTermMemory,
     userExplicitSource,
+    persistedSourceAuthority,
+    turnSourceDecision,
   } = input;
 
-  // 1. Determine source authority
-  const sourceAuthority: SourceAuthority = (() => {
+  // 1. Determine source authority. The PERSISTED contract (when supplied) is
+  // authoritative — see persistedSourceAuthority doc comment above. This
+  // replaces the legacy live-heuristic chain, which is kept ONLY as the
+  // fallback for callers that haven't threaded the persisted value through yet.
+  const sourceAuthority: SourceAuthority = persistedSourceAuthority ?? (() => {
     if (isDocGroundedCustomModeActive && hasReferenceFiles) {
       return userExplicitSource === 'transcript'
         ? 'reference_files_plus_transcript'
@@ -189,6 +238,19 @@ export function buildCustomModeExecutionContract(input: ContractBuildInput): Cus
     return 'ask_if_ambiguous';
   })();
 
+  // Knowledge Source canonical-gate observability (2026-07-16): record
+  // WHETHER the sourceAuthority came from the persisted contract, the
+  // lossless canonical decision, or the legacy heuristic chain. Surfaced
+  // via `logArbitratedContract` so a regression where the persisted value
+  // stops reaching this call site becomes visible in telemetry rather than
+  // silently flipping mode behavior.
+  const sourceAuthorityOrigin: 'persisted' | 'legacy_fallback' | 'canonical_decision' =
+    turnSourceDecision
+      ? 'canonical_decision'
+      : persistedSourceAuthority
+        ? 'persisted'
+        : 'legacy_fallback';
+
   // 2. Determine allowed / forbidden / referent-only sources
   const allowed = new Set<SourceKind>();
   const forbidden = new Set<SourceKind>();
@@ -204,7 +266,30 @@ export function buildCustomModeExecutionContract(input: ContractBuildInput): Cus
     forbidden.add('persona');
   }
 
-  switch (sourceAuthority) {
+  if (turnSourceDecision) {
+    // Canonical-decision path. The decision's allowedEvidenceKinds are the
+    // EXACT list the runtime must respect. Every other source kind is
+    // forbidden — including prior assistant facts. Prior assistant
+    // messages remain referent_only for pronoun resolution only.
+    const grantedKinds = new Set<SourceKind>(
+      turnSourceDecision.allowedEvidenceKinds.map((k) => k as SourceKind),
+    );
+    const grantable: SourceKind[] = [
+      'reference_files', 'profile_resume', 'profile_jd', 'projects',
+      'live_transcript', 'meeting_rag',
+    ];
+    allowed.add('active_mode_pinned');
+    allowed.add('custom_context');
+    for (const kind of grantedKinds) {
+      allowed.add(kind);
+    }
+    for (const kind of grantable) {
+      if (!grantedKinds.has(kind)) forbidden.add(kind);
+    }
+    for (const kind of MEMORY_SOURCES) forbidden.add(kind);
+    forbidden.add('prior_assistant_facts');
+    referentOnly.add('prior_assistant_referent');
+  } else switch (sourceAuthority) {
     case 'reference_files_only': {
       // Strict doc-grounded mode: only the uploaded material is allowed.
       allowed.add('reference_files');
@@ -231,6 +316,36 @@ export function buildCustomModeExecutionContract(input: ContractBuildInput): Cus
       if (hasLiveTranscript) allowed.add('live_transcript');
       if (hasMeetingRag) allowed.add('meeting_rag');
       for (const s of PROFILE_SOURCES) forbidden.add(s);
+      for (const s of MEMORY_SOURCES) forbidden.add(s);
+      forbidden.add('prior_assistant_facts');
+      referentOnly.add('prior_assistant_referent');
+      break;
+    }
+    case 'reference_files_primary': {
+      // Real-custom-mode-repair: reference files own ambiguous nouns by
+      // default (evidence), but an EXPLICIT user source switch this turn
+      // ("answer from my resume instead") grants that source as evidence too
+      // — unlike `reference_files_only`, which is a hard prison. Without an
+      // explicit switch, profile/JD/transcript stay forbidden as evidence
+      // (never a silent mix), matching the seminar-mode product semantics in
+      // docs/context-os/real-custom-mode-repair/05_PRODUCT_SOURCE_POLICY.md.
+      allowed.add('reference_files');
+      allowed.add('active_mode_pinned');
+      allowed.add('custom_context');
+      if (userExplicitSource === 'profile' && hasProfileFacts) {
+        allowed.add('profile_resume');
+        allowed.add('profile_jd');
+        allowed.add('projects');
+      } else {
+        for (const s of PROFILE_SOURCES) forbidden.add(s);
+      }
+      if (userExplicitSource === 'transcript' && hasLiveTranscript) {
+        allowed.add('live_transcript');
+        if (hasMeetingRag) allowed.add('meeting_rag');
+      } else {
+        forbidden.add('live_transcript');
+        forbidden.add('meeting_rag');
+      }
       for (const s of MEMORY_SOURCES) forbidden.add(s);
       forbidden.add('prior_assistant_facts');
       referentOnly.add('prior_assistant_referent');
@@ -284,11 +399,18 @@ export function buildCustomModeExecutionContract(input: ContractBuildInput): Cus
   }
 
   // 3. Evidence contract
-  const evidenceRequired = sourceAuthority === 'reference_files_only'
-    || sourceAuthority === 'reference_files_plus_transcript'
+  const isReferenceFilesAuthority = sourceAuthority === 'reference_files_only'
+    || sourceAuthority === 'reference_files_primary'
+    || sourceAuthority === 'reference_files_plus_transcript';
+  // When the canonical decision has required kinds, treat the turn as
+  // evidence-required regardless of authority (the user explicitly asked
+  // for a source, the answer must reflect that source).
+  const decisionRequiresEvidence = Boolean(turnSourceDecision?.requiredEvidenceKinds.length);
+  const evidenceRequired = decisionRequiresEvidence
+    || isReferenceFilesAuthority
     || isDocGroundedAnswerType(answerType);
   const evidenceNamespace: 'reference_files' | 'live_transcript' | 'all_active' =
-    sourceAuthority === 'reference_files_only' || sourceAuthority === 'reference_files_plus_transcript'
+    isReferenceFilesAuthority
       ? 'reference_files'
       : sourceAuthority === 'transcript_only' || sourceAuthority === 'profile_plus_transcript'
         ? 'live_transcript'
@@ -310,6 +432,7 @@ export function buildCustomModeExecutionContract(input: ContractBuildInput): Cus
     answerType: answerType ?? 'unknown',
     streamRoute,
     sourceAuthority,
+    sourceAuthorityOrigin,
     allowedSources: Array.from(allowed).sort(),
     forbiddenSources: Array.from(forbidden).sort(),
     referentOnlySources: Array.from(referentOnly).sort(),
@@ -332,6 +455,7 @@ function hashContract(c: Omit<CustomModeExecutionContract, 'contractHash'>): str
     modeId: c.modeId,
     answerType: c.answerType,
     sourceAuthority: c.sourceAuthority,
+    sourceAuthorityOrigin: c.sourceAuthorityOrigin,
     allowedSources: c.allowedSources,
     forbiddenSources: c.forbiddenSources,
     evidenceRequired: c.evidenceRequired,
@@ -364,6 +488,7 @@ export function logArbitratedContract(contract: CustomModeExecutionContract, que
     answerType: contract.answerType,
     streamRoute: contract.streamRoute,
     sourceAuthority: contract.sourceAuthority,
+    sourceAuthorityOrigin: contract.sourceAuthorityOrigin,
     allowedSources: contract.allowedSources,
     forbiddenSources: contract.forbiddenSources,
     referentOnlySources: contract.referentOnlySources,

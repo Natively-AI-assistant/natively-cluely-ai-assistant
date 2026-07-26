@@ -51,8 +51,21 @@ interface ElectronAPI {
 
   // LLM Model Management
   getCurrentLlmConfig: () => Promise<{
-    provider: 'ollama' | 'gemini';
+    provider: 'ollama' | 'gemini' | 'custom' | 'codex-cli';
+    /**
+     * @deprecated Use `modelId` for selection comparisons and `displayName`
+     * for UI labels. Kept as an alias of `modelId` for back-compat.
+     *
+     * **Behavior change**: prior to the display-name split, `model` returned
+     * the custom-provider *name* for custom providers and the *identifier*
+     * for everything else (an inconsistent surface). It now always returns
+     * the stable identifier — use `displayName` if you need the label.
+     */
     model: string;
+    /** Stable identifier suitable for equality checks and persistence. */
+    modelId: string;
+    /** Human-readable label suitable for UI rendering. */
+    displayName: string;
     isOllama: boolean;
   }>;
   getAvailableOllamaModels: () => Promise<string[]>;
@@ -311,7 +324,7 @@ interface ElectronAPI {
   onNativeAudioConnected: (callback: () => void) => () => void;
   onNativeAudioDisconnected: (callback: () => void) => () => void;
   onSuggestionGenerated: (
-    callback: (data: { question: string; suggestion: string; confidence: number }) => void,
+    callback: (data: { question: string; suggestion: string; confidence: number; sourceLabel?: string }) => void,
   ) => () => void;
   onSuggestionProcessingStart: (callback: () => void) => () => void;
   onSuggestionError: (callback: (error: { error: string }) => void) => () => void;
@@ -433,7 +446,7 @@ interface ElectronAPI {
   // Intelligence Mode Events
   onIntelligenceAssistUpdate: (callback: (data: { insight: string }) => void) => () => void;
   onIntelligenceSuggestedAnswer: (
-    callback: (data: { answer: string; question: string; confidence: number }) => void,
+    callback: (data: { answer: string; question: string; confidence: number; sourceLabel?: string; generationId?: number }) => void,
   ) => () => void;
   onIntelligenceSuggestedAnswerDiscard: (
     callback: (data: { reason: string }) => void,
@@ -753,6 +766,7 @@ interface ElectronAPI {
   profileSetMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   profileDelete: () => Promise<{ success: boolean; error?: string }>;
   profileGetProfile: () => Promise<any>;
+  profileGetCompanyDossier: () => Promise<any | null>;
   profileSelectFile: () => Promise<{
     success?: boolean;
     cancelled?: boolean;
@@ -773,6 +787,9 @@ interface ElectronAPI {
   profileGenerateNegotiation: (
     force?: boolean,
   ) => Promise<{ success: boolean; script?: any; error?: string }>;
+  profileGenerateCoverLetter: (
+    force?: boolean,
+  ) => Promise<{ success: boolean; letter?: any; error?: string }>;
   profileGetNegotiationState: () => Promise<{
     success: boolean;
     state?: any;
@@ -791,6 +808,8 @@ interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+  getCodeVerification: () => Promise<boolean>;
+  setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;
   getMeetingRetention: () => Promise<'forever' | '7d' | '30d' | 'never'>;
   setMeetingRetention: (
     retention: 'forever' | '7d' | '30d' | 'never',
@@ -915,8 +934,15 @@ interface ElectronAPI {
   e2eInvoke: (channel: string, ...args: any[]) => Promise<any>;
   modesUpdate: (
     id: string,
-    updates: { name?: string; templateType?: string; customContext?: string },
+    updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },
   ) => Promise<{ success: boolean; error?: string }>;
+  modesGetSourceContract: (modeId: string) => Promise<any>;
+  modesBuildUserSourceContract: (input: {
+    modeId: string;
+    templateType: string;
+    switches: string[];
+    hasLiveTranscriptCapable?: boolean;
+  }) => Promise<any>;
   modesDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
   modesSetActive: (id: string | null) => Promise<{ success: boolean; error?: string }>;
   modesGetReferenceFiles: (
@@ -1486,7 +1512,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   onSuggestionGenerated: (
-    callback: (data: { question: string; suggestion: string; confidence: number }) => void,
+    callback: (data: { question: string; suggestion: string; confidence: number; sourceLabel?: string }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('suggestion-generated', subscription);
@@ -1711,7 +1737,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   onIntelligenceSuggestedAnswer: (
-    callback: (data: { answer: string; question: string; confidence: number }) => void,
+    callback: (data: { answer: string; question: string; confidence: number; sourceLabel?: string; generationId?: number }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('intelligence-suggested-answer', subscription);
@@ -2268,6 +2294,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   profileSetMode: (enabled: boolean) => ipcRenderer.invoke('profile:set-mode', enabled),
   profileDelete: () => ipcRenderer.invoke('profile:delete'),
   profileGetProfile: () => ipcRenderer.invoke('profile:get-profile'),
+  profileGetCompanyDossier: () => ipcRenderer.invoke('profile:get-company-dossier'),
   profileSelectFile: () => ipcRenderer.invoke('profile:select-file'),
 
   // JD & Research API
@@ -2283,12 +2310,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('profile:research-company', companyName),
   profileGenerateNegotiation: (force?: boolean) =>
     ipcRenderer.invoke('profile:generate-negotiation', force),
+  profileGenerateCoverLetter: (force?: boolean) =>
+    ipcRenderer.invoke('profile:generate-cover-letter', force),
   profileGetNegotiationState: () => ipcRenderer.invoke('profile:get-negotiation-state'),
   profileResetNegotiation: () => ipcRenderer.invoke('profile:reset-negotiation'),
-  profileGetNotes: () => ipcRenderer.invoke('profile:get-notes'),
-  profileSaveNotes: (content: string) => ipcRenderer.invoke('profile:save-notes', content),
-  profileGetPersona: () => ipcRenderer.invoke('profile:get-persona'),
-  profileSavePersona: (content: string) => ipcRenderer.invoke('profile:save-persona', content),
 
   // Tavily Search API
   setTavilyApiKey: (apiKey: string) => ipcRenderer.invoke('set-tavily-api-key', apiKey),
@@ -2335,6 +2360,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Verbose / Debug Logging
   getVerboseLogging: () => ipcRenderer.invoke('get-verbose-logging'),
   setVerboseLogging: (enabled: boolean) => ipcRenderer.invoke('set-verbose-logging', enabled),
+  getCodeVerification: () => ipcRenderer.invoke('get-code-verification'),
+  setCodeVerification: (enabled: boolean) => ipcRenderer.invoke('set-code-verification', enabled),
   getMeetingRetention: () => ipcRenderer.invoke('get-meeting-retention'),
   setMeetingRetention: (retention: 'forever' | '7d' | '30d' | 'never') =>
     ipcRenderer.invoke('set-meeting-retention', retention),
@@ -2443,8 +2470,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(channel, ...args),
   modesUpdate: (
     id: string,
-    updates: { name?: string; templateType?: string; customContext?: string },
+    updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },
   ) => ipcRenderer.invoke('modes:update', id, updates),
+  modesGetSourceContract: (modeId: string) =>
+    ipcRenderer.invoke('modes:get-source-contract', modeId),
+  modesBuildUserSourceContract: (input: {
+    modeId: string;
+    templateType: string;
+    switches: string[];
+    hasLiveTranscriptCapable?: boolean;
+  }) => ipcRenderer.invoke('modes:build-user-source-contract', input),
   modesDelete: (id: string) => ipcRenderer.invoke('modes:delete', id),
   modesSetActive: (id: string | null) => ipcRenderer.invoke('modes:set-active', id),
   modesGetReferenceFiles: (modeId: string) =>

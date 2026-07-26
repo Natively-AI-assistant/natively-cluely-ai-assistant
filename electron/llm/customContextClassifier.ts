@@ -2,8 +2,8 @@
 //
 // Backward-compatible custom-context categorisation (REPORT_TO_CHATGPT Phase 3).
 //
-// Custom context is stored today as a SINGLE trusted blob (LLMHelper.customNotes
-// and Mode.customContext). The spec wants it split into three categories so the
+// Custom context is stored today as a SINGLE trusted blob (Mode.customContext).
+// The spec wants it split into three categories so the
 // prompt can decide what to include per answer type:
 //
 //   - pinned     : short, broadly-useful user instructions ("speak concisely",

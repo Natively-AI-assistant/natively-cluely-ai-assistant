@@ -6,8 +6,8 @@ import { DatabaseManager } from '../db/DatabaseManager';
 // Imported from the leaf module (not the ../llm barrel) to avoid a require cycle.
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
 import type { AnswerType } from '../llm/AnswerPlanner';
-import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, sentenceAwareWindows, tabularChunks, type DocumentMap } from './modes/DocumentMap';
-import { EVIDENCE_USE_RULE, retrievalDiagnosticsEnabled, diagLog, isBroadDocumentQuery, computeEvidenceCoverage, classifyDocumentQuestionShape } from '../llm/documentGroundedPrompt';
+import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks, type DocumentMap } from './modes/DocumentMap';
+import { EVIDENCE_USE_RULE, retrievalDiagnosticsEnabled, diagLog, isBroadDocumentQuery, computeEvidenceCoverage, classifyDocumentQuestionShape, normalizeDocumentGroundedRetrievalQuery } from '../llm/documentGroundedPrompt';
 
 /**
  * Gate the mode's raw customContext blob by answer type (Phase 3). Returns only
@@ -81,7 +81,7 @@ export interface ModeRetrievalOptions {
     topK?: number;
 }
 
-interface RetrieveOptions extends ModeRetrievalOptions {
+export interface RetrieveOptions extends ModeRetrievalOptions {
     query: string;
     transcript?: string;
     tokenBudget?: number;
@@ -162,13 +162,16 @@ const DOC_GROUNDED_STOPWORDS = new Set([
     'was', 'were', 'are', 'is', 'the', 'for', 'and', 'with',
     'this', 'that', 'these', 'those', 'have', 'has', 'had',
     'can', 'could', 'would', 'should', 'about', 'role', 'main',
-    // Document-context words: ubiquitous in any uploaded document so they
-    // match every chunk equally and add noise without signal.
-    'thesis', 'seminar', 'paper', 'study', 'research',
     // Generic storage verbs — substring-stem "store" matches "stores", "storage",
     // "datastore" in chunk bodies, producing false contentWordBonus hits that
     // push structural-data chunks above the RLDS-format chunk for Q39.
     'stored', 'store', 'stores',
+    // NOTE: 'thesis', 'seminar', 'paper', 'study', 'research' were previously
+    // listed here. Removed 2026-07-17: legitimate user queries like "what's the
+    // thesis about" had every signal word stripped before lexical scoring,
+    // producing zero matches against any uploaded thesis/PDF. The "ubiquitous
+    // in any uploaded document" justification was wrong — academic-style
+    // questions hinge on these exact terms.
 ]);
 
 function wordsOf(text: string): string[] {
@@ -187,6 +190,46 @@ function wordsOf(text: string): string[] {
         .replace(/[^a-z0-9\s-]/g, ' ')
         .split(/\s+/)
         .filter(word => word.length > 2);
+}
+
+/**
+ * Levenshtein distance with early exit when distance > maxDist.
+ * Returns the edit distance between `a` and `b`, or `maxDist + 1` if it exceeds
+ * `maxDist`. Used to detect 1-character typos in lexical retrieval — e.g. a
+ * query "theisis" should still match a chunk word "thesis".
+ *
+ * Length pre-check: if |len(a) - len(b)| > 1, distance is at least 2, so we
+ * can return 2 immediately without doing the dynamic-programming loop.
+ */
+function levenshteinBounded(a: string, b: string, maxDist: number): number {
+    const la = a.length;
+    const lb = b.length;
+    if (Math.abs(la - lb) > maxDist) return maxDist + 1;
+    // Standard 2-row DP bounded at maxDist+1 for early termination
+    let prev = new Array(lb + 1).fill(0);
+    let curr = new Array(lb + 1).fill(0);
+    for (let j = 0; j <= lb; j++) prev[j] = j;
+    for (let i = 1; i <= la; i++) {
+        curr[0] = i;
+        let rowMin = curr[0];
+        for (let j = 1; j <= lb; j++) {
+            const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
+            curr[j] = Math.min(
+                prev[j] + 1,        // deletion
+                curr[j - 1] + 1,    // insertion
+                prev[j - 1] + cost, // substitution
+            );
+            if (curr[j] < rowMin) rowMin = curr[j];
+        }
+        if (rowMin > maxDist) return maxDist + 1;
+        [prev, curr] = [curr, prev];
+    }
+    return prev[lb];
+}
+
+/** Convenience wrapper: returns true iff Levenshtein(a, b) === 1. */
+function levenshtein1(a: string, b: string): boolean {
+    return levenshteinBounded(a, b, 1) === 1;
 }
 
 function chunkText(content: string, fineChunk: boolean = false): string[] {
@@ -414,11 +457,34 @@ function scoreChunk(
     const chunkWords = wordsOf(chunk);
     if (chunkWords.length === 0) return 0;
 
+    // Build a fuzzy match set for the query. Only words >= 4 chars are eligible
+    // for Levenshtein-1 fuzzy matching (short words have too many false positives).
+    // This rescues typo'd queries like "whats the theisis about" → "thesis".
+    const fuzzyQueryWords = new Map<string, string>(); // chunkWord → matchedQueryWord
+    for (const qWord of queryWords) {
+        if (qWord.length < 4) continue;
+        for (const cWord of chunkWords) {
+            if (cWord.length < 4) continue;
+            if (qWord === cWord) continue; // exact match handled below
+            const dist = levenshtein1(qWord, cWord);
+            if (dist) {
+                fuzzyQueryWords.set(cWord, qWord);
+            }
+        }
+    }
+
     let matches = 0;
     const seen = new Set<string>();
     for (const word of chunkWords) {
-        if (queryWords.has(word) && !seen.has(word)) {
+        if (seen.has(word)) continue;
+        if (queryWords.has(word)) {
+            // Exact match — full weight
             matches++;
+            seen.add(word);
+        } else if (fuzzyQueryWords.has(word)) {
+            // Typo'd query word (e.g. "theisis") matches a chunk word ("thesis").
+            // Half-weight so an exact match still beats a fuzzy one when both exist.
+            matches += 0.5;
             seen.add(word);
         }
     }
@@ -766,6 +832,8 @@ function buildDocumentIdentityBlock(mode: Mode, identities: DocumentIdentity[]):
 }
 
 export class ModeContextRetriever {
+    // Expose helpers for unit testing the fuzzy-matching layer in isolation.
+    static __test__ = { levenshtein1, levenshteinBounded };
     private _hybridRetriever: ModeHybridRetriever | null = null;
     private _sharedEmbeddingPipeline: EmbeddingPipeline | null = null;
 
@@ -840,9 +908,15 @@ export class ModeContextRetriever {
                 }
             }
         }
+        // Preserve the raw question outside retrieval. The derived scoring query
+        // removes only a sentence-initial conversational wrapper in document-
+        // grounded mode, so lexical and section planning see the factual payload.
+        const documentRetrievalQuery = forceDocumentGrounding
+            ? normalizeDocumentGroundedRetrievalQuery(options.query)
+            : options.query;
         const bareQueryText = forceDocumentGrounding
-            ? `${options.query}${referentEnrichment ? '\n' + referentEnrichment : ''}`.trim()
-            : `${options.query}\n${options.transcript ?? ''}${referentEnrichment ? '\n' + referentEnrichment : ''}`.trim();
+            ? `${documentRetrievalQuery}${referentEnrichment ? '\n' + referentEnrichment : ''}`.trim()
+            : `${documentRetrievalQuery}\n${options.transcript ?? ''}${referentEnrichment ? '\n' + referentEnrichment : ''}`.trim();
         const bareQueryWords = new Set(wordsOf(bareQueryText));
         const queryText = bareQueryWords.size >= 2
             ? bareQueryText
@@ -859,8 +933,8 @@ export class ModeContextRetriever {
                 ? queryWordsRaw.filter(w => !DOC_GROUNDED_STOPWORDS.has(w))
                 : queryWordsRaw,
         );
-        const queryShape = classifyDocumentQuestionShape(options.query || '', options.followUpReferentHint);
-        const broadQuery = isBroadDocumentQuery(options.query || '');
+        const queryShape = classifyDocumentQuestionShape(documentRetrievalQuery || '', options.followUpReferentHint);
+        const broadQuery = isBroadDocumentQuery(documentRetrievalQuery || '');
         const includeDocumentIdentity = forceDocumentGrounding && broadQuery;
         const documentIdentityBlock = includeDocumentIdentity ? buildDocumentIdentityBlock(mode, documentIdentities) : '';
         diagLog('DOC-RANK identity', { queryShape, broadQuery, identityIncluded: includeDocumentIdentity, reason: includeDocumentIdentity ? 'broad_overview_query' : 'specific_query_suppressed' });
@@ -921,9 +995,22 @@ export class ModeContextRetriever {
         // (transcript present) are unaffected. See FINDING-001 in
         // docs/testing/MODES_PROFILE_INTELLIGENCE_BUGFIX_LOG.md.
         const hasTranscript = !forceDocumentGrounding && !!options.transcript && options.transcript.trim().length > 0;
+        // Broad-query rescue (2026-07-17): when the user asks a broad-overview
+        // question against a document-grounded mode (e.g. "what's the thesis
+        // about?"), the query often collapses to ≤2 effective tokens after
+        // stopword filtering — even with typo tolerance added, the threshold
+        // filter would still reject most chunks. For these queries, drop the
+        // threshold to 0 so the document identity block + any surviving
+        // candidate can surface, and let the LLM synthesize from what is
+        // available rather than answering blind.
+        const broadQueryNeedsRescue = forceDocumentGrounding && (
+            broadQuery || queryWords.size <= 2
+        );
         const adaptiveThreshold = hasTranscript
             ? MIN_RELEVANCE_SCORE
-            : MIN_RELEVANCE_SCORE * Math.min(1, queryWords.size / 5);
+            : (broadQueryNeedsRescue
+                ? 0
+                : MIN_RELEVANCE_SCORE * Math.min(1, queryWords.size / 5));
 
         // Chunk a source the right way: a STRUCTURED reference file (real ToC +
         // numbered sections, e.g. a thesis PDF) is chunked by SECTION via the
@@ -969,8 +1056,8 @@ export class ModeContextRetriever {
         // whose child §2.3.2 holds the Jetson controller. The enrichment is
         // retrieval-side only; it never enters the model-visible prompt.
         const plannerQuery = referentEnrichment
-            ? `${options.query} ${referentEnrichment}`
-            : options.query;
+            ? `${documentRetrievalQuery} ${referentEnrichment}`
+            : documentRetrievalQuery;
         if (forceDocumentGrounding && plannerQuery) {
             for (const source of sources) {
                 if (source.type !== 'reference_file') continue;
@@ -1030,6 +1117,19 @@ export class ModeContextRetriever {
             const m = text.match(/^\[Section\s+([\d.]+)\s*\|/);
             return m ? m[1] : null;
         };
+        const navigationEntriesBySource = new Map<string, Set<string>>();
+        if (forceDocumentGrounding && queryShape === 'document_structure_answer') {
+            for (const source of sources) {
+                if (source.type !== 'reference_file') continue;
+                const entries = selectTableOfContentsEntries(options.query, getCachedDocumentMap(source.id, source.content));
+                if (entries.length > 0) navigationEntriesBySource.set(source.id, new Set(entries));
+            }
+        }
+        const isMatchingNavigationChunk = (sourceId: string, text: string): boolean => {
+            if (!text.startsWith('[Table of Contents |')) return false;
+            const entries = navigationEntriesBySource.get(sourceId);
+            return Boolean(entries && [...entries].some((entry) => text.includes(entry)));
+        };
         // Boost a chunk for being IN a target section or a DESCENDANT of one
         // (a target "2.3" pulls "2.3.2 Technical Specifications"). We do NOT
         // boost ANCESTORS — boosting the broad "2" chapter for a "2.4.2" target
@@ -1075,7 +1175,7 @@ export class ModeContextRetriever {
 
         // Precompute the query's entity terms ONCE (was recomputed per chunk
         // inside scoreChunk across all three scoring loops).
-        const queryEntityTerms = precomputeEntityTerms(options.query, forceDocumentGrounding);
+        const queryEntityTerms = precomputeEntityTerms(documentRetrievalQuery, forceDocumentGrounding);
 
         // Within-section tiebreak (round-6 51-bench): when the planner targets a
         // long section EVERY window gets the same section boost, so the generic
@@ -1085,8 +1185,8 @@ export class ModeContextRetriever {
         // gets a tiny bonus so the right window surfaces. Matching is PREFIX-
         // based (≥4 chars) so "parameters"/"parameter" and "format"/"formats"
         // unify without a full stemmer.
-        const queryContentStems = forceDocumentGrounding && options.query
-            ? [...new Set(wordsOf(options.query))]
+        const queryContentStems = forceDocumentGrounding && documentRetrievalQuery
+            ? [...new Set(wordsOf(documentRetrievalQuery))]
                 .filter(w => w.length >= 4 && !DOC_GROUNDED_STOPWORDS.has(w))
                 .map(w => w.slice(0, Math.max(4, w.length - 1))) // crude stem: drop trailing plural/inflection
             : [];
@@ -1103,30 +1203,14 @@ export class ModeContextRetriever {
             // but only the RLDS chunk contains "forma" (from "format").
             return Math.min(0.15, 0.05 * hit);
         };
-        const mercuryControllerQuery = /\bmercury\s*x1\b/i.test(options.query || '')
-            && /\b(?:processor|controller|control\s+system|controls?|main\s+controller|auxiliary\s+controller)\b/i.test(options.query || '');
-        const mercuryControllerScoreAdjust = (chunk: string): number => {
-            if (!forceDocumentGrounding || !mercuryControllerQuery) return 0;
-            const hasMain = /\bJetson\s+Xavier\b/i.test(chunk) && !/\bJetson\s+Xavier\s+NX\b/i.test(chunk);
-            const hasAux = /\bJetson\s+Nano\b/i.test(chunk);
-            const controllerCue = /\b(?:Control\s+System|main\s+controller|auxiliary\s+controller|controlled\s+by|technical\s+specifications?|specifications?)\b/i.test(chunk);
-            const lowLevelEsp32 = /\bESP32\b/i.test(chunk) && /\b(?:motor\s+control|low-level\s+motor|communication\s+board|motor\s+control\s+board)\b/i.test(chunk);
-            let delta = 0;
-            if (controllerCue) delta += 0.12;
-            if (hasMain) delta += 0.18;
-            if (hasAux) delta += 0.18;
-            if (hasMain && hasAux) delta += 0.22;
-            if (lowLevelEsp32 && !(hasMain || hasAux)) delta -= 0.30;
-            return delta;
-        };
-
         const candidates: ModeRetrievedSnippet[] = [];
         for (const source of sources) {
             for (const chunk of chunksForSource(source)) {
-                let score = scoreChunk(queryWords, chunk, options.query, forceDocumentGrounding, queryEntityTerms);
+                const navigationMatch = isMatchingNavigationChunk(source.id, chunk);
+                let score = scoreChunk(queryWords, chunk, documentRetrievalQuery, forceDocumentGrounding, queryEntityTerms);
                 const boost = sectionBoost(chunkSectionNum(chunk));
                 if (boost > 0) score = Math.min(1, score + boost + contentWordBonus(chunk));
-                score = Math.max(0, Math.min(1, score + mercuryControllerScoreAdjust(chunk)));
+                if (navigationMatch) score = Math.max(score, 0.9);
                 if (score < adaptiveThreshold) continue;
                 candidates.push({
                     sourceId: source.id,
@@ -1193,7 +1277,7 @@ export class ModeContextRetriever {
             // by an "evaluation"/"metric" sentence). NO fixture-specific terms
             // (no "teleoperation"/"Success Rate"/"MSE") are hardcoded — the boost
             // only fires when the CHUNK itself contains the generic section word.
-            const ql = `${options.query ?? ''}`.toLowerCase();
+            const ql = documentRetrievalQuery.toLowerCase();
             const sectionHints: string[] = [];
             const addHint = (...terms: string[]) => sectionHints.push(...terms);
             if (/\bphase|phases|stage|stages|step|steps|main (?:parts|components)\b/.test(ql)) addHint('objective', 'phase', 'stage', 'step');
@@ -1231,8 +1315,8 @@ export class ModeContextRetriever {
                 // "Mercury X1"). Falls through to the synonym-only rescue when
                 // no entities are present in the query (broad / vague questions),
                 // so the original behaviour is preserved for entity-less questions.
-                const ownEntityTerms = forceDocumentGrounding && options.query
-                    ? extractHighSignalEntityTerms(options.query)
+                const ownEntityTerms = forceDocumentGrounding && documentRetrievalQuery
+                    ? extractHighSignalEntityTerms(documentRetrievalQuery)
                         .filter(t => !/^\d[\d.,]*$/.test(t.trim()))   // drop pure numbers
                         .map(t => t.toLowerCase())
                     : [];
@@ -1251,7 +1335,7 @@ export class ModeContextRetriever {
                             if (!entityHit) continue;
                         }
                         const key = `${source.id}::${chunk}`;
-                        let base = scoreChunk(queryWords, chunk, options.query, forceDocumentGrounding, queryEntityTerms);
+                        let base = scoreChunk(queryWords, chunk, documentRetrievalQuery, forceDocumentGrounding, queryEntityTerms);
                         // Carry forward the section-target boost so a rescued
                         // chunk in a TARGET section isn't demoted below its
                         // first-pass rank (consistency across the two passes).
@@ -1381,7 +1465,7 @@ export class ModeContextRetriever {
                     const retryCandidates: ModeRetrievedSnippet[] = [];
                     for (const source of sources) {
                         for (const chunk of chunksForSource(source)) {
-                            const score = Math.max(0, Math.min(1, scoreChunk(retryQueryWords, chunk, retryTerms.join(" "), forceDocumentGrounding, retryEntityTerms) + mercuryControllerScoreAdjust(chunk)));
+                            const score = Math.max(0, Math.min(1, scoreChunk(retryQueryWords, chunk, retryTerms.join(" "), forceDocumentGrounding, retryEntityTerms)));
                             if (score < MIN_RELEVANCE_SCORE) continue;
                             retryCandidates.push({
                                 sourceId: source.id,
@@ -1677,13 +1761,16 @@ export class ModeContextRetriever {
                 if (hintEntities.length > 0) referentEnrichment = '\n' + hintEntities.slice(0, 3).join(' ');
             }
         }
-        const queryText = `${options.query}\n${options.transcript ?? ''}${referentEnrichment}`.trim();
+        const retrievalQuery = options.forceDocumentGrounding
+            ? normalizeDocumentGroundedRetrievalQuery(options.query)
+            : options.query;
+        const queryText = `${retrievalQuery}\n${options.transcript ?? ''}${referentEnrichment}`.trim();
         // Doc-grounded retrieval must score against the actual question, not the
         // whole transcript. The transcript is useful conversational context, but in
         // a seminar session it contains generic words like "uploaded thesis material"
         // that swamp short precise queries (hardware/camera/self-awareness) and can
         // cause fallback/ranking to miss the answer-bearing reference chunk.
-        const hybridQuery = options.forceDocumentGrounding ? `${options.query}${referentEnrichment}`.trim() : queryText;
+        const hybridQuery = options.forceDocumentGrounding ? `${retrievalQuery}${referentEnrichment}`.trim() : queryText;
         const hasTranscript = !options.forceDocumentGrounding && !!options.transcript && options.transcript.trim().length > 0;
 
         const result = await this._hybridRetriever!.retrieve({

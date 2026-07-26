@@ -164,14 +164,18 @@ const TRANSCRIPT_BLOCK = `
 
 // ── Test 1: DOC_GROUNDED_ANSWER_TYPES set completeness ─────────────────────
 
-test('DOC_GROUNDED_ANSWER_TYPES contains the six doc-grounded shapes', () => {
-  assert.equal(DOC_GROUNDED_ANSWER_TYPES.size, 6, `expected 6 shapes, got ${DOC_GROUNDED_ANSWER_TYPES.size}`);
+test('DOC_GROUNDED_ANSWER_TYPES contains the seven doc-grounded shapes', () => {
+  assert.equal(DOC_GROUNDED_ANSWER_TYPES.size, 7, `expected 7 shapes, got ${DOC_GROUNDED_ANSWER_TYPES.size}`);
   for (const t of [
     'lecture_answer',
     'definitional_answer',
     'list_answer',
     'exact_numeric_answer',
     'document_followup_answer',
+    // document_structure_answer added by the structural/ToC hardening
+    // (commit 9abc9a6) so "what's in section N" / ToC questions also fire
+    // the post-stream document-grounded validator.
+    'document_structure_answer',
     'document_absent_fact_refusal',
   ]) {
     assert.equal(DOC_GROUNDED_ANSWER_TYPES.has(t), true, `missing shape: ${t}`);

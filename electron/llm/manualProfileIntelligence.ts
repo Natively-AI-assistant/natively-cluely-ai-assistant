@@ -196,7 +196,15 @@ const NAME_PATTERNS = [
   // single deterministic fact (the loaded name) and MUST be answered by the
   // fast path in every mode so they can never reach the LLM and leak "I'm
   // Natively, an AI assistant" / a false refusal.
-  /\bwhat\s+(is|s)\s+your\s+(full\s+)?name\b/,
+  // Campaign-3 fix (2026-07-19, fix/answer-policy-engine): the previous
+  // alternation `what (is|s) your name` did NOT match the post-normalize form
+  // `"what s your name"` that the harness's question "What's your name?"
+  // produces (apostrophe → space). Live-trace C3M-001 returned "I'm Natively,
+  // an AI assistant." because the identity fast path never fired. The added
+  // pattern below matches `what s your name` (post-normalize) AND `what's your
+  // name` (pre-normalize); redundant with the existing alternation when both
+  // spaces are explicit, but guarantees coverage of the apostrophe form.
+  /\bwhat\s*(?:'s|s|is)\s+your\s+(full\s+)?name\b/,
   /\bwhats\s+your\s+name\b/,
   /\bwhat\s+should\s+(i|we)\s+call\s+you\b/,
   /\bwho\s+are\s+you\b/,

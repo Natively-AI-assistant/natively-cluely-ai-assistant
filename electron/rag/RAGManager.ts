@@ -22,6 +22,7 @@ export interface RAGManagerConfig {
     geminiKeys?: string[];   // optional pool for embedding key-rotation + 429 cooldown
     ollamaUrl?: string;
     providerDataScopes?: ProviderDataScopePolicy;
+    explicitKeyManagement?: boolean;
 }
 
 /**
@@ -54,7 +55,8 @@ export class RAGManager {
             geminiKey: config.geminiKey,
             geminiKeys: config.geminiKeys,
             ollamaUrl: config.ollamaUrl,
-            providerDataScopes: config.providerDataScopes
+            providerDataScopes: config.providerDataScopes,
+            explicitKeyManagement: config.explicitKeyManagement,
         }).then(() => {
             // Backfill provider metadata for meetings that were embedded before the
             // embedding_provider column was written (or where the write failed silently).
@@ -76,8 +78,11 @@ export class RAGManager {
         return this.embeddingPipeline;
     }
 
-    initializeEmbeddings(keys: { openaiKey?: string, geminiKey?: string, geminiKeys?: string[], ollamaUrl?: string, providerDataScopes?: ProviderDataScopePolicy }): void {
-        const initPromise = this.embeddingPipeline.initialize(keys);
+    initializeEmbeddings(keys: { openaiKey?: string, geminiKey?: string, geminiKeys?: string[], ollamaUrl?: string, providerDataScopes?: ProviderDataScopePolicy, explicitKeyManagement?: boolean }): void {
+        const initPromise = this.embeddingPipeline.initialize({
+            ...keys,
+            explicitKeyManagement: keys.explicitKeyManagement,
+        });
         // After init, backfill embedding_provider on meetings that have embedded chunks
         // but a NULL metadata column (common for meetings embedded before this metadata
         // write was introduced, or where the write silently failed).
