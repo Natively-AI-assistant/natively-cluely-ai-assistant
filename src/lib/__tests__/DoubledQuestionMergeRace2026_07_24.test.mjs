@@ -112,4 +112,20 @@ describe('Phase 3 item 4 / Phase 6 Slice 0 item 2: doubled-question client-side 
     );
     assert.equal(result, 'the quick brown fox jumps over the lazy dog');
   });
+
+  test('Greptile PR #392 finding: a word that is merely a character prefix of a longer base word is not treated as a startsWith match', () => {
+    // "category".startsWith("cat") is true at the character level, but "cat"
+    // and "category" are unrelated words — the merge must not replace base
+    // with addition just because addition's first word happens to contain
+    // base's only word as a character prefix.
+    const result = mergeTranscriptChunks('cat', 'category is broad');
+    assert.equal(result, 'cat category is broad');
+  });
+
+  test('Greptile PR #392 finding: a word that is merely a character suffix of a longer base word is not silently dropped', () => {
+    // "chocolate".endsWith("late") is true at the character level, but "late"
+    // is a genuinely new word, not a stale trailing fragment of "chocolate".
+    const result = mergeTranscriptChunks('a lot of chocolate', 'late at night');
+    assert.equal(result, 'a lot of chocolate late at night');
+  });
 });
