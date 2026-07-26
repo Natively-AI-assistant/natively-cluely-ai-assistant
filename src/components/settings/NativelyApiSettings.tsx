@@ -1098,7 +1098,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                 {/* Clean limits grid container */}
                 <div className="flex items-center justify-center gap-3.5 mb-5 text-[11.5px] font-medium text-text-primary bg-bg-input px-3.5 py-2 rounded-[8px] border border-border-subtle shadow-[inset_0_1px_rgba(255,255,255,0.02)]">
                   <div className="flex flex-col items-center gap-1">
-                    <Clock size={14} strokeWidth={2} className="text-blue-500" />
+                    <Clock size={14} strokeWidth={2} className="text-accent-primary" />
                     <span>30 min</span>
                   </div>
                   <div className="w-px h-5 bg-border-subtle/80" />
@@ -1168,8 +1168,8 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         {/* Card header */}
         <div className="flex items-center gap-3 px-5 pt-5 pb-4">
           {/* Tinted icon well — Apple style */}
-          <div className="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-500/20 flex items-center justify-center shrink-0">
-            <NativelyLogoMark size={18} className="text-blue-400" />
+          <div className="w-9 h-9 rounded-xl bg-accent-subtle border border-accent-border flex items-center justify-center shrink-0">
+            <NativelyLogoMark size={18} className="text-accent-strong" />
           </div>
           <div className="min-w-0">
             <p className="text-[13px] font-semibold text-text-primary">API Key</p>
@@ -1220,7 +1220,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                             ${
                               error
                                 ? 'border-red-500/40 focus:border-red-500/60 focus:ring-1 focus:ring-red-500/20'
-                                : 'border-border-subtle focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/15'
+                                : 'border-border-subtle focus:border-accent-focus focus:ring-1 focus:ring-accent-focus'
                             }`}
           />
 
@@ -1239,12 +1239,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             className={`w-full py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150 select-none
                             ${
                               isSaving
-                                ? 'bg-button-primary-disabled-bg border border-button-primary-disabled-border text-button-primary-disabled-text cursor-wait'
+                                ? 'bg-legacy-action-disabled-bg border border-legacy-action-disabled-border text-legacy-action-disabled-text cursor-wait'
                                 : justSaved
                                   ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-pointer'
                                   : !isDirty
-                                    ? 'bg-button-primary-disabled-bg border border-button-primary-disabled-border text-button-primary-disabled-text cursor-default'
-                                    : 'bg-button-primary-bg hover:bg-button-primary-hover text-white shadow-sm active:scale-[0.99] cursor-pointer'
+                                    ? 'bg-legacy-action-disabled-bg border border-legacy-action-disabled-border text-legacy-action-disabled-text cursor-default'
+                                    : 'bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg shadow-sm active:scale-[0.99] cursor-pointer'
                             }`}
           >
             {isSaving ? (
@@ -1267,7 +1267,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             Don't have a key?{' '}
             <span
               onClick={() => openExternal(PLAN_STANDARD_URL)}
-              className="text-blue-400 hover:text-blue-300 cursor-pointer transition-colors duration-150"
+              className="text-accent-primary hover:text-accent-hover cursor-pointer transition-colors duration-150"
             >
               Subscribe to get one
             </span>
@@ -1374,7 +1374,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                   label="Transcription"
                   icon={Mic}
                   bucket={usageData.quota.transcription}
-                  barColor="bg-blue-500"
+                  barColor="bg-accent-primary"
                 />
                 <QuotaBar
                   label="AI requests"
@@ -1406,7 +1406,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             </p>
             <button
               onClick={() => openExternal('https://natively.software/pro')}
-              className="flex items-center gap-1 text-[10px] font-semibold text-blue-400 hover:text-blue-300 uppercase tracking-widest transition-colors cursor-pointer"
+              className="flex items-center gap-1 text-[10px] font-semibold text-accent-primary hover:text-accent-hover uppercase tracking-widest transition-colors cursor-pointer"
             >
               Watch Demo <ArrowUpRight size={10} strokeWidth={2} />
             </button>
@@ -1474,7 +1474,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                 To cancel your subscription, log in to the{' '}
                 <span
                   onClick={() => openExternal('https://customer.dodopayments.com/')}
-                  className="text-blue-400 hover:text-blue-300 underline decoration-blue-400/40 underline-offset-[3px] cursor-pointer transition-colors"
+                  className="text-accent-primary hover:text-accent-hover underline decoration-accent-border underline-offset-[3px] cursor-pointer transition-colors"
                 >
                   customer portal
                 </span>{' '}

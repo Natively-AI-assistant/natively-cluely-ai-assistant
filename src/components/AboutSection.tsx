@@ -211,7 +211,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     {/* 0. Official Website */}
                     <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 flex flex-col md:flex-row items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-500 shadow-sm shadow-indigo-500/5">
+                            <div className="w-10 h-10 rounded-full bg-accent-subtle flex items-center justify-center text-accent-primary shadow-sm shadow-[var(--accent-shadow-20)]">
                                 <Globe size={18} className="opacity-80" />
                             </div>
                             <div>
@@ -358,7 +358,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     {/* 3. Get in Touch */}
                     <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 flex flex-col md:flex-row items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500 shadow-sm shadow-blue-500/5">
+                            <div className="w-10 h-10 rounded-full bg-accent-subtle flex items-center justify-center text-accent-primary shadow-sm shadow-[var(--accent-shadow-20)]">
                                 <Mail size={18} className="opacity-80" />
                             </div>
                             <div>

@@ -42,7 +42,7 @@ const MiniPairingCountdownRing: React.FC<{ seconds: number; total: number }> = (
           style={{ transition: 'stroke-dashoffset 950ms cubic-bezier(0.4, 0, 0.2, 1)' }}
         />
       </svg>
-      <span className="absolute inset-0 grid place-items-center font-mono text-[8px] font-semibold tabular-nums text-blue-300">
+      <span className="absolute inset-0 grid place-items-center font-mono text-[8px] font-semibold tabular-nums text-accent-primary">
         {remaining}
       </span>
     </div>
@@ -317,7 +317,7 @@ export const PhoneMirrorSettings: React.FC = () => {
             aria-checked={info.running}
             disabled={busy !== null}
             onClick={onToggleEnable}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${info.running ? 'bg-blue-500' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''}`}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-focus ${info.running ? 'bg-accent-primary' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''}`}
           >
             <span
               className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${info.running ? 'translate-x-5' : 'translate-x-1'}`}
@@ -449,7 +449,7 @@ export const PhoneMirrorSettings: React.FC = () => {
               aria-checked={info.exposeOnLan}
               disabled={busy !== null}
               onClick={onToggleLan}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${info.exposeOnLan ? 'bg-amber-500' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''}`}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-focus ${info.exposeOnLan ? 'bg-amber-500' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''}`}
             >
               <span
                 className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${info.exposeOnLan ? 'translate-x-5' : 'translate-x-1'}`}
@@ -516,7 +516,7 @@ export const PhoneMirrorSettings: React.FC = () => {
                   aria-live="polite"
                   aria-atomic="true"
                   aria-label={`Waiting for extension. Pairing window: ${armCountdown} seconds remaining.`}
-                  className="flex items-center gap-2.5 rounded-lg border border-blue-500/20 bg-blue-500/[0.05] px-3 py-2"
+                  className="flex items-center gap-2.5 rounded-lg border border-accent-border bg-accent-subtle px-3 py-2"
                 >
                   <MiniPairingCountdownRing seconds={armCountdown} total={armTotal} />
                   <div className="min-w-0 flex-1">
@@ -524,7 +524,7 @@ export const PhoneMirrorSettings: React.FC = () => {
                       Waiting for extension
                     </div>
                     <div className="text-text-secondary text-[11px] mt-0.5 leading-snug">
-                      Click <span className="text-blue-300">Connect to Natively</span> in the browser popup.
+                      Click <span className="text-accent-primary">Connect to Natively</span> in the browser popup.
                     </div>
                   </div>
                 </div>
@@ -555,7 +555,7 @@ export const PhoneMirrorSettings: React.FC = () => {
                   type="button"
                   onClick={onArmExtension}
                   aria-label="Connect browser extension"
-                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors bg-blue-500 text-white hover:bg-blue-400"
+                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors bg-legacy-action-bg text-legacy-action-fg hover:bg-legacy-action-hover"
                 >
                   <Zap size={13} />
                   Connect browser extension
@@ -783,8 +783,8 @@ const CtxToggle: React.FC<{
       aria-label={label}
       disabled={comingSoon}
       onClick={comingSoon ? undefined : onChange}
-      className={`flex-shrink-0 mt-0.5 relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${
-        comingSoon ? 'cursor-not-allowed bg-bg-item-active' : checked ? 'bg-blue-500' : 'bg-bg-item-active'
+      className={`flex-shrink-0 mt-0.5 relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-focus ${
+        comingSoon ? 'cursor-not-allowed bg-bg-item-active' : checked ? 'bg-accent-primary' : 'bg-bg-item-active'
       }`}
     >
       <span

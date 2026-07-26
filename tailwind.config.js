@@ -20,9 +20,36 @@ module.exports = {
           'item-surface': 'var(--bg-item-surface)',
           'item-active': 'var(--bg-item-active)',
         },
+        // Never chain a Tailwind /NN opacity modifier onto any accent-*, on-accent, or
+        // button-primary-* utility — these are bare var() references and Tailwind cannot
+        // parse them to recompute alpha; the utility silently compiles to nothing.
+        // Add a named token instead.
         accent: {
           primary: 'var(--accent-primary)',
           secondary: 'var(--accent-muted)',
+          hover: 'var(--accent-hover)',
+          pressed: 'var(--accent-pressed)',
+          strong: 'var(--accent-strong)',
+          subtle: 'var(--accent-subtle)',
+          muted: 'var(--accent-muted)',
+          border: 'var(--accent-border)',
+          focus: 'var(--accent-focus)',
+        },
+        'on-accent': 'var(--on-accent)',
+        'on-accent-surface': 'var(--on-accent-surface)',
+        // Deliberately blue, immune to the Settings orchid scope — for specific
+        // action buttons (Save, Fetch Models, Install, etc.) kept on the original
+        // color scheme rather than migrated to Soft Orchid.
+        'legacy-action': {
+          bg: 'var(--legacy-action-bg)',
+          hover: 'var(--legacy-action-hover)',
+          fg: 'var(--legacy-action-fg)',
+          subtle: 'var(--legacy-action-subtle)',
+          'subtle-hover': 'var(--legacy-action-subtle-hover)',
+          border: 'var(--legacy-action-border)',
+          'disabled-bg': 'var(--legacy-action-disabled-bg)',
+          'disabled-border': 'var(--legacy-action-disabled-border)',
+          'disabled-text': 'var(--legacy-action-disabled-text)',
         },
         button: {
           primary: {

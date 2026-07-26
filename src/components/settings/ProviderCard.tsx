@@ -246,7 +246,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                         disabled={isFetching}
                         className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-border-subtle flex items-center gap-2 shrink-0 ${isFetching
                             ? 'bg-bg-input text-text-secondary'
-                            : 'bg-accent-primary/10 text-accent-primary border-accent-primary/20 hover:bg-accent-primary/20'
+                            : 'bg-legacy-action-subtle text-legacy-action-bg border-legacy-action-border hover:bg-legacy-action-subtle-hover'
                             }`}
                     >
                         {isFetching ? (

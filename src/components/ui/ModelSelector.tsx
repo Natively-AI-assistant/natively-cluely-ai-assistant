@@ -240,10 +240,10 @@ interface ModelOptionProps {
 const ModelOption: React.FC<ModelOptionProps> = ({ name, desc, icon, selected, onSelect }) => (
     <button
         onClick={onSelect}
-        className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors group ${selected ? 'bg-accent-primary/10' : 'hover:bg-bg-input'}`}
+        className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors group ${selected ? 'bg-accent-subtle' : 'hover:bg-bg-input'}`}
     >
         <div className="flex items-center gap-3">
-            <div className={`p-1.5 rounded-md ${selected ? 'bg-accent-primary/20 text-accent-primary' : 'bg-bg-elevated text-text-secondary group-hover:text-text-primary'}`}>
+            <div className={`p-1.5 rounded-md ${selected ? 'bg-accent-muted text-accent-primary' : 'bg-bg-elevated text-text-secondary group-hover:text-text-primary'}`}>
                 {icon}
             </div>
             <div className="text-left">

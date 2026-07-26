@@ -99,7 +99,7 @@ const MockAppInterface = () => {
                             </div>
                         </div>
                         <div className="flex justify-end">
-                            <div className="max-w-[72.25%] px-[13.6px] py-[10.2px] text-[14px] leading-relaxed whitespace-pre-wrap bg-blue-500/10 border border-blue-500/20 text-blue-500 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium">
+                            <div className="max-w-[72.25%] px-[13.6px] py-[10.2px] text-[14px] leading-relaxed whitespace-pre-wrap bg-accent-subtle border border-accent-border text-accent-primary rounded-[20px] rounded-tr-[4px] shadow-sm font-medium">
                                 <span className="font-semibold text-emerald-500 block mb-1 text-[12px]">🎯 Answer</span>
                                 A good approach would be to use a hash map to cache intermediate results and reduce time complexity to O(N).
                             </div>
@@ -254,7 +254,7 @@ const MockMeetingInterfaceAnim = () => {
                     {tab === 'usage' && (
                         <motion.div key="usage" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }} className="space-y-4">
                             <div className="flex justify-end pt-2">
-                                <div className="bg-accent-primary text-white px-4 py-2 rounded-2xl rounded-tr-sm max-w-[75%] text-xs leading-relaxed shadow-sm">
+                                <div className="bg-accent-primary text-on-accent px-4 py-2 rounded-2xl rounded-tr-sm max-w-[75%] text-xs leading-relaxed shadow-sm">
                                     Could you elaborate on the Redis rate limiting?
                                 </div>
                             </div>
@@ -300,7 +300,7 @@ const MockMeetingChatAnim = () => {
             {/* Messages */}
             <div className="p-5 space-y-5">
                 <div className="flex justify-end">
-                    <div className="bg-accent-primary text-white px-4 py-2.5 rounded-2xl rounded-tr-sm max-w-[75%] text-sm leading-relaxed shadow-sm">
+                    <div className="bg-accent-primary text-on-accent px-4 py-2.5 rounded-2xl rounded-tr-sm max-w-[75%] text-sm leading-relaxed shadow-sm">
                         What API dependencies did they mention?
                     </div>
                 </div>
@@ -333,7 +333,7 @@ const MockSearchPillAnim = () => {
                         <Search size={14} className="text-text-tertiary" />
                     </div>
                     <div className="w-full bg-transparent pl-9 pr-4 py-2.5 text-[13px] text-text-primary outline-none flex items-center h-[38px]">
-                        <span className="opacity-90">System</span><motion.span animate={{ opacity: [1, 0, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-[1.5px] h-3.5 bg-blue-500 ml-[2px] inline-block" />
+                        <span className="opacity-90">System</span><motion.span animate={{ opacity: [1, 0, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-[1.5px] h-3.5 bg-accent-primary ml-[2px] inline-block" />
                     </div>
                 </div>
 
@@ -417,7 +417,7 @@ const MockPermissionsAnim = () => {
         <div className="flex justify-center flex-col items-center gap-4 py-8 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[240px]">
             <div className="w-[300px] bg-bg-elevated border border-border-subtle rounded-xl shadow-lg p-4 z-10">
                 <div className="flex items-center gap-3 mb-4 border-b border-border-subtle pb-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-500 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-accent-subtle text-accent-primary flex items-center justify-center">
                         <Monitor className="w-4 h-4" />
                     </div>
                     <div className="font-semibold text-sm text-text-primary">Screen Recording</div>
@@ -579,7 +579,7 @@ const getBadgeStyle = (color?: string) => {
 };
 
 const getIconStyle = (color?: string, isSelectedItem: boolean = false) => {
-    if (isSelectedItem) return 'bg-accent-primary text-white shadow-sm';
+    if (isSelectedItem) return 'bg-accent-primary text-on-accent shadow-sm';
     switch (color) {
         case 'blue': return 'bg-blue-500/10 text-blue-600';
         case 'orange': return 'bg-orange-500/10 text-orange-600';
@@ -616,7 +616,7 @@ const MockProviderSelectionAnim = () => {
             <div className="w-[340px] flex flex-col gap-2 relative z-10 font-sans">
                 <label className="text-xs font-medium text-text-secondary">Speech Provider</label>
                 <div className="relative">
-                    <button className={`w-full group bg-bg-input border border-border-subtle shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-all duration-200 outline-none ${isOpen ? 'ring-2 ring-accent-primary/20 border-accent-primary/50' : 'hover:shadow-md'}`}>
+                    <button className={`w-full group bg-bg-input border border-border-subtle shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-all duration-200 outline-none ${isOpen ? 'ring-2 ring-accent-border border-accent-focus' : 'hover:shadow-md'}`}>
                         <div className="flex items-center gap-3 overflow-hidden">
                             <div className={`w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-all duration-300 transform ${getIconStyle(selected.color, false)}`}>
                                 {selected.icon}
@@ -719,7 +719,7 @@ const MockApiKeyFlowAnim = () => {
                 <div className="flex items-center justify-between mt-2">
                     <div className="flex items-center gap-3">
                         <div className="text-xs bg-bg-input px-3 py-1.5 rounded-md flex items-center gap-2 border border-border-subtle shadow-sm">
-                            {stage === 2 ? <RefreshCw size={12} className="text-blue-500 animate-spin" /> : stage > 2 ? <Check size={12} className="text-green-500" /> : <Play size={12} className="text-text-tertiary" />}
+                            {stage === 2 ? <RefreshCw size={12} className="text-accent-primary animate-spin" /> : stage > 2 ? <Check size={12} className="text-green-500" /> : <Play size={12} className="text-text-tertiary" />}
                             <span className={stage > 2 ? "text-green-500" : "text-text-primary"}>
                                 {stage === 2 ? 'Testing...' : stage > 2 ? 'Connected' : 'Test API Key'}
                             </span>
@@ -949,7 +949,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                 <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                    <Mic size={14} className="text-blue-500" /> Microphone & Speaker Loopback Selection
+                                    <Mic size={14} className="text-accent-primary" /> Microphone & Speaker Loopback Selection
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
                                     Natively can capture both what you say and what you hear globally. At the top of the Audio Settings, use the Dropdowns to explicitly select your hardware Input (e.g. your physical microphone) and Output capture (what the speakers play). By default, Natively utilizes the <strong>System Default</strong>, so audio routing will automatically follow your OS preferences.
@@ -1009,7 +1009,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                             <div className="flex flex-col gap-3 mt-6">
                                 <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                        <Mic className="w-4 h-4 text-blue-500" /> Microphone
+                                        <Mic className="w-4 h-4 text-accent-primary" /> Microphone
                                     </h4>
                                     <p className="text-xs opacity-90 mb-2">Required to capture what you say during meetings. Windows prompts the first time you start a meeting.</p>
                                     <p className="text-[11px] text-text-tertiary">Settings &gt; Privacy &gt; Microphone</p>
@@ -1344,7 +1344,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                 <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                    <FileText className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" /> Summary Execution
+                                    <FileText className="w-4 h-4 text-accent-primary group-hover:scale-110 transition-transform" /> Summary Execution
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
                                     Natively fires a local background job as soon as the meeting finishes to compress the entire raw audio transcript into clean, formatted markdown representing structural overviews and explicit action items.
@@ -1514,7 +1514,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <Globe className="w-4 h-4 text-blue-500" /> Core Benefits
+                                        <Globe className="w-4 h-4 text-accent-primary" /> Core Benefits
                                     </h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li><strong>Zero Context Prep:</strong> Model inherits your coding stack, experience, etc.</li>
@@ -1523,7 +1523,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     </ul>
                                 </div>
 
-                                <div className="p-4 rounded-xl border bg-accent-primary/5 border-border-subtle">
+                                <div className="p-4 rounded-xl border bg-accent-subtle border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
                                         <CreditCard className="w-4 h-4 text-accent-primary" /> Pro Requirement
                                     </h4>
@@ -1679,8 +1679,8 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     <div className="space-y-6">
                         {/* Calendar */}
                         <div>
-                            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl mb-4">
-                                <h4 className="text-[13px] font-semibold text-blue-500 flex items-center gap-2 mb-1">
+                            <div className="p-3 bg-accent-subtle border border-accent-border rounded-xl mb-4">
+                                <h4 className="text-[13px] font-semibold text-accent-primary flex items-center gap-2 mb-1">
                                     <Calendar size={14} /> What is Calendar Intelligence?
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
@@ -1705,7 +1705,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <LayoutGrid className="w-4 h-4 text-blue-500" /> Launcher Peek Stack
+                                        <LayoutGrid className="w-4 h-4 text-accent-primary" /> Launcher Peek Stack
                                     </h4>
                                     <p className="text-[11px] text-text-secondary">
                                         The Launcher's Calendar card now displays your <strong>next real meeting</strong> with a stacked-card visual hinting at what comes after it — no need to switch tabs to see what's queued.
@@ -1853,9 +1853,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                         <div className="grid gap-3">
                             {/* Option 1: Managed Cloud */}
-                            <div className="p-4 rounded-xl border bg-accent-primary/5 border-border-subtle group">
+                            <div className="p-4 rounded-xl border bg-accent-subtle border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Globe className="w-4 h-4 text-blue-500" /> Option A: Hindsight Cloud (Recommended)
+                                    <Globe className="w-4 h-4 text-accent-primary" /> Option A: Hindsight Cloud (Recommended)
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
                                     A fully managed memory service hosted by Vectorize.io that handles all vector database indexing, LLM fact extraction, and observation consolidation.
@@ -1988,14 +1988,14 @@ hindsight-api`}
                                     <Cpu className="w-4 h-4 text-indigo-500" /> 1. Install the Extension
                                 </h4>
                                 <div className="space-y-3 text-[11px] text-text-secondary">
-                                    <div className="p-3 bg-accent-primary/5 border border-border-subtle rounded-lg">
+                                    <div className="p-3 bg-accent-subtle border border-border-subtle rounded-lg">
                                         <p className="font-semibold text-text-primary mb-1 flex items-center gap-1.5">
                                             <ExternalLink className="w-3.5 h-3.5 text-accent-primary" /> Chrome Web Store (Recommended)
                                         </p>
                                         <p className="mb-2 leading-relaxed">Install the official companion extension in one click directly from the Web Store:</p>
                                         <button
                                             onClick={() => { (window as any).electronAPI?.openExternal('https://chromewebstore.google.com/detail/lmhgnkbjnelmciecjkleaomjpejcgaln?utm_source=item-share-cb') }}
-                                            className="px-2.5 py-1 bg-accent-primary hover:bg-accent-hover text-white rounded text-[10px] font-semibold transition-colors flex items-center gap-1"
+                                            className="px-2.5 py-1 bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg rounded text-[10px] font-semibold transition-colors flex items-center gap-1"
                                         >
                                             Install from Chrome Web Store <ExternalLink size={10} />
                                         </button>

@@ -85,7 +85,7 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                         {/* Rolling Transcript Bar */}
                         <div className="w-full flex justify-center py-2 px-4 border-b mb-1 overlay-transcript-surface" style={appearance.transcriptStyle}>
                             <p className="text-[13px] truncate max-w-[90%] font-medium overlay-text-primary">
-                                <span className={`${resolvedTheme === 'light' ? 'text-blue-700' : 'text-blue-400'} mr-2 font-semibold`}>{t('Interviewer')}</span>
+                                <span className="overlay-text-muted mr-2 font-semibold">{t('Interviewer')}</span>
                                 <span className="opacity-95">{t('So how would you optimize the current algorithm?')}</span>
                             </p>
                         </div>
@@ -266,7 +266,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
     };
 
     const getIconStyle = (color?: string, isSelectedItem: boolean = false) => {
-        if (isSelectedItem) return 'bg-accent-primary text-white shadow-sm';
+        if (isSelectedItem) return 'bg-accent-primary text-on-accent shadow-sm';
         // For unselected items in list or trigger
         switch (color) {
             case 'blue': return 'bg-blue-500/10 text-blue-600';
@@ -284,7 +284,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
         <div ref={containerRef} className="relative z-20 font-sans">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`w-full group bg-bg-input border border-border-subtle hover:border-border-muted shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-all duration-200 outline-none focus:ring-2 focus:ring-accent-primary/20 ${isOpen ? 'ring-2 ring-accent-primary/20 border-accent-primary/50' : 'hover:shadow-md'}`}
+                className={`w-full group bg-bg-input border border-border-subtle hover:border-border-muted shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-all duration-200 outline-none focus:ring-2 focus:ring-accent-border ${isOpen ? 'ring-2 ring-accent-border border-accent-focus' : 'hover:shadow-md'}`}
             >
                 {selected ? (
                     <div className="flex items-center gap-3 overflow-hidden">
@@ -371,7 +371,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const isLight = useResolvedTheme() === 'light';
     const { t, lang, setLang } = useLanguage();
     const [activeTab, setActiveTab] = useState(initialTab);
-
     // Sync active tab when modal opens
     useEffect(() => {
         if (isOpen && initialTab) {
@@ -1421,6 +1420,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 >
                     <motion.div
                         id="settings-panel-wrapper"
+                        // Phase-1 Soft Orchid rebrand scope: any future Settings dropdown/menu
+                        // that renders via createPortal(..., document.body) will mount OUTSIDE
+                        // this data-settings-theme scope and silently fall back to the blue
+                        // brand accent — portals must be scoped to this subtree (or avoided).
+                        data-settings-theme="orchid"
                         initial={{ scale: 0.94, opacity: 0, y: 20 }}
                         animate={{ scale: 1, opacity: 1, y: 0 }}
                         exit={{ scale: 0.94, opacity: 0, y: 20 }}
@@ -1452,79 +1456,79 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 <nav className="mt-2 space-y-1">
                                     <button
                                         onClick={() => setActiveTab('general')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'general' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'general' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <Monitor size={16} /> {t('General')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('natively-api')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'natively-api' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'natively-api' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
-                                        <NativelyLogoMark size={16} className={activeTab === 'natively-api' ? 'text-blue-500' : 'text-blue-500/70'} />
+                                        <NativelyLogoMark size={16} className={activeTab === 'natively-api' ? 'text-text-primary' : 'text-text-secondary'} />
                                         <span>Natively API</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('natively-pro')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'natively-pro' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'natively-pro' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <NativelyLogoMark size={16} className={activeTab === 'natively-pro' ? 'text-text-primary' : 'text-text-secondary'} />
                                         <span>Natively Pro</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('ai-providers')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'ai-providers' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'ai-providers' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <FlaskConical size={16} /> {t('AI Providers')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('skills')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'skills' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'skills' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
-                                        <Folder size={16} className={activeTab === 'skills' ? 'text-accent-primary' : 'text-text-secondary'} /> {t('Skills')}
+                                        <Folder size={16} /> {t('Skills')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('calendar')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'calendar' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'calendar' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <Calendar size={16} /> {t('Calendar')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('audio')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'audio' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'audio' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <Mic size={16} /> {t('Audio')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('keybinds')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'keybinds' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'keybinds' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <Keyboard size={16} /> {t('Keybinds')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('phone-mirror')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'phone-mirror' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'phone-mirror' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <Smartphone size={16} /> {t('Sync')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('intelligence')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'intelligence' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'intelligence' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
-                                        <Cpu size={16} className={activeTab === 'intelligence' ? 'text-accent-primary' : ''} /> {t('Intelligence')}
+                                        <Cpu size={16} /> {t('Intelligence')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('help')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-3 ${activeTab === 'help' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'help' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <HelpCircle size={16} /> {t('Setup & Help')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('about')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'about' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'about' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <Info size={16} /> {t('About')}
                                     </button>
@@ -1546,141 +1550,85 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             {activeTab === 'general' && (
                                 <div className="space-y-6 animated fadeIn">
                                     <div className="space-y-3.5">
-                                        {/* UndetectableToggle */}
-                                        <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle flex items-center justify-between transition-all ${isUndetectable ? 'shadow-lg shadow-blue-500/10' : ''}`}>
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-2">
-                                                    {isUndetectable ? (
-                                                        <svg
-                                                            width="18"
-                                                            height="18"
-                                                            viewBox="0 0 24 24"
-                                                            fill="none"
-                                                            stroke="currentColor"
-                                                            strokeWidth="2"
-                                                            strokeLinecap="round"
-                                                            strokeLinejoin="round"
-                                                            className="text-text-primary"
-                                                        >
-                                                            <path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z" fill="currentColor" stroke="currentColor" />
-                                                            <path d="M9 10h.01" stroke="var(--bg-item-surface)" strokeWidth="2.5" />
-                                                            <path d="M15 10h.01" stroke="var(--bg-item-surface)" strokeWidth="2.5" />
-                                                        </svg>
-                                                    ) : (
-                                                        <Ghost size={18} className="text-text-primary" />
-                                                    )}
-                                                    <h3 className="text-lg font-bold text-text-primary">{isUndetectable ? t('Undetectable') : t('Detectable')}</h3>
-                                                </div>
-                                                <p className="text-xs text-text-secondary">
-                                                    {isUndetectable ? t('Natively is currently undetectable by screen-sharing.') : t('Natively is currently detectable by screen-sharing.')} <button onClick={() => window.electronAPI?.openExternal?.('https://natively.software/supportedapps')} className="text-blue-400 hover:underline">{t('Supported apps here')}</button>
-                                                </p>
-                                            </div>
-                                            <div
-                                                onClick={() => {
-                                                    const newState = !isUndetectable;
-                                                    setIsUndetectable(newState);
-                                                    window.electronAPI?.setUndetectable(newState);
-                                                    // Analytics: Undetectable Mode Toggle
-                                                    analytics.trackModeSelected(newState ? 'undetectable' : 'overlay');
-                                                }}
-                                                className={`w-11 h-6 rounded-full relative transition-colors ${isUndetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                            >
-                                                <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${isUndetectable ? 'translate-x-5' : 'translate-x-0'}`} />
-                                            </div>
-                                        </div>
-
-                                        {/* Mouse Passthrough Toggle — Adapted from public PR #113 */}
-                                        <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle flex items-center justify-between transition-all ${isMousePassthrough ? 'shadow-lg shadow-sky-500/10' : ''}`}>
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-2">
-                                                    <PointerOff size={18} className={isMousePassthrough ? 'text-sky-400' : 'text-text-primary'} />
-                                                    <h3 className="text-lg font-bold text-text-primary">{t('Mouse Passthrough')}</h3>
-                                                </div>
-                                                <p className="text-xs text-text-secondary">
-                                                    {t('Overlay stays visible but lets all mouse clicks pass through to the app beneath.')}
-                                                </p>
-                                            </div>
-                                            <div
-                                                onClick={() => {
-                                                    const newState = !isMousePassthrough;
-                                                    setIsMousePassthrough(newState);
-                                                    window.electronAPI?.setOverlayMousePassthrough(newState);
-                                                }}
-                                                className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${isMousePassthrough ? 'bg-sky-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                            >
-                                                <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${isMousePassthrough ? 'translate-x-5' : 'translate-x-0'}`} />
-                                            </div>
-                                        </div>
-
                                         <div>
                                             <h3 className="text-lg font-bold text-text-primary mb-1">{t('General settings')}</h3>
                                             <p className="text-xs text-text-secondary mb-2">{t('Customize how Natively works for you')}</p>
 
                                             <div className={`rounded-xl border ${isLight ? 'bg-bg-card border-border-subtle divide-y divide-border-subtle' : 'bg-transparent border-transparent divide-y divide-border-subtle/20'}`}>
                                             <div className="space-y-0">
-                                                {/* Language */}
+                                                {/* Detectable / Undetectable */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                            <Globe size={20} />
+                                                            {isUndetectable ? (
+                                                                <svg
+                                                                    width="20"
+                                                                    height="20"
+                                                                    viewBox="0 0 24 24"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    strokeWidth="2"
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                >
+                                                                    <path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z" fill="currentColor" stroke="currentColor" />
+                                                                    <path d="M9 10h.01" stroke="var(--bg-item-surface)" strokeWidth="2.5" />
+                                                                    <path d="M15 10h.01" stroke="var(--bg-item-surface)" strokeWidth="2.5" />
+                                                                </svg>
+                                                            ) : (
+                                                                <Ghost size={20} />
+                                                            )}
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Language')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Interface language for Natively')}</p>
+                                                            <h3 className="text-sm font-bold text-text-primary">{isUndetectable ? t('Undetectable') : t('Detectable')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">
+                                                                {isUndetectable ? t('Natively is currently undetectable by screen-sharing.') : t('Natively is currently detectable by screen-sharing.')} <button onClick={() => window.electronAPI?.openExternal?.('https://natively.software/supportedapps')} className="text-accent-primary hover:underline">{t('Supported apps here')}</button>
+                                                            </p>
                                                         </div>
                                                     </div>
+                                                    <div
+                                                        onClick={() => {
+                                                            const newState = !isUndetectable;
+                                                            setIsUndetectable(newState);
+                                                            window.electronAPI?.setUndetectable(newState);
+                                                            // Analytics: Undetectable Mode Toggle
+                                                            analytics.trackModeSelected(newState ? 'undetectable' : 'overlay');
+                                                        }}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer shrink-0 ${isUndetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                    >
+                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${isUndetectable ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                    </div>
+                                                </div>
 
-                                                    <div className="relative" ref={langDropdownRef}>
-                                                        <button
-                                                            onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
-                                                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
-                                                        >
-                                                            <span className="text-ellipsis overflow-hidden whitespace-nowrap">
-                                                                {lang === 'en' && t('English')}
-                                                                {lang === 'ru' && t('Russian')}
-                                                                {lang === 'zh' && t('Chinese')}
-                                                                {lang === 'ja' && t('Japanese')}
-                                                                {lang === 'es' && t('Spanish')}
-                                                            </span>
-                                                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
-                                                        </button>
-
-                                                        {isLangDropdownOpen && (
-                                                            <div className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
-                                                                {[
-                                                                    { code: 'en' as const, label: t('English') },
-                                                                    { code: 'ru' as const, label: t('Russian') },
-                                                                    { code: 'zh' as const, label: t('Chinese') },
-                                                                    { code: 'ja' as const, label: t('Japanese') },
-                                                                    { code: 'es' as const, label: t('Spanish') },
-                                                                ].map((option) => (
-                                                                    <button
-                                                                        key={option.code}
-                                                                        onClick={() => {
-                                                                            setLang(option.code);
-                                                                            setIsLangDropdownOpen(false);
-                                                                        }}
-                                                                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${lang === option.code ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                                                    >
-                                                                        {lang === option.code && <Check size={12} className="text-text-primary" />}
-                                                                        <span className={lang === option.code ? 'text-text-primary' : 'text-text-secondary'}>{option.label}</span>
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        )}
+                                                {/* Mouse Passthrough Toggle — Adapted from public PR #113 */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <PointerOff size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Mouse Passthrough')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">
+                                                                {t('Overlay stays visible but lets all mouse clicks pass through to the app beneath.')}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div
+                                                        onClick={() => {
+                                                            const newState = !isMousePassthrough;
+                                                            setIsMousePassthrough(newState);
+                                                            window.electronAPI?.setOverlayMousePassthrough(newState);
+                                                        }}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer shrink-0 ${isMousePassthrough ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                    >
+                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${isMousePassthrough ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
                                                 </div>
 
                                                 {/* Open at Login */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            openOnLogin
-                                                                ? isLight
-                                                                    ? 'border-indigo-500/30 text-indigo-600 bg-indigo-50/50'
-                                                                    : 'border-indigo-500/40 text-indigo-400 bg-indigo-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Power size={20} />
                                                         </div>
                                                         <div>
@@ -1703,18 +1651,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Meeting Retention */}
                                                 <div className="flex items-start justify-between px-4 py-3 gap-4">
                                                     <div className="flex items-start gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            meetingRetention === 'never'
-                                                                ? isLight
-                                                                    ? 'border-emerald-500/30 text-emerald-600 bg-emerald-50/50'
-                                                                    : 'border-emerald-500/40 text-emerald-400 bg-emerald-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Shield size={20} />
                                                         </div>
                                                         <div className="flex-1">
                                                             <h3 className="text-sm font-bold text-text-primary">{t('Do not save meetings')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5 leading-normal">{t('When enabled, live assistance works but transcripts, summaries, and history are discarded when the meeting ends')}</p>
+                                                            <p className="text-xs text-text-secondary mt-0.5 leading-normal">{t('Nothing is saved after the meeting ends')}</p>
                                                         </div>
                                                     </div>
                                                     <div
@@ -1723,7 +1665,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             setMeetingRetention(nextRetention);
                                                             window.electronAPI?.setMeetingRetention?.(nextRetention);
                                                         }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer shrink-0 mt-2 ${meetingRetention === 'never' ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer shrink-0 mt-2 ${meetingRetention === 'never' ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                         role="switch"
                                                         aria-checked={meetingRetention === 'never'}
                                                         aria-label={t("Do not save meetings")}
@@ -1735,13 +1677,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Debug Logging */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            verboseLogging
-                                                                ? isLight
-                                                                    ? 'border-amber-500/30 text-amber-600 bg-amber-50/50'
-                                                                    : 'border-amber-500/40 text-amber-400 bg-amber-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Terminal size={20} />
                                                         </div>
                                                         <div>
@@ -1758,7 +1694,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 setShowVerboseToast(true);
                                                             }
                                                         }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${verboseLogging ? 'bg-amber-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${verboseLogging ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                     >
                                                         <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${verboseLogging ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
@@ -1803,13 +1739,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Code Verification — runs LLM-generated code against test cases + one-shot correction */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            codeVerification
-                                                                ? isLight
-                                                                    ? 'border-blue-500/30 text-blue-600 bg-blue-50/50'
-                                                                    : 'border-blue-500/40 text-blue-400 bg-blue-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Code2 size={20} />
                                                         </div>
                                                         <div>
@@ -1826,7 +1756,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             // other toggle-style settings also use optional chaining.
                                                             window.electronAPI?.setCodeVerification?.(newState)?.catch?.(() => { });
                                                         }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${codeVerification ? 'bg-blue-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${codeVerification ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                         role="switch"
                                                         aria-checked={codeVerification}
                                                         aria-label={t('Verify coding answers')}
@@ -1838,13 +1768,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Interviewer Transcript */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            showTranscript
-                                                                ? isLight
-                                                                    ? 'border-blue-500/30 text-blue-600 bg-blue-50/50'
-                                                                    : 'border-blue-500/40 text-blue-400 bg-blue-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <MessageSquare size={20} />
                                                         </div>
                                                         <div>
@@ -1868,13 +1792,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Auto Scroll */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            autoScroll
-                                                                ? isLight
-                                                                    ? 'border-purple-500/30 text-purple-600 bg-purple-50/50'
-                                                                    : 'border-purple-500/40 text-purple-400 bg-purple-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <ArrowDown size={20} />
                                                         </div>
                                                         <div>
@@ -1899,13 +1817,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Theme */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            themeMode !== 'system'
-                                                                ? isLight
-                                                                    ? 'border-violet-500/30 text-violet-600 bg-violet-50/50'
-                                                                    : 'border-violet-500/40 text-violet-400 bg-violet-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Palette size={20} />
                                                         </div>
                                                         <div>
@@ -1958,13 +1870,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Meeting Interface Style */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            (meetingInterfaceTheme === 'liquid-glass' || meetingInterfaceTheme === 'modern')
-                                                                ? isLight
-                                                                    ? 'border-sky-500/30 text-sky-600 bg-sky-50/50'
-                                                                    : 'border-sky-500/40 text-sky-400 bg-sky-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Layout size={20} />
                                                         </div>
                                                         <div>
@@ -2018,57 +1924,52 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     </div>
                                                 </div>
 
-                                                    {/* AI Response Language */}
+                                                {/* Language */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            aiResponseLanguage !== 'auto'
-                                                                ? isLight
-                                                                    ? 'border-teal-500/30 text-teal-600 bg-teal-50/50'
-                                                                    : 'border-teal-500/40 text-teal-400 bg-teal-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Globe size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('AI Response Language')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">
-                                                                {aiResponseLanguage === 'auto'
-                                                                    ? t('Mirrors user\'s language automatically')
-                                                                    : t('Language for AI suggestions and notes')
-                                                                }
-                                                            </p>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Language')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Interface language for Natively')}</p>
                                                         </div>
                                                     </div>
 
-                                                    <div className="relative" ref={aiLangDropdownRef}>
+                                                    <div className="relative" ref={langDropdownRef}>
                                                         <button
-                                                            onClick={() => setIsAiLangDropdownOpen(!isAiLangDropdownOpen)}
+                                                            onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
                                                             className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
                                                         >
-                                                            <span className="capitalize text-ellipsis overflow-hidden whitespace-nowrap flex items-center gap-1">
-                                                                {aiResponseLanguage === 'auto' ? t('Auto') : aiResponseLanguage}
+                                                            <span className="text-ellipsis overflow-hidden whitespace-nowrap">
+                                                                {lang === 'en' && t('English')}
+                                                                {lang === 'ru' && t('Russian')}
+                                                                {lang === 'zh' && t('Chinese')}
+                                                                {lang === 'ja' && t('Japanese')}
+                                                                {lang === 'es' && t('Spanish')}
                                                             </span>
-                                                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isAiLangDropdownOpen ? 'rotate-180' : ''}`} />
+                                                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
                                                         </button>
 
-                                                        {/* Dropdown Menu */}
-                                                        {isAiLangDropdownOpen && (
-                                                            <div className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none max-h-60 overflow-y-auto custom-scrollbar">
-                                                                {availableAiLanguages.map((option) => (
+                                                        {isLangDropdownOpen && (
+                                                            <div className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
+                                                                {[
+                                                                    { code: 'en' as const, label: t('English') },
+                                                                    { code: 'ru' as const, label: t('Russian') },
+                                                                    { code: 'zh' as const, label: t('Chinese') },
+                                                                    { code: 'ja' as const, label: t('Japanese') },
+                                                                    { code: 'es' as const, label: t('Spanish') },
+                                                                ].map((option) => (
                                                                     <button
                                                                         key={option.code}
                                                                         onClick={() => {
-                                                                            handleAiLanguageChange(option.code);
-                                                                            setIsAiLangDropdownOpen(false);
+                                                                            setLang(option.code);
+                                                                            setIsLangDropdownOpen(false);
                                                                         }}
-                                                                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${aiResponseLanguage === option.code ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                                                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${lang === option.code ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
                                                                     >
-                                                                        {option.code === 'auto' ? (
-                                                                            <span className="font-medium">{t('Auto')}</span>
-                                                                        ) : (
-                                                                            <span className="font-medium">{option.label}</span>
-                                                                        )}
+                                                                        {lang === option.code && <Check size={12} className="text-text-primary" />}
+                                                                        <span className={lang === option.code ? 'text-text-primary' : 'text-text-secondary'}>{option.label}</span>
                                                                     </button>
                                                                 ))}
                                                             </div>
@@ -2108,7 +2009,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             updateStatus === 'checking'
                                                                 ? 'bg-bg-input text-text-tertiary border-border-subtle cursor-wait'
                                                                 : updateStatus === 'available'
-                                                                    ? 'bg-accent-primary text-white border-accent-primary hover:bg-accent-secondary shadow-lg shadow-blue-500/20'
+                                                                    ? 'bg-legacy-action-bg text-legacy-action-fg border-legacy-action-bg hover:bg-legacy-action-hover shadow-lg shadow-[var(--legacy-action-shadow)]'
                                                                     : updateStatus === 'uptodate'
                                                                         ? 'bg-green-500/10 text-green-400 border-green-500/20'
                                                                         : updateStatus === 'error'
@@ -2251,11 +2152,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         analytics.trackModeSelected(`disguise_${option.id}`);
                                                     }}
                                                     className={`p-3 rounded-lg border text-left flex items-center gap-3 transition-all ${disguiseMode === option.id
-                                                        ? 'bg-accent-primary border-accent-primary text-white shadow-lg shadow-blue-500/20'
+                                                        ? 'bg-accent-primary border-accent-primary text-on-accent shadow-lg shadow-[var(--accent-shadow-20)]'
                                                         : 'bg-bg-input border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-subtle-hover'
                                                         } ${isUndetectable ? 'cursor-not-allowed' : ''}`}
                                                 >
-                                                    <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${disguiseMode === option.id ? 'bg-white/20 text-white' : 'bg-bg-item-surface text-text-secondary'
+                                                    <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${disguiseMode === option.id ? 'bg-on-accent-surface text-on-accent' : 'bg-bg-item-surface text-text-secondary'
                                                         }`}>
                                                         {option.icon}
                                                     </div>
@@ -2269,7 +2170,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             )}
 
                             {activeTab === 'ai-providers' && (
-                                <AIProvidersSettings />
+                                <AIProvidersSettings
+                                    aiResponseLanguage={aiResponseLanguage}
+                                    availableAiLanguages={availableAiLanguages}
+                                    isAiLangDropdownOpen={isAiLangDropdownOpen}
+                                    onToggleAiLangDropdown={() => setIsAiLangDropdownOpen(!isAiLangDropdownOpen)}
+                                    onSelectAiLanguage={(code) => {
+                                        handleAiLanguageChange(code);
+                                        setIsAiLangDropdownOpen(false);
+                                    }}
+                                    aiLangDropdownRef={aiLangDropdownRef}
+                                />
                             )}
                             {activeTab === 'skills' && (
                                 <SkillsSettings />
@@ -2496,12 +2407,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                     }
                                                                 }}
                                                                 className={`rounded-lg px-3 py-2.5 text-left transition-all duration-200 ease-in-out active:scale-[0.98] ${groqSttModel === m.id
-                                                                    ? 'bg-blue-600 text-white shadow-md'
+                                                                    ? 'bg-accent-primary text-on-accent shadow-md'
                                                                     : 'bg-bg-input hover:bg-bg-elevated text-text-primary'
                                                                     }`}
                                                             >
                                                                 <span className="text-sm font-medium block">{m.label}</span>
-                                                                <span className={`text-[11px] transition-colors ${groqSttModel === m.id ? 'text-white/70' : 'text-text-tertiary'
+                                                                <span className={`text-[11px] transition-colors ${groqSttModel === m.id ? 'text-on-accent opacity-70' : 'text-text-tertiary'
                                                                     }`}>{m.desc}</span>
                                                             </button>
                                                         ))}
@@ -2931,7 +2842,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <div>
                                                                     <div className="flex items-center gap-2 mb-0.5">
                                                                         <h3 className="text-sm font-bold text-text-primary">SCK Backend</h3>
-                                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 uppercase tracking-wide">{t('Alternative')}</span>
+                                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent-muted text-accent-primary uppercase tracking-wide">{t('Alternative')}</span>
                                                                     </div>
                                                                     <p className="text-xs text-text-secondary leading-relaxed max-w-[300px]">
                                                                         {t('Use the ScreenCaptureKit backend. An optimized alternative to CoreAudio if you experience any capture issues.')}
@@ -2944,7 +2855,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                     setUseExperimentalSck(newState);
                                                                     window.localStorage.setItem('useExperimentalSckBackend', newState ? 'true' : 'false');
                                                                 }}
-                                                                className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${useExperimentalSck ? 'bg-amber-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                                className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${useExperimentalSck ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                             >
                                                                 <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${useExperimentalSck ? 'translate-x-5' : 'translate-x-0'}`} />
                                                             </div>
@@ -2971,7 +2882,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Connection header */}
                                                 <div className="p-6 flex items-center justify-between">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
+                                                        <div className="w-10 h-10 rounded-lg bg-bg-item-surface border border-border-subtle flex items-center justify-center text-text-primary">
                                                             <Calendar size={20} />
                                                         </div>
                                                         <div>
@@ -3225,7 +3136,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             {activeTab === 'intelligence' && (
                                 <IntelligenceSettings />
                             )}
-
                             {activeTab === 'help' && (
                                 <HelpSettings onNavigate={setActiveTab} />
                             )}

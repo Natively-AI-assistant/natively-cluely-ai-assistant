@@ -36,7 +36,7 @@ export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, onAccept
         'group relative flex items-stretch gap-2 px-2.5 py-2 rounded-[12px]',
         'border backdrop-blur-md no-drag select-none',
         isPrimary
-          ? 'border-blue-400/40 bg-blue-500/8 hover:bg-blue-500/12'
+          ? 'border-accent-focus bg-accent-subtle hover:bg-accent-muted'
           : 'border-white/10 bg-white/5 hover:bg-white/8',
         'transition-colors duration-150 cursor-pointer',
       ].join(' ')}
@@ -53,7 +53,7 @@ export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, onAccept
       data-testid={`dynamic-action-card-${action.id}`}
     >
       <div className="flex items-center justify-center w-7 h-7 rounded-full bg-white/8 shrink-0">
-        <Zap className={`w-3.5 h-3.5 ${isPrimary ? 'text-blue-300' : 'text-white/70'}`} />
+        <Zap className={`w-3.5 h-3.5 ${isPrimary ? 'text-accent-primary' : 'text-white/70'}`} />
       </div>
 
       <div className="flex flex-col flex-1 min-w-0 leading-tight">

@@ -344,7 +344,7 @@ const mdComponents = {
     ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mb-2 space-y-1.5" {...props} />,
     li: ({ node, ...props }: any) => <li className="text-[15px] text-text-secondary font-normal leading-relaxed" {...props} />,
     strong: ({ node, ...props }: any) => <strong className="font-semibold text-text-primary" {...props} />,
-    a: ({ node, ...props }: any) => <a target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline underline-offset-2 transition-colors duration-150" {...props} />,
+    a: ({ node, ...props }: any) => <a target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:text-accent-hover underline underline-offset-2 transition-colors duration-150" {...props} />,
     pre: ({ children }: any) => <div className="mb-3 last:mb-0">{children}</div>,
     code: ({ node, className, children, ...props }: any) => {
         const match = /language-([\w+#-]+)/.exec(className || '');
@@ -385,7 +385,7 @@ const CodeHero: React.FC<{ lang: string; code: string; technique?: string }> = (
         return () => { el.removeEventListener('scroll', update); ro.disconnect(); };
     }, [code]);
     return (
-        <div className="group relative w-full min-w-0 rounded-xl overflow-hidden border border-white/[0.08] ring-1 ring-inset ring-white/[0.05] bg-zinc-900/80 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] transition-colors duration-200 hover:border-white/[0.12]">
+        <div className="group relative w-full min-w-0 rounded-xl overflow-hidden border border-white/[0.08] ring-1 ring-inset ring-white/[0.05] bg-[#0a0a0d]/90 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] transition-colors duration-200 hover:border-white/[0.12]">
             <div className="flex items-center gap-2 h-9 px-3 border-b border-white/[0.05] bg-white/[0.02]">
                 <span className="text-[11px] uppercase tracking-[0.04em] font-medium text-text-tertiary font-mono select-none cursor-default">
                     {resolved || 'code'}
@@ -1230,7 +1230,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             ol: ({ node, ...props }) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
                                             li: ({ node, ...props }) => <li className="text-sm text-text-secondary" {...props} />,
                                             strong: ({ node, ...props }) => <strong className="font-semibold text-text-primary" {...props} />,
-                                            a: ({ node, ...props }) => <a className="text-blue-500 hover:underline" {...props} />,
+                                            a: ({ node, ...props }) => <a className="text-accent-primary hover:underline" {...props} />,
                                         }}
                                     >
                                         {meeting.detailedSummary?.overview || ''}
@@ -1306,7 +1306,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                 whileTap={prefersReducedMotion ? undefined : { scale: 0.96 }}
                                                 transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
                                                 aria-pressed={showEvidence}
-                                                className={`h-7 inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 rounded-md transition-colors ${showEvidence ? 'text-accent-primary bg-accent-primary/10' : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.06]'}`}
+                                                className={`h-7 inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 rounded-md transition-colors ${showEvidence ? 'text-accent-primary bg-accent-subtle' : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.06]'}`}
                                             >
                                                 <span className="relative w-3.5 h-3.5 shrink-0">
                                                     <AnimatePresence initial={false} mode="wait">
@@ -1416,7 +1416,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             <div className="min-w-0 flex-1">
                                                                 <p className="text-sm text-text-secondary leading-relaxed">{bullet.text}</p>
                                                                 {showEvidence && evidenceLabel(bullet.evidence) && (
-                                                                    <button type="button" onClick={() => jumpToEvidence(bullet.evidence)} className="text-[11px] text-blue-400/80 hover:text-blue-300 mt-1 text-left">↳ {evidenceLabel(bullet.evidence)}</button>
+                                                                    <button type="button" onClick={() => jumpToEvidence(bullet.evidence)} className="text-[11px] text-accent-primary hover:text-accent-hover mt-1 text-left">↳ {evidenceLabel(bullet.evidence)}</button>
                                                                 )}
                                                             </div>
                                                         </li>
@@ -1460,7 +1460,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                                 <span>{item.confidence} {t('confidence')}</span>
                                                             </p>
                                                             {showEvidence && evidenceLabel(item.evidence) && (
-                                                                <button type="button" onClick={() => jumpToEvidence(item.evidence)} className="text-[11px] text-blue-400/80 hover:text-blue-300 mt-1 text-left">↳ {evidenceLabel(item.evidence)}</button>
+                                                                <button type="button" onClick={() => jumpToEvidence(item.evidence)} className="text-[11px] text-accent-primary hover:text-accent-hover mt-1 text-left">↳ {evidenceLabel(item.evidence)}</button>
                                                             )}
                                                         </div>
                                                     </div>
@@ -1487,7 +1487,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                                 <span>{item.confidence} {t('confidence')}</span>
                                                             </p>
                                                             {showEvidence && evidenceLabel(item.evidence) && (
-                                                                <button type="button" onClick={() => jumpToEvidence(item.evidence)} className="text-[11px] text-blue-400/80 hover:text-blue-300 mt-1 text-left">↳ {evidenceLabel(item.evidence)}</button>
+                                                                <button type="button" onClick={() => jumpToEvidence(item.evidence)} className="text-[11px] text-accent-primary hover:text-accent-hover mt-1 text-left">↳ {evidenceLabel(item.evidence)}</button>
                                                             )}
                                                         </div>
                                                     </div>
@@ -1631,7 +1631,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         <ul className="space-y-3">
                                             {meeting.detailedSummary.actionItems.map((item, i) => (
                                                 <li key={actionItemKeys[i] ?? i} className="flex items-start gap-3 group">
-                                                    <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary group-hover:bg-blue-500 transition-colors shrink-0" />
+                                                    <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary group-hover:bg-accent-primary transition-colors shrink-0" />
                                                     <div className="flex-1">
                                                         <EditableTextBlock
                                                             initialValue={item}
@@ -1830,7 +1830,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             initial={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.96 }}
                                                             animate={prefersReducedMotion ? undefined : { opacity: 1, scale: 1 }}
                                                             transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                            className="inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-full bg-bg-secondary border border-accent-primary/50 ring-1 ring-accent-primary/20"
+                                                            className="inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-full bg-bg-secondary border border-accent-focus ring-1 ring-accent-border"
                                                         >
                                                             <input
                                                                 autoFocus
@@ -1845,7 +1845,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                                 onMouseDown={e => e.preventDefault()}
                                                                 onClick={() => handleSaveSpeakerLabel(id, speakerDraft)}
                                                                 whileTap={prefersReducedMotion ? undefined : { scale: 0.9 }}
-                                                                className="inline-flex items-center justify-center w-5 h-5 rounded-full text-accent-primary hover:bg-accent-primary/15 transition-colors"
+                                                                className="inline-flex items-center justify-center w-5 h-5 rounded-full text-accent-primary hover:bg-accent-muted transition-colors"
                                                                 title={t("Save")}
                                                             >
                                                                 <Check className="w-3 h-3" strokeWidth={2.5} />
@@ -1903,7 +1903,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         return filteredTranscript.map((entry, i) => (
                                             <div
                                                 key={i}
-                                                className={`group rounded-md transition-colors ${i === scrollIndex ? 'bg-blue-500/10 ring-1 ring-blue-400/30 -mx-2 px-2 py-1' : ''}`}
+                                                className={`group rounded-md transition-colors ${i === scrollIndex ? 'bg-accent-subtle ring-1 ring-accent-border -mx-2 px-2 py-1' : ''}`}
                                                 ref={i === scrollIndex ? (el) => { if (el && pendingScrollTs != null) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => setPendingScrollTs(null), 1500); } } : undefined}
                                             >
                                                 <div className="flex items-center gap-2 mb-1">
