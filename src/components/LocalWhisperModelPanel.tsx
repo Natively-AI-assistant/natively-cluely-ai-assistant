@@ -454,91 +454,90 @@ export function LocalWhisperModelPanel() {
                     )}
                 </div>
                 
-                <div className="p-4 space-y-3 bg-bg-elevated/20">
+                <div className="max-h-[250px] overflow-y-auto custom-scrollbar p-3 space-y-2 bg-bg-elevated/20">
                     {models.map(model => {
                         const isDownloading = model.status === 'downloading' || downloadingSet.has(model.id);
                         const progress = downloadProgress[model.id] || 0;
                         const isAvailable = model.status === 'available';
-                        const isError = model.status === 'error';
                         const isRecommended = hardware?.recommendedModel === model.id;
                         
                         return (
-                            <div key={model.id} className="p-4 flex items-center justify-between bg-bg-card border border-border-subtle rounded-[14px] hover:shadow-sm hover:border-border-muted transition-all duration-200">
-                                <div className="flex-1 min-w-0 pr-4">
-                                    <div className="flex items-center gap-2 mb-1.5">
-                                        <span className="text-sm font-medium text-text-primary truncate tracking-tight">{model.name}</span>
+                            <div key={model.id} className="p-3 bg-bg-card border border-border-subtle rounded-xl hover:border-border-muted transition-all duration-150 flex flex-col gap-2">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                                        <span className="text-xs font-semibold text-text-primary truncate">{model.name}</span>
                                         {isRecommended && (
-                                            <span className="px-1.5 py-0.5 rounded-[4px] bg-accent-primary/10 text-accent-primary text-[9px] font-bold uppercase tracking-wider">{t('Recommended')}</span>
+                                            <span className="px-1.5 py-0.5 rounded bg-accent-primary/10 text-accent-primary text-[9px] font-bold uppercase tracking-wider shrink-0">{t('Recommended')}</span>
                                         )}
                                         {model.requiresAppleSilicon && (
-                                            <span className="px-1.5 py-0.5 rounded-[4px] bg-purple-500/10 text-purple-500 text-[9px] font-bold uppercase tracking-wider">Apple Silicon</span>
+                                            <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500 text-[9px] font-bold uppercase tracking-wider shrink-0">Apple Silicon</span>
                                         )}
                                     </div>
-                                    <div className="flex items-center gap-3.5 text-xs text-text-tertiary">
-                                        <span className="flex items-center gap-1.5"><HardDrive size={13} className="opacity-70" /> {model.sizeMb} MB</span>
-                                        <span className="flex items-center gap-1.5"><Zap size={13} className="opacity-70" /> {model.speed}</span>
-                                        <span className="flex items-center gap-1.5"><Check size={13} className="opacity-70" /> {model.accuracy} {t('acc')}</span>
+
+                                    <div className="flex items-center gap-3 shrink-0">
+                                        <div className="flex items-center gap-2 text-[11px] text-text-tertiary">
+                                            <span className="flex items-center gap-1"><HardDrive size={11} className="opacity-70" /> {model.sizeMb}MB</span>
+                                            <span className="hidden sm:flex items-center gap-1"><Zap size={11} className="opacity-70" /> {model.speed}</span>
+                                            <span className="hidden sm:flex items-center gap-1"><Check size={11} className="opacity-70" /> {model.accuracy}</span>
+                                        </div>
+
+                                        {!isAvailable && !isDownloading && (
+                                            <button
+                                                onClick={() => handleDownload(model.id)}
+                                                className="px-2.5 py-1 rounded-lg bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary text-xs font-semibold transition-colors flex items-center gap-1 shrink-0"
+                                            >
+                                                <Download size={12} />
+                                                <span>{model.status === 'error' || model.status === 'interrupted' || model.status === 'cancelled' ? t('Retry') : t('Install')}</span>
+                                            </button>
+                                        )}
+                                        
+                                        {isAvailable && (
+                                            <button
+                                                onClick={() => handleDelete(model.id)}
+                                                className="p-1.5 rounded-lg text-text-tertiary hover:bg-red-500/10 hover:text-red-500 transition-colors shrink-0"
+                                                title={t("Delete model")}
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
                                     </div>
-                                    
-                                    {isDownloading && (
-                                        <div className="mt-3.5 pr-8">
-                                            <div className="flex justify-between items-center text-[10px] text-text-secondary mb-1.5 uppercase tracking-wider font-semibold">
-                                                <span>{t('Downloading...')}</span>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-accent-primary tabular-nums">{Math.round(progress)}%</span>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleCancel(model.id); }}
-                                                        className="text-text-tertiary hover:text-red-500 transition-colors duration-200 px-1.5 py-0.5 rounded-md hover:bg-red-500/10 normal-case tracking-normal font-medium"
-                                                        title={t("Cancel download")}
-                                                    >
-                                                        {t('Cancel')}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div className="w-full h-1.5 bg-bg-input rounded-full overflow-hidden shadow-inner ring-1 ring-inset ring-black/5 dark:ring-white/5">
-                                                <div
-                                                    className="h-full bg-accent-primary transition-all duration-300 ease-out relative"
-                                                    style={{ width: `${progress}%` }}
+                                </div>
+
+                                {isDownloading && (
+                                    <div className="pt-1">
+                                        <div className="flex justify-between items-center text-[10px] text-text-secondary mb-1">
+                                            <span className="font-semibold">{t('Downloading...')}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-accent-primary tabular-nums font-bold">{Math.round(progress)}%</span>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleCancel(model.id); }}
+                                                    className="text-text-tertiary hover:text-red-500 transition-colors text-[10px] font-medium"
                                                 >
-                                                    <div className="absolute inset-0 bg-white/20 animate-pulse" />
-                                                </div>
+                                                    {t('Cancel')}
+                                                </button>
                                             </div>
                                         </div>
-                                    )}
-                                    
-                                    {(model.status === 'error' || model.status === 'interrupted' || model.status === 'cancelled') && (
-                                        <div className="mt-2.5 text-xs text-red-500 flex items-center gap-1.5 font-medium bg-red-500/10 px-2.5 py-1.5 rounded-md inline-flex">
-                                            <AlertCircle size={14} />
+                                        <div className="w-full h-1.5 bg-bg-input rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full bg-accent-primary transition-all duration-300 ease-out"
+                                                style={{ width: `${progress}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {(model.status === 'error' || model.status === 'interrupted' || model.status === 'cancelled') && (
+                                    <div className="text-[11px] text-red-500 flex items-center gap-1 font-medium bg-red-500/10 px-2 py-1 rounded-md">
+                                        <AlertCircle size={12} />
+                                        <span className="truncate">
                                             {model.status === 'interrupted'
-                                                ? t('Download was interrupted. Click Install to retry.')
+                                                ? t('Download interrupted. Click Install to retry.')
                                                 : model.status === 'cancelled'
                                                   ? t('Download cancelled. Click Install to retry.')
                                                   : (model.errorMessage || t('Failed to download model'))}
-                                        </div>
-                                    )}
-                                </div>
-                                
-                                <div className="flex-shrink-0 flex items-center gap-2">
-                                    {!isAvailable && !isDownloading && (
-                                        <button
-                                            onClick={() => handleDownload(model.id)}
-                                            className="group/btn relative h-[34px] px-4 flex items-center gap-1.5 rounded-[10px] bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary text-[13px] font-semibold transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.96] shadow-sm"
-                                        >
-                                            <Download size={14} className="transition-transform duration-300 group-hover/btn:-translate-y-[2px]" />
-                                            <span>{model.status === 'error' || model.status === 'interrupted' || model.status === 'cancelled' ? t('Retry') : t('Install')}</span>
-                                        </button>
-                                    )}
-                                    
-                                    {isAvailable && (
-                                        <button
-                                            onClick={() => handleDelete(model.id)}
-                                            className="p-2 rounded-[10px] text-text-tertiary hover:bg-red-500/10 hover:text-red-500 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.96]"
-                                            title={t("Delete model")}
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    )}
-                                </div>
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
