@@ -1,4 +1,4 @@
-import { animate, motion, useMotionValue, useTransform } from 'framer-motion';
+import { animate, AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion';
 import {
   ArrowRight,
   ChevronDown,
@@ -113,6 +113,41 @@ const CardCopyButton = ({
   );
 };
 
+const CodeBlockCopyButton = ({ code }: { code: string }) => {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const handleCopy = () => {
+    const p = navigator.clipboard?.writeText(code);
+    if (!p) return;
+    p.then(() => {
+      setCopied(true);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      aria-label={copied ? 'Copied' : 'Copy code'}
+      className="absolute top-2 right-2 z-10 w-7 h-7 rounded-md bg-black/55 backdrop-blur-md border border-white/[0.08] flex items-center justify-center opacity-0 group-hover/code:opacity-100 transition-opacity duration-150 active:scale-[0.92]"
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        {copied ? (
+          <motion.span key="check" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} transition={{ duration: 0.14 }} className="absolute inset-0 flex items-center justify-center">
+            <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={2.5} />
+          </motion.span>
+        ) : (
+          <motion.span key="copy" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} transition={{ duration: 0.14 }} className="absolute inset-0 flex items-center justify-center text-white/70 hover:text-white/95">
+            <Copy className="w-3.5 h-3.5" strokeWidth={2} />
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </button>
+  );
+};
+
 import React, {
   startTransition as reactStartTransition,
   useCallback,
@@ -162,7 +197,8 @@ import {
   shouldFlushPreviousStream,
 } from '../lib/streamingTokenQueue.mjs';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
-import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { vividDarkCodeTheme, VIVID_DARK_LINE_NUMBER_COLOR } from '../lib/codeTheme';
 
 registerPrismLanguages();
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
@@ -281,6 +317,7 @@ interface HighlightedCodeProps {
   appearance: any;
   isModernTheme?: boolean;
   isGlassTheme?: boolean;
+  showCodeHeader: boolean;
 }
 
 const HighlightedCode = React.memo(
@@ -295,25 +332,39 @@ const HighlightedCode = React.memo(
     appearance,
     isModernTheme,
     isGlassTheme,
+    showCodeHeader,
   }: HighlightedCodeProps) {
     const isSpecialTheme = isModernTheme || isGlassTheme;
     const resolved = mapLanguageForPrism(lang, code);
     return (
       <div
-        className={`my-3 rounded-xl overflow-hidden border shadow-lg ${codeBlockClass}`}
+        className={`relative group/code my-3 rounded-xl overflow-hidden border shadow-lg ${codeBlockClass}`}
         style={isSpecialTheme ? undefined : appearance.codeBlockStyle}
       >
         {/* Minimalist Apple Header */}
-        <div
-          className={`px-3 py-1.5 border-b ${codeHeaderClass}`}
-          style={isSpecialTheme ? undefined : appearance.codeHeaderStyle}
-        >
-          <span
-            className={`text-[10px] uppercase tracking-widest font-semibold font-mono ${codeHeaderTextClass}`}
+        {showCodeHeader && (
+          <div
+            className={`px-3 py-1.5 border-b ${codeHeaderClass}`}
+            style={isSpecialTheme ? undefined : appearance.codeHeaderStyle}
           >
-            {resolved || 'CODE'}
-          </span>
-        </div>
+            <span
+              className={`text-[10px] uppercase tracking-widest font-semibold font-mono ${codeHeaderTextClass}`}
+            >
+              {resolved || 'CODE'}
+            </span>
+          </div>
+        )}
+        {!showCodeHeader && (
+          <>
+            <span
+              className="absolute top-2.5 left-3 z-10 text-[10px] uppercase tracking-widest font-mono pointer-events-none opacity-0 group-hover/code:opacity-100 transition-opacity duration-150"
+              style={{ color: VIVID_DARK_LINE_NUMBER_COLOR }}
+            >
+              {resolved || 'CODE'}
+            </span>
+            <CodeBlockCopyButton code={code} />
+          </>
+        )}
         {/* No-wrap horizontal scroll: code line layout stays stable as the
                 canvas grows/shrinks. Without this, wrapped lines re-flow at every
                 spring tick, the block height jitters, and content below shifts.
@@ -350,7 +401,8 @@ const HighlightedCode = React.memo(
     prev.lang === next.lang &&
     prev.appearance === next.appearance &&
     prev.isModernTheme === next.isModernTheme &&
-    prev.isGlassTheme === next.isGlassTheme,
+    prev.isGlassTheme === next.isGlassTheme &&
+    prev.showCodeHeader === next.showCodeHeader,
 );
 
 // PERF: MessageRow renders one chat-message bubble. Module-scope + React.memo
@@ -1163,8 +1215,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   }, []);
 
   const useDarkCodeTheme = !isLightTheme || isGlassTheme || isModernTheme;
-  const codeTheme = useDarkCodeTheme ? vscDarkPlus : oneLight;
-  const codeLineNumberColor = useDarkCodeTheme ? 'rgba(255,255,255,0.2)' : 'rgba(15,23,42,0.35)';
+  const codeTheme = useDarkCodeTheme ? vividDarkCodeTheme : oneLight;
+  const codeLineNumberColor = useDarkCodeTheme ? VIVID_DARK_LINE_NUMBER_COLOR : 'rgba(24,24,24,0.4)';
+  const showCodeHeader = !useDarkCodeTheme || isModernTheme || isGlassTheme;
   const appearance = useMemo(
     () =>
       isGlassTheme
@@ -1238,6 +1291,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                 appearance={appearance}
                 isModernTheme={isModernTheme}
                 isGlassTheme={isGlassTheme}
+                showCodeHeader={showCodeHeader}
               />
             );
           }
@@ -4556,6 +4610,7 @@ Provide only the answer, nothing else.`;
                         appearance={appearance}
                         isModernTheme={isModernTheme}
                         isGlassTheme={isGlassTheme}
+                        showCodeHeader={showCodeHeader}
                       />
                     );
                   }
@@ -4704,6 +4759,7 @@ Provide only the answer, nothing else.`;
                         appearance={appearance}
                         isModernTheme={isModernTheme}
                         isGlassTheme={isGlassTheme}
+                        showCodeHeader={showCodeHeader}
                       />
                     );
                   }
