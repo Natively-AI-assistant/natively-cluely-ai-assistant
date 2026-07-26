@@ -128,4 +128,23 @@ describe('Phase 3 item 4 / Phase 6 Slice 0 item 2: doubled-question client-side 
     const result = mergeTranscriptChunks('a lot of chocolate', 'late at night');
     assert.equal(result, 'a lot of chocolate late at night');
   });
+
+  test('Greptile PR #392 finding: an unpunctuated interim chunk still matches a punctuated corrected final (double-final replace path)', () => {
+    // Interim STT chunks are typically unpunctuated; the corrected/complete
+    // final for the same words usually carries automatic punctuation. The
+    // replace-with-addition path must still recognize these as the same
+    // words rather than falling through to concatenation.
+    const unpunctuatedPartial = 'What is a race condition Show how';
+    const result = mergeTranscriptChunks(unpunctuatedPartial, FULL_QUESTION);
+    assert.equal(result, FULL_QUESTION);
+  });
+
+  test('Greptile PR #392 finding: a punctuated final already contains an unpunctuated stale trailing partial (drop path)', () => {
+    // The reverse direction: base already committed the final, punctuated
+    // text; a leftover unpunctuated partial tail must still be recognized
+    // as already-present and dropped, not appended as new content.
+    const staleUnpunctuatedTail = 'backend service';
+    const result = mergeTranscriptChunks(FULL_QUESTION, staleUnpunctuatedTail);
+    assert.equal(result, FULL_QUESTION);
+  });
 });

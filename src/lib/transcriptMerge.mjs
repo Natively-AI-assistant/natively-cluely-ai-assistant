@@ -7,6 +7,17 @@ function normalize(text) {
   return String(text ?? '').trim().replace(/\s+/g, ' ');
 }
 
+// Strips leading/trailing punctuation for COMPARISON only — interim STT
+// chunks are typically unpunctuated while the corrected/final chunk for the
+// same words carries automatic punctuation ("condition" vs "condition?"), so
+// comparing raw tokens would treat identical spoken words as non-overlapping
+// and fall through to concatenation, reproducing the doubled-question bug
+// this helper exists to prevent. Internal apostrophes are preserved so
+// contractions ("don't") still compare as a single token.
+function stripPunctuationForCompare(word) {
+  return word.replace(/^[^\p{L}\p{N}']+|[^\p{L}\p{N}']+$/gu, '');
+}
+
 // Word-array prefix/suffix checks — deliberately NOT string startsWith/endsWith,
 // which match on raw characters and can misfire across word boundaries (e.g.
 // "category".startsWith("cat") or "chocolate".endsWith("late") would wrongly
@@ -55,21 +66,22 @@ export function mergeTranscriptChunks(base, addition) {
 
   const baseWords = baseNorm.split(' ');
   const addWords = addNorm.split(' ');
-  const baseWordsLower = baseWords.map((w) => w.toLowerCase());
-  const addWordsLower = addWords.map((w) => w.toLowerCase());
+  // Compare on lowercased, punctuation-stripped tokens; construct results
+  // from the original (cased, punctuated) word arrays so the more-complete
+  // side's punctuation is preserved in the output.
+  const baseWordsCompare = baseWords.map((w) => stripPunctuationForCompare(w.toLowerCase()));
+  const addWordsCompare = addWords.map((w) => stripPunctuationForCompare(w.toLowerCase()));
 
-  if (arrayStartsWith(addWordsLower, baseWordsLower)) {
+  if (arrayStartsWith(addWordsCompare, baseWordsCompare)) {
     return addition;
   }
-  if (arrayEndsWith(baseWordsLower, addWordsLower)) {
+  if (arrayEndsWith(baseWordsCompare, addWordsCompare)) {
     return base;
   }
 
   const maxOverlap = Math.min(baseWords.length, addWords.length);
   for (let n = maxOverlap; n >= 1; n--) {
-    const baseTail = baseWords.slice(baseWords.length - n).join(' ').toLowerCase();
-    const addHead = addWords.slice(0, n).join(' ').toLowerCase();
-    if (baseTail === addHead) {
+    if (arrayEndsWith(baseWordsCompare, addWordsCompare.slice(0, n))) {
       return [...baseWords, ...addWords.slice(n)].join(' ');
     }
   }
