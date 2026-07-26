@@ -131,7 +131,7 @@ const CodeBlockCopyButton = ({ code }: { code: string }) => {
       type="button"
       onClick={handleCopy}
       aria-label={copied ? 'Copied' : 'Copy code'}
-      className="absolute top-2 right-2 z-10 w-7 h-7 rounded-md bg-black/55 backdrop-blur-md border border-white/[0.08] flex items-center justify-center opacity-0 group-hover/code:opacity-100 transition-opacity duration-150 active:scale-[0.92]"
+      className="absolute top-2 right-2 z-10 w-7 h-7 rounded-md bg-black/55 backdrop-blur-md border border-white/[0.08] flex items-center justify-center opacity-0 group-hover/code:opacity-100 transition-opacity duration-150 active:scale-[0.92] focus:outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-white/20"
     >
       <AnimatePresence mode="wait" initial={false}>
         {copied ? (
