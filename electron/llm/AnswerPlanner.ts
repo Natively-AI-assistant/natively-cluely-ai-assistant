@@ -148,6 +148,12 @@ export interface AnswerPlan {
   answerStyleTargetSeconds: number;
   /** True when a user-created custom mode requires uploaded/reference files as source of truth. */
   documentGroundedCustomModeActive?: boolean;
+  /**
+   * SD Requirements grilling phase (derived from the durable Requirements artifact).
+   * When `requirements`, WhatToAnswerLLM applies LESSON allowlist inject + structural
+   * Delivery Framework heading soft-truncate. Omitted → legacy full SD path.
+   */
+  sdPhase?: 'requirements' | 'post_requirements';
 }
 
 export interface PlanAnswerInput {
