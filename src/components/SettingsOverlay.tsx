@@ -3196,11 +3196,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 const status = await window.electronAPI.getCalendarStatus();
                                                                 setCalendarStatus(status);
                                                             } else {
-                                                                setCalendarError(getCalendarConnectErrorMessage(res.error));
+                                                                setCalendarError(getCalendarConnectErrorMessage(res.error, t));
                                                             }
                                                         } catch (e) {
                                                             console.error(e);
-                                                            setCalendarError(getCalendarConnectErrorMessage(e));
+                                                            setCalendarError(getCalendarConnectErrorMessage(e, t));
                                                         } finally {
                                                             setIsCalendarsLoading(false);
                                                         }
@@ -3219,7 +3219,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     {isCalendarsLoading ? t('Connecting...') : t('Connect Google')}
                                                 </button>
                                                 {calendarError && (
-                                                    <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-400">
+                                                    <div role="alert" className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-400">
                                                         <AlertCircle size={14} className="mt-0.5 shrink-0" />
                                                         <span>{calendarError}</span>
                                                     </div>

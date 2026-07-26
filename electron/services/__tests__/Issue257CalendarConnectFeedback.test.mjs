@@ -18,12 +18,15 @@ function read(relativePath) {
 
 test('calendar connect error formatter separates user denial from Google test-user blocking', () => {
     const source = read('src/lib/calendarConnectError.ts');
+    const i18nSource = read('src/i18n.tsx');
 
     assert.match(source, /access_denied/, 'formatter must recognize Google OAuth access_denied failures');
     assert.match(source, /authorization was cancelled/, 'access_denied must be shown as a declined consent prompt');
     assert.match(source, /status=403/, 'formatter must recognize blocked Google OAuth exchange failures');
     assert.match(source, /test user/, 'blocked Google OAuth exchange failures must mention the current test-user limitation');
     assert.match(source, /Could not connect Google Calendar/, 'formatter must provide a fallback connection failure message');
+    assert.match(source, /translate\(DEFAULT_CALENDAR_CONNECT_ERROR\)/, 'known calendar failures must use the active UI translator');
+    assert.match(i18nSource, /Google Calendar authorization timed out/, 'calendar failure translations must be registered');
 });
 
 test('launcher calendar button surfaces calendarConnect failure instead of silently idling', () => {
@@ -31,9 +34,10 @@ test('launcher calendar button surfaces calendarConnect failure instead of silen
 
     assert.match(source, /getCalendarConnectErrorMessage/, 'launcher button must import the shared formatter');
     assert.match(source, /const \[connectError,\s*setConnectError\]/, 'launcher button must keep visible error state');
-    assert.match(source, /setConnectError\(getCalendarConnectErrorMessage\(res\.error\)\)/, 'success=false result must set visible error text');
-    assert.match(source, /setConnectError\(getCalendarConnectErrorMessage\(err\)\)/, 'thrown errors must set visible error text');
+    assert.match(source, /setConnectError\(getCalendarConnectErrorMessage\(res\.error,\s*t\)\)/, 'success=false result must set localized visible error text');
+    assert.match(source, /setConnectError\(getCalendarConnectErrorMessage\(err,\s*t\)\)/, 'thrown errors must set localized visible error text');
     assert.match(source, /connectError &&/, 'launcher button must render the error below the button');
+    assert.match(source, /<p role="alert"/, 'launcher errors must be announced to assistive technology');
 });
 
 test('settings calendar tab surfaces calendarConnect failure instead of silently idling', () => {
@@ -41,7 +45,8 @@ test('settings calendar tab surfaces calendarConnect failure instead of silently
 
     assert.match(source, /getCalendarConnectErrorMessage/, 'settings must import the shared formatter');
     assert.match(source, /const \[calendarError,\s*setCalendarError\]/, 'settings must keep visible calendar error state');
-    assert.match(source, /setCalendarError\(getCalendarConnectErrorMessage\(res\.error\)\)/, 'success=false result must set visible error text');
-    assert.match(source, /setCalendarError\(getCalendarConnectErrorMessage\(e\)\)/, 'thrown errors must set visible error text');
+    assert.match(source, /setCalendarError\(getCalendarConnectErrorMessage\(res\.error,\s*t\)\)/, 'success=false result must set localized visible error text');
+    assert.match(source, /setCalendarError\(getCalendarConnectErrorMessage\(e,\s*t\)\)/, 'thrown errors must set localized visible error text');
     assert.match(source, /calendarError &&/, 'settings must render the error below the button');
+    assert.match(source, /<div role="alert"/, 'settings errors must be announced to assistive technology');
 });

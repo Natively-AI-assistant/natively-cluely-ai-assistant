@@ -49,11 +49,11 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                 // Track calendar connection (analytics imported statically above)
                 analytics.trackCalendarConnected();
             } else {
-                setConnectError(getCalendarConnectErrorMessage(res.error));
+                setConnectError(getCalendarConnectErrorMessage(res.error, t));
             }
         } catch (err) {
             console.error(err);
-            setConnectError(getCalendarConnectErrorMessage(err));
+            setConnectError(getCalendarConnectErrorMessage(err, t));
         } finally {
             setLoading(false);
         }
@@ -223,7 +223,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                 </span>
             </button>
             {connectError && (
-                <p className="mt-2 flex max-w-[260px] items-start gap-1.5 text-left text-[11px] leading-snug text-red-300">
+                <p role="alert" className="mt-2 flex max-w-[260px] items-start gap-1.5 text-left text-[11px] leading-snug text-red-300">
                     <AlertCircle size={13} className="mt-0.5 shrink-0" />
                     <span>{connectError}</span>
                 </p>
