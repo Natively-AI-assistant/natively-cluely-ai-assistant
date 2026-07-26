@@ -256,11 +256,25 @@ export function tickPacer(state, fullText, nowMs, deltaMs, opts = {}) {
   state.charBudget -= snapped - prevRevealedLen;
   state.revealedLen = snapped;
 
-  const lastRevealedChar = fullText[snapped - 1];
-  if (SENTENCE_END_CHARS.has(lastRevealedChar)) {
-    state.pauseUntilMs = nowMs + SENTENCE_END_PAUSE_MS;
-  } else if (CLAUSE_PAUSE_CHARS.has(lastRevealedChar)) {
-    state.pauseUntilMs = nowMs + CLAUSE_PAUSE_MS;
+  // Scan the WHOLE slice revealed this tick, not just its last character.
+  // A single tick can span multiple characters (a large character budget
+  // after the initial buffer closes, or catching up from a burst), so a
+  // sentence/clause boundary can land mid-slice instead of exactly at the
+  // end — checking only fullText[snapped - 1] would silently skip the
+  // pause for text that jumped past a period/comma without landing on it.
+  // Walk backward so the LAST (most recently reached) punctuation mark in
+  // the slice wins, matching how a reader would pause at the boundary they
+  // just arrived at, not an earlier one further back in the same tick.
+  for (let i = snapped - 1; i >= prevRevealedLen; i -= 1) {
+    const ch = fullText[i];
+    if (SENTENCE_END_CHARS.has(ch)) {
+      state.pauseUntilMs = nowMs + SENTENCE_END_PAUSE_MS;
+      break;
+    }
+    if (CLAUSE_PAUSE_CHARS.has(ch)) {
+      state.pauseUntilMs = nowMs + CLAUSE_PAUSE_MS;
+      break;
+    }
   }
 
   return state;

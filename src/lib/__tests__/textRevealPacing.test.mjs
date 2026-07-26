@@ -163,6 +163,29 @@ test('clause punctuation (comma) gets the shorter CLAUSE_PAUSE_MS hold, not the 
   assert.ok(CLAUSE_PAUSE_MS < SENTENCE_END_PAUSE_MS, 'clause pause should be shorter than sentence-end pause');
 });
 
+test('a punctuation mark crossed MID-TICK (not landing exactly at the tick boundary) still triggers the pause', () => {
+  // Regression: the pause check used to only examine the single last
+  // character revealed by a tick (fullText[snapped - 1]). A tick spanning
+  // several characters (a large budget after the initial buffer closes, or
+  // catching up from a burst) can jump PAST a period/comma without landing
+  // exactly on it, silently skipping the reading-rhythm hold.
+  const state = createPacerState();
+  // "Hi. World" — period at index 2. Force a single huge tick (a giant
+  // deltaMs) that reveals the whole string in one call, well past the
+  // period, so `snapped` lands at the end, not on the period itself.
+  const text = 'Hi. World';
+  // Clear the initial buffer first with a zero-effect tiny tick, then a
+  // single huge tick that reveals everything at once.
+  tickPacer(state, text, 1, 1);
+  const beforeHugeTick = state.pauseUntilMs;
+  tickPacer(state, text, 10_000, 10_000 - 1);
+  assert.equal(state.revealedLen, text.length, 'the huge tick should reveal the whole string in one shot');
+  assert.ok(
+    state.pauseUntilMs > beforeHugeTick,
+    'a period crossed mid-tick must still arm a pause, even though revealedLen landed at the end, not on the period',
+  );
+});
+
 test('no idle credit: a long silence before a burst does not let the burst reveal faster than the cap', () => {
   const stateAfterSilence = createPacerState();
   const stateNoSilence = createPacerState();

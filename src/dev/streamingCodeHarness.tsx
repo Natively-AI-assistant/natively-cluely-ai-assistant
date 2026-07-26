@@ -71,6 +71,7 @@ function Harness() {
     // sentence" cadence the pacer module's own docs describe as the
     // problem it exists to smooth over.
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let cursor = 0;
     const feed = () => {
       if (cancelled) return;
@@ -79,12 +80,13 @@ function Harness() {
       cursor += chunkLen;
       arrivedRef.current += next;
       if (cursor < ANSWER.length) {
-        setTimeout(feed, 90);
+        timeoutId = setTimeout(feed, 90);
       }
     };
     feed();
     return () => {
       cancelled = true;
+      if (timeoutId !== null) clearTimeout(timeoutId);
     };
   }, []);
 

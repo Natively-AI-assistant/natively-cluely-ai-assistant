@@ -144,7 +144,7 @@ function Harness() {
         (renderMessageText streaming branch) and the standalone pre-placeholder
         pill.
       </p>
-      <button onClick={() => setRootMode((m) => (m === 'light' ? 'dark' : 'light'))} style={{ marginBottom: 16 }}>
+      <button type="button" onClick={() => setRootMode((m) => (m === 'light' ? 'dark' : 'light'))} style={{ marginBottom: 16 }}>
         Toggle html[data-theme] (currently: {rootMode})
       </button>
       <div>
