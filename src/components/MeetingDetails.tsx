@@ -12,7 +12,7 @@ import NativelyLogo from './icon.png';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { vividDarkCodeTheme } from '../lib/codeTheme';
 
 registerPrismLanguages();
 
@@ -405,7 +405,7 @@ const CodeHero: React.FC<{ lang: string; code: string; technique?: string }> = (
             >
                 <SyntaxHighlighter
                     language={resolved}
-                    style={vscDarkPlus}
+                    style={vividDarkCodeTheme}
                     customStyle={{ margin: 0, borderRadius: 0, fontSize: '13px', lineHeight: '1.6', background: 'transparent', padding: '14px 16px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}
                     showLineNumbers={lineCount > 8}
                     lineNumberStyle={{ minWidth: '2.2em', paddingRight: '1.2em', color: 'rgba(255,255,255,0.2)', textAlign: 'right', fontSize: '11px', userSelect: 'none' }}
