@@ -34,10 +34,14 @@ export const SLOT_EXTRACTORS: Array<{ id: SlotId; re: RegExp; alt?: RegExp }> = 
   {
     id: 'scale_qps',
     re: /\b(?:scale|qps|throughput|events?\/sec)[^.\d]{0,40}(\d[\d,]*(?:\s*[kKmM])?(?:\s*(?:QPS|qps|events?\/sec))?)/i,
+    // Whiteboard / screen: bare "100k QPS"
+    alt: /\b(\d[\d,]*(?:\s*[kKmM])?\s*(?:QPS|qps|events?\/sec))\b/,
   },
   {
     id: 'latency',
     re: /\b(?:latency|p99)[^.\d]{0,40}((?:under\s+)?\d[\d.]*(?:\s*ms|\s*s(?:ec(?:onds?)?)?)?(?:\s*p99)?)/i,
+    // Whiteboard / screen: "p99 < 200ms"
+    alt: /\bp99\s*[<≤]\s*(\d[\d.]*(?:\s*ms)?)/i,
   },
   {
     id: 'consistency_availability',
@@ -56,6 +60,22 @@ export const SLOT_EXTRACTORS: Array<{ id: SlotId; re: RegExp; alt?: RegExp }> = 
     re: /\b(?:data\s*flow\s*stages?\s*[:\-–]?\s*)([^.]{10,200})/i,
   },
 ];
+
+/**
+ * Build a screen_context evidence blob from existing ScreenContext /
+ * vision understanding fields (SPEC 04 — no new sensors).
+ */
+export function screenEvidenceText(screen: {
+  ocrText?: string | null;
+  extractedText?: string | null;
+  visibleSummary?: string | null;
+} | null | undefined): string {
+  if (!screen) return '';
+  return [screen.extractedText, screen.visibleSummary, screen.ocrText]
+    .map((s) => String(s || '').trim())
+    .filter(Boolean)
+    .join('\n');
+}
 
 const PIPELINE_SIGNAL_RE =
   /\b(?:data\s+pipeline|stream(?:ing)?\s+analytics|event\s+stream|kafka|flink|spark\s+streaming|clickstream|ingest\s+(?:and\s+)?(?:aggregate|process)|real[-\s]?time\s+analytics|etl\s+pipeline)\b/i;
@@ -108,6 +128,11 @@ export interface PrepareSdRequirementsInput {
   problemQuestion: string;
   /** Interviewer-attributed transcript texts (Context OS consume-only). */
   interviewerTexts: string[];
+  /**
+   * Optional screen_context evidence (OCR / vision extract). Used only to fill
+   * slots still empty after interviewer transcript (SPEC 04).
+   */
+  screenTexts?: string[];
   /** Recent candidate (mic) utterances for advance detection. */
   candidateTexts?: string[];
   /** Optional Natively (assistant) spoken advance channel. */
@@ -151,7 +176,8 @@ export function prepareSdRequirementsForAnswerPlan(
   }
 
   const interviewerBlob = (input.interviewerTexts || []).filter(Boolean).join('\n');
-  const classBlob = `${input.problemQuestion}\n${interviewerBlob}`;
+  const screenBlob = (input.screenTexts || []).filter(Boolean).join('\n');
+  const classBlob = `${input.problemQuestion}\n${interviewerBlob}\n${screenBlob}`;
   // Do not reclassify after gate close (SPEC 08).
   if (!artifact.gateClosed) {
     const nextClass = detectProblemClassFromText(classBlob, artifact.problemClass);
@@ -160,8 +186,17 @@ export function prepareSdRequirementsForAnswerPlan(
     }
   }
 
-  const filled = fillArtifactFromInterviewerText(artifact, interviewerBlob);
-  artifact = filled.artifact;
+  // Interviewer transcript is authoritative; screen fills only remaining slots.
+  const filledSpeech = fillArtifactFromInterviewerText(artifact, interviewerBlob);
+  artifact = filledSpeech.artifact;
+  const fills = [...filledSpeech.fills];
+  if (screenBlob.trim()) {
+    const filledScreen = fillArtifactFromInterviewerText(artifact, screenBlob);
+    artifact = filledScreen.artifact;
+    for (const f of filledScreen.fills) {
+      fills.push({ ...f });
+    }
+  }
 
   let softRefuseSpoken: string | null = null;
 
@@ -210,6 +245,6 @@ export function prepareSdRequirementsForAnswerPlan(
     artifact,
     softRefuseSpoken,
     sdPhase,
-    fills: filled.fills,
+    fills,
   };
 }

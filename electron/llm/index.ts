@@ -99,6 +99,7 @@ export {
     normalizeSdProblemKey,
     detectProblemClassFromText,
     fillArtifactFromInterviewerText,
+    screenEvidenceText,
     SLOT_EXTRACTORS,
 } from "./sdRequirementsLive";
 export type {

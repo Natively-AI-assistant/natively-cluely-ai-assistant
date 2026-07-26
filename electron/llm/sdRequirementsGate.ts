@@ -83,7 +83,7 @@ const LESSON_ALLOWLIST_HEADINGS = [
 ];
 
 const ADVANCE_PHRASE_RE =
-  /\b(?:let'?s\s+(?:move\s+on|go\s+(?:to|into)\s+(?:entities|design|hld)|continue)|ready\s+to\s+(?:design|move\s+on)|moving\s+(?:past|on\s+from)\s+requirements|advance\s+(?:to|past)\s+requirements)\b/i;
+  /\b(?:(?:let'?s|lets|let\s+us|we\s+can|shall\s+we|can\s+we)\s+(?:move\s+on|go\s+(?:to|into|ahead(?:\s+to)?)\s+(?:the\s+)?(?:entities|design|hld|high[- ]level(?:\s+design)?)|continue(?:\s+(?:to|with)\s+(?:the\s+)?(?:design|entities))?|proceed)|ready\s+to\s+(?:design|move\s+on)|i'?m\s+ready\s+to\s+(?:design|move\s+on)|moving\s+(?:past|on\s+from)\s+requirements|advance\s+(?:to|past)\s+requirements|jump\s+(?:into|to)\s+(?:the\s+)?(?:design|hld|entities|high[- ]level)|next\s+(?:up\s+)?(?:is\s+)?(?:the\s+)?(?:design|hld|high[- ]level\s+design))\b/i;
 
 function emptySlot(): SlotState {
   return { filled: false, askedOnce: false };

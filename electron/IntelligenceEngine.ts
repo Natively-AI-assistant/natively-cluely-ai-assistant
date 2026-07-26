@@ -1598,6 +1598,7 @@ export class IntelligenceEngine extends EventEmitter {
             const sdPrepared = this.applySdRequirementsGate(
                 answerPlanRaw,
                 question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                options?.screenContext,
             );
             const answerPlan = sdPrepared.answerPlan;
             if (sdPrepared.softRefuseSpoken) {
@@ -3284,6 +3285,7 @@ export class IntelligenceEngine extends EventEmitter {
     private applySdRequirementsGate(
         answerPlan: import('./llm/AnswerPlanner').AnswerPlan,
         problemQuestion: string,
+        screenContext?: ScreenContext | null,
     ): { answerPlan: import('./llm/AnswerPlanner').AnswerPlan; softRefuseSpoken: string | null } {
         if (answerPlan.answerType !== 'system_design_answer') {
             return { answerPlan, softRefuseSpoken: null };
@@ -3297,6 +3299,8 @@ export class IntelligenceEngine extends EventEmitter {
                 .filter((it) => it.role === 'user')
                 .map((it) => it.text)
                 .slice(-1);
+            const { screenEvidenceText } = require('./llm/sdRequirementsLive') as typeof import('./llm/sdRequirementsLive');
+            const screenBlob = screenEvidenceText(screenContext as any);
             // Only treat the current question as advance when it itself matches
             // an advance phrase (manual "let's move on") — never re-scan the
             // whole window as a sticky soft-refuse.
@@ -3305,6 +3309,7 @@ export class IntelligenceEngine extends EventEmitter {
                 artifact: this.session.getSdRequirementsArtifact?.() ?? null,
                 problemQuestion,
                 interviewerTexts,
+                screenTexts: screenBlob ? [screenBlob] : undefined,
                 candidateTexts,
                 assistantAdvanceTexts: detectAdvanceSignal(problemQuestion, 'mic')
                     ? [problemQuestion]

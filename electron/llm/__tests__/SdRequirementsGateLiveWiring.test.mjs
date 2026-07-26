@@ -181,6 +181,50 @@ describe('prepareSdRequirementsForAnswerPlan (live stamp)', () => {
     assert.match(out.softRefuseSpoken, /data-flow|data flow/i);
     assert.equal(out.sdPhase, 'requirements');
   });
+
+  test('screen_context fills empty slots after interviewer speech (whiteboard NFRs)', () => {
+    const plan = { answerType: 'system_design_answer', forbiddenContextLayers: [] };
+    const out = live.prepareSdRequirementsForAnswerPlan({
+      answerPlan: plan,
+      artifact: null,
+      problemQuestion: 'Design a URL shortener',
+      interviewerTexts: ['Functional: create short links and redirect'],
+      screenTexts: ['p99 < 200ms', '100k QPS', 'prefer availability over consistency'],
+    });
+    assert.equal(out.artifact.slots.functional_requirements.filled, true);
+    assert.equal(out.artifact.slots.latency.filled, true);
+    assert.equal(out.artifact.slots.scale_qps.filled, true);
+    assert.equal(out.artifact.slots.consistency_availability.filled, true);
+    assert.ok(out.fills.some((f) => f.id === 'latency'));
+  });
+
+  test('interviewer speech wins over conflicting screen text for already-filled slots', () => {
+    const plan = { answerType: 'system_design_answer', forbiddenContextLayers: [] };
+    const out = live.prepareSdRequirementsForAnswerPlan({
+      answerPlan: plan,
+      artifact: null,
+      problemQuestion: 'url shortener',
+      interviewerTexts: ['Scale about 1k QPS'],
+      screenTexts: ['100k QPS'],
+    });
+    assert.equal(out.artifact.slots.scale_qps.filled, true);
+    assert.match(String(out.artifact.slots.scale_qps.value), /1k/i);
+  });
+
+  test('ASR-ish advance phrases still soft-refuse when checklist incomplete', () => {
+    const plan = { answerType: 'system_design_answer', forbiddenContextLayers: [] };
+    for (const phrase of ['lets move on', 'can we move on', "I'm ready to design", 'jump into HLD']) {
+      const out = live.prepareSdRequirementsForAnswerPlan({
+        answerPlan: plan,
+        artifact: gate.createEmptyRequirementsArtifact('p'),
+        problemQuestion: 'url shortener',
+        interviewerTexts: [],
+        candidateTexts: [phrase],
+      });
+      assert.ok(out.softRefuseSpoken, `expected soft-refuse for: ${phrase}`);
+      assert.equal(out.sdPhase, 'requirements');
+    }
+  });
 });
 
 describe('SessionTracker SD Requirements working copy', () => {
