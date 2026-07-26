@@ -1,0 +1,31 @@
+{
+  "id": "new-sd-problem-reset",
+  "title": "New SD problem resets checklist + re-opens gate",
+  "problemKey": "url-shortener",
+  "problemClass": "crud_product",
+  "turns": [
+    {
+      "role": "interviewer",
+      "speaker": "system",
+      "text": "Design a URL shortener. Functional: create and redirect. Scale 1k QPS. Latency 50ms p99. Prefer availability."
+    },
+    {
+      "role": "user",
+      "speaker": "user",
+      "text": "Great — let's move on."
+    },
+    {
+      "role": "interviewer",
+      "speaker": "system",
+      "text": "New problem: design a rate limiter for our API gateway."
+    }
+  ],
+  "newProblemKey": "rate-limiter",
+  "expect": {
+    "sdPhaseAfterFirstAdvance": "post_requirements",
+    "sdPhaseAfterReset": "requirements",
+    "checklistCompleteAfterReset": false,
+    "gateClosedAfterReset": false,
+    "priorSlotsCleared": true
+  }
+}

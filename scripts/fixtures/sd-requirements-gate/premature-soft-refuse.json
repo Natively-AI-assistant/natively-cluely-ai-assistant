@@ -1,0 +1,32 @@
+{
+  "id": "premature-soft-refuse",
+  "title": "Premature advance → soft-refuse naming missing slots",
+  "problemKey": "url-shortener-early",
+  "problemClass": "crud_product",
+  "turns": [
+    {
+      "role": "interviewer",
+      "speaker": "system",
+      "text": "Design a URL shortener."
+    },
+    {
+      "role": "interviewer",
+      "speaker": "system",
+      "text": "Functional: create short links and redirect. We can talk scale, latency, and CAP later."
+    },
+    {
+      "role": "user",
+      "speaker": "user",
+      "text": "Ready to design — let's move on to High-Level Design."
+    }
+  ],
+  "expect": {
+    "sdPhaseAfter": "requirements",
+    "checklistComplete": false,
+    "gateClosed": false,
+    "laterSectionsAllowed": false,
+    "softRefused": true,
+    "softRefuseMustName": ["scale / QPS", "latency", "consistency vs availability"],
+    "requiredSlotsFilled": ["functional_requirements"]
+  }
+}
