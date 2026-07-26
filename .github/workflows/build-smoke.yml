@@ -4,7 +4,7 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    - cron: '0 9 * * 1'  # Every Monday at 09:00 UTC (api-smoke + sd-quality)
+    - cron: '0 9 * * 1'  # Every Monday at 09:00 UTC (api-smoke + sd-quality + sd-requirements-gate-e2e)
 
 jobs:
   electron-entry-smoke:
@@ -124,3 +124,33 @@ jobs:
           NATIVELY_API_BASE: ${{ secrets.NATIVELY_API_BASE }}
           BENCHMARK_MODEL: gemini-3.1-flash-lite
           SD_BENCHMARK_SPLIT: development
+
+  sd-requirements-gate-e2e:
+    # Runs weekly (Monday 09:00 UTC) and on demand via workflow_dispatch.
+    # Stub LLM core matrix (ticket 13) — no API secrets required.
+    # Env: NATIVELY_E2E=1 (set by npm script). Exit 0 skip if gate/SessionTracker
+    # dist artifacts are missing. NEVER runs on pull_request — job-level `if` below.
+    # Tier 0 Requirements-gate suite is already on PRs via electron-entry-smoke
+    # `npm test` (SdRequirementsGateTier0.test.mjs under electron/llm/__tests__/).
+    name: SD Requirements Gate E2E (weekly)
+    runs-on: macos-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron (test prerequisite)
+        run: npm run build:electron
+
+      - name: Run SD Requirements-gate Electron e2e (core matrix)
+        run: npm run e2e:sd-requirements-gate

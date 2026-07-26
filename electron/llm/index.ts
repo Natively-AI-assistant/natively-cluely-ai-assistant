@@ -55,6 +55,39 @@ export type { CodeSanityResult, CodeSanityIssue } from "./CodeSanityCheck";
 export { AnswerDiversityGuard, cleanAnswerArtifacts, isLeakedSchemaStub, isProviderTransportError, stripMetaPreamble, compressToSpeakable, varySpokenOpening, SCAFFOLD_LABEL_RE } from "./answerPolish";
 export type { RepetitionVerdict, RepetitionReason, DiversityCheckOpts } from "./answerPolish";
 export type { AnswerPlan, AnswerSource, AnswerType, ContextLayer, OutputPerspective, SpeakerPerspective } from "./AnswerPlanner";
+export {
+    createEmptyRequirementsArtifact,
+    deriveSdPhase,
+    resetArtifactForNewSdProblem,
+    isChecklistComplete,
+    listMissingRequiredSlots,
+    markSlotAsked,
+    fillSlotFromInterviewer,
+    fillSlotFromAssumption,
+    clearSlotFill,
+    setProblemClass,
+    acceptAdvance,
+    detectAdvanceSignal,
+    buildSoftRefuseSpoken,
+    softRefuseIfPrematureAdvance,
+    hasLaterFrameworkHeadings,
+    softTruncateToRequirements,
+    enforceStructuralGate,
+    filterLessonChunksForPhase,
+    requirementsPhaseContractFor,
+    REQUIREMENTS_PHASE_CONTRACT,
+    LATER_FRAMEWORK_HEADING_PATTERNS,
+} from "./sdRequirementsGate";
+export type {
+    SdPhase,
+    ProblemClass,
+    SlotId,
+    SlotFillSource,
+    SlotState,
+    RequirementsArtifact,
+    MissingSlot,
+    AdvanceChannel,
+} from "./sdRequirementsGate";
 export { applyModeFallback, MODE_CONTEXT_PROFILES } from "./modeProfiles";
 export type { ActiveModeInfo, ModeContextProfile, ModeTemplateType } from "./modeProfiles";
 export { resolveFollowUp, resolveFollowUpOrClarify, isBareFollowUp, isRefinementFollowUp, isSameSessionFollowUp, buildContextFreeClarification } from "./FollowUpResolver";

@@ -1,0 +1,27 @@
+{
+  "id": "lesson-allowlist-gated",
+  "title": "LESSON allowlist while gated (Understanding / FR / NFR only)",
+  "problemKey": "url-shortener-lesson",
+  "problemClass": "crud_product",
+  "turns": [
+    {
+      "role": "interviewer",
+      "speaker": "system",
+      "text": "Design a URL shortener. Functional: shorten and redirect. Scale 500 QPS. Latency under 100ms. Availability over consistency."
+    }
+  ],
+  "lessonChunks": [
+    {
+      "text": "## Understanding the Problem\nClarify what the shortener must do.\n### Functional Requirements\nCreate short links and redirect.\n### Non-Functional Requirements\nLow latency redirects.\n## The Set Up\nPick a language and IDE.\n## Defining the Core Entities\nURL, User, Click.\n## The API\nPOST /shorten\n## High-Level Design\nCDN in front of app servers and Redis.\n## Potential Deep Dives\nBase62 encoding tradeoffs."
+    }
+  ],
+  "expect": {
+    "sdPhaseAfter": "requirements",
+    "checklistComplete": true,
+    "gateClosed": false,
+    "laterSectionsAllowed": false,
+    "softRefused": false,
+    "lessonMustInclude": ["Understanding the Problem", "Functional Requirements", "Non-Functional Requirements", "Low latency redirects"],
+    "lessonMustExclude": ["High-Level Design", "Deep Dives", "Core Entities", "The Set Up", "POST /shorten", "CDN in front of app servers", "Base62 encoding tradeoffs"]
+  }
+}
