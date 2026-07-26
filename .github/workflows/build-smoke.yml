@@ -3,6 +3,8 @@ name: Build Smoke
 on:
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 09:00 UTC (api-smoke + sd-quality)
 
 jobs:
   electron-entry-smoke:
@@ -63,8 +65,6 @@ jobs:
     name: API Smoke (weekly)
     runs-on: macos-latest
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    schedule:
-      - cron: '0 9 * * 1'  # Every Monday at 09:00 UTC
 
     steps:
       - name: Checkout
@@ -89,3 +89,38 @@ jobs:
           NATIVELY_API_KEY: ${{ secrets.NATIVELY_API_KEY }}
           NATIVELY_TRIAL_TOKEN: ${{ secrets.NATIVELY_TRIAL_TOKEN }}
           NATIVELY_API_BASE: ${{ secrets.NATIVELY_API_BASE }}
+
+  sd-quality:
+    # Runs weekly (Monday 09:00 UTC) and on demand via workflow_dispatch.
+    # Requires secrets: NATIVELY_API_KEY (and optionally RUN_NATIVELY_API_E2E).
+    # Without credentials the harness skips cleanly via the env gate (exit 0).
+    # NEVER runs on pull_request — guarded by the job-level `if` below.
+    name: SD Quality (weekly)
+    runs-on: macos-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron (test prerequisite)
+        run: npm run build:electron
+
+      - name: Run SD grounding quality harness (development split)
+        run: ./node_modules/.bin/electron scripts/benchmark-sd-grounding.js
+        env:
+          RUN_NATIVELY_API_E2E: ${{ secrets.RUN_NATIVELY_API_E2E }}
+          NATIVELY_API_KEY: ${{ secrets.NATIVELY_API_KEY }}
+          NATIVELY_TRIAL_TOKEN: ${{ secrets.NATIVELY_TRIAL_TOKEN }}
+          NATIVELY_API_BASE: ${{ secrets.NATIVELY_API_BASE }}
+          BENCHMARK_MODEL: gemini-3.1-flash-lite
+          SD_BENCHMARK_SPLIT: development
