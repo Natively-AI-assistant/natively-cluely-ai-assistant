@@ -54,6 +54,15 @@ export interface BuildTurnContractInput {
   hasReferenceFiles: boolean;
   hasProfileFacts: boolean;
   hasLiveTranscript: boolean;
+  /**
+   * Bug fix (2026-07-26, live-testing session): the legacy (no-decision)
+   * `unknown` owner branch of issueCapabilities had no way to grant
+   * profile_jd — this field was entirely missing — so a JD-fact question
+   * under a mixed/ask_if_ambiguous mode with no matching clarify term
+   * got zero JD evidence even with a real JD loaded, and the model
+   * fabricated a role-fit narrative instead of grounding in it.
+   */
+  hasJobDescription?: boolean;
   /** Explicit user source override ("answer from my resume instead"). */
   userExplicitSource?: 'reference_files' | 'profile' | 'transcript' | null;
   /**
@@ -73,6 +82,16 @@ export interface BuildTurnContractInput {
    * `userExplicitSource` scalar when both are available.
    */
   turnSourceDecision?: TurnSourceDecision | null;
+  /**
+   * Phase 6 Slice 1 (context-rebuild, 2026-07-25): the caller's own
+   * TurnIdentity.turnId. When supplied, the kernel uses it verbatim instead
+   * of minting its own via randomUUID() — the prerequisite for
+   * SourceAuthorityKernel.build's turnId and CanonicalTurn's turnId (Slice 3)
+   * to be provably the SAME value for the same turn, not two independently-
+   * minted ids that happen to agree. Optional — every existing caller keeps
+   * minting its own until updated.
+   */
+  turnId?: string;
 }
 
 // Nouns that can NAME a thing owned by a specific source universe (uploaded
@@ -194,7 +213,7 @@ export class SourceAuthorityKernel {
       .map((s) => s.sourceKind);
 
     return {
-      turnId: randomUUID(),
+      turnId: input.turnId ?? randomUUID(),
       surface: input.surface,
       activeModeId: input.activeModeId,
       activeModeName: input.activeModeName ?? null,
@@ -457,6 +476,15 @@ export class SourceAuthorityKernel {
       caps.push(capability('profile_resume', 'evidence', 'general mode: profile facts available'));
       caps.push(capability('profile_project', 'evidence', 'general mode: profile projects available'));
       caps.push(capability('profile_persona', 'style', 'persona is style only'));
+    }
+    if (input.hasJobDescription) {
+      const jdPermittedByContract = !input.allowedExplicitSwitches
+        || input.allowedExplicitSwitches.length === 0
+        || input.allowedExplicitSwitches.includes('job_description');
+      if (jdPermittedByContract || input.userExplicitSource === 'profile') {
+        caps.push(capability('profile_jd', 'evidence',
+          'general mode: JD supports role-fit framing; JD facts are role requirements, never candidate claims'));
+      }
     }
     if (input.hasLiveTranscript) {
       caps.push(capability('live_transcript', 'referent_only', 'general mode: transcript for context only'));

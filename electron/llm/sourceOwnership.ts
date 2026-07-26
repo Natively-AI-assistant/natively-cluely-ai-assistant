@@ -114,7 +114,22 @@ export function resolveSourceOwnership(input: ResolveSourceOwnershipInput): Sour
   // résumé intent — the legacy heuristic chain below folds JD → profile.
   if (input.turnSourceDecision) {
     const d = input.turnSourceDecision;
-    const profileAllowed = d.outcome === 'explicit_granted'
+    // Bug fix (2026-07-26, live-testing session): this previously required
+    // `outcome === 'explicit_granted'`, so a 'default'-outcome decision
+    // (the ordinary un-switched turn — profile_only, general_mixed,
+    // ask_if_ambiguous with no explicit switch) NEVER set profileAllowed
+    // true here, no matter what allowedEvidenceKinds actually granted.
+    // `sourceOwnershipAllowsProfile`/`profileEvidenceEligible` in
+    // ipcHandlers.ts read this field directly, so every JD/résumé-grounded
+    // question under a mixed-authority mode with no explicit switch got
+    // zero profile/JD evidence built for the prompt — the live "wrong
+    // answers" bug. Mirrors the already-correct
+    // `wtaDecisionAllowsCandidateProfile` pattern in IntelligenceEngine.ts
+    // (default|explicit_granted, gated by allowedEvidenceKinds). 'default'
+    // is safe to include unconditionally: explicit_denied/source_unavailable
+    // decisions always carry an empty allowedEvidenceKinds (see
+    // denied()/unavailable() above), so this can't leak into a denied turn.
+    const profileAllowed = (d.outcome === 'default' || d.outcome === 'explicit_granted')
       && d.allowedEvidenceKinds.some((k) => (
         k === 'profile_resume' || k === 'profile_jd' || k === 'projects'
       ));
