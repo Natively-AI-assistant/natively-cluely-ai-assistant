@@ -1,4 +1,4 @@
-import { animate, motion, useMotionValue, useTransform } from 'framer-motion';
+import { animate, AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion';
 import {
   ArrowRight,
   ChevronDown,
@@ -53,7 +53,7 @@ function SkillPicker({
         <button
           key={skill.id}
           onMouseDown={(e) => { e.preventDefault(); onSelect(skill); }}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors ${i === selectedIndex ? 'bg-accent-primary/15 text-text-primary' : 'hover:bg-bg-subtle/50 text-text-secondary'}`}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors ${i === selectedIndex ? 'bg-accent-muted text-text-primary' : 'hover:bg-bg-subtle/50 text-text-secondary'}`}
         >
           <span className="text-[11px] font-mono text-amber-400 shrink-0">/{skill.id}</span>
           <span className="text-[11px] truncate flex-1">{skill.description}</span>
@@ -113,6 +113,63 @@ const CardCopyButton = ({
   );
 };
 
+// Floating hover-reveal copy button for the headerless vivid-dark code block
+// (see HighlightedCode / StreamingHighlightedCode). Mirrors CardCopyButton's
+// interaction (copy → 2s "copied" state) but rendered as a self-contained
+// chip absolutely positioned over the code surface, since there is no header
+// row to dock into in that theme.
+const CodeBlockCopyButton = ({ code }: { code: string }) => {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+  const handleCopy = () => {
+    const p = navigator.clipboard?.writeText(code);
+    if (!p) return;
+    p.then(() => {
+      setCopied(true);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      aria-label={copied ? t('Copied') : t('Copy code')}
+      className="absolute top-2 right-2 z-10 w-7 h-7 rounded-md bg-black/55 backdrop-blur-md border border-white/[0.08] flex items-center justify-center opacity-0 group-hover/code:opacity-100 transition-opacity duration-150 active:scale-[0.92]"
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        {copied ? (
+          <motion.span
+            key="check"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.14 }}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={2.5} />
+          </motion.span>
+        ) : (
+          <motion.span
+            key="copy"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.14 }}
+            className="absolute inset-0 flex items-center justify-center text-white/70 hover:text-white/95"
+          >
+            <Copy className="w-3.5 h-3.5" strokeWidth={2} />
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </button>
+  );
+};
+
 import React, {
   startTransition as reactStartTransition,
   useCallback,
@@ -128,6 +185,7 @@ import {
   shouldDedupeOverlayAction,
 } from '../lib/overlayActionDedup.mjs';
 import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
+import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
 import {
   applyWhatToAnswerNullFeedbackMessages,
   finalizeStreamingByIntentMessages,
@@ -152,7 +210,11 @@ import {
   OVERLAY_RESIZE_SPRING,
 } from '../../electron/utils/overlayResizeEasing.mjs';
 import { shouldAcceptIntelligenceIpc } from '../lib/overlayIntelligenceGeneration.mjs';
-import { shouldUseStreamingCodeUi } from '../lib/overlayStreamingCodeUi.mjs';
+import {
+  shouldUseStreamingCodeUi,
+  isUnclosedCodeFencePart,
+  splitStreamingCodeLines,
+} from '../lib/overlayStreamingCodeUi.mjs';
 import { widthDerivedScrollMax, verticalScrollCap } from '../lib/overlayScrollBudget.mjs';
 import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch } from '../lib/chatStreamGuard.mjs';
 import {
@@ -161,8 +223,16 @@ import {
   finalizeImperativeStreamMessages,
   shouldFlushPreviousStream,
 } from '../lib/streamingTokenQueue.mjs';
+import {
+  createPacerState,
+  tickPacer,
+  estimateRevealDurationMs,
+  INITIAL_BUFFER_MS,
+  STREAM_RENDER_CONFIG,
+} from '../lib/textRevealPacing.mjs';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
-import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { vividDarkCodeTheme, VIVID_DARK_LINE_NUMBER_COLOR } from '../lib/codeTheme';
 
 registerPrismLanguages();
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
@@ -209,6 +279,80 @@ const REHYPE_PLUGINS: any[] = [[rehypeKatex, { throwOnError: false, strict: fals
 
 import { DOM_CONTEXT_MAX_CHARS } from '../constants/domCapture';
 
+// ── Streaming-height headroom buffer (native OS window resize during token
+// streaming) ─────────────────────────────────────────────────────────────
+// Plain answer streaming (NOT the code-expansion width transition, which
+// already rate-limits + dedupes its own height channel — see
+// heightReportSuppressedUntilRef / HEIGHT_REPORT_INTERVAL_MS in
+// startTransition) drives the ResizeObserver at up to 60fps: nearly every
+// streamed token re-wraps text, so the observer can fire on almost every rAF.
+// Each fire used to call reportShellSize() unconditionally, which is an
+// IMMEDIATE, un-eased native setBounds() on a transparent/blurred window —
+// macOS re-rasterizes the blur on every single one of those calls. Bubble
+// text is `text-[15px] leading-relaxed` (line-height ≈ 24px), so the
+// dominant event is a ~24px jump per wrapped line, dozens of times a second —
+// the "staircase" jitter the user feels.
+//
+// An earlier version of this fix sprung an INTERPOLATED height toward each
+// new measurement (same retarget-in-flight pattern as the `shellWidth` width
+// channel). That is unsafe here and was reverted: contentRef is laid out at
+// `h-fit` and rendered INSTANTLY to its full new height every frame (there is
+// no CSS transition on the text reflow itself) — only the reported height was
+// lagging. For the whole catch-up window the native window is SMALLER than
+// the real laid-out content, which — since the footer chrome (input / model
+// selector / send) sits at the bottom of contentRef, below the growing
+// scroll area — means the window edge slices the footer off, not just empty
+// space. verticalScrollCap (see overlayScrollBudget.mjs) exists specifically
+// to prevent this class of clip; a lagging spring reintroduces it as a
+// steady-state condition instead of a one-frame accident.
+//
+// The safe direction is the other one: the window must never be SMALLER than
+// contentRef's real height, so it has to LEAD content growth, never chase it.
+// driveStreamingHeight below commits `measured height + a reserved buffer` on
+// every real grow, then does nothing (no native call at all) for every
+// subsequent measurement that still fits inside that buffer — which, at this
+// line height, covers several more wrapped lines before another native call
+// is needed. Each commit is immediate (no interpolation, no rate limit is
+// needed: growth events are naturally spaced out by how long it takes to
+// fill the buffer), and by construction the committed height is always >=
+// the real content height, so there is no clipping window, ever. The
+// trade-off is a few tens of px of transient empty space below the panel
+// while the buffer hasn't been fully used yet — invisible in practice (the
+// window is a transparent/blurred overlay, and contentRef's own `h-fit`
+// background ends exactly at the real content, not at the window edge) — and
+// it collapses to the exact final height the instant streaming ends (see
+// reportShellSize's sync call below).
+const STREAMING_HEIGHT_GROW_BUFFER_PX = 96; // ~4 lines of headroom per forced grow
+
+// ── "Always shown as typing" cursor glyph ───────────────────────────────────
+// Appends a small blinking cursor as the TRUE last DOM node inside `root`,
+// walking down through *element* children only (never descending into a text
+// node) so it lands inline with the actual last line of rendered content —
+// whatever block that line happens to be inside (paragraph, list item, table
+// cell, inline code, bold run, ...) — instead of trailing the whole subtree
+// as a new block-level line. A naive `root.innerHTML += '<span>...'` or a
+// sibling appended after the root's last child would sit BELOW the last
+// paragraph (block elements force a line break), not at its tail.
+//
+// This is a plain DOM append happening AFTER innerHTML/React has already
+// rendered — not a string concatenated into the markdown source before
+// marked.parse/ReactMarkdown. That matters for two reasons: (1) DOMPurify
+// never sees it, so there's no sanitizer interaction to reason about, and
+// (2) it can never be swallowed/escaped by an unterminated code fence the
+// way an injected `<span>` string would be if it landed inside `marked`'s
+// literal-code handling.
+function appendTypingCursorNode(root: HTMLElement) {
+  let target: Element = root;
+  while (target.lastElementChild) {
+    target = target.lastElementChild;
+  }
+  const cursor = document.createElement('span');
+  cursor.className = 'reveal-typing-cursor';
+  cursor.setAttribute('aria-hidden', 'true');
+  cursor.textContent = '▍'; // ▍ left three-quarters block
+  target.appendChild(cursor);
+}
+
 interface Message {
   id: string;
   role: 'user' | 'system' | 'interviewer';
@@ -216,6 +360,8 @@ interface Message {
   isStreaming?: boolean;
   hasScreenshot?: boolean;
   screenshotPreview?: string;
+  // Synthetic user-role label pushed before a hotkey/button answer (e.g. "Recap") — excluded from LLM conversation-context building, same as a screenshot-question card.
+  isQuickActionLabel?: boolean;
   isCode?: boolean;
   intent?: string;
   // Verified code execution: set when the code in this message passed N executed
@@ -245,7 +391,7 @@ interface NativelyInterfaceProps {
 
 const buildConversationContextFromMessages = (items: Message[]): string =>
   items
-    .filter((m) => m.role !== 'user' || !m.hasScreenshot)
+    .filter((m) => !(m.role === 'user' && (m.hasScreenshot || m.isQuickActionLabel)))
     .map(
       (m) =>
         `${m.role === 'interviewer' ? 'Interviewer' : m.role === 'user' ? 'User' : 'Assistant'}: ${m.text}`,
@@ -281,6 +427,7 @@ interface HighlightedCodeProps {
   appearance: any;
   isModernTheme?: boolean;
   isGlassTheme?: boolean;
+  showCodeHeader: boolean;
 }
 
 const HighlightedCode = React.memo(
@@ -295,25 +442,41 @@ const HighlightedCode = React.memo(
     appearance,
     isModernTheme,
     isGlassTheme,
+    showCodeHeader,
   }: HighlightedCodeProps) {
     const isSpecialTheme = isModernTheme || isGlassTheme;
     const resolved = mapLanguageForPrism(lang, code);
     return (
       <div
-        className={`my-3 rounded-xl overflow-hidden border shadow-lg ${codeBlockClass}`}
+        className={`relative group/code my-3 rounded-xl overflow-hidden border shadow-lg ${codeBlockClass}`}
         style={isSpecialTheme ? undefined : appearance.codeBlockStyle}
       >
-        {/* Minimalist Apple Header */}
-        <div
-          className={`px-3 py-1.5 border-b ${codeHeaderClass}`}
-          style={isSpecialTheme ? undefined : appearance.codeHeaderStyle}
-        >
-          <span
-            className={`text-[10px] uppercase tracking-widest font-semibold font-mono ${codeHeaderTextClass}`}
+        {/* Minimalist Apple Header — hidden for the headerless vivid-dark
+            theme, which floats a hover-reveal language tag + copy button
+            over the code instead (see below). */}
+        {showCodeHeader && (
+          <div
+            className={`px-3 py-1.5 border-b ${codeHeaderClass}`}
+            style={isSpecialTheme ? undefined : appearance.codeHeaderStyle}
           >
-            {resolved || 'CODE'}
-          </span>
-        </div>
+            <span
+              className={`text-[10px] uppercase tracking-widest font-semibold font-mono ${codeHeaderTextClass}`}
+            >
+              {resolved || 'CODE'}
+            </span>
+          </div>
+        )}
+        {!showCodeHeader && (
+          <>
+            <span
+              className="absolute top-2.5 left-3 z-10 text-[10px] uppercase tracking-widest font-mono pointer-events-none opacity-0 group-hover/code:opacity-100 transition-opacity duration-150"
+              style={{ color: VIVID_DARK_LINE_NUMBER_COLOR }}
+            >
+              {resolved || 'CODE'}
+            </span>
+            <CodeBlockCopyButton code={code} />
+          </>
+        )}
         {/* No-wrap horizontal scroll: code line layout stays stable as the
                 canvas grows/shrinks. Without this, wrapped lines re-flow at every
                 spring tick, the block height jitters, and content below shifts.
@@ -350,7 +513,208 @@ const HighlightedCode = React.memo(
     prev.lang === next.lang &&
     prev.appearance === next.appearance &&
     prev.isModernTheme === next.isModernTheme &&
-    prev.isGlassTheme === next.isGlassTheme,
+    prev.isGlassTheme === next.isGlassTheme &&
+    prev.showCodeHeader === next.showCodeHeader,
+);
+
+// ── Streaming code block (fixes the "flicker" + "no reveal feel" complaints
+// for the ACTIVE, still-open fence only) ────────────────────────────────────
+// Root cause of the flicker: HighlightedCode above hands its ENTIRE `code`
+// string to one SyntaxHighlighter, and mid-stream that string is
+// syntactically INCOMPLETE (an unclosed string/comment/bracket). Prism has
+// to guess how to tokenize the dangling tail, gets it wrong, and then
+// visibly RECOLORS the whole block the instant the real token closes a few
+// ticks later — on top of literally re-tokenizing the full growing string
+// from scratch on every one of the pacer's commits (React.memo can't help;
+// `code` genuinely changes every tick).
+//
+// Fix: only ever feed Prism text that can no longer change. A line is
+// "complete" the moment a newline has arrived after it — nothing about that
+// line's syntax can retroactively change (the model can't rewrite text it
+// already streamed). So:
+//   - each completed line gets its own memoized SyntaxHighlighter instance,
+//     keyed by (stable) line index — completedLines only ever grows by
+//     APPENDING new lines, never mutates or reorders existing ones, so an
+//     index key is safe here (unlike the outer per-fence `parts` split,
+//     which can grow when a whole NEW fence starts).  Once a line is
+//     rendered it never receives new props, so CodeStreamLine's memo bails
+//     out and Prism never touches it again — this is also what makes the
+//     per-line reveal-fade (.reveal-line-in, @starting-style) fire exactly
+//     once per line, matching the premium per-word prose reveal at the same
+//     granularity code actually reads at.
+//   - the trailing IN-PROGRESS line (after the last newline) is rendered as
+//     PLAIN monospace text, deliberately NOT run through Prism at all, since
+//     it's the one line whose syntax is still incomplete by definition.
+// The moment the fence closes (or the message finalizes), renderMessageText
+// stops selecting this component and falls back to the static
+// HighlightedCode above with the FULL, now-final code string — giving
+// correct whole-block-context highlighting at rest (multi-line strings,
+// block comments spanning several lines, etc., which this streaming preview
+// intentionally does not attempt to get right).
+const CODE_STREAM_LINE_FONT: React.CSSProperties = {
+  margin: 0,
+  padding: 0,
+  background: 'transparent',
+  display: 'inline',
+  fontSize: '13px',
+  lineHeight: '1.6',
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+  whiteSpace: 'pre',
+};
+
+// Exported (module-scope const, no behavioral change) so a dev-only
+// synthetic harness (src/dev/streamingCodeHarness.tsx) can render the real
+// component with the real pacer instead of re-implementing it for a visual
+// check — flicker/reveal-feel/layout-jump are not tsc/unit-testable.
+export const CodeStreamLine = React.memo(
+  function CodeStreamLine({
+    line,
+    lang,
+    codeTheme,
+    lineNumber,
+    codeLineNumberColor,
+  }: {
+    line: string;
+    lang: string;
+    codeTheme: any;
+    lineNumber: number;
+    codeLineNumberColor: string;
+  }) {
+    return (
+      <div className="flex reveal-line-in">
+        <span
+          aria-hidden="true"
+          style={{
+            minWidth: '2.5em',
+            paddingRight: '1.2em',
+            color: codeLineNumberColor,
+            textAlign: 'right',
+            fontSize: '11px',
+            userSelect: 'none',
+            flexShrink: 0,
+          }}
+        >
+          {lineNumber}
+        </span>
+        <SyntaxHighlighter
+          language={lang}
+          style={codeTheme}
+          PreTag="span"
+          CodeTag="span"
+          wrapLongLines={false}
+          customStyle={CODE_STREAM_LINE_FONT}
+        >
+          {line.length > 0 ? line : ' '}
+        </SyntaxHighlighter>
+      </div>
+    );
+  },
+  (prev, next) =>
+    prev.line === next.line &&
+    prev.lang === next.lang &&
+    prev.codeTheme === next.codeTheme &&
+    prev.lineNumber === next.lineNumber &&
+    prev.codeLineNumberColor === next.codeLineNumberColor,
+);
+
+interface StreamingHighlightedCodeProps extends HighlightedCodeProps {}
+
+export const StreamingHighlightedCode = React.memo(
+  function StreamingHighlightedCode({
+    code,
+    lang,
+    codeTheme,
+    codeBlockClass,
+    codeHeaderClass,
+    codeHeaderTextClass,
+    codeLineNumberColor,
+    appearance,
+    isModernTheme,
+    isGlassTheme,
+    showCodeHeader,
+  }: StreamingHighlightedCodeProps) {
+    const isSpecialTheme = isModernTheme || isGlassTheme;
+    const resolved = mapLanguageForPrism(lang, code);
+    const { completedLines, partialLine } = splitStreamingCodeLines(code);
+    return (
+      <div
+        className={`relative group/code my-3 rounded-xl overflow-hidden border shadow-lg ${codeBlockClass}`}
+        style={isSpecialTheme ? undefined : appearance.codeBlockStyle}
+      >
+        {showCodeHeader && (
+          <div
+            className={`px-3 py-1.5 border-b ${codeHeaderClass}`}
+            style={isSpecialTheme ? undefined : appearance.codeHeaderStyle}
+          >
+            <span
+              className={`text-[10px] uppercase tracking-widest font-semibold font-mono ${codeHeaderTextClass}`}
+            >
+              {resolved || 'CODE'}
+            </span>
+          </div>
+        )}
+        {!showCodeHeader && (
+          <>
+            <span
+              className="absolute top-2.5 left-3 z-10 text-[10px] uppercase tracking-widest font-mono pointer-events-none opacity-0 group-hover/code:opacity-100 transition-opacity duration-150"
+              style={{ color: VIVID_DARK_LINE_NUMBER_COLOR }}
+            >
+              {resolved || 'CODE'}
+            </span>
+            <CodeBlockCopyButton code={code} />
+          </>
+        )}
+        {/* Outer element scrolls; the padded inner element IS the scrolled
+            content (matches HighlightedCode's single-element SyntaxHighlighter,
+            whose own `padding` scrolls together with the code) so a
+            horizontally-scrolled view doesn't leave the gutter/first column
+            pinned oddly against unpadded edges. */}
+        <div className="w-full min-w-0 bg-transparent overflow-x-auto">
+          <div style={{ padding: '16px' }}>
+            {completedLines.map((line, i) => (
+              <CodeStreamLine
+                key={i}
+                line={line}
+                lang={resolved}
+                codeTheme={codeTheme}
+                lineNumber={i + 1}
+                codeLineNumberColor={codeLineNumberColor}
+              />
+            ))}
+            {/* In-progress last line: plain text, no Prism — see the block
+                comment above for why. */}
+            <div className="flex">
+              <span
+                aria-hidden="true"
+                style={{
+                  minWidth: '2.5em',
+                  paddingRight: '1.2em',
+                  color: codeLineNumberColor,
+                  textAlign: 'right',
+                  fontSize: '11px',
+                  userSelect: 'none',
+                  flexShrink: 0,
+                }}
+              >
+                {completedLines.length + 1}
+              </span>
+              <span style={CODE_STREAM_LINE_FONT}>
+                {partialLine}
+                <span className="reveal-typing-cursor" aria-hidden="true">▍</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  },
+  (prev, next) =>
+    prev.code === next.code &&
+    prev.lang === next.lang &&
+    prev.appearance === next.appearance &&
+    prev.isModernTheme === next.isModernTheme &&
+    prev.isGlassTheme === next.isGlassTheme &&
+    prev.showCodeHeader === next.showCodeHeader,
 );
 
 // PERF: MessageRow renders one chat-message bubble. Module-scope + React.memo
@@ -993,6 +1357,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // freeze height reporting. A deadline lapses on its own. Set to 0 to release
   // immediately (session reset).
   const heightReportSuppressedUntilRef = useRef(0);
+  // ── Streaming-height headroom-buffer state ────────────────────────────
+  // See STREAMING_HEIGHT_GROW_BUFFER_PX's comment near the top of this file
+  // for the full rationale (an earlier springed/interpolated version of this
+  // was unsafe: it let the native window lag behind contentRef's real,
+  // instantly-laid-out height, clipping the footer chrome). This tracks the
+  // height we've most recently told the OS window during the CURRENT stream
+  // — always measured-height + buffer, so it's always >= the real content.
+  const streamingHeightCommittedRef = useRef(-1);
+  // Which streaming message this state belongs to. A change means a brand
+  // new answer card just started — that first measurement should commit
+  // fresh (with its own buffer), not be compared against whatever the
+  // previous (unrelated) message left behind.
+  const streamingHeightStreamIdRef = useRef<string | null>(null);
+  // Indirection so the ResizeObserver effect (declared further up the
+  // component, before driveStreamingHeight exists) can call "whatever the
+  // current driveStreamingHeight closure is" without referencing the `const`
+  // itself before its declaration runs (a real TDZ crash, not just a lint
+  // warning — unlike reading a ref's `.current` inside a callback body that
+  // only executes after the full render has completed, a dependency array is
+  // evaluated immediately at that line). Kept in sync by a plain assignment
+  // right after driveStreamingHeight is created below — no effect needed,
+  // since refs don't need to participate in the render/commit cycle.
+  const driveStreamingHeightRef = useRef<(height: number) => void>(() => {});
   // Stability gate for code-visibility transitions. Scroll fires at ~60Hz; this
   // debounces the scanner so a code block flickering across the viewport edge
   // during a fast scroll does not issue a transition on every frame. The width
@@ -1163,8 +1550,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   }, []);
 
   const useDarkCodeTheme = !isLightTheme || isGlassTheme || isModernTheme;
-  const codeTheme = useDarkCodeTheme ? vscDarkPlus : oneLight;
-  const codeLineNumberColor = useDarkCodeTheme ? 'rgba(255,255,255,0.2)' : 'rgba(15,23,42,0.35)';
+  const codeTheme = useDarkCodeTheme ? vividDarkCodeTheme : oneLight;
+  const codeLineNumberColor = useDarkCodeTheme ? VIVID_DARK_LINE_NUMBER_COLOR : 'rgba(24,24,24,0.4)';
+  // Header only shows for the light theme and the modern/glass interface
+  // themes (which already have their own header CSS via
+  // [data-interface-theme] variables) — the new vivid-black default dark
+  // theme drops the header row in favor of a floating hover-reveal language
+  // tag + copy button (see HighlightedCode / StreamingHighlightedCode).
+  const showCodeHeader = !useDarkCodeTheme || isModernTheme || isGlassTheme;
   const appearance = useMemo(
     () =>
       isGlassTheme
@@ -1238,6 +1631,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                 appearance={appearance}
                 isModernTheme={isModernTheme}
                 isGlassTheme={isGlassTheme}
+                showCodeHeader={showCodeHeader}
               />
             );
           }
@@ -1299,7 +1693,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         ),
         a: ({ node, ...props }: any) => (
           <a
-            className="hover:underline text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+            className="hover:underline text-accent-primary hover:text-accent-hover"
             target="_blank"
             rel="noopener noreferrer"
             {...props}
@@ -1700,11 +2094,41 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => mql.removeEventListener('change', onChange);
   }, []);
 
+  // This is called by every channel that ever sets the native window height
+  // directly (this function, resizeOverlayWindowCentered's width-transition
+  // callers, and the streaming-height buffer below via resizeOverlayWindowCentered
+  // itself is a pure sender — this one carries the side effect) to keep
+  // streamingHeightCommittedRef in sync with whatever the OS window's real
+  // height now is. Without this, whichever channel last won would leave that
+  // ref stale, and driveStreamingHeight could wrongly believe the window is
+  // already tall enough (comparing against a stale, too-large committed
+  // value) and skip a grow that's actually needed — reopening the exact
+  // clipping window the buffer design exists to close. No dependencies: it
+  // only touches a ref, so it's declared here (before reportShellSize, which
+  // needs to call it) rather than near driveStreamingHeight further down.
+  const syncStreamingHeightBaseline = useCallback((height: number) => {
+    streamingHeightCommittedRef.current = height;
+  }, []);
+
   // Single canonical size-reporter. Width is ALWAYS the fixed OVERLAY_WINDOW_WIDTH
   // (the OS window never width-resizes — the CSS panel animates inside it), so
   // this is effectively a height-only reporter; height is from the
   // ResizeObserver-measured content rect. Centered IPC keeps the
-  // TopPill's horizontal center invariant across resizes.
+  // TopPill's horizontal center invariant across resizes. Also the channel
+  // that settles the streaming-height buffer back to the exact final size
+  // once a stream ends (see the ResizeObserver call site below: once
+  // streamingMsgIdRef.current goes null, the next observer fire takes this
+  // branch instead of driveStreamingHeight). NOTE: ResizeObserver fires on
+  // SIZE change, not DOM/text change — for a long answer that has already
+  // plateaued at its scroll cap (see overlayScrollBudget.mjs), the final
+  // tokens change text but not contentRef's offsetHeight, so the observer
+  // may not fire again at all once streaming ends. In that case the window
+  // simply stays at `plateau + STREAMING_HEIGHT_GROW_BUFFER_PX` until the
+  // next unrelated size-changing event (a new message, an attachment, etc.)
+  // — harmless since that headroom is transparent, top-anchored empty space
+  // below the (already fully visible) content, not a clip. Only SHORT
+  // answers that end below the scroll cap are guaranteed an exact settle
+  // immediately (their last real text change is still a size change).
   const reportShellSize = useCallback(() => {
     if (!contentRef.current) return;
     // Skip IPC while the shell is hidden (Cmd+B has fired hideWindow and the
@@ -1746,7 +2170,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     } else {
       window.electronAPI?.updateContentDimensions({ width, height });
     }
-  }, [attachedContext.length, OVERLAY_WINDOW_WIDTH]);
+    syncStreamingHeightBaseline(height);
+  }, [attachedContext.length, OVERLAY_WINDOW_WIDTH, syncStreamingHeightBaseline]);
 
   // Compute the vertical budget cap for the chat scroll area and push it into
   // the `verticalCap` motion value (which scrollMaxH mins against the
@@ -1838,7 +2263,23 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         if (Date.now() < heightReportSuppressedUntilRef.current) {
           return;
         }
-        reportShellSize();
+        // While a message is actively streaming, route through the
+        // headroom-buffered height channel (see driveStreamingHeight below)
+        // instead of reportShellSize's immediate raw-height forward on EVERY
+        // wrapped line — that per-line forwarding is the "staircase" jitter
+        // the user feels while an answer is generating. Every OTHER trigger
+        // of this observer (a new message mounting, an attached-screenshot
+        // strip, status pills appearing/disappearing, the Cmd+B re-expand
+        // force-remeasure, the end of THIS stream, etc.) is a discrete,
+        // infrequent event that should still resize immediately and exactly
+        // — those keep going through reportShellSize exactly as before.
+        if (streamingMsgIdRef.current !== null) {
+          if (contentRef.current && isExpandedRef.current) {
+            driveStreamingHeightRef.current(contentRef.current.offsetHeight);
+          }
+        } else {
+          reportShellSize();
+        }
       });
     });
 
@@ -1917,6 +2358,60 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     [OVERLAY_WINDOW_WIDTH],
   );
 
+  // Height channel used by the ResizeObserver WHILE a message is actively
+  // streaming (streamingMsgIdRef.current !== null — see the call site below).
+  // Called with the freshly-measured raw content height on every observer
+  // fire. See STREAMING_HEIGHT_GROW_BUFFER_PX's comment near the top of this
+  // file for why this commits `measured + buffer` immediately on every real
+  // grow rather than interpolating toward it: the native window must never
+  // be smaller than contentRef's real (instantly-laid-out) height, or the
+  // footer chrome at the bottom of contentRef gets sliced off by the window
+  // edge. Committing ahead of need, then doing nothing until content catches
+  // up to the reserved headroom, cuts the native call frequency from
+  // "every wrapped line" to "every few wrapped lines" while keeping that
+  // invariant exactly true at every instant — no lag, ever.
+  const driveStreamingHeight = useCallback(
+    (targetHeight: number) => {
+      if (targetHeight <= 0) return;
+      const currentStreamId = streamingMsgIdRef.current;
+
+      // Brand-new answer card (or the very first measurement of the app's
+      // lifetime): commit fresh, with its own buffer. Comparing against
+      // whatever height an unrelated previous message left behind would be
+      // meaningless.
+      if (currentStreamId !== streamingHeightStreamIdRef.current) {
+        streamingHeightStreamIdRef.current = currentStreamId;
+        const committed = targetHeight + STREAMING_HEIGHT_GROW_BUFFER_PX;
+        streamingHeightCommittedRef.current = committed;
+        resizeOverlayWindowCentered(committed);
+        return;
+      }
+
+      // Still comfortably inside the reserved headroom from the last grow —
+      // no native call needed at all. This is the common case for most
+      // token arrivals; it is what actually cuts the resize frequency.
+      if (targetHeight <= streamingHeightCommittedRef.current) return;
+
+      // Content caught up to (or exceeded) the reserved headroom: grow again,
+      // immediately, with a fresh buffer. No rate limiting is applied here —
+      // and none is needed, because a grow only fires once every ~4 lines of
+      // real content, which is already far below any perceptible-jitter
+      // frequency; adding a delay here would only reopen a window where
+      // real content briefly exceeds the committed (undersized) native
+      // height.
+      const committed = targetHeight + STREAMING_HEIGHT_GROW_BUFFER_PX;
+      streamingHeightCommittedRef.current = committed;
+      resizeOverlayWindowCentered(committed);
+    },
+    [resizeOverlayWindowCentered],
+  );
+  // Keep the ResizeObserver's indirection ref current (see
+  // driveStreamingHeightRef's declaration above for why this can't just be a
+  // dependency-array entry). Plain assignment, not an effect: it must be in
+  // place before the ResizeObserver can possibly fire for this render, and
+  // effects run after paint.
+  driveStreamingHeightRef.current = driveStreamingHeight;
+
   // Re-pin the chat to the bottom for the current frame (iMessage-style sticky
   // bottom). Hoisted out of the animation callback so both the spring's
   // per-frame onUpdate and the reduced-motion snap path share one definition.
@@ -1965,7 +2460,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         shellWidth.set(targetWidth);
         pinScrollBottomIfNeeded();
         const h = contentRef.current?.offsetHeight ?? 0;
-        if (h > 0) resizeOverlayWindowCentered(h);
+        if (h > 0) {
+          resizeOverlayWindowCentered(h);
+          syncStreamingHeightBaseline(h);
+        }
         return;
       }
 
@@ -2031,6 +2529,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           lastHeightReportAt = now;
           lastReportedHeight = h;
           resizeOverlayWindowCentered(h);
+          syncStreamingHeightBaseline(h);
         },
         onComplete: () => {
           animationControlsRef.current = null;
@@ -2043,10 +2542,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           // even if the last rate-limited sample landed a few px short.
           const settledHeight = contentRef.current?.offsetHeight ?? 0;
           resizeOverlayWindowCentered(settledHeight);
+          syncStreamingHeightBaseline(settledHeight);
         },
       });
     },
-    [shellWidth, SHELL_WIDTH_EXPANDED, resizeOverlayWindowCentered, pinScrollBottomIfNeeded],
+    [
+      shellWidth,
+      SHELL_WIDTH_EXPANDED,
+      resizeOverlayWindowCentered,
+      syncStreamingHeightBaseline,
+      pinScrollBottomIfNeeded,
+    ],
   );
 
   // Manual resize toggle. Reads the LIVE shell width (not codeExpandedRef) so it
@@ -2221,6 +2727,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         cancelAnimationFrame(rafDimUpdateRef.current);
         rafDimUpdateRef.current = null;
       }
+      streamingHeightCommittedRef.current = -1;
+      streamingHeightStreamIdRef.current = null;
       if (stableVisibilityTimerRef.current) {
         clearTimeout(stableVisibilityTimerRef.current);
         stableVisibilityTimerRef.current = null;
@@ -2241,6 +2749,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       streamingMsgIdRef.current = null;
       streamingIntentRef.current = null;
       streamingRenderModeRef.current = 'imperative';
+      // Pre-existing gap closed while adding the reveal ticker: this unmount
+      // cleanup canceled streamingCodeRafRef but never streamingRafRef, so a
+      // pending markdown-render RAF (and now the reveal ticker that reuses
+      // this same handle) could still fire once after unmount, harmlessly
+      // no-op-ing on a detached node — but there's no reason to leave a
+      // dangling rAF around.
+      if (streamingRafRef.current !== null) {
+        cancelAnimationFrame(streamingRafRef.current);
+        streamingRafRef.current = null;
+      }
+      revealTickerMsgIdRef.current = null;
+      revealPacerRef.current = createPacerState();
+      revealLastTsRef.current = null;
+      pendingFinalizeRef.current = null;
+      if (pendingFinalizeTimeoutRef.current !== null) {
+        clearTimeout(pendingFinalizeTimeoutRef.current);
+        pendingFinalizeTimeoutRef.current = null;
+      }
       if (streamingCodeRafRef.current !== null) {
         cancelAnimationFrame(streamingCodeRafRef.current);
         streamingCodeRafRef.current = null;
@@ -2503,6 +3029,59 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // incremental). In practice this is <1ms for typical LLM responses and
   // invisible at 60fps. If a response grows beyond ~20 KB we can throttle
   // the RAF to every other frame.
+  //
+  // ── Deterministic reveal (rate-capped, provider-independent display) ────
+  // The above coalescing prevents excess REACT RENDERS, but does nothing
+  // about the shape of the DOM writes themselves: the old queueToken wrote
+  // the FULL arrived text to the DOM node synchronously on every token, and
+  // scheduleMarkdownRender re-parsed the full arrived text every RAF tick —
+  // so the UI directly mirrored whatever chunking the provider happened to
+  // use (Groq/Gemini/MiniMax/DeepSeek/... all chunk differently and bursty),
+  // reading as jittery and provider-dependent: "dumping tokens".
+  //
+  // Fix: `revealPacerRef` (src/lib/textRevealPacing.mjs's `PacerState`)
+  // tracks how much of `streamingTextRef.current` has been shown so far,
+  // separate from how much has ARRIVED — the provider keeps generating at
+  // full speed in the background; only the DISPLAY rate is governed.
+  // `revealTick` (below) is a self-rescheduling rAF loop — reusing
+  // `streamingRafRef` as its handle, see rationale at its declaration — that
+  // advances the pacer via `tickPacer` every frame:
+  //   displayRate = min(providerRate, MAX_REVEAL_TOKENS_PER_SECOND)
+  // A brief initial smoothing buffer (INITIAL_BUFFER_MS /
+  // INITIAL_BUFFER_CHAR_THRESHOLD) absorbs the common "two characters then a
+  // dead pause" startup stutter before the rate cap takes over; a burst
+  // faster than the cap is buffered and drained smoothly (never instantly);
+  // a provider slower than the cap is shown essentially immediately (the cap
+  // never becomes the bottleneck for a genuine trickle); reveal boundaries
+  // snap to whole words/markdown runs (never "interv" then "iew" a frame
+  // later); and brief holds land after sentence/clause punctuation for a
+  // natural reading rhythm. Every one of these behaviors is provider-
+  // independent by construction — the user cannot infer which LLM answered
+  // from the streaming cadence. marked.parse runs on the REVEALED slice, not
+  // the arrived text.
+  //
+  // `prefers-reduced-motion` bypasses pacing entirely (tickPacer's
+  // `reducedMotion` branch jumps straight to the arrived length on the very
+  // next tick) — same "snap, don't animate" convention as the width-
+  // transition code above (prefersReducedMotionRef).
+  //
+  // Stream-end / supersede correctness: this reveal layer does NOT need its
+  // own teardown wiring at every flush/finalize/cancel/error call site.
+  // `revealTick` reuses `streamingRafRef` as its own RAF handle, and every
+  // one of those call sites already cancels `streamingRafRef` (hardening
+  // from the original per-token-render-storm fix) before resetting
+  // `streamingMsgIdRef`/`streamingTextRef` — so the reveal ticker is
+  // guaranteed to stop at exactly the same boundaries the rest of this
+  // pipeline already treats as "stream torn down", with no new gap for a
+  // stale reveal queue to leak into a new stream's bubble. The FINAL commit
+  // at every one of those sites (commitStreamingFlush /
+  // finalizeImperativeStreamMessages / finalizeStreamingByIntentMessages)
+  // always uses `streamingTextRef.current` (the full arrived text), never
+  // the pacer's revealedLen — so any queued-but-not-yet-revealed text is
+  // always shown in full, instantly, the moment a stream ends (this matters
+  // MORE now than under the old model: a done event can arrive with
+  // thousands of chars still unrevealed at a 180 char/s display cap). The
+  // reveal only paces what's shown WHILE a stream is actively open.
   // ─────────────────────────────────────────────────────────────────────────
 
   // Legacy buffer kept for sentinel/negotiation-coaching reset path.
@@ -2517,18 +3096,128 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const streamingTextRef   = useRef<string>('');
   const streamingMsgIdRef  = useRef<string | null>(null);
   const streamingIntentRef = useRef<string | null>(null);
+  // Reveal-ticker's rAF handle (see "Smooth reveal" block above). Originally
+  // this was scheduleMarkdownRender's single-shot coalescing handle; it now
+  // belongs to the self-rescheduling revealTick loop instead. Deliberately
+  // NOT renamed: every existing stream-teardown call site below already
+  // does `if (streamingRafRef.current !== null) { cancelAnimationFrame(...);
+  // streamingRafRef.current = null; }` at exactly the boundaries where a
+  // stream ends or is superseded — reusing the same ref means the reveal
+  // ticker inherits that hardening for free, with zero edits to those sites.
   const streamingRafRef    = useRef<number | null>(null);
   const streamingRenderModeRef = useRef<'imperative' | 'react-code'>('imperative');
+  // RETIRED: used to be scheduleStreamingCodeRender's own rAF handle (a
+  // second, UNPACED render loop that wrote streamingTextRef.current — the
+  // full raw arrived text, not the reveal-paced prefix — straight into
+  // React state on every frame while streamingRenderModeRef === 'react-code'.
+  // That's why code answers kept "dumping" even after the prose path grew a
+  // deterministic pacer: the react-code branch never called into it.
+  // revealTick (below) is now mode-aware and paints BOTH prose (imperative
+  // DOM) and code (setMessages with the paced prefix) through the SAME
+  // ticker/handle (streamingRafRef), so this ref no longer schedules
+  // anything. Left in place (rather than threading its removal through the
+  // ~13 teardown sites below that still defensively cancel it) because every
+  // one of those sites is a harmless no-op on an always-null ref — but
+  // nothing should ever assign to it again.
   const streamingCodeRafRef = useRef<number | null>(null);
+  // Deterministic-reveal pacer state (src/lib/textRevealPacing.mjs) for
+  // streamingTextRef.current — how much of it has been REVEALED to the user
+  // so far, plus the rate-limiter's carried fractional budget, initial-
+  // smoothing-buffer bookkeeping, and any active punctuation hold. Replaced
+  // wholesale (not mutated field-by-field) whenever revealTickerMsgIdRef
+  // adopts a new msgId — see ensureRevealTicker. Read/written only by
+  // revealTick/ensureRevealTicker/paintRevealedNow.
+  const revealPacerRef = useRef(createPacerState());
+  // High-res rAF timestamp of the previous revealTick call, for computing
+  // this frame's deltaMs. Reset to null whenever ensureRevealTicker adopts a
+  // new msgId — WITHOUT this reset, the first tick of a brand-new stream
+  // could compute its deltaMs against a stale timestamp from a much-earlier
+  // (already self-terminated) stream, handing the rate limiter a huge
+  // one-time budget spike. null falls back to a nominal one-frame delta.
+  const revealLastTsRef = useRef<number | null>(null);
+  // Which msgId the reveal ticker is currently pacing. Compared against
+  // streamingMsgIdRef.current every tick as a belt-and-suspenders guard (the
+  // primary defense is streamingRafRef cancellation at every teardown site,
+  // per the comment above); also used by ensureRevealTicker to detect "this
+  // is a new stream" and reset the pacer state.
+  const revealTickerMsgIdRef = useRef<string | null>(null);
   // PERF: onRAGStreamChunk previously called setMessages() (full array clone +
   // per-token re-render) on every chunk — the same per-token cost the Gemini
   // token stream above was already fixed for via rAF coalescing. RAG chunks
   // come from the same SSE-derived async generator (ipcHandlers.ts `for await
   // (const chunk of stream) event.sender.send(...)`), so a long meeting-recall
-  // answer hit the identical N-renders-per-answer cost. Buffer chunks in a ref
-  // and flush to state at most once per animation frame.
-  const ragChunkBufRef = useRef<string>('');
+  // answer hit the identical N-renders-per-answer cost.
+  //
+  // ragArrivedTextRef accumulates the FULL text that has arrived for the
+  // current RAG answer — never truncated, mirroring streamingTextRef in the
+  // main path. This bubble is rendered through normal React state
+  // (lastMsg.text), not a DOM ref, so committing text to state IS the
+  // "paint" step: each tick, ragRevealTick commits `ragArrivedTextRef.current
+  // .slice(0, ragPacerRef.current.revealedLen)` — the same rate-capped
+  // cursor-over-accumulated-text shape as the main streaming path, so a
+  // burst of RAG chunks paces identically instead of dumping into the bubble
+  // at once. (An earlier version kept a SHRINKING queue instead — sliced the
+  // revealed prefix off the front of the buffer every tick — which doesn't
+  // carry per-stream pacer state cleanly and could stall permanently if a
+  // boundary-holdback made zero progress against a buffer that never grows
+  // again before the stream ends. The cursor shape has no such failure
+  // mode: forward progress is guaranteed by tickPacer/snapRevealBoundary
+  // against the same accumulated text every time.)
+  const ragArrivedTextRef = useRef<string>('');
+  const ragPacerRef = useRef(createPacerState());
+  const ragLastTsRef = useRef<number | null>(null);
   const ragChunkRafRef = useRef<number | null>(null);
+  // True once onRAGStreamComplete has fired for the CURRENT RAG answer but
+  // the reveal ticker hasn't yet caught up to the full arrived text — i.e.
+  // "the provider is done, keep draining, then finalize." Per
+  // STREAM_RENDER_CONFIG.flushImmediatelyOnComplete (default false), the
+  // isStreaming:false commit is deferred to ragRevealTick's own catch-up
+  // check rather than happening the instant the network signals done — see
+  // that function below. Reset to false whenever the RAG state is reset
+  // (flushRagChunkBuffer, forceFinalizeStaleRagStream, or the catch-up commit
+  // itself), so a new RAG answer never inherits a stale "done" flag.
+  const ragDoneRef = useRef(false);
+
+  // A NEW RAG query can start (a new placeholder about to be pushed as "the
+  // last message") while a PREVIOUS RAG answer's deferred drain is still in
+  // flight — plausible in a live interview via a rapid follow-up question.
+  // RAG has no explicit per-message id (unlike the main streaming path's
+  // streamingMsgIdRef); it operates positionally on "the last isStreaming
+  // system message", so a still-draining old stream and a brand-new
+  // placeholder would otherwise collide: the old stream's ticker would keep
+  // committing ITS text onto whatever is now the LAST message — the new
+  // placeholder. Call this immediately before pushing a new RAG placeholder
+  // / invoking ragQueryLive to force the old stream to its final state
+  // first (same "abandon whatever was there" pattern as flushToken /
+  // queueToken's shouldFlushPreviousStream branch on the main path).
+  const forceFinalizeStaleRagStream = useCallback(() => {
+    if (ragChunkRafRef.current !== null) {
+      cancelAnimationFrame(ragChunkRafRef.current);
+      ragChunkRafRef.current = null;
+    }
+    const fullText = ragArrivedTextRef.current;
+    if (fullText) {
+      setMessages((prev) => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg && lastMsg.isStreaming && lastMsg.role === 'system') {
+          const updated = [...prev];
+          updated[prev.length - 1] = {
+            ...lastMsg,
+            text: fullText,
+            isStreaming: false,
+            isCode: fullText.includes('```'),
+          };
+          return updated;
+        }
+        return prev;
+      });
+    }
+    ragArrivedTextRef.current = '';
+    ragPacerRef.current = createPacerState();
+    ragLastTsRef.current = null;
+    ragDoneRef.current = false;
+  }, []);
+
   // Active chat stream id (audit finding #3). The main process emits chat tokens
   // on one channel from both the desktop and phone-mirror paths; this lets us drop
   // tokens/done from a superseded stream. null = no id adopted yet (back-compat).
@@ -2542,41 +3231,340 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // generation. null = no id adopted yet (id-less items are always accepted →
   // backward compatible with the code-hint / brainstorm streams that omit it).
   const liveAnswerGenIdRef = useRef<number | null>(null);
+  // Deferred-finalize bookkeeping. THE ONE mechanism for "commit this row's
+  // final isStreaming:false only once the reveal ticker has actually caught
+  // up to the full text" — used by BOTH:
+  //   • typeOutCompleteAnswer (below): an answer that arrived as ONE complete
+  //     IPC payload with no preceding token stream at all (e.g.
+  //     onIntelligenceManualResult for the manual-chat path — no per-token
+  //     channel, only a "started" placeholder + one final event). Feeds the
+  //     WHOLE text into streamingTextRef in one shot, as if it had all
+  //     "arrived" in one IPC tick, so it types itself out instead of popping
+  //     in whole.
+  //   • finalizeWhenRevealCaughtUp (below) / onGeminiStreamDone / the RAG
+  //     complete handler: a REAL token-by-token stream whose provider has
+  //     genuinely finished. Per STREAM_RENDER_CONFIG.flushImmediatelyOnComplete
+  //     (default false), the ANIMATION does not snap to complete just
+  //     because the network did — it keeps draining at the same
+  //     deterministic rate all the way to the last character, so the
+  //     cadence is identical from the first character to the final period
+  //     regardless of when the provider actually stopped sending tokens.
+  // Either way: revealTick's catch-up branch (`pacer.revealedLen >=
+  // fullText.length`) is the single place that actually performs the commit.
+  // This ref carries the pending {msgId, intent, text} across frames until
+  // then.
+  const pendingFinalizeRef = useRef<{ msgId: string; intent: string; text: string } | null>(null);
+  // Safety net: if the reveal ticker's rAF never fires again for some reason
+  // (node never mounts, an unrelated teardown cancels streamingRafRef between
+  // schedule and fire), a pending finalize would otherwise leave the row
+  // stuck showing typing-dots/partial text forever — the exact "stuck
+  // thinking bubble" failure mode this file already seals against
+  // elsewhere. This timer force-commits the full text if the ticker hasn't
+  // finished on its own within comfortably more than the expected reveal
+  // duration. Cleared the instant the normal catch-up path in revealTick
+  // fires, and on unmount/supersede (see flushToken and queueToken's
+  // shouldFlushPreviousStream branch, which both clear this too — a stale
+  // pending finalize left behind by an abandoned stream must never later
+  // re-commit text onto a row the user has already moved past).
+  const pendingFinalizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Helper: render accumulated markdown to the streaming DOM node via RAF.
-  // Called after every token write. Schedules at most one RAF per frame.
-  const scheduleMarkdownRender = useCallback(() => {
-    if (streamingRafRef.current !== null) return; // already pending
-    streamingRafRef.current = requestAnimationFrame(() => {
-      streamingRafRef.current = null;
-      const node = streamingNodeRef.current;
-      if (!node || !streamingTextRef.current) return;
-      // marked.parse is sync and fast (<1ms for typical LLM chunks).
-      // DOMPurify strips any script/event-handler injection.
-      const rawHtml = marked.parse(streamingTextRef.current, { async: false }) as string;
-      node.innerHTML = DOMPurify.sanitize(rawHtml);
+  // Paint whatever has been REVEALED so far (not the full arrived text) into
+  // the streaming DOM node. Synchronous — called from revealTick (inside its
+  // rAF) and once from registerStreamingNode (on mount, outside any rAF, to
+  // avoid a blank frame between mount and the next tick).
+  const paintRevealedNow = useCallback(() => {
+    const node = streamingNodeRef.current;
+    if (!node) return;
+    const revealed = streamingTextRef.current.slice(0, revealPacerRef.current.revealedLen);
+    if (!revealed) {
+      // Do NOT clear innerHTML here. This branch also runs synchronously
+      // from registerStreamingNode's mount-time call (and from
+      // ensureRevealTicker on a fresh msgId) — i.e. on the very first paint
+      // of the streaming node, before any token has arrived. At that moment
+      // the node's only children are the React-rendered blinking-dot
+      // indicator (see the `!msg.text` branch in renderMessageText); wiping
+      // to '' here destroyed it before the browser ever got a frame to
+      // paint it, so the "thinking" dot never visibly appeared. There is no
+      // stale content to clear: this div is freshly mounted per message
+      // (key="streaming" forces a full unmount on the PREVIOUS row when it
+      // finalizes), so leaving existing children alone is always correct.
+      return;
+    }
+    // marked.parse is sync and fast (<1ms for typical LLM chunks).
+    // DOMPurify strips any script/event-handler injection.
+    const rawHtml = marked.parse(revealed, { async: false }) as string;
+    node.innerHTML = DOMPurify.sanitize(rawHtml);
+    // Trailing blinking "typing" cursor (appendTypingCursorNode, module scope
+    // above). Recreated on every paint — while the reveal ticker is actively
+    // painting frame after frame, that means the cursor is torn down and
+    // rebuilt before its CSS blink animation ever completes a cycle, so it
+    // reads as solid during active reveal; the instant the ticker pauses
+    // between bursts (nothing left to reveal THIS frame, more still expected)
+    // this call simply doesn't fire again, so the last-painted cursor node
+    // survives untouched and its blink animation actually runs — visually
+    // "still typing, briefly paused" rather than a flicker. It disappears
+    // the moment the row finalizes because finalizing unmounts this entire
+    // key="streaming" node (see the DOM-ownership comment above). Hidden
+    // under prefers-reduced-motion, matching this file's snap-not-animate
+    // convention elsewhere (prefersReducedMotionRef).
+    if (!prefersReducedMotionRef.current) {
+      appendTypingCursorNode(node);
+    }
+  }, []);
+
+  // Mode-aware paint sink's "code" branch: same cursor-over-accumulated-text
+  // shape as commitRagText (see ragRevealTick below — the existing, hardened
+  // precedent for pacing text that paints via React state instead of a DOM
+  // ref) — commits the pacer's REVEALED PREFIX, not the full arrived text.
+  // This is the fix for the "code answers still dump" complaint: before this,
+  // react-code mode bypassed the pacer entirely (scheduleStreamingCodeRender
+  // wrote the raw, un-paced streamingTextRef.current on every rAF), so a
+  // burst of tokens landing in one tick showed up all at once regardless of
+  // how well-paced the prose path was. Called from revealTick, so it's
+  // already coalesced to at most once per frame.
+  const commitRevealedCodeText = useCallback((msgId: string, revealedText: string) => {
+    setMessages((prev) => {
+      const idx = prev.findLastIndex((m) => m.id === msgId);
+      if (idx === -1) return prev;
+      const row = prev[idx];
+      if (row.text === revealedText && row.isStreaming) return prev; // no-op, skip a redundant re-render
+      const updated = [...prev];
+      updated[idx] = { ...row, text: revealedText, isStreaming: true };
+      return updated;
     });
   }, []);
 
-  const scheduleStreamingCodeRender = useCallback(() => {
-    if (streamingCodeRafRef.current !== null) return;
-    streamingCodeRafRef.current = requestAnimationFrame(() => {
-      streamingCodeRafRef.current = null;
-      const msgId = streamingMsgIdRef.current;
-      const text = streamingTextRef.current;
-      const intent = streamingIntentRef.current;
-      if (!msgId || !text) return;
-      setMessages((prev) => {
-        const idx = prev.findLastIndex((m) => m.id === msgId);
-        if (idx === -1) return prev;
-        const row = prev[idx];
-        if (row.text === text && row.isStreaming && row.intent === intent) return prev;
-        const updated = [...prev];
-        updated[idx] = { ...row, text, intent: intent ?? row.intent, isStreaming: true };
-        return updated;
-      });
-    });
+  // revealTick: self-rescheduling rAF loop that paces the reveal via the
+  // deterministic tickPacer state machine (src/lib/textRevealPacing.mjs —
+  // rate-capped at MAX_REVEAL_TOKENS_PER_SECOND, word/markdown-boundary
+  // aware, with an initial smoothing buffer and punctuation holds). Reuses
+  // streamingRafRef as its handle so every existing stream-teardown site
+  // already stops it. Takes the real rAF high-res timestamp so the pacer's
+  // rate math is driven by actual elapsed time, not a fixed per-frame
+  // assumption — robust to dropped/late frames. Reads the CURRENT
+  // revealTickerMsgIdRef/streamingMsgIdRef rather than closing over a msgId
+  // captured at schedule time, so it can't act on stale state if something
+  // reassigns those refs between one frame's schedule and fire.
+  const revealTick = useCallback((ts: number) => {
+    streamingRafRef.current = null; // this frame's slot consumed
+    const msgId = revealTickerMsgIdRef.current;
+    // Belt-and-suspenders: every stream-end/supersede path already cancels
+    // streamingRafRef before nulling/reassigning streamingMsgIdRef, so this
+    // mismatch should be rare in practice — but if some path is ever added
+    // that resets streamingMsgIdRef without going through that cancellation,
+    // this stops the ticker instead of pacing a dead stream's reveal.
+    if (msgId === null || streamingMsgIdRef.current !== msgId) {
+      revealTickerMsgIdRef.current = null;
+      return;
+    }
+    const deltaMs = revealLastTsRef.current === null ? 1000 / 60 : Math.max(0, ts - revealLastTsRef.current);
+    revealLastTsRef.current = ts;
+
+    const fullText = streamingTextRef.current;
+    const pacer = revealPacerRef.current;
+    const prevLen = pacer.revealedLen;
+    tickPacer(pacer, fullText, ts, deltaMs, { reducedMotion: prefersReducedMotionRef.current });
+    if (pacer.revealedLen !== prevLen) {
+      // Mode-aware paint sink: prose paints straight into the imperative DOM
+      // node; code commits the same paced-prefix shape through React state
+      // (there is no DOM ref for the react-code branch — it renders via
+      // ReactMarkdown/HighlightedCode, which only React can own). Both modes
+      // share this ONE ticker/pacer instance, so revealedLen carries over
+      // continuously across a mid-stream flip from prose to code — the
+      // moment a ``` fence is detected, the code-mode commit picks up
+      // exactly where the prose reveal left off instead of jumping backward
+      // to 0 or forward to the full arrived text.
+      if (streamingRenderModeRef.current === 'react-code') {
+        commitRevealedCodeText(msgId, fullText.slice(0, pacer.revealedLen));
+      } else {
+        paintRevealedNow();
+      }
+    }
+    // Caught up to everything that has arrived: stop rescheduling instead of
+    // spinning at 60fps indefinitely. Not every path that ends a stream goes
+    // through flushToken/finalize's RAF cancellation (e.g. onSuggestionError
+    // just appends an error row and leaves streamingMsgIdRef as-is) — this
+    // would otherwise become a permanent per-frame timer in an always-on
+    // overlay window. ensureRevealTicker (called on every queueToken)
+    // restarts this the moment a new token actually arrives, so stopping
+    // here costs nothing when the stream is still genuinely active. (While
+    // buffering or mid punctuation-hold, revealedLen has not yet reached
+    // fullText.length, so this falls through to the reschedule below exactly
+    // as intended — no special-casing needed for those states.)
+    if (pacer.revealedLen >= fullText.length) {
+      // Synthetic-replay completion (see typeOutCompleteAnswer / the
+      // pendingFinalizeRef block above): this stream was a
+      // complete-block answer we're replaying as if it were typed, so
+      // there is no separate "done" event coming — catching up here IS
+      // done. Commit the finalize now, the same shape flushToken uses at
+      // every other stream-end site, so the row seals to isStreaming:false
+      // at the exact instant the last character is revealed (no lingering
+      // cursor, per the design brief).
+      const pending = pendingFinalizeRef.current;
+      if (pending && pending.msgId === msgId) {
+        pendingFinalizeRef.current = null;
+        if (pendingFinalizeTimeoutRef.current !== null) {
+          clearTimeout(pendingFinalizeTimeoutRef.current);
+          pendingFinalizeTimeoutRef.current = null;
+        }
+        streamingNodeRef.current = null;
+        streamingTextRef.current = '';
+        streamingMsgIdRef.current = null;
+        streamingIntentRef.current = null;
+        streamingRenderModeRef.current = 'imperative';
+        if (streamingCodeRafRef.current !== null) {
+          cancelAnimationFrame(streamingCodeRafRef.current);
+          streamingCodeRafRef.current = null;
+        }
+        setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+      }
+      return;
+    }
+    streamingRafRef.current = requestAnimationFrame(revealTick);
+  }, [paintRevealedNow, commitRevealedCodeText]);
+
+  // Ensure the reveal ticker is running for `msgId`. A new msgId resets the
+  // pacer to a fresh state (see createPacerState — starts the initial
+  // smoothing buffer over again for this new answer) and repaints (clearing
+  // any stale HTML left by a previous stream). An already-running-or-dormant
+  // ticker for the same msgId just gets its RAF re-armed if revealTick had
+  // self-terminated after catching up. Safe to call on every token —
+  // idempotent no-op in the common (already scheduled, same stream) case.
+  const ensureRevealTicker = useCallback((msgId: string) => {
+    if (revealTickerMsgIdRef.current !== msgId) {
+      revealTickerMsgIdRef.current = msgId;
+      const pacer = createPacerState();
+      // Reduced motion (WCAG 2.3.3): show whatever has already arrived
+      // immediately, synchronously, rather than waiting one frame for the
+      // first revealTick to apply the reducedMotion branch — avoids a
+      // one-frame blank flash between mount and that first tick.
+      if (prefersReducedMotionRef.current) {
+        pacer.revealedLen = streamingTextRef.current.length;
+        pacer.buffering = false;
+      }
+      revealPacerRef.current = pacer;
+      revealLastTsRef.current = null;
+      paintRevealedNow();
+    }
+    if (streamingRafRef.current === null) {
+      streamingRafRef.current = requestAnimationFrame(revealTick);
+    }
+  }, [revealTick, paintRevealedNow]);
+
+  // Safety-net duration for a pending deferred finalize (see
+  // pendingFinalizeTimeoutRef declaration): comfortably more than the
+  // WORST-CASE time the reveal ticker can legitimately take to finish typing
+  // `charCount` characters, so the net never fires while the ticker is still
+  // genuinely draining. Must account for BOTH the initial smoothing buffer
+  // AND punctuation holds — a long answer accrues many of them (a 2000-char
+  // answer can easily cross a few dozen sentence/clause boundaries, each
+  // adding SENTENCE_END_PAUSE_MS/CLAUSE_PAUSE_MS on top of the raw rate-cap
+  // math), so a flat fixed slack sized for the raw rate alone would
+  // eventually under-shoot for long enough answers and yank the row to
+  // "done" mid-type — the same failure this mechanism exists to prevent, in
+  // a new shape. The 1.3x factor absorbs that; the flat +3000ms floor covers
+  // rAF scheduling jitter and short answers where the multiplicative slack
+  // alone would be too tight.
+  const computeSafetyNetMs = useCallback((charCount: number) => {
+    return INITIAL_BUFFER_MS + estimateRevealDurationMs(charCount) * 1.3 + 3000;
   }, []);
+
+  // typeOutCompleteAnswer: replay an already-complete answer through the SAME
+  // reveal ticker a real token stream uses, so it visibly "types itself out"
+  // instead of snapping into place. For an answer that arrives as one whole
+  // IPC payload (see pendingFinalizeRef above for why that happens),
+  // this is the only way to get the same typing effect a real stream gets —
+  // there's no per-token channel to hook into, so we manufacture the "it all
+  // arrived in one burst" shape the pacing model already handles.
+  const typeOutCompleteAnswer = useCallback((intent: string, text: string) => {
+    if (!text) return;
+    // Reuse an already-open same-intent placeholder if one exists (e.g. the
+    // manual-chat "started" placeholder, mounted before this complete answer
+    // arrived and still showing typing-dots) instead of mounting a second
+    // row for the same turn.
+    const reuseMsgId = streamingIntentRef.current === intent ? streamingMsgIdRef.current : null;
+    const msgId = reuseMsgId ?? genMessageId();
+    streamingMsgIdRef.current = msgId;
+    streamingIntentRef.current = intent;
+    streamingRenderModeRef.current = 'imperative';
+    streamingTextRef.current = text; // the whole answer "arrives" as one token
+    pendingFinalizeRef.current = { msgId, intent, text };
+    if (pendingFinalizeTimeoutRef.current !== null) {
+      clearTimeout(pendingFinalizeTimeoutRef.current);
+    }
+    // Safety net (see pendingFinalizeTimeoutRef declaration): force
+    // the same commit revealTick's catch-up branch would have done, in case
+    // that branch never runs for this msgId (node never mounted, or an
+    // unrelated teardown canceled the RAF between schedule and fire).
+    const safetyNetMs = computeSafetyNetMs(text.length);
+    pendingFinalizeTimeoutRef.current = setTimeout(() => {
+      pendingFinalizeTimeoutRef.current = null;
+      const pending = pendingFinalizeRef.current;
+      if (!pending || pending.msgId !== msgId) return;
+      pendingFinalizeRef.current = null;
+      if (streamingRafRef.current !== null) {
+        cancelAnimationFrame(streamingRafRef.current);
+        streamingRafRef.current = null;
+      }
+      streamingNodeRef.current = null;
+      streamingTextRef.current = '';
+      streamingMsgIdRef.current = null;
+      streamingIntentRef.current = null;
+      streamingRenderModeRef.current = 'imperative';
+      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+    }, safetyNetMs);
+    if (!reuseMsgId) {
+      setMessages((prev) => prepareIntelligenceStreamPlaceholderMessages(prev, intent, msgId));
+    }
+    ensureRevealTicker(msgId);
+  }, [ensureRevealTicker, computeSafetyNetMs]);
+
+  // finalizeWhenRevealCaughtUp: the equivalent of typeOutCompleteAnswer for a
+  // stream that IS already actively token-streaming (msgId/streamingTextRef
+  // already live, ticker already running) and whose provider has genuinely
+  // finished. Per STREAM_RENDER_CONFIG.flushImmediatelyOnComplete (default
+  // false): does NOT commit isStreaming:false right away — updates
+  // streamingTextRef to the authoritative `finalText` (which the ticker now
+  // drains toward, in case it differs in length from what was mid-stream)
+  // and registers the same deferred-commit bookkeeping typeOutCompleteAnswer
+  // uses, so revealTick's existing catch-up branch performs the actual
+  // commit once the reveal has caught all the way up. Unlike
+  // typeOutCompleteAnswer, this does NOT touch streamingMsgIdRef/
+  // streamingIntentRef/streamingRenderModeRef or mount a placeholder — the
+  // stream is already live, only its "we're actually done" moment is being
+  // deferred to match the reveal's pace.
+  //
+  // Callers MUST already have confirmed finalText does not diverge from what
+  // was streamed (or that divergence doesn't matter) — see the "finalText
+  // present and different from the streamed text → commit instantly instead"
+  // rule at each call site: continuing to paint over already-read text if
+  // the backend rewrote the answer would be a visible, confusing rewrite,
+  // not smooth reveal.
+  const finalizeWhenRevealCaughtUp = useCallback((msgId: string, intent: string, finalText: string) => {
+    streamingTextRef.current = finalText;
+    pendingFinalizeRef.current = { msgId, intent, text: finalText };
+    if (pendingFinalizeTimeoutRef.current !== null) {
+      clearTimeout(pendingFinalizeTimeoutRef.current);
+    }
+    const safetyNetMs = computeSafetyNetMs(finalText.length);
+    pendingFinalizeTimeoutRef.current = setTimeout(() => {
+      pendingFinalizeTimeoutRef.current = null;
+      const pending = pendingFinalizeRef.current;
+      if (!pending || pending.msgId !== msgId) return;
+      pendingFinalizeRef.current = null;
+      if (streamingRafRef.current !== null) {
+        cancelAnimationFrame(streamingRafRef.current);
+        streamingRafRef.current = null;
+      }
+      streamingNodeRef.current = null;
+      streamingTextRef.current = '';
+      streamingMsgIdRef.current = null;
+      streamingIntentRef.current = null;
+      streamingRenderModeRef.current = 'imperative';
+      setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+    }, safetyNetMs);
+    ensureRevealTicker(msgId);
+  }, [ensureRevealTicker, computeSafetyNetMs]);
 
   // queueToken: imperative DOM write per token + RAF markdown render.
   // Only the FIRST token of a stream calls setMessages (to mount the bubble).
@@ -2609,6 +3597,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (streamingCodeRafRef.current !== null) {
         cancelAnimationFrame(streamingCodeRafRef.current);
         streamingCodeRafRef.current = null;
+      }
+      // A deferred finalize for the ABANDONED stream must not survive it —
+      // prevText above already captured its authoritative text (updated by
+      // finalizeWhenRevealCaughtUp if one was in flight), which the
+      // setMessages below commits instantly; the stale timeout must not
+      // later re-fire onto this now-finalized row. Same reasoning as
+      // flushToken's identical cleanup.
+      pendingFinalizeRef.current = null;
+      if (pendingFinalizeTimeoutRef.current !== null) {
+        clearTimeout(pendingFinalizeTimeoutRef.current);
+        pendingFinalizeTimeoutRef.current = null;
       }
       reactStartTransition(() => {
         setMessages((prev) => {
@@ -2653,19 +3652,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     streamingIntentRef.current = intent;
 
     if (streamingMsgIdRef.current !== null) {
-      if (streamingRenderModeRef.current === 'react-code') {
-        scheduleStreamingCodeRender();
-        return;
-      }
-      // Mid-stream: write directly to DOM, schedule markdown render.
-      if (streamingNodeRef.current) {
-        // Fast path: update textContent immediately so the user sees the
-        // new character without waiting for the RAF, then let the RAF
-        // upgrade it to rendered HTML. This gives sub-frame latency for
-        // plain text and up-to-60fps latency for markdown.
-        streamingNodeRef.current.textContent = streamingTextRef.current;
-      }
-      scheduleMarkdownRender();
+      // Mid-stream: the token has been appended to streamingTextRef.current
+      // above; do NOT write it to the DOM/React state here. Writing the full
+      // arrived text synchronously on every token is exactly the "dumping
+      // tokens" bug — if several tokens land in one event-loop tick (normal
+      // under load), the whole burst would appear at once. The reveal ticker
+      // (ensureRevealTicker/revealTick above) paces what's actually painted,
+      // independent of arrival cadence — for BOTH render modes now:
+      // streamingRenderModeRef === 'react-code' paints via
+      // commitRevealedCodeText (setMessages with the paced prefix) instead
+      // of the imperative DOM node, but it's the same ticker/pacer instance,
+      // so switching modes mid-stream never resets or skips revealedLen.
+      ensureRevealTicker(streamingMsgIdRef.current);
       return;
     }
 
@@ -2727,20 +3725,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         });
       });
     });
-    scheduleMarkdownRender();
-  }, [scheduleMarkdownRender, startTransition, SHELL_WIDTH_EXPANDED]);
+    // New stream: start the reveal ticker fresh (the pacer resets inside
+    // ensureRevealTicker since reservedId != the previous msgId).
+    ensureRevealTicker(reservedId);
+  }, [ensureRevealTicker, startTransition, SHELL_WIDTH_EXPANDED]);
 
   // registerStreamingNode: ref-callback wired to the streaming bubble's div.
   // Called by React when the node mounts/unmounts.
   const registerStreamingNode = useCallback((msgId: string, el: HTMLDivElement | null) => {
     if (msgId !== streamingMsgIdRef.current) return;
     streamingNodeRef.current = el;
-    if (el && streamingTextRef.current) {
-      // Push any text that arrived before the DOM node was ready.
-      el.textContent = streamingTextRef.current;
-      scheduleMarkdownRender();
+    if (el) {
+      // Paint whatever has already been revealed (the ticker may have
+      // started — and advanced the pacer — before React finished
+      // mounting this node) so there's no blank frame between mount and
+      // the next tick. Do NOT dump streamingTextRef.current here: that
+      // would reintroduce the "full burst appears instantly" bug for
+      // late-mounting nodes.
+      paintRevealedNow();
+      // Guarantee a ticker is running for this stream even if queueToken's
+      // ensureRevealTicker call somehow raced ahead of this mount.
+      if (streamingMsgIdRef.current) ensureRevealTicker(streamingMsgIdRef.current);
     }
-  }, [scheduleMarkdownRender]);
+  }, [paintRevealedNow, ensureRevealTicker]);
 
   const flushToken = useCallback(() => {
     // Cancel any pending markdown RAF — the final-answer setMessages is
@@ -2748,6 +3755,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (streamingRafRef.current !== null) {
       cancelAnimationFrame(streamingRafRef.current);
       streamingRafRef.current = null;
+    }
+    // Defensive: flushToken is the shared "wipe all imperative streaming
+    // state" utility, called from every abandon/cancel/supersede site (a
+    // new turn starting, an error, a coaching-card swap, ...). If a deferred
+    // finalize (see pendingFinalizeRef) was still draining for whatever
+    // stream is being wiped here, it must not be left to fire later — its
+    // safety-net timeout would otherwise re-commit stale text onto a row the
+    // user has already moved past. (streamingTextRef.current already holds
+    // the authoritative text at this point if a deferred finalize was in
+    // flight for THIS msgId — see finalizeWhenRevealCaughtUp — so the normal
+    // commit below is unaffected; this just prevents an orphaned timeout.)
+    pendingFinalizeRef.current = null;
+    if (pendingFinalizeTimeoutRef.current !== null) {
+      clearTimeout(pendingFinalizeTimeoutRef.current);
+      pendingFinalizeTimeoutRef.current = null;
     }
     const text = streamingTextRef.current;
     const msgId = streamingMsgIdRef.current;
@@ -2885,31 +3907,67 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       const bufferedText = streamingMsgId ? streamingTextRef.current : '';
 
       if (streamingMsgId && bufferedText) {
-        if (streamingRafRef.current !== null) {
-          cancelAnimationFrame(streamingRafRef.current);
-          streamingRafRef.current = null;
+        const authoritativeText = text || bufferedText;
+        // If the backend's authoritative finalText actually REWROTE the
+        // answer (validate→repair, coding-answer cleanup, etc.) it is not
+        // simply a longer/shorter version of the same prefix the user has
+        // been watching stream in — continuing to paint toward it would
+        // visibly rewrite text already read, not smoothly finish it. Commit
+        // instantly in that case (and whenever the config is set to always
+        // flush immediately on complete); otherwise defer to the reveal
+        // ticker's own pace, per STREAM_RENDER_CONFIG.flushImmediatelyOnComplete
+        // (default false) — the animation keeps draining at the same
+        // deterministic rate all the way to the last character rather than
+        // jumping to complete just because the provider did.
+        const finalTextDiverges = Boolean(text) && text !== bufferedText;
+        if (STREAM_RENDER_CONFIG.flushImmediatelyOnComplete || finalTextDiverges) {
+          if (streamingRafRef.current !== null) {
+            cancelAnimationFrame(streamingRafRef.current);
+            streamingRafRef.current = null;
+          }
+          streamingNodeRef.current = null;
+          streamingTextRef.current = '';
+          streamingMsgIdRef.current = null;
+          streamingIntentRef.current = null;
+          streamingRenderModeRef.current = 'imperative';
+          if (streamingCodeRafRef.current !== null) {
+            cancelAnimationFrame(streamingCodeRafRef.current);
+            streamingCodeRafRef.current = null;
+          }
+          pendingFinalizeRef.current = null;
+          if (pendingFinalizeTimeoutRef.current !== null) {
+            clearTimeout(pendingFinalizeTimeoutRef.current);
+            pendingFinalizeTimeoutRef.current = null;
+          }
+          setMessages((prev) =>
+            finalizeImperativeStreamMessages(prev, {
+              msgId: streamingMsgId,
+              intent,
+              bufferedText,
+              finalText: text,
+            }),
+          );
+          return;
         }
-        streamingNodeRef.current = null;
-        streamingTextRef.current = '';
-        streamingMsgIdRef.current = null;
-        streamingIntentRef.current = null;
-        streamingRenderModeRef.current = 'imperative';
-        if (streamingCodeRafRef.current !== null) {
-          cancelAnimationFrame(streamingCodeRafRef.current);
-          streamingCodeRafRef.current = null;
-        }
-        setMessages((prev) =>
-          finalizeImperativeStreamMessages(prev, {
-            msgId: streamingMsgId,
-            intent,
-            bufferedText,
-            finalText: text,
-          }),
-        );
+        finalizeWhenRevealCaughtUp(streamingMsgId, intent, authoritativeText);
         return;
       }
 
       flushToken();
+      // No buffered token text for this intent — this answer arrived as one
+      // complete IPC payload with no preceding token stream at all (e.g. the
+      // manual-chat "started" placeholder → onIntelligenceManualResult path,
+      // which has no per-token channel). Per the "always shown as typing"
+      // requirement, replay it through the reveal ticker instead of writing
+      // the full text into React state in one isStreaming:false commit — the
+      // "pops in whole" bug. Empty text has nothing to replay; fall back to
+      // the direct commit (matches the pre-existing behavior for that edge
+      // case, and finalizeStreamingByIntentMessages's byId race-handling
+      // comment above still applies to it).
+      if (text) {
+        typeOutCompleteAnswer(intent, text);
+        return;
+      }
       setMessages((prev) =>
         finalizeStreamingByIntentMessages(
           prev,
@@ -2920,7 +3978,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         ),
       );
     },
-    [flushToken],
+    [flushToken, typeOutCompleteAnswer, finalizeWhenRevealCaughtUp],
   );
 
   const pinAnswerPanel = useCallback(() => {
@@ -3022,9 +4080,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // Use ref to avoid stale closure issue
         if (isRecordingRef.current && transcript.speaker === 'user') {
           if (transcript.final) {
-            // Accumulate final transcripts
+            // Accumulate final transcripts, collapsing STT overlap/re-transcription
+            // races (RC5, docs/context-rebuild/03_LIVE_REPRO_FINDINGS.md item 4)
+            // instead of blindly concatenating.
             setVoiceInput((prev) => {
-              const updated = prev + (prev ? ' ' : '') + transcript.text;
+              const updated = mergeTranscriptChunks(prev, transcript.text);
               voiceInputRef.current = updated;
               return updated;
             });
@@ -3417,6 +4477,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Optional: Trigger a small toast or state change for visual feedback
   }, []);
 
+  // Labels for synthetic "question card" bubbles shown before a hotkey/button
+  // answer. Keyed by action identity (the same string passed to
+  // tryBeginOverlayAction), NOT by the intent string passed to
+  // prepareIntelligenceStreamPlaceholder — those two diverge for brainstorm
+  // (placeholder intent 'what_to_answer') and code_hint (no placeholder call
+  // at all). Hardcoded English, matching existing precedent in this file (the
+  // 3 screenshot-branch strings below are not run through useT()).
+  const QUICK_ACTION_LABELS: Record<string, string> = {
+    what_to_say: 'What should I say?',
+    recap: 'Recap',
+    follow_up_questions: 'Follow-up questions',
+    clarify: 'Clarify',
+    code_hint: 'Code hint',
+    brainstorm: 'Brainstorm',
+    'follow_up:shorten': 'Shorten',
+    'follow_up:rephrase': 'Rephrase',
+  };
+
   const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
     if (!tryBeginOverlayAction('what_to_say')) {
       // The press was blocked because a prior 'what_to_say' is still streaming.
@@ -3458,10 +4536,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 50);
+    } else {
+      // No screenshot attached — still show a question card so the answer
+      // never appears with no preceding "question" bubble.
+      setMessages((prev) => [
+        ...prev,
+        { id: genMessageId(), role: 'user', text: QUICK_ACTION_LABELS.what_to_say, isQuickActionLabel: true },
+      ]);
     }
 
     // Create AI response placeholder AFTER user message so thinking dots + response
-    // appear BELOW the screenshot question card (not above it)
+    // appear BELOW the question card (not above it)
     prepareIntelligenceStreamPlaceholder('what_to_answer');
     analytics.trackCommandExecuted('what_to_say');
 
@@ -3590,6 +4675,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (!tryBeginOverlayAction(actionKey)) return;
     setIsExpanded(true);
     setIsProcessing(true);
+    setMessages((prev) => [
+      ...prev,
+      { id: genMessageId(), role: 'user', text: QUICK_ACTION_LABELS[actionKey] ?? 'Follow-up', isQuickActionLabel: true },
+    ]);
     prepareIntelligenceStreamPlaceholder(intent);
     analytics.trackCommandExecuted('follow_up_' + intent);
 
@@ -3614,6 +4703,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (!tryBeginOverlayAction('recap')) return;
     setIsExpanded(true);
     setIsProcessing(true);
+    setMessages((prev) => [
+      ...prev,
+      { id: genMessageId(), role: 'user', text: QUICK_ACTION_LABELS.recap, isQuickActionLabel: true },
+    ]);
     prepareIntelligenceStreamPlaceholder('recap');
     analytics.trackCommandExecuted('recap');
 
@@ -3638,6 +4731,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (!tryBeginOverlayAction('follow_up_questions')) return;
     setIsExpanded(true);
     setIsProcessing(true);
+    setMessages((prev) => [
+      ...prev,
+      { id: genMessageId(), role: 'user', text: QUICK_ACTION_LABELS.follow_up_questions, isQuickActionLabel: true },
+    ]);
     prepareIntelligenceStreamPlaceholder('follow_up_questions');
     analytics.trackCommandExecuted('suggest_questions');
 
@@ -3662,6 +4759,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (!tryBeginOverlayAction('clarify')) return;
     setIsExpanded(true);
     setIsProcessing(true);
+    setMessages((prev) => [
+      ...prev,
+      { id: genMessageId(), role: 'user', text: QUICK_ACTION_LABELS.clarify, isQuickActionLabel: true },
+    ]);
     prepareIntelligenceStreamPlaceholder('clarify');
     analytics.trackCommandExecuted('clarify');
 
@@ -3715,6 +4816,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 50);
+    } else {
+      // No screenshot attached — still show a question card so the answer
+      // never appears with no preceding "question" bubble.
+      setMessages((prev) => [
+        ...prev,
+        { id: genMessageId(), role: 'user', text: QUICK_ACTION_LABELS.code_hint, isQuickActionLabel: true },
+      ]);
     }
 
     try {
@@ -3740,13 +4848,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (!tryBeginOverlayAction('brainstorm')) return;
     setIsExpanded(true);
     setIsProcessing(true);
-    prepareIntelligenceStreamPlaceholder('what_to_answer');
     analytics.trackCommandExecuted('brainstorm');
 
     const currentAttachments = attachedContext;
     if (currentAttachments.length > 0) {
       setAttachedContext([]);
-      // Show the attached image in chat
+      // Show the attached image in chat FIRST — question card must appear before AI response
       setMessages((prev) => [
         ...prev,
         {
@@ -3761,7 +4868,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 50);
+    } else {
+      // No screenshot attached — still show a question card so the answer
+      // never appears with no preceding "question" bubble.
+      setMessages((prev) => [
+        ...prev,
+        { id: genMessageId(), role: 'user', text: QUICK_ACTION_LABELS.brainstorm, isQuickActionLabel: true },
+      ]);
     }
+
+    // Create AI response placeholder AFTER the question card so thinking dots
+    // + response appear BELOW it (not above it) — see handleWhatToSay for the
+    // same ordering rationale.
+    prepareIntelligenceStreamPlaceholder('what_to_answer');
 
     try {
       await window.electronAPI.generateBrainstorm(
@@ -3806,40 +4925,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         const doneDecision = resolveChatStreamDone(chatStreamIdRef.current, data?.streamId);
         chatStreamIdRef.current = doneDecision.activeId;
         if (!doneDecision.honor) return;
-        const pendingText = streamingTextRef.current;
-        const pendingMsgId = streamingMsgIdRef.current;
         // finalText is set ONLY when the backend's coding validate→repair changed
         // the streamed answer — it authoritatively REPLACES the streamed row text
         // (in-place, by id) so the user sees the corrected six-section markdown.
         // Absent in the common case, where the streamed tokens already stand.
         const finalText = data?.finalText;
-        if (streamingRafRef.current !== null) {
-          cancelAnimationFrame(streamingRafRef.current);
-          streamingRafRef.current = null;
-        }
-        if (streamingCodeRafRef.current !== null) {
-          cancelAnimationFrame(streamingCodeRafRef.current);
-          streamingCodeRafRef.current = null;
-        }
-        streamingNodeRef.current = null;
-        // Capture pending text BEFORE clearing the ref. The capture happens
-        // synchronously here, but the setMessages callback below uses
-        // streamingTextRef.current — which a late-arriving token between this
-        // line and the React flush could clobber. We snapshot it locally so
-        // even a racing token can't drop the last few chars. The ref is
-        // cleared AFTER setMessages is scheduled (see flushSync below).
+        // Capture pending text/id BEFORE any clearing. The capture happens
+        // synchronously here, but a late-arriving token between this line and
+        // the eventual React flush could otherwise clobber streamingTextRef —
+        // snapshotting locally means even a racing token can't drop the last
+        // few chars from what gets (instantly or eventually) committed.
         const pendingTextSnapshot = streamingTextRef.current;
         const pendingMsgIdSnapshot = streamingMsgIdRef.current;
-        // Clear in the next microtask so any token already in the IPC queue
-        // before this done arrived is still visible to setMessages. The setMessages
-        // callback above reads `pendingText` from the closure variable, so this
-        // ref clear only affects subsequent question turns.
-        queueMicrotask(() => {
-          streamingTextRef.current = '';
-          streamingMsgIdRef.current = null;
-          streamingIntentRef.current = null;
-          streamingRenderModeRef.current = 'imperative';
-        });
+        const authoritativeText = finalText || pendingTextSnapshot;
+
         setIsProcessing(false);
 
         // Calculate latency if we have a start time
@@ -3854,6 +4953,59 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           model_name: currentModel,
           provider_type: detectProviderType(currentModel),
           latency_ms: latency,
+        });
+
+        // Deferred path: the provider is done, but per
+        // STREAM_RENDER_CONFIG.flushImmediatelyOnComplete (default false) the
+        // reveal ticker keeps draining at the same deterministic rate all the
+        // way to the last character instead of snapping to complete just
+        // because the network did. Requires an actual live row to defer
+        // (pendingMsgIdSnapshot) and — same rule as finalizeStreamingByIntent
+        // — that finalText, if present, isn't a REWRITE of what was already
+        // streamed (continuing to paint over already-read text would be a
+        // visible, confusing rewrite, not a smooth finish).
+        const finalTextDiverges = Boolean(finalText) && finalText !== pendingTextSnapshot;
+        if (
+          pendingMsgIdSnapshot != null &&
+          authoritativeText &&
+          !STREAM_RENDER_CONFIG.flushImmediatelyOnComplete &&
+          !finalTextDiverges
+        ) {
+          // Do NOT cancel streamingRafRef/streamingCodeRafRef, null
+          // streamingNodeRef, or clear streamingMsgIdRef/streamingTextRef —
+          // all four would stop the ticker or make paintRevealedNow/revealTick
+          // treat this stream as already torn down (see the advisor note this
+          // fix is based on). The stream stays fully "live" until
+          // finalizeWhenRevealCaughtUp's deferred commit fires.
+          finalizeWhenRevealCaughtUp(pendingMsgIdSnapshot, 'chat', authoritativeText);
+          return;
+        }
+
+        // Instant path (flushImmediatelyOnComplete=true, finalText diverged,
+        // or there was no live row to defer at all).
+        if (streamingRafRef.current !== null) {
+          cancelAnimationFrame(streamingRafRef.current);
+          streamingRafRef.current = null;
+        }
+        if (streamingCodeRafRef.current !== null) {
+          cancelAnimationFrame(streamingCodeRafRef.current);
+          streamingCodeRafRef.current = null;
+        }
+        streamingNodeRef.current = null;
+        pendingFinalizeRef.current = null;
+        if (pendingFinalizeTimeoutRef.current !== null) {
+          clearTimeout(pendingFinalizeTimeoutRef.current);
+          pendingFinalizeTimeoutRef.current = null;
+        }
+        // Clear in the next microtask so any token already in the IPC queue
+        // before this done arrived is still visible to setMessages. The setMessages
+        // callback below reads the snapshot from the closure variable, so this
+        // ref clear only affects subsequent question turns.
+        queueMicrotask(() => {
+          streamingTextRef.current = '';
+          streamingMsgIdRef.current = null;
+          streamingIntentRef.current = null;
+          streamingRenderModeRef.current = 'imperative';
         });
 
         setMessages((prev) => {
@@ -3970,42 +5122,104 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     // JIT RAG Stream listeners (for live meeting RAG responses)
     //
-    // rAF-coalesced (see ragChunkBufRef/ragChunkRafRef decl above): chunks
-    // accumulate in a ref and flush to React state at most once per frame,
-    // instead of one setMessages() (full array clone) per chunk.
+    // Same deterministic-reveal treatment as the main streaming path (see
+    // the "Deterministic reveal" comment block above queueToken) — rate-
+    // capped, word-aware, provider-independent — adapted to the fact that
+    // this bubble commits through normal React state (lastMsg.text) rather
+    // than a direct DOM ref: committing the revealed prefix to state IS the
+    // paint step, no separate render call needed.
     const cancelRagChunkRaf = () => {
       if (ragChunkRafRef.current !== null) {
         cancelAnimationFrame(ragChunkRafRef.current);
         ragChunkRafRef.current = null;
       }
     };
-    const flushRagChunkBuffer = () => {
-      cancelRagChunkRaf();
-      if (!ragChunkBufRef.current) return;
-      const pending = ragChunkBufRef.current;
-      ragChunkBufRef.current = '';
+    // Sets the bubble's text to exactly `revealedText` (the full revealed
+    // PREFIX so far, not a delta to append) — the cursor-over-accumulated-
+    // text shape means each tick recomputes the whole visible slice, not an
+    // incremental splice.
+    const commitRagText = (revealedText: string) => {
       setMessages((prev) => {
         const lastMsg = prev[prev.length - 1];
         if (lastMsg && lastMsg.isStreaming && lastMsg.role === 'system') {
+          if (lastMsg.text === revealedText) return prev; // no-op, skip a redundant re-render
           const updated = [...prev];
-          const text = lastMsg.text + pending;
-          updated[prev.length - 1] = { ...lastMsg, text, isCode: text.includes('```') };
+          updated[prev.length - 1] = { ...lastMsg, text: revealedText, isCode: revealedText.includes('```') };
           return updated;
         }
         return prev;
       });
     };
+    const ragRevealTick = (ts: number) => {
+      ragChunkRafRef.current = null;
+      const fullText = ragArrivedTextRef.current;
+      const pacer = ragPacerRef.current;
+      const deltaMs = ragLastTsRef.current === null ? 1000 / 60 : Math.max(0, ts - ragLastTsRef.current);
+      ragLastTsRef.current = ts;
+      const prevLen = pacer.revealedLen;
+      tickPacer(pacer, fullText, ts, deltaMs, { reducedMotion: prefersReducedMotionRef.current });
+      if (pacer.revealedLen !== prevLen) {
+        commitRagText(fullText.slice(0, pacer.revealedLen));
+      }
+      if (pacer.revealedLen < fullText.length) {
+        ragChunkRafRef.current = requestAnimationFrame(ragRevealTick);
+        return;
+      }
+      // Caught up to everything that has arrived. If the provider hasn't
+      // signaled done yet (ragDoneRef false), self-terminate — onRAGStreamChunk's
+      // ensureRagRevealTicker restarts this the moment more text arrives.
+      // If the provider HAS signaled done, per
+      // STREAM_RENDER_CONFIG.flushImmediatelyOnComplete (default false) THIS
+      // is the moment to actually commit isStreaming:false — deferred all
+      // the way until the reveal genuinely caught up, not the instant the
+      // network finished (see onRAGStreamComplete below).
+      if (ragDoneRef.current) {
+        ragDoneRef.current = false;
+        setMessages((prev) => {
+          const lastMsg = prev[prev.length - 1];
+          if (lastMsg && lastMsg.isStreaming && lastMsg.role === 'system') {
+            return [...prev.slice(0, -1), { ...lastMsg, isStreaming: false }];
+          }
+          if (lastMsg && lastMsg.isStreaming) {
+            const updated = [...prev];
+            updated[prev.length - 1] = { ...lastMsg, isStreaming: false };
+            return updated;
+          }
+          return prev;
+        });
+        ragArrivedTextRef.current = '';
+        ragPacerRef.current = createPacerState();
+        ragLastTsRef.current = null;
+      }
+    };
+    const ensureRagRevealTicker = () => {
+      if (ragChunkRafRef.current === null) {
+        ragChunkRafRef.current = requestAnimationFrame(ragRevealTick);
+      }
+    };
+    // Stream-end flush: any backlog still un-revealed must appear INSTANTLY,
+    // not paced — used for the error path (always instant — see
+    // onRAGStreamError below) and for the flushImmediatelyOnComplete=true
+    // config branch of onRAGStreamComplete. Also resets the pacer/
+    // accumulator/done-flag for the NEXT RAG answer, so a fresh stream never
+    // inherits stale state from this one.
+    const flushRagChunkBuffer = () => {
+      cancelRagChunkRaf();
+      const fullText = ragArrivedTextRef.current;
+      if (ragPacerRef.current.revealedLen < fullText.length) {
+        commitRagText(fullText);
+      }
+      ragArrivedTextRef.current = '';
+      ragPacerRef.current = createPacerState();
+      ragLastTsRef.current = null;
+      ragDoneRef.current = false;
+    };
 
     if (window.electronAPI.onRAGStreamChunk) {
       cleanups.push(
         window.electronAPI.onRAGStreamChunk((data: { chunk: string }) => {
-          ragChunkBufRef.current += data.chunk;
-          if (ragChunkRafRef.current === null) {
-            ragChunkRafRef.current = requestAnimationFrame(() => {
-              ragChunkRafRef.current = null;
-              flushRagChunkBuffer();
-            });
-          }
+          ragArrivedTextRef.current += data.chunk;
+          ensureRagRevealTicker();
         }),
       );
     }
@@ -4013,24 +5227,38 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (window.electronAPI.onRAGStreamComplete) {
       cleanups.push(
         window.electronAPI.onRAGStreamComplete(() => {
-          // Flush any chunk(s) still buffered for the current frame BEFORE
-          // marking the stream as done, so the final commit never drops the
-          // last few characters of the answer.
-          flushRagChunkBuffer();
           setIsProcessing(false);
           requestStartTimeRef.current = null;
-          setMessages((prev) => {
-            const lastMsg = prev[prev.length - 1];
-            if (lastMsg && lastMsg.isStreaming && lastMsg.role === 'system') {
-              return [...prev.slice(0, -1), { ...lastMsg, isStreaming: false }];
-            }
-            if (lastMsg && lastMsg.isStreaming) {
-              const updated = [...prev];
-              updated[prev.length - 1] = { ...lastMsg, isStreaming: false };
-              return updated;
-            }
-            return prev;
-          });
+          if (STREAM_RENDER_CONFIG.flushImmediatelyOnComplete) {
+            // Flush any chunk(s) still buffered for the current frame BEFORE
+            // marking the stream as done, so the final commit never drops
+            // the last few characters of the answer.
+            flushRagChunkBuffer();
+            setMessages((prev) => {
+              const lastMsg = prev[prev.length - 1];
+              if (lastMsg && lastMsg.isStreaming && lastMsg.role === 'system') {
+                return [...prev.slice(0, -1), { ...lastMsg, isStreaming: false }];
+              }
+              if (lastMsg && lastMsg.isStreaming) {
+                const updated = [...prev];
+                updated[prev.length - 1] = { ...lastMsg, isStreaming: false };
+                return updated;
+              }
+              return prev;
+            });
+            return;
+          }
+          // Deferred (default): the provider is done, but the ANIMATION
+          // keeps draining at the same deterministic rate all the way to
+          // the last character — mark it and let ragRevealTick's own
+          // catch-up branch perform the actual isStreaming:false commit.
+          // ensureRagRevealTicker guarantees at least one more tick runs
+          // even if the ticker had already self-terminated (the reveal
+          // fully caught up to whatever had arrived BEFORE this done event
+          // — without this, nothing would ever wake it to notice
+          // ragDoneRef and finalize).
+          ragDoneRef.current = true;
+          ensureRagRevealTicker();
         }),
       );
     }
@@ -4038,6 +5266,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (window.electronAPI.onRAGStreamError) {
       cleanups.push(
         window.electronAPI.onRAGStreamError((data: { error: string }) => {
+          // Errors are always instant, never deferred — flushRagChunkBuffer
+          // resets ragDoneRef/accumulator/pacer so a still-running ticker
+          // (if any) can't later overwrite the error text appended below
+          // with a stale `fullText.slice(0, revealedLen)` commit.
           flushRagChunkBuffer();
           setIsProcessing(false);
           requestStartTimeRef.current = null;
@@ -4061,7 +5293,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // this effect tears down mid-stream (component unmount, deps change).
     cleanups.push(() => {
       cancelRagChunkRaf();
-      ragChunkBufRef.current = '';
+      ragArrivedTextRef.current = '';
+      ragDoneRef.current = false;
     });
 
     return () => cleanups.forEach((fn) => fn());
@@ -4083,9 +5316,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         const currentAttachments = attachedContext;
         setAttachedContext([]);
 
-        const question = (
-          voiceInputRef.current +
-          (manualTranscriptRef.current ? ' ' + manualTranscriptRef.current : '')
+        const question = mergeTranscriptChunks(
+          voiceInputRef.current,
+          manualTranscriptRef.current,
         ).trim();
         setVoiceInput('');
         voiceInputRef.current = '';
@@ -4140,6 +5373,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }, 50);
 
+        // A previous turn's RAG answer may still be deferred-draining (see
+        // forceFinalizeStaleRagStream's declaration) — force it to its final
+        // state before this new placeholder can become "the last message".
+        forceFinalizeStaleRagStream();
         const placeholderId = genMessageId();
         streamingMsgIdRef.current = placeholderId;
         streamingIntentRef.current = 'chat';
@@ -4310,6 +5547,10 @@ Provide only the answer, nothing else.`;
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 50);
 
+    // A previous turn's RAG answer may still be deferred-draining (see
+    // forceFinalizeStaleRagStream's declaration) — force it to its final
+    // state before this new placeholder can become "the last message".
+    forceFinalizeStaleRagStream();
     // Add placeholder for streaming response — wire queueToken to this row so
     // the first gemini-stream-token does not spawn a second streaming bubble.
     const placeholderId = genMessageId();
@@ -4400,10 +5641,6 @@ Provide only the answer, nothing else.`;
   // other deps so its inclusion is mostly defensive.
   const renderMessageText = useCallback(
     (msg: Message) => {
-      const cardBgBorderClass = isLightTheme
-        ? 'bg-slate-100/70 backdrop-blur-md border border-slate-200/50 text-slate-900 shadow-sm'
-        : 'bg-zinc-800/60 backdrop-blur-md border border-zinc-700/40 text-zinc-100 shadow-md';
-
       const labelColorClass = isLightTheme ? 'text-slate-500' : 'text-slate-400';
       const headerBorderClass = isLightTheme ? 'border-b pb-1.5 border-black/5' : 'border-b pb-1.5 border-white/5';
 
@@ -4413,9 +5650,96 @@ Provide only the answer, nothing else.`;
       // without going through React reconciliation.
       // On stream completion, flushToken() resets streamingMsgIdRef and the
       // next render falls through to the normal intent-specific path below.
+      //
+      // isActiveReactCodeStream also requires msg.text to already satisfy the
+      // SAME condition the "Code Solution" branch below checks —
+      // `msg.isCode || msg.text.includes('```')`. streamingRenderModeRef
+      // flips to 'react-code' the instant the RAW, unpaced arrived text
+      // (streamingTextRef.current) contains a fence, but msg.text is the
+      // PACED, revealed prefix (commitRevealedCodeText), which lags behind
+      // by design (the reveal ticker's smoothing buffer + rate cap). Without
+      // this extra check, there was a real window — between the mode flip
+      // and msg.text catching up to the fence — where neither this
+      // thinking-dots branch NOR the Code Solution branch below matched:
+      // the row fell through to a generic/default render with nothing to
+      // show ("the dot is gone and it's back to the response card" with a
+      // blank/empty body). Tying this flag to msg.text instead of the raw
+      // mode ref keeps something rendering until there's real content to
+      // hand off to, and is safe to leave permanently true afterwards: once
+      // the paced text contains a fence it never loses it (reveal only
+      // grows forward).
       const isActiveReactCodeStream =
-        msg.id === streamingMsgIdRef.current && streamingRenderModeRef.current === 'react-code';
+        msg.id === streamingMsgIdRef.current &&
+        streamingRenderModeRef.current === 'react-code' &&
+        (msg.isCode || msg.text.includes('```'));
       if (msg.isStreaming && msg.role === 'system' && !msg.isNegotiationCoaching && !isActiveReactCodeStream) {
+        // React-code pre-fence gap: streamingRenderModeRef already flipped to
+        // 'react-code' (the raw arrived text has a fence) but the paced
+        // msg.text hasn't caught up to it yet — isActiveReactCodeStream above
+        // is deliberately false for exactly this window. The ref-registered
+        // imperative div a few lines down is the WRONG destination here:
+        // queueToken wipes that node's innerHTML the instant it flips modes,
+        // and revealTick's react-code branch paints via commitRevealedCodeText
+        // (a plain setMessages), never paintRevealedNow — nothing imperative
+        // writes to the ref node in this mode anymore. Reusing that branch
+        // would render blank the moment msg.text becomes non-empty (its
+        // isThinking flips false, killing the dots, with no React child to
+        // fill the gap). Render straight off msg.text/React state instead —
+        // dots while still empty, paced text + cursor once content has
+        // arrived — the SAME shape (raw text + sibling cursor span, not
+        // ReactMarkdown) as the "handoff gap" block further below. Raw text
+        // is deliberate, not a shortcut: ReactMarkdown wraps text in a
+        // block-level <p>, which pushes a sibling cursor span onto its own
+        // line below the text instead of sitting inline at the live edge —
+        // confirmed by a standalone repro rendering this exact JSX. A
+        // transient literal "**"/"-" before the markdown closes is the
+        // accepted tradeoff elsewhere in this same streaming path (e.g. the
+        // unclosed-fence code preview below); a cursor floating on its own
+        // line reads as visibly broken, so raw text wins here.
+        //
+        // CRITICAL: this branch deliberately uses a DIFFERENT key
+        // ("streaming-precode") than the ref-registered imperative div right
+        // below (key="streaming"), even though both represent "the same
+        // streaming row mid-flight". Reusing "streaming" here would make
+        // React RECONCILE instead of unmount when this branch takes over
+        // from the imperative one — i.e. diff this branch's real React
+        // children against the imperative div's last-known-to-React
+        // children (typically the dots, since msg.text/React state never
+        // changes during imperative-mode streaming). But the imperative
+        // div's ACTUAL dom contents were long since overwritten out-of-band
+        // by paintRevealedNow's `node.innerHTML = ...` (marked.parse output)
+        // — React's fiber has no idea. If React then tried to reconcile
+        // (not unmount) that div's children against ITS stale record, it
+        // would attempt to remove a child DOM node that innerHTML already
+        // detached, which throws (or at best corrupts the tree) — the same
+        // family of DOM-ownership bug the key="streaming" mechanism further
+        // below exists to prevent for the imperative-to-finalized-card
+        // handoff. A distinct key forces a clean unmount/mount here too:
+        // unmounting removes the whole `node` element in one shot (no
+        // per-child diffing), so the mismatch between React's fiber and the
+        // real DOM never gets exercised.
+        if (msg.id === streamingMsgIdRef.current && streamingRenderModeRef.current === 'react-code') {
+          const isThinking = !msg.text;
+          return (
+            <div
+              key="streaming-precode"
+              className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14.5px] leading-relaxed"
+            >
+              {isThinking ? (
+                <div className="flex items-center min-h-[24px] py-0.5">
+                  <div
+                    className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
+                  />
+                </div>
+              ) : (
+                <>
+                  {msg.text}
+                  <span className="reveal-typing-cursor" aria-hidden="true">▍</span>
+                </>
+              )}
+            </div>
+          );
+        }
         if (msg.id === streamingMsgIdRef.current) {
           // CRITICAL: key="streaming" forces React to UNMOUNT this div (taking
           // the imperative innerHTML with it) when the row transitions to the
@@ -4430,19 +5754,14 @@ Provide only the answer, nothing else.`;
           // imperative path wrote — the user sees the streaming markdown
           // STACKED on top of the React-rendered "Code Solution" tree, which is
           // exactly the duplicate-answer bug.
-          const isThinking = !msg.text;
           return (
             <div
               key="streaming"
               ref={(el) => registerStreamingNode(msg.id, el)}
-              className={`${
-                isThinking
-                  ? 'w-fit px-[16.5px] py-[12.5px]'
-                  : 'w-full p-[14px_18px]'
-              } rounded-[20px] rounded-tl-[4px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 markdown-content whitespace-pre-wrap text-[14.5px] leading-relaxed`}
+              className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14.5px] leading-relaxed"
             >
               {/*
-               * Typing-dots indicator INSIDE the streaming bubble. Renders
+               * Blinking-dot indicator INSIDE the streaming bubble. Renders
                * while no tokens have arrived yet (text === ''). When the first
                * token lands, queueToken's mid-stream path does
                *   streamingNodeRef.current.textContent = streamingTextRef.current
@@ -4456,24 +5775,23 @@ Provide only the answer, nothing else.`;
                * key="streaming" causes a full unmount, so the dots-vs-text
                * discrepancy never causes a reconciliation conflict.
                *
-               * Placing the dots INSIDE the bubble (instead of as a separate
+               * The outer div's className must stay constant across isThinking
+               * — it is never re-rendered by React while tokens stream in (the
+               * imperative writes above bypass reconciliation), so any
+               * isThinking-conditional class here would freeze at whichever
+               * value was present on first paint. The dot's own layout
+               * (flex/items-center) lives on the inner wrapper below instead,
+               * which unmounts cleanly once real text arrives.
+               *
+               * Placing the dot INSIDE the bubble (instead of as a separate
                * pill below the message list) gives the classic messaging
-               * "typing indicator" UX — the dots appear where the answer
-               * will, then smoothly hand off to the answer text.
+               * "typing indicator" UX — the dot appears where the answer
+               * will, then smoothly hands off to the answer text.
                */}
               {!msg.text && (
-                <div className="flex gap-1.5 items-center py-0.5">
+                <div className="flex items-center min-h-[24px] py-0.5">
                   <div
-                    className={`w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full animate-bounce`}
-                    style={{ animationDelay: '0ms' }}
-                  />
-                  <div
-                    className={`w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full animate-bounce`}
-                    style={{ animationDelay: '150ms' }}
-                  />
-                  <div
-                    className={`w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full animate-bounce`}
-                    style={{ animationDelay: '300ms' }}
+                    className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
                   />
                 </div>
               )}
@@ -4482,9 +5800,17 @@ Provide only the answer, nothing else.`;
         }
         // Handoff gap after flushToken(): imperative ref cleared but React has
         // not yet reconciled — keep showing accumulated text instead of blank.
+        // Also the ENTIRE-duration render path for the JIT-RAG/meeting-recall
+        // stream (commitRagText commits paced text via plain setMessages,
+        // never registering streamingMsgIdRef — see ragRevealTick above), so
+        // the trailing cursor belongs here too: this is the only place that
+        // bubble's "still typing" state is ever painted.
         if (msg.text) {
           return (
-            <div key="streaming" className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 markdown-content whitespace-pre-wrap text-[14.5px] leading-relaxed`}>{msg.text}</div>
+            <div key="streaming" className="w-full ai-response-card my-2.5 transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14.5px] leading-relaxed">
+              {msg.text}
+              <span className="reveal-typing-cursor" aria-hidden="true">▍</span>
+            </div>
           );
         }
       }
@@ -4522,8 +5848,17 @@ Provide only the answer, nothing else.`;
       if (msg.isCode || (msg.role === 'system' && msg.text.includes('```'))) {
         const parts = msg.text.split(/(```[\s\S]*?(?:```|$))/g);
         return (
-          <div className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 relative group`}>
-            <div className="absolute top-[-16px] right-[-16px] z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+          // code-card-mount-in: a one-time cross-fade (@starting-style, see
+          // index.css) for the FIRST render of this branch — i.e. exactly
+          // the instant a streaming row hands off from the imperative
+          // prose bubble (thinking dots / plain reveal text) to this
+          // React-rendered code-solution layout. React reuses this div's
+          // identity across every later tick (same position, same type),
+          // so the fade fires once at the handoff and never again — a
+          // deliberate cross-fade instead of the hard, silent DOM swap the
+          // "different layout before vs after" complaint was describing.
+          <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group code-card-mount-in">
+            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
               <CardCopyButton
                 text={msg.text}
                 onCopy={handleCopy}
@@ -4539,13 +5874,51 @@ Provide only the answer, nothing else.`;
                   const match = part.match(/```([\w+#-]*)\s+([\s\S]*?)(?:```|$)/);
                   if (match || part.startsWith('```')) {
                     const lang = match && match[1] ? match[1] : '';
-                    const code = (match && match[2]
+                    // Raw, UNTRIMMED — see below for why the streaming path
+                    // must not trim this.
+                    const rawCode = match && match[2]
                       ? match[2]
-                      : part.replace(/^```[\w+#-]*\s*/, '').replace(/```$/, '')).trim();
+                      : part.replace(/^```[\w+#-]*\s*/, '').replace(/```$/, '');
+                    // Still-open fence on a still-streaming row → the
+                    // per-completed-line preview (kills the flicker, adds
+                    // the per-line reveal fade). Anything else (already
+                    // closed, or streaming already ended) → the static,
+                    // full-context-highlighted block, same as always.
+                    if (isUnclosedCodeFencePart(part) && msg.isStreaming) {
+                      // Deliberately NOT .trim()'d: splitStreamingCodeLines
+                      // decides "this line is complete" by finding a
+                      // trailing \n. Trimming it here would strip the most
+                      // recently arrived line's newline the instant it
+                      // lands (before the NEXT character confirms there's
+                      // more text after it), so that line would render as
+                      // the unhighlighted in-progress line for one extra
+                      // tick, then flip to highlighted-and-faded-in a tick
+                      // late — a small but real one-tick color pop on every
+                      // single line. The static HighlightedCode path below
+                      // still trims (rawCode.trim()) since a finalized block
+                      // should never show a stray trailing blank line.
+                      return (
+                        <StreamingHighlightedCode
+                          key={i}
+                          code={rawCode}
+                          lang={lang}
+                          isLightTheme={isLightTheme}
+                          codeTheme={codeTheme}
+                          codeBlockClass={codeBlockClass}
+                          codeHeaderClass={codeHeaderClass}
+                          codeHeaderTextClass={codeHeaderTextClass}
+                          codeLineNumberColor={codeLineNumberColor}
+                          appearance={appearance}
+                          isModernTheme={isModernTheme}
+                          isGlassTheme={isGlassTheme}
+                          showCodeHeader={showCodeHeader}
+                        />
+                      );
+                    }
                     return (
                       <HighlightedCode
                         key={i}
-                        code={code}
+                        code={rawCode.trim()}
                         lang={lang}
                         isLightTheme={isLightTheme}
                         codeTheme={codeTheme}
@@ -4556,13 +5929,14 @@ Provide only the answer, nothing else.`;
                         appearance={appearance}
                         isModernTheme={isModernTheme}
                         isGlassTheme={isGlassTheme}
+                        showCodeHeader={showCodeHeader}
                       />
                     );
                   }
                 }
                 // Regular text - Render with Markdown
                 return (
-                  <div key={i} className="markdown-content">
+                  <div key={i} className="markdown-content pr-6">
                     <ReactMarkdown
                       remarkPlugins={REMARK_PLUGINS}
                       rehypePlugins={REHYPE_PLUGINS}
@@ -4581,8 +5955,8 @@ Provide only the answer, nothing else.`;
       // Custom Styled Labels (Shorten, Recap, Follow-up) - also use Markdown for content
       if (msg.intent === 'shorten') {
         return (
-          <div className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 relative group`}>
-            <div className="absolute top-[-16px] right-[-16px] z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+          <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
+            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
               <CardCopyButton
                 text={msg.text}
                 onCopy={handleCopy}
@@ -4591,7 +5965,7 @@ Provide only the answer, nothing else.`;
                 isGlassTheme={isGlassTheme}
               />
             </div>
-            <div className="text-[14.5px] leading-relaxed markdown-content">
+            <div className="text-[14.5px] leading-relaxed markdown-content pr-6">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -4606,8 +5980,8 @@ Provide only the answer, nothing else.`;
 
       if (msg.intent === 'recap') {
         return (
-          <div className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 relative group`}>
-            <div className="absolute top-[-16px] right-[-16px] z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+          <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
+            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
               <CardCopyButton
                 text={msg.text}
                 onCopy={handleCopy}
@@ -4616,7 +5990,7 @@ Provide only the answer, nothing else.`;
                 isGlassTheme={isGlassTheme}
               />
             </div>
-            <div className="text-[14.5px] leading-relaxed markdown-content">
+            <div className="text-[14.5px] leading-relaxed markdown-content pr-6">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -4631,8 +6005,8 @@ Provide only the answer, nothing else.`;
 
       if (msg.intent === 'follow_up_questions') {
         return (
-          <div className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 relative group`}>
-            <div className="absolute top-[-16px] right-[-16px] z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+          <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
+            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
               <CardCopyButton
                 text={msg.text}
                 onCopy={handleCopy}
@@ -4641,7 +6015,7 @@ Provide only the answer, nothing else.`;
                 isGlassTheme={isGlassTheme}
               />
             </div>
-            <div className="text-[14.5px] leading-relaxed markdown-content">
+            <div className="text-[14.5px] leading-relaxed markdown-content pr-6">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -4659,8 +6033,8 @@ Provide only the answer, nothing else.`;
         const parts = msg.text.split(/(```[\s\S]*?(?:```|$))/g);
 
         return (
-          <div className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 relative group`}>
-            <div className="absolute top-[-16px] right-[-16px] z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+          <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
+            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
               <CardCopyButton
                 text={msg.text}
                 onCopy={handleCopy}
@@ -4704,13 +6078,14 @@ Provide only the answer, nothing else.`;
                         appearance={appearance}
                         isModernTheme={isModernTheme}
                         isGlassTheme={isGlassTheme}
+                        showCodeHeader={showCodeHeader}
                       />
                     );
                   }
                 }
                 // Regular text - Render Markdown
                 return (
-                  <div key={i} className="markdown-content">
+                  <div key={i} className="markdown-content pr-6">
                     <ReactMarkdown
                       remarkPlugins={REMARK_PLUGINS}
                       rehypePlugins={REHYPE_PLUGINS}
@@ -4729,8 +6104,8 @@ Provide only the answer, nothing else.`;
       // Fallback for general system/chat messages to ensure they maintain card structure after streaming ends
       if (msg.role === 'system' && !msg.isNegotiationCoaching) {
         return (
-          <div className={`w-full rounded-[20px] rounded-tl-[4px] p-[14px_18px] ai-response-card ${cardBgBorderClass} my-2.5 transition-all duration-300 relative group`}>
-            <div className="absolute top-[-16px] right-[-16px] z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+          <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
+            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
               <CardCopyButton
                 text={msg.text}
                 onCopy={handleCopy}
@@ -4739,7 +6114,7 @@ Provide only the answer, nothing else.`;
                 isGlassTheme={isGlassTheme}
               />
             </div>
-            <div className="text-[14.5px] leading-relaxed markdown-content">
+            <div className="text-[14.5px] leading-relaxed markdown-content pr-6">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -6119,7 +7494,8 @@ Provide only the answer, nothing else.`;
                                         so a setMessages on the streaming row does NOT
                                         re-render every prior message — bailout fires on
                                         identity equality (msg, theme, callbacks). */}
-                  {displayMessages.map((msg: Message) => (
+                  {displayMessages
+                    .map((msg: Message) => (
                     <MessageRow
                       key={msg.id}
                       msg={msg}
@@ -6162,13 +7538,15 @@ Provide only the answer, nothing else.`;
                   )}
 
                   {/*
-                   * Bouncing-dots "AI is thinking" indicator. Gated on
-                   * `!hasStreamingPlaceholder` so it never co-exists with a
-                   * streaming system row — which MessageRow already renders as
-                   * a visible empty bubble (subtleSurfaceClass + border +
-                   * rounded-[18px] + px-4 py-3). Without the gate, the user
-                   * sees TWO thinking bubbles during the wait: the empty
-                   * placeholder above, the dots pill below.
+                   * Blinking-dot "AI is thinking" indicator (no card chrome —
+                   * see `.ai-response-card` neutralization in index.css).
+                   * Gated on `!hasStreamingPlaceholder` so it never co-exists
+                   * with a streaming system row, which already renders its own
+                   * identical single-dot indicator inside `renderMessageText`
+                   * (the `isThinking` branch there). Without this gate the
+                   * user would see TWO dot indicators during the wait — one
+                   * per surface — even though neither has a visible bubble to
+                   * "double up" with anymore.
                    *
                    * Once the first token arrives the placeholder fills with
                    * text; once finalize fires `setIsProcessing(false)` clears
@@ -6179,24 +7557,10 @@ Provide only the answer, nothing else.`;
                     !displayMessages.some(
                       (m) => m.role === 'system' && m.isStreaming,
                     ) && (
-                    <div className="flex justify-start">
+                    <div className="flex justify-start my-2.5 min-h-[24px] items-center">
                       <div
-                        className="px-3 py-2 flex gap-1.5 overlay-subtle-surface rounded-full border"
-                        style={appearance.subtleStyle}
-                      >
-                        <div
-                          className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
-                          style={{ animationDelay: '0ms' }}
-                        />
-                        <div
-                          className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
-                          style={{ animationDelay: '150ms' }}
-                        />
-                        <div
-                          className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
-                          style={{ animationDelay: '300ms' }}
-                        />
-                      </div>
+                        className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
+                      />
                     </div>
                   )}
                   <div ref={messagesEndRef} />
@@ -6584,7 +7948,7 @@ Provide only the answer, nothing else.`;
                                                     interaction-base interaction-press
                                                     ${
                                                       isMousePassthrough
-                                                        ? 'overlay-icon-surface overlay-icon-surface-hover text-sky-400 opacity-100'
+                                                        ? 'overlay-icon-surface overlay-icon-surface-hover text-accent-primary opacity-100'
                                                         : 'overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive'
                                                     }
                                                 `}

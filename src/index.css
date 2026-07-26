@@ -22,6 +22,28 @@
   /* System Fonts - SF Pro */
   --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 
+  /* ─── SOFT ORCHID PALETTE — single canonical source of truth ──────────────
+     The 10-step scale, defined ONCE here at :root so it's available to any
+     stylesheet in the document via normal CSS custom-property inheritance —
+     including the separate `.pi-root` (ProfileIntelligenceSettings.tsx) and
+     `.modes-manager-root` (premium/src/ModesSettings.tsx) token systems,
+     which are rendered in the same top-level document and consume these
+     values via var()/color-mix() rather than duplicating hex. If the hue
+     ever needs adjusting, this is the only place to change it.
+     --------------------------------------------------------------------- */
+  --orchid-50:  #FBF6FD;
+  --orchid-100: #F5E9F9;
+  --orchid-200: #EBCFF3;
+  --orchid-300: #D9A7E8; /* dark-mode accent (light bg, needs dark foreground) */
+  --orchid-400: #C987DD;
+  --orchid-500: #B66ACF;
+  --orchid-600: #984DB2; /* light-mode accent (contrast-corrected — see SoftOrchidContrastGuard.test.mjs) */
+  --orchid-700: #773B8B;
+  --orchid-800: #572C66;
+  --orchid-900: #3A1D45;
+  --orchid-on-accent-dark: #1A1020;  /* foreground for solid orchid-300 fills */
+  --orchid-on-accent-light: #FFFFFF; /* foreground for solid orchid-600 fills */
+
   /* --- SEMANTIC TOKEN SYSTEM (DEFAULT: DARK) --- */
   /* Reference Image Matching */
   --bg-sidebar: #18181B;
@@ -54,8 +76,9 @@
   --border-subtle: transparent;
   --border-muted: #333333;
 
-  --accent-primary: #3b82f6;
-  --accent-muted: rgba(59, 130, 246, 0.15);
+  /* Promoted from Settings-only to the app-wide default (Phase 2). */
+  --accent-primary: var(--orchid-300);
+  --accent-muted: color-mix(in srgb, var(--orchid-300) 15%, transparent);
 
   --bg-component: #262626;
   /* Specific legacy value */
@@ -92,13 +115,65 @@
   --overlay-pill-blur: calc(1px + (var(--overlay-opacity) * 12px));
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 6px);
 
-  /* Primary Action Button Defaults (Dark) */
-  --btn-primary-bg: #2563EB; /* blue-600 */
-  --btn-primary-hover: #3b82f6; /* blue-500 */
-  --btn-primary-disabled-bg: rgba(30, 58, 138, 0.3); /* blue-900/30 */
-  --btn-primary-disabled-border: rgba(30, 64, 175, 0.3); /* blue-800/30 */
-  --btn-primary-disabled-text: rgba(96, 165, 250, 0.4); /* blue-400/40 */
-  --btn-primary-shadow-color: rgba(30, 58, 138, 0.3); /* blue-900/30 */
+  /* Primary Action Button Defaults (Dark) — promoted to orchid (Phase 2) */
+  --btn-primary-bg: var(--orchid-300);
+  --btn-primary-hover: #E4BCEF; /* not a canonical scale step — dedicated lighter dark-mode hover tint */
+  --btn-primary-disabled-bg: color-mix(in srgb, var(--orchid-300) 12%, transparent);
+  --btn-primary-disabled-border: color-mix(in srgb, var(--orchid-300) 20%, transparent);
+  --btn-primary-disabled-text: color-mix(in srgb, var(--orchid-300) 45%, transparent);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--orchid-500) 20%, transparent);
+
+  /* Semantic accent tiers — promoted from Settings-only to the app-wide
+     default (Phase 2). Numerically identical to the [data-settings-theme
+     ="orchid"] scoped block below, which is now a redundant no-op override
+     kept only so a future Settings-specific divergence has somewhere to go. */
+  --accent-subtle: color-mix(in srgb, var(--orchid-300) 10%, transparent);
+  --accent-hover: #E4BCEF;
+  --accent-pressed: var(--orchid-400);
+  --accent-strong: var(--orchid-500);
+  --accent-border: color-mix(in srgb, var(--orchid-300) 28%, transparent);
+  --accent-focus: color-mix(in srgb, var(--orchid-300) 48%, transparent);
+  --accent-shadow-20: color-mix(in srgb, var(--orchid-500) 20%, transparent);
+  --on-accent: var(--orchid-on-accent-dark);
+  --on-accent-surface: color-mix(in srgb, var(--orchid-on-accent-dark) 12%, transparent);
+
+  /* Legacy blue action-button tokens — deliberately defined ONLY here and in
+     [data-theme='light'], never inside the [data-settings-theme="orchid"]
+     blocks below, so specific Settings CTAs can opt out of the orchid
+     accent and stay blue regardless of scope. */
+  --legacy-action-bg: #3b82f6;
+  --legacy-action-hover: #60a5fa;
+  --legacy-action-fg: #FFFFFF;
+  --legacy-action-subtle: rgba(59, 130, 246, 0.10);
+  --legacy-action-subtle-hover: rgba(59, 130, 246, 0.20);
+  --legacy-action-border: rgba(59, 130, 246, 0.28);
+  --legacy-action-shadow: rgba(59, 130, 246, 0.20);
+  --legacy-action-disabled-bg: rgba(30, 58, 138, 0.3);
+  --legacy-action-disabled-border: rgba(30, 64, 175, 0.3);
+  --legacy-action-disabled-text: rgba(96, 165, 250, 0.4);
+}
+
+/* Phase-1 Settings-only Soft Orchid accent override (dark mode), scoped via
+   data-settings-theme so the rest of the app keeps the blue brand accent. */
+[data-settings-theme="orchid"] {
+  --accent-primary: var(--orchid-300);
+  --accent-hover: #E4BCEF; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
+  --accent-pressed: var(--orchid-400);
+  --accent-strong: var(--orchid-500);
+  --accent-subtle: color-mix(in srgb, var(--orchid-300) 10%, transparent);
+  --accent-muted: color-mix(in srgb, var(--orchid-300) 16%, transparent);
+  --accent-border: color-mix(in srgb, var(--orchid-300) 28%, transparent);
+  --accent-focus: color-mix(in srgb, var(--orchid-300) 48%, transparent);
+  --accent-shadow-20: color-mix(in srgb, var(--orchid-500) 20%, transparent);
+  --on-accent: var(--orchid-on-accent-dark);
+  --on-accent-surface: color-mix(in srgb, var(--orchid-on-accent-dark) 12%, transparent);
+
+  --btn-primary-bg: var(--orchid-300);
+  --btn-primary-hover: #E4BCEF; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
+  --btn-primary-disabled-bg: color-mix(in srgb, var(--orchid-300) 12%, transparent);
+  --btn-primary-disabled-border: color-mix(in srgb, var(--orchid-300) 20%, transparent);
+  --btn-primary-disabled-text: color-mix(in srgb, var(--orchid-300) 45%, transparent);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--orchid-500) 20%, transparent);
 }
 
 [data-theme='light'] {
@@ -143,9 +218,9 @@
   --border-subtle:     rgba(0, 0, 0, 0.07);   /* card outlines, dividers          */
   --border-muted:      rgba(0, 0, 0, 0.11);   /* inputs, tables                   */
 
-  /* ── Accent ── */
-  --accent-primary:    #2563EB;   /* blue-600 — accessible, confident             */
-  --accent-muted:      rgba(37, 99, 235, 0.10);
+  /* ── Accent — promoted from Settings-only to the app-wide default (Phase 2) ── */
+  --accent-primary:    var(--orchid-600);
+  --accent-muted:      color-mix(in srgb, var(--orchid-600) 10%, transparent);
 
   --bg-component:      #F3F4F6;
 
@@ -167,7 +242,7 @@
   --overlay-code-bg:         rgba(249, 250, 251, 0.22);
   --overlay-code-border:     rgba(0, 0, 0, 0.08);
   --overlay-code-header-bg:  rgba(243, 244, 246, 0.28);
-  --overlay-inline-code-bg:  rgba(219, 234, 254, 0.42);
+  --overlay-inline-code-bg:  rgba(229, 229, 229, 0.62);
   --overlay-icon-bg:         rgba(255, 255, 255, 0.22);
   --overlay-icon-hover-bg:   rgba(243, 244, 246, 0.36);
   --overlay-panel-shadow:    rgb(0 0 0 / calc(0.04 + (var(--overlay-opacity) * 0.08)));
@@ -181,13 +256,57 @@
   --overlay-pill-blur:       calc(2px + (var(--overlay-opacity) * 12px));
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 5px);
 
-  /* Primary Action Button (Light) */
-  --btn-primary-bg: #2563EB; /* blue-600 */
-  --btn-primary-hover: #1d4ed8; /* blue-700 */
+  /* Primary Action Button (Light) — promoted to orchid (Phase 2) */
+  --btn-primary-bg: var(--orchid-600);
+  --btn-primary-hover: var(--orchid-700);
   --btn-primary-disabled-bg: var(--bg-input); /* #F9FAFB */
   --btn-primary-disabled-border: var(--border-subtle);
   --btn-primary-disabled-text: var(--text-tertiary);
-  --btn-primary-shadow-color: rgba(0, 0, 0, 0.05);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--orchid-600) 15%, transparent);
+
+  --accent-subtle: color-mix(in srgb, var(--orchid-600) 8%, transparent);
+  --accent-hover: var(--orchid-700);
+  --accent-pressed: var(--orchid-800);
+  --accent-strong: var(--orchid-700);
+  --accent-border: color-mix(in srgb, var(--orchid-600) 24%, transparent);
+  --accent-focus: color-mix(in srgb, var(--orchid-600) 40%, transparent);
+  --accent-shadow-20: color-mix(in srgb, var(--orchid-600) 18%, transparent);
+  --on-accent: var(--orchid-on-accent-light);
+  --on-accent-surface: color-mix(in srgb, var(--orchid-on-accent-light) 18%, transparent);
+
+  --legacy-action-bg: #2563EB;
+  --legacy-action-hover: #1d4ed8;
+  --legacy-action-fg: #FFFFFF;
+  --legacy-action-subtle: rgba(37, 99, 235, 0.08);
+  --legacy-action-subtle-hover: rgba(37, 99, 235, 0.16);
+  --legacy-action-border: rgba(37, 99, 235, 0.24);
+  --legacy-action-shadow: rgba(37, 99, 235, 0.18);
+  --legacy-action-disabled-bg: var(--bg-input);
+  --legacy-action-disabled-border: var(--border-subtle);
+  --legacy-action-disabled-text: var(--text-tertiary);
+}
+
+/* Phase-1 Settings-only Soft Orchid accent override (light mode), scoped via
+   data-settings-theme so the rest of the app keeps the blue brand accent. */
+[data-theme='light'] [data-settings-theme="orchid"] {
+  --accent-primary: var(--orchid-600);
+  --accent-hover: var(--orchid-700);
+  --accent-pressed: var(--orchid-800);
+  --accent-strong: var(--orchid-700);
+  --accent-subtle: color-mix(in srgb, var(--orchid-600) 8%, transparent);
+  --accent-muted: color-mix(in srgb, var(--orchid-600) 14%, transparent);
+  --accent-border: color-mix(in srgb, var(--orchid-600) 24%, transparent);
+  --accent-focus: color-mix(in srgb, var(--orchid-600) 40%, transparent);
+  --accent-shadow-20: color-mix(in srgb, var(--orchid-600) 18%, transparent);
+  --on-accent: var(--orchid-on-accent-light);
+  --on-accent-surface: color-mix(in srgb, var(--orchid-on-accent-light) 18%, transparent);
+
+  --btn-primary-bg: var(--orchid-600);
+  --btn-primary-hover: var(--orchid-700);
+  --btn-primary-disabled-bg: var(--bg-input);
+  --btn-primary-disabled-border: var(--border-subtle);
+  --btn-primary-disabled-text: var(--text-tertiary);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--orchid-600) 15%, transparent);
 }
 
 [data-theme='light'] .force-black-icon {
@@ -742,20 +861,20 @@
 [data-interface-theme="default"] .ai-response-card {
   position: relative;
   overflow: visible;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
+/* Chrome intentionally removed — only the user's question gets a card. Class + child color rules retained as the text-contrast cascade. */
 [data-theme='light'] [data-interface-theme="default"] .ai-response-card {
-  background: rgba(240, 244, 250, calc(var(--overlay-opacity) * 0.75)) !important;
-  border: 1px solid rgba(0, 0, 0, 0.07) !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
+/* Chrome intentionally removed — only the user's question gets a card. Class + child color rules retained as the text-contrast cascade. */
 [data-theme='dark'] [data-interface-theme="default"] .ai-response-card {
-  background: rgba(30, 34, 42, calc(var(--overlay-opacity) * 0.85)) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 /* Ensure child text elements match theme contrast in Default style */
@@ -804,42 +923,20 @@
 [data-interface-theme="liquid-glass"] .ai-response-card {
   position: relative;
   overflow: visible;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
 }
 
+/* Chrome intentionally removed — only the user's question gets a card. Class + child color rules retained as the text-contrast cascade. */
 [data-theme='light'] [data-interface-theme="liquid-glass"] .ai-response-card {
-  background:
-    linear-gradient(180deg,
-      rgba(255, 255, 255, 0.4) 0%,
-      rgba(255, 255, 255, 0.0) 45%,
-      rgba(0, 0, 0, 0.05) 100%
-    ),
-    rgb(244 244 245 / calc(var(--overlay-opacity) * 0.81)) !important;
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.05),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.2),
-    0 6px 16px rgba(0, 0, 0, 0.05),
-    0 2px 4px rgba(0, 0, 0, 0.03) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
+/* Chrome intentionally removed — only the user's question gets a card. Class + child color rules retained as the text-contrast cascade. */
 [data-theme='dark'] [data-interface-theme="liquid-glass"] .ai-response-card {
-  background:
-    linear-gradient(180deg,
-      rgba(255, 255, 255, 0.1) 0%,
-      rgba(255, 255, 255, 0.0) 45%,
-      rgba(0, 0, 0, 0.15) 100%
-    ),
-    rgb(255 255 255 / calc(var(--overlay-opacity) * 0.10)) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.15),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-    0 6px 16px rgba(0, 0, 0, 0.15),
-    0 2px 4px rgba(0, 0, 0, 0.08) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 /* In Liquid Glass, use dark zinc text in light mode and soft grey in dark mode */
@@ -890,38 +987,24 @@
   overflow: visible;
 }
 
+/* Chrome intentionally removed — only the user's question gets a card. Class + child color rules retained as the text-contrast cascade. */
 [data-theme='light'] [data-interface-theme="modern"] .ai-response-card {
-  background: linear-gradient(160deg,
-      rgba(250, 250, 250, calc(var(--overlay-opacity) * 1.25)) 0%,
-      rgba(240, 240, 243, calc(var(--overlay-opacity) * 1.25)) 50%,
-      rgba(225, 225, 230, calc(var(--overlay-opacity) * 1.25)) 100%
-    ) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.75) !important;
-  border-left: 1px solid rgba(255, 255, 255, 0.55) !important;
-  border-right: 1px solid rgba(0, 0, 0, 0.04) !important;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.12) !important;
-  box-shadow:
-    inset 0 2.5px 3px rgba(255, 255, 255, 0.90),
-    inset 0 -6px 12px rgba(0, 0, 0, 0.06),
-    0 8px 24px rgba(0, 0, 0, 0.08),
-    0 2px 5px rgba(0, 0, 0, 0.03) !important;
+  background: transparent !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
 }
 
+/* Chrome intentionally removed — only the user's question gets a card. Class + child color rules retained as the text-contrast cascade. */
 [data-theme='dark'] [data-interface-theme="modern"] .ai-response-card {
-  background: linear-gradient(160deg,
-      rgba(108, 108, 117, calc(var(--overlay-opacity) * 1.25)) 0%,
-      rgba(80, 80, 88, calc(var(--overlay-opacity) * 1.25)) 50%,
-      rgba(60, 60, 68, calc(var(--overlay-opacity) * 1.25)) 100%
-    ) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.32) !important;
-  border-left: 1px solid rgba(255, 255, 255, 0.18) !important;
-  border-right: 1px solid rgba(0, 0, 0, 0.12) !important;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.35) !important;
-  box-shadow:
-    inset 0 2.5px 3px rgba(255, 255, 255, 0.35),
-    inset 0 -6px 12px rgba(0, 0, 0, 0.20),
-    0 8px 24px rgba(0, 0, 0, 0.22),
-    0 2px 5px rgba(0, 0, 0, 0.12) !important;
+  background: transparent !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
 }
 
 
@@ -2005,6 +2088,172 @@ body {
 [data-theme='light'] .stt-error-card-reconnecting {
     background: var(--overlay-chip-bg);
     border-color: rgba(202, 138, 4, 0.22);
+}
+
+/* ─── "Waiting for answer" indicator — soft breathing pulse ──────────────
+   Replaces Tailwind's default .animate-bounce (a large springy translateY
+   keyframe that reads as generic/childish) with a calmer opacity+scale pulse,
+   matching the iMessage/Slack-style typing indicator: the dot barely moves,
+   it breathes. Mounted in two places (see NativelyInterface.tsx) — a single
+   dot, no stagger — that must stay visually identical. */
+@keyframes natively-thinking-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.8); }
+  45% { opacity: 1; transform: scale(1); }
+}
+
+.natively-thinking-dot {
+  animation: natively-thinking-pulse 0.9s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* A fully static dot reads as a stray artifact rather than "in progress"
+     with only one dot (no siblings to imply motion by contrast), so keep a
+     gentle opacity-only cycle instead of freezing it — no transform/scale,
+     which is the part reduced-motion users actually want suppressed. */
+  .natively-thinking-dot {
+    animation: natively-thinking-pulse-reduced 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes natively-thinking-pulse-reduced {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
+
+/* ─── Streaming "typing" cursor ───────────────────────────────────────────
+   Trailing glyph appended (as a real DOM node, see appendTypingCursorNode in
+   NativelyInterface.tsx) at the true tail of whatever is currently revealed —
+   inside the streaming imperative bubble AND the JIT-RAG state-rendered
+   bubble. Recreated on every paint while more text is being revealed, so it
+   renders solid (no time to blink) during active reveal, and blinks during
+   the natural idle gaps between bursts — exactly like a real terminal/typing
+   cursor. It disappears the instant the row finalizes, because finalizing
+   unmounts the whole streaming node (key="streaming"), taking this with it. */
+@keyframes natively-typing-cursor-blink {
+  0%, 45% { opacity: 1; }
+  50%, 95% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.reveal-typing-cursor {
+  display: inline;
+  font-weight: normal;
+  font-style: normal;
+  font-family: inherit;
+  color: currentColor;
+  opacity: 0.65;
+  animation: natively-typing-cursor-blink 1s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-typing-cursor {
+    display: none;
+  }
+}
+
+/* ─── Word-level reveal entrance (premium "typing" feel) ──────────────────
+   Each newly-revealed word — the imperative reveal-tail path
+   (paintRevealedNow/appendRevealTailDelta) AND the JIT-RAG plain-text bubble
+   (renderMessageText), NativelyInterface.tsx — gets wrapped in its own span
+   with this class the FIRST time it is inserted into the DOM.
+   @starting-style fires exactly once, at insertion; a later class/prop
+   update on the same DOM node (e.g. React re-rendering with the same key, or
+   this span simply sitting untouched while later siblings are appended)
+   never re-triggers it, so already-revealed words never re-flash. Word
+   granularity (not per-character) matches the pacer's own reveal cadence —
+   tickPacer (src/lib/textRevealPacing.mjs) snaps each frame's newly-revealed
+   slice to a whole-word boundary already, so one animated span == one
+   frame's worth of newly-visible text in the common case. */
+.reveal-word-in {
+  display: inline-block;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@starting-style {
+  .reveal-word-in {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-word-in {
+    transition: none;
+  }
+}
+
+/* .reveal-prefix / .reveal-tail: the two-layer structure paintRevealedNow
+   maintains inside the streaming bubble — prefix holds fully-parsed
+   markdown, tail holds the still-growing plain-text remainder (see that
+   function for the full rationale). Both are plain inline spans; no
+   standalone styling needed beyond what .markdown-content already provides
+   to their descendants. */
+.reveal-prefix,
+.reveal-tail {
+  display: inline;
+}
+
+/* ─── Streaming code: per-line reveal entrance ────────────────────────────
+   Applied to each completed line row inside StreamingHighlightedCode
+   (NativelyInterface.tsx) — the code-block equivalent of .reveal-word-in
+   above, at line granularity instead of word granularity because a
+   syntax-highlighted line is the smallest unit that can be safely animated
+   without fighting Prism's re-tokenization (see the block comment above
+   CodeStreamLine). Each row is keyed by its (stable, append-only) line
+   index, so @starting-style fires exactly once — when that line is first
+   completed and inserted — and never again as later lines are appended
+   below it. */
+.reveal-line-in {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@starting-style {
+  .reveal-line-in {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-line-in {
+    transition: none;
+  }
+}
+
+/* ─── Streaming code card: one-time mount cross-fade ──────────────────────
+   Fixes the "different layout before vs after" complaint: without this, the
+   row visibly SNAPS from the imperative prose bubble (thinking dots / plain
+   reveal text) to this React-rendered code-solution card the instant a ```
+   fence is detected — a silent, instant DOM swap (see the key="streaming"
+   unmount contract in renderMessageText). This fires once, at that exact
+   handoff instant (the div's identity is stable across every later paced
+   tick — see the comment at its call site), turning the hard cut into a
+   short, deliberate cross-fade. Kept snappy (150ms) — this is a UI
+   transition users will see on every single coding answer, not a rare
+   occasional surface, so per the animation decision framework it stays
+   brief rather than reaching for a slower "explanatory" duration. */
+.code-card-mount-in {
+  opacity: 1;
+  transition: opacity 150ms ease-out;
+}
+
+@starting-style {
+  .code-card-mount-in {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .code-card-mount-in {
+    transition: none;
+  }
 }
 
 .overlay-subtle-surface {
