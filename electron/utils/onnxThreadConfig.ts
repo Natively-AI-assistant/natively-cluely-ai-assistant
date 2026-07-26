@@ -121,9 +121,13 @@ function readMaxConcurrent(): number {
 
 function readMinFreeGB(): number {
     const raw = process.env.NATIVELY_ONNX_MIN_FREE_GB;
-    if (!raw) return 2.0;
-    const n = Number.parseFloat(raw);
-    return Number.isFinite(n) && n >= 0 ? n : 2.0;
+    if (raw) {
+        const n = Number.parseFloat(raw);
+        if (Number.isFinite(n) && n >= 0) return n;
+    }
+    // On Windows, low free memory causes severe working-set thrashing across
+    // Chromium renderer processes. Require 4.0GB available RAM floor by default.
+    return process.platform === 'win32' ? 4.0 : 2.0;
 }
 
 function canAcquireNow(priority: OnnxSlotPriority): boolean {

@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useT } from '../../i18n';
-import { Trash2, AlertCircle, CheckCircle, ExternalLink, Loader2, ChevronDown, Check, RefreshCw } from 'lucide-react';
+import { Trash2, AlertCircle, CheckCircle, ExternalLink, Loader2, ChevronDown, Check, RefreshCw, SlidersHorizontal, Filter } from 'lucide-react';
+import { STANDARD_CLOUD_MODELS } from '../../utils/modelUtils';
+import { Dialog, DialogContent } from '../ui/dialog';
 
 interface FetchedModel {
     id: string;
@@ -8,10 +10,12 @@ interface FetchedModel {
 }
 
 interface ProviderCardProps {
-    providerId: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek';
+    providerId: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'openrouter';
     providerName: string;
     apiKey: string;
     preferredModel?: string;
+    enabledModels?: string[];
+    onSetEnabledModels?: (models: string[]) => void;
     hasStoredKey: boolean;
     onKeyChange: (key: string) => void;
     onSaveKey: () => Promise<void>;
@@ -24,13 +28,22 @@ interface ProviderCardProps {
     keyPlaceholder: string;
     keyUrl: string;
     onPreferredModelChange?: (modelId: string) => void;
+    isDisabled?: boolean;
+    onToggleDisabled?: (disabled: boolean) => void;
+    icon?: React.ReactNode;
+    isFastProvider?: boolean;
+    fastModeEnabled?: boolean;
+    onToggleFastMode?: (enabled: boolean) => void;
+    id?: string;
 }
 
 export const ProviderCard: React.FC<ProviderCardProps> = ({
     providerId,
     providerName,
     apiKey,
-    preferredModel,
+    preferredModel: _preferredModel,
+    enabledModels = [],
+    onSetEnabledModels,
     hasStoredKey,
     onKeyChange,
     onSaveKey,
@@ -42,15 +55,22 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     savedStatus,
     keyPlaceholder,
     keyUrl,
-    onPreferredModelChange,
+    onPreferredModelChange: _onPreferredModelChange,
+    isDisabled = false,
+    onToggleDisabled,
+    icon,
+    isFastProvider = false,
+    fastModeEnabled = false,
+    onToggleFastMode,
+    id,
 }) => {
     const t = useT();
     const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
     const [isFetching, setIsFetching] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
-    const [selectedModel, setSelectedModel] = useState<string>(preferredModel || '');
-    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const dropdownRef = React.useRef<HTMLDivElement>(null);
+    const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [showSelectedOnly, setShowSelectedOnly] = useState(false);
 
     // Refs to avoid stale closures in the auto-save timer
     const savedRef = useRef(savedStatus);
@@ -58,63 +78,62 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     savedRef.current = savedStatus;
     savingRef.current = savingStatus;
 
-    // Auto-save API key after 5 seconds of inactivity
+    // Load cached models or fallback to standard models
     useEffect(() => {
-        if (!apiKey.trim()) return;
+        const cacheKey = `cached-models-${providerId}`;
+        const cachedStr = localStorage.getItem(cacheKey);
+        let list: FetchedModel[] = [];
+
+        if (cachedStr) {
+            try {
+                const parsed = JSON.parse(cachedStr);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    list = parsed;
+                }
+            } catch { /* noop */ }
+        }
+
+        const std = STANDARD_CLOUD_MODELS[providerId];
+        if (std) {
+            std.ids.forEach((id, i) => {
+                if (!list.some(m => m.id === id)) {
+                    list.push({ id, label: std.names[i] || id });
+                }
+            });
+        }
+
+        setFetchedModels(list);
+    }, [providerId]);
+
+    // Auto-save API key after 5 seconds of inactivity when not saved
+    useEffect(() => {
+        if (hasStoredKey || !apiKey.trim()) return;
         const timer = setTimeout(() => {
             if (!savedRef.current && !savingRef.current) {
                 onSaveKey().catch(console.error);
             }
         }, 5000);
         return () => clearTimeout(timer);
-    }, [apiKey]);
-
-    // Sync preferredModel prop
-    useEffect(() => {
-        if (preferredModel) setSelectedModel(preferredModel);
-    }, [preferredModel]);
-
-    // Close dropdown on outside click
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-                setIsDropdownOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+    }, [apiKey, hasStoredKey]);
 
     const handleFetchModels = async () => {
         setIsFetching(true);
         setFetchError(null);
 
         try {
-            // If a new key is entered, save it first
-            if (apiKey.trim()) {
+            if (!hasStoredKey && apiKey.trim()) {
                 await onSaveKey();
             }
 
-            // Fetch models using the key (or stored key)
             const keyToUse = apiKey.trim() || '';
             // @ts-ignore
             const result = await window.electronAPI?.fetchProviderModels(providerId, keyToUse);
 
-            if (result?.success && result.models) {
+            if (result?.success && result.models && result.models.length > 0) {
                 setFetchedModels(result.models);
-                // If we have a preferred model that exists in the list, keep it; otherwise auto-select first
-                if (result.models.length > 0) {
-                    const existsInList = result.models.some((m: FetchedModel) => m.id === selectedModel);
-                    if (!existsInList) {
-                        const firstModel = result.models[0].id;
-                        setSelectedModel(firstModel);
-                        // @ts-ignore
-                        await window.electronAPI?.setProviderPreferredModel(providerId, firstModel);
-                        if (onPreferredModelChange) {
-                            onPreferredModelChange(firstModel);
-                        }
-                    }
-                }
+                try {
+                    localStorage.setItem(`cached-models-${providerId}`, JSON.stringify(result.models));
+                } catch { /* noop */ }
             } else {
                 setFetchError(result?.error || 'Failed to fetch models');
             }
@@ -125,147 +144,341 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         }
     };
 
-    const handleSelectModel = async (modelId: string) => {
-        setSelectedModel(modelId);
-        setIsDropdownOpen(false);
-        try {
-            // @ts-ignore
-            await window.electronAPI?.setProviderPreferredModel(providerId, modelId);
-            if (onPreferredModelChange) {
-                onPreferredModelChange(modelId);
-            }
-        } catch (e) {
-            console.error('Failed to save preferred model:', e);
+    const handleToggleModel = (modelId: string) => {
+        if (!onSetEnabledModels) return;
+
+        let currentEnabled: string[];
+        if (!enabledModels || enabledModels.length === 0) {
+            currentEnabled = fetchedModels.map(m => m.id);
+        } else {
+            currentEnabled = enabledModels.filter(m => m !== '_none_');
         }
+
+        let next: string[];
+        if (currentEnabled.includes(modelId)) {
+            next = currentEnabled.filter(id => id !== modelId);
+            if (next.length === 0) next = ['_none_'];
+        } else {
+            next = [...currentEnabled, modelId];
+        }
+
+        onSetEnabledModels(next);
+        // @ts-ignore
+        window.electronAPI?.setCloudEnabledModels?.(providerId, next);
     };
 
-    const selectedOption = fetchedModels.find(m => m.id === selectedModel);
+    const handleEnableAll = () => {
+        if (!onSetEnabledModels) return;
+        const allIds = fetchedModels.map(m => m.id);
+        onSetEnabledModels(allIds);
+        // @ts-ignore
+        window.electronAPI?.setCloudEnabledModels?.(providerId, allIds);
+    };
+
+    const handleDisableAll = () => {
+        if (!onSetEnabledModels) return;
+        onSetEnabledModels(['_none_']);
+        // @ts-ignore
+        window.electronAPI?.setCloudEnabledModels?.(providerId, ['_none_']);
+    };
+
+    const totalModels = fetchedModels.length;
+    const isNone = enabledModels.includes('_none_');
+    const enabledCount = isNone
+        ? 0
+        : (!enabledModels || enabledModels.length === 0)
+            ? totalModels
+            : fetchedModels.filter(m => enabledModels.includes(m.id)).length;
+
+    const filteredModels = useMemo(() => {
+        const query = searchQuery.toLowerCase();
+        return fetchedModels.filter(m => {
+            const isModelEnabled = (!enabledModels || enabledModels.length === 0) || (enabledModels.includes(m.id) && !enabledModels.includes('_none_'));
+            if (showSelectedOnly && !isModelEnabled) return false;
+            return (
+                m.label.toLowerCase().includes(query) ||
+                m.id.toLowerCase().includes(query)
+            );
+        });
+    }, [fetchedModels, enabledModels, showSelectedOnly, searchQuery]);
 
     return (
-        <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle">
-            <div className="mb-2 flex items-center justify-between">
-                <label className="flex items-center text-xs font-medium text-text-primary uppercase tracking-wide">
-                    {providerName} {t('API Key')}
-                    {hasStoredKey && <span className="ml-2 text-green-500 normal-case">✓ {t('Saved')}</span>}
-                </label>
-                <button
-                    onClick={() => {
-                        // @ts-ignore
-                        window.electronAPI?.openExternal(keyUrl);
-                    }}
-                    className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors"
-                    title={`Get ${providerName} API Key`}
-                >
-                    <span className="text-[10px] uppercase tracking-wide">{t('Get Key')}</span>
-                    <ExternalLink size={12} />
-                </button>
-            </div>
-            <div className="flex gap-2 mb-3">
-                <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => onKeyChange(e.target.value)}
-                    placeholder={hasStoredKey ? "••••••••••••" : keyPlaceholder}
-                    className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
-                />
-                <button
-                    onClick={onSaveKey}
-                    disabled={savingStatus || !apiKey.trim()}
-                    className={`px-5 py-2.5 rounded-lg text-xs font-medium transition-colors ${savedStatus
-                        ? 'bg-green-500/20 text-green-400'
-                        : 'bg-bg-input hover:bg-bg-secondary border border-border-subtle text-text-primary disabled:opacity-50'
-                        }`}
-                >
-                    {savingStatus ? t('Saving...') : savedStatus ? t('Saved!') : t('Save')}
-                </button>
-                {hasStoredKey && (
+        <div id={id || `provider-card-${providerId}`} className={`bg-bg-item-surface rounded-xl p-5 border transition-all ${isDisabled ? 'border-transparent bg-bg-item-surface/40 opacity-70 shadow-none' : 'border-border-subtle'}`}>
+            {/* Header Row */}
+            <div className={`flex items-center justify-between ${isDisabled ? 'mb-0' : 'mb-3'}`}>
+                <div className="flex items-center gap-2.5">
+                    {icon && <div className="shrink-0 flex items-center justify-center">{icon}</div>}
+                    <label className="flex items-center gap-2 text-xs font-bold text-text-primary uppercase tracking-wide">
+                        {providerName} {t('API Key')}
+                    </label>
+                    {isDisabled ? (
+                        <span className="text-[10px] font-semibold text-amber-500/90 dark:text-amber-400/90 uppercase tracking-wider px-2 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded-full">
+                            {t('Disabled')}
+                        </span>
+                    ) : hasStoredKey ? (
+                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center gap-1">
+                            ✓ {t('Configured')}
+                        </span>
+                    ) : (
+                        <span className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider px-2 py-0.5 bg-bg-input border border-border-subtle rounded-full">
+                            {t('Not Set')}
+                        </span>
+                    )}
+                </div>
+                <div className="flex items-center gap-3">
+                    {isFastProvider && onToggleFastMode && !isDisabled && (
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-500/10 rounded-lg border border-orange-500/20" title={t("Fast Response Mode for this provider")}>
+                            <span className="text-[10px] font-bold text-orange-500 dark:text-orange-400 flex items-center gap-0.5">⚡ {t('Fast Mode')}</span>
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onToggleFastMode(!fastModeEnabled);
+                                }}
+                                className={`w-7 h-4 rounded-full relative cursor-pointer transition-colors ${fastModeEnabled ? 'bg-orange-500' : 'bg-zinc-300 dark:bg-zinc-700/80 border border-zinc-400/40 dark:border-zinc-600/50'}`}
+                            >
+                                <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform ${fastModeEnabled ? 'translate-x-3' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+                    )}
                     <button
-                        onClick={onRemoveKey}
-                        className="px-2.5 py-2.5 rounded-lg text-xs font-medium text-text-tertiary hover:text-red-500 hover:bg-red-500/10 transition-all"
-                        title={t("Remove API Key")}
+                        onClick={() => {
+                            if (isDisabled) return;
+                            // @ts-ignore
+                            window.electronAPI?.openExternal(keyUrl);
+                        }}
+                        className={`text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors ${isDisabled ? 'opacity-50 pointer-events-none' : ''}`}
+                        title={`Get ${providerName} API Key`}
+                        disabled={isDisabled}
                     >
-                        <Trash2 size={16} strokeWidth={1.5} />
+                        <span className="text-[10px] uppercase tracking-wide">{t('Get Key')}</span>
+                        <ExternalLink size={12} />
                     </button>
-                )}
+                    {onToggleDisabled && (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleDisabled(!isDisabled);
+                            }}
+                            className={`shrink-0 w-9 h-5 rounded-full relative cursor-pointer transition-colors border ${isDisabled ? 'bg-zinc-300 dark:bg-zinc-700/80 border-zinc-400/40 dark:border-zinc-600/50' : 'bg-emerald-500 border-emerald-400'}`}
+                            title={isDisabled ? t("Enable Provider") : t("Disable Provider")}
+                        >
+                            <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ease-out ${isDisabled ? 'translate-x-0' : 'translate-x-4'}`} />
+                        </button>
+                    )}
+                </div>
             </div>
 
-            {/* Action Row: Test Connection + Conditional Dropdown + Fetch Models */}
-            <div className="flex items-center justify-between mb-3 w-full">
-                <button
-                    onClick={onTestConnection}
-                    disabled={(!apiKey.trim() && !hasStoredKey) || testStatus === 'testing'}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-border-subtle flex items-center gap-2 shrink-0 ${testStatus === 'success' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
-                        testStatus === 'error' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                            'bg-bg-input hover:bg-bg-elevated text-text-primary'
-                        }`}
-                    title={testError || t("Test Connection")}
-                >
-                    {testStatus === 'testing' ? <><Loader2 size={12} className="animate-spin" /> {t('Testing...')}</> :
-                        testStatus === 'success' ? <><CheckCircle size={12} /> {t('Connected')}</> :
-                            testStatus === 'error' ? <><AlertCircle size={12} /> {t('Error')}</> :
-                                <>{/* No Icon */} {t('Test Connection')}</>}
-                </button>
-
-                {/* Inline Model Dropdown */}
-                {fetchedModels.length > 0 || preferredModel ? (
-                    <div className="relative flex-1 max-w-[200px] mx-4" ref={dropdownRef}>
-                        <button
-                            onClick={() => fetchedModels.length > 0 && setIsDropdownOpen(!isDropdownOpen)}
-                            className={`w-full bg-bg-input border border-border-subtle rounded-md px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary flex items-center justify-between transition-colors ${fetchedModels.length > 0 ? 'hover:bg-bg-elevated' : 'opacity-80 cursor-default'}`}
-                            type="button"
-                        >
-                            <span className="truncate pr-2">{selectedOption ? selectedOption.label : (preferredModel || t('Select model'))}</span>
-                            <ChevronDown size={14} className={`text-text-secondary transition-transform ${isDropdownOpen ? 'rotate-180' : ''} ${fetchedModels.length === 0 ? 'opacity-50' : ''}`} />
-                        </button>
-
-                        {isDropdownOpen && fetchedModels.length > 0 && (
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-full min-w-[200px] bg-bg-elevated border border-border-subtle rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto animated fadeIn">
-                                <div className="p-1 space-y-0.5">
-                                    {fetchedModels.map((model) => (
-                                        <button
-                                            key={model.id}
-                                            onClick={() => handleSelectModel(model.id)}
-                                            className={`w-full text-left px-3 py-2 text-xs rounded-md flex items-center justify-between group transition-colors ${selectedModel === model.id ? 'bg-bg-input hover:bg-bg-elevated text-text-primary' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                            type="button"
-                                        >
-                                            <span className="truncate">{model.label}</span>
-                                            {selectedModel === model.id && <Check size={14} className="text-accent-primary shrink-0 ml-2" />}
-                                        </button>
-                                    ))}
+            {!isDisabled && (
+                <>
+                    {/* UNCONFIGURED STATE: Show API Key Input + Save Button only */}
+                    {!hasStoredKey ? (
+                        <div className="flex gap-2">
+                            <input
+                                type="password"
+                                value={apiKey}
+                                onChange={(e) => onKeyChange(e.target.value)}
+                                placeholder={keyPlaceholder}
+                                disabled={isDisabled}
+                                className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors disabled:opacity-50"
+                            />
+                            <button
+                                onClick={onSaveKey}
+                                disabled={savingStatus || !apiKey.trim() || isDisabled}
+                                className={`px-5 py-2.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${savedStatus
+                                    ? 'bg-green-500/20 text-green-400'
+                                    : 'bg-bg-input hover:bg-bg-secondary border border-border-subtle text-text-primary disabled:opacity-50'
+                                    }`}
+                            >
+                                {savingStatus ? t('Saving...') : savedStatus ? t('Saved!') : t('Save')}
+                            </button>
+                        </div>
+                    ) : (
+                        /* CONFIGURED STATE: Show Manage Models + Test Connection + Remove Key */
+                        <div className="flex items-center justify-between gap-2.5 w-full">
+                            {/* 1. Manage Models Button */}
+                            <button
+                                type="button"
+                                onClick={() => setIsManageModalOpen(true)}
+                                disabled={isDisabled}
+                                className="flex-1 max-w-[320px] bg-bg-input hover:bg-bg-elevated border border-border-subtle rounded-md px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary flex items-center justify-between transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                                <div className="flex items-center gap-2 truncate">
+                                    <SlidersHorizontal size={13} className="text-accent-primary shrink-0" />
+                                    <span className="truncate font-medium">
+                                        {t('Manage Models')} ({enabledCount}/{totalModels})
+                                    </span>
                                 </div>
+                                <ChevronDown size={14} className="text-text-secondary shrink-0 ml-1" />
+                            </button>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                                {/* 2. Test Connection Button */}
+                                <button
+                                    onClick={onTestConnection}
+                                    disabled={testStatus === 'testing' || isDisabled}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-border-subtle flex items-center gap-2 shrink-0 cursor-pointer ${testStatus === 'success' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
+                                        testStatus === 'error' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                                        'bg-bg-input hover:bg-bg-elevated text-text-primary'
+                                        } disabled:opacity-50`}
+                                    title={testError || t("Test Connection")}
+                                >
+                                    {testStatus === 'testing' ? <><Loader2 size={12} className="animate-spin" /> {t('Testing...')}</> :
+                                        testStatus === 'success' ? <><CheckCircle size={12} /> {t('Connected')}</> :
+                                        testStatus === 'error' ? <><AlertCircle size={12} /> {t('Error')}</> :
+                                        <>{t('Test Connection')}</>}
+                                </button>
+
+                                {/* 3. Remove API Key Button */}
+                                <button
+                                    onClick={onRemoveKey}
+                                    disabled={isDisabled}
+                                    className="p-2 rounded-md text-xs font-medium text-text-tertiary hover:text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center"
+                                    title={t("Remove API Key")}
+                                >
+                                    <Trash2 size={14} strokeWidth={1.5} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {testStatus === 'error' && testError && (
+                        <div className="mt-2 text-xs text-red-500 bg-red-500/10 border border-red-500/20 rounded-md p-2 flex items-center gap-2">
+                            <AlertCircle size={14} className="shrink-0" />
+                            <span>{testError}</span>
+                        </div>
+                    )}
+                    {fetchError && (
+                        <div className="mt-2 text-xs text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-md p-2 flex items-center gap-2">
+                            <AlertCircle size={14} className="shrink-0" />
+                            <span>{fetchError}</span>
+                        </div>
+                    )}
+                </>
+            )}
+
+            {/* MANAGE SELECTABLE MODELS MODAL FOR THIS PROVIDER */}
+            <Dialog open={isManageModalOpen} onOpenChange={setIsManageModalOpen}>
+                <DialogContent className="w-[540px] max-w-[92vw] bg-bg-elevated border border-border-subtle p-6 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] animated fadeIn text-xs text-text-primary opacity-100 ring-1 ring-border-subtle/50">
+                    <div className="flex items-center justify-between mb-4 border-b border-border-subtle pb-3">
+                        <div>
+                            <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
+                                {t('Manage Selectable')} {providerName} {t('Models')}
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-mono">
+                                    {enabledCount} / {totalModels} Enabled
+                                </span>
+                            </h3>
+                            <p className="text-[11px] text-text-secondary mt-0.5">{t('Select which models appear in your active model dropdowns.')}</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setIsManageModalOpen(false)}
+                            className="p-1.5 rounded-lg hover:bg-bg-input text-text-tertiary hover:text-text-primary transition-colors cursor-pointer"
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    {/* Search & Refresh Actions */}
+                    <div className="flex gap-2 mb-3 shrink-0">
+                        <input
+                            type="text"
+                            placeholder={t('Search models...')}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary font-mono"
+                        />
+                        <button
+                            type="button"
+                            onClick={handleFetchModels}
+                            disabled={isFetching}
+                            className="px-3.5 py-2 bg-accent-primary hover:bg-accent-primary-hover text-white rounded-lg font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer shrink-0"
+                            title={t("Fetch/Discover latest models for this provider")}
+                        >
+                            <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
+                            {isFetching ? t('Fetching...') : t('Fetch Models')}
+                        </button>
+                    </div>
+
+                    {/* Quick Selection Buttons + Show Selected Filter */}
+                    <div className="flex items-center justify-between mb-3 shrink-0">
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={handleEnableAll}
+                                className="px-2.5 py-1 bg-bg-input hover:bg-bg-item-surface border border-border-subtle rounded-md text-[11px] font-medium text-text-primary transition-colors cursor-pointer"
+                            >
+                                {t('Enable All')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDisableAll}
+                                className="px-2.5 py-1 bg-bg-input hover:bg-bg-item-surface border border-border-subtle rounded-md text-[11px] font-medium text-text-primary transition-colors cursor-pointer"
+                            >
+                                {t('Disable All')}
+                            </button>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowSelectedOnly(!showSelectedOnly)}
+                            className={`px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                                showSelectedOnly
+                                    ? 'bg-accent-primary/20 border-accent-primary/50 text-accent-primary font-bold'
+                                    : 'bg-bg-input hover:bg-bg-item-surface border-border-subtle text-text-secondary hover:text-text-primary'
+                            }`}
+                        >
+                            <Filter size={11} />
+                            {showSelectedOnly ? t('Selected Only') : t('Show All')}
+                        </button>
+                    </div>
+
+                    {/* Scrollable Model List */}
+                    <div className="flex-1 overflow-y-auto min-h-[220px] max-h-[360px] border border-border-subtle rounded-xl bg-bg-input p-2 space-y-1.5">
+                        {filteredModels.map((model) => {
+                            const isModelEnabled = (!enabledModels || enabledModels.length === 0) || (enabledModels.includes(model.id) && !enabledModels.includes('_none_'));
+
+                            return (
+                                <div
+                                    key={model.id}
+                                    onClick={() => handleToggleModel(model.id)}
+                                    className={`flex items-center justify-between p-2.5 rounded-lg border transition-colors duration-150 cursor-pointer ${
+                                        isModelEnabled
+                                            ? 'bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/30 text-emerald-900 dark:text-emerald-300'
+                                            : 'bg-bg-item-surface dark:bg-zinc-900/60 border-zinc-200 dark:border-transparent hover:border-zinc-300 dark:hover:border-zinc-700/60 dark:hover:bg-zinc-800/80'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                        <div className={`w-4 h-4 rounded border transition-colors flex items-center justify-center shrink-0 ${
+                                            isModelEnabled
+                                                ? 'bg-emerald-500 border-emerald-400 text-white'
+                                                : 'bg-bg-input border-zinc-400 dark:border-zinc-500 text-transparent hover:border-zinc-500 dark:hover:border-zinc-400'
+                                        }`}>
+                                            <Check size={11} strokeWidth={3} />
+                                        </div>
+                                        <div className="flex flex-col truncate">
+                                            <span className="font-mono text-xs text-text-primary truncate" title={model.id}>
+                                                {model.label}
+                                            </span>
+                                            {model.id !== model.label && (
+                                                <span className="font-mono text-[10px] text-text-tertiary truncate">
+                                                    {model.id}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {filteredModels.length === 0 && (
+                            <div className="flex flex-col items-center justify-center py-10 text-text-tertiary text-[11px] italic gap-1">
+                                <span>{showSelectedOnly ? t('No selected models to display.') : t('No models found.')}</span>
+                                <span>{t('Click "Fetch Models" to discover available models for this provider.')}</span>
                             </div>
                         )}
                     </div>
-                ) : (
-                    <div className="flex-1 mx-4" />
-                )}
-
-                {hasStoredKey ? (
-                    <button
-                        onClick={handleFetchModels}
-                        disabled={isFetching}
-                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-border-subtle flex items-center gap-2 shrink-0 ${isFetching
-                            ? 'bg-bg-input text-text-secondary'
-                            : 'bg-accent-primary/10 text-accent-primary border-accent-primary/20 hover:bg-accent-primary/20'
-                            }`}
-                    >
-                        {isFetching ? (
-                            <><Loader2 size={12} className="animate-spin" /> {t('Fetching...')}</>
-                        ) : (
-                            <><RefreshCw size={12} /> {t('Fetch Models')}</>
-                        )}
-                    </button>
-                ) : (
-                    // Placeholder span to perfectly balance flex-between if button isn't shown
-                    <span className="w-[110px]" />
-                )}
-            </div>
-
-            {/* Error from test or fetch */}
-            {testError && <p className="text-[10px] text-red-400 mt-1.5 mb-2">{testError}</p>}
-            {fetchError && <p className="text-[10px] text-red-400 mt-1.5 mb-2">{t('Model fetch error:')} {fetchError}</p>}
-
-
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

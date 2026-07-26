@@ -318,11 +318,11 @@ export const FeatureSpotlight: React.FC = () => {
                                                 <motion.div
                                                     variants={{
                                                         hover: isInterested ? {
-                                                            rotate: [0, -10, 10, -10, 10, 0],
-                                                            transition: { duration: 0.5, repeat: Infinity, repeatDelay: 2 }
+                                                            rotate: [0, -10, 10, 0],
+                                                            transition: { duration: 0.4 }
                                                         } : (isSupport ? {
                                                             x: [0, 4, 0],
-                                                            transition: { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
+                                                            transition: { duration: 0.4 }
                                                         } : {})
                                                     }}
                                                 >

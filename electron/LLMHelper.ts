@@ -252,6 +252,8 @@ export class LLMHelper {
   private openaiApiKey: string | null = null
   private claudeApiKey: string | null = null
   private deepseekApiKey: string | null = null
+  private openrouterApiKey: string | null = null
+  private openrouterClient: OpenAI | null = null
   private litellmApiKey: string | null = null
   private litellmBaseURL: string = "http://localhost:4000/v1"
   // Manual output-ceiling override (Settings → LiteLLM Proxy dropdown).
@@ -600,6 +602,26 @@ export class LLMHelper {
     this.deepseekPermanentlyDead = false;
     this.deepseekSkipWarned = false;
     console.log("[LLMHelper] DeepSeek API Key updated.");
+  }
+
+  public setOpenrouterApiKey(apiKey: string) {
+    const trimmed = (apiKey || '').trim();
+    if (!trimmed) {
+      this.openrouterApiKey = null;
+      this.openrouterClient = null;
+      console.log("[LLMHelper] OpenRouter API Key cleared.");
+      return;
+    }
+    this.openrouterApiKey = trimmed;
+    this.openrouterClient = new OpenAI({
+      apiKey: trimmed,
+      baseURL: 'https://openrouter.ai/api/v1',
+      defaultHeaders: {
+        'HTTP-Referer': 'https://natively.ai',
+        'X-Title': 'Natively AI',
+      },
+    });
+    console.log("[LLMHelper] OpenRouter API Key updated.");
   }
 
   /**

@@ -1916,6 +1916,20 @@ body {
   100% { filter: drop-shadow(0 0 0 rgba(167, 139, 250, 0)); }
 }
 
+/* ─── ConnectCalendarButton (connected state) animations ─────────────────
+   CSS keyframes replace framer-motion repeat:Infinity JS loops to keep
+   these on the compositor thread and prevent rasterizer tile churn.
+   ─────────────────────────────────────────────────────────────────────── */
+@keyframes calendar-aurora {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.75; }
+}
+
+@keyframes calendar-shimmer {
+  0% { transform: translateX(-200%) skewX(-12deg); }
+  40%, 100% { transform: translateX(200%) skewX(-12deg); }
+}
+
 .aurora-focus {
   position: relative;
   transform: translateZ(0);

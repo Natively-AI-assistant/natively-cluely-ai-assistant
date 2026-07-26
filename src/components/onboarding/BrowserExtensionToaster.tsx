@@ -353,14 +353,12 @@ const IndigoCTA: React.FC<{ label: string; onClick: () => void; disabled: boolea
 
       {/* Shimmer */}
       {!reduced && !disabled && (
-        <motion.div aria-hidden
+        <div aria-hidden
           style={{
             position: 'absolute', inset: 0, pointerEvents: 'none',
-            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 50%, transparent 100%)',
+            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 50%, transparent 100%)',
             transform: 'skewX(-14deg)', zIndex: 2,
           }}
-          animate={{ x: ['-130%', '230%'] }}
-          transition={{ duration: 1.8, ease: 'easeInOut', repeat: Infinity, repeatDelay: 5.5 }}
         />
       )}
 

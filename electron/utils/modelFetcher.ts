@@ -10,7 +10,7 @@ export interface ProviderModel {
     label: string;
 }
 
-type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek';
+type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'openrouter';
 
 /**
  * Fetch available models from a provider's API.
@@ -31,6 +31,8 @@ export async function fetchProviderModels(
             return fetchGeminiModels(apiKey);
         case 'deepseek':
             return fetchDeepSeekModels(apiKey);
+        case 'openrouter':
+            return fetchOpenRouterModels(apiKey);
         default:
             throw new Error(`Unknown provider: ${provider}`);
     }
@@ -210,5 +212,23 @@ async function fetchGeminiModels(apiKey: string): Promise<ProviderModel[]> {
             const id = (m.name || '').replace(/^models\//, '');
             return { id, label: m.displayName || id };
         })
+        .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+// ─── OpenRouter ─────────────────────────────────────────────────────────────
+
+async function fetchOpenRouterModels(apiKey: string): Promise<ProviderModel[]> {
+    const response = await axios.get('https://openrouter.ai/api/v1/models', {
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'HTTP-Referer': 'https://natively.ai',
+            'X-Title': 'Natively AI',
+        },
+        timeout: 15000,
+    });
+
+    const models: any[] = response.data?.data || [];
+    return models
+        .map((m: any) => ({ id: m.id, label: m.name || m.id }))
         .sort((a, b) => a.label.localeCompare(b.label));
 }

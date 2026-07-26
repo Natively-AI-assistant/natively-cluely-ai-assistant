@@ -1278,20 +1278,22 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     setInputDevices(formatDevices(inputs));
                     setOutputDevices(formatDevices(outputs));
 
-                    // Load saved preferences
+                    // Load saved preferences - fallback to 'default' for system default audio
                     const savedInput = localStorage.getItem('preferredInputDeviceId');
                     const savedOutput = localStorage.getItem('preferredOutputDeviceId');
 
                     if (savedInput && inputs.find((d: any) => d.id === savedInput)) {
                         setSelectedInput(savedInput);
-                    } else if (inputs.length > 0 && !selectedInput) {
-                        setSelectedInput(inputs[0].id);
+                    } else {
+                        localStorage.removeItem('preferredInputDeviceId');
+                        setSelectedInput('default');
                     }
 
                     if (savedOutput && outputs.find((d: any) => d.id === savedOutput)) {
                         setSelectedOutput(savedOutput);
-                    } else if (outputs.length > 0 && !selectedOutput) {
-                        setSelectedOutput(outputs[0].id);
+                    } else {
+                        localStorage.removeItem('preferredOutputDeviceId');
+                        setSelectedOutput('default');
                     }
                 } catch (e) {
                     console.error("Error loading native devices:", e);

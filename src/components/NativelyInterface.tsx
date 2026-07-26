@@ -6496,7 +6496,7 @@ Provide only the answer, nothing else.`;
                       className={`
                                                 flex items-center gap-2 px-3 py-1.5
                                                 border rounded-lg transition-colors
-                                                text-xs font-medium w-[140px]
+                                                text-xs font-medium min-w-[170px] max-w-[240px]
                                                 interaction-base interaction-press
                                                 ${controlSurfaceClass}
                                             `}

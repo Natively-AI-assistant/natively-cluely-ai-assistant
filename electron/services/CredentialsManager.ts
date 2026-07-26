@@ -45,6 +45,7 @@ export interface StoredCredentials {
     openaiApiKey?: string;
     claudeApiKey?: string;
     deepseekApiKey?: string;
+    openrouterApiKey?: string;
     litellmApiKey?: string;
     litellmBaseURL?: string;
     /** Manual output ceiling for LiteLLM-proxied models. Unset → Auto (per-model via /model/info). */
@@ -79,6 +80,8 @@ export interface StoredCredentials {
     openaiPreferredModel?: string;
     claudePreferredModel?: string;
     deepseekPreferredModel?: string;
+    openrouterPreferredModel?: string;
+    cloudEnabledModels?: Record<string, string[]>;
     // Free trial state
     trialToken?: string;   // server-issued signed token (natively_trial_…)
     trialExpiresAt?: string;   // ISO timestamp — local copy for startup check
@@ -122,6 +125,9 @@ export interface StoredCredentials {
          */
         lastRefreshAt?: number;
     };
+    disabledProviders?: string[];
+    litellmModels?: string[];
+    litellmEnabledModels?: string[];
 }
 
 export class CredentialsManager {
@@ -230,6 +236,17 @@ export class CredentialsManager {
 
     public getDeepseekApiKey(): string | undefined {
         return this.credentials.deepseekApiKey;
+    }
+
+    public getOpenrouterApiKey(): string | undefined {
+        return this.credentials.openrouterApiKey;
+    }
+
+    public setOpenrouterApiKey(key: string): void {
+        const trimmed = (key || '').trim();
+        this.credentials.openrouterApiKey = trimmed || undefined;
+        this.saveCredentials();
+        console.log('[CredentialsManager] OpenRouter API Key updated');
     }
 
     /** Persisted loopback-scoped companion-extension token (stable across restarts). */
@@ -361,6 +378,33 @@ export class CredentialsManager {
         return this.credentials.nativelyApiKey;
     }
 
+    public getDisabledProviders(): string[] {
+        return this.credentials.disabledProviders || [];
+    }
+
+    public getLitellmModels(): string[] {
+        return this.credentials.litellmModels || [];
+    }
+
+    public getLitellmEnabledModels(): string[] {
+        return this.credentials.litellmEnabledModels || [];
+    }
+
+    public getCloudEnabledModels(provider: string): string[] {
+        if (!this.credentials.cloudEnabledModels) return [];
+        return this.credentials.cloudEnabledModels[provider] || [];
+    }
+
+    public setCloudEnabledModels(provider: string, models: string[]): boolean {
+        if (!this.credentials.cloudEnabledModels) {
+            this.credentials.cloudEnabledModels = {};
+        }
+        this.credentials.cloudEnabledModels[provider] = models;
+        const persisted = this.saveCredentials();
+        console.log(`[CredentialsManager] Cloud enabled models updated for ${provider}:`, models);
+        return persisted;
+    }
+
     public getAllCredentials(): StoredCredentials {
         return { ...this.credentials };
     }
@@ -438,6 +482,24 @@ export class CredentialsManager {
         this.credentials.deepseekApiKey = trimmed || undefined;
         this.saveCredentials();
         console.log('[CredentialsManager] DeepSeek API Key updated');
+    }
+
+    public setDisabledProviders(providers: string[]): void {
+        this.credentials.disabledProviders = providers;
+        this.saveCredentials();
+        console.log('[CredentialsManager] Disabled providers updated');
+    }
+
+    public setLitellmModels(models: string[]): void {
+        this.credentials.litellmModels = models;
+        this.saveCredentials();
+        console.log('[CredentialsManager] LiteLLM models updated');
+    }
+
+    public setLitellmEnabledModels(models: string[]): void {
+        this.credentials.litellmEnabledModels = models;
+        this.saveCredentials();
+        console.log('[CredentialsManager] LiteLLM enabled models updated');
     }
 
     /**
@@ -672,12 +734,12 @@ export class CredentialsManager {
         console.log('[CredentialsManager] Natively API Key updated');
     }
 
-    public getPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek'): string | undefined {
+    public getPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'openrouter'): string | undefined {
         const key = `${provider}PreferredModel` as keyof StoredCredentials;
         return this.credentials[key] as string | undefined;
     }
 
-    public setPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', modelId: string): void {
+    public setPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'openrouter', modelId: string): void {
         const key = `${provider}PreferredModel` as keyof StoredCredentials;
         (this.credentials as any)[key] = modelId;
         this.saveCredentials();

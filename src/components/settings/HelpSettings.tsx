@@ -333,7 +333,7 @@ const MockSearchPillAnim = () => {
                         <Search size={14} className="text-text-tertiary" />
                     </div>
                     <div className="w-full bg-transparent pl-9 pr-4 py-2.5 text-[13px] text-text-primary outline-none flex items-center h-[38px]">
-                        <span className="opacity-90">System</span><motion.span animate={{ opacity: [1, 0, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-[1.5px] h-3.5 bg-blue-500 ml-[2px] inline-block" />
+                        <span className="opacity-90">System</span><span className="w-[1.5px] h-3.5 bg-blue-500 ml-[2px] inline-block animate-pulse" />
                     </div>
                 </div>
 
@@ -469,17 +469,13 @@ const MockPillControlsAnim = () => {
                 </div>
                 <ArrowRight className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <motion.div
-                        animate={{ opacity: [0.7, 1, 0.7] }}
-                        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 shrink-0"
-                    >
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 shrink-0">
                         <span className="relative flex h-[7px] w-[7px] shrink-0">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
                             <span className="relative inline-flex rounded-full h-[7px] w-[7px] bg-emerald-400" />
                         </span>
                         <span className="text-[11px] font-medium text-emerald-500">Meeting ongoing</span>
-                    </motion.div>
+                    </div>
                     <span className="text-[11px] text-text-secondary leading-snug">— clicking this brings you right back</span>
                 </div>
             </div>
@@ -521,13 +517,9 @@ const MockPillControlsAnim = () => {
                 </div>
                 <ArrowRight className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <motion.span
-                        animate={{ opacity: [1, 0.25, 1] }}
-                        transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-                        className="text-[11px] text-red-400 font-medium shrink-0"
-                    >
+                    <span className="text-[11px] text-red-400 font-medium shrink-0 animate-pulse">
                         Session ends instantly
-                    </motion.span>
+                    </span>
                     <span className="text-[11px] text-text-tertiary">— returns to launcher</span>
                 </div>
             </div>
@@ -540,13 +532,9 @@ const MockFastModeAnim = () => {
     return (
         <div className="flex justify-center items-center py-8 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[240px]">
             <div className="flex flex-col items-center gap-4 z-10">
-                <motion.div
-                    className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center shadow-[0_0_30px_rgba(249,115,22,0.4)]"
-                    animate={{ rotate: 360 }}
-                    transition={{ ease: "linear", duration: 8, repeat: Infinity }}
-                >
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center shadow-[0_0_30px_rgba(249,115,22,0.4)]">
                     <Zap className="w-8 h-8 text-white" />
-                </motion.div>
+                </div>
                 <div className="text-center">
                     <div className="font-bold text-lg text-text-primary">Fast Mode Enabled</div>
                     <div className="text-xs text-text-secondary mt-1">Routing via Groq LPU (Response &lt; 0.5s)</div>
@@ -554,11 +542,7 @@ const MockFastModeAnim = () => {
             </div>
 
             {/* Background pulses */}
-            <motion.div
-                className="absolute inset-0 border-[6px] border-orange-500/20 rounded-xl"
-                animate={{ scale: [1, 1.05, 1], opacity: [0, 1, 0] }}
-                transition={{ duration: 2, repeat: Infinity }}
-            />
+            <div className="absolute inset-0 border-[6px] border-orange-500/20 rounded-xl animate-pulse" />
         </div>
     );
 };
@@ -647,8 +631,8 @@ const MockProviderSelectionAnim = () => {
                                 <div className="max-h-[170px] overflow-hidden relative" style={{ WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)' }}>
                                     <motion.div
                                         className="p-1.5 space-y-0.5"
-                                        animate={{ y: [0, 0, -110, -110, 0, 0] }}
-                                        transition={{ duration: 3.5, ease: "easeInOut", repeat: Infinity }}
+                                        animate={{ y: [0, -110, 0] }}
+                                        transition={{ duration: 3.5, ease: "easeInOut" }}
                                     >
                                         {options.map((option) => {
                                             const isSelected = selected.id === option.id;
@@ -710,7 +694,7 @@ const MockApiKeyFlowAnim = () => {
                         <span className={stage > 0 ? "opacity-100" : "opacity-40"}>
                             {stage > 0 ? "gsk_a8B2c..." : "Enter API key"}
                         </span>
-                        {stage === 0 && <motion.div animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="w-0.5 h-4 bg-accent-primary ml-0.5" />}
+                        {stage === 0 && <span className="w-0.5 h-4 bg-accent-primary ml-0.5 animate-pulse" />}
                     </div>
                     <div className="px-5 py-2 rounded-lg text-xs font-medium bg-bg-elevated border border-border-subtle flex items-center justify-center transition-colors shadow-sm">
                         {stage === 1 ? <Check size={14} className="text-green-500" /> : 'Save'}

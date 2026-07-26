@@ -172,7 +172,22 @@ export function resolveInferenceConfig(): InferenceConfig {
         // Windows — DirectML over NVIDIA / AMD / Intel GPUs. Per-module dtype
         // gives best accuracy/speed tradeoff for the larger Whisper/Distil
         // checkpoints; DirectML handles mixed precision via session options.
-        return { executionProviders: ['dml', 'cpu'], dtype: WHISPER_SAFE_DTYPE };
+        //
+        // MEMORY GUARD: DML creates GPU-shared memory buffers visible to ALL
+        // Electron processes (Browser + every Tab renderer). On low-memory
+        // systems this inflates every renderer's RSS by the model size (~2-4GB),
+        // causing renderers to become UNRESPONSIVE. When available RAM is below
+        // 6GB, skip DML and use CPU-only to avoid the shared-memory overhead.
+        // CPU inference is slower but keeps memory in process-private space.
+        const { getAvailableMemoryGB } = require('../../utils/onnxThreadConfig');
+        let availGB = 99; // fail-open (use DML) if measurement throws
+        try { availGB = getAvailableMemoryGB(); } catch { /* ignore */ }
+        const DML_MIN_AVAIL_GB = Number(process.env.NATIVELY_DML_MIN_AVAIL_GB ?? 8);
+        if (availGB >= DML_MIN_AVAIL_GB) {
+            return { executionProviders: ['dml', 'cpu'], dtype: WHISPER_SAFE_DTYPE };
+        }
+        console.warn(`[InferenceConfig] Windows: skipping DML — available RAM ${availGB.toFixed(1)}GB < ${DML_MIN_AVAIL_GB}GB floor. Using CPU-only to prevent renderer UNRESPONSIVE.`);
+        return { executionProviders: ['cpu'], dtype: WHISPER_SAFE_DTYPE };
     }
 
     // Intel Mac, Linux, unknown — CPU. Per-module gives a real speedup on

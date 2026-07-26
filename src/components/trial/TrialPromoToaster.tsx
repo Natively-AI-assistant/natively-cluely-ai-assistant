@@ -139,12 +139,10 @@ export const TrialPromoToaster: React.FC<Props> = ({
             fontFamily: T.font,
           }}>
 
-            {/* Aurora — violet pulse */}
+            {/* Aurora — violet static subtle glow */}
             {!reduced && (
-              <motion.div aria-hidden
-                animate={{ opacity: isLight ? [0.06, 0.14, 0.06] : [0.1, 0.22, 0.1] }}
-                transition={{ duration: 6.5, repeat: Infinity, ease: 'easeInOut' }}
-                style={{ position: 'absolute', top: '-120px', left: '50%', transform: 'translateX(-50%)', width: '420px', height: '280px', background: 'radial-gradient(ellipse, rgba(139,92,246,0.22) 0%, transparent 65%)', pointerEvents: 'none', zIndex: 1 }}
+              <div aria-hidden
+                style={{ position: 'absolute', top: '-120px', left: '50%', transform: 'translateX(-50%)', width: '420px', height: '280px', background: 'radial-gradient(ellipse, rgba(139,92,246,0.18) 0%, transparent 65%)', pointerEvents: 'none', zIndex: 1, opacity: isLight ? 0.1 : 0.15 }}
               />
             )}
 
@@ -340,15 +338,13 @@ const VioletCTA: React.FC<{ label: string; onClick: () => void; disabled: boolea
 
       {/* Shimmer */}
       {!reduced && !disabled && (
-        <motion.div aria-hidden
+        <div aria-hidden
           style={{
             position: 'absolute', inset: 0, pointerEvents: 'none',
-            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%)',
+            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 50%, transparent 100%)',
             transform: 'skewX(-14deg)',
             zIndex: 2
           }}
-          animate={{ x: ['-130%', '230%'] }}
-          transition={{ duration: 1.8, ease: 'easeInOut', repeat: Infinity, repeatDelay: 5.5 }}
         />
       )}
       <span style={{ position: 'relative', zIndex: 3, fontSize: '13.5px', fontWeight: 750, color: '#fff', letterSpacing: '-0.015em' }}>

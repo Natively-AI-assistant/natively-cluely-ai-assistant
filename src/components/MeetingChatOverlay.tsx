@@ -54,21 +54,11 @@ type ChatState = 'idle' | 'opening' | 'waiting_for_llm' | 'streaming_response' |
 
 const TypingIndicator: React.FC = () => {
     return (
-        <div className="flex items-center gap-1 py-4">
-            <div className="flex items-center gap-1">
-                {[0, 1, 2].map((i) => (
-                    <motion.div
-                        key={i}
-                        className="w-2 h-2 rounded-full bg-text-tertiary"
-                        animate={{ opacity: [0.4, 1, 0.4] }}
-                        transition={{
-                            duration: 0.6,
-                            repeat: Infinity,
-                            delay: i * 0.15,
-                            ease: "easeInOut"
-                        }}
-                    />
-                ))}
+        <div className="flex items-center gap-1.5 py-4">
+            <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-text-tertiary animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-text-tertiary animate-pulse [animation-delay:200ms]" />
+                <span className="w-2 h-2 rounded-full bg-text-tertiary animate-pulse [animation-delay:400ms]" />
             </div>
         </div>
     );

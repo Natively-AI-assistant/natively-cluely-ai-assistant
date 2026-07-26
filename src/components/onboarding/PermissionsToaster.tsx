@@ -48,14 +48,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   const [scrStatus,  setScrStatus]  = useState<PermStatus>('loading');
   const [requesting, setRequesting] = useState(false);
   const reduced = useReducedMotion() ?? false;
-
   const [mockToggleActive, setMockToggleActive] = useState(true);
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMockToggleActive(prev => !prev);
-    }, 2200);
-    return () => clearInterval(interval);
-  }, []);
 
   const theme = useResolvedTheme();
   const isLight = theme === 'light';
@@ -376,13 +369,11 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                     >
                       <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                         {/* Natively Icon with subtle breath/float loop */}
-                        <motion.div 
-                          animate={{ y: [0, -2, 0] }}
-                          transition={{ repeat: Infinity, duration: 2.8, ease: "easeInOut" }}
+                        <div 
                           style={{ width: '32px', height: '32px', flexShrink: 0 }}
                         >
                           <img src={nativelyIcon} alt="Natively" style={{ width: '32px', height: '32px', borderRadius: '7px', boxShadow: colors.step1NativelyShadow }} />
-                        </motion.div>
+                        </div>
                         
                         {/* Prompt Text */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -397,14 +388,12 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                       
                       {/* Buttons */}
                       <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '4px' }}>
-                        {/* Pulsing button mockup */}
-                        <motion.div 
-                          animate={{ scale: [1, 1.04, 1] }}
-                          transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut", repeatDelay: 0.5 }}
+                        {/* Static button mockup */}
+                        <div 
                           style={{ padding: '4px 8px', borderRadius: '5px', background: colors.step1BtnBg, border: colors.step1BtnBorder, fontSize: '8px', fontWeight: 600, color: colors.step1BtnText, letterSpacing: '-0.01em' }}
                         >
                           Open Settings
-                        </motion.div>
+                        </div>
                         <div style={{ padding: '4px 8px', borderRadius: '5px', background: '#007AFF', fontSize: '8px', fontWeight: 600, color: '#FFFFFF', letterSpacing: '-0.01em', boxShadow: '0 2px 6px rgba(0,122,255,0.3)' }}>
                           Deny
                         </div>
