@@ -311,12 +311,31 @@ async function main() {
         // and used) but zero sentinel strings appeared in the prose. Literal-string
         // matching alone cannot distinguish that from a genuine leak-direction bug;
         // when the prompt-audit ring fires, trust its ground truth over the text
-        // heuristic for this direction. It does NOT change the forbidden direction
-        // (a profile block should never be injected there in the first place, so no
-        // equivalent false-positive risk exists on that side).
-        const hasRawProfileEvidence = promptAudit?.audit?.at(-1)?.hasRawCandidateProfile === true;
+        // heuristic for this direction.
+        //
+        // Ground-truth override for the "forbidden" direction too (live-confirmed
+        // false positive, 2026-07-27, n=20 case2_what_is_api run): 7/20 reps of
+        // "what is an api" matched the `Stripe` sentinel while
+        // `hasRawCandidateProfile: false` AND `userContentLen: 14` (the raw prompt
+        // sent to the model was literally just "what is an api" — no profile text
+        // was ever appended). The model was citing Stripe as the textbook
+        // real-world example of a well-designed API (extremely common in generic
+        // tech writing) — coincidental collision with the fictional candidate's
+        // employer name used as a sentinel, not a leak. The original comment here
+        // claimed "no equivalent false-positive risk exists on the forbidden side
+        // since a profile block should never be injected there" — that's true of
+        // profile INJECTION, but doesn't hold for literal-string matching: a
+        // famous real company name picked as a sentinel can appear in profile-free
+        // prose by pure coincidence. Apply the same ground-truth trust
+        // symmetrically: when the prompt-audit ring confirms no profile was
+        // injected, a sentinel string match alone is not a violation.
+        const auditRecord = promptAudit?.audit?.at(-1) ?? null;
+        const hasRawProfileEvidence = auditRecord?.hasRawCandidateProfile === true;
+        const confirmedNoProfileInjected = auditRecord?.hasRawCandidateProfile === false;
         const requiredSatisfied = Boolean(sentinelHit) || (expectSentinelPresent && hasRawProfileEvidence);
-        const violation = expectSentinelPresent ? !requiredSatisfied : Boolean(sentinelHit);
+        const violation = expectSentinelPresent
+          ? !requiredSatisfied
+          : Boolean(sentinelHit) && !confirmedNoProfileInjected;
         const hasCodeFenceFirst = /^\s*```/.test(answer);
         // A genuine unwanted DSA-contract section (## Complexity heading, or the
         // contract's specific "Time Complexity: ... / Space Complexity: ..." dual
