@@ -2479,18 +2479,6 @@ const isMultimodal = !!(imagePaths?.length);
         }
         // No key or call failed — fall through to default routing
       }
-      // OpenRouter — must be checked BEFORE the generic OpenAI guard because
-      // OpenRouter IDs like `openai/gpt-4o` would otherwise be misrouted to
-      // api.openai.com via isOpenAiModel()'s .includes('openai') catch-all.
-      if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
-        return await this.generateWithOpenai(
-          cloudUserContent,
-          openaiSystemPrompt,
-          cloudIsMultimodal ? cloudImagePaths : undefined,
-          this.currentModelId,
-          this.openrouterClient,
-        );
-      }
       if (this.isOpenAiModel(this.currentModelId) && this.openaiClient) {
         return await this.generateWithOpenai(cloudUserContent, openaiSystemPrompt, cloudImagePaths);
       }
@@ -2515,6 +2503,19 @@ const isMultimodal = !!(imagePaths?.length);
         }
         // CACHE: pass system separately so Groq prefix-cache hits across turns.
         return await this.generateWithGroq(cloudUserContent, this.currentModelId, skipSystemPrompt ? undefined : finalGroqPrompt);
+      }
+      // OpenRouter — checked LAST among specific-provider guards so that all
+      // named-prefix providers (Groq meta-llama/*, LiteLLM litellm/*, OpenAI, Claude,
+      // DeepSeek) are matched before the generic slash-contains check fires.
+      // This prevents namespaced Groq/LiteLLM model IDs from being misrouted here.
+      if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
+        return await this.generateWithOpenai(
+          cloudUserContent,
+          openaiSystemPrompt,
+          cloudIsMultimodal ? cloudImagePaths : undefined,
+          this.currentModelId,
+          this.openrouterClient,
+        );
       }
 
       // Fallback (Gemini) - logic handled below by SMART DYNAMIC FALLBACK list
@@ -5544,24 +5545,6 @@ const isMultimodal = !!(imagePaths?.length);
     }
 
     // 3. Cloud Provider Routing
-
-    // OpenRouter — checked BEFORE the generic OpenAI guard so that namespaced
-    // ids like `openai/gpt-4o` or `anthropic/claude-3.5-sonnet` are sent to
-    // openrouter.ai/api/v1 rather than being misrouted to openai.com.
-    if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
-      const openRouterSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
-      const finalOpenRouterSystem = this.injectLanguageInstruction(openRouterSystem);
-      if (isMultimodal && imagePaths) {
-        yield* this.streamWithOpenaiMultimodal(
-          userContent, imagePaths, finalOpenRouterSystem, this.currentModelId, abortSignal, this.openrouterClient,
-        );
-      } else {
-        yield* this.streamWithOpenai(
-          userContent, finalOpenRouterSystem, this.currentModelId, abortSignal, this.openrouterClient,
-        );
-      }
-      return;
-    }
 
     // OpenAI
     if (this.isOpenAiModel(this.currentModelId) && this.openaiClient) {
