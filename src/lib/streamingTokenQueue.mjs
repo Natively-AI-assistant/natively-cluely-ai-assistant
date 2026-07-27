@@ -102,7 +102,19 @@ export function finalizeImperativeStreamMessages(
   { msgId, intent, bufferedText, finalText },
 ) {
   if (!Array.isArray(messages) || !msgId) return messages;
-  const text = finalText || bufferedText;
+  const buffered = typeof bufferedText === 'string' ? bufferedText : '';
+  const final = typeof finalText === 'string' ? finalText : '';
+  // Prefer the visible buffered stream when the authoritative finalText is a
+  // short empty-screen refusal that would wipe a longer real answer the user
+  // already watched finish ("answer disappears after it's fully done").
+  let text = final || buffered;
+  if (
+    buffered.trim().length > 80 &&
+    looksLikeEmptyScreenClaimLocal(final) &&
+    !looksLikeEmptyScreenClaimLocal(buffered)
+  ) {
+    text = buffered;
+  }
   if (!text) return messages;
   const idx = messages.findLastIndex((m) => m.id === msgId);
   if (idx === -1) {
@@ -111,6 +123,18 @@ export function finalizeImperativeStreamMessages(
   const updated = [...messages];
   updated[idx] = { ...updated[idx], text, intent: intent ?? updated[idx].intent, isStreaming: false };
   return updated;
+}
+
+function looksLikeEmptyScreenClaimLocal(text) {
+  const t = String(text || '').trim();
+  if (!t || t.length > 280) return false;
+  return (
+    /^there'?s\s+nothing\s+to\s+answer\s+yet\s+because\s+the\s+question\s+is\s+empty\.?$/i.test(t) ||
+    /^it\s+looks\s+like\s+the\s+question\s+came\s+through\s+empty\b/i.test(t) ||
+    /^i\s+don'?t\s+see\s+any\s+attached\s+screen\s+or\s+image\b/i.test(t) ||
+    /^i\s+can'?t\s+see\s+the\s+attached\s+screen\b/i.test(t) ||
+    /^i\s+don'?t\s+see\s+any\s+screen\s+content\b/i.test(t)
+  );
 }
 
 /**

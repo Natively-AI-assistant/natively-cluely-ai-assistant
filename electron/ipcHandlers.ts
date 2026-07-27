@@ -8124,6 +8124,40 @@ export function initializeIpcHandlers(appState: AppState): void {
             visionModelUsed = sur.modelUsed;
             visionAttempts = Array.isArray(sur.attempts) ? sur.attempts.length : undefined;
             visionFailureReason = sur.failureReason;
+
+            // ⌘⇧Enter hides the overlay first — if a localhost Vite error tab
+            // was underneath, vision "succeeds" on ERR_CONNECTION_REFUSED and
+            // the model invents empty-question refusals. Fail loud instead.
+            try {
+              const {
+                isUnusableScreenCaptureText,
+                UNUSABLE_SCREEN_CAPTURE_USER_MESSAGE,
+              } = require('./services/screen/unusableScreenCapture');
+              const screenBlob = [sur?.ocrText, sur?.extractedText, sur?.visibleSummary]
+                .filter((s: any) => typeof s === 'string' && s.trim())
+                .join('\n');
+              if (isUnusableScreenCaptureText(screenBlob)) {
+                console.warn(
+                  '[IPC] generate-what-to-say: screenshot looks like a browser/dev-server error page — refusing to answer',
+                );
+                return {
+                  answer: null,
+                  question: question || 'unknown',
+                  screenContextStatus: 'failed',
+                  visionProviderUsed,
+                  visionModelUsed,
+                  visionAttempts,
+                  visionFailureReason: 'unusable_screen_capture',
+                  usedImageInput: true,
+                  error: UNUSABLE_SCREEN_CAPTURE_USER_MESSAGE,
+                };
+              }
+            } catch (detectErr: any) {
+              console.warn(
+                '[IPC] generate-what-to-say: unusable-screen detection skipped',
+                detectErr?.message || detectErr,
+              );
+            }
           } catch (sErr: any) {
             screenContextStatus = 'failed';
             console.warn('[IPC] generate-what-to-say: ScreenUnderstandingService failed', {

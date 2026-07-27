@@ -1054,13 +1054,28 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 return;
             }
 
-            if (provider === 'groq') setHasStoredSttGroqKey(true);
-            else if (provider === 'openai') setHasStoredSttOpenaiKey(true);
-            else if (provider === 'elevenlabs') setHasStoredElevenLabsKey(true);
-            else if (provider === 'azure') setHasStoredAzureKey(true);
-            else if (provider === 'ibmwatson') setHasStoredIbmWatsonKey(true);
-            else if (provider === 'soniox') setHasStoredSonioxKey(true);
-            else setHasStoredDeepgramKey(true);
+            if (provider === 'groq') {
+                setHasStoredSttGroqKey(true);
+                setSttGroqKey('');
+            } else if (provider === 'openai') {
+                setHasStoredSttOpenaiKey(true);
+                setSttOpenaiKey('');
+            } else if (provider === 'elevenlabs') {
+                setHasStoredElevenLabsKey(true);
+                setSttElevenLabsKey('');
+            } else if (provider === 'azure') {
+                setHasStoredAzureKey(true);
+                setSttAzureKey('');
+            } else if (provider === 'ibmwatson') {
+                setHasStoredIbmWatsonKey(true);
+                setSttIbmKey('');
+            } else if (provider === 'soniox') {
+                setHasStoredSonioxKey(true);
+                setSttSonioxKey('');
+            } else {
+                setHasStoredDeepgramKey(true);
+                setSttDeepgramKey('');
+            }
 
             // Issue #322: a successful re-entry clears the secure-storage banner.
             setNeedsCredentialReentry(false);
@@ -2579,18 +2594,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             onBlur={onSttKeyBlur}
                                                             placeholder={
                                                                 sttProvider === 'groq'
-                                                                    ? (hasStoredSttGroqKey ? '••••••••••••' : t('Enter Groq API key'))
+                                                                    ? (hasStoredSttGroqKey ? t('Key stored securely — paste a new key to replace') : t('Enter Groq API key'))
                                                                     : sttProvider === 'openai'
-                                                                        ? (hasStoredSttOpenaiKey ? '••••••••••••' : t('Enter OpenAI STT API key'))
+                                                                        ? (hasStoredSttOpenaiKey ? t('Key stored securely — paste a new key to replace') : t('Enter OpenAI STT API key'))
                                                                         : sttProvider === 'elevenlabs'
-                                                                            ? (hasStoredElevenLabsKey ? '••••••••••••' : t('Enter ElevenLabs API key'))
+                                                                            ? (hasStoredElevenLabsKey ? t('Key stored securely — paste a new key to replace') : t('Enter ElevenLabs API key'))
                                                                             : sttProvider === 'azure'
-                                                                                ? (hasStoredAzureKey ? '••••••••••••' : t('Enter Azure API key'))
+                                                                                ? (hasStoredAzureKey ? t('Key stored securely — paste a new key to replace') : t('Enter Azure API key'))
                                                                                 : sttProvider === 'ibmwatson'
-                                                                                    ? (hasStoredIbmWatsonKey ? '••••••••••••' : t('Enter IBM Watson API key'))
+                                                                                    ? (hasStoredIbmWatsonKey ? t('Key stored securely — paste a new key to replace') : t('Enter IBM Watson API key'))
                                                                                     : sttProvider === 'soniox'
-                                                                                        ? (hasStoredSonioxKey ? '••••••••••••' : t('Enter Soniox API key'))
-                                                                                        : (hasStoredDeepgramKey ? '••••••••••••' : t('Enter Deepgram API key'))
+                                                                                        ? (hasStoredSonioxKey ? t('Key stored securely — paste a new key to replace') : t('Enter Soniox API key'))
+                                                                                        : (hasStoredDeepgramKey ? t('Key stored securely — paste a new key to replace') : t('Enter Deepgram API key'))
                                                             }
                                                             className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
                                                         />

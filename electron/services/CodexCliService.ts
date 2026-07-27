@@ -304,8 +304,11 @@ export class CodexCliService {
     }
 
     // Build the request body ONCE outside the retry loop — refreshing
-    // tokens doesn't change the prompt.
-    const body = this.buildRequestBody(options);
+    // tokens doesn't change the prompt. Encode screenshots first so
+    // ⌘⇧Enter / WTA with Codex actually sees the screen (previously
+    // imagePaths were accepted then dropped at the wire).
+    const imageParts = await this.encodeImageParts(options.imagePaths);
+    const body = this.buildRequestBody(options, imageParts);
     const headers = this.buildHeaders();
 
     // Idle-timeout guard: aborts the HTTP connection if no bytes arrive for
@@ -347,6 +350,43 @@ export class CodexCliService {
   // ---------------------------------------------------------------------------
 
   /**
+   * Encode local screenshot paths as Responses API `input_image` parts.
+   * Caps at 5 images (same IPC validation limit). Failures are skipped with
+   * a warn so a missing temp file does not kill the whole Codex call.
+   */
+  private static async encodeImageParts(
+    imagePaths?: string[],
+  ): Promise<Array<{ type: 'input_image'; image_url: string; detail: 'auto' }>> {
+    if (!imagePaths?.length) return [];
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const parts: Array<{ type: 'input_image'; image_url: string; detail: 'auto' }> = [];
+    for (const imagePath of imagePaths.slice(0, 5)) {
+      if (!imagePath || typeof imagePath !== 'string') continue;
+      try {
+        const buf = await fs.readFile(imagePath);
+        const ext = path.extname(imagePath).toLowerCase();
+        const mime =
+          ext === '.jpg' || ext === '.jpeg'
+            ? 'image/jpeg'
+            : ext === '.webp'
+              ? 'image/webp'
+              : ext === '.gif'
+                ? 'image/gif'
+                : 'image/png';
+        parts.push({
+          type: 'input_image',
+          image_url: `data:${mime};base64,${buf.toString('base64')}`,
+          detail: 'auto',
+        });
+      } catch (err) {
+        console.warn('[CodexCliService] Skipping unreadable image for Codex request:', imagePath, err);
+      }
+    }
+    return parts;
+  }
+
+  /**
    * Build the OpenAI Responses API body. Mirrors open-sse
    * CodexExecutor.transformRequest (codex.md:395-487):
    *  - `model` is the requested model (e.g. "gpt-5.4")
@@ -365,22 +405,22 @@ export class CodexCliService {
    *  - `prompt_cache_key` is a stable session id so the backend can
    *    cache the prompt prefix (codex.md:428-430)
    */
-  private static buildRequestBody(options: CodexCliRunOptions): Record<string, unknown> {
+  private static buildRequestBody(
+    options: CodexCliRunOptions,
+    imageParts: Array<{ type: 'input_image'; image_url: string; detail: 'auto' }> = [],
+  ): Record<string, unknown> {
     const resolvedEffort = resolveCodexReasoningEffort(options.model, options.modelReasoningEffort);
 
-    // Image inputs: Responses API wants `type: "input_image"` items.
-    // We don't yet support image-bearing Codex calls in this rewrite
-    // (LLMHelper.buildCodexCliPrompt only passes text) — the imagePaths
-    // arg is accepted for backward-compat but ignored at the wire level.
-    // Future: encode as data URLs the same way LocalWhisperSTT does.
+    const content: Array<Record<string, unknown>> = [
+      { type: 'input_text', text: options.prompt },
+      ...imageParts,
+    ];
 
     const input: Array<Record<string, unknown>> = [
       {
         type: 'message',
         role: 'user',
-        content: [
-          { type: 'input_text', text: options.prompt },
-        ],
+        content,
       },
     ];
 

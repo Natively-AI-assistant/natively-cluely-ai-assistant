@@ -586,6 +586,7 @@ module.exports.getHardwareId = nativeBinding.getHardwareId
 module.exports.getInputDevices = nativeBinding.getInputDevices
 module.exports.getOutputDevices = nativeBinding.getOutputDevices
 module.exports.isAccessibilityGranted = nativeBinding.isAccessibilityGranted
+module.exports.setProcessDisplayName = nativeBinding.setProcessDisplayName
 module.exports.validateDodoKey = nativeBinding.validateDodoKey
 module.exports.verifyDodoKey = nativeBinding.verifyDodoKey
 module.exports.verifyGumroadKey = nativeBinding.verifyGumroadKey

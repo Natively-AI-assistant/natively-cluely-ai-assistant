@@ -161,7 +161,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                     value={apiKey}
                     onChange={(e) => onKeyChange(e.target.value)}
                     onBlur={onKeyBlur}
-                    placeholder={hasStoredKey ? "••••••••••••" : keyPlaceholder}
+                    // Never echo the real key. Bullet-only placeholders look like a
+                    // truncated password — use plain text so "Saved" is unambiguous.
+                    placeholder={hasStoredKey ? t('Key stored securely — paste a new key to replace') : keyPlaceholder}
                     className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
                 />
                 <button

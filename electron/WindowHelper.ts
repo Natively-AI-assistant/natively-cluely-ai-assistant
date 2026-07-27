@@ -600,8 +600,32 @@ export class WindowHelper {
       this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
     }
 
-    this.overlayWindow.loadURL(`${startUrl}?window=overlay`).catch((e) => {
+    const overlayUrl = `${startUrl}?window=overlay`;
+    this.overlayWindow.loadURL(overlayUrl).catch((e) => {
       console.error('[WindowHelper] Failed to load Overlay URL:', e);
+    });
+
+    // DEV SELF-HEAL: same as launcher — Vite on :5180 can blip mid-session;
+    // without retry the transparent overlay paints Chromium's Connection Failed
+    // page behind the chat chrome and screenshots capture that error page.
+    let overlayLoadRetries = 0;
+    const MAX_OVERLAY_LOAD_RETRIES = 10;
+    this.overlayWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      console.error(`[WindowHelper] overlay did-fail-load: ${errorCode} ${errorDescription}`);
+      if (isDev && errorCode !== -3 && overlayLoadRetries < MAX_OVERLAY_LOAD_RETRIES) {
+        overlayLoadRetries += 1;
+        console.warn(
+          `[WindowHelper] dev: retrying overlay load (${overlayLoadRetries}/${MAX_OVERLAY_LOAD_RETRIES}) in 1s…`,
+        );
+        setTimeout(() => {
+          if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+            this.overlayWindow.loadURL(overlayUrl).catch(() => { /* next did-fail-load retries */ });
+          }
+        }, 1000);
+      }
+    });
+    this.overlayWindow.webContents.on('did-finish-load', () => {
+      overlayLoadRetries = 0;
     });
 
     this.attachRendererDiagnostics(this.overlayWindow, 'overlay');

@@ -1347,6 +1347,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // mounted a [data-code-msg] row. While true, the visibility scanner must not
   // immediately contradict eager expansion and schedule a collapse.
   const eagerCodeExpansionHoldRef = useRef(false);
+  // After a coding/expanded answer finishes, keep the shell wide even if the
+  // user scrolls the code block out of view. Fast scroll used to trigger a
+  // contract (scrollMaxH 560→320) + sticky-bottom pin that clipped the answer
+  // so it looked like the message "disappeared". Cleared on the next stream
+  // start, session reset, or a manual resize toggle.
+  const postAnswerWidthHoldRef = useRef(false);
   const animationControlsRef = useRef<ReturnType<typeof animate> | null>(null);
   // Honors the OS "Reduce Motion" accessibility setting (WCAG 2.3.3). When the
   // user prefers reduced motion we SNAP the shell width instead of springing it
@@ -2451,6 +2457,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       codeExpandedRef.current = targetWidth === SHELL_WIDTH_EXPANDED;
 
       const fromWidth = Math.round(shellWidth.get());
+      // Only sticky-pin while EXPANDING. Contracting shrinks scrollMaxH
+      // (560→320); pinning to bottom mid-shrink clips tall ⌘⇧Enter answers out
+      // of view and reads as "the message disappeared."
+      const isExpanding = targetWidth > fromWidth;
 
       // iMessage-style sticky bottom. Capture the user's scroll intent now,
       // before scrollMaxH starts changing. If they were at (or near) the
@@ -2482,7 +2492,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // Snap the width to the target with no animated travel; content reflows
         // once to the final width.
         shellWidth.set(targetWidth);
-        pinScrollBottomIfNeeded();
+        if (isExpanding) pinScrollBottomIfNeeded();
         const h = contentRef.current?.offsetHeight ?? 0;
         if (h > 0) {
           resizeOverlayWindowCentered(h);
@@ -2545,7 +2555,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       animationControlsRef.current = animate(shellWidth, targetWidth, {
         ...OVERLAY_RESIZE_SPRING,
         onUpdate: () => {
-          pinScrollBottomIfNeeded();
+          if (isExpanding) pinScrollBottomIfNeeded();
           const now = Date.now();
           if (now - lastHeightReportAt < HEIGHT_REPORT_INTERVAL_MS) return;
           const h = contentRef.current?.offsetHeight ?? 0;
@@ -2589,6 +2599,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const target =
       current >= SHELL_WIDTH_EXPANDED ? SHELL_WIDTH_COLLAPSED : SHELL_WIDTH_EXPANDED;
     manualWidthOverrideRef.current = target;
+    // Manual toggle wins over the post-answer hold (user explicitly chose a width).
+    postAnswerWidthHoldRef.current = false;
     startTransition(target);
   }, [shellWidth, startTransition, SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED]);
 
@@ -2665,6 +2677,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       visible = true;
     }
 
+    // Post-answer hold: keep the wide shell while the user scrolls/reads.
+    // Scroll-away contraction is what made ⌘⇧Enter answers appear to vanish.
+    if (postAnswerWidthHoldRef.current && !visible && codeExpandedRef.current) {
+      pendingVisibilityRef.current = null;
+      if (stableVisibilityTimerRef.current) {
+        clearTimeout(stableVisibilityTimerRef.current);
+        stableVisibilityTimerRef.current = null;
+      }
+      return;
+    }
+
     // Already in the correct state — clear any pending change so a
     // mid-flight tween isn't interrupted by a stale timer firing.
     if (visible === codeExpandedRef.current) {
@@ -2728,6 +2751,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (!container) return;
     let rafId: number | null = null;
     const onScroll = () => {
+      // Keep sticky-bottom intent in sync with real user scroll so a later
+      // expand doesn't yank them back if they've already scrolled away.
+      const distanceFromBottom =
+        container.scrollHeight - (container.scrollTop + container.clientHeight);
+      wasAtBottomRef.current = distanceFromBottom <= 8;
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
         rafId = null;
@@ -2932,6 +2960,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       requestStartTimeRef.current = null;
       setMessages([]);
       eagerCodeExpansionHoldRef.current = false;
+      postAnswerWidthHoldRef.current = false;
       answerPanelPinnedRef.current = false;
       setAnswerPanelPinned(false);
 
@@ -3784,10 +3813,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (streamingMsgIdRef.current === null && manualWidthOverrideRef.current !== null) {
       manualWidthOverrideRef.current = null;
     }
+    // New stream: allow scroll-driven expand/contract again.
+    if (streamingMsgIdRef.current === null) {
+      postAnswerWidthHoldRef.current = false;
+    }
 
     const shouldUseReactCodeUi = shouldUseStreamingCodeUi(intent, token, streamingTextRef.current);
     if (shouldEagerExpandForCodeToken(intent, token, streamingTextRef.current)) {
       eagerCodeExpansionHoldRef.current = true;
+      // Hold wide until the next stream / manual resize so scroll-away mid-
+      // answer (or right after ⌘⇧Enter finalize) cannot contract the viewport.
+      postAnswerWidthHoldRef.current = true;
       // Respect a manual width pin: don't auto-grow if the user chose a width.
       if (manualWidthOverrideRef.current === null && !codeExpandedRef.current) {
         startTransition(SHELL_WIDTH_EXPANDED);
@@ -3960,6 +3996,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     streamingTextRef.current = '';
     streamingMsgIdRef.current = null;
     streamingIntentRef.current = null;
+    const wasReactCode = streamingRenderModeRef.current === 'react-code';
     streamingRenderModeRef.current = 'imperative';
     if (streamingCodeRafRef.current !== null) {
       cancelAnimationFrame(streamingCodeRafRef.current);
@@ -3969,6 +4006,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // visibility scanner clears it as soon as it sees a real [data-code-msg].
     // NOT wrapped in startTransition — ordering must hold.
     setMessages((prev) => commitStreamingFlush(prev, msgId, text));
+    // Freeze width against scroll-away contraction while the user reads.
+    if (codeExpandedRef.current || wasReactCode) {
+      postAnswerWidthHoldRef.current = true;
+    }
   }, []);
 
   const tryBeginOverlayAction = useCallback((actionKey: string): boolean => {
@@ -4103,6 +4144,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               finalText: text,
             }),
           );
+          if (codeExpandedRef.current) {
+            postAnswerWidthHoldRef.current = true;
+          }
           return;
         }
         finalizeWhenRevealCaughtUp(streamingMsgId, intent, authoritativeText);
@@ -4764,9 +4808,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             }
           : undefined;
 
-      // Pass imagePath if attached
+      // Pass imagePath if attached. When a screenshot is present, send an
+      // explicit on-screen question so Codex/WTA don't treat an empty
+      // transcript as "nothing to answer" while the UI shows a screenshot.
+      const screenshotQuestion =
+        currentAttachments.length > 0
+          ? 'Answer what is visible on the attached screen. Identify the main question or coding problem and provide the answer.'
+          : undefined;
       const result = await window.electronAPI.generateWhatToSay(
-        undefined,
+        screenshotQuestion,
         currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
         options,
       );

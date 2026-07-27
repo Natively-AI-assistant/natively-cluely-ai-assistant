@@ -375,3 +375,24 @@ test('CodexCliService: buildRequestBody sets reasoning.effort + include for non-
   // store is always false (Codex requirement).
   assert.match(source, /store:\s*false/);
 });
+
+test('CodexCliService: screenshots are encoded as Responses API input_image parts', () => {
+  const source = read('electron/services/CodexCliService.ts');
+  assert.match(source, /encodeImageParts/, 'must encode local screenshot paths');
+  assert.match(source, /type:\s*'input_image'/, 'must use Responses API input_image');
+  assert.match(
+    source,
+    /image_url:\s*`data:\$\{mime\};base64,\$\{buf\.toString\('base64'\)\}`/,
+    'must send base64 data URLs',
+  );
+  assert.match(
+    source,
+    /const imageParts = await this\.encodeImageParts\(options\.imagePaths\)/,
+    'stream() must encode imagePaths before buildRequestBody',
+  );
+  assert.doesNotMatch(
+    source,
+    /ignored at the wire level/,
+    'must not still claim imagePaths are ignored on the wire',
+  );
+});

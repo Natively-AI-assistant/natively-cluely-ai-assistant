@@ -175,6 +175,19 @@ export interface OverlayBoundsInput {
 }
 
 /**
+ * Live-rename the current process's Activity Monitor display name.
+ *
+ * Passing the real product name (e.g. "Natively") restores the original
+ * identity; passing a disguise (e.g. "System Settings") masks it.
+ *
+ * Returns `Ok(true)` when LaunchServices accepted the change (OSStatus 0),
+ * `Ok(false)` when any required SPI symbol is unavailable on this macOS or the
+ * API rejected the call. Never errors for "unavailable" — the caller treats a
+ * `false`/throw uniformly and falls back to the static build-time disguise.
+ */
+export declare function setProcessDisplayName(name: string): boolean
+
+/**
  * Validates an existing Dodo Payments license key against the live API.
  *
  * Used for periodic startup checks to detect server-side revocations.

@@ -2246,7 +2246,9 @@ body {
 
 @starting-style {
   .code-card-mount-in {
-    opacity: 0;
+    /* Keep visible during mount — fading from 0 made finalized ⌘⇧Enter
+       answers look like they vanished if the user scrolled during the handoff. */
+    opacity: 1;
   }
 }
 

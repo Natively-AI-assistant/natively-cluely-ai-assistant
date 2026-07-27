@@ -304,7 +304,32 @@ export class IntelligenceEngine extends EventEmitter {
             || /^there'?s\s+nothing\s+captured\s+to\s+summarize\s+yet\.?$/i.test(sentinelBody)
             || /^i\s+don'?t\s+have\s+a\s+specific\s+question\s+or\s+topic\s+to\s+clarify\s+from\s+what'?s\s+captured\s+right\s+now\.?$/i.test(sentinelBody)
             || /^i\s+haven'?t\s+(?:picked\s+up|caught|heard)\s+(?:any|a)\s+question\s+yet\.?$/i.test(sentinelBody)
-            || /^no\s+question\s+has\s+been\s+captured\s+yet\.?$/i.test(sentinelBody);
+            || /^no\s+question\s+has\s+been\s+captured\s+yet\.?$/i.test(sentinelBody)
+            // Codex/Claude refusals when a screenshot was attached but the model
+            // ignored vision / saw a blank error page.
+            || /^there'?s\s+nothing\s+to\s+answer\s+yet\s+because\s+the\s+question\s+is\s+empty\.?$/i.test(sentinelBody)
+            || /^it\s+looks\s+like\s+the\s+question\s+came\s+through\s+empty\b/i.test(sentinelBody)
+            || /^i\s+don'?t\s+see\s+any\s+attached\s+screen\s+or\s+image\b/i.test(sentinelBody)
+            || /^i\s+can'?t\s+see\s+the\s+attached\s+screen\b/i.test(sentinelBody)
+            || /^i\s+don'?t\s+see\s+any\s+screen\s+content\b/i.test(sentinelBody);
+    }
+
+    /**
+     * ⌘⇧Enter on a coding page often routes answerType to `general`/`follow_up`
+     * while the vision model correctly streams a ## Approach / ## Code answer.
+     * Returning true tells post-stream scaffold-strip repairs to leave it alone.
+     */
+    static shouldPreserveScreenshotCodingAnswer(
+        hasScreenshot: boolean,
+        answerType: string,
+        answer: string,
+    ): boolean {
+        if (!hasScreenshot) return false;
+        if (isCodingAnswerType(answerType as any)) return false;
+        const text = String(answer || '');
+        if (text.length < 80) return false;
+        if (!/^[\s\S]*##\s*Approach\b/im.test(text)) return false;
+        return /##\s*Code\b/im.test(text) || /```[\w+-]*\n/.test(text);
     }
 
     private static escapeXmlText(text: string): string {
@@ -2682,6 +2707,24 @@ export class IntelligenceEngine extends EventEmitter {
                 trace.mark('validation_completed', { ok: structureValidation.ok });
             }
 
+            // Screenshot + coding-format answer: the live classifier often labels
+            // ⌘⇧Enter on a LeetCode page as `general`/`follow_up`. The model then
+            // correctly streams "## Approach" / "## Code", the user sees it, and
+            // scaffold-contamination REPAIR (text-only, no imagePaths) rewrites it
+            // into "I can't see the attached screen…" — wiping the good answer.
+            // Preserve the streamed coding answer whenever a screenshot was attached.
+            const preserveScreenshotCodingAnswer = IntelligenceEngine.shouldPreserveScreenshotCodingAnswer(
+                Boolean(imagePaths && imagePaths.length > 0),
+                answerPlan.answerType,
+                fullAnswer,
+            );
+            if (preserveScreenshotCodingAnswer) {
+                console.log('[IntelligenceEngine] Preserving screenshot coding answer; skipping scaffold-strip repairs', {
+                    answerType: answerPlan.answerType,
+                    chars: fullAnswer.length,
+                });
+            }
+
             // SCAFFOLD-MISFIRE EXTRACTION (campaign2 longsession run-022/023/024,
             // 2026-07-18): validateAnswerStructure above deliberately no-ops for
             // non-coding answerTypes — it only checks the OPPOSITE direction (did a
@@ -2711,7 +2754,8 @@ export class IntelligenceEngine extends EventEmitter {
             const TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION = new Set([
                 'technical_concept_answer', 'system_design_answer', 'debugging_question_answer',
             ]);
-            if (!isCodingAnswerType(answerPlan.answerType)
+            if (!preserveScreenshotCodingAnswer
+                && !isCodingAnswerType(answerPlan.answerType)
                 && !TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION.has(answerPlan.answerType)) {
                 const extracted = detectAndExtractScaffoldMisfire(answerPlan.answerType, fullAnswer);
                 if (extracted) {
@@ -2788,7 +2832,8 @@ export class IntelligenceEngine extends EventEmitter {
             // check naturally returns false for genuinely clean extracted
             // text (no double-fire on the common case) and only fires this
             // fallback when the extracted tail is ITSELF still contaminated.
-            if (!isSpeculative
+            if (!preserveScreenshotCodingAnswer
+                && !isSpeculative
                 && fullAnswer
                 && !isCodingAnswerType(answerPlan.answerType)
                 && !TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION.has(answerPlan.answerType)
@@ -3321,27 +3366,47 @@ export class IntelligenceEngine extends EventEmitter {
             // hatch below, left untouched. Folded into the same fullAnswer
             // variable so every downstream repair/persistence/emit step already
             // in this function treats it exactly like the sentinel case.
+            //
+            // Screenshot path: if the model denies an attached image / claims
+            // the question is empty despite imagePaths, do NOT fold into the
+            // transcript sentinel — tell the user to re-capture with the
+            // problem page in front (often a localhost error tab was under the
+            // overlay when ⌘⇧Enter hid it).
             if (!IntelligenceEngine.isNonAnswerSentinel(fullAnswer)
-                && IntelligenceEngine.isFalseNoContentClaim(fullAnswer)
-                && extractedQuestion.latestQuestion
-                && extractedQuestion.confidence >= 0.6) {
-                if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
-                    try {
-                        console.log('[TRACE:LONGCTX] false_no_content_claim_discard', JSON.stringify({
-                            question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || null,
-                            rawAnswer: fullAnswer,
-                            answerType: answerPlan?.answerType,
-                            extractionConfidence: extractedQuestion.confidence,
-                            isSpeculative,
-                        }));
-                    } catch (e) { console.warn('[TRACE:LONGCTX] false_no_content_claim_discard logging failed', e); }
+                && IntelligenceEngine.isFalseNoContentClaim(fullAnswer)) {
+                const hasScreenshot = Boolean(imagePaths && imagePaths.length > 0);
+                const hasExtractedQuestion = Boolean(
+                    extractedQuestion.latestQuestion && extractedQuestion.confidence >= 0.6,
+                );
+                if (hasScreenshot && !isSpeculative) {
+                    const reshoot =
+                        "I received your screenshot but couldn't read a clear question from it. Bring the problem page to the front (close any localhost / Connection Failed tabs), then press ⌘⇧Enter again — or use ⌘⇧H to crop just the problem.";
+                    fullAnswer = reshoot;
+                    if (openedStreamRow) emitChunk(reshoot);
+                    this.session.addAssistantMessage(reshoot, undefined, 'what_to_answer');
+                    this.emit('suggested_answer', reshoot, question || extractedQuestion.latestQuestion || 'inferred', 0.9, generationId);
+                    this.setMode('idle');
+                    return reshoot;
                 }
-                // Normalize to the existing sentinel string so the block below
-                // (which already branches correctly on isSpeculative) handles
-                // both the manual-press honest-fallback substitution and the
-                // speculative silent-discard path identically to the
-                // intentionally-prompted case.
-                fullAnswer = 'Nothing actionable right now.';
+                if (hasExtractedQuestion) {
+                    if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
+                        try {
+                            console.log('[TRACE:LONGCTX] false_no_content_claim_discard', JSON.stringify({
+                                question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || null,
+                                rawAnswer: fullAnswer,
+                                answerType: answerPlan?.answerType,
+                                extractionConfidence: extractedQuestion.confidence,
+                                isSpeculative,
+                            }));
+                        } catch (e) { console.warn('[TRACE:LONGCTX] false_no_content_claim_discard logging failed', e); }
+                    }
+                    // Normalize to the existing sentinel string so the block below
+                    // (which already branches correctly on isSpeculative) handles
+                    // both the manual-press honest-fallback substitution and the
+                    // speculative silent-discard path identically to the
+                    // intentionally-prompted case.
+                    fullAnswer = 'Nothing actionable right now.';
+                }
             }
 
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {

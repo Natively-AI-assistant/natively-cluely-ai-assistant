@@ -85,6 +85,10 @@ test('onSessionReset clears the code-expansion ref so the next visibility scan s
     /codeExpandedRef\.current\s*=\s*false/.test(body),
     'BUG: onSessionReset must reset codeExpandedRef.current = false — otherwise checkCodeVisibility believes the shell is still expanded and may not contract, and a stale expansion can re-fire.',
   );
+  assert.ok(
+    /postAnswerWidthHoldRef\.current\s*=\s*false/.test(body),
+    'BUG: onSessionReset must clear postAnswerWidthHoldRef so a previous answer\'s scroll-away hold cannot keep the next meeting locked wide.',
+  );
 });
 
 test('onSessionReset stops any in-flight width animation and clears the deferred visibility machinery', () => {

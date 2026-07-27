@@ -44,4 +44,19 @@ describe('useApiKeyAutoSave Greptile', () => {
       'finally must drain queuedRef via runSave()',
     );
   });
+
+  test('dedupes identical values so enabled toggles do not re-fire the same key', () => {
+    const src = fs.readFileSync(SRC, 'utf8');
+    assert.match(src, /lastAttemptedRef/, 'must track last attempted value');
+    assert.match(
+      src,
+      /if \(lastAttemptedRef\.current === v\) return/,
+      'runSave must skip when value was already attempted',
+    );
+    assert.match(
+      src,
+      /if \(lastAttemptedRef\.current === value\)/,
+      'debounce effect must skip when value was already attempted',
+    );
+  });
 });
