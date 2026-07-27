@@ -480,12 +480,30 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 }
             }
 
+            // Code-review finding (2026-07-28): mirrors the DOM budget-estimate fix
+            // right above — buildScreenContextBlock now also runs
+            // escapePromptInjection with forceRedactOnInjection=true (Phase 3
+            // security fix), so it can collapse to INJECTION_REDACTION_MESSAGE just
+            // like the DOM block. Without this, a screen-content injection pattern
+            // (real or false-positive) would inflate assemblerBudget as if the full
+            // ~2000-char extracted text survived, over-truncating workingTranscript
+            // for no reason. NOTE: this file's ScreenContext type (from
+            // ScreenContextService.ts) only has `ocrText` — unlike
+            // PromptAssembler.ts's richer ScreenContext (extractedText/
+            // visibleSummary/ocrText), so ocrText is the correct (and only) field
+            // to read here; no fallback-order gap applies to this call site.
+            const screenText = screenContext?.ocrText || '';
+            const screenTokenEstimate = screenText
+                ? (PromptAssembler.hasPromptInjection(escapeUserContent(screenText))
+                    ? estimateTokens(INJECTION_REDACTION_MESSAGE) + 100
+                    : estimateTokens(screenText) + 100)
+                : 0;
             const assemblerBudget = 2000
                 + estimateTokens(intentContext || '')
                 + estimateTokens(modeContextBlock)
                 + estimateTokens(pinnedModeInstructions)
                 + estimateTokens(effectiveCandidateProfile || '')
-                + estimateTokens(screenContext?.ocrText || '')
+                + screenTokenEstimate
                 + domTokenEstimate
                 + estimateTokens((temporalContext?.previousResponses || []).join('\n'));
             const reservedForFit =

@@ -445,7 +445,7 @@ ${JSON.stringify({ content: this.escapePromptInjection(pinned) })}
     private escapePromptInjection(
         text: string,
         forceRedactOnInjection = false,
-        blockType: 'dom_context' | 'reference_file' | 'transcript' = 'reference_file'
+        blockType: 'dom_context' | 'reference_file' | 'transcript' | 'screen_context' = 'reference_file'
     ): string {
         if (!text) return '';
 
@@ -616,6 +616,23 @@ ${entries}
         if (typeof screenContext.confidence === 'number') metaParts.push(`confidence=${screenContext.confidence.toFixed(2)}`);
         const metaLine = metaParts.length ? `[${metaParts.join(' ')}]\n` : '';
 
+        // Security fix (Phase 3, answer-pipeline-rebuild, 2026-07-28): this block
+        // is labeled trust_level="untrusted_visual_evidence" but, unlike
+        // buildDomContextBlock (same TrustLevel.UNTRUSTED_SCREEN) and
+        // buildTranscriptBlock, never ran escapePromptInjection — only
+        // escapeUserContent (XML-delimiter escaping, not instruction-override
+        // neutralization). Screen content is exactly as attacker-reachable as
+        // DOM content (a crafted webpage, document, or visible chat message can
+        // contain an "ignore previous instructions"-style payload that a vision
+        // model then extracts verbatim as extractedText/visibleSummary/ocrText)
+        // and, like DOM, is static captured content rather than live spoken
+        // conversation — so it gets DOM's stricter full-block-redaction policy
+        // (forceRedactOnInjection=true), not transcript's inline-only
+        // neutralization.
+        const sanitizedContent = this.escapePromptInjection(this.escapeUserContent(truncated), true, 'screen_context');
+        const isRedacted = sanitizedContent === INJECTION_REDACTION_MESSAGE;
+        const evidenceText = isRedacted ? '[REDACTED]' : sanitizedContent.substring(0, 100);
+
         return {
             type: 'screen_context',
             trustLevel: TrustLevel.UNTRUSTED_SCREEN,
@@ -624,11 +641,11 @@ ${entries}
             recency: Date.now() - screenContext.timestamp,
             content: `<screen_context trust_level="untrusted_visual_evidence" source="${sourceLabel}">
 ${metaLine}${heading}
-${this.escapeUserContent(truncated)}
+${sanitizedContent}
 </screen_context>`,
             evidenceRefs: [{
                 source: 'screen',
-                text: this.escapeUserContent(truncated.substring(0, 100)),
+                text: evidenceText,
                 timestamp: screenContext.timestamp,
                 chunkId: isVision ? 'vision_capture' : 'ocr_capture',
             }],
