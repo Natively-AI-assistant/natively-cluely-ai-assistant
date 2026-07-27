@@ -302,7 +302,21 @@ async function main() {
         const promptAudit = await invoke('__e2e__:context-os-prompt-audit').catch(() => null);
         const answer = response.answer || '';
         const sentinelHit = SENTINELS.find((s) => answer.toLowerCase().includes(String(s).toLowerCase())) || null;
-        const violation = expectSentinelPresent ? !sentinelHit : Boolean(sentinelHit);
+        // Ground-truth fallback for the "required" direction (live-confirmed false
+        // positive, 2026-07-27): a correct, profile-grounded answer can legitimately
+        // paraphrase the candidate's experience (e.g. describe the Kafka/Flink
+        // migration) without ever repeating a literal sentinel string (candidate
+        // name, employer, project title) — confirmed via a real rep where
+        // `promptAuditLatest.hasRawCandidateProfile` was true (profile WAS injected
+        // and used) but zero sentinel strings appeared in the prose. Literal-string
+        // matching alone cannot distinguish that from a genuine leak-direction bug;
+        // when the prompt-audit ring fires, trust its ground truth over the text
+        // heuristic for this direction. It does NOT change the forbidden direction
+        // (a profile block should never be injected there in the first place, so no
+        // equivalent false-positive risk exists on that side).
+        const hasRawProfileEvidence = promptAudit?.audit?.at(-1)?.hasRawCandidateProfile === true;
+        const requiredSatisfied = Boolean(sentinelHit) || (expectSentinelPresent && hasRawProfileEvidence);
+        const violation = expectSentinelPresent ? !requiredSatisfied : Boolean(sentinelHit);
         const hasCodeFenceFirst = /^\s*```/.test(answer);
         // A genuine unwanted DSA-contract section (## Complexity heading, or the
         // contract's specific "Time Complexity: ... / Space Complexity: ..." dual

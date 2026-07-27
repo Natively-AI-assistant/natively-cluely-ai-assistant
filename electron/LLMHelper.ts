@@ -5589,9 +5589,20 @@ const isMultimodal = !!(imagePaths?.length);
     // images keeps the dedicated Groq-multimodal path (vision is handled by the
     // separate vision fallback when a vision model is selected).
     if (this.currentModelId === 'natively') {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
-      if (nativelyKey) {
+      // Bug found during Phase 2 harness investigation (2026-07-27): this gate
+      // used to check CredentialsManager.getNativelyApiKey() directly, which
+      // is false in the E2E test profile (a fresh userDataDir has no stored
+      // key). `hasNatively()` already encodes the exact same "real key OR
+      // NATIVELY_E2E local-test bypass" logic used by streamWithNatively
+      // itself (which this whole block ultimately opens) and by the
+      // last-resort fallback rung below (~line 5738) — this call site was the
+      // one place still duplicating the check without the E2E branch, so an
+      // E2E-driven request could never reach the Natively gateway at all and
+      // silently fell through to direct Gemini, unable to test the gateway's
+      // own cascade/fallback/quota logic. See docs/answer-pipeline-rebuild/
+      // 02_STATUS.md for the full trace (zero backend [Chat/Stream] log
+      // lines despite 76 successful harness reps was the smoking gun).
+      if (this.hasNatively()) {
         const textProviders: TextStreamProvider[] = [];
         let prio = 0;
         // Primary: Natively (fast connect budget — TTFT race handles slow prefill).
