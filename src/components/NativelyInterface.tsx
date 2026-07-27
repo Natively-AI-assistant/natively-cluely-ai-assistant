@@ -440,7 +440,12 @@ const HighlightedCode = React.memo(
         {!showCodeHeader && (
           <>
             <span
-              className="absolute top-2.5 left-3 z-10 text-[10px] uppercase tracking-widest font-mono pointer-events-none opacity-0 group-hover/code:opacity-100 transition-opacity duration-150"
+              // right-11 sits just left of CodeBlockCopyButton (w-7 at
+              // right-2, i.e. its left edge lands at 36px from the code
+              // block's right edge) — right-anchored so the label grows
+              // leftward, away from the button, regardless of language name
+              // length ("PYTHON" vs "TYPESCRIPT").
+              className="absolute top-2.5 right-11 z-10 text-[10px] uppercase tracking-widest font-mono pointer-events-none opacity-0 group-hover/code:opacity-100 transition-opacity duration-150"
               style={{ color: VIVID_DARK_LINE_NUMBER_COLOR }}
             >
               {resolved || 'CODE'}
@@ -627,7 +632,12 @@ export const StreamingHighlightedCode = React.memo(
         {!showCodeHeader && (
           <>
             <span
-              className="absolute top-2.5 left-3 z-10 text-[10px] uppercase tracking-widest font-mono pointer-events-none opacity-0 group-hover/code:opacity-100 transition-opacity duration-150"
+              // right-11 sits just left of CodeBlockCopyButton (w-7 at
+              // right-2, i.e. its left edge lands at 36px from the code
+              // block's right edge) — right-anchored so the label grows
+              // leftward, away from the button, regardless of language name
+              // length ("PYTHON" vs "TYPESCRIPT").
+              className="absolute top-2.5 right-11 z-10 text-[10px] uppercase tracking-widest font-mono pointer-events-none opacity-0 group-hover/code:opacity-100 transition-opacity duration-150"
               style={{ color: VIVID_DARK_LINE_NUMBER_COLOR }}
             >
               {resolved || 'CODE'}
