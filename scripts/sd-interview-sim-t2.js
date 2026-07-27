@@ -16,9 +16,11 @@
 //     npm run sd-interview-sim:t2
 //
 // Optional knobs:
-//   SD_INTERVIEW_SIM_T2_MAX_TURNS=20
+//   SD_INTERVIEW_SIM_T2_MAX_TURNS=32   (live quality default; use 4 only for smoke)
+//   SD_INTERVIEW_SIM_T2_INGEST_LESSONS=0  (opt out of LESSON ingest on live SUT)
 //   SD_INTERVIEW_SIM_T2_MAX_INTERVIEWS=5
 //   SD_INTERVIEW_SIM_T2_MAX_USD=1.5
+//   Full-loop cost guidance ~$1–3 / interview (non-SLA).
 //   SD_INTERVIEW_SIM_T2_INTERVIEWER_MODEL=gemini-3.1-flash-lite
 //   SD_INTERVIEW_SIM_T2_SUT_MODEL=gemini-3.5-flash
 //   SD_INTERVIEW_SIM_T2_SUT_TIMEOUT_MS=90000
@@ -49,6 +51,7 @@ const {
   t2SkipMessage,
   DEFAULT_INTERVIEWER_MODEL,
   DEFAULT_SUT_MODEL,
+  DEFAULT_LIVE_MAX_TURNS,
   createLiveInterviewerAgent,
   createThinCandidateAgent,
   createStubInterviewerAgent,
@@ -63,6 +66,12 @@ const {
   createLiveWhatToAnswerSut,
   liveSideChannelSnapshot,
 } = require('./lib/sd-interview-sim/liveSut');
+
+const {
+  resolveLessonsDir,
+  shouldIngestLessonsForT2,
+  walkLessonFiles,
+} = require('./lib/sd-interview-sim/lessonIngest');
 
 function resolveGitSha() {
   try {
@@ -212,6 +221,52 @@ async function bootLiveSut(models) {
     `[sd-interview-sim-t2] live SUT ready mode=${mode.id} model=${models.sut} userData=${tmpUserData}`,
   );
 
+  // LESSON ingest (SPEC 08) — default on for live SUT; warn+continue if missing.
+  let lessonsIngested = 0;
+  if (shouldIngestLessonsForT2(process.env)) {
+    try {
+      const lessonDir = resolveLessonsDir({ repoRoot, env: process.env });
+      if (!lessonDir) {
+        console.warn(
+          '[sd-interview-sim-t2] LESSON ingest skipped — no lessons dir ' +
+            '(set SD_LESSONS_DIR or add lessons/hellointerview-system-design)',
+        );
+      } else {
+        const orch = appState.getKnowledgeOrchestrator?.();
+        if (!orch?.ingestDocument) {
+          console.warn('[sd-interview-sim-t2] LESSON ingest skipped — KnowledgeOrchestrator unavailable');
+        } else {
+          const { DocType } = require(path.join(distRoot, 'knowledge', 'types.js'));
+          const files = walkLessonFiles(lessonDir);
+          console.log(
+            `[sd-interview-sim-t2] ingesting ${files.length} LESSON file(s) from ${lessonDir}`,
+          );
+          for (const f of files) {
+            const result = await orch.ingestDocument(f, DocType.LESSON);
+            if (result?.success) lessonsIngested += 1;
+            else {
+              console.warn(
+                `[sd-interview-sim-t2] ingest FAIL ${path.basename(f)}: ${result?.error || 'unknown'}`,
+              );
+            }
+          }
+          if (lessonsIngested > 0 && typeof orch.setKnowledgeMode === 'function') {
+            orch.setKnowledgeMode(true);
+          }
+          console.log(
+            `[sd-interview-sim-t2] LESSON ingest done: ${lessonsIngested}/${files.length} ok`,
+          );
+        }
+      }
+    } catch (err) {
+      console.warn(
+        `[sd-interview-sim-t2] LESSON ingest warn-and-continue: ${err?.message || err}`,
+      );
+    }
+  } else {
+    console.log('[sd-interview-sim-t2] LESSON ingest opted out (SD_INTERVIEW_SIM_T2_INGEST_LESSONS=0)');
+  }
+
   const sessionTracker = createIntelligenceSessionAdapter(intelligenceManager);
   const sut = createLiveWhatToAnswerSut({
     intelligenceManager,
@@ -224,6 +279,7 @@ async function bootLiveSut(models) {
     intelligenceManager,
     tmpUserData,
     app,
+    lessonsIngested,
   };
 }
 
@@ -248,7 +304,7 @@ async function main() {
   const sutModel =
     (process.env.SD_INTERVIEW_SIM_T2_SUT_MODEL || '').trim() || DEFAULT_SUT_MODEL;
 
-  const maxTurns = envInt('SD_INTERVIEW_SIM_T2_MAX_TURNS', 20);
+  const maxTurns = envInt('SD_INTERVIEW_SIM_T2_MAX_TURNS', DEFAULT_LIVE_MAX_TURNS);
   const maxInterviews = envInt('SD_INTERVIEW_SIM_T2_MAX_INTERVIEWS', 5);
   const maxUsd = envFloat('SD_INTERVIEW_SIM_T2_MAX_USD', 1.5);
   const retainN = envInt('SD_INTERVIEW_SIM_T2_RETAIN', 20);
@@ -277,6 +333,7 @@ async function main() {
   let sut = createEchoStubSut(models);
   let sessionTracker = null;
   let getSideChannelSnapshot;
+  let candidateAgent = createThinCandidateAgent();
 
   if (wantLiveSut) {
     liveBoot = await bootLiveSut(models);
@@ -284,6 +341,10 @@ async function main() {
     sessionTracker = liveBoot.sessionTracker;
     getSideChannelSnapshot = () =>
       liveSideChannelSnapshot(liveBoot.intelligenceManager);
+    candidateAgent = createThinCandidateAgent({
+      getGateStatus: () =>
+        liveBoot.intelligenceManager.getSdRequirementsGateStatus?.() ?? null,
+    });
   }
 
   const interviewerAgent = live
@@ -313,7 +374,7 @@ async function main() {
         interviewerAgent: live
           ? createLiveInterviewerAgent({ model: interviewerModel })
           : interviewerAgent,
-        candidateAgent: createThinCandidateAgent(),
+        candidateAgent,
         sut,
         sessionTracker,
         getSideChannelSnapshot,
@@ -327,6 +388,7 @@ async function main() {
           git_sha: resolveGitSha(),
           tier: 'T2',
           sut_path: wantLiveSut ? 'runWhatShouldISay' : 'echo-stub',
+          lessons_ingested: liveBoot?.lessonsIngested ?? 0,
         },
         nightlyCap,
         corpusDir,

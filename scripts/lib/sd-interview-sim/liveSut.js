@@ -7,6 +7,19 @@
 'use strict';
 
 /**
+ * Casual spoken tone contract for live SUT (SPEC 08).
+ * Attitude only — not the GitHub /sondo-pr-voice pipeline.
+ */
+const CASUAL_SD_TONE_INSTRUCTION = [
+  'Spoken tone for this system-design answer:',
+  '- Sound like a real interview candidate: casual, collaborative, short.',
+  '- Prefer "we" for design choices. Hedge lightly (I think / probably / maybe) when uncertain.',
+  '- Walk the hellointerview Delivery Framework in order when it fits the probe',
+  '  (Requirements → Core Entities → API → HLD → Deep Dives); do not dump every section every turn.',
+  '- No stiff corporate filler. No long monologue over the interviewer.',
+].join('\n');
+
+/**
  * @param {AsyncIterable<string>|AsyncGenerator<string>|string|null|undefined} streamOrText
  * @returns {Promise<string>}
  */
@@ -85,17 +98,24 @@ function createLiveWhatToAnswerSut(opts = {}) {
   const skipCooldown = opts.skipCooldown !== false;
   const forceFresh = opts.forceFresh !== false;
   const usdPer1k = opts.estimateUsdPer1kTokens != null ? opts.estimateUsdPer1kTokens : 0.0015;
+  const promptInstruction =
+    opts.promptInstruction != null
+      ? String(opts.promptInstruction)
+      : CASUAL_SD_TONE_INSTRUCTION;
 
   return async function liveWhatToAnswerSut(ctx) {
     const probe = String(ctx?.interviewerTurn?.text || '');
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     const started = Date.now();
+    const candidateAction = ctx?.candidateAction || 'trigger';
     try {
       const raw = await Promise.race([
         im.runWhatShouldISay(undefined, 1, undefined, {
           skipCooldown,
           forceFresh,
+          promptInstruction,
+          sdRequirementsUiAdvance: candidateAction === 'advance',
         }),
         new Promise((_, reject) => {
           ctl.signal.addEventListener('abort', () => {
@@ -126,7 +146,15 @@ function createLiveWhatToAnswerSut(opts = {}) {
         usdPer1kTokens: usdPer1k,
       });
       spend.latency_ms = Date.now() - started;
-      return { text, spend };
+      return {
+        text,
+        spend,
+        meta: {
+          promptInstruction,
+          candidateAction,
+          sdRequirementsUiAdvance: candidateAction === 'advance',
+        },
+      };
     } finally {
       clearTimeout(timer);
     }
@@ -147,6 +175,7 @@ function liveSideChannelSnapshot(intelligenceManager) {
 }
 
 module.exports = {
+  CASUAL_SD_TONE_INSTRUCTION,
   collectAnswer,
   estimateSpendFromText,
   createIntelligenceSessionAdapter,
