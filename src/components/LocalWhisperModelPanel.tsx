@@ -542,12 +542,6 @@ export function LocalWhisperModelPanel() {
                                         </span>
                                     </div>
                                 )}
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    )}
-                                </div>
->>>>>>> origin/main
                             </div>
                         );
                     })}
