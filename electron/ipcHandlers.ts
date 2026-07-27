@@ -4690,6 +4690,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  safeHandle('get-ambient-chat-enabled', async () => {
+    return appState.getAmbientChatEnabled();
+  });
+
+  safeHandle('set-ambient-chat-enabled', async (_, enabled: boolean) => {
+    appState.setAmbientChatEnabled(enabled);
+    return { success: true };
+  });
+
   safeHandle('get-code-verification', async () => {
     // Default OFF: code verification is currently disabled. Only true when the
     // user has explicitly opted in via Settings → General or env override.
