@@ -3313,9 +3313,10 @@ export class IntelligenceEngine extends EventEmitter {
             // Only treat the current question as advance when it itself matches
             // an advance phrase (manual "let's move on") — never re-scan the
             // whole window as a sticky soft-refuse.
+            const priorArtifact = this.session.getSdRequirementsArtifact?.() ?? null;
             const prepared = prepareSdRequirementsForAnswerPlan({
                 answerPlan,
-                artifact: this.session.getSdRequirementsArtifact?.() ?? null,
+                artifact: priorArtifact,
                 problemQuestion,
                 interviewerTexts,
                 screenTexts: screenBlob ? [screenBlob] : undefined,
@@ -3327,8 +3328,17 @@ export class IntelligenceEngine extends EventEmitter {
             });
 
             if (prepared.artifact) {
-                this.session.setSdRequirementsArtifact?.(prepared.artifact);
-                this.checkpointSdRequirements(prepared.artifact);
+                // Merge-before-checkpoint: gate prepare rebuilds gate-only shapes;
+                // reattach designSheet/recentSdAnswers when problemKey unchanged,
+                // else reset extension for the new key (SPEC 03).
+                const { mergeDeepDiveExtensionBeforeCheckpoint } =
+                    require('./llm/sdRequirementsGate') as typeof import('./llm/sdRequirementsGate');
+                const merged = mergeDeepDiveExtensionBeforeCheckpoint(
+                    priorArtifact,
+                    prepared.artifact,
+                );
+                this.session.setSdRequirementsArtifact?.(merged);
+                this.checkpointSdRequirements(merged);
             }
 
             this.publishSdRequirementsGateStatus(Boolean(prepared.softRefuseSpoken));
@@ -3367,7 +3377,7 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     /** Persist Requirements artifact for same-meeting crash restore (ticket 09). */
-    private checkpointSdRequirements(artifact: import('./llm/sdRequirementsGate').RequirementsArtifact): void {
+    private checkpointSdRequirements(artifact: import('./llm/sdRequirementsGate').SdRequirementsSessionArtifact): void {
         try {
             const meta = this.session.getMeetingMetadata?.();
             if (meta && (meta as any).doNotPersist === true) return;

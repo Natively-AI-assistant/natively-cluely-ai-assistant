@@ -269,7 +269,12 @@ describe('SessionTracker SD Requirements working copy', () => {
     const session = new SessionTracker();
     const a = gate.createEmptyRequirementsArtifact('p');
     session.setSdRequirementsArtifact(a);
-    assert.equal(session.getSdRequirementsArtifact(), a);
+    const stored = session.getSdRequirementsArtifact();
+    assert.ok(stored);
+    assert.equal(stored.problemKey, 'p');
+    // Deep-dive siblings defaulted on set for legacy gate-only artifacts.
+    assert.ok(stored.designSheet);
+    assert.ok(stored.recentSdAnswers);
 
     session.clearSdRequirementsLive();
     assert.equal(session.getSdRequirementsArtifact(), null);
@@ -284,7 +289,7 @@ describe('SessionTracker SD Requirements working copy', () => {
     const a = gate.createEmptyRequirementsArtifact('p');
     session.setSdRequirementsArtifact(a);
     session.clearSessionContext();
-    assert.equal(session.getSdRequirementsArtifact(), a);
+    assert.equal(session.getSdRequirementsArtifact()?.problemKey, 'p');
   });
 
   test('bindSdRequirementsMeeting hydrates same meeting only', () => {

@@ -37,6 +37,181 @@ export interface RequirementsArtifact {
   slots: Record<SlotId, SlotState>;
 }
 
+// ── Post-gate deep-dive design-state (SPECs 03/04) ───────────────────────────
+
+export type CoverageGapId = 'entities' | 'api' | 'hld' | 'deep_dive_topics';
+
+export type FillSource = 'interviewer' | 'speech' | 'assumption';
+
+export interface CoverageGapState {
+  uncovered: boolean;
+  reason?: string;
+  lastAttemptedAt?: number;
+}
+
+export interface DesignCommitment {
+  id: string;
+  section: CoverageGapId;
+  text: string;
+  fillSource: FillSource;
+  status: 'committed' | 'superseded';
+  supersededById?: string;
+  supersededReason?: string;
+  updatedAt: number;
+}
+
+export interface SdDesignSheet {
+  problemKey: string | null;
+  coverageGaps: Record<CoverageGapId, CoverageGapState>;
+  committed: DesignCommitment[];
+  updatedAt: number;
+  schemaVersion: 1;
+}
+
+export interface RecentSdAnswerItem {
+  answerId: string;
+  capturedAt: number;
+  text: string;
+  extractedCoverage?: Partial<Record<CoverageGapId, true>>;
+}
+
+export interface RecentSdAnswers {
+  problemKey: string | null;
+  items: RecentSdAnswerItem[];
+  cap: { maxItems: 3; maxTotalChars: 1800 };
+  updatedAt: number;
+  schemaVersion: 1;
+}
+
+/** Session artifact = Requirements gate fields + optional deep-dive siblings. */
+export type SdRequirementsSessionArtifact = RequirementsArtifact & {
+  designSheet?: SdDesignSheet;
+  recentSdAnswers?: RecentSdAnswers;
+};
+
+/** Locked continue order for non-specific interviewer prompts (SPEC 04). */
+export const COVERAGE_GAP_CONTINUE_ORDER: readonly CoverageGapId[] = [
+  'entities',
+  'api',
+  'hld',
+  'deep_dive_topics',
+] as const;
+
+/** Fresh sheet: all four gaps uncovered, no commitments. */
+export function createEmptySdDesignSheet(
+  problemKey: string | null = null,
+  now: number = Date.now(),
+): SdDesignSheet {
+  const coverageGaps = {} as Record<CoverageGapId, CoverageGapState>;
+  for (const id of COVERAGE_GAP_CONTINUE_ORDER) {
+    coverageGaps[id] = { uncovered: true };
+  }
+  return {
+    problemKey,
+    coverageGaps,
+    committed: [],
+    updatedAt: now,
+    schemaVersion: 1,
+  };
+}
+
+/** Fresh recent-SD window with locked caps (SPEC 04). */
+export function createEmptyRecentSdAnswers(
+  problemKey: string | null = null,
+  now: number = Date.now(),
+): RecentSdAnswers {
+  return {
+    problemKey,
+    items: [],
+    cap: { maxItems: 3, maxTotalChars: 1800 },
+    updatedAt: now,
+    schemaVersion: 1,
+  };
+}
+
+/**
+ * First uncovered Delivery Framework slice in locked continue order.
+ * Returns null when all four are covered (deepen/summarize — no fifth id).
+ */
+export function selectNextUncoveredCoverageGap(sheet: SdDesignSheet): CoverageGapId | null {
+  for (const id of COVERAGE_GAP_CONTINUE_ORDER) {
+    if (sheet.coverageGaps[id]?.uncovered) return id;
+  }
+  return null;
+}
+
+/**
+ * Derive coverage gap uncovered flags from commitments.
+ * Covered when ≥1 commitment for that section has status 'committed';
+ * uncovered when all are superseded (or none exist).
+ */
+export function coverageGapsFromCommitments(
+  committed: DesignCommitment[],
+): Record<CoverageGapId, CoverageGapState> {
+  const coverageGaps = {} as Record<CoverageGapId, CoverageGapState>;
+  for (const id of COVERAGE_GAP_CONTINUE_ORDER) {
+    const hasActive = committed.some((c) => c.section === id && c.status === 'committed');
+    coverageGaps[id] = { uncovered: !hasActive };
+  }
+  return coverageGaps;
+}
+
+/**
+ * Injectable floor payload: only status:'committed' entries (SPEC 04).
+ * Superseded rows stay on the sheet for audit but must not actively ground.
+ */
+export function serializeDesignSheetFloor(sheet: SdDesignSheet): DesignCommitment[] {
+  return sheet.committed.filter((c) => c.status === 'committed');
+}
+
+/**
+ * Ensure optional deep-dive siblings exist (backward-compatible hydrate).
+ * Missing fields default to empty sheet/window keyed to artifact.problemKey.
+ */
+export function ensureSdDeepDiveExtension(
+  artifact: RequirementsArtifact | SdRequirementsSessionArtifact,
+): SdRequirementsSessionArtifact {
+  const key = artifact.problemKey ?? null;
+  const next = artifact as SdRequirementsSessionArtifact;
+  return {
+    ...next,
+    designSheet: next.designSheet ?? createEmptySdDesignSheet(key),
+    recentSdAnswers: next.recentSdAnswers ?? createEmptyRecentSdAnswers(key),
+  };
+}
+
+/**
+ * After gate prepare rebuilds a gate-shaped artifact: reattach prior extension
+ * when problemKey is unchanged; reset to empty when problemKey changed; then
+ * always ensure siblings are present before checkpoint (SPEC 03).
+ */
+export function mergeDeepDiveExtensionBeforeCheckpoint(
+  prior: RequirementsArtifact | SdRequirementsSessionArtifact | null | undefined,
+  prepared: RequirementsArtifact | SdRequirementsSessionArtifact,
+): SdRequirementsSessionArtifact {
+  const priorExt = prior as SdRequirementsSessionArtifact | null | undefined;
+  const sameKey =
+    priorExt != null &&
+    priorExt.problemKey != null &&
+    prepared.problemKey != null &&
+    priorExt.problemKey === prepared.problemKey;
+
+  if (sameKey) {
+    return ensureSdDeepDiveExtension({
+      ...prepared,
+      designSheet: priorExt!.designSheet,
+      recentSdAnswers: priorExt!.recentSdAnswers,
+    });
+  }
+
+  const key = prepared.problemKey ?? null;
+  return {
+    ...prepared,
+    designSheet: createEmptySdDesignSheet(key),
+    recentSdAnswers: createEmptyRecentSdAnswers(key),
+  };
+}
+
 export interface MissingSlot {
   id: SlotId;
   label: string;
