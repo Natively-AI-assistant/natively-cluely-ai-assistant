@@ -151,16 +151,48 @@ async function main() {
     const providerSet = await raw(() => (window.electronAPI || window.api).setModel('natively'));
     if (!providerSet?.success) throw new Error(`setModel(natively) failed: ${providerSet?.error}`);
 
+    // The main process broadcasts chat tokens on a single untagged
+    // 'gemini-stream-token' channel; a superseded/fire-and-forget losing branch
+    // of `raceStreamWithDeadline` can keep emitting after its own request already
+    // "finished" from the caller's point of view. Production already defends
+    // against this at the renderer layer (src/lib/chatStreamGuard.mjs,
+    // resolveChatStreamToken/resolveChatStreamDone: drop any token/done whose
+    // streamId is older than the currently-adopted one). This harness MUST apply
+    // the identical policy — accepting every token blindly (as an earlier version
+    // of this script did) reproduced exactly the interleaving bug that guard
+    // exists to prevent, producing garbled answers and impossibly-fast TFFT from
+    // stale in-flight tokens. Inlined (not imported) because this closure runs
+    // inside page.evaluate, a separate JS realm with no module loader access.
     const askManual = async (question) => raw(async ({ question, timeoutMs }) => {
       const api = window.electronAPI || window.api;
       return new Promise((resolve) => {
         const t0 = performance.now();
         const events = [];
         let settled = false;
+        let activeStreamId = null;
+        const resolveToken = (incomingId) => {
+          if (typeof incomingId !== 'number') return { accept: true, activeId: activeStreamId };
+          if (activeStreamId === null || incomingId === activeStreamId) return { accept: true, activeId: incomingId };
+          if (incomingId > activeStreamId) return { accept: true, activeId: incomingId };
+          return { accept: false, activeId: activeStreamId };
+        };
+        const resolveDone = (incomingId) => {
+          if (typeof incomingId !== 'number') return { honor: true, activeId: null };
+          if (activeStreamId === null || incomingId >= activeStreamId) return { honor: true, activeId: null };
+          return { honor: false, activeId: activeStreamId };
+        };
         const stop = () => { offToken?.(); offDone?.(); offError?.(); clearTimeout(timer); };
         const done = (result) => { if (settled) return; settled = true; stop(); resolve({ ...result, t0, events }); };
-        const offToken = api.onGeminiStreamToken((token) => { events.push({ t: performance.now(), token }); });
+        const offToken = api.onGeminiStreamToken((token, meta) => {
+          const decision = resolveToken(meta?.streamId);
+          activeStreamId = decision.activeId;
+          if (!decision.accept) return;
+          events.push({ t: performance.now(), token });
+        });
         const offDone = api.onGeminiStreamDone((payload) => {
+          const decision = resolveDone(payload?.streamId);
+          activeStreamId = decision.activeId;
+          if (!decision.honor) return;
           const text = events.map((e) => e.token).join('');
           done({ success: true, answer: payload?.finalText || text });
         });
@@ -242,7 +274,15 @@ async function main() {
         const answer = response.answer || '';
         const sentinelHit = SENTINELS.find((s) => answer.toLowerCase().includes(String(s).toLowerCase())) || null;
         const hasCodeFenceFirst = /^\s*```/.test(answer);
-        const hasComplexitySection = /\b(time complexity|space complexity|complexity analysis|big[- ]o)\b/i.test(answer);
+        // A genuine unwanted DSA-contract section (## Complexity heading, or the
+        // contract's specific "Time Complexity: ... / Space Complexity: ..." dual
+        // line pattern) is the actual bug (RC-7). A single incidental clause like
+        // "this is O(1) because it's one arithmetic operation" inside an
+        // otherwise-appropriate short explanation is NOT the bug — CODING_CONTRACT_IMPL
+        // explicitly asks for a short explanation, and one clause mentioning
+        // complexity naturally is normal prose, not a mandated dedicated section.
+        const hasComplexitySection = /^\s*##\s*complexity\b/im.test(answer)
+          || (/\btime complexity\b/i.test(answer) && /\bspace complexity\b/i.test(answer));
         results.push({
           caseId,
           rep,

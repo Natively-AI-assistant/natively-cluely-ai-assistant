@@ -5,6 +5,7 @@ import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
 import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords } from './speakability';
 import { applyModeFallback, type ActiveModeInfo } from './modeProfiles';
 import { classifyDocumentQuestionShape } from './documentGroundedPrompt';
+import { includesPlannerTerm } from '../services/modes/retrievalTextMatch';
 
 export type AnswerType =
   | 'identity_answer'
@@ -503,7 +504,7 @@ const TECHNICAL_SUBJECT_PATTERNS = [
   /\b(eventual consistency|strong consistency|consistency model|cap theorem|consensus|quorum|paxos|raft|two[- ]?phase commit)\b/i,
   /\b(amortized|complexity|big[- ]?o|asymptotic|np[- ]?complete)\b/i,
   /\b(closure|hoisting|prototype|garbage collection|event loop|promise|async)\b/i,
-  /\b(rest|graphql|grpc|microservice|monolith|cache|caching|cdn|load balanc|rate limit\w*|rate[- ]?limiter|message queue|pub[- ]?sub|webhook|idempoten\w*|backpressure|circuit breaker)\b/i,
+  /\b(rest|restful|graphql|graph\s*ql|apis?|grpc|microservice|monolith|cache|caching|cdn|load balanc|rate limit\w*|rate[- ]?limiter|message queue|pub[- ]?sub|webhook|idempoten\w*|backpressure|circuit breaker)\b/i,
   /\b(encryption|hashing|oauth|jwt|tls|ssl|cors|xss|csrf|sql injection)\b/i,
   /\b(pointer|reference|stack|heap|recursion|iteration|polymorphism|inheritance)\b/i,
   // Frameworks / cloud / data-eng subjects that appear in "explain X" concept
@@ -514,7 +515,27 @@ const TECHNICAL_SUBJECT_PATTERNS = [
   /\b(indexing|pandas|numpy|spark|hadoop|etl|dataframe)\b/i,
   /\b(a\/b test|ab test|retention|cohort|regression|classification|clustering)\b/i,
 ];
-const isLikelyTechnicalConcept = (text: string): boolean => includesAny(text, TECHNICAL_SUBJECT_PATTERNS);
+// Typo-tolerant technical vocabulary (RC-2 fix): a one-edit-distance misspelling
+// of a common technical term ("qraphql") should route the same as the correctly
+// spelled term, rather than falling through to classifyUnmatchedFallback's
+// unknown_answer (which had no relevance-gated profile policy — see RC-1). Only
+// terms >= 4 chars are fuzzed by includesPlannerTerm, so short acronyms like
+// "api" rely on the exact TECHNICAL_SUBJECT_PATTERNS entry above instead.
+// "mutex" deliberately excluded (code-review 2026-07-27): levenshtein1('mute',
+// 'mutex') is true, and "mute" is a common word in a live-meeting/interview
+// product's transcripts — the exact `\bmutex\b` pattern in
+// TECHNICAL_SUBJECT_PATTERNS above already covers the correctly-spelled term.
+const TYPO_TOLERANT_TECHNICAL_TERMS = [
+  'graphql', 'database', 'algorithm', 'javascript', 'typescript', 'kubernetes',
+  'docker', 'postgres', 'postgresql', 'mongodb', 'redis', 'kafka',
+  'microservice', 'recursion', 'encryption', 'deadlock', 'semaphore',
+  'concurrency', 'asynchronous', 'polymorphism', 'inheritance', 'websocket',
+  'idempotent', 'middleware', 'endpoint', 'authentication', 'authorization',
+  'serverless', 'container', 'framework', 'compiler', 'interpreter',
+];
+const isLikelyTechnicalConcept = (text: string): boolean =>
+  includesAny(text, TECHNICAL_SUBJECT_PATTERNS)
+  || TYPO_TOLERANT_TECHNICAL_TERMS.some((term) => includesPlannerTerm(text, term));
 
 const DSA_PATTERNS = [
   /\btwo\s*sum\b/i,
@@ -2496,7 +2517,16 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
              && (followUpHasProjectContext(input, question)
                  || (!includesAny(textNoTechStack, DSA_PATTERNS)
                      && !includesAny(text, CODING_PATTERNS)
-                     && !isLikelyTechnicalConcept(textNoTechStack)))) {
+                     // Scoped to the exact TECHNICAL_SUBJECT_PATTERNS check only
+                     // (NOT the typo-tolerant isLikelyTechnicalConcept) — code-review
+                     // finding (2026-07-27): the broadened typo-tolerant matcher added
+                     // for RC-2 (see isLikelyTechnicalConcept above) includes exact
+                     // trigger words like "framework"/"api" that weren't guarded
+                     // before, and this negation would then wrongly exclude a genuine
+                     // project follow-up like "what frameworks did you use in your
+                     // project?" from project_followup routing (recreating the same
+                     // unknown_answer-leak bug class for a different question shape).
+                     && !includesAny(textNoTechStack, TECHNICAL_SUBJECT_PATTERNS)))) {
     // Phase 5: a drill-in on a project already on the table ("how is it built?",
     // "what was your role?", "what tech stack did you use?", "hardest part?",
     // "why did you build it?", "what did you learn?"). These are PROFILE questions

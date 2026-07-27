@@ -1591,14 +1591,23 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         }
 
-        // Real-custom-mode-repair (2026-07-11), Phase 4/7: this is the REAL,
-        // non-provisional `finalAction` trace log for this turn — reached only
-        // when the clarification short-circuit above did NOT fire (it already
-        // logged 'clarify' and returned). Emitted once per turn, so a trace
-        // consumer can never see a `sourceOwner=clarify` line paired with a
-        // hardcoded 'answer' outcome that doesn't reflect what actually
-        // happened, closing the authority-conflict trace gap identified in
-        // docs/context-os/real-custom-mode-repair/04_AUTHORITY_CONFLICT_REPORT.md.
+        // Real-custom-mode-repair (2026-07-11), Phase 4/7: reached only when the
+        // clarification short-circuit above did NOT fire (it already logged
+        // 'clarify' and returned), so `finalAction: 'answer'` here correctly
+        // states "not clarifying" — but no `evidencePack` is available yet at
+        // this point (it's built later, inside `manualContextOsGeneration`), so
+        // `evidenceCoverage`/`selectedEvidenceCount` below are NOT measurements —
+        // they are `buildContextOsTrace`'s no-pack defaults (false/0). Do not
+        // treat this trace as proof that evidence was insufficient; it fires
+        // before evidence is known. This is a dev-only diagnostic (gated by the
+        // `trace` intelligence flag, console output only) — no `__e2e__:*`
+        // handler currently reads it, and it does not gate generation behavior.
+        // Answer-pipeline-rebuild Phase 1/RC-3: a prior version of this comment
+        // claimed this WAS "the REAL, non-provisional" outcome trace, which is
+        // what led to the original misdiagnosis of the finalAction fingerprint.
+        // Wiring a second, post-evidence-pack trace call is tracked for Phase 3
+        // (final-payload/telemetry invariants), not done here to avoid a
+        // untested restructure of this call's surrounding control flow.
         if (turnContract && isIntelligenceFlagEnabled('trace')) {
           try {
             const { buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
