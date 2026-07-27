@@ -400,6 +400,11 @@ Sample thesis for testing.pdf
 # Live-smoke harness scratch dir (created at runtime by scripts/smoke-document-grounded.js)
 /.smoke-sandbox/
 
+# SD interview sim overnight corpus (file-based transcript bundles; not meeting DB).
+# Path convention: traces/sd-interview-sim/<run_id>.json — see scripts/lib/sd-interview-sim/corpus.js
+traces/sd-interview-sim/*
+!traces/sd-interview-sim/README.md
+
 # User-submitted crash reports / debug logs (device + session diagnostics — never commit)
 user log/
 *.ips
