@@ -1467,65 +1467,65 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 <nav className="mt-2 space-y-1">
                                     <button
                                         onClick={() => setActiveTab('general')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'general' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'general' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <Monitor size={16} /> {t('General')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('natively-api')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'natively-api' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'natively-api' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <img src={nativelyLogo} alt="" className={`w-4 h-4 object-contain ${activeTab === 'natively-api' ? 'opacity-100' : 'opacity-70'}`} draggable={false} />
                                         <span>Natively API</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('natively-pro')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'natively-pro' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'natively-pro' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <img src={nativelyLogo} alt="" className={`w-4 h-4 object-contain ${activeTab === 'natively-pro' ? 'opacity-100' : 'opacity-70'}`} draggable={false} />
                                         <span>Natively Pro</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('ai-providers')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'ai-providers' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'ai-providers' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <FlaskConical size={16} /> {t('AI Providers')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('skills')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'skills' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'skills' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <Folder size={16} /> {t('Skills')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('calendar')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'calendar' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'calendar' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <Calendar size={16} /> {t('Calendar')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('audio')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'audio' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'audio' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <Mic size={16} /> {t('Audio')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('keybinds')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'keybinds' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'keybinds' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <Keyboard size={16} /> {t('Keybinds')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('phone-mirror')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'phone-mirror' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'phone-mirror' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <Smartphone size={16} /> {t('Sync')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('intelligence')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'intelligence' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'intelligence' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <Cpu size={16} /> {t('Intelligence')}
                                     </button>
@@ -1533,7 +1533,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     {visionBenchmarkEnabled && (
                                         <button
                                             onClick={() => setActiveTab('vision-benchmark')}
-                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'vision-benchmark' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'vision-benchmark' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                         >
                                             <FlaskConical size={16} /> Vision Benchmark
                                         </button>
@@ -1541,14 +1541,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                     <button
                                         onClick={() => setActiveTab('help')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'help' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'help' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <HelpCircle size={16} /> {t('Setup & Help')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('about')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'about' ? "bg-bg-item-active text-text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full before:bg-accent-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'about' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
                                     >
                                         <Info size={16} /> {t('About')}
                                     </button>
