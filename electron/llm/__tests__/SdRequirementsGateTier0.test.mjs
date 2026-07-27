@@ -62,6 +62,8 @@ function withPhase(plan, sdPhase) {
 
 const MIXED_LESSON_CHUNKS = [
   {
+    // similarity kept so post-gate score gate (SPEC 02) still injects this stub
+    similarity: 0.9,
     text: [
       '## Understanding the Problem',
       'Clarify what the shortener must do.',

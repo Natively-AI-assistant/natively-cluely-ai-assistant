@@ -57,6 +57,14 @@ export type { RepetitionVerdict, RepetitionReason, DiversityCheckOpts } from "./
 export type { AnswerPlan, AnswerSource, AnswerType, ContextLayer, OutputPerspective, SpeakerPerspective } from "./AnswerPlanner";
 export {
     createEmptyRequirementsArtifact,
+    createEmptySdDesignSheet,
+    createEmptyRecentSdAnswers,
+    selectNextUncoveredCoverageGap,
+    coverageGapsFromCommitments,
+    serializeDesignSheetFloor,
+    ensureSdDeepDiveExtension,
+    mergeDeepDiveExtensionBeforeCheckpoint,
+    COVERAGE_GAP_CONTINUE_ORDER,
     deriveSdPhase,
     resetArtifactForNewSdProblem,
     isChecklistComplete,
@@ -92,6 +100,14 @@ export type {
     SlotFillSource,
     SlotState,
     RequirementsArtifact,
+    SdRequirementsSessionArtifact,
+    CoverageGapId,
+    FillSource,
+    CoverageGapState,
+    DesignCommitment,
+    SdDesignSheet,
+    RecentSdAnswerItem,
+    RecentSdAnswers,
     MissingSlot,
     AdvanceChannel,
     NextSlotOptions,
@@ -112,6 +128,35 @@ export type {
     PrepareSdRequirementsInput,
     PrepareSdRequirementsResult,
 } from "./sdRequirementsLive";
+export {
+    buildSdDeepDivePackSnapshot,
+    buildDeepDiveCheckContext,
+    applyCompletedSdAnswerToArtifact,
+    shouldApplySdDeepDivePostAnswerMerge,
+} from "./sdDeepDiveLive";
+export type {
+    SdDeepDivePackSnapshot,
+    ApplyCompletedSdAnswerArgs,
+    ApplyCompletedSdAnswerResult,
+} from "./sdDeepDiveLive";
+export {
+    buildSdDeepDiveContextPack,
+    capRecentSdAnswers,
+    SD_CONTEXT_PACK_HARD_CAP_TOKENS,
+    SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS,
+    SD_RETRIEVED_MODE_CONTEXT_BUDGET_TOKENS,
+} from "./sdDeepDiveContextPack";
+export { enforceDeepDiveChecks, buildSoftCheckTrailer } from "./sdDeepDiveSoftChecks";
+export {
+    startProvisional,
+    clearProvisional,
+    mergeExtractedAnswer,
+    heuristicExtractFromSpoken,
+} from "./sdDesignSheetExtractor";
+export {
+    applyScoreGate,
+    preferDeepDiveSections,
+} from "./sdLessonScoreGate";
 export { applyModeFallback, MODE_CONTEXT_PROFILES } from "./modeProfiles";
 export type { ActiveModeInfo, ModeContextProfile, ModeTemplateType } from "./modeProfiles";
 export { resolveFollowUp, resolveFollowUpOrClarify, isBareFollowUp, isRefinementFollowUp, isSameSessionFollowUp, buildContextFreeClarification } from "./FollowUpResolver";

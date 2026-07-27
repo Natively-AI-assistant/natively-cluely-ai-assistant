@@ -3,7 +3,10 @@
 // Extracted from IntelligenceManager to decouple state management from LLM orchestration.
 
 import { RecapLLM } from './llm';
-import type { RequirementsArtifact } from './llm/sdRequirementsGate';
+import {
+    ensureSdDeepDiveExtension,
+    type SdRequirementsSessionArtifact,
+} from './llm/sdRequirementsGate';
 import { isVerboseLogging } from './verboseLog';
 
 // Canned-fallback phrases that mean the model gave up entirely, not phrases
@@ -109,9 +112,10 @@ export class SessionTracker {
     } | null = null;
 
     // SD Requirements grilling gate — live working copy (ticket 09).
+    // Optional designSheet + recentSdAnswers siblings (deep-dive Wave 1).
     // Keyed by active meeting id; checkpointed to meeting DB separately.
     // Cleared on meeting end / reset; never owned by ModesManager.
-    private sdRequirementsArtifact: RequirementsArtifact | null = null;
+    private sdRequirementsArtifact: SdRequirementsSessionArtifact | null = null;
     private sdRequirementsBoundMeetingId: string | null = null;
 
     // Full Session Tracking (Persisted)
@@ -175,29 +179,39 @@ export class SessionTracker {
     // SD Requirements artifact (working copy)
     // ============================================
 
-    getSdRequirementsArtifact(): RequirementsArtifact | null {
+    getSdRequirementsArtifact(): SdRequirementsSessionArtifact | null {
         return this.sdRequirementsArtifact;
     }
 
-    setSdRequirementsArtifact(artifact: RequirementsArtifact | null): void {
-        this.sdRequirementsArtifact = artifact;
+    setSdRequirementsArtifact(artifact: SdRequirementsSessionArtifact | null): void {
+        if (!artifact) {
+            this.sdRequirementsArtifact = null;
+            return;
+        }
+        // Preserve identity when siblings already present (callers may rely on
+        // same reference mid-turn); default only when legacy gate-only.
+        this.sdRequirementsArtifact =
+            artifact.designSheet && artifact.recentSdAnswers
+                ? artifact
+                : ensureSdDeepDiveExtension(artifact);
     }
 
     /**
      * Bind live Requirements state to a meeting id. On first bind / meeting-id
      * change: clear prior live state, then optionally hydrate from that
-     * meeting's own checkpoint (never cross-meeting).
+     * meeting's own checkpoint (never cross-meeting). Missing deep-dive
+     * siblings default to empty sheet/window for the restored problemKey.
      */
     bindSdRequirementsMeeting(
         meetingId: string | null,
-        loadCheckpoint?: () => RequirementsArtifact | null | undefined,
+        loadCheckpoint?: () => SdRequirementsSessionArtifact | null | undefined,
     ): void {
         const nextId = meetingId ? String(meetingId) : null;
         if (nextId === this.sdRequirementsBoundMeetingId) {
             // Same meeting already bound — keep working copy (mid-meeting).
             if (this.sdRequirementsArtifact == null && nextId && loadCheckpoint) {
                 const cp = loadCheckpoint();
-                if (cp) this.sdRequirementsArtifact = cp;
+                if (cp) this.sdRequirementsArtifact = ensureSdDeepDiveExtension(cp);
             }
             return;
         }
@@ -206,7 +220,7 @@ export class SessionTracker {
         if (nextId && loadCheckpoint) {
             try {
                 const cp = loadCheckpoint();
-                if (cp) this.sdRequirementsArtifact = cp;
+                if (cp) this.sdRequirementsArtifact = ensureSdDeepDiveExtension(cp);
             } catch (err: any) {
                 console.warn('[SessionTracker] SD Requirements checkpoint restore failed:', err?.message || err);
             }

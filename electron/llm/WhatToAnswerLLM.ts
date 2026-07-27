@@ -421,52 +421,107 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 }
             }
 
-            // ── SYSTEM-DESIGN LESSON GROUNDING (ticket 08) ────────────────────
+            // ── SYSTEM-DESIGN LESSON GROUNDING (ticket 08) + deep-dive pack ───
             // On a system-design turn, ground the Deep Dives in the persistent
             // hellointerview LESSON corpus (ingested via knowledge:ingest-lesson).
             // Retrieval is SCOPED to doc_type='lesson' so this content can never
-            // reach a profile/behavioral answer, and appended to modeContextBlock
-            // as a <reference_file> block — the SAME mechanism the technical-
-            // interview prompt's <injected_context> already consumes (no new
-            // injection path). Bounded like the hybrid retrieval above so a cold
-            // embedder can't stall first-token; a miss just leaves the framework
-            // skeleton (ticket 07) ungrounded rather than blocking the answer.
+            // reach a profile/behavioral answer. Bounded like hybrid retrieval.
             //
             // Requirements grilling (Tier 0 / ticket 12): while sdPhase=requirements,
             // filter inject to Understanding/FR/NFR allowlist and append the phase
-            // prompt contract. Full inject resumes at post_requirements (or when
-            // sdPhase is unset — legacy SD path).
+            // prompt contract (ad-hoc LESSON <reference_file> — unchanged).
+            // Post-gate (SPECs 02/06): score-gate ~0.5, prefer Deep Dive/NFR, then
+            // assemble bounded context pack (sheet + utterance + LESSON + recent)
+            // into modeContextBlock — replaces ad-hoc LESSON-only inject.
             const sdPhase = answerPlan?.sdPhase;
             const requirementsGated =
                 answerPlan?.answerType === 'system_design_answer' && sdPhase === 'requirements';
+            const deepDivePostGate =
+                answerPlan?.answerType === 'system_design_answer' && sdPhase !== 'requirements';
+            let sdRetrievedModeBudget: number | undefined;
+            let deepDiveCheckContext: import('./sdDeepDiveSoftChecks').DeepDiveCheckContext = {
+                lessonInjected: false,
+                sheetCommittedTexts: [],
+                lessonChunkTexts: [],
+                recentAnswerTexts: [],
+            };
             if (answerPlan?.answerType === 'system_design_answer') {
                 try {
                     const {
                         filterLessonChunksForPhase,
                         requirementsPhaseContractFor,
                     } = require('./sdRequirementsGate') as typeof import('./sdRequirementsGate');
+                    const {
+                        applyScoreGate,
+                        preferDeepDiveSections,
+                    } = require('./sdLessonScoreGate') as typeof import('./sdLessonScoreGate');
+                    type LessonChunk = { text: string; similarity: number };
+                    let chunksForInject: LessonChunk[] = [];
                     const orchestrator = this.llmHelper.getKnowledgeOrchestrator?.();
                     if (orchestrator?.queryRelevantChunks) {
                         const { DocType } = require('../knowledge/types') as typeof import('../knowledge/types');
                         const lessonQuery = answerPlan?.question?.trim() || cleanedTranscript;
                         const { value: lessonChunks } = await raceWithBudget(
-                            orchestrator.queryRelevantChunks(lessonQuery, DocType.LESSON, 5) as Promise<Array<{ text: string }>>,
+                            orchestrator.queryRelevantChunks(lessonQuery, DocType.LESSON, 5) as Promise<LessonChunk[]>,
                             HYBRID_RETRIEVAL_BUDGET_MS,
-                            [] as Array<{ text: string }>,
+                            [] as LessonChunk[],
                         );
-                        const chunksForInject = Array.isArray(lessonChunks)
-                            ? filterLessonChunksForPhase(lessonChunks, sdPhase)
-                            : [];
+                        const scored = Array.isArray(lessonChunks) ? lessonChunks : [];
+                        chunksForInject = preferDeepDiveSections(
+                            filterLessonChunksForPhase(applyScoreGate(scored, sdPhase), sdPhase),
+                            sdPhase,
+                        );
+                    }
+
+                    if (requirementsGated) {
+                        // Requirements identity: keep ad-hoc LESSON + phase contract.
                         if (chunksForInject.length > 0) {
                             const lessonBlock = `<reference_file name="hellointerview-system-design.md">\n${chunksForInject.map((c) => c.text).join('\n\n')}\n</reference_file>`;
                             modeContextBlock = modeContextBlock ? `${modeContextBlock}\n\n${lessonBlock}` : lessonBlock;
                         }
-                    }
-                    const phaseContract = requirementsPhaseContractFor(sdPhase, answerPlan?.sdGrill);
-                    if (phaseContract) {
-                        modeContextBlock = modeContextBlock
-                            ? `${modeContextBlock}\n\n${phaseContract}`
-                            : phaseContract;
+                        const phaseContract = requirementsPhaseContractFor(sdPhase, answerPlan?.sdGrill);
+                        if (phaseContract) {
+                            modeContextBlock = modeContextBlock
+                                ? `${modeContextBlock}\n\n${phaseContract}`
+                                : phaseContract;
+                        }
+                    } else if (deepDivePostGate) {
+                        const {
+                            buildSdDeepDiveContextPack,
+                            SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS,
+                            SD_RETRIEVED_MODE_CONTEXT_BUDGET_TOKENS,
+                        } = require('./sdDeepDiveContextPack') as typeof import('./sdDeepDiveContextPack');
+                        const { buildDeepDiveCheckContext } = require('./sdDeepDiveLive') as typeof import('./sdDeepDiveLive');
+                        const snap = requestSnapshot?.sdDeepDive;
+                        const sheet = (snap?.designSheet ?? null) as import('./sdRequirementsGate').SdDesignSheet | null;
+                        const recent = (snap?.recentSdAnswers ?? null) as import('./sdRequirementsGate').RecentSdAnswers | null;
+                        const latestInterviewer =
+                            (snap?.latestInterviewer != null && String(snap.latestInterviewer).trim())
+                                ? String(snap.latestInterviewer).trim()
+                                : (answerPlan?.question?.trim() || null);
+                        const packResult = buildSdDeepDiveContextPack({
+                            sheet,
+                            recentSdAnswers: recent,
+                            latestInterviewer,
+                            lessonChunks: chunksForInject,
+                            // Fit under retrievedModeContext so pack eviction
+                            // (never drop sheet+utterance) wins over assembler truncation.
+                            budgets: { maxTotalTokens: SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS },
+                            // Never pass transcript into the pack.
+                            sdPhase: sdPhase === 'post_requirements' ? 'post_requirements' : null,
+                        });
+                        if (packResult.pack) {
+                            modeContextBlock = modeContextBlock
+                                ? `${modeContextBlock}\n\n${packResult.pack}`
+                                : packResult.pack;
+                        }
+                        deepDiveCheckContext = buildDeepDiveCheckContext({
+                            sheet,
+                            recentSdAnswers: recent,
+                            lessonChunks: chunksForInject,
+                            lessonInjected: Boolean(packResult.blocks.lesson),
+                        });
+                        sdRetrievedModeBudget = SD_RETRIEVED_MODE_CONTEXT_BUDGET_TOKENS;
                     }
                 } catch (lessonErr: any) {
                     console.warn('[WhatToAnswerLLM] system-design lesson grounding skipped (non-fatal):', lessonErr?.message);
@@ -605,6 +660,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 priorResponses: !documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses ? temporalContext.previousResponses : undefined,
                 intentContext,
                 retrievedModeContext: typedModeContext || undefined,
+                retrievedModeContextTokenBudget: sdRetrievedModeBudget,
                 pinnedModeInstructions: pinnedModeInstructions || undefined,
                 candidateProfile: typedCandidateProfile || undefined,
                 tokenBudget: Math.max(1000, assemblerBudget),
@@ -736,10 +792,9 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 }
                 tokenCount++;
                 streamedBuffer.push(token);
-                // While Requirements gate is open, buffer tokens and soft-truncate
-                // later Delivery Framework headings before show (Tier 0 / ticket 12).
-                // Clarifier turns are short; buffering does not change the product
-                // shape vs streaming then repairing after the fact.
+                // Requirements gate still buffers (structural truncate needs full text).
+                // Post-gate deep-dive soft checks stream live for TTFT, then finalize
+                // the authoritative buffer + optional annotation trailer (SPEC 07 gap fix).
                 if (!requirementsGated) {
                     yield token;
                 }
@@ -760,6 +815,21 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 } catch (gateErr: any) {
                     console.warn('[WhatToAnswerLLM] requirements structural gate threw:', gateErr?.message);
                     yield streamedBuffer.join('');
+                }
+            } else if (deepDivePostGate) {
+                try {
+                    const {
+                        enforceDeepDiveChecks,
+                        buildSoftCheckTrailer,
+                    } = require('./sdDeepDiveSoftChecks') as typeof import('./sdDeepDiveSoftChecks');
+                    const raw = streamedBuffer.join('');
+                    const checked = enforceDeepDiveChecks(raw, sdPhase, deepDiveCheckContext);
+                    streamedBuffer.length = 0;
+                    streamedBuffer.push(checked);
+                    const trailer = buildSoftCheckTrailer(raw, checked);
+                    if (trailer) yield trailer;
+                } catch (checkErr: any) {
+                    console.warn('[WhatToAnswerLLM] deep-dive soft checks threw:', checkErr?.message);
                 }
             }
 

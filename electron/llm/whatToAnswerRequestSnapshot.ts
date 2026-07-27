@@ -80,6 +80,17 @@ export interface WhatToAnswerRequestSnapshot {
    *  block is suppressed. Opaque (`unknown`) to avoid a cross-module type cycle;
    *  WhatToAnswerLLM narrows it at the use site. Absent → legacy assembly. */
   readonly contextOsGeneration?: unknown;
+  /**
+   * Post-gate SD deep-dive pack inputs (SPEC 06). Present only for
+   * system_design_answer when sdPhase !== 'requirements' (unset = post-gate).
+   * Never carries full meeting transcript. Opaque-ish via structural fields so
+   * this module stays free of sdRequirementsGate imports.
+   */
+  readonly sdDeepDive?: Readonly<{
+    designSheet?: unknown | null;
+    recentSdAnswers?: unknown | null;
+    latestInterviewer?: string | null;
+  }>;
 }
 
 /** Minimal interface for the bits of ModesManager the snapshot reads. Keeps this
