@@ -768,10 +768,17 @@ const getSttSummary = (
   }
   if (userStatus === 'failed' || interviewerStatus === 'failed') {
     const parts: string[] = [];
-    if (userStatus === 'failed' && userError) parts.push(`Mic: ${userError}`);
-    if (interviewerStatus === 'failed' && interviewerError) parts.push(`System: ${interviewerError}`);
+    let isLowRam = false;
+    if (userStatus === 'failed' && userError) {
+      parts.push(`Mic: ${userError}`);
+      if (userError.includes('Low system RAM')) isLowRam = true;
+    }
+    if (interviewerStatus === 'failed' && interviewerError) {
+      parts.push(`System: ${interviewerError}`);
+      if (interviewerError.includes('Low system RAM')) isLowRam = true;
+    }
     return {
-      label: 'STT needs attention',
+      label: isLowRam ? 'Low RAM (<4GB)' : 'STT needs attention',
       tone: 'error',
       detail: parts.length > 0 ? parts.join(' · ') : `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`,
     };

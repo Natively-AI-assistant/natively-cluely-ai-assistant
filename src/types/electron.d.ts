@@ -260,6 +260,9 @@ export interface ElectronAPI {
   // STT Status Events
   onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
 
+  getOnnxMemoryGuardDisabled: () => Promise<{ disabled: boolean }>
+  setOnnxMemoryGuardDisabled: (disabled: boolean) => Promise<{ success: boolean; error?: string }>
+
   getNativeAudioStatus: () => Promise<{ connected: boolean }>
 
   // Intelligence Mode IPC

@@ -7156,6 +7156,19 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('onnx-get-memory-guard-disabled', async () => {
+    return { disabled: !!SettingsManager.getInstance().get('onnxMemoryGuardDisabled') };
+  });
+
+  safeHandle('onnx-set-memory-guard-disabled', async (_, disabled: boolean) => {
+    try {
+      SettingsManager.getInstance().set('onnxMemoryGuardDisabled', !!disabled);
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  });
+
   // Per-channel model overrides (mic / system audio). When enabled, the two
   // STT instances pick their own model via these slots. When disabled, both
   // fall back to localWhisperModel (the existing global setting).

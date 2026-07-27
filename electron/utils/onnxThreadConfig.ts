@@ -280,6 +280,14 @@ export function getAvailableMemoryGB(): number {
  */
 export function hasEnoughMemoryForOnnxSession(): boolean {
     try {
+        const { SettingsManager } = require('../services/SettingsManager');
+        if (SettingsManager.getInstance().get('onnxMemoryGuardDisabled')) {
+            console.warn('[ONNX] Memory guard is explicitly DISABLED by user setting — bypassing free RAM floor.');
+            return true;
+        }
+    } catch { /* ignore if SettingsManager unavailable */ }
+
+    try {
         return getAvailableMemoryGB() >= readMinFreeGB();
     } catch {
         return true;

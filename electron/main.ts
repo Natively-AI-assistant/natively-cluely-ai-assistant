@@ -2884,23 +2884,29 @@ export class AppState {
         errorMessage = `${httpStatus} ${axiosErr.response.statusText}`;
       }
 
-      // Immediately fatal: auth/account problems — no amount of retrying helps
+      // Immediately fatal: auth/account problems or low RAM guard refusal — no amount of retrying helps
       const isAuthError = httpStatus === 401
         || err.message.toLowerCase().includes('auth_timeout')
         || err.message.toLowerCase().includes('invalid_key')
         || err.message.toLowerCase().includes('invalid api')
         || err.message.toLowerCase().includes('authentication');
 
+      const isMemoryError = err.message.toLowerCase().includes('insufficient available memory')
+        || err.message.toLowerCase().includes('whisper init refused')
+        || err.message.toLowerCase().includes('low memory');
+
       const isQuotaError = err.message.toLowerCase().includes('transcription_quota_exceeded')
         || err.message.toLowerCase().includes('quota');
 
-      if (isAuthError) {
+      if (isAuthError || isMemoryError) {
         _consecutiveErrors = 0;
         _lastState = 'failed';
         this.sendSttStatus( {
           state: 'failed',
           provider: sttProvider,
-          error: errorMessage,
+          error: isMemoryError
+            ? 'Low system RAM (<4GB free). Free up RAM or disable Memory Safety Guard in Audio Settings.'
+            : errorMessage,
           channel: speaker,
         } as SttStatusPayload);
         return;

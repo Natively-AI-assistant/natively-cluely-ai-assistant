@@ -521,6 +521,8 @@ interface ElectronAPI {
   // Groq Fast Text Mode
   getGroqFastTextMode: () => Promise<{ enabled: boolean }>;
   setGroqFastTextMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  getOnnxMemoryGuardDisabled: () => Promise<{ disabled: boolean }>;
+  setOnnxMemoryGuardDisabled: (disabled: boolean) => Promise<{ success: boolean; error?: string }>;
   getCodexCliConfig: () => Promise<{
     enabled: boolean;
     path: string;
@@ -1994,6 +1996,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Groq Fast Text Mode
   getGroqFastTextMode: () => ipcRenderer.invoke('get-groq-fast-text-mode'),
   setGroqFastTextMode: (enabled: boolean) => ipcRenderer.invoke('set-groq-fast-text-mode', enabled),
+  getOnnxMemoryGuardDisabled: () => ipcRenderer.invoke('onnx-get-memory-guard-disabled'),
+  setOnnxMemoryGuardDisabled: (disabled: boolean) => ipcRenderer.invoke('onnx-set-memory-guard-disabled', disabled),
   getCodexCliConfig: () => ipcRenderer.invoke('get-codex-cli-config'),
   setCodexCliConfig: (config: {
     enabled: boolean;

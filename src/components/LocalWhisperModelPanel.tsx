@@ -131,34 +131,28 @@ export function LocalWhisperModelPanel() {
     const [downloadingSet, setDownloadingSet] = useState<Set<string>>(new Set());
     const [recoveryNotice, setRecoveryNotice] = useState<RecoveryNotice | null>(null);
     const [onnxNotices, setOnnxNotices] = useState<Partial<Record<OnnxRecoveryNotice['family'], OnnxRecoveryNotice>>>({});
+    const [memoryGuardDisabled, setMemoryGuardDisabled] = useState(false);
     const [loading, setLoading] = useState(true);
 
     const loadData = useCallback(async () => {
         try {
-            const [modelsRes, hwRes, cfgRes, stateRes, noticeRes, intentRes, embedRes, rerankRes] = await Promise.all([
+            const [modelsRes, hwRes, cfgRes, stateRes, noticeRes, intentRes, embedRes, rerankRes, guardRes] = await Promise.all([
                 electronAPI?.localWhisperGetModels?.(),
                 electronAPI?.localWhisperGetHardware?.(),
                 electronAPI?.localWhisperGetChannelConfig?.(),
-                // NEW (2026-06-23): read the service's live download state so
-                // a re-mounted panel sees an in-flight download that started
-                // before the overlay was closed. Without this the panel
-                // would show 0% / "Install" even though the main process is
-                // still downloading.
                 electronAPI?.localWhisperGetDownloadState?.().catch(() => []),
                 electronAPI?.localWhisperGetRecoveryNotice?.().catch(() => null),
-                // Generalized ONNX load-sentinel notices for the other three
-                // local-model families (intent classifier / local embeddings /
-                // local reranker). Each is one-shot drained through AppState so
-                // a renderer reload does not see the same notice twice.
                 electronAPI?.onnxGetRecoveryNotice?.('intent').catch(() => null),
                 electronAPI?.onnxGetRecoveryNotice?.('embeddings').catch(() => null),
                 electronAPI?.onnxGetRecoveryNotice?.('reranker').catch(() => null),
+                electronAPI?.getOnnxMemoryGuardDisabled?.().catch(() => ({ disabled: false })),
             ]);
 
             if (modelsRes) setModels(modelsRes.models ?? []);
             if (hwRes) setHardware(hwRes);
             if (cfgRes) setConfig(cfgRes);
             if (noticeRes?.recovered) setRecoveryNotice(noticeRes);
+            if (guardRes && typeof guardRes.disabled === 'boolean') setMemoryGuardDisabled(guardRes.disabled);
 
             // Merge the three family-keyed notices into a single keyed object
             // so the chips render in a deterministic order. A `null` from the
@@ -454,7 +448,7 @@ export function LocalWhisperModelPanel() {
                     )}
                 </div>
                 
-                <div className="max-h-[250px] overflow-y-auto custom-scrollbar p-3 space-y-2 bg-bg-elevated/20">
+                <div className="max-h-[280px] overflow-y-scroll custom-scrollbar p-3 space-y-2 bg-bg-elevated/20" style={{ scrollbarWidth: 'thin' }}>
                     {models.map(model => {
                         const isDownloading = model.status === 'downloading' || downloadingSet.has(model.id);
                         const progress = downloadProgress[model.id] || 0;
@@ -548,6 +542,40 @@ export function LocalWhisperModelPanel() {
                 </div>
             </div>
             
+            {/* ── Safety Memory Guard Toggle ── */}
+            <div className="bg-bg-card rounded-xl border border-border-subtle p-4 shadow-sm space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                    <div>
+                        <h4 className="text-xs font-semibold text-text-primary">{t('Local Engine Safety Memory Guard')}</h4>
+                        <p className="text-[11px] text-text-secondary leading-snug mt-0.5">
+                            {t('Refuses loading ONNX / Whisper local models when free system RAM is under 4.0GB to prevent memory crashes.')}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={async () => {
+                            const next = !memoryGuardDisabled;
+                            setMemoryGuardDisabled(next);
+                            await electronAPI?.setOnnxMemoryGuardDisabled?.(next);
+                        }}
+                        className={`w-9 h-5 rounded-full relative cursor-pointer transition-colors shrink-0 ${!memoryGuardDisabled ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                        role="switch"
+                        aria-checked={!memoryGuardDisabled}
+                        title={memoryGuardDisabled ? t("Safety Guard Disabled") : t("Safety Guard Enabled")}
+                    >
+                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${!memoryGuardDisabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </button>
+                </div>
+                {memoryGuardDisabled && (
+                    <div className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-lg flex items-start gap-2">
+                        <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                        <span>
+                            {t('Warning: Safety Guard is DISABLED. Force-loading local models on systems with low free RAM (<4GB) may cause renderer processes or Electron to freeze.')}
+                        </span>
+                    </div>
+                )}
+            </div>
+
             {/* ── Footer note ── */}
             {hardware?.tier === 'limited' && (
                 <div className="pt-1 text-center">
