@@ -138,8 +138,22 @@ const CodeBlockCopyButton = ({ code }: { code: string }) => {
     <button
       type="button"
       onClick={handleCopy}
+      title={copied ? t('Copied') : t('Copy code')}
       aria-label={copied ? t('Copied') : t('Copy code')}
-      className="absolute top-2 right-2 z-10 w-7 h-7 rounded-md bg-black/55 backdrop-blur-md border border-white/[0.08] flex items-center justify-center opacity-0 group-hover/code:opacity-100 transition-opacity duration-150 active:scale-[0.92]"
+      // transition-opacity alone (the old className) never listed `transform`,
+      // so active:scale had nothing to animate through — the press feedback
+      // snapped instantly instead of easing. Listing transform explicitly
+      // (not `transition-all`) fixes that, and active:scale-95 replaces the
+      // old scale-[0.92] to land in the 0.95-0.98 "subtle" range instead of
+      // an overly aggressive squash. Also added a hover background/border
+      // shift and a copied-state emerald tint (both now animate smoothly
+      // too, via background-color/border-color in the same list) so the
+      // button reads as a tactile surface, not just an icon that fades in.
+      className={`absolute top-2 right-2 z-10 w-7 h-7 rounded-md border backdrop-blur-md flex items-center justify-center opacity-0 group-hover/code:opacity-100 transition-[opacity,transform,background-color,border-color] duration-150 active:scale-95 ${
+        copied
+          ? 'bg-emerald-500/15 border-emerald-400/25'
+          : 'bg-black/55 border-white/[0.08] hover:bg-black/70 hover:border-white/[0.14]'
+      }`}
     >
       <AnimatePresence mode="wait" initial={false}>
         {copied ? (
