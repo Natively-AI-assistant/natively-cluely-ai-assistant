@@ -28,7 +28,6 @@ import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import {
     clampOverlayOpacity,
     getOverlayAppearance,
-    getGlassOverlayAppearance,
     OVERLAY_OPACITY_DEFAULT,
     OVERLAY_OPACITY_MIN,
     getDefaultOverlayOpacity,
@@ -608,20 +607,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             wrapper.style.backgroundColor = 'transparent';
             wrapper.style.border = 'none';
             wrapper.style.boxShadow = 'none';
-            // The liquid-glass/modern .settings-shell-surface rules (index.css) set
-            // background/border-color/box-shadow/backdrop-filter with !important so
-            // they can win over the plain bg-bg-elevated/border-border-subtle Tailwind
-            // classes. A normal inline style (above) can't beat an !important
-            // stylesheet rule, so when a meeting-interface theme is active this reveal
-            // would otherwise stay opaque/blurred and hide the opacity mockup behind
-            // it. Force the same properties via setProperty(..., 'important') so the
-            // preview wins regardless of which theme is active; stopPreviewingOpacity
-            // removes these so .settings-shell-surface resumes control afterward.
-            wrapper.style.setProperty('background', 'transparent', 'important');
-            wrapper.style.setProperty('border-color', 'transparent', 'important');
-            wrapper.style.setProperty('box-shadow', 'none', 'important');
-            wrapper.style.setProperty('backdrop-filter', 'none', 'important');
-            wrapper.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
         }
         if (panel) {
             panel.style.visibility = 'hidden';
@@ -662,15 +647,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             wrapper.style.backgroundColor = '';
             wrapper.style.border = '';
             wrapper.style.boxShadow = '';
-            // Mirror of the setProperty(..., 'important') overrides in
-            // startPreviewingOpacity — remove them so .settings-shell-surface
-            // (liquid-glass/modern) or the plain Tailwind classes (default theme)
-            // resume normal control of the panel body.
-            wrapper.style.removeProperty('background');
-            wrapper.style.removeProperty('border-color');
-            wrapper.style.removeProperty('box-shadow');
-            wrapper.style.removeProperty('backdrop-filter');
-            wrapper.style.removeProperty('-webkit-backdrop-filter');
         }
         if (panel) {
             panel.style.visibility = '';
@@ -1432,59 +1408,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         setMicLevel(0);
     }, [isOpen, activeTab, selectedInput]);
 
-    // Mirrors App.tsx's interfaceThemeAttribute derivation exactly (undefined
-    // for 'default' so the [data-interface-theme="..."] scoped CSS rules in
-    // index.css simply never match — no separate "off" state to keep in
-    // sync). Deliberately derived from the live-synced `meetingInterfaceTheme`
-    // state already tracked above (line ~402, kept current via the
-    // storage/IPC listener at ~821-839) rather than threaded in as a prop,
-    // so there's exactly one source of truth for this window's copy of the
-    // theme instead of two that could drift.
-    const interfaceThemeAttribute = meetingInterfaceTheme === 'default' ? undefined : meetingInterfaceTheme;
-
-    // Real per-theme shell style for #settings-panel-wrapper, computed the
-    // same way NativelyInterface computes its own `appearance` for the real
-    // panel shell (NativelyInterface.tsx ~1531-1537: isGlassTheme ?
-    // getGlassOverlayAppearance() : getOverlayAppearance(opacity, theme)) —
-    // same source, same inputs (`overlayOpacity`/`resolvedTheme` above are
-    // already the live state this component tracks for the opacity-slider
-    // mockup). This is what makes DEFAULT theme actually track the meeting
-    // interface's shell color now: previously #settings-panel-wrapper only
-    // ever got static bg-bg-elevated/border-border-subtle Tailwind classes
-    // with no appearance object at all. For liquid-glass this resolves to
-    // {} (empty) — the [data-interface-theme="liquid-glass"]
-    // .settings-shell-surface !important CSS rule (index.css ~469) owns
-    // that theme's styling entirely, matching how NativelyInterface's own
-    // shell defers to the identical liquid-glass CSS for .overlay-shell-surface.
-    // For modern this is NOT empty (mirrors real NativelyInterface behavior:
-    // getOverlayAppearance() is used, not the glass variant) but the
-    // [data-interface-theme="modern"] .settings-shell-surface !important
-    // rule (index.css ~1406) still wins over these inline values.
-    const isSettingsGlassTheme = meetingInterfaceTheme === 'liquid-glass';
-    const settingsShellAppearance = useMemo(
-        () =>
-            isSettingsGlassTheme
-                ? getGlassOverlayAppearance()
-                : getOverlayAppearance(overlayOpacity, resolvedTheme),
-        [isSettingsGlassTheme, overlayOpacity, resolvedTheme]
-    );
-
-    // Full shellStyle spread is applied now (background/borderColor/
-    // backdropFilter/WebkitBackdropFilter/boxShadow, all five) — a previous
-    // round of this fix deliberately dropped `boxShadow` here because at the
-    // time #settings-panel's sidebar (`bg-bg-sidebar`) and content
-    // (`bg-bg-main`) panes were still opaque and occluded background/
-    // backdrop-filter entirely, so losing `shadow-2xl` for zero visible gain
-    // was a straight regression. That occlusion is now fixed (both panes are
-    // `bg-transparent`, see below), so `shellStyle.backgroundColor` and
-    // `backdropFilter` are real paint sources now, and applying
-    // `boxShadow: 'none'` alongside them is no longer a stray side effect —
-    // it's the correct match to NativelyInterface's real panel shell, which
-    // also has no drop shadow in default theme (see overlayAppearance.ts
-    // getOverlayAppearance()'s `boxShadow: 'none'` in both its light and dark
-    // branches). Full parity, not a narrower one.
-    const settingsShellStyleVisible = settingsShellAppearance.shellStyle;
-
     return (
         <AnimatePresence>
             {isOpen && (
@@ -1495,13 +1418,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
                     id="settings-backdrop"
-                    // Ancestor-only placement: the scoped liquid-glass/modern CSS in
-                    // index.css is written as descendant combinators
-                    // ([data-interface-theme="..."] .settings-shell-surface), which can
-                    // never match an element against itself. The attribute lives here;
-                    // the .settings-shell-surface class that consumes it lives on the
-                    // separate #settings-panel-wrapper below.
-                    data-interface-theme={interfaceThemeAttribute}
                     className={`fixed inset-0 z-50 flex items-center justify-center p-8 transition-colors duration-150 ${isPreviewingOpacity ? 'bg-transparent backdrop-blur-none pointer-events-none' : 'bg-black/60 backdrop-blur-sm'}`}
                     onClick={(e) => {
                         // Mirror Modes/Profile (App.tsx) close-on-outside-click.
@@ -1519,14 +1435,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                         // that renders via createPortal(..., document.body) will mount OUTSIDE
                         // this data-settings-theme scope and silently fall back to the blue
                         // brand accent — portals must be scoped to this subtree (or avoided).
-                        // NOTE: data-settings-theme="orchid" lives on this SAME element, so
-                        // its --accent-primary/--btn-primary-* declarations win here over
-                        // any --accent-primary inherited from the data-interface-theme
-                        // attribute on the #settings-backdrop ancestor (a same-element match
-                        // always beats an inherited value) — text/buttons/toggles stay orchid
-                        // regardless of meeting-interface theme. Only the .settings-shell-surface
-                        // class below (background/border/backdrop-filter/box-shadow) responds
-                        // to the meeting-interface theme.
                         data-settings-theme="orchid"
                         initial={{ scale: 0.94, opacity: 0, y: 20 }}
                         animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -1537,85 +1445,15 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             damping: 32,
                             mass: 1
                         }}
-                        className="settings-shell-surface bg-bg-elevated w-full max-w-4xl h-[80vh] rounded-2xl border border-border-subtle shadow-2xl overflow-hidden relative"
-                        // Real per-theme shell material — full shellStyle spread
-                        // (backgroundColor/borderColor/backdropFilter/
-                        // WebkitBackdropFilter/boxShadow), same
-                        // getOverlayAppearance()/getGlassOverlayAppearance() source
-                        // NativelyInterface's real panel shell and ResizeToggle both
-                        // use. Now that #settings-panel's sidebar/content panes are
-                        // bg-transparent (below) instead of the previously-opaque
-                        // bg-bg-sidebar/bg-bg-main, this is what actually paints — not
-                        // just borderColor. DEFAULT theme's body now genuinely tracks
-                        // NativelyInterface's real default-theme shell color, blur,
-                        // and (lack of) drop shadow, instead of the static
-                        // bg-bg-elevated/border-border-subtle/shadow-2xl Tailwind
-                        // classes (those remain as the fallback for a brief unstyled
-                        // flash before this computes, and are what liquid-glass falls
-                        // back to below). For liquid-glass this resolves to {} (no
-                        // inline properties at all) so the classes plus the
-                        // !important .settings-shell-surface CSS rule (index.css ~469)
-                        // fully govern — same deferral pattern the real shell uses.
-                        // For modern this is non-empty but the !important
-                        // .settings-shell-surface modern rule (index.css ~1438) still
-                        // wins over it (stylesheet !important always beats inline
-                        // normal-priority).
-                        //
-                        // Kept as a single always-populated object (NOT swapped to {}
-                        // during isPreviewingOpacity — an earlier draft of this tried
-                        // that and it was wrong): React diffs style props between
-                        // renders by per-key VALUE comparison (prevProps.style vs
-                        // nextProps.style), and does not know about the imperative
-                        // wrapper.style.setProperty(..., 'important') calls
-                        // startPreviewingOpacity/stopPreviewingOpacity make directly on
-                        // the DOM node. If this object were swapped to {} on preview
-                        // entry, React would write node.style[key] = '' for every key
-                        // that disappeared — which, per CSSOM, clears the property
-                        // ENTIRELY INCLUDING its !important flag — destroying 4 of the
-                        // 5 imperative overrides the instant React's next render lands
-                        // (guaranteed, since #settings-panel's visibility and the
-                        // backdrop's className both read isPreviewingOpacity too),
-                        // leaving the wrapper opaque and occluding the very mockup the
-                        // preview exists to reveal. Keeping this object identical
-                        // (same computed values) across the preview boundary makes
-                        // React's diff a no-op — zero DOM writes — so the imperative
-                        // !important overrides survive the whole drag untouched.
-                        //
-                        // Residual (accepted, bounded): if settingsShellStyleVisible's
-                        // values happen to be UNCHANGED across a tap-without-drag
-                        // preview (latestOpacityRef.current === overlayOpacity, so the
-                        // memo doesn't recompute), stopPreviewingOpacity's
-                        // removeProperty() calls strip the React-set values along with
-                        // the !important ones, and React never rewrites them (no diff
-                        // to react to) — the wrapper falls back to its static
-                        // bg-bg-elevated/border-border-subtle/shadow-2xl Tailwind
-                        // classes (all 5 properties, now that the sidebar/content
-                        // occlusion is fixed and all 5 actually paint) until the next
-                        // real drag (memo recomputes) or the modal unmounts (every
-                        // close, via AnimatePresence). Worst case is a momentarily
-                        // wrong-looking panel body for the remainder of that one open
-                        // session after a tap-without-drag preview — self-heals, not a
-                        // broken reveal (the reveal itself, i.e. the imperative
-                        // !important overrides during an actual drag, is unaffected;
-                        // this residual only concerns what's left behind AFTER a
-                        // no-op drag ends).
-                        style={settingsShellStyleVisible}
+                        className="bg-bg-elevated w-full max-w-4xl h-[80vh] rounded-2xl border border-border-subtle shadow-2xl overflow-hidden relative"
                     >
                         <div
                             id="settings-panel"
                             className="flex w-full h-full"
                             style={{ visibility: isPreviewingOpacity ? 'hidden' : 'visible' }}
                         >
-                        {/* Sidebar — bg-transparent (was bg-bg-sidebar): #settings-panel-wrapper's
-                            own background (.settings-shell-surface in glass/modern, or the inline
-                            appearance.shellStyle in default/light/dark) is the intended paint
-                            source for ALL themes now, not just glass/modern — the user explicitly
-                            wants default theme's Settings body to also match the meeting
-                            interface's default body color, so this is unconditional, not
-                            theme-gated. border-r border-border-subtle kept as the sidebar/content
-                            seam so the two panes don't visually merge into one undifferentiated
-                            block. */}
-                        <div className="w-64 bg-transparent flex flex-col border-r border-border-subtle">
+                        {/* Sidebar */}
+                        <div className="w-64 bg-bg-sidebar flex flex-col border-r border-border-subtle">
                             <button
                                 onClick={onClose}
                                 className="self-start ml-2 mt-2 mb-1 p-1.5 rounded-md text-text-tertiary hover:text-text-primary transition-colors"
@@ -1727,10 +1565,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             </div>
                         </div>
 
-                        {/* Content — bg-transparent (was bg-bg-main), same reasoning as the
-                            sidebar above: lets #settings-panel-wrapper's real per-theme
-                            background paint through, unconditionally across all 3 themes. */}
-                        <div className="flex-1 bg-transparent overflow-y-auto p-8 relative">
+                        {/* Content */}
+                        <div className="flex-1 bg-bg-main overflow-y-auto p-8 relative">
                             {activeTab === 'general' && (
                                 <div className="space-y-6 animated fadeIn">
                                     <div className="space-y-3.5">
