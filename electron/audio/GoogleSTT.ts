@@ -507,8 +507,18 @@ export class GoogleSTT extends EventEmitter {
             const gen = this.streamGenerations.find(g => g.s === old);
             if (gen && !gen.closed) {
                 // Deadline so a stream that never closes can't hold every
-                // younger generation's transcripts hostage.
-                gen.deadline = setTimeout(() => this.markGenerationClosed(old), GoogleSTT.SWAP_DRAIN_DEADLINE_MS);
+                // younger generation's transcripts hostage. It must DESTROY
+                // the straggler, not merely advance past it: with the old
+                // data listener still live, a final flushed after the
+                // deadline would bypass the queue and land after newer
+                // speech (greptile PR #401 round 3). destroy() makes the
+                // late final impossible; whatever Google had not flushed
+                // within the budget is sacrificed — that is the deadline's
+                // contract, and real flushes complete in well under 1s.
+                gen.deadline = setTimeout(() => {
+                    try { old.destroy(); } catch { /* already dead */ }
+                    this.markGenerationClosed(old);
+                }, GoogleSTT.SWAP_DRAIN_DEADLINE_MS);
             }
             try { old.end(); } catch { /* flush-only — old stream is abandoned either way */ }
         }
@@ -627,8 +637,9 @@ export class GoogleSTT extends EventEmitter {
                         // the OLDEST unfinished generation emits live; younger
                         // generations hold their results until every older
                         // stream has drained its pre-swap tail. A stream not
-                        // in the queue anymore (already advanced past) is
-                        // pathologically late — forward as-is.
+                        // in the queue can only be an event already in flight
+                        // when its deadline destroy()ed it — forward as-is
+                        // rather than drop real speech.
                         const gen = this.streamGenerations.find(g => g.s === s);
                         if (gen && gen !== this.streamGenerations[0]) {
                             gen.pending.push(payload);

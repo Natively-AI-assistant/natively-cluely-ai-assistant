@@ -235,6 +235,33 @@ test('nested swaps keep all three generations in chronological order', async () 
     }
 });
 
+test('drain deadline destroys the straggler so late finals cannot bypass the queue', async () => {
+    // greptile PR #401 round 3: the deadline used to merely advance past the
+    // straggler while its data listener stayed live — a final flushed after
+    // the deadline bypassed the queue and landed after newer speech. The
+    // deadline must destroy() the stream so that final is impossible.
+    const streams = [];
+    const stt = await makeAutoModeSTT(streams);
+    try {
+        const transcripts = [];
+        stt.on('transcript', t => transcripts.push(t.text));
+
+        streams[0].emit('data', finalResult('привет', 'ru-ru'));
+        streams[0].emit('data', finalResult('как дела', 'ru-ru'));
+        assert.equal(streams.length, 2, 're-pin swap happened');
+
+        streams[1].emit('data', finalResult('новая фраза', 'ru-ru'));
+        assert.ok(!transcripts.includes('новая фраза'), 'held while straggler drains');
+
+        // The old stream never closes — the 1s deadline must fire.
+        await new Promise(r => setTimeout(r, 1200));
+        assert.ok(transcripts.includes('новая фраза'), 'deadline released the held transcripts');
+        assert.ok(streams[0].destroyed, 'straggler destroyed so it cannot emit a late final');
+    } finally {
+        stt.stop();
+    }
+});
+
 test('manual (non-auto) language selection never re-pins', async () => {
     const streams = [];
     const stt = new GoogleSTT('test');
