@@ -113,12 +113,51 @@ const CardCopyButton = ({
   );
 };
 
-// Floating hover-reveal copy button for the headerless vivid-dark code block
-// (see HighlightedCode / StreamingHighlightedCode). Mirrors CardCopyButton's
-// interaction (copy → 2s "copied" state) but rendered as a self-contained
-// chip absolutely positioned over the code surface, since there is no header
-// row to dock into in that theme.
-const CodeBlockCopyButton = ({ code }: { code: string }) => {
+// Prism grammar names (from mapLanguageForPrism) are lowercase machine
+// identifiers, not display-ready. Maps the common ones this app's code
+// blocks actually show to their proper display casing; anything else falls
+// back to capitalizing the raw grammar name.
+const LANGUAGE_DISPLAY_NAMES: Record<string, string> = {
+  javascript: 'JavaScript',
+  typescript: 'TypeScript',
+  jsx: 'JSX',
+  tsx: 'TSX',
+  python: 'Python',
+  bash: 'Bash',
+  json: 'JSON',
+  json5: 'JSON5',
+  markup: 'HTML',
+  css: 'CSS',
+  scss: 'SCSS',
+  sass: 'Sass',
+  less: 'Less',
+  sql: 'SQL',
+  yaml: 'YAML',
+  go: 'Go',
+  rust: 'Rust',
+  swift: 'Swift',
+  kotlin: 'Kotlin',
+  java: 'Java',
+  cpp: 'C++',
+  c: 'C',
+  csharp: 'C#',
+  ruby: 'Ruby',
+  php: 'PHP',
+  markdown: 'Markdown',
+  graphql: 'GraphQL',
+  powershell: 'PowerShell',
+  dart: 'Dart',
+};
+const displayLanguageName = (lang: string): string =>
+  LANGUAGE_DISPLAY_NAMES[lang] || (lang ? lang[0].toUpperCase() + lang.slice(1) : '');
+
+// Combined hover-reveal chrome for the headerless vivid-dark code block (see
+// HighlightedCode / StreamingHighlightedCode) — language name + copy button
+// as ONE capsule, not two independently absolute-positioned elements. The
+// split-position version (label at one offset, button at another) read as
+// disjointed floating chrome; grouping them into a single translucent
+// surface with one hover fade gives it a calmer, more cohesive feel.
+const CodeBlockChrome = ({ lang, code }: { lang: string; code: string }) => {
   const t = useT();
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -135,53 +174,53 @@ const CodeBlockCopyButton = ({ code }: { code: string }) => {
     }).catch(() => {});
   };
   return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      title={copied ? t('Copied') : t('Copy code')}
-      aria-label={copied ? t('Copied') : t('Copy code')}
-      // transition-opacity alone (the old className) never listed `transform`,
-      // so active:scale had nothing to animate through — the press feedback
-      // snapped instantly instead of easing. Listing transform explicitly
-      // (not `transition-all`) fixes that, and active:scale-95 replaces the
-      // old scale-[0.92] to land in the 0.95-0.98 "subtle" range instead of
-      // an overly aggressive squash. Also added a hover background shift and
-      // a copied-state emerald tint (both now animate smoothly too, via
-      // background-color in the same list) so the button reads as a tactile
-      // surface, not just an icon that fades in. No border — removed per
-      // user feedback (the outline read as a "squiggle" around the button).
-      className={`absolute top-2 right-2 z-10 w-7 h-7 rounded-md backdrop-blur-md flex items-center justify-center opacity-0 group-hover/code:opacity-100 transition-[opacity,transform,background-color] duration-150 active:scale-95 ${
-        copied
-          ? 'bg-emerald-500/15'
-          : 'bg-black/55 hover:bg-black/70'
+    <div
+      className={`absolute top-2 right-2 z-10 flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-lg backdrop-blur-md opacity-0 group-hover/code:opacity-100 transition-[opacity,background-color] duration-150 ${
+        copied ? 'bg-emerald-500/15' : 'bg-black/55 hover:bg-black/70'
       }`}
     >
-      <AnimatePresence mode="wait" initial={false}>
-        {copied ? (
-          <motion.span
-            key="check"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.14 }}
-            className="absolute inset-0 flex items-center justify-center"
-          >
-            <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={2.5} />
-          </motion.span>
-        ) : (
-          <motion.span
-            key="copy"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.14 }}
-            className="absolute inset-0 flex items-center justify-center text-white/70 hover:text-white/95"
-          >
-            <Copy className="w-3.5 h-3.5" strokeWidth={2} />
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </button>
+      {lang && (
+        <span
+          className="text-[10px] font-mono tracking-wide pointer-events-none"
+          style={{ color: VIVID_DARK_LINE_NUMBER_COLOR }}
+        >
+          {displayLanguageName(lang)}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={handleCopy}
+        title={copied ? t('Copied') : t('Copy code')}
+        aria-label={copied ? t('Copied') : t('Copy code')}
+        className="relative w-5 h-5 flex items-center justify-center transition-transform duration-150 active:scale-95"
+      >
+        <AnimatePresence mode="wait" initial={false}>
+          {copied ? (
+            <motion.span
+              key="check"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.14 }}
+              className="absolute inset-0 flex items-center justify-center"
+            >
+              <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={2.5} />
+            </motion.span>
+          ) : (
+            <motion.span
+              key="copy"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.14 }}
+              className="absolute inset-0 flex items-center justify-center text-white/70 hover:text-white/95"
+            >
+              <Copy className="w-3.5 h-3.5" strokeWidth={2} />
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </button>
+    </div>
   );
 };
 
@@ -453,20 +492,7 @@ const HighlightedCode = React.memo(
           </div>
         )}
         {!showCodeHeader && (
-          <>
-            <span
-              // right-11 sits just left of CodeBlockCopyButton (w-7 at
-              // right-2, i.e. its left edge lands at 36px from the code
-              // block's right edge) — right-anchored so the label grows
-              // leftward, away from the button, regardless of language name
-              // length ("PYTHON" vs "TYPESCRIPT").
-              className="absolute top-2.5 right-11 z-10 text-[10px] uppercase tracking-widest font-mono pointer-events-none opacity-0 group-hover/code:opacity-100 transition-opacity duration-150"
-              style={{ color: VIVID_DARK_LINE_NUMBER_COLOR }}
-            >
-              {resolved || 'CODE'}
-            </span>
-            <CodeBlockCopyButton code={code} />
-          </>
+          <CodeBlockChrome lang={resolved} code={code} />
         )}
         {/* No-wrap horizontal scroll: code line layout stays stable as the
                 canvas grows/shrinks. Without this, wrapped lines re-flow at every
@@ -645,20 +671,7 @@ export const StreamingHighlightedCode = React.memo(
           </div>
         )}
         {!showCodeHeader && (
-          <>
-            <span
-              // right-11 sits just left of CodeBlockCopyButton (w-7 at
-              // right-2, i.e. its left edge lands at 36px from the code
-              // block's right edge) — right-anchored so the label grows
-              // leftward, away from the button, regardless of language name
-              // length ("PYTHON" vs "TYPESCRIPT").
-              className="absolute top-2.5 right-11 z-10 text-[10px] uppercase tracking-widest font-mono pointer-events-none opacity-0 group-hover/code:opacity-100 transition-opacity duration-150"
-              style={{ color: VIVID_DARK_LINE_NUMBER_COLOR }}
-            >
-              {resolved || 'CODE'}
-            </span>
-            <CodeBlockCopyButton code={code} />
-          </>
+          <CodeBlockChrome lang={resolved} code={code} />
         )}
         {/* Outer element scrolls; the padded inner element IS the scrolled
             content (matches HighlightedCode's single-element SyntaxHighlighter,
@@ -5820,7 +5833,7 @@ Provide only the answer, nothing else.`;
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group code-card-mount-in">
             {/* No card-level CardCopyButton here — HighlightedCode /
                 StreamingHighlightedCode below already render their own
-                per-block copy button (CodeBlockCopyButton for the headerless
+                per-block copy button (CodeBlockChrome for the headerless
                 dark theme, or the header row for light/modern/glass). Code
                 messages are almost always a single fenced block, so msg.text
                 and the block's own code are the same content — a second,
