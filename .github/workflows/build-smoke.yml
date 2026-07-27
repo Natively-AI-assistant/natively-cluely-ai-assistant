@@ -4,7 +4,7 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    - cron: '0 9 * * 1'  # Monday 09:00 UTC: api-smoke + sd-quality + sd-requirements-gate-*
+    - cron: '0 9 * * 1'  # Monday 09:00 UTC: api-smoke + sd-quality + sd-requirements-gate-* + sd-interview-sim-e2e + sd-interview-sim-t2
 
 jobs:
   electron-entry-smoke:
@@ -157,6 +157,64 @@ jobs:
 
       - name: Run SD Requirements-gate Electron e2e (core matrix)
         run: npm run e2e:sd-requirements-gate
+
+  # T1 SD interview-sim Electron fixture matrix (ticket 04). Sibling of
+  # sd-requirements-gate-e2e — additive; does NOT replace gate e2e ownership.
+  # Stub SUT ($0 live API). schedule / workflow_dispatch only — NEVER pull_request.
+  sd-interview-sim-e2e:
+    name: SD Interview Sim E2E (weekly)
+    runs-on: macos-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron (test prerequisite)
+        run: npm run build:electron
+
+      - name: Run SD interview-sim Electron fixture matrix (T1)
+        run: npm run e2e:sd-interview-sim
+
+  # T2 dual-agent overnight corpus (ticket 05). Headless; opt-in spend caps.
+  # workflow_dispatch / schedule only — NEVER pull_request. Exit 0 skip without
+  # RUN_SD_INTERVIEW_SIM_T2 + GEMINI_API_KEY. Dual-agent free-form is NOT a
+  # pass/fail oracle — job succeeds when the runner exits cleanly (incl. skip).
+  sd-interview-sim-t2:
+    name: SD Interview Sim T2 (overnight)
+    runs-on: macos-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run SD interview-sim T2 dual-agent (opt-in; skip without keys)
+        run: npm run sd-interview-sim:t2
+        env:
+          RUN_SD_INTERVIEW_SIM_T2: ${{ secrets.RUN_SD_INTERVIEW_SIM_T2 }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SD_INTERVIEW_SIM_T2_MAX_TURNS: '20'
+          SD_INTERVIEW_SIM_T2_MAX_INTERVIEWS: '5'
+          SD_INTERVIEW_SIM_T2_MAX_USD: '1.5'
 
   # Optional Requirements-gate real-API smoke (ticket 15). Sibling of sd-quality:
   # schedule / workflow_dispatch only — NEVER pull_request. Exit 0 skip without keys.

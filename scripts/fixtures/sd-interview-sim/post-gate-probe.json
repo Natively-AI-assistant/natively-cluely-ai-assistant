@@ -1,0 +1,32 @@
+{
+  "id": "post-gate-probe",
+  "title": "Post-gate deep-dive probe with optional mermaid HLD",
+  "problemKey": "url-shortener",
+  "sdPhase": "post_requirements",
+  "turns": [
+    {
+      "role": "interviewer",
+      "speaker": "system",
+      "text": "Gate is closed. Walk me through your high-level design — clients, API, storage, and redirect path.",
+      "attachments": [
+        {
+          "kind": "mermaid",
+          "source": "flowchart LR\n  C[Client] --> A[API]\n  A --> R[Redis]\n  A --> DB[(Postgres)]"
+        }
+      ]
+    },
+    {
+      "role": "interviewer",
+      "speaker": "system",
+      "text": "How do you handle Base62 collision under 1000 QPS?",
+      "stop": true
+    }
+  ],
+  "expect": {
+    "end_reason": "scenario_stop",
+    "minInterviewerTurns": 2,
+    "minAssistantTurns": 2,
+    "requireMermaidAttachment": true,
+    "sutPhase": "post_requirements"
+  }
+}

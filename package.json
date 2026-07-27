@@ -37,6 +37,8 @@
     "test:e2e:parity": "ELECTRON_E2E=1 ELECTRON_APP_PORT=${ELECTRON_APP_PORT:-5173} npx playwright test tests/e2e/parity-gaps-evidence.spec.ts",
     "test:e2e:screen-understanding": "npm run build:electron && node natively-api/tests/screen-understanding-live.e2e.mjs",
     "e2e:sd-requirements-gate": "NATIVELY_E2E=1 ./node_modules/.bin/electron scripts/e2e-sd-requirements-gate.js",
+    "e2e:sd-interview-sim": "NATIVELY_E2E=1 ./node_modules/.bin/electron scripts/e2e-sd-interview-sim.js",
+    "sd-interview-sim:t2": "node scripts/sd-interview-sim-t2.js",
     "bench:screen-understanding": "npm run build:electron && node scripts/bench-screen-understanding.mjs",
     "benchmark:profile:dataset": "node benchmarks/profile-intelligence/generate_dataset.ts",
     "benchmark:profile": "cross-env NODE_NO_WARNINGS=1 node benchmarks/profile-intelligence/run_profile_intelligence_benchmark.ts",
