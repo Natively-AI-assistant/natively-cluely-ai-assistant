@@ -31,6 +31,21 @@ const DEFAULT_INTERVIEWER_MODEL = 'gemini-3.1-flash-lite';
 /** Default SUT / product model label (corpus provenance; not a second WTA). */
 const DEFAULT_SUT_MODEL = 'gemini-3.5-flash';
 
+/** Live T2 quality default turn budget (SPEC 08). Smoke demos may override lower. */
+const DEFAULT_LIVE_MAX_TURNS = 32;
+
+/**
+ * True when interviewer text is a non-specific continue cue.
+ * @param {string} text
+ */
+function isNonspecificInterviewerText(text) {
+  const t = String(text || '').trim();
+  if (!t) return true;
+  if (t.length > 120) return false;
+  return /^(continue|go on|next|keep going|proceed|go ahead)\b/i.test(t)
+    || /^(ok|okay|sure|yeah|yep)[,.]?\s*(continue|go on|next|keep going)?$/i.test(t);
+}
+
 /**
  * Opt-in gate for live T2 dual-agent runs.
  * Requires RUN_SD_INTERVIEW_SIM_T2=1 plus a Gemini/Google API key.
@@ -93,17 +108,39 @@ function createStubInterviewerAgent(probes = []) {
 }
 
 /**
- * Thin candidate-agent: only decides to trigger the SUT (or stop).
+ * Thin candidate-agent: decides trigger / continue / advance only.
  * Never produces answer text — Natively remains the answer brain.
  *
- * @param {{ onDecision?: (d: object) => void }} [opts]
+ * Advance once when Requirements checklist is complete (gate still open).
+ * Continue when interviewer turn is non-specific.
+ *
+ * @param {{
+ *   onDecision?: (d: object) => void,
+ *   getGateStatus?: () => { checklistComplete?: boolean, visible?: boolean } | null,
+ * }} [opts]
  */
 function createThinCandidateAgent(opts = {}) {
+  let advancedOnce = false;
   return async function thinCandidateAgent(ctx) {
     const decision = { action: 'trigger' };
-    if (ctx?.interviewerTurn?.end_interview || ctx?.interviewerTurn?.stop) {
-      decision.action = 'trigger'; // still let SUT answer the final probe
+    const gate =
+      (typeof opts.getGateStatus === 'function' ? opts.getGateStatus() : null) ||
+      ctx?.gateStatus ||
+      null;
+    const probeText = String(ctx?.interviewerTurn?.text || '');
+
+    if (
+      !advancedOnce &&
+      gate &&
+      gate.checklistComplete === true &&
+      gate.visible === true
+    ) {
+      advancedOnce = true;
+      decision.action = 'advance';
+    } else if (isNonspecificInterviewerText(probeText)) {
+      decision.action = 'continue';
     }
+
     if (typeof opts.onDecision === 'function') opts.onDecision(decision);
     return decision;
   };
@@ -446,17 +483,28 @@ async function runT2DualAgent(config = {}) {
 
     // Thin candidate: trigger (or continue/advance) — SUT produces the answer.
     if (action === 'trigger' || action === 'continue' || action === 'advance') {
-      const answer = await Promise.resolve(
-        sut({
-          scenario,
-          interviewerTurn,
-          injectLog: [...injectLog],
-          injected,
-          bundle: run.bundle,
-          turnCount: run.spend.turn_count,
-          candidateAction: action,
-        }),
-      );
+      let answer;
+      try {
+        answer = await Promise.resolve(
+          sut({
+            scenario,
+            interviewerTurn,
+            injectLog: [...injectLog],
+            injected,
+            bundle: run.bundle,
+            turnCount: run.spend.turn_count,
+            candidateAction: action,
+          }),
+        );
+      } catch (err) {
+        appendTurn(run, {
+          role: 'assistant',
+          text: `[sut-error] ${err?.message || String(err)}`.slice(0, 2000),
+          attachments: [],
+        });
+        end_reason = 'error';
+        break;
+      }
       const answerObj =
         answer && typeof answer === 'object' ? answer : { text: String(answer ?? '') };
 
@@ -544,6 +592,11 @@ async function runT2DualAgent(config = {}) {
 module.exports = {
   DEFAULT_INTERVIEWER_MODEL,
   DEFAULT_SUT_MODEL,
+  DEFAULT_LIVE_MAX_TURNS,
+  get CASUAL_SD_TONE_INSTRUCTION() {
+    return require('./liveSut').CASUAL_SD_TONE_INSTRUCTION;
+  },
+  isNonspecificInterviewerText,
   shouldRunT2DualAgent,
   t2SkipMessage,
   extractMermaidAttachments,
