@@ -7095,8 +7095,13 @@ async function initializeApp() {
   if (storedServiceAccountPath) {
     console.log("[Init] Loading stored Google Service Account path");
     appState.updateGoogleCredentials(storedServiceAccountPath);
-    // Persist env-var path so Spotlight launches also work going forward
-    if (!CredentialsManager.getInstance().getGoogleServiceAccountPath()) {
+    // Persist env-var path so Spotlight launches also work going forward.
+    // Issue #322: skip disk writes while the keyring store is undecryptable —
+    // a single-field self-heal would clobber the still-recoverable ciphertext.
+    if (
+      !CredentialsManager.getInstance().getGoogleServiceAccountPath()
+      && !CredentialsManager.getInstance().wasExistingStoreUnreadable()
+    ) {
       CredentialsManager.getInstance().setGoogleServiceAccountPath(storedServiceAccountPath);
     }
   }

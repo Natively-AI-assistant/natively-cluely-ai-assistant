@@ -20,6 +20,7 @@ import nativelyLogo from '../../assets/logo.webp';
 import { FreeTrialModal } from '../trial/FreeTrialModal';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useApiKeyAutoSave } from '../../hooks/useApiKeyAutoSave';
 
 // ─── Types ───────────────────────────────────────────────────
 interface QuotaBucket {
@@ -659,14 +660,14 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     setShowTrialModal(false);
   };
 
-  const handleSave = async () => {
-    if (!apiKey.trim() || apiKey.includes('•')) return;
+  const handleSave = useCallback(async () => {
+    if (!apiKey.trim() || apiKey.includes('•') || isSaving) return;
     setIsSaving(true);
     setError(null);
     try {
       const r = await window.electronAPI.setNativelyApiKey(apiKey.trim());
       if (r.success) {
-        setApiKey('•'.repeat(24));
+        setApiKey(MASKED_NATIVELY_KEY);
         setIsSaved(true);
         setJustSaved(true);
         setTimeout(() => setJustSaved(false), 2500);
@@ -685,7 +686,14 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [apiKey, isSaving]);
+
+  // Persist as the user types — no need to click "Save key". Flush on blur/unmount
+  // so closing Settings mid-paste never loses the key.
+  const { onBlur: onApiKeyBlur } = useApiKeyAutoSave(apiKey, handleSave, {
+    enabled: !isSaving && !isSaved,
+    shouldSave: (v) => v.trim().length > 0 && !v.includes('•'),
+  });
 
   const handleClear = () => {
     setApiKey('');
@@ -1209,7 +1217,8 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
               setIsSaved(false);
               setError(null);
             }}
-            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+            onBlur={onApiKeyBlur}
+            onKeyDown={(e) => e.key === 'Enter' && void handleSave()}
             placeholder="natively_api_..."
             spellCheck={false}
             autoComplete="off"

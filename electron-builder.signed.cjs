@@ -64,6 +64,9 @@ module.exports = {
   extraMetadata: {
     ...(base.extraMetadata || {}),
     nativelySigned: true,
+    // Field telemetry: proves the issue #322 keychain-access-groups entitlement
+    // shipped in this signed build (see KeychainEntitlement.test.mjs).
+    keychainGroupEntitled: true,
   },
   // afterSign: notarize the .app via scripts/notarize.js, which adds STAPLE-RETRY
   // recovery for the Apple CDN ticket-propagation race (Error 65). We do NOT use

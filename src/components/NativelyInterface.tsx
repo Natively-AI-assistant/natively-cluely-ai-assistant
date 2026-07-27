@@ -8,6 +8,7 @@ import {
   Globe,
   HelpCircle,
   Image,
+  KeyRound,
   Lightbulb,
   List,
   MessageSquare,
@@ -750,6 +751,8 @@ const formatProviderLabel = (provider?: string | null): string => {
     .join(' ');
 };
 
+type SttSummaryTone = 'ok' | 'warn' | 'error' | 'info';
+
 const getSttSummary = (
   userStatus: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio',
   interviewerStatus: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio',
@@ -758,12 +761,23 @@ const getSttSummary = (
   notConfigured: boolean,
   userError?: string | null,
   interviewerError?: string | null,
-): { label: string; tone: 'ok' | 'warn' | 'error'; detail: string } => {
+  /** Issue #322: keyring could not decrypt stored keys this launch. */
+  credentialUnreadable?: boolean,
+): { label: string; tone: SttSummaryTone; detail: string } => {
   if (notConfigured) {
     return {
       label: 'STT not configured',
       tone: 'error',
       detail: 'Open Audio settings to select a provider',
+    };
+  }
+  // Credential storage failure is distinct from capture / reconnect — surface it
+  // before channel status so users don't chase Screen Recording or "reconnect".
+  if (credentialUnreadable) {
+    return {
+      label: 'Re-enter API keys',
+      tone: 'error',
+      detail: 'Secure storage could not read saved keys. Open Audio settings and save your provider key again.',
     };
   }
   if (userStatus === 'failed' || interviewerStatus === 'failed') {
@@ -783,10 +797,11 @@ const getSttSummary = (
       detail: `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`,
     };
   }
+  // Awaiting first transcript is healthy/idle — not a warning, and not reconnect.
   if (userStatus === 'awaiting-audio' || interviewerStatus === 'awaiting-audio') {
     return {
       label: 'Listening for audio…',
-      tone: 'warn',
+      tone: 'info',
       detail: `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`,
     };
   }
@@ -797,10 +812,12 @@ const getSttSummary = (
   };
 };
 
-const getStatusToneClass = (tone: 'ok' | 'warn' | 'error'): string => {
+const getStatusToneClass = (tone: SttSummaryTone): string => {
   if (tone === 'error') return 'text-rose-600 dark:text-rose-300 border-rose-500/20 bg-rose-500/10';
   if (tone === 'warn')
     return 'text-amber-600 dark:text-amber-300 border-amber-500/20 bg-amber-500/10';
+  if (tone === 'info')
+    return 'text-sky-600 dark:text-sky-300 border-sky-500/20 bg-sky-500/10';
   return 'text-emerald-600 dark:text-emerald-300 border-emerald-500/20 bg-emerald-500/10';
 };
 
@@ -977,6 +994,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   >('awaiting-audio');
   const [sttInterviewerError, setSttInterviewerError] = useState<string>('');
   const [sttInterviewerProvider, setSttInterviewerProvider] = useState<string>('');
+  /** Issue #322: secure storage could not decrypt saved API keys this launch. */
+  const [credentialUnreadable, setCredentialUnreadable] = useState(false);
+  const [needsCredentialReentry, setNeedsCredentialReentry] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [conversationContext, setConversationContext] = useState<string>('');
@@ -3005,6 +3025,30 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }
     });
   }, []);
+
+  // Issue #322: surface undecryptable credential store in the live overlay
+  // (distinct from capture TCC failures and STT reconnect).
+  const refreshCredentialStoreHealth = useCallback(() => {
+    window.electronAPI?.getStoredCredentials?.()
+      .then((creds) => {
+        if (!creds) return;
+        setCredentialUnreadable(!!creds.credentialsStoreUnreadable);
+        setNeedsCredentialReentry(!!creds.needsCredentialReentry);
+      })
+      .catch(() => { /* ignore */ });
+  }, []);
+
+  useEffect(() => {
+    refreshCredentialStoreHealth();
+  }, [refreshCredentialStoreHealth]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onCredentialsChanged) return;
+    const unsubscribe = window.electronAPI.onCredentialsChanged(() => {
+      refreshCredentialStoreHealth();
+    });
+    return () => unsubscribe();
+  }, [refreshCredentialStoreHealth]);
 
   // ── PERF: streaming-token rAF coalescing ─────────────────────────────────
   // Token streams (LLM answers) used to call setMessages PER TOKEN. Groq
@@ -6945,6 +6989,7 @@ Provide only the answer, nothing else.`;
     /\s*\(\d+ consecutive errors\):?/gi,
     '',
   );
+  const credentialsNeedAttention = credentialUnreadable || needsCredentialReentry;
   const sttSummary = getSttSummary(
     sttUserStatus,
     sttInterviewerStatus,
@@ -6953,21 +6998,25 @@ Provide only the answer, nothing else.`;
     sttNotConfigured,
     sttUserError,
     sttInterviewerError,
+    credentialsNeedAttention,
   );
   const showAnswerPanel =
     messages.length > 0 || isManualRecording || isProcessing || answerPanelPinned;
-  // Only surface the STT pill for genuine problems (config error, failed, or a
-  // dropped-then-reconnecting channel). The neutral 'awaiting-audio' state
-  // ("Listening for audio…") is intentionally suppressed — it added a pill on
-  // every launch and made the top section look padded vs. the prior build.
+  // Only surface the STT pill for genuine problems (config error, credential
+  // unreadable, failed, or a dropped-then-reconnecting channel). The neutral
+  // 'awaiting-audio' state ("Listening for audio…") stays suppressed — it is
+  // idle, not a warning, and must not look like reconnect.
   // When an audio-capture-failure banner is showing, it already conveys the
   // hard failure with actionable UI (repair button + system-settings deep
   // link). Surfacing the STT "needs attention" error pill at the same time is
   // the same status on two surfaces — let the richer banner own the error and
   // suppress the redundant error-tone pill. Reconnecting indication still shows
   // (the banner only fires on terminal/stuck, not transient reconnects).
+  // Credential-unreadable always shows (even alongside capture banners) — it is
+  // a different failure class than TCC/capture.
   const audioFailureBannerActive = systemAudioWarning?.kind === 'audio-capture-failure';
   const shouldShowSttSummaryPill =
+    credentialsNeedAttention ||
     (sttSummary.tone === 'error' && !audioFailureBannerActive) ||
     sttUserStatus === 'reconnecting' ||
     sttInterviewerStatus === 'reconnecting';
@@ -7167,7 +7216,13 @@ Provide only the answer, nothing else.`;
                     className={`${statusPillBaseClass} ${getStatusToneClass(sttSummary.tone)}`}
                     title={sttSummary.detail}
                   >
-                    <Mic className="h-3 w-3 opacity-70" />
+                    {credentialsNeedAttention ? (
+                      <KeyRound className="h-3 w-3 opacity-70" />
+                    ) : sttUserStatus === 'reconnecting' || sttInterviewerStatus === 'reconnecting' ? (
+                      <RefreshCw className="h-3 w-3 opacity-70 animate-spin" />
+                    ) : (
+                      <Mic className="h-3 w-3 opacity-70" />
+                    )}
                     <span>{sttSummary.label}</span>
                   </div>
                 )}
@@ -7431,6 +7486,46 @@ Provide only the answer, nothing else.`;
                       onClick={() => setSttNotConfigured(false)}
                       className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-orange-600/50 hover:text-orange-700 dark:text-orange-500/50 dark:hover:text-orange-400 transition-colors absolute top-1 right-1 opacity-0 group-hover/stt-warning:opacity-100"
                       title={t("Dismiss")}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Issue #322: credential store unreadable — distinct from capture TCC /
+                  STT reconnect. Keys may still be recoverable on disk; re-enter & save. */}
+              {credentialsNeedAttention && !sttNotConfigured && (
+                <div className="flex items-center justify-between mx-4 mt-3 mb-1 px-3.5 py-2.5 bg-rose-500/10 border border-rose-500/20 rounded-[12px] shadow-sm relative no-drag group/cred-warning">
+                  <div className="flex flex-col gap-1 pr-3">
+                    <div className="flex items-center gap-2 text-[12.5px] text-rose-600 dark:text-rose-400/90 font-medium leading-tight">
+                      <div className="shrink-0 p-1 bg-rose-500/20 rounded-full">
+                        <KeyRound className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                      </div>
+                      <span>{t('Saved API keys could not be read')}</span>
+                    </div>
+                    <p className="text-[11px] text-rose-600/70 dark:text-rose-400/60 leading-snug pl-[26px]">
+                      {needsCredentialReentry
+                        ? t('Secure storage failed repeatedly. Open Settings → Audio, re-enter your speech provider key, and save.')
+                        : t('Secure storage could not decrypt keys this session. Open Settings → Audio and save your key again — previous keys were not overwritten.')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => {
+                        window.electronAPI?.toggleSettingsWindow?.();
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-700 dark:text-rose-400 text-[11px] font-semibold transition-all active:scale-95 border border-rose-500/20 shadow-sm"
+                    >
+                      {t('Open Audio Settings')}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCredentialUnreadable(false);
+                        setNeedsCredentialReentry(false);
+                      }}
+                      className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-rose-600/50 hover:text-rose-700 dark:text-rose-500/50 dark:hover:text-rose-400 transition-colors absolute top-1 right-1 opacity-0 group-hover/cred-warning:opacity-100"
+                      title={t('Dismiss')}
                     >
                       <X className="w-3 h-3" />
                     </button>

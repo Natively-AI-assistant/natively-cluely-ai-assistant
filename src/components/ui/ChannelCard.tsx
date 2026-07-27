@@ -51,12 +51,10 @@ const ChannelCard: React.FC<ChannelCardProps> = ({
         }
     };
 
-    // B2: 'awaiting-audio' shares the visual treatment of 'reconnecting'
-    // (amber, non-error) but with a distinct label so users know audio
-    // hasn't been verified yet — different from "we had a connection and
-    // lost it."
+    // awaiting-audio is idle/listening (sky, mic icon) — NOT reconnect (amber, spinner).
+    // Conflating those two made silent-capture / waiting look like a network failure.
     const icon = status === 'failed' ? iconFailed
-        : status === 'reconnecting' || status === 'awaiting-audio' ? iconReconnecting
+        : status === 'reconnecting' ? iconReconnecting
         : iconConnected;
 
     const statusLabel = status === 'connected' ? 'Operational'
@@ -64,42 +62,51 @@ const ChannelCard: React.FC<ChannelCardProps> = ({
         : status === 'reconnecting' ? 'Reconnecting...'
         : 'Error';
     const label = providerLabel(provider);
+    const isReconnect = status === 'reconnecting';
+    const isFailed = status === 'failed';
+    const isListening = status === 'awaiting-audio';
 
     return (
         <div className={`relative rounded-xl transition-all duration-300 ${
-            status === 'failed'
+            isFailed
                 ? 'bg-gradient-to-br from-red-500/8 to-red-500/3 border border-red-500/15'
-                : status === 'reconnecting'
+                : isReconnect
                     ? 'bg-gradient-to-br from-amber-500/8 to-amber-500/3 border border-amber-500/15'
-                    : 'bg-gradient-to-br from-sky-500/4 to-sky-500/2 border border-sky-500/10'
+                    : isListening
+                        ? 'bg-gradient-to-br from-sky-500/6 to-sky-500/2 border border-sky-500/12'
+                        : 'bg-gradient-to-br from-emerald-500/6 to-emerald-500/2 border border-emerald-500/12'
         }`}>
             {/* Status indicator line */}
             <div className={`absolute top-0 left-3 right-3 h-px ${
-                status === 'failed' ? 'bg-gradient-to-r from-red-500/40 to-transparent' :
-                status === 'reconnecting' ? 'bg-gradient-to-r from-amber-500/40 to-transparent' :
-                'bg-gradient-to-r from-sky-500/40 to-transparent'
+                isFailed ? 'bg-gradient-to-r from-red-500/40 to-transparent' :
+                isReconnect ? 'bg-gradient-to-r from-amber-500/40 to-transparent' :
+                isListening ? 'bg-gradient-to-r from-sky-500/40 to-transparent' :
+                'bg-gradient-to-r from-emerald-500/40 to-transparent'
             }`} />
 
             <div className="p-3.5 space-y-2.5">
                 {/* Header */}
                 <div className="flex items-center gap-2">
                     <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${
-                        status === 'failed' ? 'bg-red-500/15' :
-                        status === 'reconnecting' ? 'bg-amber-500/15' :
-                        'bg-sky-500/10'
+                        isFailed ? 'bg-red-500/15' :
+                        isReconnect ? 'bg-amber-500/15' :
+                        isListening ? 'bg-sky-500/10' :
+                        'bg-emerald-500/10'
                     }`}>
                         <div className={`w-4 h-4 ${
-                            status === 'failed' ? 'text-red-400' :
-                            status === 'reconnecting' ? 'text-amber-400 animate-spin' :
-                            'text-sky-400'
+                            isFailed ? 'text-red-400' :
+                            isReconnect ? 'text-amber-400 animate-spin' :
+                            isListening ? 'text-sky-400' :
+                            'text-emerald-400'
                         }`}>
                             {icon}
                         </div>
                     </div>
                     <div className="flex-1 min-w-0">
                         <p className={`text-[11px] font-semibold ${
-                            status === 'failed' ? 'text-red-400/90' :
-                            status === 'reconnecting' ? 'text-amber-400/90' :
+                            isFailed ? 'text-red-400/90' :
+                            isReconnect ? 'text-amber-400/90' :
+                            isListening ? 'text-sky-400/90' :
                             'overlay-text-primary'
                         }`}>
                             {name}

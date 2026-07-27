@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useT } from '../../i18n';
 import { Plus, Trash2, Edit2, AlertCircle, CheckCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut } from 'lucide-react';
 import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
+import { useApiKeyAutoSave } from '../../hooks/useApiKeyAutoSave';
 
 const CODEX_SERVICE_TIERS = ['default', 'fast', 'flex'] as const;
 // Must mirror CodexCliService.CODEX_MODEL_REASONING_EFFORTS in
@@ -208,6 +209,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // proxy's /model/info (standard registry value), falling back to 8192.
     const [litellmMaxTokens, setLitellmMaxTokens] = useState('');
     const [litellmModels, setLitellmModels] = useState<string[]>([]);
+    /** True after the user edits LiteLLM fields — prevents autosave on credential hydrate. */
+    const [litellmDirty, setLitellmDirty] = useState(false);
 
     // Status
     const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
@@ -763,9 +766,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // LiteLLM needs three fields (baseURL + optional key + optional max-tokens),
     // so it can't use the single-key ProviderCard contract. baseURL is required
     // to enable the proxy; maxTokens empty → backend default (8192).
-    const handleSaveLitellm = async () => {
+    const handleSaveLitellm = useCallback(async () => {
         const url = litellmBaseURL.trim();
-        if (!url) return;
+        if (!url || savingStatus.litellm) return;
         setSavingStatus(prev => ({ ...prev, litellm: true }));
         try {
             const parsedMax = parseInt(litellmMaxTokens, 10);
@@ -778,6 +781,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 setSavedStatus(prev => ({ ...prev, litellm: true }));
                 setHasStoredKey(prev => ({ ...prev, litellm: true }));
                 setLitellmApiKey('');
+                setLitellmDirty(false);
                 window.electronAPI?.getAvailableLiteLLMModels?.()
                     .then((models) => setLitellmModels(Array.isArray(models) ? models.filter(Boolean) : []))
                     .catch(() => setLitellmModels([]));
@@ -788,7 +792,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         } finally {
             setSavingStatus(prev => ({ ...prev, litellm: false }));
         }
-    };
+    }, [litellmBaseURL, litellmApiKey, litellmMaxTokens, savingStatus.litellm]);
+
+    // Autosave LiteLLM when the user edits any field (after credentials hydrate).
+    const litellmFingerprint = `${litellmBaseURL}\0${litellmApiKey}\0${litellmMaxTokens}`;
+    const { onBlur: onLitellmBlur } = useApiKeyAutoSave(litellmFingerprint, handleSaveLitellm, {
+        enabled: credentialsLoaded && litellmDirty && !savingStatus.litellm,
+        shouldSave: () => litellmBaseURL.trim().length > 0,
+    });
 
     const handleRemoveLitellm = async () => {
         if (!confirm(t('Are you sure you want to remove the LiteLLM proxy configuration?'))) return;
@@ -1177,7 +1188,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 <span className="text-[10px] font-medium text-text-secondary uppercase tracking-wide">{t('Proxy Base URL')}</span>
                                 <input
                                     value={litellmBaseURL}
-                                    onChange={e => setLitellmBaseURL(e.target.value)}
+                                    onChange={e => { setLitellmBaseURL(e.target.value); setLitellmDirty(true); }}
+                                    onBlur={onLitellmBlur}
                                     className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-primary"
                                     placeholder="http://localhost:4000/v1"
                                 />
@@ -1188,7 +1200,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 <input
                                     type="password"
                                     value={litellmApiKey}
-                                    onChange={e => setLitellmApiKey(e.target.value)}
+                                    onChange={e => { setLitellmApiKey(e.target.value); setLitellmDirty(true); }}
+                                    onBlur={onLitellmBlur}
                                     className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-primary"
                                     placeholder={hasStoredKey.litellm ? t('•••••••• (leave blank to keep)') : t('sk-... (only if proxy requires auth)')}
                                 />
@@ -1200,7 +1213,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             <ModelSelect
                                 value={litellmMaxTokens}
                                 options={LITELLM_MAX_TOKENS_OPTIONS}
-                                onChange={setLitellmMaxTokens}
+                                onChange={(v) => { setLitellmMaxTokens(v); setLitellmDirty(true); }}
                                 placeholder={t("Auto (per-model)")}
                                 className="py-2"
                             />

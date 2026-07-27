@@ -1566,7 +1566,13 @@ function loadOrCreatePersistedExtToken(): string {
     const existing = cm.getPhoneMirrorToken();
     if (existing && /^[A-Za-z0-9_-]{16,}$/.test(existing)) return existing;
     const fresh = generateToken();
-    cm.setPhoneMirrorToken(fresh);
+    // Issue #322: mint in memory always, but only PERSIST when the keyring store
+    // is readable. An unguarded setPhoneMirrorToken during an undecryptable
+    // launch would write a sparse { phoneMirrorToken } and permanently clobber
+    // recoverable API keys.
+    if (!cm.wasExistingStoreUnreadable()) {
+      cm.setPhoneMirrorToken(fresh);
+    }
     return fresh;
   } catch (_) {
     return generateToken();

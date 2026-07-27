@@ -34,6 +34,19 @@
     <true/>
 
     <!--
+      Issue #322 forward-stability: Electron safeStorage / Chromium OSCrypt binds the
+      "Natively Safe Storage" keychain item to the binary's code signature unless a
+      stable keychain-access-groups entitlement scopes it to a Team ID + appId group.
+      Without this, signed updates / pre-v2.7 → signed migrations can make
+      decryptString() throw and wipe persisted API keys. Must match
+      APPLE_TEAM_ID (BJM29W3UQ6) + package.json build.appId.
+    -->
+    <key>keychain-access-groups</key>
+    <array>
+        <string>BJM29W3UQ6.com.electron.meeting-notes</string>
+    </array>
+
+    <!--
       INTENTIONALLY OMITTED (verified against Apple docs + codebase audit, 2026-05-29):
         * com.apple.security.screen-capture        — NOT a real Apple entitlement.
           ScreenCaptureKit + the CoreAudio process tap are pure-TCC (Screen & System

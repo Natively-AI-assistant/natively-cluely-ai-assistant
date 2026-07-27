@@ -23,6 +23,7 @@ import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
 import nativelyLogo from '../assets/logo.webp';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
+import { useApiKeyAutoSave } from '../hooks/useApiKeyAutoSave';
 import { isMac } from '../utils/platformUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import {
@@ -889,6 +890,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [hasStoredIbmWatsonKey, setHasStoredIbmWatsonKey] = useState(false);
     const [sttSonioxKey, setSttSonioxKey] = useState('');
     const [hasStoredSonioxKey, setHasStoredSonioxKey] = useState(false);
+    /** Issue #322: macOS keychain could not decrypt stored keys — prompt re-entry. */
+    const [needsCredentialReentry, setNeedsCredentialReentry] = useState(false);
     const [isSttDropdownOpen, setIsSttDropdownOpen] = useState(false);
     const sttDropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -923,6 +926,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     if (creds.azureRegion) setSttAzureRegion(creds.azureRegion);
                     setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
                     setHasStoredSonioxKey(creds.hasSonioxKey || false);
+                    setNeedsCredentialReentry(!!creds.needsCredentialReentry);
 
                     setHasNativelyKey(creds.hasNativelyKey || false);
                     // Do NOT pre-populate STT key fields from stored credentials.
@@ -960,6 +964,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     setHasStoredAzureKey(creds.hasAzureKey);
                     setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
                     setHasStoredSonioxKey(creds.hasSonioxKey || false);
+                    setNeedsCredentialReentry(!!creds.needsCredentialReentry);
                 }).catch(() => { /* silently ignore */ });
             }
         });
@@ -1056,6 +1061,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             else if (provider === 'soniox') setHasStoredSonioxKey(true);
             else setHasStoredDeepgramKey(true);
 
+            // Issue #322: a successful re-entry clears the secure-storage banner.
+            setNeedsCredentialReentry(false);
             setSttSaved(true);
             setTimeout(() => setSttSaved(false), 2000);
         } catch (e: any) {
@@ -1066,6 +1073,33 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             setSttSaving(false);
         }
     };
+
+    const currentSttKey =
+        sttProvider === 'groq' ? sttGroqKey
+            : sttProvider === 'openai' ? sttOpenaiKey
+                : sttProvider === 'elevenlabs' ? sttElevenLabsKey
+                    : sttProvider === 'azure' ? sttAzureKey
+                        : sttProvider === 'ibmwatson' ? sttIbmKey
+                            : sttProvider === 'soniox' ? sttSonioxKey
+                                : sttDeepgramKey;
+
+    // Autosave STT keys after typing / on blur / on unmount (still validates via test).
+    const { onBlur: onSttKeyBlur } = useApiKeyAutoSave(
+        currentSttKey,
+        () => {
+            if (sttSaving || sttSaved) return;
+            return handleSttKeySubmit(
+                sttProvider as 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox',
+                currentSttKey,
+            );
+        },
+        {
+            // Longer idle than BYOK keys — STT save runs a live connection test.
+            debounceMs: 800,
+            enabled: !sttSaving && !sttSaved,
+            shouldSave: (v) => v.trim().length > 0 && !/^sk-\.\.\.[A-Za-z0-9]{4}$/.test(v.trim()),
+        },
+    );
 
     const handleRemoveSttKey = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox') => {
         if (!confirm(`Are you sure you want to remove the ${provider === 'ibmwatson' ? 'IBM Watson' : provider.charAt(0).toUpperCase() + provider.slice(1)} API key?`)) return;
@@ -2404,6 +2438,19 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                             {activeTab === 'audio' && (
                                 <div className="space-y-6 animated fadeIn">
+                                    {needsCredentialReentry && (
+                                        <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                                            <AlertCircle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-semibold text-amber-300">
+                                                    {t('Saved API keys could not be read from secure storage')}
+                                                </p>
+                                                <p className="text-[11px] text-amber-200/80 mt-1 leading-relaxed">
+                                                    {t('Re-enter your speech provider API key below and save. Your previous keys were preserved on disk and were not overwritten.')}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
                                     {/* ── Speech Provider Section ── */}
                                     <div>
                                         <h3 className="text-lg font-bold text-text-primary mb-1">{t('Speech Provider')}</h3>
@@ -2527,6 +2574,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 else if (sttProvider === 'soniox') setSttSonioxKey(e.target.value);
                                                                 else setSttDeepgramKey(e.target.value);
                                                             }}
+                                                            onBlur={onSttKeyBlur}
                                                             placeholder={
                                                                 sttProvider === 'groq'
                                                                     ? (hasStoredSttGroqKey ? '••••••••••••' : t('Enter Groq API key'))

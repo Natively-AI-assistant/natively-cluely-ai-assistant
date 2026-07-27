@@ -6246,6 +6246,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         openaiPreferredModel: creds.openaiPreferredModel || undefined,
         claudePreferredModel: creds.claudePreferredModel || undefined,
         deepseekPreferredModel: creds.deepseekPreferredModel || undefined,
+        // Issue #322: surface permanent keychain-decrypt failure so Settings can
+        // prompt the user to re-enter API keys instead of showing a silent empty store.
+        needsCredentialReentry: CredentialsManager.getInstance().needsCredentialReentry(),
+        credentialsStoreUnreadable: CredentialsManager.getInstance().wasExistingStoreUnreadable(),
       };
     } catch (error: any) {
       // SECURITY FIX (P0): Error fallback returns masked keys, not raw strings
@@ -6279,6 +6283,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         sttAzureKey: '',
         sttIbmKey: '',
         sttSonioxKey: '',
+        needsCredentialReentry: false,
+        credentialsStoreUnreadable: false,
       };
     }
   });

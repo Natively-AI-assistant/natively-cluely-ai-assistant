@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
     Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star, Sparkles,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { PremiumUpgradeModal } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { useApiKeyAutoSave } from '../hooks/useApiKeyAutoSave';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
@@ -708,6 +709,29 @@ export function ProfileIntelligenceSettings({
         } catch { /**/ }
     };
 
+    const handleSaveTavilyKey = useCallback(async () => {
+        if (!tavilyApiKey.trim() || tavilySaving) return;
+        setTavilyError('');
+        setTavilySaving(true);
+        try {
+            const result = await window.electronAPI?.setTavilyApiKey?.(tavilyApiKey.trim());
+            if (result && !result.success) {
+                setTavilyError(result.error ?? 'Failed to save API key.');
+            } else {
+                setHasStoredTavilyKey(true);
+                setTavilyApiKey('');
+            }
+        } catch (e: any) {
+            setTavilyError(e?.message ?? 'Unexpected error.');
+        } finally {
+            setTavilySaving(false);
+        }
+    }, [tavilyApiKey, tavilySaving]);
+
+    const { onBlur: onTavilyKeyBlur } = useApiKeyAutoSave(tavilyApiKey, handleSaveTavilyKey, {
+        enabled: !tavilySaving,
+    });
+
     const visibleNav = NAV_ITEMS;
 
     // ── Upload helpers ────────────────────────────────────────────────────────
@@ -1357,6 +1381,7 @@ export function ProfileIntelligenceSettings({
                     className="pi-input"
                     placeholder={hasStoredTavilyKey ? '••••••••••••••••' : 'tvly-...'}
                     onChange={e => { setTavilyApiKey(e.target.value); setTavilyError(''); }}
+                    onBlur={onTavilyKeyBlur}
                 />
             </div>
             {tavilyError && <p style={{ fontSize: 11, color: 'var(--pi-danger)', margin: '0 0 8px' }}>{tavilyError}</p>}
@@ -1364,16 +1389,7 @@ export function ProfileIntelligenceSettings({
                 className="pi-pill-btn pi-press"
                 style={{ width: '100%', justifyContent: 'center', padding: '8px 12px', borderRadius: 9 }}
                 disabled={tavilySaving || !tavilyApiKey.trim()}
-                onClick={async () => {
-                    if (!tavilyApiKey.trim()) return;
-                    setTavilyError(''); setTavilySaving(true);
-                    try {
-                        const result = await window.electronAPI?.setTavilyApiKey?.(tavilyApiKey.trim());
-                        if (result && !result.success) { setTavilyError(result.error ?? 'Failed to save API key.'); }
-                        else { setHasStoredTavilyKey(true); setTavilyApiKey(''); }
-                    } catch (e: any) { setTavilyError(e?.message ?? 'Unexpected error.'); }
-                    finally { setTavilySaving(false); }
-                }}
+                onClick={() => { void handleSaveTavilyKey(); }}
             >
                 {tavilySaving ? <><RefreshCw size={12} className="pi-spinner" /> Saving…</> : 'Save API Key'}
             </button>

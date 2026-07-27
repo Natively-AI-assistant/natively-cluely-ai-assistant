@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useT } from '../../i18n';
 import { Trash2, AlertCircle, CheckCircle, ExternalLink, Loader2, ChevronDown, Check, RefreshCw } from 'lucide-react';
+import { useApiKeyAutoSave } from '../../hooks/useApiKeyAutoSave';
 
 interface FetchedModel {
     id: string;
@@ -52,22 +53,16 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = React.useRef<HTMLDivElement>(null);
 
-    // Refs to avoid stale closures in the auto-save timer
-    const savedRef = useRef(savedStatus);
-    const savingRef = useRef(savingStatus);
-    savedRef.current = savedStatus;
-    savingRef.current = savingStatus;
+    const persistKey = useCallback(() => {
+        if (savingStatus || savedStatus || !apiKey.trim()) return;
+        return onSaveKey();
+    }, [onSaveKey, savingStatus, savedStatus, apiKey]);
 
-    // Auto-save API key after 5 seconds of inactivity
-    useEffect(() => {
-        if (!apiKey.trim()) return;
-        const timer = setTimeout(() => {
-            if (!savedRef.current && !savingRef.current) {
-                onSaveKey().catch(console.error);
-            }
-        }, 5000);
-        return () => clearTimeout(timer);
-    }, [apiKey]);
+    // Autosave ~500ms after typing; also flush on blur / unmount so closing
+    // Settings never drops a key the user already entered.
+    const { onBlur: onKeyBlur } = useApiKeyAutoSave(apiKey, persistKey, {
+        enabled: !savingStatus && !savedStatus,
+    });
 
     // Sync preferredModel prop
     useEffect(() => {
@@ -165,11 +160,12 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                     type="password"
                     value={apiKey}
                     onChange={(e) => onKeyChange(e.target.value)}
+                    onBlur={onKeyBlur}
                     placeholder={hasStoredKey ? "••••••••••••" : keyPlaceholder}
                     className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
                 />
                 <button
-                    onClick={onSaveKey}
+                    onClick={() => { void onSaveKey(); }}
                     disabled={savingStatus || !apiKey.trim()}
                     className={`px-5 py-2.5 rounded-lg text-xs font-medium transition-colors ${savedStatus
                         ? 'bg-green-500/20 text-green-400'
