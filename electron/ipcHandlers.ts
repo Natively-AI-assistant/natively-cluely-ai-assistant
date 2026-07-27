@@ -2535,6 +2535,19 @@ export function initializeIpcHandlers(appState: AppState): void {
         // framing in HARD_SYSTEM_PROMPT/ASSIST_MODE_PROMPT that was causing coding
         // questions to be answered with "At Aetherbot AI, I was responsible for..."
         // (resume hijack via CONTEXT_INTELLIGENCE_LAYER's "you ARE the user").
+        //
+        // NOTE (answer-pipeline-rebuild Phase 4 finding, 2026-07-28): this is set
+        // unconditionally, even when isCodingChat later builds `context` from
+        // formatAnswerPlanForPrompt's full CODING_TEMPLATE/CODING_CONTRACT (strict
+        // six mandatory headings). CHAT_MODE_PROMPT's own <coding> block ("code +
+        // optional 1-2 sentences, no mandated structure") is a looser, technically
+        // conflicting instruction on the same axis, sent on the system channel
+        // alongside the stricter user-channel contract. In practice this is inert:
+        // RC-7 (Phase 2) had to add a SHARED_CODING_RULES exception specifically
+        // because the stricter user-channel CODING_CONTRACT was winning and forcing
+        // the six-section treatment onto trivial code — proof the model already
+        // resolves this conflict in the contract's favor. Left as-is; see
+        // docs/answer-pipeline-rebuild/02_STATUS.md Phase 4 for the full writeup.
         const systemPromptOverride: string | undefined = options?.skipSystemPrompt
           ? ''
           : CHAT_MODE_PROMPT;
