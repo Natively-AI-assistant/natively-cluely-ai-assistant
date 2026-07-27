@@ -138,6 +138,8 @@ export interface IntelligenceModeEvents {
     // newly created candidate action (post-dedupe). Renderer subscribes via
     // window.electronAPI.onIntelligenceDynamicAction and renders cards.
     'dynamic_action_emitted': (action: DynamicAction) => void;
+    /** Requirements gate-status strip projection (ticket 17). */
+    'sd_requirements_gate_status': (viewModel: import('./llm/sdRequirementsGate').GateStatusViewModel) => void;
 }
 
 export class IntelligenceEngine extends EventEmitter {
@@ -677,7 +679,7 @@ export class IntelligenceEngine extends EventEmitter {
      * Manual trigger - uses clean transcript pipeline for question inference
      * NEVER returns null - always provides a usable response
      */
-    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean }): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean; sdRequirementsUiAdvance?: boolean }): Promise<string | null> {
         const now = Date.now();
         // Intelligence OS observe-only trace (Phase 1). Zero-cost NO-OP unless
         // intelligence_trace_enabled is on. Committed at the primary final-answer emit
@@ -1599,6 +1601,7 @@ export class IntelligenceEngine extends EventEmitter {
                 answerPlanRaw,
                 question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
                 options?.screenContext,
+                { uiAdvance: options?.sdRequirementsUiAdvance === true },
             );
             const answerPlan = sdPrepared.answerPlan;
             if (sdPrepared.softRefuseSpoken) {
@@ -3282,12 +3285,18 @@ export class IntelligenceEngine extends EventEmitter {
      * Reads/writes SessionTracker working copy, checkpoints to meeting DB,
      * stamps answerPlan.sdPhase so WhatToAnswerLLM enforcement is active.
      */
+    /**
+     * SD Requirements grilling gate: SessionTracker working copy → fill/advance →
+     * stamp answerPlan.sdPhase. Broadcasts overlay gate-status projection (ticket 17).
+     */
     private applySdRequirementsGate(
         answerPlan: import('./llm/AnswerPlanner').AnswerPlan,
         problemQuestion: string,
         screenContext?: ScreenContext | null,
+        gateOpts?: { uiAdvance?: boolean },
     ): { answerPlan: import('./llm/AnswerPlanner').AnswerPlan; softRefuseSpoken: string | null } {
         if (answerPlan.answerType !== 'system_design_answer') {
+            this.publishSdRequirementsGateStatus(false);
             return { answerPlan, softRefuseSpoken: null };
         }
         try {
@@ -3314,12 +3323,15 @@ export class IntelligenceEngine extends EventEmitter {
                 assistantAdvanceTexts: detectAdvanceSignal(problemQuestion, 'mic')
                     ? [problemQuestion]
                     : undefined,
+                uiAdvance: gateOpts?.uiAdvance === true,
             });
 
             if (prepared.artifact) {
                 this.session.setSdRequirementsArtifact?.(prepared.artifact);
                 this.checkpointSdRequirements(prepared.artifact);
             }
+
+            this.publishSdRequirementsGateStatus(Boolean(prepared.softRefuseSpoken));
 
             return {
                 answerPlan: prepared.answerPlan,
@@ -3329,6 +3341,29 @@ export class IntelligenceEngine extends EventEmitter {
             console.warn('[IntelligenceEngine] SD Requirements gate skipped (non-fatal):', err?.message || err);
             return { answerPlan, softRefuseSpoken: null };
         }
+    }
+
+    /** Push gate-status strip projection to the overlay (ticket 17). */
+    publishSdRequirementsGateStatus(softRefused: boolean = false): void {
+        try {
+            const viewModel = this.getSdRequirementsGateStatus(softRefused);
+            this.emit('sd_requirements_gate_status', viewModel);
+        } catch (err: any) {
+            console.warn('[IntelligenceEngine] SD Requirements gate status publish skipped:', err?.message || err);
+        }
+    }
+
+    getSdRequirementsGateStatus(
+        softRefused: boolean = false,
+    ): import('./llm/sdRequirementsGate').GateStatusViewModel {
+        const { projectGateStatusViewModel } = require('./llm/sdRequirementsGate') as typeof import('./llm/sdRequirementsGate');
+        const artifact = this.session.getSdRequirementsArtifact?.() ?? null;
+        const vm = projectGateStatusViewModel(artifact, { softRefused });
+        // SPEC 17: strip only while Technical Interview + requirements gate.
+        if (vm.visible && this.getActiveModeId() !== 'technical-interview') {
+            return projectGateStatusViewModel(null);
+        }
+        return vm;
     }
 
     /** Persist Requirements artifact for same-meeting crash restore (ticket 09). */

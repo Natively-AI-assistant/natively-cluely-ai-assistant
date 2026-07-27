@@ -195,6 +195,7 @@ import GlassEffectLayer from './ui/GlassEffectLayer';
 import ResizeToggle from './ui/ResizeToggle';
 import RollingTranscript from './ui/RollingTranscript';
 import TopPill from './ui/TopPill';
+import { SdRequirementsGateStrip } from './SdRequirementsGateStrip';
 
 // PERF: hoisted plugin arrays. ReactMarkdown receives `remarkPlugins` and
 // `rehypePlugins` as new array literals if defined inline at the call site —
@@ -651,6 +652,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     partial?: boolean;
     missing?: string[];
   } | null>(null);
+  // SD Requirements gate strip (ticket 17) — contributes to status-pill row mount.
+  const [sdGateStripVisible, setSdGateStripVisible] = useState(false);
 
   // The structured capture (Smart Browser Context v2) that arrived with the last
   // page context, if any. Held in a ref so it survives re-renders and is consumed
@@ -3383,7 +3386,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Optional: Trigger a small toast or state change for visual feedback
   }, []);
 
-  const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
+  const handleWhatToSay = async (
+    promptInstruction?: string | React.MouseEvent,
+    advanceOpts?: { sdRequirementsUiAdvance?: boolean },
+  ) => {
     if (!tryBeginOverlayAction('what_to_say')) {
       // The press was blocked because a prior 'what_to_say' is still streaming.
       // Surface a brief hint instead of silently doing nothing, so a blocked
@@ -3481,11 +3487,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }
 
       const options =
-        dynamicPromptInstruction || domContext
+        dynamicPromptInstruction || domContext || advanceOpts?.sdRequirementsUiAdvance
           ? {
               ...(dynamicPromptInstruction ? { promptInstruction: dynamicPromptInstruction } : {}),
               ...(domContext ? { domContext } : {}),
               ...(domContextEnvelope ? { domContextEnvelope } : {}),
+              ...(advanceOpts?.sdRequirementsUiAdvance ? { sdRequirementsUiAdvance: true } : {}),
             }
           : undefined;
 
@@ -5574,7 +5581,7 @@ Provide only the answer, nothing else.`;
   // Suppressed: mode label pill is not required in the UI.
   // Suppressed: LLM privacy label pill is not required in the UI.
   // Suppressed: vision pill ("Vision: provider") is not required in the UI.
-  const hasStatusPill = shouldShowSttSummaryPill || !!pageContext;
+  const hasStatusPill = shouldShowSttSummaryPill || !!pageContext || sdGateStripVisible;
   const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-black/20 border-white/10'}`;
 
   // Suppress the shell's scale/translate entry animation until it has rendered
@@ -5751,8 +5758,11 @@ Provide only the answer, nothing else.`;
             >
               {isGlassTheme && <GlassEffectLayer parentRef={shellRef} cornerRadius={24} />}
 
-              {hasStatusPill && (
-              <div className="relative no-drag flex flex-wrap items-center justify-center gap-1.5 px-4 pt-3 pb-1">
+              <div
+                className={`relative no-drag flex flex-wrap items-center justify-center gap-1.5 px-4 pt-3 pb-1 ${
+                  hasStatusPill ? '' : 'hidden'
+                }`}
+              >
                 {shouldShowSttSummaryPill && (
                   <div
                     className={`${statusPillBaseClass} ${getStatusToneClass(sttSummary.tone)}`}
@@ -5762,6 +5772,13 @@ Provide only the answer, nothing else.`;
                     <span>{sttSummary.label}</span>
                   </div>
                 )}
+                <SdRequirementsGateStrip
+                  onVisibilityChange={setSdGateStripVisible}
+                  onAdvance={() => handleWhatToSay(undefined, { sdRequirementsUiAdvance: true })}
+                  advancing={isProcessing}
+                  statusPillBaseClass={statusPillBaseClass}
+                  getStatusToneClass={getStatusToneClass}
+                />
                 {pageContext && (
                   <div
                     className={`${statusPillBaseClass} ${getStatusToneClass(pageContext.partial ? 'warn' : 'ok')} pr-1.5`}
@@ -5806,7 +5823,6 @@ Provide only the answer, nothing else.`;
                   </div>
                 )}
               </div>
-              )}
 
               {/* Multi-tab picker — choose which open browser tab to capture. */}
               {tabPicker !== null && (

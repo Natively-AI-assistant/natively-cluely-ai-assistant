@@ -5664,6 +5664,11 @@ export class AppState {
       this.sendToWindow(win, 'intelligence-suggested-answer-discard', { reason })
     })
 
+    this.intelligenceManager.on('sd_requirements_gate_status', (viewModel: unknown) => {
+      const win = mainWindow()
+      this.sendToWindow(win, 'sd-requirements-gate-status', viewModel)
+    })
+
     // Verified code execution (background): a ✓ badge when the shown code passed
     // its executed test cases, and a NEW corrected message when it failed and a
     // re-verified fix was produced. Both arrive AFTER the answer was shown.

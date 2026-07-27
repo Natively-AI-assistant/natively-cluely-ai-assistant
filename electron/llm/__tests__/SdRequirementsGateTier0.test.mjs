@@ -425,3 +425,105 @@ describe('Grill pacing — next slot + clarifier budget', () => {
     assert.match(c, /exactly ONE/i);
   });
 });
+
+// ── Pure: gate-status overlay projection (ticket 17) ─────────────────────────
+
+describe('Gate status overlay projection', () => {
+  test('null artifact is not visible', () => {
+    const vm = gate.projectGateStatusViewModel(null);
+    assert.equal(vm.visible, false);
+    assert.equal(vm.filled, 0);
+    assert.equal(vm.required, 0);
+    assert.equal(vm.nextSlotLabel, null);
+    assert.deepEqual(vm.rows, []);
+  });
+
+  test('post_requirements artifact is not visible', () => {
+    let a = gate.createEmptyRequirementsArtifact('p');
+    for (const id of ['functional_requirements', 'scale_qps', 'latency', 'consistency_availability']) {
+      a = gate.fillSlotFromInterviewer(a, id, 'x');
+    }
+    a = gate.acceptAdvance(a);
+    assert.equal(gate.deriveSdPhase(a), 'post_requirements');
+    const vm = gate.projectGateStatusViewModel(a);
+    assert.equal(vm.visible, false);
+  });
+
+  test('open gate projects compact progress and next missing slot', () => {
+    let a = gate.createEmptyRequirementsArtifact('url');
+    a = gate.fillSlotFromInterviewer(a, 'functional_requirements', 'shorten + redirect');
+    const vm = gate.projectGateStatusViewModel(a);
+    assert.equal(vm.visible, true);
+    assert.equal(vm.filled, 1);
+    assert.equal(vm.required, 4);
+    assert.equal(vm.progressLabel, 'Requirements · 1/4');
+    assert.equal(vm.nextSlotLabel, 'scale / QPS');
+    assert.equal(vm.checklistComplete, false);
+    assert.equal(vm.shouldAutoExpand, false);
+    assert.deepEqual(
+      vm.rows.map((r) => r.id),
+      ['functional_requirements', 'scale_qps', 'latency', 'consistency_availability'],
+    );
+    assert.equal(vm.rows[0].status, 'filled');
+    assert.equal(vm.rows[1].status, 'missing');
+    assert.ok(!vm.rows.some((r) => r.id === 'durability' || r.id === 'read_write_ratio'));
+  });
+
+  test('pipeline class includes data_flow_stages; optionals still omitted', () => {
+    let a = gate.createEmptyRequirementsArtifact('etl', 'data_pipeline_streaming_analytics');
+    a = gate.fillSlotFromInterviewer(a, 'functional_requirements', 'ingest');
+    a = gate.fillSlotFromAssumption(
+      gate.markSlotAsked(a, 'scale_qps'),
+      'scale_qps',
+      '10k events/s',
+    );
+    const vm = gate.projectGateStatusViewModel(a);
+    assert.equal(vm.required, 5);
+    assert.ok(vm.rows.some((r) => r.id === 'data_flow_stages' && r.status === 'missing'));
+    assert.equal(vm.rows.find((r) => r.id === 'scale_qps')?.status, 'assumed');
+    assert.ok(!vm.rows.some((r) => r.id === 'durability'));
+  });
+
+  test('softRefused sets shouldAutoExpand and missingIds', () => {
+    const a = gate.createEmptyRequirementsArtifact('p');
+    const vm = gate.projectGateStatusViewModel(a, { softRefused: true });
+    assert.equal(vm.shouldAutoExpand, true);
+    assert.deepEqual(vm.missingIds, [
+      'functional_requirements',
+      'scale_qps',
+      'latency',
+      'consistency_availability',
+    ]);
+  });
+});
+
+describe('UI advance channel (ticket 17)', () => {
+  test('ui channel soft-refuses when incomplete without needing a phrase', () => {
+    const a = gate.createEmptyRequirementsArtifact('p');
+    const result = gate.softRefuseIfPrematureAdvance(a, '', 'ui');
+    assert.equal(result.refused, true);
+    assert.match(result.spoken, /functional requirements/i);
+    assert.equal(result.artifact.gateClosed, false);
+  });
+
+  test('ui channel accepts when checklist complete', () => {
+    let a = gate.createEmptyRequirementsArtifact('p');
+    for (const id of ['functional_requirements', 'scale_qps', 'latency', 'consistency_availability']) {
+      a = gate.fillSlotFromInterviewer(a, id, 'x');
+    }
+    const result = gate.softRefuseIfPrematureAdvance(a, '', 'ui');
+    assert.equal(result.refused, false);
+    assert.equal(result.artifact.gateClosed, true);
+    assert.equal(result.artifact.advanceAccepted, true);
+  });
+
+  test('interviewer channel still never advances', () => {
+    let a = gate.createEmptyRequirementsArtifact('p');
+    for (const id of ['functional_requirements', 'scale_qps', 'latency', 'consistency_availability']) {
+      a = gate.fillSlotFromInterviewer(a, id, 'x');
+    }
+    const result = gate.softRefuseIfPrematureAdvance(a, "let's move on", 'interviewer');
+    assert.equal(result.refused, false);
+    assert.equal(result.artifact.gateClosed, false);
+  });
+});

@@ -1611,8 +1611,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateWhatToSay: (
     question?: string,
     imagePaths?: string[],
-    options?: { promptInstruction?: string; domContext?: string; domContextEnvelope?: unknown },
+    options?: {
+      promptInstruction?: string;
+      domContext?: string;
+      domContextEnvelope?: unknown;
+      sdRequirementsUiAdvance?: boolean;
+    },
   ) => ipcRenderer.invoke('generate-what-to-say', question, imagePaths, options),
+  getSdRequirementsGateStatus: () => ipcRenderer.invoke('get-sd-requirements-gate-status'),
+  onSdRequirementsGateStatus: (callback: (viewModel: any) => void) => {
+    const subscription = (_: any, viewModel: any) => callback(viewModel);
+    ipcRenderer.on('sd-requirements-gate-status', subscription);
+    return () => {
+      ipcRenderer.removeListener('sd-requirements-gate-status', subscription);
+    };
+  },
   generateClarify: () => ipcRenderer.invoke('generate-clarify'),
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) =>
     ipcRenderer.invoke('generate-code-hint', imagePaths, problemStatement),
