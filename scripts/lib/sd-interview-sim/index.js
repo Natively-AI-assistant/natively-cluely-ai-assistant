@@ -7,6 +7,13 @@
 
 const { randomUUID } = require('crypto');
 const { checkMermaidSyntax } = require('./mermaid');
+const {
+  CORPUS_DIR_RELATIVE,
+  redactSecrets,
+  resolveCorpusDir,
+  writeCorpusBundle,
+  retainLastN,
+} = require('./corpus');
 
 /**
  * @typedef {{ git_sha?: string, tier?: string, models?: Record<string, string> }} Provenance
@@ -162,6 +169,12 @@ module.exports = {
   budgetExceeded,
   finalize,
   checkMermaidSyntax,
+  // Corpus (ticket 06) — file-based traces/sd-interview-sim/, not meeting DB
+  CORPUS_DIR_RELATIVE,
+  redactSecrets,
+  resolveCorpusDir,
+  writeCorpusBundle,
+  retainLastN,
 };
 
 // Runner seam (fixture + stub). Required after exports so circular load sees helpers.
