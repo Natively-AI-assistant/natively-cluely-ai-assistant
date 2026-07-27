@@ -5793,15 +5793,15 @@ Provide only the answer, nothing else.`;
           // deliberate cross-fade instead of the hard, silent DOM swap the
           // "different layout before vs after" complaint was describing.
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group code-card-mount-in">
-            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-              <CardCopyButton
-                text={msg.text}
-                onCopy={handleCopy}
-                isLightTheme={isLightTheme}
-                isModernTheme={isModernTheme}
-                isGlassTheme={isGlassTheme}
-              />
-            </div>
+            {/* No card-level CardCopyButton here — HighlightedCode /
+                StreamingHighlightedCode below already render their own
+                per-block copy button (CodeBlockCopyButton for the headerless
+                dark theme, or the header row for light/modern/glass). Code
+                messages are almost always a single fenced block, so msg.text
+                and the block's own code are the same content — a second,
+                card-level copy button just duplicated the same action and
+                overlapped it visually (both hover-reveal near the top-right
+                corner of the same card). */}
             <div className="space-y-2 text-[14.5px] leading-relaxed">
               {parts.map((part, i) => {
                 if (part.startsWith('```')) {
