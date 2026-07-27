@@ -446,17 +446,28 @@ async function runT2DualAgent(config = {}) {
 
     // Thin candidate: trigger (or continue/advance) — SUT produces the answer.
     if (action === 'trigger' || action === 'continue' || action === 'advance') {
-      const answer = await Promise.resolve(
-        sut({
-          scenario,
-          interviewerTurn,
-          injectLog: [...injectLog],
-          injected,
-          bundle: run.bundle,
-          turnCount: run.spend.turn_count,
-          candidateAction: action,
-        }),
-      );
+      let answer;
+      try {
+        answer = await Promise.resolve(
+          sut({
+            scenario,
+            interviewerTurn,
+            injectLog: [...injectLog],
+            injected,
+            bundle: run.bundle,
+            turnCount: run.spend.turn_count,
+            candidateAction: action,
+          }),
+        );
+      } catch (err) {
+        appendTurn(run, {
+          role: 'assistant',
+          text: `[sut-error] ${err?.message || String(err)}`.slice(0, 2000),
+          attachments: [],
+        });
+        end_reason = 'error';
+        break;
+      }
       const answerObj =
         answer && typeof answer === 'object' ? answer : { text: String(answer ?? '') };
 
