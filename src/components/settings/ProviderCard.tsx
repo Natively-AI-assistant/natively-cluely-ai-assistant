@@ -122,12 +122,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         if (std) {
             std.ids.forEach((id, i) => {
                 if (!list.some(m => m.id === id)) {
-                    const idLower = id.toLowerCase();
-                    const nameLower = (std.names[i] || id).toLowerCase();
-                    // Heuristic is acceptable for the small hardcoded preset list
-                    const supportsVision = idLower.includes('claude-3') || idLower.includes('gpt-4o') || idLower.includes('gemini') || idLower.includes('vision') || nameLower.includes('vision') || nameLower.includes('multimodal');
-                    const supportsReasoning = idLower.includes('/r1') || idLower.includes('o1') || idLower.includes('o3') || idLower.includes('thinking') || nameLower.includes('reasoning') || nameLower.includes('thinking');
-                    list.push({ id, label: std.names[i] || id, supportsVision, supportsReasoning });
+                    list.push({ id, label: std.names[i] || id });
                 }
             });
         }
@@ -584,32 +579,34 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                             </button>
                         </div>
 
-                        {/* Modality Filters */}
-                        <div className="flex items-center gap-1 bg-bg-input p-0.5 rounded-lg border border-border-subtle">
-                            <button
-                                type="button"
-                                onClick={() => setModalityFilter('all')}
-                                className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors ${modalityFilter === 'all' ? 'bg-accent-primary text-white font-bold' : 'text-text-tertiary hover:text-text-primary'}`}
-                            >
-                                {t('All')}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setModalityFilter('vision')}
-                                className={`px-2 py-0.5 text-[10px] font-medium rounded flex items-center gap-1 transition-colors ${modalityFilter === 'vision' ? 'bg-accent-primary text-white font-bold' : 'text-text-tertiary hover:text-text-primary'}`}
-                            >
-                                <Eye size={10} />
-                                {t('Vision')}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setModalityFilter('reasoning')}
-                                className={`px-2 py-0.5 text-[10px] font-medium rounded flex items-center gap-1 transition-colors ${modalityFilter === 'reasoning' ? 'bg-accent-primary text-white font-bold' : 'text-text-tertiary hover:text-text-primary'}`}
-                            >
-                                <Brain size={10} />
-                                {t('Reasoning')}
-                            </button>
-                        </div>
+                        {/* Modality Filters — Only rendered for OpenRouter provider */}
+                        {providerId === 'openrouter' && (
+                            <div className="flex items-center gap-1 bg-bg-input p-0.5 rounded-lg border border-border-subtle">
+                                <button
+                                    type="button"
+                                    onClick={() => setModalityFilter('all')}
+                                    className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors ${modalityFilter === 'all' ? 'bg-accent-primary text-white font-bold' : 'text-text-tertiary hover:text-text-primary'}`}
+                                >
+                                    {t('All')}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setModalityFilter('vision')}
+                                    className={`px-2 py-0.5 text-[10px] font-medium rounded flex items-center gap-1 transition-colors ${modalityFilter === 'vision' ? 'bg-accent-primary text-white font-bold' : 'text-text-tertiary hover:text-text-primary'}`}
+                                >
+                                    <Eye size={10} />
+                                    {t('Vision')}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setModalityFilter('reasoning')}
+                                    className={`px-2 py-0.5 text-[10px] font-medium rounded flex items-center gap-1 transition-colors ${modalityFilter === 'reasoning' ? 'bg-accent-primary text-white font-bold' : 'text-text-tertiary hover:text-text-primary'}`}
+                                >
+                                    <Brain size={10} />
+                                    {t('Reasoning')}
+                                </button>
+                            </div>
+                        )}
 
                         <button
                             type="button"
@@ -653,27 +650,29 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                                                 <span className="font-mono text-xs text-text-primary truncate" title={model.id}>
                                                     {model.label}
                                                 </span>
-                                                {/* Capability / Modality Badges */}
-                                                <div className="flex items-center gap-1 shrink-0">
-                                                    {model.supportsVision && (
-                                                        <span className="px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-400 text-[9px] font-semibold flex items-center gap-0.5" title={t('Vision / Image Input Supported')}>
-                                                            <Eye size={9} />
-                                                            {t('Vision')}
-                                                        </span>
-                                                    )}
-                                                    {model.supportsReasoning && (
-                                                        <span className="px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-400 text-[9px] font-semibold flex items-center gap-0.5" title={t('Reasoning / Extended Thinking Supported')}>
-                                                            <Brain size={9} />
-                                                            {t('Reasoning')}
-                                                        </span>
-                                                    )}
-                                                    {!model.supportsVision && !model.supportsReasoning && (
-                                                        <span className="px-1.5 py-0.2 rounded bg-zinc-500/10 text-zinc-400 text-[9px] font-medium flex items-center gap-0.5" title={t('Text-only Input')}>
-                                                            <FileText size={9} />
-                                                            {t('Text')}
-                                                        </span>
-                                                    )}
-                                                </div>
+                                                {/* Capability / Modality Badges — Only for OpenRouter models when API data is present */}
+                                                {providerId === 'openrouter' && (
+                                                    <div className="flex items-center gap-1 shrink-0">
+                                                        {model.supportsVision === true && (
+                                                            <span className="px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-400 text-[9px] font-semibold flex items-center gap-0.5" title={t('Vision / Image Input Supported')}>
+                                                                <Eye size={9} />
+                                                                {t('Vision')}
+                                                            </span>
+                                                        )}
+                                                        {model.supportsReasoning === true && (
+                                                            <span className="px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-400 text-[9px] font-semibold flex items-center gap-0.5" title={t('Reasoning / Extended Thinking Supported')}>
+                                                                <Brain size={9} />
+                                                                {t('Reasoning')}
+                                                            </span>
+                                                        )}
+                                                        {model.supportsVision === false && model.supportsReasoning !== true && (
+                                                            <span className="px-1.5 py-0.2 rounded bg-zinc-500/10 text-zinc-400 text-[9px] font-medium flex items-center gap-0.5" title={t('Text-only Input')}>
+                                                                <FileText size={9} />
+                                                                {t('Text')}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                             {model.id !== model.label && (
                                                 <span className="font-mono text-[10px] text-text-tertiary truncate">

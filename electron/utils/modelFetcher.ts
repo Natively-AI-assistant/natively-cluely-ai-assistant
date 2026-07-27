@@ -234,24 +234,16 @@ async function fetchOpenRouterModels(apiKey: string): Promise<ProviderModel[]> {
     const models: any[] = response.data?.data || [];
     return models
         .map((m: any) => {
+            // Strictly check API metadata — no guessing or string pattern matching.
             const inputModalities: string[] = m.architecture?.modality?.split('->')?.[0]?.split('+')?.map((s: string) => s.trim().toLowerCase()) || [];
-            const idLower = (m.id || '').toLowerCase();
-            const nameLower = (m.name || '').toLowerCase();
+            const hasModalityData = Boolean(m.architecture?.modality);
 
-            const supportsVision = inputModalities.includes('image') || Boolean(m.architecture?.instruct_type?.includes('vision'));
+            const supportsVision = hasModalityData ? inputModalities.includes('image') || Boolean(m.architecture?.instruct_type?.includes('vision')) : undefined;
 
-            // Reasoning: only match when the ID segment clearly indicates it.
-            // Use path-segment patterns (e.g. '/r1', '/o1', '/o3') so we don't
-            // accidentally match arbitrary IDs like 'model-101' or 'tool-o10'.
-            const supportsReasoning =
-                idLower.includes('/r1') ||
-                idLower.includes('-r1') ||
-                /[\/\-]o[13]($|[\-\/])/.test(idLower) ||
-                idLower.includes('thinking') ||
-                idLower.includes('reasoner') ||
-                idLower.includes('qwq') ||
-                nameLower.includes('thinking') ||
-                nameLower.includes('reasoning');
+            // OpenRouter provides reasoning capability info in supported_parameters or architecture if present
+            const supportedParams: string[] = m.supported_parameters || [];
+            const hasParamData = Array.isArray(m.supported_parameters);
+            const supportsReasoning = hasParamData ? supportedParams.includes('reasoning') || supportedParams.includes('include_reasoning') : undefined;
 
             return {
                 id: m.id,
