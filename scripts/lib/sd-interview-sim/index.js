@@ -179,3 +179,5 @@ module.exports = {
 
 // Runner seam (fixture + stub). Required after exports so circular load sees helpers.
 Object.assign(module.exports, require('./runner'));
+// T1 matrix (fixture scenarios + stub SUT). Additive; not Requirements-gate e2e.
+Object.assign(module.exports, require('./matrix'));

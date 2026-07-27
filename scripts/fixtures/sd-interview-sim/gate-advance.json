@@ -1,0 +1,33 @@
+{
+  "id": "gate-advance",
+  "title": "Requirements grilling → stub answers → advance (gate→advance)",
+  "problemKey": "url-shortener",
+  "sdPhase": "requirements",
+  "turns": [
+    {
+      "role": "interviewer",
+      "speaker": "system",
+      "text": "Design a URL shortener for our product."
+    },
+    {
+      "role": "interviewer",
+      "speaker": "system",
+      "text": "Functional: create short links and redirect. Scale about 1000 QPS. Latency p99 under 50ms. Prefer availability over strong consistency."
+    },
+    {
+      "role": "interviewer",
+      "speaker": "system",
+      "text": "Checklist looks complete — please advance to the design.",
+      "continue": true,
+      "continueText": "Looks good — let's move on to the design.",
+      "stop": true
+    }
+  ],
+  "expect": {
+    "end_reason": "scenario_stop",
+    "minInterviewerTurns": 3,
+    "minAssistantTurns": 3,
+    "requireUserDriver": true,
+    "sutPhase": "requirements"
+  }
+}
