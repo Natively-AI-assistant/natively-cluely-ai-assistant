@@ -1879,11 +1879,19 @@ ANSWER DIRECTLY:`;
    */
   private buildLanguageInstructionSuffix(): string {
     if (!this.aiResponseLanguage || this.aiResponseLanguage === 'auto') {
+      // The structured-answer carve-out below is load-bearing: coding/DSA
+      // answers carry a contract mandating exact English headings ("## Approach",
+      // "## Dry Run"). Without the carve-out, models read that contract as
+      // "the whole answer is English" and a Russian "как работает bubble sort"
+      // gets an all-English answer (observed 2026-07-26). Prose language and
+      // mandated scaffolding are independent — say so explicitly.
       return `\n\n[LANGUAGE INSTRUCTION — HIGHEST PRIORITY]
 Detect the language of the user's most recent message and ALWAYS respond in that exact same language.
-If the user writes in Hindi, respond in Hindi. If in Spanish, respond in Spanish. If in English, respond in English.
+If the user writes in Hindi, respond in Hindi. If in Spanish, respond in Spanish. If in Russian, respond in Russian. If in English, respond in English.
+This applies to ALL explanatory prose — including every sentence under required markdown headings in structured/coding answers (Approach, Dry Run, Complexity explanations, follow-up points).
+Only three things stay as-is regardless of the user's language: (1) code and identifiers, (2) markdown headings whose EXACT English text is mandated by a formatting contract, (3) established technical terms with no natural translation.
+A formatting contract mandating English headings does NOT make the answer English — write the prose in the user's language under those headings.
 If the language is ambiguous, default to English.
-You may mix scripts naturally (e.g. code stays in English even when the explanation is in another language).
 [END LANGUAGE INSTRUCTION]`;
     }
     if (this.aiResponseLanguage === 'English') return "";
