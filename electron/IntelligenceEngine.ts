@@ -1838,6 +1838,19 @@ export class IntelligenceEngine extends EventEmitter {
                 surface: 'what_to_answer' as const,
                 generationId,
                 ...(wtaContextOsGeneration ? { contextOsGeneration: wtaContextOsGeneration } : {}),
+                // Post-gate SD pack inputs (SPEC 06): sheet + recent + latest probe.
+                // Requirements phase deliberately omitted so WTA keeps gate identity.
+                ...((answerPlan.answerType === 'system_design_answer' && answerPlan.sdPhase !== 'requirements')
+                    ? (() => {
+                        const { buildSdDeepDivePackSnapshot } = require('./llm/sdDeepDiveLive') as typeof import('./llm/sdDeepDiveLive');
+                        return {
+                            sdDeepDive: buildSdDeepDivePackSnapshot(
+                                this.session.getSdRequirementsArtifact?.() ?? null,
+                                wtaTurnQuestion || lastInterviewerTurn || null,
+                            ),
+                        };
+                    })()
+                    : {}),
             });
 
             // RC-03 fix: hold a reference to the generator so we can call .return()
@@ -2526,6 +2539,16 @@ export class IntelligenceEngine extends EventEmitter {
             } catch { /* normalizer never blocks the answer */ }
 
             this.session.addAssistantMessage(finalWtaAnswer, wtaWriteDecision, 'what_to_answer');
+
+            // Post-gate SD design-sheet extract+merge (SPEC 05): after a completed
+            // system_design_answer (not requirements), merge into sheet/recent and
+            // checkpoint. Respect blocked/do_not_store + generation supersession.
+            this.applySdDeepDivePostAnswerMerge({
+                spokenText: finalWtaAnswer,
+                answerPlan,
+                writeDecision: wtaWriteDecision,
+                generationId,
+            });
 
             // Full-JIT write-gating law (§6): a provider-error/no-answer WTA
             // fallback (deadline timeout, leaked-schema-stub) carries a
@@ -3387,6 +3410,59 @@ export class IntelligenceEngine extends EventEmitter {
             DatabaseManager.getInstance().saveSdRequirementsCheckpoint(meetingId, artifact);
         } catch (err: any) {
             console.warn('[IntelligenceEngine] SD Requirements checkpoint skipped:', err?.message || err);
+        }
+    }
+
+    /**
+     * Post-gate SD deep-dive: extract+merge completed answer into design sheet
+     * + recent window, then checkpoint (SPEC 05). Non-blocking for first-token
+     * (runs only after stream complete). Skips requirements / blocked / races.
+     */
+    private applySdDeepDivePostAnswerMerge(args: {
+        spokenText: string;
+        answerPlan: import('./llm/AnswerPlanner').AnswerPlan;
+        writeDecision?: { policy?: string; blockedFromSessionTracker?: boolean } | null;
+        generationId: number;
+    }): void {
+        try {
+            if (args.answerPlan.answerType !== 'system_design_answer') return;
+            if (args.answerPlan.sdPhase === 'requirements') return;
+            if (this.currentGenerationId !== args.generationId) return;
+            const wd = args.writeDecision;
+            if (wd?.policy === 'do_not_store' || wd?.blockedFromSessionTracker) return;
+
+            const prior = this.session.getSdRequirementsArtifact?.() ?? null;
+            if (!prior) return;
+
+            const meetingId = this.session.getActiveMeetingId?.() || '';
+            const { applyCompletedSdAnswerToArtifact } =
+                require('./llm/sdDeepDiveLive') as typeof import('./llm/sdDeepDiveLive');
+
+            const result = applyCompletedSdAnswerToArtifact({
+                artifact: prior,
+                spokenText: args.spokenText,
+                meetingId,
+                currentMeetingId: this.session.getActiveMeetingId?.() || meetingId,
+                answerType: args.answerPlan.answerType,
+                sdPhase: args.answerPlan.sdPhase,
+                blockedFromSessionTracker: Boolean(wd?.blockedFromSessionTracker),
+                doNotStore: wd?.policy === 'do_not_store',
+            });
+
+            if (!result.applied || result.discarded) return;
+            // Generation race after merge compute — do not commit stale sheet.
+            if (this.currentGenerationId !== args.generationId) return;
+
+            // result.artifact already carries updated sheet/recent; do NOT run
+            // mergeDeepDiveExtensionBeforeCheckpoint here (that helper reattaches
+            // prior sheet over gate-only prepares and would wipe this merge).
+            const { ensureSdDeepDiveExtension } =
+                require('./llm/sdRequirementsGate') as typeof import('./llm/sdRequirementsGate');
+            const next = ensureSdDeepDiveExtension(result.artifact);
+            this.session.setSdRequirementsArtifact?.(next);
+            this.checkpointSdRequirements(next);
+        } catch (err: any) {
+            console.warn('[IntelligenceEngine] SD deep-dive post-answer merge skipped (non-fatal):', err?.message || err);
         }
     }
 

@@ -128,6 +128,28 @@ export type {
     PrepareSdRequirementsInput,
     PrepareSdRequirementsResult,
 } from "./sdRequirementsLive";
+export {
+    buildSdDeepDivePackSnapshot,
+    buildDeepDiveCheckContext,
+    applyCompletedSdAnswerToArtifact,
+} from "./sdDeepDiveLive";
+export type {
+    SdDeepDivePackSnapshot,
+    ApplyCompletedSdAnswerArgs,
+    ApplyCompletedSdAnswerResult,
+} from "./sdDeepDiveLive";
+export { buildSdDeepDiveContextPack, capRecentSdAnswers } from "./sdDeepDiveContextPack";
+export { enforceDeepDiveChecks } from "./sdDeepDiveSoftChecks";
+export {
+    startProvisional,
+    clearProvisional,
+    mergeExtractedAnswer,
+    heuristicExtractFromSpoken,
+} from "./sdDesignSheetExtractor";
+export {
+    applyScoreGate,
+    preferDeepDiveSections,
+} from "./sdLessonScoreGate";
 export { applyModeFallback, MODE_CONTEXT_PROFILES } from "./modeProfiles";
 export type { ActiveModeInfo, ModeContextProfile, ModeTemplateType } from "./modeProfiles";
 export { resolveFollowUp, resolveFollowUpOrClarify, isBareFollowUp, isRefinementFollowUp, isSameSessionFollowUp, buildContextFreeClarification } from "./FollowUpResolver";

@@ -107,7 +107,9 @@ function serializeInterviewer(text: string): string {
 
 function serializeLesson(chunks: SdLessonChunk[]): string {
   const body = chunks.map((c) => c.text.trim()).filter(Boolean).join('\n\n');
-  return wrap('reference_file', body);
+  // Keep the named hellointerview reference_file shape so prompt consumers /
+  // prior WTA grounding tests recognize the LESSON inject seam.
+  return `<reference_file name="hellointerview-system-design.md">\n${body}\n</reference_file>`;
 }
 
 function serializeRecent(items: RecentSdAnswerItem[]): string {

@@ -63,7 +63,7 @@ describe('SD context pack floor (SPEC 06)', () => {
       lessonChunks: [],
     });
     assert.equal(without.blocks.lesson, null);
-    assert.doesNotMatch(without.pack, /<reference_file>/);
+    assert.doesNotMatch(without.pack, /<reference_file\b/);
 
     const withChunks = packMod.buildSdDeepDiveContextPack({
       sheet: makeSheet(),
@@ -71,7 +71,7 @@ describe('SD context pack floor (SPEC 06)', () => {
       lessonChunks: [{ text: '## Potential Deep Dives\nHot-key sharding.' }],
     });
     assert.ok(withChunks.blocks.lesson);
-    assert.match(withChunks.pack, /<reference_file>/);
+    assert.match(withChunks.pack, /<reference_file\b/);
     assert.match(withChunks.pack, /Hot-key sharding/);
   });
 
