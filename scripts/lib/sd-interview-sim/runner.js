@@ -8,6 +8,7 @@
 const {
   createRun,
   appendTurn,
+  appendSideChannel,
   recordSpend,
   budgetExceeded,
   finalize,
@@ -89,7 +90,7 @@ function resolveEndReasonAfterBudget(run) {
  *
  * @param {{
  *   scenario: { id?: string, turns?: Array<object> },
- *   sut: (ctx: object) => ({ text?: string, attachments?: Array, spend?: object, continue?: boolean, continueText?: string } | Promise<...>),
+ *   sut: (ctx: object) => ({ text?: string, attachments?: Array, spend?: object, continue?: boolean, continueText?: string, sideChannel?: object } | Promise<...>),
  *   budgets?: object,
  *   provenance?: object,
  *   maxTurns?: number,
@@ -97,11 +98,48 @@ function resolveEndReasonAfterBudget(run) {
  *   sessionTracker?: { addTranscript?: Function },
  *   onInject?: (segment: object) => void,
  *   inject?: typeof injectSpeech,
+ *   getSideChannelSnapshot?: (ctx: object) => (object | null | undefined | Promise<object | null | undefined>),
  * }} config
  */
 class SdInterviewSimRunner {
   constructor(config = {}) {
     this.config = config;
+  }
+
+  /**
+   * Capture analysis-only side-channel state after an assistant turn (or when
+   * fixture/SUT supplies an explicit snapshot payload). Never feeds WTA packs.
+   *
+   * @param {ReturnType<typeof createRun>} run
+   * @param {object} ctx
+   * @param {object | null | undefined} explicit
+   */
+  async _recordSideChannel(run, ctx, explicit) {
+    const { getSideChannelSnapshot } = this.config;
+    let payload = explicit && typeof explicit === 'object' ? { ...explicit } : null;
+
+    if (!payload && typeof getSideChannelSnapshot === 'function') {
+      const hooked = await Promise.resolve(getSideChannelSnapshot(ctx));
+      if (hooked && typeof hooked === 'object') payload = { ...hooked };
+    }
+
+    if (!payload) return;
+
+    const lastTurn = run.bundle.turns[run.bundle.turns.length - 1];
+    const turn_idx =
+      payload.turn_idx != null
+        ? payload.turn_idx
+        : lastTurn
+          ? lastTurn.idx
+          : null;
+    const checkpoint =
+      payload.checkpoint != null ? payload.checkpoint : 'after_assistant';
+
+    appendSideChannel(run, {
+      ...payload,
+      turn_idx,
+      checkpoint,
+    });
   }
 
   /**
@@ -192,6 +230,27 @@ class SdInterviewSimRunner {
       if (answerObj.spend) {
         recordSpend(run, answerObj.spend);
       }
+
+      const explicitSnapshot =
+        answerObj.sideChannel ||
+        answerObj.side_channel ||
+        interviewerTurn.sideChannel ||
+        interviewerTurn.side_channel ||
+        null;
+
+      await this._recordSideChannel(
+        run,
+        {
+          scenario,
+          interviewerTurn,
+          injectLog: [...injectLog],
+          injected,
+          bundle: run.bundle,
+          turnCount: run.spend.turn_count,
+          answer: answerObj,
+        },
+        explicitSnapshot,
+      );
 
       const shouldContinue =
         continueAfterAnswer ||

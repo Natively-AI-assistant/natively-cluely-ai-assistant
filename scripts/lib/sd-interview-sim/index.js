@@ -91,6 +91,38 @@ function appendTurn(run, turn) {
 }
 
 /**
+ * Record an analysis-only side-channel snapshot (designSheet, recentSdAnswers,
+ * Requirements-shaped fields, optional screen_context). Tied to turn_idx and/or
+ * a checkpoint label. Does not feed live WTA deep-dive packs.
+ *
+ * @param {ReturnType<typeof createRun>} run
+ * @param {{
+ *   turn_idx?: number | null,
+ *   checkpoint?: string | null,
+ *   designSheet?: object | null,
+ *   recentSdAnswers?: object | null,
+ *   requirements?: object | null,
+ *   screen_context?: unknown,
+ * }} entry
+ */
+function appendSideChannel(run, entry = {}) {
+  if (run.finalized) {
+    throw new Error('Cannot appendSideChannel after finalize');
+  }
+  const snapshot = {
+    turn_idx: entry.turn_idx != null ? entry.turn_idx : null,
+    checkpoint: entry.checkpoint != null ? String(entry.checkpoint) : null,
+  };
+  if ('designSheet' in entry) snapshot.designSheet = entry.designSheet;
+  if ('recentSdAnswers' in entry) snapshot.recentSdAnswers = entry.recentSdAnswers;
+  if ('requirements' in entry) snapshot.requirements = entry.requirements;
+  if ('screen_context' in entry) snapshot.screen_context = entry.screen_context;
+
+  run.bundle.side_channels.push(snapshot);
+  return run;
+}
+
+/**
  * Add simulated token/USD spend toward budget caps.
  *
  * @param {ReturnType<typeof createRun>} run
@@ -155,7 +187,7 @@ function finalize(run, opts = {}) {
         ...t,
         attachments: (t.attachments || []).map((a) => ({ ...a })),
       })),
-      side_channels: [...run.bundle.side_channels],
+      side_channels: run.bundle.side_channels.map((sc) => ({ ...sc })),
       outcome: { ...outcome, spend: { ...spend } },
     },
     outcome: { ...outcome, spend: { ...spend } },
@@ -165,6 +197,7 @@ function finalize(run, opts = {}) {
 module.exports = {
   createRun,
   appendTurn,
+  appendSideChannel,
   recordSpend,
   budgetExceeded,
   finalize,
@@ -179,5 +212,3 @@ module.exports = {
 
 // Runner seam (fixture + stub). Required after exports so circular load sees helpers.
 Object.assign(module.exports, require('./runner'));
-// T1 matrix (fixture scenarios + stub SUT). Additive; not Requirements-gate e2e.
-Object.assign(module.exports, require('./matrix'));
