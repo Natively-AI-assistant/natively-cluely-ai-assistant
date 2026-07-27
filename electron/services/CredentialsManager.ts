@@ -81,6 +81,9 @@ export interface StoredCredentials {
     claudePreferredModel?: string;
     deepseekPreferredModel?: string;
     openrouterPreferredModel?: string;
+    openrouterReasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'max';
+    openrouterProviderSort?: 'latency' | 'price' | 'throughput';
+    openrouterAllowFallbacks?: boolean;
     cloudEnabledModels?: Record<string, string[]>;
     // Free trial state
     trialToken?: string;   // server-issued signed token (natively_trial_…)
@@ -247,6 +250,30 @@ export class CredentialsManager {
         this.credentials.openrouterApiKey = trimmed || undefined;
         this.saveCredentials();
         console.log('[CredentialsManager] OpenRouter API Key updated');
+    }
+
+    public getOpenrouterPreferences(): {
+        reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'max';
+        providerSort?: 'latency' | 'price' | 'throughput';
+        allowFallbacks?: boolean;
+    } {
+        return {
+            reasoningEffort: this.credentials.openrouterReasoningEffort,
+            providerSort: this.credentials.openrouterProviderSort,
+            allowFallbacks: this.credentials.openrouterAllowFallbacks,
+        };
+    }
+
+    public setOpenrouterPreferences(prefs: {
+        reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'max';
+        providerSort?: 'latency' | 'price' | 'throughput';
+        allowFallbacks?: boolean;
+    }): void {
+        if (prefs.reasoningEffort !== undefined) this.credentials.openrouterReasoningEffort = prefs.reasoningEffort;
+        if (prefs.providerSort !== undefined) this.credentials.openrouterProviderSort = prefs.providerSort;
+        if (prefs.allowFallbacks !== undefined) this.credentials.openrouterAllowFallbacks = prefs.allowFallbacks;
+        this.saveCredentials();
+        console.log('[CredentialsManager] OpenRouter preferences updated');
     }
 
     /** Persisted loopback-scoped companion-extension token (stable across restarts). */

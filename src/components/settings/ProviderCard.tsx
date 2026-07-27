@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useT } from '../../i18n';
-import { Trash2, AlertCircle, CheckCircle, ExternalLink, Loader2, ChevronDown, Check, RefreshCw, SlidersHorizontal, Filter } from 'lucide-react';
+import { Trash2, AlertCircle, CheckCircle, ExternalLink, Loader2, ChevronDown, Check, RefreshCw, SlidersHorizontal, Filter, Eye, Brain, FileText, Zap, DollarSign } from 'lucide-react';
 import { STANDARD_CLOUD_MODELS } from '../../utils/modelUtils';
 import { Dialog, DialogContent } from '../ui/dialog';
 
 interface FetchedModel {
     id: string;
     label: string;
+    supportsVision?: boolean;
+    supportsReasoning?: boolean;
+    contextLength?: number;
+    pricing?: { prompt?: string; completion?: string };
 }
 
 interface ProviderCardProps {
@@ -71,6 +75,16 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     const [isManageModalOpen, setIsManageModalOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+    const [modalityFilter, setModalityFilter] = useState<'all' | 'vision' | 'reasoning'>('all');
+
+    // OpenRouter Specific State
+    const [openrouterKeyInfo, setOpenrouterKeyInfo] = useState<{ usage?: number; limit?: number | null; is_free_tier?: boolean; label?: string } | null>(null);
+    const [isLoadingKeyInfo, setIsLoadingKeyInfo] = useState(false);
+    const [openrouterPrefs, setOpenrouterPrefs] = useState<{
+        reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'max';
+        providerSort?: 'latency' | 'price' | 'throughput';
+        allowFallbacks?: boolean;
+    }>({ reasoningEffort: 'medium', providerSort: 'latency', allowFallbacks: true });
 
     // Refs to avoid stale closures in the auto-save timer
     const savedRef = useRef(savedStatus);
@@ -104,6 +118,41 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
         setFetchedModels(list);
     }, [providerId]);
+
+    // Load OpenRouter key info & preferences
+    const fetchOpenrouterKeyInfo = async () => {
+        if (providerId !== 'openrouter' || !hasStoredKey) return;
+        setIsLoadingKeyInfo(true);
+        try {
+            // @ts-ignore
+            const result = await window.electronAPI?.getOpenrouterKeyInfo();
+            if (result?.success && result.data) {
+                setOpenrouterKeyInfo(result.data);
+            }
+        } catch { /* noop */ }
+        finally { setIsLoadingKeyInfo(false); }
+    };
+
+    useEffect(() => {
+        if (providerId === 'openrouter' && hasStoredKey) {
+            fetchOpenrouterKeyInfo();
+            // @ts-ignore
+            window.electronAPI?.getOpenrouterPreferences().then((res: any) => {
+                if (res?.success && res.preferences) {
+                    setOpenrouterPrefs(res.preferences);
+                }
+            }).catch(() => {});
+        }
+    }, [providerId, hasStoredKey]);
+
+    const handleUpdateOpenrouterPrefs = async (newPrefs: Partial<typeof openrouterPrefs>) => {
+        const updated = { ...openrouterPrefs, ...newPrefs };
+        setOpenrouterPrefs(updated);
+        try {
+            // @ts-ignore
+            await window.electronAPI?.setOpenrouterPreferences(updated);
+        } catch { /* noop */ }
+    };
 
     // Auto-save API key after 5 seconds of inactivity when not saved
     useEffect(() => {
@@ -191,16 +240,20 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             : fetchedModels.filter(m => enabledModels.includes(m.id)).length;
 
     const filteredModels = useMemo(() => {
-        const query = searchQuery.toLowerCase();
+        const query = searchQuery.toLowerCase().trim();
         return fetchedModels.filter(m => {
-            const isModelEnabled = (!enabledModels || enabledModels.length === 0) || (enabledModels.includes(m.id) && !enabledModels.includes('_none_'));
-            if (showSelectedOnly && !isModelEnabled) return false;
-            return (
-                m.label.toLowerCase().includes(query) ||
-                m.id.toLowerCase().includes(query)
-            );
+            if (query && !m.label.toLowerCase().includes(query) && !m.id.toLowerCase().includes(query)) {
+                return false;
+            }
+            if (showSelectedOnly) {
+                const isEnabled = (!enabledModels || enabledModels.length === 0) || (enabledModels.includes(m.id) && !enabledModels.includes('_none_'));
+                if (!isEnabled) return false;
+            }
+            if (modalityFilter === 'vision' && !m.supportsVision) return false;
+            if (modalityFilter === 'reasoning' && !m.supportsReasoning) return false;
+            return true;
         });
-    }, [fetchedModels, enabledModels, showSelectedOnly, searchQuery]);
+    }, [fetchedModels, searchQuery, showSelectedOnly, modalityFilter, enabledModels]);
 
     return (
         <div id={id || `provider-card-${providerId}`} className={`bg-bg-item-surface rounded-xl p-5 border transition-all ${isDisabled ? 'border-transparent bg-bg-item-surface/40 opacity-70 shadow-none' : 'border-border-subtle'}`}>
@@ -349,6 +402,80 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                             <span>{testError}</span>
                         </div>
                     )}
+
+                    {/* OpenRouter Token Budget / Credit Info & Advanced Controls */}
+                    {providerId === 'openrouter' && hasStoredKey && (
+                        <div className="mt-4 pt-3.5 border-t border-border-subtle/60 space-y-3">
+                            {/* Credit Info Badge */}
+                            <div className="flex items-center justify-between bg-bg-input/60 rounded-lg p-2.5 border border-border-subtle/50 text-xs">
+                                <div className="flex items-center gap-2">
+                                    <DollarSign size={14} className="text-emerald-500" />
+                                    <span className="font-semibold text-text-primary">{t('OpenRouter Account Budget')}</span>
+                                    {openrouterKeyInfo?.is_free_tier && (
+                                        <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 text-[10px] font-bold uppercase">{t('Free Tier')}</span>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    {openrouterKeyInfo ? (
+                                        <span className="font-mono text-[11px] text-text-secondary">
+                                            {t('Usage')}: ${openrouterKeyInfo.usage ? openrouterKeyInfo.usage.toFixed(4) : '0.00'}
+                                            {openrouterKeyInfo.limit ? ` / $${openrouterKeyInfo.limit}` : ''}
+                                        </span>
+                                    ) : (
+                                        <span className="text-[11px] text-text-tertiary">{t('Key Info Available')}</span>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={fetchOpenrouterKeyInfo}
+                                        disabled={isLoadingKeyInfo}
+                                        className="p-1 text-text-tertiary hover:text-text-primary rounded hover:bg-bg-item-surface transition-colors cursor-pointer"
+                                        title={t('Refresh Account Balance')}
+                                    >
+                                        <RefreshCw size={12} className={isLoadingKeyInfo ? 'animate-spin' : ''} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* OpenRouter Advanced Tuning Controls */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {/* Reasoning / Thinking Control */}
+                                <div className="bg-bg-input/40 p-2.5 rounded-lg border border-border-subtle/40 space-y-1">
+                                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-text-secondary">
+                                        <Brain size={12} className="text-purple-400" />
+                                        <span>{t('Reasoning / Thinking Effort')}</span>
+                                    </div>
+                                    <select
+                                        value={openrouterPrefs.reasoningEffort || 'medium'}
+                                        onChange={(e) => handleUpdateOpenrouterPrefs({ reasoningEffort: e.target.value as any })}
+                                        className="w-full bg-bg-input border border-border-subtle rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-primary"
+                                    >
+                                        <option value="none">{t('Disabled (No Thinking Tokens)')}</option>
+                                        <option value="low">{t('Low Effort')}</option>
+                                        <option value="medium">{t('Medium Effort (Default)')}</option>
+                                        <option value="high">{t('High Effort')}</option>
+                                        <option value="max">{t('Max Effort')}</option>
+                                    </select>
+                                </div>
+
+                                {/* Provider Routing Strategy */}
+                                <div className="bg-bg-input/40 p-2.5 rounded-lg border border-border-subtle/40 space-y-1">
+                                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-text-secondary">
+                                        <Zap size={12} className="text-amber-400" />
+                                        <span>{t('Upstream Routing Strategy')}</span>
+                                    </div>
+                                    <select
+                                        value={openrouterPrefs.providerSort || 'latency'}
+                                        onChange={(e) => handleUpdateOpenrouterPrefs({ providerSort: e.target.value as any })}
+                                        className="w-full bg-bg-input border border-border-subtle rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-primary"
+                                    >
+                                        <option value="latency">{t('Lowest Latency (Fastest Response)')}</option>
+                                        <option value="price">{t('Lowest Price (Cheapest Provider)')}</option>
+                                        <option value="throughput">{t('Highest Throughput')}</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {fetchError && (
                         <div className="mt-2 text-xs text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-md p-2 flex items-center gap-2">
                             <AlertCircle size={14} className="shrink-0" />
@@ -401,9 +528,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                         </button>
                     </div>
 
-                    {/* Quick Selection Buttons + Show Selected Filter */}
-                    <div className="flex items-center justify-between mb-3 shrink-0">
-                        <div className="flex gap-2">
+                    {/* Quick Selection Buttons + Modality Filter Chips + Show Selected Filter */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3 shrink-0">
+                        <div className="flex items-center gap-1.5">
                             <button
                                 type="button"
                                 onClick={handleEnableAll}
@@ -419,6 +546,34 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                                 {t('Disable All')}
                             </button>
                         </div>
+
+                        {/* Modality Filters */}
+                        <div className="flex items-center gap-1 bg-bg-input p-0.5 rounded-lg border border-border-subtle">
+                            <button
+                                type="button"
+                                onClick={() => setModalityFilter('all')}
+                                className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors ${modalityFilter === 'all' ? 'bg-accent-primary text-white font-bold' : 'text-text-tertiary hover:text-text-primary'}`}
+                            >
+                                {t('All')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setModalityFilter('vision')}
+                                className={`px-2 py-0.5 text-[10px] font-medium rounded flex items-center gap-1 transition-colors ${modalityFilter === 'vision' ? 'bg-accent-primary text-white font-bold' : 'text-text-tertiary hover:text-text-primary'}`}
+                            >
+                                <Eye size={10} />
+                                {t('Vision')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setModalityFilter('reasoning')}
+                                className={`px-2 py-0.5 text-[10px] font-medium rounded flex items-center gap-1 transition-colors ${modalityFilter === 'reasoning' ? 'bg-accent-primary text-white font-bold' : 'text-text-tertiary hover:text-text-primary'}`}
+                            >
+                                <Brain size={10} />
+                                {t('Reasoning')}
+                            </button>
+                        </div>
+
                         <button
                             type="button"
                             onClick={() => setShowSelectedOnly(!showSelectedOnly)}
@@ -456,10 +611,33 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                                         }`}>
                                             <Check size={11} strokeWidth={3} />
                                         </div>
-                                        <div className="flex flex-col truncate">
-                                            <span className="font-mono text-xs text-text-primary truncate" title={model.id}>
-                                                {model.label}
-                                            </span>
+                                        <div className="flex flex-col truncate flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-mono text-xs text-text-primary truncate" title={model.id}>
+                                                    {model.label}
+                                                </span>
+                                                {/* Capability / Modality Badges */}
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    {model.supportsVision && (
+                                                        <span className="px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-400 text-[9px] font-semibold flex items-center gap-0.5" title={t('Vision / Image Input Supported')}>
+                                                            <Eye size={9} />
+                                                            {t('Vision')}
+                                                        </span>
+                                                    )}
+                                                    {model.supportsReasoning && (
+                                                        <span className="px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-400 text-[9px] font-semibold flex items-center gap-0.5" title={t('Reasoning / Extended Thinking Supported')}>
+                                                            <Brain size={9} />
+                                                            {t('Reasoning')}
+                                                        </span>
+                                                    )}
+                                                    {!model.supportsVision && !model.supportsReasoning && (
+                                                        <span className="px-1.5 py-0.2 rounded bg-zinc-500/10 text-zinc-400 text-[9px] font-medium flex items-center gap-0.5" title={t('Text-only Input')}>
+                                                            <FileText size={9} />
+                                                            {t('Text')}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
                                             {model.id !== model.label && (
                                                 <span className="font-mono text-[10px] text-text-tertiary truncate">
                                                     {model.id}

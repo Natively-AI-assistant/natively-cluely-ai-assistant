@@ -3113,6 +3113,25 @@ const isMultimodal = !!(imagePaths?.length);
     }
 
     const cacheKey = this.getOpenAiPromptCacheKey(systemPrompt);
+    const extraOpenRouterParams: Record<string, any> = {};
+    if (clientOverride && this.isOpenRouterModel(model)) {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const prefs = CredentialsManager.getInstance().getOpenrouterPreferences();
+        if (prefs.reasoningEffort === 'none') {
+          extraOpenRouterParams.reasoning = { exclude: true };
+        } else if (prefs.reasoningEffort) {
+          extraOpenRouterParams.reasoning = { effort: prefs.reasoningEffort };
+        }
+        if (prefs.providerSort || prefs.allowFallbacks !== undefined) {
+          extraOpenRouterParams.provider = {
+            sort: prefs.providerSort || 'latency',
+            allow_fallbacks: prefs.allowFallbacks ?? true,
+          };
+        }
+      } catch { /* optional */ }
+    }
+
     const request = {
       model,
       messages,
@@ -3120,6 +3139,7 @@ const isMultimodal = !!(imagePaths?.length);
       max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
       ...openaiReasoningParam(model), // minimal reasoning for gpt-5/o-series (fast TTFT)
       ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
+      ...extraOpenRouterParams,
     };
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
@@ -6287,6 +6307,25 @@ const isMultimodal = !!(imagePaths?.length);
 
     const cacheKey = this.getOpenAiPromptCacheKey(systemPrompt);
     if (abortSignal?.aborted) return;
+    const extraOpenRouterParams: Record<string, any> = {};
+    if (clientOverride && this.isOpenRouterModel(model)) {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const prefs = CredentialsManager.getInstance().getOpenrouterPreferences();
+        if (prefs.reasoningEffort === 'none') {
+          extraOpenRouterParams.reasoning = { exclude: true };
+        } else if (prefs.reasoningEffort) {
+          extraOpenRouterParams.reasoning = { effort: prefs.reasoningEffort };
+        }
+        if (prefs.providerSort || prefs.allowFallbacks !== undefined) {
+          extraOpenRouterParams.provider = {
+            sort: prefs.providerSort || 'latency',
+            allow_fallbacks: prefs.allowFallbacks ?? true,
+          };
+        }
+      } catch { /* optional */ }
+    }
+
     const request = {
       model,
       messages,
@@ -6297,6 +6336,7 @@ const isMultimodal = !!(imagePaths?.length);
       max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
       ...openaiReasoningParam(model), // minimal reasoning for gpt-5/o-series (fast TTFT)
       ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
+      ...extraOpenRouterParams,
     };
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
@@ -6487,6 +6527,25 @@ const isMultimodal = !!(imagePaths?.length);
 
     const cacheKey = this.getOpenAiPromptCacheKey(systemPrompt);
     if (abortSignal?.aborted) return;
+    const extraOpenRouterParams: Record<string, any> = {};
+    if (clientOverride && this.isOpenRouterModel(model)) {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const prefs = CredentialsManager.getInstance().getOpenrouterPreferences();
+        if (prefs.reasoningEffort === 'none') {
+          extraOpenRouterParams.reasoning = { exclude: true };
+        } else if (prefs.reasoningEffort) {
+          extraOpenRouterParams.reasoning = { effort: prefs.reasoningEffort };
+        }
+        if (prefs.providerSort || prefs.allowFallbacks !== undefined) {
+          extraOpenRouterParams.provider = {
+            sort: prefs.providerSort || 'latency',
+            allow_fallbacks: prefs.allowFallbacks ?? true,
+          };
+        }
+      } catch { /* optional */ }
+    }
+
     const stream = await client.chat.completions.create({
       model,
       messages,
@@ -6495,6 +6554,7 @@ const isMultimodal = !!(imagePaths?.length);
       max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
       ...openaiReasoningParam(model), // minimal reasoning for gpt-5/o-series (fast TTFT)
       ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
+      ...extraOpenRouterParams,
     }, { signal: abortSignal });
 
     try {

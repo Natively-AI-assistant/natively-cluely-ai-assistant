@@ -5367,6 +5367,49 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('get-openrouter-key-info', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const apiKey = CredentialsManager.getInstance().getOpenrouterApiKey();
+      if (!apiKey) {
+        return { success: false, error: 'No OpenRouter API key set' };
+      }
+      const axios = require('axios');
+      const response = await axios.get('https://openrouter.ai/api/v1/key', {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://natively.ai',
+          'X-Title': 'Natively AI',
+        },
+        timeout: 10000,
+      });
+      return { success: true, data: response.data?.data };
+    } catch (error: any) {
+      const msg = error?.response?.data?.error?.message || error.message || 'Failed to fetch key info';
+      return { success: false, error: msg };
+    }
+  });
+
+  safeHandle('get-openrouter-preferences', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return { success: true, preferences: CredentialsManager.getInstance().getOpenrouterPreferences() };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('set-openrouter-preferences', async (_, prefs: any) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setOpenrouterPreferences(prefs);
+      broadcastCredentialsChanged();
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
   safeHandle('set-litellm-config', async (_, config: { apiKey: string; baseURL: string; maxTokens?: number }) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');

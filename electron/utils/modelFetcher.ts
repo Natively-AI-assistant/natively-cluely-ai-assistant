@@ -8,6 +8,10 @@ import axios from 'axios';
 export interface ProviderModel {
     id: string;
     label: string;
+    supportsVision?: boolean;
+    supportsReasoning?: boolean;
+    contextLength?: number;
+    pricing?: { prompt?: string; completion?: string };
 }
 
 type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'openrouter';
@@ -229,6 +233,24 @@ async function fetchOpenRouterModels(apiKey: string): Promise<ProviderModel[]> {
 
     const models: any[] = response.data?.data || [];
     return models
-        .map((m: any) => ({ id: m.id, label: m.name || m.id }))
+        .map((m: any) => {
+            const inputModalities: string[] = m.architecture?.modality?.split('->')?.[0]?.split('+')?.map((s: string) => s.trim().toLowerCase()) || [];
+            const supportsVision = inputModalities.includes('image') || Boolean(m.architecture?.instruct_type?.includes('vision'));
+            const idLower = (m.id || '').toLowerCase();
+            const nameLower = (m.name || '').toLowerCase();
+            const supportsReasoning = idLower.includes('reasoner') || idLower.includes('r1') || idLower.includes('o1') || idLower.includes('o3') || idLower.includes('thinking') || nameLower.includes('thinking') || nameLower.includes('reasoning');
+
+            return {
+                id: m.id,
+                label: m.name || m.id,
+                supportsVision,
+                supportsReasoning,
+                contextLength: m.context_length,
+                pricing: m.pricing ? {
+                    prompt: m.pricing.prompt,
+                    completion: m.pricing.completion,
+                } : undefined,
+            };
+        })
         .sort((a, b) => a.label.localeCompare(b.label));
 }
