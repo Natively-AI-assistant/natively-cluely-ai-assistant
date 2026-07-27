@@ -672,7 +672,13 @@
   color: var(--overlay-text-secondary) !important;
 }
 
-/* Icon buttons — small round jelly lozenges */
+/* Icon buttons — small round jelly lozenges. This is the "embedded button"
+   recipe — deliberately DIFFERENT material from the shell/pill (see the
+   jelly-clay comment block above) so buttons like TopPill's logo/quit and
+   in-panel chips visually pop against the panel body. Floating chrome that
+   sits OUTSIDE the panel (TopPill's own outer pill, ResizeToggle) should NOT
+   use this class — see .overlay-resize-toggle-surface below, which matches
+   the shell/pill material instead. */
 [data-interface-theme="liquid-glass"] .overlay-icon-surface {
   background:
     radial-gradient(ellipse at 50% 25%,
@@ -712,6 +718,68 @@
 
 [data-interface-theme="liquid-glass"] .overlay-icon-surface:active {
   transform: translateY(0) scale(0.94);
+  box-shadow:
+    inset 0 1.5px 3px rgba(0, 0, 0, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 1px 2px rgba(0, 0, 0, 0.10) !important;
+}
+
+/* ResizeToggle — floating chrome that lives OUTSIDE the panel's DOM subtree
+   (src/components/ui/ResizeToggle.tsx), architecturally the same kind of
+   element as TopPill's outer pill (both float beside/outside the panel body
+   rather than being embedded inside it — see TopPill.tsx, whose own outer
+   container uses .overlay-pill-surface while its embedded logo/quit buttons
+   keep .overlay-icon-surface). It should read as the SAME material as the
+   panel body, not the embedded-button jelly-clay recipe, so this class
+   copies the shell's background/backdrop-filter/border (opacity-driven,
+   same base RGB) instead. Box-shadow is kept from .overlay-icon-surface
+   above (not the shell's inset-only shadow): the shell's shadow assumes a
+   large surface sitting flush in the panel column, but this is a lone 28px
+   circle floating in the side gutter and needs an outer drop-shadow to read
+   as detached rather than pasted onto the desktop.
+   Written as a compound (no-space) selector — not a descendant combinator —
+   because ResizeToggle carries data-interface-theme and this class on the
+   SAME element (it can't inherit the attribute from an ancestor the way
+   TopPill's embedded buttons do; see the ResizeToggle.tsx doc comment). */
+[data-interface-theme="liquid-glass"].overlay-resize-toggle-surface {
+  background:
+    linear-gradient(135deg,
+      rgba(255, 255, 255, 0.16) 0%,
+      rgba(255, 255, 255, 0.07) 45%,
+      rgba(255, 255, 255, 0.04) 65%,
+      rgba(255, 255, 255, 0.12) 100%
+    ),
+    rgb(12 18 32 / calc(0.15 + (var(--overlay-opacity) * 0.69))) !important;
+  border-color: transparent !important;
+  backdrop-filter: blur(calc(var(--overlay-opacity) * 25px)) saturate(165%) !important;
+  -webkit-backdrop-filter: blur(calc(var(--overlay-opacity) * 25px)) saturate(165%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.50),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.10),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    0 3px 10px rgba(0, 0, 0, 0.24),
+    0 1px 3px rgba(0, 0, 0, 0.12) !important;
+  transition: box-shadow 0.18s ease-out, background 0.18s ease-out !important;
+}
+
+[data-interface-theme="liquid-glass"].overlay-resize-toggle-surface:hover {
+  background:
+    linear-gradient(135deg,
+      rgba(255, 255, 255, 0.16) 0%,
+      rgba(255, 255, 255, 0.07) 45%,
+      rgba(255, 255, 255, 0.04) 65%,
+      rgba(255, 255, 255, 0.12) 100%
+    ),
+    rgb(12 18 32 / calc(0.20 + (var(--overlay-opacity) * 0.69))) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.68),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.10),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+    0 6px 16px rgba(0, 0, 0, 0.32),
+    0 2px 5px rgba(0, 0, 0, 0.16) !important;
+}
+
+[data-interface-theme="liquid-glass"].overlay-resize-toggle-surface:active {
   box-shadow:
     inset 0 1.5px 3px rgba(0, 0, 0, 0.18),
     inset 0 0 0 1px rgba(255, 255, 255, 0.10),
@@ -1522,6 +1590,53 @@
     0 1px 2px rgba(0, 0, 0, 0.12) !important;
 }
 
+/* ResizeToggle — floating chrome OUTSIDE the panel's DOM subtree (see the
+   matching liquid-glass rule for .overlay-resize-toggle-surface earlier in
+   this file for the full rationale). Matches the modern shell/pill
+   material (opacity-driven slate gradient) instead of the embedded-button
+   .overlay-icon-surface recipe above, but keeps that recipe's box-shadow —
+   the shell's own shadow is inset-only and assumes a large flush surface,
+   whereas this is a lone 28px circle that needs an outer drop-shadow to
+   read as detached. Written as a compound (no-space) selector, and
+   deliberately omits `position`/`overflow`: those declarations are not
+   !important, and the compound selector's specificity (0,2,0) beats
+   Tailwind's `.fixed` (0,1,0) — including them would flip the button from
+   `position: fixed` to `position: relative` and break its top-right
+   anchoring. */
+[data-interface-theme="modern"].overlay-resize-toggle-surface {
+  background: linear-gradient(160deg,
+      rgba(90, 90, 108, calc(var(--overlay-opacity) * 1.1)) 0%,
+      rgba(55, 55, 70, calc(var(--overlay-opacity) * 1.16)) 50%,
+      rgba(36, 36, 50, calc(var(--overlay-opacity) * 1.21)) 100%
+    ) !important;
+  border-color: rgba(255, 255, 255, 0.20) !important;
+  backdrop-filter: blur(calc(var(--overlay-opacity) * 3.75px)) !important;
+  -webkit-backdrop-filter: blur(calc(var(--overlay-opacity) * 3.75px)) !important;
+  box-shadow:
+    0 3px 10px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
+  transition: box-shadow 0.18s ease-out, background 0.18s ease-out !important;
+}
+
+[data-interface-theme="modern"].overlay-resize-toggle-surface:hover {
+  background: linear-gradient(160deg,
+      rgba(108, 108, 128, calc(var(--overlay-opacity) * 1.1)) 0%,
+      rgba(70, 70, 88, calc(var(--overlay-opacity) * 1.16)) 50%,
+      rgba(46, 46, 64, calc(var(--overlay-opacity) * 1.21)) 100%
+    ) !important;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 0.5px rgba(255, 255, 255, 0.14) !important;
+}
+
+[data-interface-theme="modern"].overlay-resize-toggle-surface:active {
+  box-shadow:
+    inset 0 1.5px 3px rgba(0, 0, 0, 0.22),
+    0 1px 2px rgba(0, 0, 0, 0.12) !important;
+}
+
 /* AI response cards (Follow-Up Questions, Recap, What to Answer, Shorten,
    code, latent-context attachment preview) — they all share the
    .overlay-subtle-surface class. Neutral white-tinted panel so the colored
@@ -1924,6 +2039,20 @@ body {
 [data-theme='light'] .overlay-pill-surface {
   backdrop-filter: blur(var(--overlay-pill-blur)) saturate(200%);
   -webkit-backdrop-filter: blur(var(--overlay-pill-blur)) saturate(200%);
+}
+
+/* ResizeToggle base (non-glass/non-modern) rule — defensive fallback only.
+   In default theme the button's actual rendered background comes from the
+   inline appearance.shellStyle.backgroundColor now passed to it (see
+   ResizeToggle.tsx), the same source the main panel shell uses, which wins
+   the cascade over this non-!important class rule. This class rule mirrors
+   .overlay-shell-surface's var()-driven values purely so the button isn't
+   unstyled if that inline style is ever absent. No box-shadow here,
+   matching .overlay-icon-surface's own base rule (below) having none —
+   default theme never had an outer drop-shadow on this button. */
+.overlay-resize-toggle-surface {
+  background: var(--overlay-panel-bg);
+  border-color: var(--overlay-border);
 }
 
 .overlay-transcript-surface {

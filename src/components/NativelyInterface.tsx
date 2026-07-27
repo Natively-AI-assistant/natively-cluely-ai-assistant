@@ -7014,7 +7014,7 @@ Provide only the answer, nothing else.`;
         expanded={isShellWide}
         onToggle={handleManualResizeToggle}
         appearance={appearance}
-        interfaceTheme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : undefined}
+        interfaceTheme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default'}
         rightOffset={buttonRight}
         topOffset={buttonTop}
       />

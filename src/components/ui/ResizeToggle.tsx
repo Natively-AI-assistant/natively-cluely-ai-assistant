@@ -71,9 +71,15 @@ const ResizeToggle = forwardRef<HTMLButtonElement, ResizeToggleProps>(
         aria-pressed={expanded}
         title={expanded ? 'Collapse' : 'Expand'}
         data-interface-theme={interfaceTheme}
-        className="no-drag fixed z-[9999] flex h-[28px] w-[28px] items-center justify-center overflow-hidden rounded-full overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
+        className="no-drag fixed z-[9999] flex h-[28px] w-[28px] items-center justify-center overflow-hidden rounded-full overlay-resize-toggle-surface overlay-text-interactive"
         style={{
-          ...appearance.iconStyle,
+          // Shell's background (not iconStyle's) — this button is floating
+          // chrome OUTSIDE the panel, architecturally the same as TopPill's
+          // outer pill, and should read as the same material as the panel
+          // body rather than the deliberately-different "embedded button"
+          // jelly-clay recipe. See .overlay-resize-toggle-surface in
+          // index.css for the full rationale.
+          ...appearance.shellStyle,
           top: topOffset ?? 12,
           right: rightOffset ?? 12,
           border: '1px solid rgba(128,128,128,0.22)',
