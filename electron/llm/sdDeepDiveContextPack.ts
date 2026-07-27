@@ -14,6 +14,16 @@ import type {
 /** Upper bound of the locked ~8–12k SD-layer hard band (tokens ≈ chars/4). */
 export const SD_CONTEXT_PACK_HARD_CAP_TOKENS = 12_000;
 
+/**
+ * WTA inject budget: PromptAssembler `retrievedModeContext` defaults to 1800 tokens.
+ * Cap the pack under that so pack-builder eviction (floor-preserving) runs instead
+ * of blind assembler truncation from the end of the combined mode block.
+ */
+export const SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS = 1_600;
+
+/** Assembler block budget when the retrieved block carries a post-gate SD pack. */
+export const SD_RETRIEVED_MODE_CONTEXT_BUDGET_TOKENS = 4_000;
+
 /** Locked recent-window caps for the pack floor (SPEC 06 grilling lock). */
 export const SD_RECENT_MAX_ITEMS = 3;
 export const SD_RECENT_MAX_TOTAL_CHARS = 6_000;

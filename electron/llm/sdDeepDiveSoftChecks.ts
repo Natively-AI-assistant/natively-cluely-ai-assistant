@@ -149,3 +149,33 @@ export function enforceDeepDiveChecks(
     return original;
   }
 }
+
+/**
+ * Trailer emitted AFTER live-streamed tokens when soft checks change the
+ * authoritative text. Keeps TTFT intact (tokens yield immediately) while still
+ * surfacing assumption / figure annotations to the UI without replaying the body.
+ */
+export function buildSoftCheckTrailer(raw: string, checked: string): string {
+  const r = String(raw ?? '');
+  const c = String(checked ?? '');
+  if (!c || c === r) return '';
+
+  const notes: string[] = [];
+  if (/As a design assumption:/i.test(c) && !/As a design assumption:/i.test(r)) {
+    notes.push('As a design assumption: this turn lacked grounded LESSON/sheet evidence.');
+  }
+  const flagRe = /(\d[\d,]*(?:\.\d+)?\s*(?:k|m|b|ms|s|gb|tb|mb|qps|rps|%|requests?|users?|nodes?|replicas?))\s*\[figure unverified\]/gi;
+  const seen = new Set<string>();
+  for (const m of c.matchAll(flagRe)) {
+    const key = m[1].toLowerCase().replace(/\s+/g, '');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    notes.push(`${m[1]} ${FIGURE_FLAG}`);
+  }
+  // Superseded soft-truncate: body shortened without additive labels — note only.
+  if (notes.length === 0 && c.length + 20 < r.length) {
+    notes.push('[soft-check] Removed claims that contradicted superseded design commitments.');
+  }
+  if (notes.length === 0) return '';
+  return `\n\n${notes.join('\n')}`;
+}

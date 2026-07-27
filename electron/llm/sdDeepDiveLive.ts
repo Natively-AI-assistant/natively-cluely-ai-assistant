@@ -83,6 +83,23 @@ export interface ApplyCompletedSdAnswerArgs {
   now?: number;
 }
 
+/** IE guard seam: whether post-answer extract+merge should run (pure). */
+export function shouldApplySdDeepDivePostAnswerMerge(args: {
+  answerType?: string | null;
+  sdPhase?: string | null;
+  blockedFromSessionTracker?: boolean;
+  doNotStore?: boolean;
+  hasArtifact?: boolean;
+  generationMatches?: boolean;
+}): boolean {
+  if (args.answerType !== 'system_design_answer') return false;
+  if (args.sdPhase === 'requirements') return false;
+  if (args.blockedFromSessionTracker || args.doNotStore) return false;
+  if (args.hasArtifact === false) return false;
+  if (args.generationMatches === false) return false;
+  return true;
+}
+
 export interface ApplyCompletedSdAnswerResult {
   artifact: SdRequirementsSessionArtifact;
   applied: boolean;

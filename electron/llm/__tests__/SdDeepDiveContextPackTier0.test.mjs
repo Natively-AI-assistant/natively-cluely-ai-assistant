@@ -292,4 +292,35 @@ describe('SD context pack hard cap & excludes (SPEC 06)', () => {
     assert.ok(result.blocks.recentSdAnswers);
     assert.ok(result.blocks.adaptive);
   });
+
+  test('WTA inject budget keeps pack under retrievedModeContext default (floor survives)', () => {
+    const fat = (label) => ({ text: `## ${label}\n` + 'X'.repeat(2500) });
+    const result = packMod.buildSdDeepDiveContextPack({
+      sheet: makeSheet(),
+      latestInterviewer: 'Probe the cache.',
+      lessonChunks: [
+        fat('Understanding the Problem'),
+        fat('Potential Deep Dives'),
+        fat('Non-Functional Requirements'),
+        fat('Deep Dives'),
+        fat('Scalability'),
+      ],
+      recentSdAnswers: [
+        { answerId: 'r1', capturedAt: 1, text: 'R'.repeat(3000) },
+        { answerId: 'r2', capturedAt: 2, text: 'R'.repeat(3000) },
+        { answerId: 'r3', capturedAt: 3, text: 'R'.repeat(3000) },
+      ],
+      adaptiveSlice: 'ADAPT ' + 'A'.repeat(8000),
+      budgets: { maxTotalTokens: packMod.SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS },
+    });
+
+    assert.ok(
+      result.meta.tokenEstimate <= packMod.SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS,
+      `tokenEstimate ${result.meta.tokenEstimate} exceeds WTA inject cap`,
+    );
+    assert.ok(result.blocks.designSheet, 'sheet floor must survive');
+    assert.ok(result.blocks.latestInterviewer, 'utterance floor must survive');
+    assert.match(result.pack, /<design_sheet>/);
+    assert.match(result.pack, /<latest_interviewer>/);
+  });
 });

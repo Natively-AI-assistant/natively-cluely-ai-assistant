@@ -184,3 +184,24 @@ describe('Deep-dive soft checks — never hard-refuse / fail-open (SPEC 07)', ()
     assert.ok(/2,?000\s*QPS/i.test(out), `claim retained with flag, got: ${out}`);
   });
 });
+
+describe('buildSoftCheckTrailer (TTFT stream-then-annotate)', () => {
+  test('empty when checked equals raw', () => {
+    assert.equal(soft.buildSoftCheckTrailer('hello', 'hello'), '');
+  });
+
+  test('emits assumption + figure notes without replaying body', () => {
+    const raw = 'Redis at 100k QPS.';
+    const checked = soft.enforceDeepDiveChecks(raw, 'post_requirements', {
+      lessonInjected: false,
+      sheetCommittedTexts: [],
+      lessonChunkTexts: [],
+      recentAnswerTexts: [],
+    });
+    const trailer = soft.buildSoftCheckTrailer(raw, checked);
+    assert.ok(trailer.startsWith('\n\n'));
+    assert.match(trailer, /As a design assumption:/i);
+    assert.match(trailer, /100k\s*\[figure unverified\]/i);
+    assert.doesNotMatch(trailer, /^Redis at/);
+  });
+});

@@ -438,6 +438,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 answerPlan?.answerType === 'system_design_answer' && sdPhase === 'requirements';
             const deepDivePostGate =
                 answerPlan?.answerType === 'system_design_answer' && sdPhase !== 'requirements';
+            let sdRetrievedModeBudget: number | undefined;
             let deepDiveCheckContext: import('./sdDeepDiveSoftChecks').DeepDiveCheckContext = {
                 lessonInjected: false,
                 sheetCommittedTexts: [],
@@ -485,7 +486,11 @@ ANSWER SHAPE: ${intentResult.answerShape}
                                 : phaseContract;
                         }
                     } else if (deepDivePostGate) {
-                        const { buildSdDeepDiveContextPack } = require('./sdDeepDiveContextPack') as typeof import('./sdDeepDiveContextPack');
+                        const {
+                            buildSdDeepDiveContextPack,
+                            SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS,
+                            SD_RETRIEVED_MODE_CONTEXT_BUDGET_TOKENS,
+                        } = require('./sdDeepDiveContextPack') as typeof import('./sdDeepDiveContextPack');
                         const { buildDeepDiveCheckContext } = require('./sdDeepDiveLive') as typeof import('./sdDeepDiveLive');
                         const snap = requestSnapshot?.sdDeepDive;
                         const sheet = (snap?.designSheet ?? null) as import('./sdRequirementsGate').SdDesignSheet | null;
@@ -499,6 +504,9 @@ ANSWER SHAPE: ${intentResult.answerShape}
                             recentSdAnswers: recent,
                             latestInterviewer,
                             lessonChunks: chunksForInject,
+                            // Fit under retrievedModeContext so pack eviction
+                            // (never drop sheet+utterance) wins over assembler truncation.
+                            budgets: { maxTotalTokens: SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS },
                             // Never pass transcript into the pack.
                             sdPhase: sdPhase === 'post_requirements' ? 'post_requirements' : null,
                         });
@@ -513,6 +521,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                             lessonChunks: chunksForInject,
                             lessonInjected: Boolean(packResult.blocks.lesson),
                         });
+                        sdRetrievedModeBudget = SD_RETRIEVED_MODE_CONTEXT_BUDGET_TOKENS;
                     }
                 } catch (lessonErr: any) {
                     console.warn('[WhatToAnswerLLM] system-design lesson grounding skipped (non-fatal):', lessonErr?.message);
@@ -651,6 +660,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 priorResponses: !documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses ? temporalContext.previousResponses : undefined,
                 intentContext,
                 retrievedModeContext: typedModeContext || undefined,
+                retrievedModeContextTokenBudget: sdRetrievedModeBudget,
                 pinnedModeInstructions: pinnedModeInstructions || undefined,
                 candidateProfile: typedCandidateProfile || undefined,
                 tokenBudget: Math.max(1000, assemblerBudget),
@@ -782,11 +792,10 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 }
                 tokenCount++;
                 streamedBuffer.push(token);
-                // While Requirements gate is open, buffer tokens and soft-truncate
-                // later Delivery Framework headings before show (Tier 0 / ticket 12).
-                // Post-gate deep-dive soft checks (SPEC 07) also buffer so the
-                // authoritative delivered string includes assumption / figure labels.
-                if (!requirementsGated && !deepDivePostGate) {
+                // Requirements gate still buffers (structural truncate needs full text).
+                // Post-gate deep-dive soft checks stream live for TTFT, then finalize
+                // the authoritative buffer + optional annotation trailer (SPEC 07 gap fix).
+                if (!requirementsGated) {
                     yield token;
                 }
             }
@@ -809,18 +818,18 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 }
             } else if (deepDivePostGate) {
                 try {
-                    const { enforceDeepDiveChecks } = require('./sdDeepDiveSoftChecks') as typeof import('./sdDeepDiveSoftChecks');
-                    const checked = enforceDeepDiveChecks(
-                        streamedBuffer.join(''),
-                        sdPhase,
-                        deepDiveCheckContext,
-                    );
+                    const {
+                        enforceDeepDiveChecks,
+                        buildSoftCheckTrailer,
+                    } = require('./sdDeepDiveSoftChecks') as typeof import('./sdDeepDiveSoftChecks');
+                    const raw = streamedBuffer.join('');
+                    const checked = enforceDeepDiveChecks(raw, sdPhase, deepDiveCheckContext);
                     streamedBuffer.length = 0;
                     streamedBuffer.push(checked);
-                    yield checked;
+                    const trailer = buildSoftCheckTrailer(raw, checked);
+                    if (trailer) yield trailer;
                 } catch (checkErr: any) {
                     console.warn('[WhatToAnswerLLM] deep-dive soft checks threw:', checkErr?.message);
-                    yield streamedBuffer.join('');
                 }
             }
 

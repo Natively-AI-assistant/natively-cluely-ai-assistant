@@ -218,6 +218,12 @@ export class PromptAssembler {
         intentContext?: string;
         retrievedModeContext?: string;
         /**
+         * Optional override for the retrieved-mode-context block token budget
+         * (default 1800). Post-gate SD deep-dive packs raise this so pack-builder
+         * floor eviction is not undone by assembler truncation.
+         */
+        retrievedModeContextTokenBudget?: number;
+        /**
          * PI v3 (W2): the active mode's user-authored "Real-time prompt"
          * (customContext), ALWAYS pinned when non-empty — unlike
          * retrievedModeContext it is not retrieval-scored, so a custom mode's
@@ -333,7 +339,13 @@ ${JSON.stringify({ content: this.escapePromptInjection(pinned) })}
             });
         }
         if (params.retrievedModeContext) {
-            this.addBlock(packet, this.buildRetrievedModeContextBlock(params.retrievedModeContext));
+            this.addBlock(
+                packet,
+                this.buildRetrievedModeContextBlock(
+                    params.retrievedModeContext,
+                    params.retrievedModeContextTokenBudget,
+                ),
+            );
         }
 
         // 7. MEETING HISTORY — untrusted past meetings
@@ -712,13 +724,16 @@ ${this.escapePromptInjection(this.escapeUserContent(transcript), false, 'transcr
         };
     }
 
-    private buildRetrievedModeContextBlock(retrievedModeContext: string): ContextBlock {
+    private buildRetrievedModeContextBlock(
+        retrievedModeContext: string,
+        tokenBudget?: number,
+    ): ContextBlock {
         const sanitized = this.escapePromptInjection(retrievedModeContext);
         return {
             type: 'active_mode_retrieved_context',
             trustLevel: TrustLevel.UNTRUSTED_REFERENCE,
             source: 'mode_retrieval',
-            tokenBudget: 1800,
+            tokenBudget: typeof tokenBudget === 'number' && tokenBudget > 0 ? tokenBudget : 1800,
             content: sanitized,
         };
     }

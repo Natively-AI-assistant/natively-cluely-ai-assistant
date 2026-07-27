@@ -129,8 +129,36 @@ describe('WhatToAnswerLLM post-gate pack + soft checks', () => {
         { ...SD_PLAN, sdPhase: 'post_requirements' },
       ),
     );
+    // Live stream yields body first; soft-check annotations arrive as trailer (TTFT fix).
+    assert.match(out, /I would put Redis in front of Postgres at 100k QPS/);
     assert.match(out, /As a design assumption:/i);
-    assert.match(out, /100k\s*\[figure unverified\]/);
+    assert.match(out, /100k\s*\[figure unverified\]/i);
+  });
+
+  test('post-gate yields first token before soft-check finalize (TTFT)', async () => {
+    const tokens = ['Hello', ' world', ' Redis'];
+    const helper = {
+      ...makeStubHelper([], null),
+      async *streamChat() {
+        for (const t of tokens) yield t;
+      },
+    };
+    const llm = new WhatToAnswerLLM(helper, stubModes);
+    const seen = [];
+    for await (const t of llm.generateStream(
+      '[INTERVIEWER]: Continue.',
+      undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+      { ...SD_PLAN, sdPhase: 'post_requirements' },
+    )) {
+      seen.push(t);
+    }
+    // First yields are live body tokens (not a single buffered blob).
+    assert.equal(seen[0], 'Hello');
+    assert.equal(seen[1], ' world');
+    assert.equal(seen[2], ' Redis');
+    // Soft-check trailer follows (evidence miss → assumption note).
+    assert.ok(seen.length >= 4, `expected trailer after live tokens, got ${JSON.stringify(seen)}`);
+    assert.match(seen.slice(3).join(''), /As a design assumption:/i);
   });
 
   test('requirements path keeps named LESSON reference_file (prompt echo)', async () => {
@@ -183,8 +211,54 @@ describe('WhatToAnswerLLM post-gate pack + soft checks', () => {
         { ...SD_PLAN, sdPhase: undefined },
       ),
     );
-    assert.match(out, /As a design assumption:/i);
     assert.match(out, /write-through cache/);
+    assert.match(out, /As a design assumption:/i);
+  });
+});
+
+describe('shouldApplySdDeepDivePostAnswerMerge (IE guard seam)', () => {
+  test('applies for post-gate system_design with artifact + matching generation', () => {
+    assert.equal(live.shouldApplySdDeepDivePostAnswerMerge({
+      answerType: 'system_design_answer',
+      sdPhase: 'post_requirements',
+      hasArtifact: true,
+      generationMatches: true,
+    }), true);
+  });
+
+  test('skips requirements / blocked / do_not_store / no artifact / generation mismatch', () => {
+    assert.equal(live.shouldApplySdDeepDivePostAnswerMerge({
+      answerType: 'system_design_answer',
+      sdPhase: 'requirements',
+      hasArtifact: true,
+      generationMatches: true,
+    }), false);
+    assert.equal(live.shouldApplySdDeepDivePostAnswerMerge({
+      answerType: 'system_design_answer',
+      sdPhase: 'post_requirements',
+      blockedFromSessionTracker: true,
+      hasArtifact: true,
+      generationMatches: true,
+    }), false);
+    assert.equal(live.shouldApplySdDeepDivePostAnswerMerge({
+      answerType: 'system_design_answer',
+      sdPhase: 'post_requirements',
+      doNotStore: true,
+      hasArtifact: true,
+      generationMatches: true,
+    }), false);
+    assert.equal(live.shouldApplySdDeepDivePostAnswerMerge({
+      answerType: 'system_design_answer',
+      sdPhase: 'post_requirements',
+      hasArtifact: false,
+      generationMatches: true,
+    }), false);
+    assert.equal(live.shouldApplySdDeepDivePostAnswerMerge({
+      answerType: 'system_design_answer',
+      sdPhase: 'post_requirements',
+      hasArtifact: true,
+      generationMatches: false,
+    }), false);
   });
 });
 

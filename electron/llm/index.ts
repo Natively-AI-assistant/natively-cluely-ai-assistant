@@ -132,14 +132,21 @@ export {
     buildSdDeepDivePackSnapshot,
     buildDeepDiveCheckContext,
     applyCompletedSdAnswerToArtifact,
+    shouldApplySdDeepDivePostAnswerMerge,
 } from "./sdDeepDiveLive";
 export type {
     SdDeepDivePackSnapshot,
     ApplyCompletedSdAnswerArgs,
     ApplyCompletedSdAnswerResult,
 } from "./sdDeepDiveLive";
-export { buildSdDeepDiveContextPack, capRecentSdAnswers } from "./sdDeepDiveContextPack";
-export { enforceDeepDiveChecks } from "./sdDeepDiveSoftChecks";
+export {
+    buildSdDeepDiveContextPack,
+    capRecentSdAnswers,
+    SD_CONTEXT_PACK_HARD_CAP_TOKENS,
+    SD_CONTEXT_PACK_WTA_INJECT_MAX_TOKENS,
+    SD_RETRIEVED_MODE_CONTEXT_BUDGET_TOKENS,
+} from "./sdDeepDiveContextPack";
+export { enforceDeepDiveChecks, buildSoftCheckTrailer } from "./sdDeepDiveSoftChecks";
 export {
     startProvisional,
     clearProvisional,

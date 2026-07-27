@@ -3425,21 +3425,26 @@ export class IntelligenceEngine extends EventEmitter {
         generationId: number;
     }): void {
         try {
-            if (args.answerPlan.answerType !== 'system_design_answer') return;
-            if (args.answerPlan.sdPhase === 'requirements') return;
-            if (this.currentGenerationId !== args.generationId) return;
-            const wd = args.writeDecision;
-            if (wd?.policy === 'do_not_store' || wd?.blockedFromSessionTracker) return;
-
             const prior = this.session.getSdRequirementsArtifact?.() ?? null;
-            if (!prior) return;
-
-            const meetingId = this.session.getActiveMeetingId?.() || '';
-            const { applyCompletedSdAnswerToArtifact } =
+            const wd = args.writeDecision;
+            const { shouldApplySdDeepDivePostAnswerMerge, applyCompletedSdAnswerToArtifact } =
                 require('./llm/sdDeepDiveLive') as typeof import('./llm/sdDeepDiveLive');
 
+            if (!shouldApplySdDeepDivePostAnswerMerge({
+                answerType: args.answerPlan.answerType,
+                sdPhase: args.answerPlan.sdPhase,
+                blockedFromSessionTracker: Boolean(wd?.blockedFromSessionTracker),
+                doNotStore: wd?.policy === 'do_not_store',
+                hasArtifact: Boolean(prior),
+                generationMatches: this.currentGenerationId === args.generationId,
+            })) {
+                return;
+            }
+
+            const meetingId = this.session.getActiveMeetingId?.() || '';
+
             const result = applyCompletedSdAnswerToArtifact({
-                artifact: prior,
+                artifact: prior!,
                 spokenText: args.spokenText,
                 meetingId,
                 currentMeetingId: this.session.getActiveMeetingId?.() || meetingId,
