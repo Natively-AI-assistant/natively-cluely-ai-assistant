@@ -998,7 +998,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   });
   const [autoScroll, setAutoScroll] = useState(() => {
     const stored = localStorage.getItem('natively_auto_scroll');
-    return stored === 'true';
+    return stored !== 'false';
   });
 
   // Analytics State
@@ -1217,21 +1217,109 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   useEffect(() => {
     const handleStorage = () => {
       const stored = localStorage.getItem('natively_auto_scroll');
-      setAutoScroll(stored === 'true');
+      setAutoScroll(stored !== 'false');
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
+  // Interrupt-aware auto-scroll (see the streaming effect below + the
+  // rAF-coalesced scroll listener further down). Every write to
+  // scrollContainerRef's scrollTop — ours or the user's native scroll —
+  // updates this so the scroll handler can compare direction (decreased =>
+  // user scrolled up => interrupt) instead of guessing from distance alone.
+  // Declared here (ahead of the streaming effect and pinScrollBottomIfNeeded,
+  // both of which read/write it) rather than down near scrollContainerRef's
+  // own declaration, to avoid a real TDZ break: these are referenced from
+  // dependency arrays, which — unlike refs only touched inside an effect
+  // body — are evaluated eagerly during render, not deferred.
+  const lastScrollTopRef = useRef<number>(0);
+  // Holds the id of the streaming message auto-scroll is currently withheld
+  // for (see streamingMsgIdRef, declared further down). null = not
+  // suppressed. A ref, not state, because it's written from a hot scroll
+  // handler; the paired `showJumpToLatest` state below is what actually
+  // drives the "jump to latest" pill's visibility re-render.
+  const autoScrollSuppressedForMsgIdRef = useRef<string | null>(null);
+  // Scroll-headroom reservation. Independent of the suppression flag itself:
+  // even with suppression correctly armed, a code-block width transition
+  // growing scrollContainerRef's clientHeight can shrink the max scrollable
+  // position (scrollHeight - clientHeight) far enough that the BROWSER'S OWN
+  // native scrollTop clamp fires — no JS write involved — silently dragging
+  // the user back toward the bottom. Live-verified: pinScrollBottomIfNeeded
+  // correctly no-ops the whole time in that scenario, yet scrollTop still
+  // moved, because the clamp happens at layout time, beneath any of our event
+  // handlers. clientHeightAtInterruptRef snapshots clientHeight at the moment
+  // of interrupt; scrollSpacerRef is a real (flow, not absolute) trailing DOM
+  // node whose height is grown in lockstep with clientHeight while suppressed
+  // (see reserveScrollHeadroomIfNeeded), which grows scrollHeight by the same
+  // amount and gives the browser real room to expand into instead of clamping
+  // — preserving the user's chosen distance-from-bottom instead of letting
+  // panel growth silently swallow it. Reset to 0 on every re-arm path.
+  const clientHeightAtInterruptRef = useRef<number>(0);
+  const scrollSpacerRef = useRef<HTMLDivElement>(null);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  // Mirrors showJumpToLatest so the hot scroll handler (fires every rAF frame
+  // during streaming, per the streaming effect's per-frame scrollTop writes)
+  // can skip the setState call when nothing actually changed.
+  const showJumpToLatestRef = useRef(false);
+  const setJumpToLatestVisible = useCallback((visible: boolean) => {
+    if (showJumpToLatestRef.current === visible) return;
+    showJumpToLatestRef.current = visible;
+    setShowJumpToLatest(visible);
+  }, []);
+  // Shared "is auto-scroll currently withheld for the active stream" check —
+  // used both by the streaming effect below (to skip its own scroll write)
+  // and by startTransition's wasAtBottomRef snapshot (so a width/height
+  // transition retriggered by more code streaming in — e.g. a mid-stream
+  // code fence keeps calling checkCodeVisibility -> startTransition — can
+  // never re-arm the per-frame sticky-bottom pin while the user has an
+  // active interrupt in effect, regardless of the raw distance-from-bottom
+  // at that instant). Declared once here rather than duplicated inline at
+  // both call sites.
+  const isAutoScrollSuppressed = useCallback(() => {
+    const suppressedId = autoScrollSuppressedForMsgIdRef.current;
+    const streamingId = streamingMsgIdRef.current;
+    return suppressedId !== null && (streamingId === null || streamingId === suppressedId);
+  }, []);
+
   // Auto-scroll to bottom on every messages update when toggle is enabled.
-  // 'auto' (instant) instead of 'smooth' is intentional: streaming tokens fire
-  // this effect tens of times per second; smooth would restart the animation
-  // each time and never reach bottom, producing visible chase/jitter.
+  // A direct scrollTop write (matching pinScrollBottomIfNeeded's style, see
+  // line ~2376) instead of scrollIntoView({ behavior: 'auto' }): the
+  // interrupt-detection scroll handler needs to know the EXACT value we just
+  // wrote so it can tell our own programmatic scroll apart from a user
+  // scroll on the very next frame, and scrollIntoView doesn't hand that back
+  // synchronously the same way.
+  //
+  // Suppression: once the scroll handler below detects the user scrolled
+  // up mid-stream, it arms autoScrollSuppressedForMsgIdRef with the id of
+  // the message that was streaming at the time. While that id is still the
+  // one actively streaming (or the stream it belonged to has just finalized
+  // — streamingMsgIdRef.current briefly goes null on finalize, one commit
+  // before this effect's own re-run for that same message, see
+  // commitStreamingFlush), we withhold the scroll write so completion
+  // doesn't yank the view out from under a user who's still reading. A
+  // genuinely NEW message carries a different (non-null) streaming id, so
+  // suppression naturally lifts without any explicit "new message" handling.
   useEffect(() => {
     if (!autoScroll) return;
     if (messages.length === 0) return;
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-  }, [messages, autoScroll]);
+    if (isAutoScrollSuppressed()) return;
+    // Not (or no longer) suppressed — clear any stale suppression/pill state
+    // left over from a prior message and resume following the stream.
+    autoScrollSuppressedForMsgIdRef.current = null;
+    setJumpToLatestVisible(false);
+    // Inlined clearScrollHeadroom's body rather than calling it — that
+    // function is declared later in the component (near pinScrollBottomIfNeeded)
+    // and referencing it from this effect's dependency array would be a TDZ
+    // read, same class of issue already worked around for the refs above.
+    if (scrollSpacerRef.current) scrollSpacerRef.current.style.height = '0px';
+    clientHeightAtInterruptRef.current = 0;
+    const c = scrollContainerRef.current;
+    if (c) {
+      c.scrollTop = c.scrollHeight - c.clientHeight;
+      lastScrollTopRef.current = c.scrollTop;
+    }
+  }, [messages, autoScroll, setJumpToLatestVisible, isAutoScrollSuppressed]);
 
   const hasActiveSystemAnswer = useMemo(
     () =>
@@ -2414,7 +2502,42 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const pinScrollBottomIfNeeded = useCallback(() => {
     if (!wasAtBottomRef.current) return;
     const c = scrollContainerRef.current;
-    if (c) c.scrollTop = c.scrollHeight - c.clientHeight;
+    if (c) {
+      c.scrollTop = c.scrollHeight - c.clientHeight;
+      // Keep the interrupt-detection ref (see the scroll listener below)
+      // in sync with this programmatic write. Without this, a width/height
+      // transition that SHRINKS scrollHeight (e.g. a code block collapsing
+      // reflows text to fewer lines) would make this write's new scrollTop
+      // read as a decrease from the stale lastScrollTopRef value on the next
+      // scroll event, misread as a user-initiated upward scroll, and falsely
+      // arm auto-scroll suppression mid-stream.
+      lastScrollTopRef.current = c.scrollTop;
+    }
+  }, []);
+
+  // Sibling of pinScrollBottomIfNeeded for the OPPOSITE case: called from the
+  // same per-frame site, active exactly when the user has an armed interrupt
+  // (see clientHeightAtInterruptRef's comment above for why this exists).
+  // Grows a trailing spacer node to match whatever clientHeight has grown by
+  // since the interrupt, so scrollHeight keeps pace and the browser never
+  // needs to clamp scrollTop to fit a taller viewport into the same content
+  // — the user's chosen distance-from-bottom stays exactly what they left it
+  // at, instead of shrinking as the panel grows around them.
+  const reserveScrollHeadroomIfNeeded = useCallback(() => {
+    if (autoScrollSuppressedForMsgIdRef.current === null) return;
+    const c = scrollContainerRef.current;
+    const spacer = scrollSpacerRef.current;
+    if (!c || !spacer) return;
+    const growth = c.clientHeight - clientHeightAtInterruptRef.current;
+    if (growth > 0) spacer.style.height = `${growth}px`;
+  }, []);
+
+  // Re-arm counterpart: drop the reserved headroom back to 0. Called from
+  // every path that clears autoScrollSuppressedForMsgIdRef (wheel-down,
+  // geometry re-arm, the jump-to-latest click, and a fresh message starting).
+  const clearScrollHeadroom = useCallback(() => {
+    if (scrollSpacerRef.current) scrollSpacerRef.current.style.height = '0px';
+    clientHeightAtInterruptRef.current = 0;
   }, []);
 
   const startTransition = useCallback(
@@ -2431,7 +2554,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (container) {
         const distanceFromBottom =
           container.scrollHeight - (container.scrollTop + container.clientHeight);
-        wasAtBottomRef.current = distanceFromBottom <= 8;
+        // Never re-arm the sticky-bottom pin while the user has an active
+        // auto-scroll interrupt in effect for the current stream — otherwise
+        // a transition retriggered mid-stream (e.g. more code streaming in
+        // re-firing checkCodeVisibility -> startTransition) would snapshot
+        // wasAtBottomRef purely from raw distance, and pinScrollBottomIfNeeded
+        // would then fight the user's scroll-up for the transition's whole
+        // duration regardless of the suppression ref being armed elsewhere.
+        wasAtBottomRef.current = distanceFromBottom <= 8 && !isAutoScrollSuppressed();
       }
 
       // No meaningful width change: nothing to animate, no native resize.
@@ -2454,6 +2584,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // once to the final width.
         shellWidth.set(targetWidth);
         pinScrollBottomIfNeeded();
+        reserveScrollHeadroomIfNeeded();
         const h = contentRef.current?.offsetHeight ?? 0;
         if (h > 0) {
           resizeOverlayWindowCentered(h);
@@ -2517,6 +2648,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         ...OVERLAY_RESIZE_SPRING,
         onUpdate: () => {
           pinScrollBottomIfNeeded();
+          reserveScrollHeadroomIfNeeded();
           const now = Date.now();
           if (now - lastHeightReportAt < HEIGHT_REPORT_INTERVAL_MS) return;
           const h = contentRef.current?.offsetHeight ?? 0;
@@ -2547,6 +2679,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       resizeOverlayWindowCentered,
       syncStreamingHeightBaseline,
       pinScrollBottomIfNeeded,
+      reserveScrollHeadroomIfNeeded,
+      isAutoScrollSuppressed,
     ],
   );
 
@@ -2670,6 +2804,98 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => cancelAnimationFrame(raf);
   }, [messages, checkCodeVisibility]);
 
+  // Interrupt-aware auto-scroll direction check. Piggybacks on the existing
+  // rAF-coalesced scroll listener below (used today for checkCodeVisibility)
+  // rather than adding a second `scroll` listener / rAF loop.
+  //
+  // Order matters: the near-bottom re-arm check runs BEFORE the
+  // decreased-scrollTop interrupt check. A content-height shrink (e.g. a
+  // message removed, or finalize replacing streamed text) can make the
+  // browser clamp scrollTop downward on its own, which looks identical to a
+  // user scrolling up (delta < 0) — but those clamps always land AT the
+  // bottom, so checking distance-from-bottom first makes them self-healing
+  // instead of falsely arming suppression.
+  //
+  // That same native clamp is also why this re-arm is gated OFF while a
+  // width/height transition is actively in flight (heightReportSuppressedUntilRef
+  // is the existing "spring is running" signal, set in startTransition). A
+  // transition growing clientHeight shrinks the max scrollable position
+  // (scrollHeight - clientHeight), and if the user's post-interrupt scrollTop
+  // is within that shrinking margin, the BROWSER forces it back toward the
+  // bottom on its own — no user input involved. Read purely by geometry, that
+  // native clamp is indistinguishable from "the user scrolled back down" and
+  // would silently clear a real interrupt within the same transition that
+  // triggered it. Verified live (see the code-block-transition repro during
+  // this fix): with this guard absent, a genuine wheel-armed interrupt got
+  // erased mid-transition even though pinScrollBottomIfNeeded itself never
+  // wrote a single frame. A deliberate user wheel-down tick still re-arms
+  // immediately regardless of an in-flight transition — see onWheel's
+  // deltaY>0 branch above, which is unambiguous because it can only
+  // originate from real input.
+  const handleScrollInterrupt = useCallback(() => {
+    if (!autoScroll) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const distanceFromBottom =
+      container.scrollHeight - (container.scrollTop + container.clientHeight);
+    const delta = container.scrollTop - lastScrollTopRef.current;
+    lastScrollTopRef.current = container.scrollTop;
+
+    const transitionInFlight = Date.now() < heightReportSuppressedUntilRef.current;
+    if (distanceFromBottom <= 28 && !transitionInFlight) {
+      // Looser tolerance than the 8px used for the sticky-bottom transition
+      // pin (wasAtBottomRef) — this is a manual re-arm, not a pixel-perfect
+      // "still at bottom" check. Lets a user who scrolled up, read, then
+      // scrolled back down themselves resume live-following without waiting
+      // for the next message.
+      autoScrollSuppressedForMsgIdRef.current = null;
+      setJumpToLatestVisible(false);
+      clearScrollHeadroom();
+      return;
+    }
+
+    // Only arm on a FRESH interrupt (not already suppressed for this stream).
+    // Without this guard, once reserveScrollHeadroomIfNeeded's spacer growth
+    // lags a frame behind an active clientHeight increase, the browser's own
+    // clamp nudges scrollTop down by a pixel or two — an entirely
+    // self-inflicted, native side effect, not user input — which this same
+    // delta<0 check would otherwise misread as a brand new interrupt and
+    // re-snapshot clientHeightAtInterruptRef to the (already-grown) CURRENT
+    // clientHeight every single frame. That perpetually resets the headroom
+    // baseline forward in lockstep with the growth it's supposed to be
+    // measuring against, so computed growth reads ~0 forever and the spacer
+    // never gets a chance to reserve anything — confirmed live via the
+    // wheel-only repro during this fix (clientHeightAtInterruptRef tracked
+    // current clientHeight frame-for-frame instead of staying pinned to the
+    // value at the moment of the real interrupt).
+    if (delta < 0 && !isAutoScrollSuppressed()) {
+      // User-initiated upward scroll (our own auto-scroll writes only ever
+      // increase/hold scrollTop, see the streaming effect + pinScrollBottomIfNeeded).
+      autoScrollSuppressedForMsgIdRef.current = streamingMsgIdRef.current;
+      // Stop the width/height-transition sticky-bottom pin from re-fighting
+      // the user through that other path too (e.g. a code block auto-
+      // expanding mid-stream).
+      wasAtBottomRef.current = false;
+      clientHeightAtInterruptRef.current = container.clientHeight;
+      // Only show the pill when there's an actual active stream being
+      // withheld — scrolling up in a finished, static conversation must not
+      // surface a pill with no suppression behind it.
+      setJumpToLatestVisible(streamingMsgIdRef.current !== null);
+    }
+  }, [autoScroll, setJumpToLatestVisible, clearScrollHeadroom, isAutoScrollSuppressed]);
+
+  // "Jump to latest" pill click handler — the ONE place `behavior: 'smooth'`
+  // is used for this scroll container. The per-frame streaming chase (step 4)
+  // stays a direct scrollTop write; smooth-scrolling every frame would
+  // restart the animation each time and never reach bottom.
+  const handleJumpToLatest = useCallback(() => {
+    autoScrollSuppressedForMsgIdRef.current = null;
+    setJumpToLatestVisible(false);
+    clearScrollHeadroom();
+    const c = scrollContainerRef.current;
+    if (c) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
+  }, [setJumpToLatestVisible, clearScrollHeadroom]);
+
   // (Re)attach the scroll listener whenever the scroll container mounts.
   // The OUTER shell (the always-mounted `data-shell-root` motion.div) now
   // stays in the DOM across Cmd+B so scrollTop survives, but the scroll
@@ -2703,14 +2929,85 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       rafId = requestAnimationFrame(() => {
         rafId = null;
         checkCodeVisibility();
+        handleScrollInterrupt();
       });
     };
+    // Direct, SYNCHRONOUS wheel listener — the authoritative "user is
+    // scrolling up" signal, deliberately not routed through the rAF-coalesced
+    // scroll handler above. A token flush during active streaming calls
+    // setMessages on ~every frame; the streaming effect's scrollTop write and
+    // its lastScrollTopRef update both happen synchronously, in the same pass,
+    // ahead of the queued native `scroll` event for the user's wheel tick. By
+    // the time handleScrollInterrupt's rAF runs, container.scrollTop has
+    // already been snapped back to bottom AND lastScrollTopRef already
+    // reflects that same bottom value — delta reads as 0 and the interrupt is
+    // invisible. Reading deltaY straight off the wheel event sidesteps that
+    // race entirely: it's raw input, read and acted on in the same tick the
+    // gesture fires, before anything else this frame gets a chance to
+    // overwrite scrollTop. No distance/threshold gating here on purpose — any
+    // upward wheel motion counts. handleScrollInterrupt's own delta<0 check
+    // remains a secondary signal for input that doesn't fire wheel events
+    // (e.g. dragging the scrollbar thumb directly).
+    const onWheel = (e: WheelEvent) => {
+      if (!autoScroll) return;
+      if (e.deltaY < 0) {
+        // Upward tick — interrupt, no threshold. Mirrors handleScrollInterrupt's
+        // direction check but reads raw input directly (see the effect-level
+        // comment above for why that avoids the streaming-write race).
+        const alreadySuppressed = isAutoScrollSuppressed();
+        autoScrollSuppressedForMsgIdRef.current = streamingMsgIdRef.current;
+        wasAtBottomRef.current = false;
+        // Snapshot the headroom baseline only on the FIRST tick of a gesture
+        // — a multi-tick trackpad flick fires several wheel events in quick
+        // succession, and re-snapshotting on each one would keep moving the
+        // "start of the escape" baseline forward, defeating
+        // reserveScrollHeadroomIfNeeded the same way a re-snapshot loop did
+        // in handleScrollInterrupt (see its comment for the full mechanism).
+        if (!alreadySuppressed) {
+          const container = scrollContainerRef.current;
+          if (container) clientHeightAtInterruptRef.current = container.clientHeight;
+        }
+        setJumpToLatestVisible(streamingMsgIdRef.current !== null);
+        return;
+      }
+      if (e.deltaY > 0) {
+        // Downward tick — a genuine user-driven re-arm signal, checked here
+        // (not only via handleScrollInterrupt's geometry-only re-arm below)
+        // because a width/height transition growing clientHeight can pull
+        // scrollTop toward the bottom via the BROWSER'S OWN native clamping
+        // (max scrollable position shrinking as the visible area grows) with
+        // no user input at all — that native clamp is indistinguishable from
+        // "the user scrolled back to bottom" by geometry alone, and would
+        // silently clear a real interrupt. A wheel-down tick is unambiguous:
+        // it can only originate from the user.
+        const container = scrollContainerRef.current;
+        if (container) {
+          const distanceFromBottom =
+            container.scrollHeight - (container.scrollTop + container.clientHeight);
+          if (distanceFromBottom <= 28) {
+            autoScrollSuppressedForMsgIdRef.current = null;
+            setJumpToLatestVisible(false);
+            clearScrollHeadroom();
+          }
+        }
+      }
+    };
     container.addEventListener('scroll', onScroll, { passive: true });
+    container.addEventListener('wheel', onWheel, { passive: true });
     return () => {
       container.removeEventListener('scroll', onScroll);
+      container.removeEventListener('wheel', onWheel);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [scrollContainerMounted, checkCodeVisibility]);
+  }, [
+    scrollContainerMounted,
+    checkCodeVisibility,
+    handleScrollInterrupt,
+    autoScroll,
+    setJumpToLatestVisible,
+    clearScrollHeadroom,
+    isAutoScrollSuppressed,
+  ]);
 
   // Cancel all in-flight async work on unmount.
   useEffect(() => {
@@ -7568,13 +7865,122 @@ Provide only the answer, nothing else.`;
                     </div>
                   )}
                   <div ref={messagesEndRef} />
+                  {/* Scroll-headroom spacer — real flow content (not absolute),
+                      height imperatively driven by reserveScrollHeadroomIfNeeded
+                      while an interrupt is active, 0 otherwise. See
+                      clientHeightAtInterruptRef's declaration for why this
+                      exists: it gives the browser room to grow the panel into
+                      during a code-block transition instead of clamping
+                      scrollTop back toward the bottom on its own. */}
+                  <div ref={scrollSpacerRef} aria-hidden="true" style={{ height: 0 }} />
                 </motion.div>
               )}
 
-              {/* Quick Actions - Minimal & Clean */}
-              <div
-                className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}
-              >
+              {/* Quick Actions - Minimal & Clean.
+                  Split into an outer positioning-only wrapper + an inner row
+                  that owns the actual flex layout and `overflow-x-hidden`
+                  (present since the very first commit — see
+                  d7101217 "contain horizontal scrolling to code blocks" —
+                  load-bearing, not removable). The split matters because
+                  `overflow-x: hidden` on an element whose `overflow-y` is
+                  otherwise 'visible' makes the BROWSER coerce that y-axis to
+                  'auto' per the CSS spec (you can't have one axis truly
+                  visible while the other is clipped/scrollable) — so the
+                  jump-to-latest pill's `bottom-full` (poking out ABOVE the
+                  row) was being silently clipped by the inner row's own
+                  auto-overflow box, even though every computed style on the
+                  pill itself (opacity, visibility, background contrast) was
+                  completely correct. Confirmed live: forcing the row's
+                  overflow to 'visible' via devtools made the pill appear
+                  instantly with no other changes. The outer wrapper here
+                  carries no overflow of its own, so the pill (a direct child
+                  of the OUTER div, sibling to the inner row) is never
+                  clipped, while the inner row keeps its original horizontal
+                  containment intact. */}
+              <div className="relative">
+                {/* Jump-to-latest pill — shown while auto-scroll is
+                    suppressed (user scrolled up mid-stream) and the view
+                    isn't already near the bottom. Anchored to THIS row
+                    (always rendered, Answer button as its rightmost item)
+                    rather than to the scroll container: the scroll container
+                    only grows to scrollMaxH once content actually overflows,
+                    so anchoring the pill there could visually land near the
+                    top of a short conversation instead of pinned to the
+                    panel's true bottom. `bottom-full` + `mb-2` floats it just
+                    above this row's top edge — directly above the Answer
+                    button — regardless of the row's or the chat history's
+                    height, no scroll-content dependency and no magic pixel
+                    offsets.
+
+                    Styled to match ResizeToggle (src/components/ui/ResizeToggle.tsx)
+                    at the user's request: same 28px jelly-pill material
+                    (.overlay-resize-toggle-surface + appearance.shellStyle,
+                    the same "floating chrome outside the content, reads as
+                    the panel's own material" recipe), same gloss-sheen
+                    overlay, same mount-pop/hover/tap motion curve. Unlike
+                    ResizeToggle this pill does NOT default to a dimmed 0.72
+                    opacity — that dimming exists there because window-chrome
+                    controls should recede until interacted with, but this
+                    pill only ever appears when there's actually something to
+                    jump to, so staying fully visible is the right call for
+                    what is effectively a lightweight notification affordance. */}
+                <AnimatePresence>
+                  {autoScroll && showJumpToLatest && (
+                    <motion.button
+                      type="button"
+                      // Same "don't steal focus from the chat input" idiom
+                      // ResizeToggle uses — see its onMouseDown comment.
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={handleJumpToLatest}
+                      aria-label={t('Jump to latest')}
+                      title={t('Jump to latest')}
+                      data-interface-theme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default'}
+                      // NOT overlay-resize-toggle-surface/appearance.shellStyle
+                      // despite matching ResizeToggle everywhere else on this
+                      // button (motion, size, gloss sheen): that surface is
+                      // documented in index.css as "matches the shell/pill
+                      // material" specifically FOR chrome that floats OUTSIDE
+                      // the panel (ResizeToggle, TopPill's outer pill), where
+                      // it contrasts against the transparent desktop behind
+                      // it. This pill lives INSIDE the panel — same material
+                      // as its own background renders it nearly invisible
+                      // there (confirmed visually: shellStyle's background is
+                      // within a few RGB points of the panel body it sits on,
+                      // and default theme carries no box-shadow on that
+                      // surface to compensate). overlay-icon-surface +
+                      // appearance.iconStyle is index.css's own "embedded
+                      // button" recipe (used by the X/remove-attachment
+                      // buttons etc.) — deliberately a lighter tone so
+                      // embedded controls pop against the panel body instead
+                      // of blending into it.
+                      className="absolute right-3 bottom-full mb-2 z-20 no-drag flex h-[28px] w-[28px] items-center justify-center overflow-hidden rounded-full overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
+                      style={{
+                        ...appearance.iconStyle,
+                        borderWidth: '1px',
+                        borderStyle: 'solid',
+                        borderColor: 'rgba(255, 255, 255, 0.14)',
+                      }}
+                      initial={prefersReducedMotionRef.current ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={prefersReducedMotionRef.current ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
+                      whileHover={prefersReducedMotionRef.current ? undefined : { scale: 1.06 }}
+                      whileTap={prefersReducedMotionRef.current ? undefined : { scale: 0.92 }}
+                      transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                    >
+                      {/* Jelly-gloss sheen — identical to ResizeToggle's */}
+                      <span className="pointer-events-none absolute inset-x-1 top-0.5 h-[45%] rounded-full bg-gradient-to-b from-white/20 to-white/0 blur-[0.5px]" />
+                      <span
+                        className="relative grid place-items-center"
+                        style={{ transform: 'translate(-0.5px, -0.5px)' }}
+                      >
+                        <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} />
+                      </span>
+                    </motion.button>
+                  )}
+                </AnimatePresence>
+                <div
+                  className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}
+                >
                 <button
                   onClick={handleWhatToSay}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
@@ -7631,6 +8037,7 @@ Provide only the answer, nothing else.`;
                     </>
                   )}
                 </button>
+                </div>
               </div>
 
               {/* Input Area */}
