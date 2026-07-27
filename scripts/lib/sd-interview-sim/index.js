@@ -163,3 +163,6 @@ module.exports = {
   finalize,
   checkMermaidSyntax,
 };
+
+// Runner seam (fixture + stub). Required after exports so circular load sees helpers.
+Object.assign(module.exports, require('./runner'));
