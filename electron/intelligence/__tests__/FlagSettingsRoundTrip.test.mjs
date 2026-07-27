@@ -107,6 +107,26 @@ const EXPECTED_KEYS = [
   'contextOsEnforceSourceCapabilities',
   'contextOsPropertyValidation',
   'contextOsMultiFamilyEvidenceEnabled',
+  // Answer-relevance semantic guard (campaign2 longsession, 2026-07-19). Was
+  // already missing from this list before Slice 1/2 of the context-rebuild
+  // (found 2026-07-25 while adding turnIdentityV2 below — this file has its
+  // own independent hardcoded key list from IntelligenceFlags.test.mjs's,
+  // so the earlier fix there did not cover this one).
+  'answerRelevanceGuardLive',
+  // TurnIdentity (Phase 6 Slice 1, context-rebuild, 2026-07-25) — dev/test-only.
+  'turnIdentityV2',
+  // PromptComposer (Phase 6 Slice 2, context-rebuild, 2026-07-25) — dev/test-only.
+  'promptComposerV2',
+  // Phase 6 Slice 3 (context-rebuild, 2026-07-25) — dev/test-only.
+  'canonicalTurnManualChat',
+  // Phase 6 Slice 5 (context-rebuild, 2026-07-25) — dev/test-only.
+  'atomicJdProfilePackGeneration',
+  // Phase 6 Slice 7 (context-rebuild, 2026-07-25) — dev/test-only.
+  'assistantClaimsEnforcement',
+  // Phase 6 Slice 4 item 2 follow-up (context-rebuild, 2026-07-26) — dev/test-only.
+  'pronounRegexShadowObservation',
+  // Phase 6 Slice 7 follow-up (context-rebuild, 2026-07-26) — dev/test-only.
+  'modePolicyShadowObservation',
 ];
 
 // All NATIVELY_* env vars these flags read — cleared before/after so a leaked env from the
@@ -194,6 +214,14 @@ const ALL_ENV_VARS = [
   'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES',
   'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION',
   'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE',
+  'NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE',
+  'NATIVELY_TURN_IDENTITY_V2',
+  'NATIVELY_PROMPT_COMPOSER_V2',
+  'NATIVELY_CANONICAL_TURN_MANUAL_CHAT',
+  'NATIVELY_ATOMIC_JD_PROFILE_PACK',
+  'NATIVELY_ASSISTANT_CLAIMS_ENFORCEMENT',
+  'NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION',
+  'NATIVELY_MODE_POLICY_SHADOW_OBSERVATION',
 ];
 
 function clearAllEnv() {

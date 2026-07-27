@@ -831,6 +831,10 @@ interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+
+  // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
+  getAmbientChatEnabled: () => Promise<boolean>;
+  setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;
   getMeetingRetention: () => Promise<'forever' | '7d' | '30d' | 'never'>;
@@ -1924,6 +1928,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
   ) => ipcRenderer.invoke('gemini-chat-stream', message, imagePaths, context, options),
 
+  // Developer-only Vision Model Benchmark. Main-process handlers are not
+  // registered unless NATIVELY_ENABLE_BENCHMARKS=true.
+  visionBenchmarkInfo: () => ipcRenderer.invoke('vision-benchmark:info'),
+  visionBenchmarkPickImage: () => ipcRenderer.invoke('vision-benchmark:pick-image'),
+  visionBenchmarkPreviewPrompt: (input: any) => ipcRenderer.invoke('vision-benchmark:preview-prompt', input),
+  visionBenchmarkRun: (config: any) => ipcRenderer.invoke('vision-benchmark:run', config),
+  visionBenchmarkCancel: () => ipcRenderer.invoke('vision-benchmark:cancel'),
+  visionBenchmarkRate: (input: any) => ipcRenderer.invoke('vision-benchmark:rate', input),
+  visionBenchmarkExport: () => ipcRenderer.invoke('vision-benchmark:export'),
+  visionBenchmarkShowExport: (reportPath: string) => ipcRenderer.invoke('vision-benchmark:show-export', reportPath),
+  onVisionBenchmarkProgress: (callback: (payload: any) => void) => {
+    const subscription = (_: any, payload: any) => callback(payload);
+    ipcRenderer.on('vision-benchmark:progress', subscription);
+    return () => ipcRenderer.removeListener('vision-benchmark:progress', subscription);
+  },
+
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => {
     // meta is an optional 2nd arg carrying { streamId } (audit finding #3). Existing
     // (token)=>… callbacks ignore it; the renderer uses it to drop stale-stream tokens.
@@ -2394,6 +2414,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Verbose / Debug Logging
   getVerboseLogging: () => ipcRenderer.invoke('get-verbose-logging'),
   setVerboseLogging: (enabled: boolean) => ipcRenderer.invoke('set-verbose-logging', enabled),
+
+  // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
+  getAmbientChatEnabled: () => ipcRenderer.invoke('get-ambient-chat-enabled'),
+  setAmbientChatEnabled: (enabled: boolean) => ipcRenderer.invoke('set-ambient-chat-enabled', enabled),
   getCodeVerification: () => ipcRenderer.invoke('get-code-verification'),
   setCodeVerification: (enabled: boolean) => ipcRenderer.invoke('set-code-verification', enabled),
   getMeetingRetention: () => ipcRenderer.invoke('get-meeting-retention'),

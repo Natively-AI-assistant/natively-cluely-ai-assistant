@@ -33,6 +33,15 @@ export interface DynamicActionPayload {
 }
 
 export interface ElectronAPI {
+  visionBenchmarkInfo: () => Promise<any>
+  visionBenchmarkPickImage: () => Promise<{ cancelled: boolean; path?: string }>
+  visionBenchmarkPreviewPrompt: (input: any) => Promise<any>
+  visionBenchmarkRun: (config: any) => Promise<any>
+  visionBenchmarkCancel: () => Promise<{ ok: boolean }>
+  visionBenchmarkRate: (input: any) => Promise<{ ok: boolean; error?: string }>
+  visionBenchmarkExport: () => Promise<{ ok: boolean; path?: string; error?: string }>
+  visionBenchmarkShowExport: (reportPath: string) => Promise<{ ok: boolean; error?: string }>
+  onVisionBenchmarkProgress: (callback: (payload: any) => void) => () => void
   updateContentDimensions: (dimensions: {
     width: number
     height: number
@@ -579,6 +588,11 @@ export interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+
+  // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
+  getAmbientChatEnabled: () => Promise<boolean>;
+  setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
+
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;
   getMeetingRetention: () => Promise<'forever' | '7d' | '30d' | 'never'>;

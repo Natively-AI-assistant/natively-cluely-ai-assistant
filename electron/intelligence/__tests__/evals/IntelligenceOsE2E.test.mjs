@@ -28,10 +28,23 @@ const lecture = new LectureIntelligenceService();
 const diagrams = new DiagramIntelligenceService();
 
 describe('E2E — Profile category', () => {
+  // Updated 2026-07-27 (Intelligence-OS audit): ProfileTreeService's getters
+  // now return the compact JIT PROMPT text a provider must answer from, not
+  // synthesized final prose ("This service no longer returns deterministic
+  // final prose" — see the class's own docstring, ProfileTreeService.ts
+  // ~line 121, post ed827532's full-JIT hardening). Assert against that
+  // real, current text instead of an "I'm Alice..." literal — this is the
+  // actual text that reaches the provider, so it's a stronger check for the
+  // "no Natively leak" invariant than the old assumption was.
   test('Alice: identity + intro + projects + role fit, no Natively leak', () => {
     const tree = new ProfileTreeService(ALICE.profile, ALICE.jd);
     assert.match(tree.getIdentity().answer, /Alice Chen/);
-    assert.match(tree.getInterviewIntro(), /^i'?m alice/i);
+    // Distinguish intro from identity on the literal <question> the rendered
+    // prompt embeds (ProfileJitPromptBuilder inlines it verbatim) — both ground
+    // on the same candidate facts, so asserting the name alone here wouldn't
+    // tell intro and identity apart.
+    assert.match(tree.getInterviewIntro(), /introduce yourself/i);
+    assert.match(tree.getInterviewIntro(), /Alice Chen/);
     assert.match(tree.getProjects(), /RecoEngine/);
     assert.match(tree.getRoleFit(), /BigCo/);
     const blob = [tree.getIdentity().answer, tree.getInterviewIntro(), tree.getProjects()].join(' ');

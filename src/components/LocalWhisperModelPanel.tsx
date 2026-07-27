@@ -76,7 +76,7 @@ function PremiumSelect({ label, value, options, onChange, placeholder }: any) {
             {label && <label className="block text-xs font-medium text-text-secondary mb-1.5 uppercase tracking-wide">{label}</label>}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`w-full group bg-bg-input border border-border-subtle hover:border-border-muted shadow-sm rounded-xl px-3.5 py-2.5 flex items-center justify-between transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] outline-none focus:ring-2 focus:ring-accent-primary/20 ${isOpen ? 'ring-2 ring-accent-primary/20 border-accent-primary/50' : ''}`}
+                className={`w-full group bg-bg-input border border-border-subtle hover:border-border-muted shadow-sm rounded-xl px-3.5 py-2.5 flex items-center justify-between transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] outline-none focus:ring-2 focus:ring-accent-focus ${isOpen ? 'ring-2 ring-accent-focus border-accent-focus' : ''}`}
             >
                 <span className="text-sm text-text-primary font-medium truncate pr-4">{selectedLabel}</span>
                 <ChevronDown size={14} className={`text-text-tertiary transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:text-text-secondary ${isOpen ? 'rotate-180' : ''}`} />
@@ -481,24 +481,28 @@ export function LocalWhisperModelPanel() {
                                             <span className="hidden sm:flex items-center gap-1"><Check size={11} className="opacity-70" /> {model.accuracy}</span>
                                         </div>
 
-                                        {!isAvailable && !isDownloading && (
-                                            <button
-                                                onClick={() => handleDownload(model.id)}
-                                                className="px-2.5 py-1 rounded-lg bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary text-xs font-semibold transition-colors flex items-center gap-1 shrink-0"
-                                            >
-                                                <Download size={12} />
-                                                <span>{model.status === 'error' || model.status === 'interrupted' || model.status === 'cancelled' ? t('Retry') : t('Install')}</span>
-                                            </button>
-                                        )}
-                                        
-                                        {isAvailable && (
-                                            <button
-                                                onClick={() => handleDelete(model.id)}
-                                                className="p-1.5 rounded-lg text-text-tertiary hover:bg-red-500/10 hover:text-red-500 transition-colors shrink-0"
-                                                title={t("Delete model")}
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
+                                        {!isDownloading && (
+                                            <div className="flex-shrink-0 flex items-center gap-2">
+                                                {!isAvailable && (
+                                                    <button
+                                                        onClick={() => handleDownload(model.id)}
+                                                        className="group/btn relative h-[34px] px-4 flex items-center gap-1.5 rounded-[10px] bg-legacy-action-subtle hover:bg-legacy-action-subtle-hover text-legacy-action-bg text-[13px] font-semibold transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.96] shadow-sm"
+                                                    >
+                                                        <Download size={14} className="transition-transform duration-300 group-hover/btn:-translate-y-[2px]" />
+                                                        <span>{model.status === 'error' || model.status === 'interrupted' || model.status === 'cancelled' ? t('Retry') : t('Install')}</span>
+                                                    </button>
+                                                )}
+                                                
+                                                {isAvailable && (
+                                                    <button
+                                                        onClick={() => handleDelete(model.id)}
+                                                        className="p-2 rounded-[10px] text-text-tertiary hover:bg-red-500/10 hover:text-red-500 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.96]"
+                                                        title={t("Delete model")}
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -538,6 +542,12 @@ export function LocalWhisperModelPanel() {
                                         </span>
                                     </div>
                                 )}
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )}
+                                </div>
+>>>>>>> origin/main
                             </div>
                         );
                     })}

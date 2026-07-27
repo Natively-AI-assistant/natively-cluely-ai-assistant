@@ -438,4 +438,12 @@ traces2/
 traces3/
 --help/
 .remember/
+fixtures/
+tools/
+
+# Vision benchmark source documentation + generated reports
+!docs/
+docs/*
+!docs/VISION_MODEL_BENCHMARK.md
+benchmark-results/
 

@@ -35,6 +35,7 @@ import { HARD_SYSTEM_PROMPT } from './llm/prompts';
 import type { ActiveModeInfo } from './llm/modeProfiles';
 import type { WhatToAnswerRequestSnapshot } from './llm/whatToAnswerRequestSnapshot';
 import { resolveCanonicalTurn } from './llm/resolveCanonicalTurn';
+import { mintTurnId } from './llm/turnIdentity';
 import { buildGracefulRetry } from './llm/manualProfileIntelligence';
 import { CodingStreamGate } from './llm/codingStreamGate';
 import { isCodeVerificationEnabled } from './llm/codeVerification/verificationEnabled';
@@ -1123,6 +1124,14 @@ export class IntelligenceEngine extends EventEmitter {
                     } catch { return ''; }
                 })();
             const extractedQuestion = extractLatestQuestion(transcriptTurns);
+            // WTA mint point (Phase 6 Slice 1, "what changes" item 1): one
+            // TurnId for this What-to-Answer invocation, threaded into every
+            // buildTurnContractIfEnabled call this method makes below instead
+            // of letting the kernel mint its own randomUUID() per call.
+            // Independent of `canonicalTurn` (line ~1903 below) — that object
+            // has no turnId field yet (resolveCanonicalTurn.ts, confirmed);
+            // unifying the two is Slice 3's job, not invented here.
+            const _wtaTurnId = mintTurnId();
 
             // [TRACE:LONGCTX] Campaign 2 forensics (temporary, R10: removed before
             // production). Dumps transcript-window size + extraction result at every
@@ -1753,6 +1762,7 @@ export class IntelligenceEngine extends EventEmitter {
                     hasLiveTranscript: true,
                     userExplicitSource: _wtaUserExplicitSource,
                     turnSourceDecision: _wtaTurnSourceDecision,
+                    turnId: _wtaTurnId,
                 });
                 if (_wtaEarlyContract) {
                     // Candidate-profile (NOT JD) gate. A JD-only decision may
@@ -2024,6 +2034,7 @@ export class IntelligenceEngine extends EventEmitter {
                     // turn (LLMHelper.ts senior-review r1 fix).
                     turnSourceDecision: _wtaTurnSourceDecision,
                     allowedExplicitSwitches: snapshotSourceContract?.allowedExplicitSwitches ?? null,
+                    turnId: _wtaTurnId,
                 });
                 if (wtaTurnContract) {
                     const { allowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
@@ -3914,6 +3925,11 @@ export class IntelligenceEngine extends EventEmitter {
         const lastMsg = this.session.getLastAssistantMessage();
         if (!lastMsg) {
             console.warn('[IntelligenceEngine] No lastAssistantMessage found for follow-up');
+            // Emit the normal completion event so a caller with an open streaming
+            // placeholder (e.g. the follow-up hotkey fired before any answer
+            // exists — the default state of a fresh Ambient AI Chat session)
+            // gets it resolved instead of left spinning forever.
+            this.emit('refined_answer', "There's no answer yet to follow up on — ask something first.", intent);
             return null;
         }
 
@@ -4078,6 +4094,13 @@ export class IntelligenceEngine extends EventEmitter {
             if (!context) {
                 console.warn('[IntelligenceEngine] No context available for recap');
                 this.setMode('idle');
+                // Emit the normal completion event (not silence) so a caller that
+                // already opened a streaming placeholder — e.g. the recap hotkey
+                // fired with an empty transcript, trivially reachable in Ambient
+                // AI Chat, which has no meeting transcript at all — gets it
+                // resolved instead of left spinning forever.
+                const fallback = "There's nothing to recap yet — start a conversation and I'll summarize it here.";
+                this.emit('recap', fallback);
                 return null;
             }
 
@@ -4222,6 +4245,11 @@ export class IntelligenceEngine extends EventEmitter {
             if (!context) {
                 console.warn('[IntelligenceEngine] No transcript or recent manual answer available for follow-up questions');
                 this.setMode('idle');
+                // Emit the normal completion event so a caller with an open
+                // streaming placeholder — trivially reachable in Ambient AI
+                // Chat, which has no meeting transcript — gets it resolved
+                // instead of left spinning forever.
+                this.emit('follow_up_questions_update', "There's no conversation yet to suggest questions from — start talking and try again.");
                 return null;
             }
 

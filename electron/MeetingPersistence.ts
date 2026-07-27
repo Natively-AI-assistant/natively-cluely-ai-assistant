@@ -596,8 +596,15 @@ Return ONLY valid JSON (no markdown code blocks):
                 const _hm = HindsightManager.getInstance();
                 const hsCfg = _hm.getHindsightConfig();
                 // Skip a known-down server (cached health) — don't queue a retain that
-                // can't land (2026-06-14 fix).
-                if (isIntelligenceFlagEnabled('hindsightPostMeetingRetain') && hsCfg && _hm.isAvailable()) {
+                // can't land (2026-06-14 fix). Skip a failed-generation summary too
+                // (2026-07-25, RC8-adjacent context-rebuild fix, non-negotiable rule 13):
+                // this condition previously never checked summaryStatus, so a summary
+                // whose generation failed (meetingData.summaryStatus === 'failed',
+                // computed one line above) could still be queued into Hindsight as if
+                // it were a validated, committed fact — see
+                // docs/context-rebuild/02_INGESTION_AND_STORAGE_AUDIT.md §C.1.
+                if (isIntelligenceFlagEnabled('hindsightPostMeetingRetain') && hsCfg && _hm.isAvailable()
+                    && meetingData.summaryStatus !== 'failed') {
                     const ltm = LongTermMemoryService.fromFlags({ hindsight: hsCfg });
                     if (ltm.enabled) {
                         const summaryText = summaryData?.schemaVersion === 3 && Array.isArray(summaryData?.tldr)

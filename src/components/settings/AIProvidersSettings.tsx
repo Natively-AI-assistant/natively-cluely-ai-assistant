@@ -186,7 +186,23 @@ const CodexCliModelField: React.FC<{
     );
 };
 
-export const AIProvidersSettings: React.FC = () => {
+interface AIProvidersSettingsProps {
+    aiResponseLanguage: string;
+    availableAiLanguages: any[];
+    isAiLangDropdownOpen: boolean;
+    onToggleAiLangDropdown: () => void;
+    onSelectAiLanguage: (code: string) => void;
+    aiLangDropdownRef: React.RefObject<HTMLDivElement | null>;
+}
+
+export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
+    aiResponseLanguage,
+    availableAiLanguages,
+    isAiLangDropdownOpen,
+    onToggleAiLangDropdown,
+    onSelectAiLanguage,
+    aiLangDropdownRef,
+}) => {
     const t = useT();
     // --- Navigation Tabs ---
     const [activeTab, setActiveTab] = useState<'cloud' | 'gateways' | 'vision'>('cloud');
@@ -1097,20 +1113,95 @@ export const AIProvidersSettings: React.FC = () => {
             </header>
 
             {/* Default Model for Chat */}
-            <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle flex items-center justify-between">
-                <div>
-                    <label className="block text-xs font-bold text-text-primary uppercase tracking-wide mb-0">{t('Active Model')}</label>
-                    <p className="text-[10px] text-text-secondary">{t('Applies to new chats instantly.')}</p>
+            <div className="space-y-5">
+                <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle flex items-center justify-between">
+                    <div>
+                        <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">{t('Active Model')}</label>
+                        <p className="text-[10px] text-text-secondary">{t('Applies to new chats instantly.')}</p>
+                    </div>
+                    <ModelSelect
+                        value={defaultModel}
+                        options={buildAvailableModelOptions()}
+                        onChange={(val) => {
+                            setDefaultModel(val);
+                            // @ts-ignore - persist as default + update runtime + broadcast
+                            window.electronAPI?.setDefaultModel(val).catch(console.error);
+                        }}
+                    />
                 </div>
-                <ModelSelect
-                    value={defaultModel}
-                    options={buildAvailableModelOptions()}
-                    onChange={(val) => {
-                        setDefaultModel(val);
-                        // @ts-ignore - persist as default + update runtime + broadcast
-                        window.electronAPI?.setDefaultModel(val).catch(console.error);
-                    }}
-                />
+                    className={`bg-bg-item-surface rounded-xl p-5 border border-border-subtle flex items-center justify-between gap-4 ${!canUseFastMode ? 'opacity-50 grayscale' : ''}`}
+                    title={!canUseFastMode ? t("Requires Groq, Natively API, or Codex CLI to be configured") : ""}
+                >
+                    <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                            <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">{t('Fast Response Mode')}</label>
+                            <span className="bg-orange-500/10 text-orange-500 text-[9px] font-bold px-1.5 py-0.5 rounded border border-orange-500/20">NEW</span>
+                        </div>
+                        <p className="text-[10px] text-text-secondary mt-0.5">{t('Routes responses through the fastest available provider (Codex fast mode model, Groq, or Natively). Turn off to use your selected model above.')}</p>
+                        {!canUseFastMode && (
+                            <p className="text-[10px] text-orange-500 mt-0.5 font-medium">{t('Requires Groq, Natively API, or Codex CLI to be configured.')}</p>
+                        )}
+                    </div>
+                    <div
+                        onClick={async () => {
+                            if (!canUseFastMode) {
+                                alert(t("Please configure Groq, Natively API, or Codex CLI first to enable Fast Response Mode."));
+                                return;
+                            }
+                            const newState = !fastResponseMode;
+                            setFastResponseMode(newState);
+                            localStorage.setItem('natively_groq_fast_text', String(newState));
+                            // @ts-ignore
+                            await window.electronAPI?.setGroqFastTextMode(newState);
+                        }}
+                        className={`shrink-0 w-11 h-6 rounded-full relative cursor-pointer transition-colors ${!canUseFastMode ? 'cursor-not-allowed bg-bg-toggle-switch' : fastResponseMode ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                    >
+                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${fastResponseMode ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </div>
+                </div>
+
+                {/* AI Response Language */}
+                <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle flex items-center justify-between gap-4">
+                    <div>
+                        <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">{t('AI Response Language')}</label>
+                        <p className="text-[10px] text-text-secondary mt-0.5">
+                            {aiResponseLanguage === 'auto'
+                                ? t('Mirrors user\'s language automatically')
+                                : t('Language for AI suggestions and notes')
+                            }
+                        </p>
+                    </div>
+                    <div className="relative" ref={aiLangDropdownRef}>
+                        <button
+                            onClick={onToggleAiLangDropdown}
+                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
+                        >
+                            <span className="capitalize text-ellipsis overflow-hidden whitespace-nowrap flex items-center gap-1">
+                                {aiResponseLanguage === 'auto' ? t('Auto') : aiResponseLanguage}
+                            </span>
+                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isAiLangDropdownOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isAiLangDropdownOpen && (
+                            <div className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none max-h-60 overflow-y-auto custom-scrollbar">
+                                {availableAiLanguages.map((option) => (
+                                    <button
+                                        key={option.code}
+                                        onClick={() => onSelectAiLanguage(option.code)}
+                                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${aiResponseLanguage === option.code ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                    >
+                                        {option.code === 'auto' ? (
+                                            <span className="font-medium">{t('Auto')}</span>
+                                        ) : (
+                                            <span className="font-medium">{option.label}</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+>>>>>>> origin/main
             </div>
 
             {/* Segmented Pill Navigation */}
@@ -2108,6 +2199,152 @@ export const AIProvidersSettings: React.FC = () => {
                         >
                             ✕
                         </button>
+                </div>
+
+                {isEditingCustom ? (
+                    <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle animated fadeIn">
+                        <h4 className="text-sm font-bold text-text-primary mb-4">{editingProvider ? t('Edit Provider') : t('New Provider')}</h4>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-1">{t('Provider Name')}</label>
+                                <input
+                                    type="text"
+                                    value={customName}
+                                    onChange={(e) => setCustomName(e.target.value)}
+                                    placeholder={t("My Custom LLM")}
+                                    className="w-full bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-1">{t('cURL Command')}</label>
+                                <div className="relative">
+                                    <textarea
+                                        value={customCurl}
+                                        onChange={(e) => setCustomCurl(e.target.value)}
+                                        placeholder={`curl https://api.openai.com/v1/chat/completions ... "content": "{{TEXT}}"`}
+                                        className="w-full h-32 bg-bg-input border border-border-subtle rounded-lg p-4 text-xs font-mono text-text-primary focus:outline-none focus:border-accent-primary transition-colors resize-none leading-relaxed"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-1">
+                                    {t('Response JSON Path')} <span className="text-text-tertiary normal-case font-normal">{t('(Optional)')}</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={customResponsePath}
+                                    onChange={(e) => setCustomResponsePath(e.target.value)}
+                                    placeholder={t("e.g. choices[0].message.content")}
+                                    className="w-full bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors font-mono"
+                                />
+                                <p className="text-[10px] text-text-secondary mt-1">
+                                    {t('Dot notation path to the answer text in the JSON response. If empty, the full JSON is returned.')}
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-1">
+                                    {t('Screenshot / Vision Support')}
+                                </label>
+                                <select
+                                    value={customVision}
+                                    onChange={(e) => setCustomVision(e.target.value as 'auto' | 'on' | 'off')}
+                                    className="w-full bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
+                                >
+                                    <option value="auto">{t('Auto-detect (recommended)')}</option>
+                                    <option value="on">{t('Always send screenshots')}</option>
+                                    <option value="off">{t('Never send screenshots (text only)')}</option>
+                                </select>
+                                <p className="text-[10px] text-text-secondary mt-1">
+                                    {t('Auto-detect enables vision when your cURL uses')} <code className="font-mono">{"{{IMAGE_BASE64}}"}</code> {t('or an OpenAI-style')} <code className="font-mono">messages</code> {t('body. Choose “Always” only if your endpoint accepts images another way; “Never” keeps this provider out of screenshot analysis.')}
+                                </p>
+                            </div>
+
+                            <div className="bg-bg-elevated/30 rounded-lg overflow-hidden border border-border-subtle mt-4">
+                                <div className="px-4 py-3 bg-bg-elevated/50 border-b border-border-subtle flex items-center justify-between">
+                                    <h5 className="block text-xs font-medium text-text-primary uppercase tracking-wide">
+                                        {t('Configuration Guide')}
+                                    </h5>
+                                </div>
+
+                                <div className="p-4 space-y-4">
+                                    <div>
+                                        <p className="text-xs text-text-secondary mb-2 font-medium">{t('Available Variables')}</p>
+                                        <div className="grid grid-cols-1 gap-2">
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <code className="bg-bg-input px-1.5 py-0.5 rounded text-text-primary font-mono border border-border-subtle">{"{{TEXT}}"}</code>
+                                                <span className="text-text-tertiary">{t('Combined System + Context + Message (Recommended)')}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <code className="bg-bg-input px-1.5 py-0.5 rounded text-text-primary font-mono border border-border-subtle">{"{{IMAGE_BASE64}}"}</code>
+                                                <span className="text-text-tertiary">{t('Screenshot data (if available)')}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <p className="text-xs text-text-secondary mb-2 font-medium">{t('Examples')}</p>
+                                        <div className="space-y-3">
+                                            {/* Ollama Example */}
+                                            <div>
+                                                <div className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1.5">{t('Local (Ollama)')}</div>
+                                                <div className="bg-bg-input p-2.5 rounded-lg border border-border-subtle overflow-x-auto group relative">
+                                                    <code className="font-mono text-[10px] text-text-primary whitespace-pre block">
+                                                        curl http://localhost:11434/api/generate -d '{"{"}"model": "llama3", "prompt": "{`{{TEXT}}`}"{"}"}'
+                                                    </code>
+                                                </div>
+                                            </div>
+
+                                            {/* OpenAI Example */}
+                                            <div>
+                                                <div className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1.5">{t('OpenAI Compatible')}</div>
+                                                <div className="bg-bg-input p-2.5 rounded-lg border border-border-subtle overflow-x-auto">
+                                                    <code className="font-mono text-[10px] text-text-primary whitespace-pre block">
+                                                        {`curl https://api.openai.com/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "{{TEXT}}"}
+    ],
+    "temperature": 0.7
+  }'`}
+                                                    </code>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {curlError && (
+                                <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs">
+                                    <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                                    <span>{curlError}</span>
+                                </div>
+                            )}
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    onClick={() => setIsEditingCustom(false)}
+                                    className="px-4 py-2 rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-bg-input transition-colors"
+                                >
+                                    {t('Cancel')}
+                                </button>
+                                <button
+                                    onClick={handleSaveCustom}
+                                    className="px-4 py-2 rounded-lg text-xs font-medium bg-legacy-action-bg text-legacy-action-fg hover:bg-legacy-action-hover transition-colors flex items-center gap-2"
+                                >
+                                    <Save size={14} /> {t('Save Provider')}
+                                </button>
+                            </div>
+                        </div>
+>>>>>>> origin/main
                     </div>
 
                     {/* Search & Refresh Actions */}
@@ -2237,6 +2474,121 @@ export const AIProvidersSettings: React.FC = () => {
                     </div>
                 </DialogContent>
             </Dialog>
+            {/* Screen Understanding — vision-first routing */}
+            <div className="space-y-5">
+                <div>
+                    <h3 className="text-sm font-bold text-text-primary mb-1">{t('Screen understanding')}</h3>
+                    <p className="text-xs text-text-secondary mb-2">{t('Pick how Natively reads what is on your screen. All paths use the vision-capable AI provider directly; OCR is no longer used.')}</p>
+                </div>
+                <div className="bg-bg-item-surface rounded-xl p-4 border border-border-subtle flex flex-col gap-2">
+                    {([
+                        {
+                            value: 'vision_first' as const,
+                            label: t('Vision first'),
+                            description: t('Recommended. Try every configured vision provider in order; first success wins.'),
+                        },
+                        {
+                            value: 'vision_only' as const,
+                            label: t('Vision only'),
+                            description: t('Stricter. Require a vision-capable provider; never silently drop the screenshot.'),
+                        },
+                        {
+                            value: 'private_vision' as const,
+                            label: t('Private vision (local only)'),
+                            description: t('Use a local vision model (Ollama) only. Never call cloud vision. Clear error if no local provider is configured.'),
+                        },
+                    ]).map(({ value, label, description }) => {
+                        const selected = screenUnderstandingMode === value;
+                        return (
+                            <div
+                                key={value}
+                                onClick={() => {
+                                    setScreenUnderstandingMode(value);
+                                    window.electronAPI?.setScreenUnderstandingMode?.(value);
+                                }}
+                                className={`px-3 py-2 rounded-lg border cursor-pointer transition-colors ${selected ? 'border-accent-primary bg-accent-subtle' : 'border-border-subtle hover:border-border-muted bg-bg-elevated/50'}`}
+                                role="radio"
+                                aria-checked={selected}
+                            >
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="flex flex-col">
+                                        <span className={`text-xs font-semibold ${selected ? 'text-accent-primary' : 'text-text-primary'}`}>{label}</span>
+                                        <span className="text-[11px] text-text-secondary leading-snug mt-0.5">{description}</span>
+                                    </div>
+                                    <div className={`w-4 h-4 rounded-full border-2 shrink-0 ${selected ? 'border-accent-primary bg-accent-primary' : 'border-border-muted'}`} />
+                                </div>
+                            </div>
+                        );
+                    })}
+                    <div className="flex items-center justify-between pt-2 mt-1 border-t border-border-subtle">
+                        <div className="flex flex-col">
+                            <span className="text-xs text-text-primary font-semibold">{t('Technical interview direct vision')}</span>
+                            <span className="text-[11px] text-text-secondary leading-snug mt-0.5">{t('Use the highest-resolution image profile so code text stays sharp in interview mode.')}</span>
+                        </div>
+                        <div
+                            onClick={() => {
+                                const next = !technicalInterviewVisionFirst;
+                                setTechnicalInterviewVisionFirst(next);
+                                const api: any = window.electronAPI;
+                                if (api?.setTechnicalInterviewVisionFirst) {
+                                    api.setTechnicalInterviewVisionFirst(next);
+                                } else {
+                                    window.electronAPI?.setTechnicalInterviewDirectVision?.(next);
+                                }
+                            }}
+                            className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer shrink-0 ${technicalInterviewVisionFirst ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                            role="switch"
+                            aria-checked={technicalInterviewVisionFirst}
+                        >
+                            <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${technicalInterviewVisionFirst ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Cloud Provider Data Scopes — fail-closed cloud share controls */}
+            <div className="space-y-5">
+                <div>
+                    <h3 className="text-sm font-bold text-text-primary mb-1">{t('Cloud provider data scopes')}</h3>
+                    <p className="text-xs text-text-secondary mb-2">{t('Control what data cloud AI providers can access. Disabled types are handled locally for privacy.')}</p>
+                </div>
+                <div className="bg-bg-item-surface rounded-xl p-4 border border-border-subtle flex flex-col gap-2">
+                    {([
+                        { key: 'transcript', label: t('Transcripts') },
+                        { key: 'screenshots', label: t('Screenshots') },
+                        { key: 'reference_files', label: t('Reference files') },
+                        { key: 'profile_history', label: t('Profile history') },
+                        { key: 'embeddings', label: t('Cloud embeddings') },
+                        { key: 'post_call_summary', label: t('Post-call summaries') },
+                    ] as const).map(({ key, label }) => {
+                        const allowed = providerDataScopes[key] !== false;
+                        return (
+                            <div key={key} className="flex items-center justify-between">
+                                <span className="text-xs text-text-secondary">{label}</span>
+                                <div
+                                    onClick={() => {
+                                        const next = { ...providerDataScopes, [key]: !allowed };
+                                        setProviderDataScopes(next);
+                                        window.electronAPI?.setProviderDataScopes?.(next);
+                                    }}
+                                    className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${allowed ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                    role="switch"
+                                    aria-checked={allowed}
+                                    aria-label={`${t('Allow')} ${label} ${t('to cloud providers')}`}
+                                >
+                                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${allowed ? 'translate-x-4' : 'translate-x-0'}`} />
+                                </div>
+                            </div>
+                        );
+                    })}
+                    <div className="flex items-start gap-2 mt-1 pt-3 border-t border-border-subtle">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-tertiary shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                        <p className="text-[11px] text-text-tertiary leading-relaxed">{t('When a data type is disabled, Natively falls back to the best available local model to keep that data on-device.')}</p>
+                    </div>
+                </div>
+            </div>
+            </div>
+>>>>>>> origin/main
         </div>
     );
 };

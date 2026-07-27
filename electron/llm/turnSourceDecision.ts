@@ -243,13 +243,21 @@ function defaultDecision(
       reasonCode: 'transcript_only:default_transcript',
     });
   }
-  // general_mixed + ask_if_ambiguous: no canonical owner. Caller decides.
+  // general_mixed + ask_if_ambiguous: no canonical owner. Caller decides which
+  // evidence to weigh, but whatever is actually available must still be
+  // allowed to reach the prompt — otherwise a jd_fact_answer/profile-grounded
+  // question under a mixed-authority mode gets zero granted evidence and the
+  // model fabricates instead of grounding or refusing (bug fixed 2026-07-26).
+  const allowed: TurnEvidenceKind[] = [];
+  if (availability.hasProfileFacts) allowed.push(...profileKinds());
+  if (availability.hasJobDescription) allowed.push('profile_jd');
   return result({
     authority,
     contract,
     switches,
     outcome: 'default',
     owner: 'unknown',
+    allowed,
     reasonCode: `${authority}:no_explicit_owner`,
   });
 }

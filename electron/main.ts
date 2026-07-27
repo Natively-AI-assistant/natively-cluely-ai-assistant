@@ -1165,6 +1165,7 @@ export class AppState {
   private _ragProcessingInFlight: Set<string> = new Set();
   private _isQuitting: boolean = false;
   private _verboseLogging: boolean = false;
+  private _ambientChatEnabled: boolean = false;
   // Tracks whether STT sample-rate has been applied for the current capture
   // session. Reset on every reconfigureAudio / new pipeline build so the next
   // first-chunk handler reads the freshly-detected native rate.
@@ -1219,7 +1220,8 @@ export class AppState {
     this.disguiseMode = normalizeDisguiseMode(settingsManager.get('disguiseMode'));
     this._verboseLogging = settingsManager.get('verboseLogging') ?? true;
     setVerboseLoggingFlag(this._verboseLogging);
-    console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}`);
+    this._ambientChatEnabled = settingsManager.get('ambientChatEnabled') ?? false;
+    console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}, ambientChatEnabled=${this._ambientChatEnabled}`);
 
     // 2. Initialize Helpers with loaded state
     this.windowHelper = new WindowHelper(this)
@@ -5165,9 +5167,31 @@ export class AppState {
         return;
       }
       try {
-        // Check for audio configuration preference
-        if (metadata?.audio) {
-          await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
+        // Ambient AI Chat (Settings > General): audio capture is the ONLY
+        // thing this setting changes. Everything else about a meeting —
+        // window, persistence, RAG, quick actions — proceeds identically;
+        // skipping reconfigureAudio()/setupSystemAudioPipeline() here just
+        // means systemAudioCapture/microphoneCapture/googleSTT/googleSTT_User
+        // stay whatever they already were (null on a clean boot or after a
+        // prior meeting's teardown), so the start() calls below are already
+        // safe no-ops via `?.` — no other code path needs to know about this.
+        if (!this._ambientChatEnabled) {
+          // Check for audio configuration preference
+          if (metadata?.audio) {
+            await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
+            if (!isCurrentMeeting()) {
+              abortStaleAudioInit();
+              return;
+            }
+            systemCaptureOwnedByInit = this.systemAudioCapture;
+            microphoneCaptureOwnedByInit = this.microphoneCapture;
+            systemSttOwnedByInit = this.googleSTT;
+            userSttOwnedByInit = this.googleSTT_User;
+            ragManagerOwnedByInit = this.ragManager;
+          }
+
+          // LAZY INIT: Ensure pipeline is ready (if not reconfigured above)
+          await this.setupSystemAudioPipeline();
           if (!isCurrentMeeting()) {
             abortStaleAudioInit();
             return;
@@ -5177,34 +5201,24 @@ export class AppState {
           systemSttOwnedByInit = this.googleSTT;
           userSttOwnedByInit = this.googleSTT_User;
           ragManagerOwnedByInit = this.ragManager;
+
+          // Start Microphone FIRST. MicrophoneCapture is lazy-init: start()
+          // constructs the cpal input stream. If we start the CoreAudio system
+          // tap first, cpal can hang inside build_input_stream while the aggregate
+          // device IO proc is already active (observed: logs stop after
+          // `[Microphone] Device: ...`). Keep launch-time mic discipline by
+          // staying lazy, but restore the pre-fix HAL ordering inside meetings.
+          this.microphoneCapture?.start();
+          this.googleSTT_User?.start();
+          userSttStartedByInit = true;
+
+          // Start System Audio after the mic stream has been constructed.
+          this.systemAudioCapture?.start();
+          this.googleSTT?.start();
+          systemSttStartedByInit = true;
+        } else {
+          console.log('[Main] Ambient AI Chat enabled — skipping mic/system audio capture and STT for this session.');
         }
-
-        // LAZY INIT: Ensure pipeline is ready (if not reconfigured above)
-        await this.setupSystemAudioPipeline();
-        if (!isCurrentMeeting()) {
-          abortStaleAudioInit();
-          return;
-        }
-        systemCaptureOwnedByInit = this.systemAudioCapture;
-        microphoneCaptureOwnedByInit = this.microphoneCapture;
-        systemSttOwnedByInit = this.googleSTT;
-        userSttOwnedByInit = this.googleSTT_User;
-        ragManagerOwnedByInit = this.ragManager;
-
-        // Start Microphone FIRST. MicrophoneCapture is lazy-init: start()
-        // constructs the cpal input stream. If we start the CoreAudio system
-        // tap first, cpal can hang inside build_input_stream while the aggregate
-        // device IO proc is already active (observed: logs stop after
-        // `[Microphone] Device: ...`). Keep launch-time mic discipline by
-        // staying lazy, but restore the pre-fix HAL ordering inside meetings.
-        this.microphoneCapture?.start();
-        this.googleSTT_User?.start();
-        userSttStartedByInit = true;
-
-        // Start System Audio after the mic stream has been constructed.
-        this.systemAudioCapture?.start();
-        this.googleSTT?.start();
-        systemSttStartedByInit = true;
 
         // Start JIT RAG live indexing
         if (this.ragManager) {
@@ -6574,6 +6588,16 @@ export class AppState {
     console.log(`[AppState] verboseLogging set to ${enabled}`);
     // Notify all renderer windows so they can start/stop forwarding their console output
     this.broadcast('verbose-logging-changed', enabled);
+  }
+
+  public getAmbientChatEnabled(): boolean {
+    return this._ambientChatEnabled;
+  }
+
+  public setAmbientChatEnabled(enabled: boolean): void {
+    this._ambientChatEnabled = enabled;
+    SettingsManager.getInstance().set('ambientChatEnabled', enabled);
+    console.log(`[AppState] ambientChatEnabled set to ${enabled}`);
   }
 
   public setDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {

@@ -1426,7 +1426,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
                                 To cancel your subscription, log in to the{' '}
                                 <span
                                     onClick={() => openExternal('https://customer.dodopayments.com/')}
-                                    className="text-blue-400 hover:text-blue-300 underline decoration-blue-400/40 underline-offset-[3px] cursor-pointer"
+                                    className="text-accent-primary hover:text-accent-hover underline decoration-accent-border underline-offset-[3px] cursor-pointer"
                                     style={{ transition: `color 180ms ${EASE_OUT_CSS}` }}
                                 >
                                     customer portal

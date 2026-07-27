@@ -197,24 +197,65 @@ const PROFILE_TYPE_SET = new Set([
   'project_followup_answer',
 ]);
 
+// Phase 6 Slice 3 (context-rebuild, 2026-07-25) staleness fix: 'document_list_answer'
+// and 'document_definition_answer' are not (and, per AnswerPlanner.ts's real
+// AnswerType union, never have been in this pass's history) real AnswerType
+// values — dead entries, harmless (Set.has() on them just returns false) but
+// removed since they were found while auditing this set for
+// resolveCanonicalTurn's answerType/questionKind precedence rule.
+// 'document_structure_answer' and 'exact_numeric_answer' are real doc-family
+// AnswerType values that were missing from this set — added.
 const DOC_TYPE_SET = new Set([
   'lecture_answer',
   'definitional_answer',
   'list_answer',
+  'exact_numeric_answer',
+  'document_structure_answer',
   'document_followup_answer',
   'document_absent_fact_refusal',
-  'document_list_answer',
-  'document_definition_answer',
   'source_code_evidence_answer',
   'project_link_answer',
 ]);
 
+// Phase 6 Slice 3 (context-rebuild, 2026-07-25) staleness fix: 'technical_concept_answer'
+// is one of AnswerPlanner.ts's five generic coding/technical answer types
+// (forbiddenLayersFor's own switch case groups it with the other four,
+// Slice 2's RC3 fix) but was missing from this set — found while auditing
+// for resolveCanonicalTurn's precedence rule. Without it, a question like
+// "Explain BFS" (technical_concept_answer, no RE_CODING match in its text)
+// fell through to deriveQuestionKind's regex fallback and landed on
+// 'general' instead of 'coding_question' — silently using
+// probeOrderFor('general') (which probes profile/JD/reference-files first)
+// instead of probeOrderFor('coding_question') for a question type Slice 2
+// just confirmed must NEVER see profile/JD context.
 const CODING_TYPE_SET = new Set([
   'coding_question_answer',
   'dsa_question_answer',
   'system_design_answer',
   'debugging_question_answer',
+  'technical_concept_answer',
 ]);
+
+/**
+ * Exported (Phase 6 Slice 3, context-rebuild, 2026-07-25) for
+ * resolveCanonicalTurn.ts's precedence-rule fallback: when `planTurn` itself
+ * fails/throws, `CanonicalTurn.resolvedQuestionKind` falls back to this
+ * DIRECT answerType→bucket mapping (the same one `deriveQuestionKind` uses
+ * internally when an `answerType` is available) instead of `'general'` by
+ * default. Returns `null` when `answerType` doesn't fall into any of the
+ * four direct buckets (e.g. `sales_answer`, `follow_up_answer`) — those
+ * answer types only resolve a `QuestionKind` via `planTurn`'s regex fallback
+ * over the question TEXT, which this function deliberately does not
+ * reimplement (no question text is required to call it).
+ */
+export function mapAnswerTypeToQuestionKind(answerType: string | null | undefined): QuestionKind | null {
+  if (!answerType) return null;
+  if (PROFILE_TYPE_SET.has(answerType)) return 'profile_question';
+  if (JD_TYPE_SET.has(answerType)) return 'jd_question';
+  if (CODING_TYPE_SET.has(answerType)) return 'coding_question';
+  if (DOC_TYPE_SET.has(answerType)) return 'doc_question';
+  return null;
+}
 
 // Lightweight regex fallback used when `answerType` is not provided. These
 // MUST stay in sync with AnswerPlanner's IDENTITY_PATTERNS / JD_*_CUE_RE so

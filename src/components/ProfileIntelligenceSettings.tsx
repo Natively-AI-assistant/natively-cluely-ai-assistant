@@ -28,11 +28,19 @@ const PI_CSS = `
         --pi-input-border: rgba(255,255,255,0.10);
         --pi-danger: #ef4444;
         --pi-danger-bg: rgba(239,68,68,0.12);
-        --pi-accent: #818cf8;
+        --pi-accent: var(--orchid-300);
+        --pi-on-accent: var(--orchid-on-accent-dark);
+        --pi-accent-subtle: color-mix(in srgb, var(--orchid-300) 8%, transparent);
+        --pi-accent-border: color-mix(in srgb, var(--orchid-300) 20%, transparent);
+        --pi-accent-icon: var(--orchid-400);
+        --pi-badge-text: var(--pi-accent);
+        --pi-badge-border: var(--pi-accent-border);
+        --pi-cta-accent-text: var(--orchid-400);
+        --pi-cta-accent-border: color-mix(in srgb, var(--orchid-300) 30%, transparent);
         --pi-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
         --pi-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-        --pi-input-border-focus: rgba(129,140,248,0.40);
-        --pi-input-bg-focus: rgba(129,140,248,0.04);
+        --pi-input-border-focus: color-mix(in srgb, var(--orchid-300) 40%, transparent);
+        --pi-input-bg-focus: color-mix(in srgb, var(--orchid-300) 4%, transparent);
         --pi-cta-bg: #ffffff;
         --pi-cta-text: #141414;
         --pi-cta-ring: rgba(0,0,0,0.08);
@@ -59,9 +67,17 @@ const PI_CSS = `
         --pi-item-hover: rgba(0,0,0,0.03);
         --pi-item-active: rgba(0,0,0,0.06);
         --pi-input-border: rgba(0,0,0,0.10);
-        --pi-accent: #6366f1;
-        --pi-input-border-focus: rgba(99,102,241,0.40);
-        --pi-input-bg-focus: rgba(99,102,241,0.04);
+        --pi-accent: var(--orchid-600);
+        --pi-on-accent: var(--orchid-on-accent-light);
+        --pi-accent-subtle: color-mix(in srgb, var(--orchid-600) 8%, transparent);
+        --pi-accent-border: color-mix(in srgb, var(--orchid-600) 16%, transparent);
+        --pi-accent-icon: var(--orchid-700);
+        --pi-badge-text: var(--pi-accent);
+        --pi-badge-border: var(--pi-accent-border);
+        --pi-cta-accent-text: var(--orchid-700);
+        --pi-cta-accent-border: color-mix(in srgb, var(--orchid-600) 24%, transparent);
+        --pi-input-border-focus: color-mix(in srgb, var(--orchid-600) 40%, transparent);
+        --pi-input-bg-focus: color-mix(in srgb, var(--orchid-600) 4%, transparent);
         --pi-cta-bg: #000000;
         --pi-cta-text: #ffffff;
         --pi-cta-ring: rgba(255,255,255,0.10);
@@ -172,10 +188,10 @@ const PI_CSS = `
     .pi-content-box:focus-within {
         border-color: var(--pi-input-border-focus);
         background: var(--pi-input-bg-focus);
-        box-shadow: 0 0 0 3px rgba(129,140,248,0.12);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--orchid-300) 12%, transparent);
     }
     .pi-root[data-theme='light'] .pi-content-box:focus-within {
-        box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--orchid-600) 12%, transparent);
     }
 
     /* ── Textarea / Input ── */
@@ -275,7 +291,7 @@ const PI_CSS = `
     .pi-pill-btn:hover:not(:disabled) { background: var(--pi-btn-bg-hover); color: var(--pi-primary); }
     .pi-pill-btn:active:not(:disabled) { transform: scale(0.97); }
     .pi-pill-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .pi-pill-btn--primary { background: var(--pi-accent); color: #fff; border-color: transparent; }
+    .pi-pill-btn--primary { background: var(--pi-accent); color: var(--pi-on-accent); border-color: transparent; }
     .pi-pill-btn--primary:hover:not(:disabled) { filter: brightness(1.1); }
     .pi-pill-btn--danger { color: var(--pi-danger); }
     .pi-pill-btn--danger:hover:not(:disabled) { background: var(--pi-danger-bg); color: var(--pi-danger); border-color: var(--pi-danger-bg); }
@@ -1123,8 +1139,8 @@ export function ProfileIntelligenceSettings({
                     the user gets a clear next step. */}
                 {!hasProfile && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(129,140,248,0.08)', border: '1px solid rgba(129,140,248,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <FileText size={18} style={{ color: 'var(--pi-accent)' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-accent-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <FileText size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No resume yet</div>
@@ -1408,8 +1424,8 @@ export function ProfileIntelligenceSettings({
                     (Cover Letter parity), but the user gets a clear next step. */}
                 {!hasJD && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Building2 size={18} style={{ color: '#D9A7E8' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No job description yet</div>
@@ -1424,8 +1440,8 @@ export function ProfileIntelligenceSettings({
                     stays, the missing-name card explains the gap. */}
                 {hasJD && !companyName && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Building2 size={18} style={{ color: '#D9A7E8' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Company name not detected</div>
@@ -1444,8 +1460,8 @@ export function ProfileIntelligenceSettings({
                 )}
                 {!companyDossier && !companyResearching && companyName && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Building2 size={18} style={{ color: '#D9A7E8' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Ready to research</div>
@@ -1455,7 +1471,7 @@ export function ProfileIntelligenceSettings({
                         </div>
                         <button
                             className="pi-pill-btn pi-press"
-                            style={{ color: '#D9A7E8', borderColor: 'rgba(217,167,232,0.25)', background: 'rgba(217,167,232,0.08)', fontWeight: 600, padding: '8px 20px' }}
+                            style={{ color: 'var(--pi-cta-accent-text)', borderColor: 'var(--pi-cta-accent-border)', background: 'var(--pi-accent-subtle)', fontWeight: 600, padding: '8px 20px' }}
                             onClick={doCompanyResearch}
                         >
                             Research Now
@@ -1585,7 +1601,7 @@ export function ProfileIntelligenceSettings({
 
                         {/* Source-of-truth disclaimer — green "Scraped / Live Web Data" when
                             Tavily ran, amber "LLM-Generated / Training Data Only" otherwise. */}
-                        <div style={{ border: '1px solid rgba(217,167,232,0.14)', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ border: '1px solid var(--pi-badge-border)', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
                             <div className="pi-skeleton" style={{ height: 11, width: 11, borderRadius: '50%', flexShrink: 0 }} />
                             <div className="pi-skeleton" style={{ height: 9, width: '70%', borderRadius: 3 }} />
                         </div>
@@ -1728,7 +1744,7 @@ export function ProfileIntelligenceSettings({
                                 <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Core Values</div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                     {companyDossier.core_values.map((v: string, i: number) => (
-                                        <span key={i} style={{ fontSize: 11, color: '#D9A7E8', padding: '3px 10px', borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.18)' }}>{v}</span>
+                                        <span key={i} style={{ fontSize: 11, color: 'var(--pi-badge-text)', padding: '3px 10px', borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)' }}>{v}</span>
                                     ))}
                                 </div>
                             </div>
@@ -1878,9 +1894,9 @@ export function ProfileIntelligenceSettings({
                     Each placeholder rect breathes; the card shell stays solid. */}
                 {showSkeleton && (
                     <div>
-                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(96,165,250,0.18)', background: 'rgba(96,165,250,0.04)' }}>
+                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--pi-badge-border)', background: 'var(--pi-accent-subtle)' }}>
                             {/* Header row */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid rgba(96,165,250,0.18)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid var(--pi-badge-border)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                     <div className="pi-skeleton" style={{ height: 12, width: 50, borderRadius: 20 }} />
                                     <div className="pi-skeleton" style={{ height: 13, width: 110, borderRadius: 3 }} />
@@ -1905,8 +1921,8 @@ export function ProfileIntelligenceSettings({
                 {/* Empty: no resume yet — always wins over any cached letter */}
                 {!hasResume && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Mail size={18} style={{ color: '#60a5fa' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Mail size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No resume yet</div>
@@ -1920,8 +1936,8 @@ export function ProfileIntelligenceSettings({
                 {/* Empty: resume present, no active JD yet */}
                 {hasResume && !hasJD && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Mail size={18} style={{ color: '#60a5fa' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Mail size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No job description yet</div>
@@ -1935,8 +1951,8 @@ export function ProfileIntelligenceSettings({
                 {/* Empty: resume + JD present, no letter generated yet */}
                 {showGenerateCTA && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Mail size={18} style={{ color: '#60a5fa' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Mail size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Ready to write</div>
@@ -1946,7 +1962,7 @@ export function ProfileIntelligenceSettings({
                         </div>
                         <button
                             className="pi-pill-btn pi-press"
-                            style={{ color: '#60a5fa', borderColor: 'rgba(96,165,250,0.25)', background: 'rgba(96,165,250,0.08)', fontWeight: 600, padding: '8px 20px' }}
+                            style={{ color: 'var(--pi-cta-accent-text)', borderColor: 'var(--pi-cta-accent-border)', background: 'var(--pi-accent-subtle)', fontWeight: 600, padding: '8px 20px' }}
                             onClick={() => doGenerate(false)}
                         >
                             Generate Letter
@@ -1959,11 +1975,11 @@ export function ProfileIntelligenceSettings({
                 {showOutput && (
                     <div style={{ opacity: coverLetterGenerating ? 0.45 : 1, transition: 'opacity 0.3s', pointerEvents: coverLetterGenerating ? 'none' : 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {/* Single continuous letter card — prose, not discrete step-cards like negotiation */}
-                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(96,165,250,0.18)', background: 'rgba(96,165,250,0.04)' }}>
+                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--pi-badge-border)', background: 'var(--pi-accent-subtle)' }}>
                             {/* Card header */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid rgba(96,165,250,0.18)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid var(--pi-badge-border)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', color: '#60a5fa', background: 'rgba(96,165,250,0.12)', padding: '2px 7px', borderRadius: 20 }}>
+                                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', color: 'var(--pi-badge-text)', background: 'var(--pi-accent-subtle)', padding: '2px 7px', borderRadius: 20 }}>
                                         COVER
                                     </span>
                                     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)' }}>Tailored Letter</span>

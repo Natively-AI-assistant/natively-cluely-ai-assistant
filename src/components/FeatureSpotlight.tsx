@@ -335,7 +335,7 @@ export const FeatureSpotlight: React.FC = () => {
                                                     ) : (
                                                         <Bell
                                                             size={14}
-                                                            className={`${isInterested ? 'text-blue-400' : 'opacity-80'}`}
+                                                            className={`${isInterested ? 'text-accent-primary' : 'opacity-80'}`}
                                                             fill={isInterested ? "currentColor" : "none"}
                                                         />
                                                     )}

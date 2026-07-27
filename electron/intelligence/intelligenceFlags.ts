@@ -189,7 +189,111 @@ export type IntelligenceFlagKey =
   // its verdict is still traced (`answer_relevance_discard`/`_would_fire`)
   // so real production score distributions can be collected before this is
   // re-enabled — mirrors the `ragConfidenceGate` observe-only precedent.
-  | 'answerRelevanceGuardLive';
+  | 'answerRelevanceGuardLive'
+  // ── TurnIdentity (Phase 6 Slice 1, context-rebuild) ──────────────────────
+  // Formal (turnId, attemptId) identity (electron/llm/turnIdentity.ts)
+  // replacing the ad hoc per-sender streamId supersession check with a
+  // shared predicate + a SessionTracker-level write guard. Genuinely new
+  // mechanism replacing a working production system, so it ships dev/test-
+  // only first (pattern 1, mirrors ragConfidenceGate/okfHybridRetrieval's
+  // rollout precedent) — both identity schemes run in parallel until a
+  // documented promotion decision citing real telemetry (see
+  // contextOsEnabled's 2026-07-18 promotion comment for the bar this must
+  // clear: a live-Electron trace campaign, not a unit-test pass alone).
+  | 'turnIdentityV2'
+  // ── PromptComposer (Phase 6 Slice 2, context-rebuild) ────────────────────
+  // electron/llm/promptComposer.ts's composePrompt() — the one assembly
+  // point replacing the ad hoc CONTEXT/USER-QUESTION concatenation
+  // scattered across LLMHelper.ts, and the RC1 answerPolicy short-circuit
+  // (no provider call for refuse_insufficient_evidence/ask_clarification).
+  // This flag exists but has NO consuming call site yet as of this pass —
+  // composePrompt() is built and tested standalone; wiring it into the live
+  // manual-chat generation path and retiring E20 (the assistant-meta
+  // refusal detector it subsumes) is deliberately deferred, since this
+  // codebase's own established bar for promoting a replacement to a
+  // load-bearing generation path is a documented live-Electron trace
+  // campaign (contextOsEnabled's 2026-07-18 precedent), not a green unit-
+  // test suite alone — see 05_MIGRATION_PLAN.md's Slice 2 STATUS note.
+  // Pattern 1 (dev/test-only default) exactly like turnIdentityV2 above.
+  | 'promptComposerV2'
+  // ── CanonicalTurn on manual chat (Phase 6 Slice 3, context-rebuild) ──────
+  // resolveCanonicalTurn (electron/llm/resolveCanonicalTurn.ts) called from
+  // ipcHandlers.ts's manual-chat handler for the FIRST TIME — a genuinely
+  // new classifier on a surface it has never run on at all (the WTA surface
+  // is the only one that calls it today, "observe-only"). SHADOW-ONLY: runs
+  // alongside the existing legacy classification, logging a divergence
+  // trace when they'd disagree; the live answer/generation path continues
+  // to use the legacy classification exclusively. This is the plan's own
+  // named "riskiest slice" — promotion requires the benchmark-corpus
+  // regression test passing across MULTIPLE live-Electron runs (not one),
+  // per 05_MIGRATION_PLAN.md's Slice 3 section, since this is the surface
+  // every one of Phase 0's 10 named failures came from. Pattern 1
+  // (dev/test-only default).
+  | 'canonicalTurnManualChat'
+  // ── Atomic JD profile-pack generation (Phase 6 Slice 5, context-rebuild) ─
+  // KnowledgeOrchestrator.ingestDocument's JD branch fires
+  // aotPipeline.runForJD(...).then(...) without awaiting it, then returns
+  // {success:true} immediately — a real race (Ingestion Audit §A.6.3): the
+  // IPC caller sees success before the JD OKF profile pack (gap analysis,
+  // negotiation script, mock questions, culture mapping, then
+  // _generateProfileOkfPack('jd')) has been generated. Closing this fully
+  // means awaiting the AOT pipeline before ingestDocument returns for a JD —
+  // a genuine, user-facing slower upload-ack (AOT runs real LLM calls), not
+  // a free fix like the resume branch's setImmediate removal. Ships dev/
+  // test-only first (pattern 1) so the race-free sequence is exercised and
+  // tested without changing production upload latency until a documented
+  // promotion decision. See 05_MIGRATION_PLAN.md's Slice 5 STATUS note.
+  | 'atomicJdProfilePackGeneration'
+  // ── Assistant-claims precedence enforcement (Phase 6 Slice 7, context-
+  // rebuild) ────────────────────────────────────────────────────────────
+  // RC8: getVerifiedAssistantClaims/markAssistantClaimContradicted (and
+  // assistantClaims.ts's claimReusableAsEvidence/claimContradictedByEvidence)
+  // are write-only today — zero read-side production callers. This flag
+  // gates the new checkAssistantClaimsPrecedence read-side check
+  // (assistantClaimsPrecedenceCheck.ts), built and tested standalone this
+  // pass but NOT wired into any live generation path (see that file's
+  // header for why). Genuinely new enforcement that could, in principle,
+  // incorrectly block a legitimate answer if a claim was mis-classified
+  // contradicted upstream — dev/test-only default (pattern 1) rather than
+  // an already-resolved promote-everywhere flag. This flag is also the
+  // removal condition for A4g/D17g's WRAP disposition in
+  // 05_COMPONENT_DISPOSITION.md.
+  | 'assistantClaimsEnforcement'
+  // ── Pronoun-regex shadow observation (Phase 6 Slice 4 item 2, follow-up
+  // pass, context-rebuild) ──────────────────────────────────────────────
+  // KnowledgeOrchestrator.processQuestion's pronoun-presence gate
+  // (isGenericKnowledgeQuestion/CANDIDATE_FRAMING_REGEX) is the confirmed
+  // root cause (RC2, live-reproduced 4/4) of a 3-way retrieval fork for
+  // the same answerType/contractHash. Retiring it as the live decision-
+  // maker is a genuinely consequential deletion of a currently-LIVE gate
+  // with real user traffic — correctly deferred pending a live-trace
+  // campaign per 05_MIGRATION_PLAN.md's Slice 4 STATUS note. This flag
+  // gates a SHADOW-ONLY observation (mirrors the CanonicalTurnV2 shadow-
+  // wiring precedent in ipcHandlers.ts for Slice 3): on every real
+  // processQuestion() call, additionally compute isLayerAllowed(plan,
+  // 'resume') and log agreement/divergence against the legacy gate's own
+  // decision — a pure side-channel trace, zero change to
+  // processQuestion's return value. Exists so a future promotion decision
+  // is evidence-based (real traffic, not this pass's synthetic corpus).
+  // Pattern 1 (dev/test-only default).
+  | 'pronounRegexShadowObservation'
+  // ── ModePolicy shadow observation (Phase 6 Slice 7 follow-up, context-
+  // rebuild) ────────────────────────────────────────────────────────────
+  // electron/services/modePolicy.ts's resolveModePolicy() is a NEW, pure,
+  // unwired projection (built standalone, no prior call sites). This flag
+  // gates a SHADOW-ONLY comparison in ipcHandlers.ts's manual-chat handler
+  // (right next to the existing contextRouterV2 shadow block, which
+  // already has both `manualActiveMode` (ActiveModeInfo) and
+  // `_activeSourceContract` (ModeSourceContract) in scope): compute
+  // ModePolicy.documentGroundedCustomModeActive from the same inputs and
+  // log agreement/divergence against the LIVE
+  // `manualActiveMode.documentGroundedCustomModeActive` field the doc-
+  // grounded-strip guard (~line 2049) already reads today. Pure
+  // side-channel log, zero change to any return value or downstream
+  // behavior. Exists so any future consumer of `ModePolicy` inherits
+  // real-traffic evidence instead of a synthetic-fixture-only history.
+  // Pattern 1 (dev/test-only default).
+  | 'modePolicyShadowObservation';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -390,6 +494,13 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // silently exercised by every dev-context test run the way the Context OS
   // rollout flags intentionally are.
   answerRelevanceGuardLive: { env: 'NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE', setting: 'answerRelevanceGuardLiveEnabled', default: false },
+  turnIdentityV2: { env: 'NATIVELY_TURN_IDENTITY_V2', setting: 'turnIdentityV2Enabled', default: isInternalDevTestContext },
+  promptComposerV2: { env: 'NATIVELY_PROMPT_COMPOSER_V2', setting: 'promptComposerV2Enabled', default: isInternalDevTestContext },
+  canonicalTurnManualChat: { env: 'NATIVELY_CANONICAL_TURN_MANUAL_CHAT', setting: 'canonicalTurnManualChatEnabled', default: isInternalDevTestContext },
+  atomicJdProfilePackGeneration: { env: 'NATIVELY_ATOMIC_JD_PROFILE_PACK', setting: 'atomicJdProfilePackGenerationEnabled', default: isInternalDevTestContext },
+  assistantClaimsEnforcement: { env: 'NATIVELY_ASSISTANT_CLAIMS_ENFORCEMENT', setting: 'assistantClaimsEnforcementEnabled', default: isInternalDevTestContext },
+  pronounRegexShadowObservation: { env: 'NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION', setting: 'pronounRegexShadowObservationEnabled', default: isInternalDevTestContext },
+  modePolicyShadowObservation: { env: 'NATIVELY_MODE_POLICY_SHADOW_OBSERVATION', setting: 'modePolicyShadowObservationEnabled', default: isInternalDevTestContext },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);

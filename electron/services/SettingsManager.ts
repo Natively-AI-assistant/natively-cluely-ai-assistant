@@ -9,6 +9,11 @@ export interface AppSettings {
     isUndetectable?: boolean;
     disguiseMode?: 'terminal' | 'settings' | 'activity' | 'none';
     verboseLogging?: boolean;
+    // Lets the user summon the overlay as a standalone AI chatbox (no audio
+    // capture, no STT, no meeting record) via the toggle-visibility hotkey
+    // while idle. Off by default — the hotkey's existing behavior is unchanged
+    // until the user opts in from Settings > General.
+    ambientChatEnabled?: boolean;
     actionButtonMode?: 'recap' | 'brainstorm';
     groqFastTextMode?: boolean;
     codexCliEnabled?: boolean;

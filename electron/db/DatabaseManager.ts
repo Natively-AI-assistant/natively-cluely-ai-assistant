@@ -1392,6 +1392,26 @@ export class DatabaseManager {
         }
     }
 
+    /**
+     * Phase 6 Slice 7 (context-rebuild, 2026-07-25, RC8 precedence
+     * enforcement): the read-side counterpart to getVerifiedAssistantClaims
+     * needed to check whether a draft answer restates a claim already
+     * marked contradicted from an earlier turn.
+     */
+    public getContradictedAssistantClaims(limit = 50): any[] {
+        if (!this.db) return [];
+        try {
+            return this.db.prepare(`
+                SELECT * FROM assistant_claims
+                WHERE validation_status = 'contradicted'
+                ORDER BY created_at DESC LIMIT ?
+            `).all(limit);
+        } catch (e) {
+            console.error('[DatabaseManager] getContradictedAssistantClaims failed:', e);
+            return [];
+        }
+    }
+
     /** Mark a stored claim contradicted by newer evidence (never deleted — audit trail). */
     public markAssistantClaimContradicted(claimId: string, contradictedByClaimId?: string | null): void {
         if (!this.db) return;

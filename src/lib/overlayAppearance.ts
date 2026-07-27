@@ -1,4 +1,5 @@
 import type React from 'react';
+import { VIVID_DARK_CODE_BG_RGB } from './codeTheme';
 
 export type OverlayTheme = 'light' | 'dark';
 
@@ -86,12 +87,12 @@ export const getOverlayAppearance = (opacity: number, theme: OverlayTheme): Over
                 backgroundColor: `rgba(248, 251, 255, ${scale(0.055, 0.88, surfaceStrength)})`,
             },
             codeBlockStyle: {
-                backgroundColor: `rgba(245, 249, 255, ${scale(0.06, 0.94, surfaceStrength)})`,
-                borderColor: `rgba(30, 64, 175, ${scale(0.07, 0.15, surfaceStrength)})`,
+                backgroundColor: `rgba(249, 250, 251, ${scale(0.06, 0.94, surfaceStrength)})`,
+                borderColor: `rgba(0, 0, 0, ${scale(0.07, 0.15, surfaceStrength)})`,
             },
             codeHeaderStyle: {
-                backgroundColor: `rgba(236, 244, 255, ${scale(0.08, 0.96, surfaceStrength)})`,
-                borderBottomColor: `rgba(30, 64, 175, ${scale(0.08, 0.16, surfaceStrength)})`,
+                backgroundColor: `rgba(243, 244, 246, ${scale(0.08, 0.96, surfaceStrength)})`,
+                borderBottomColor: `rgba(0, 0, 0, ${scale(0.08, 0.16, surfaceStrength)})`,
             },
             dividerStyle: {
                 backgroundColor: `rgba(30, 64, 175, ${scale(0.08, 0.16, surfaceStrength)})`,
@@ -140,11 +141,11 @@ export const getOverlayAppearance = (opacity: number, theme: OverlayTheme): Over
             backgroundColor: `rgba(54, 59, 71, ${scale(0.2, 0.92, surfaceStrength)})`,
         },
         codeBlockStyle: {
-            backgroundColor: `rgba(35, 40, 50, ${scale(0.24, 0.96, surfaceStrength)})`,
+            backgroundColor: `rgba(${VIVID_DARK_CODE_BG_RGB}, ${scale(0.30, 0.97, surfaceStrength)})`,
             borderColor: `rgba(255, 255, 255, ${scale(0.05, 0.1, surfaceStrength)})`,
         },
         codeHeaderStyle: {
-            backgroundColor: `rgba(48, 53, 64, ${scale(0.22, 0.94, surfaceStrength)})`,
+            backgroundColor: `rgba(45, 45, 45, ${scale(0.22, 0.94, surfaceStrength)})`,
             borderBottomColor: `rgba(255, 255, 255, ${scale(0.05, 0.1, surfaceStrength)})`,
         },
         dividerStyle: {

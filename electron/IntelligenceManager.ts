@@ -10,6 +10,7 @@
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
 import { SessionTracker, type ConversationSurface } from './SessionTracker';
+import type { TurnIdentity } from './llm/turnIdentity';
 import { IntelligenceEngine } from './IntelligenceEngine';
 import { MeetingPersistence } from './MeetingPersistence';
 import { ScreenContext } from './services/screen/ScreenContextService';
@@ -116,8 +117,9 @@ export class IntelligenceManager extends EventEmitter {
         text: string,
         writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean },
         surface?: ConversationSurface,
-    ): void {
-        this.session.addAssistantMessage(text, writeDecision, surface);
+        identity?: TurnIdentity,
+    ): boolean {
+        return this.session.addAssistantMessage(text, writeDecision, surface, identity);
     }
 
     getContext(lastSeconds: number = 120) {

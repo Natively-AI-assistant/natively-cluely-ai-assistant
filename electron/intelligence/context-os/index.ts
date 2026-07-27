@@ -65,9 +65,7 @@ export {
   buildTurnContractForSurface,
   buildTurnContractIfEnabled,
   contractBlocks,
-  assertNoAuthorityContradiction,
   type BuildTurnContractForSurfaceInput,
-  type AuthorityContradictionCheck,
 } from './integration';
 export {
   extractCandidateClaims,
@@ -78,6 +76,11 @@ export {
   type AssistantClaim,
   type ClaimValidationStatus,
 } from './assistantClaims';
+export {
+  checkAssistantClaimsPrecedence,
+  type ContradictedClaimRow,
+  type AssistantClaimsPrecedenceVerdict,
+} from './assistantClaimsPrecedenceCheck';
 export {
   ProfileEvidenceService,
   type ProfileEvidenceServiceInput,

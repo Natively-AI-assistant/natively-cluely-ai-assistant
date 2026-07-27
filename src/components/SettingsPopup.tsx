@@ -256,7 +256,7 @@ const SettingsPopup = () => {
                 <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group ${!(hasStoredKey.groq || hasStoredKey.natively) ? 'opacity-50 grayscale cursor-not-allowed' : `${itemHoverClass} ${glassRowClass} cursor-default`}`} title={!(hasStoredKey.groq || hasStoredKey.natively) ? "Requires Groq or Natively API key" : ""}>
                     <div className="flex items-center gap-2.5">
                         <Zap
-                            className={`w-4 h-4 transition-colors ${useGroqFastText ? 'text-orange-500' : inactiveIconColorClass}`}
+                            className={`w-4 h-4 transition-colors ${useGroqFastText ? 'text-accent-primary' : inactiveIconColorClass}`}
                             fill={useGroqFastText ? "currentColor" : "none"}
                         />
                         <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Fast Response</span>
@@ -266,7 +266,7 @@ const SettingsPopup = () => {
                             if (!(hasStoredKey.groq || hasStoredKey.natively)) return;
                             setUseGroqFastText(!useGroqFastText);
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${useGroqFastText ? 'bg-orange-500 shadow-[0_2px_10px_rgba(249,115,22,0.3)]' : defaultToggleTrackClass}`}
+                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${useGroqFastText ? 'bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]' : defaultToggleTrackClass}`}
                         disabled={!(hasStoredKey.groq || hasStoredKey.natively)}
                     >
                         <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${useGroqFastText ? 'translate-x-[12px]' : 'translate-x-0'}`} />
@@ -277,7 +277,7 @@ const SettingsPopup = () => {
                 <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group cursor-default ${itemHoverClass} ${glassRowClass}`}>
                     <div className="flex items-center gap-2.5">
                         <MessageSquare
-                            className={`w-3.5 h-3.5 transition-colors ${showTranscript ? 'text-emerald-400' : inactiveIconColorClass}`}
+                            className={`w-3.5 h-3.5 transition-colors ${showTranscript ? 'text-accent-primary' : inactiveIconColorClass}`}
                             fill={showTranscript ? "currentColor" : "none"}
                         />
                         <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Transcript</span>
@@ -290,7 +290,7 @@ const SettingsPopup = () => {
                             // Dispatch event for same-window listeners
                             window.dispatchEvent(new Event('storage'));
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${showTranscript ? 'bg-emerald-500 shadow-[0_2px_10px_rgba(16,185,129,0.3)]' : defaultToggleTrackClass}`}
+                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${showTranscript ? 'bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]' : defaultToggleTrackClass}`}
                     >
                         <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${showTranscript ? 'translate-x-[12px]' : 'translate-x-0'}`} />
                     </button>
@@ -307,7 +307,7 @@ const SettingsPopup = () => {
                             strokeWidth="2"
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            className={`w-3.5 h-3.5 transition-colors ${actionButtonMode === 'brainstorm' ? 'text-violet-400' : inactiveIconColorClass}`}
+                            className={`w-3.5 h-3.5 transition-colors ${actionButtonMode === 'brainstorm' ? 'text-accent-primary' : inactiveIconColorClass}`}
                         >
                             <line x1="6" y1="3" x2="6" y2="15" />
                             <circle cx="18" cy="6" r="3" />
@@ -325,7 +325,7 @@ const SettingsPopup = () => {
                                 await window.electronAPI?.setActionButtonMode?.(newMode);
                             } catch (e) { console.error(e); }
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${actionButtonMode === 'brainstorm' ? 'bg-violet-500 shadow-[0_2px_10px_rgba(139,92,246,0.3)]' : defaultToggleTrackClass}`}
+                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${actionButtonMode === 'brainstorm' ? 'bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]' : defaultToggleTrackClass}`}
                     >
                         <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${actionButtonMode === 'brainstorm' ? 'translate-x-[12px]' : 'translate-x-0'}`} />
                     </button>

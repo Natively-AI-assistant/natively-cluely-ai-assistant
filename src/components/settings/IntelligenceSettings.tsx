@@ -836,7 +836,7 @@ export const IntelligenceSettings: React.FC = () => {
                 type="button"
                 onClick={onSaveHindsight}
                 disabled={saving}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-accent-primary px-3 py-1.5 text-xs font-medium text-white transition-[opacity,transform] active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 motion-reduce:active:scale-100"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover px-3 py-1.5 text-xs font-medium text-legacy-action-fg transition-[opacity,transform] active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 motion-reduce:active:scale-100"
               >
                 <AnimatePresence mode="wait" initial={false}>
                   {saving ? (
@@ -993,7 +993,7 @@ export const IntelligenceSettings: React.FC = () => {
             type="button"
             disabled={tryBusy !== null || !flagOn('inMeetingSearchV2') || !searchQ.trim()}
             onClick={() => runTry('search', () => window.electronAPI.searchInMeeting?.(searchQ.trim()))}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-accent-primary px-3 py-1.5 text-xs font-medium text-white transition-[opacity,transform] active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 motion-reduce:active:scale-100"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover px-3 py-1.5 text-xs font-medium text-legacy-action-fg transition-[opacity,transform] active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 motion-reduce:active:scale-100"
           >
             {tryBusy === 'search' ? <Loader2 size={14} className="animate-spin" /> : null} {t('Search')}
           </button>

@@ -1591,14 +1591,23 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         }
 
-        // Real-custom-mode-repair (2026-07-11), Phase 4/7: this is the REAL,
-        // non-provisional `finalAction` trace log for this turn — reached only
-        // when the clarification short-circuit above did NOT fire (it already
-        // logged 'clarify' and returned). Emitted once per turn, so a trace
-        // consumer can never see a `sourceOwner=clarify` line paired with a
-        // hardcoded 'answer' outcome that doesn't reflect what actually
-        // happened, closing the authority-conflict trace gap identified in
-        // docs/context-os/real-custom-mode-repair/04_AUTHORITY_CONFLICT_REPORT.md.
+        // Real-custom-mode-repair (2026-07-11), Phase 4/7: reached only when the
+        // clarification short-circuit above did NOT fire (it already logged
+        // 'clarify' and returned), so `finalAction: 'answer'` here correctly
+        // states "not clarifying" — but no `evidencePack` is available yet at
+        // this point (it's built later, inside `manualContextOsGeneration`), so
+        // `evidenceCoverage`/`selectedEvidenceCount` below are NOT measurements —
+        // they are `buildContextOsTrace`'s no-pack defaults (false/0). Do not
+        // treat this trace as proof that evidence was insufficient; it fires
+        // before evidence is known. This is a dev-only diagnostic (gated by the
+        // `trace` intelligence flag, console output only) — no `__e2e__:*`
+        // handler currently reads it, and it does not gate generation behavior.
+        // Answer-pipeline-rebuild Phase 1/RC-3: a prior version of this comment
+        // claimed this WAS "the REAL, non-provisional" outcome trace, which is
+        // what led to the original misdiagnosis of the finalAction fingerprint.
+        // Wiring a second, post-evidence-pack trace call is tracked for Phase 3
+        // (final-payload/telemetry invariants), not done here to avoid a
+        // untested restructure of this call's surrounding control flow.
         if (turnContract && isIntelligenceFlagEnabled('trace')) {
           try {
             const { buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
@@ -11689,6 +11698,42 @@ export function initializeIpcHandlers(appState: AppState): void {
           .catch((e: any) => { if (!done) { done = true; resolve({ success: false, error: e?.message, streamedTokens: tokens }); } })
           .finally(() => clearTimeout(timer));
       });
+    });
+
+    // E2E-only: expose LLMHelper.getLastProviderModel() — the server-chosen
+    // model reported by the Natively SSE stream's inline `model` field (see
+    // LLMHelper.ts streamNativelyApi parsing). Lets the harness confirm which
+    // real provider/model actually served each request instead of assuming
+    // the configured cascade default.
+    safeHandle('__e2e__:last-provider-model', async () => {
+      try {
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        return { success: true, model: llmHelper.getLastProviderModel?.() ?? null };
+      } catch (e: any) {
+        return { success: false, error: e?.message || String(e) };
+      }
+    });
+
+    // E2E-only: reset the IntelligenceManager's rolling transcript between
+    // independent manual-chat reps. `gemini-chat-stream` (the real handler
+    // __e2e__:manual-ask also drives) auto-injects up to 100s of rolling
+    // context via `intelligenceManager.getFormattedContext(100)` and appends
+    // each answer via `addAssistantMessage` — so back-to-back manual asks in
+    // one session are NOT independent samples unless this is cleared between
+    // them (mirrors what __e2e__:ask already does via `im.reset?.()`).
+    safeHandle('__e2e__:reset-session', async () => {
+      try {
+        const im = appState.getIntelligenceManager();
+        im.reset?.();
+        // Also clear the last-reported provider/model so a rep that errors or
+        // times out before any SSE `model` chunk arrives can't be misattributed
+        // to whatever model served the previous rep (harness data-quality gap).
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        llmHelper.resetLastProviderModel?.();
+        return { success: true };
+      } catch (e: any) {
+        return { success: false, error: e?.message || String(e) };
+      }
     });
 
     // Force pro-active state for E2E (modes:* handlers are pro-gated). Uses the

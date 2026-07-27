@@ -32,6 +32,18 @@ const ENV_KEYS = [
   'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP', 'NATIVELY_CONTEXT_OS_EVIDENCE_PACK',
   'NATIVELY_CONTEXT_OS_MEMORY_SAFETY', 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES',
   'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION', 'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE',
+  // Pre-existing gap closed 2026-07-25 (found while adding NATIVELY_TURN_IDENTITY_V2
+  // below): NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE was added to intelligenceFlags.ts's
+  // FLAGS registry but never added here, so this test's own length-parity assertion
+  // was already red at HEAD (53 !== 52, confirmed via git stash) before this change.
+  'NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE',
+  'NATIVELY_TURN_IDENTITY_V2',
+  'NATIVELY_PROMPT_COMPOSER_V2',
+  'NATIVELY_CANONICAL_TURN_MANUAL_CHAT',
+  'NATIVELY_ATOMIC_JD_PROFILE_PACK',
+  'NATIVELY_ASSISTANT_CLAIMS_ENFORCEMENT',
+  'NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION',
+  'NATIVELY_MODE_POLICY_SHADOW_OBSERVATION',
 ];
 
 // The full flag set — Meeting Notes V3 product flags intentionally ship default ON;
@@ -59,6 +71,24 @@ const ALL_FLAG_KEYS = [
   'contextOsRecapFollowupEnabled', 'contextOsEvidencePackEnabled', 'contextOsMemorySafetyEnabled',
   'contextOsEnforceSourceCapabilities', 'contextOsPropertyValidation',
   'contextOsMultiFamilyEvidenceEnabled',
+  // Pre-existing gap closed 2026-07-25 (see the matching ENV_KEYS comment above).
+  'answerRelevanceGuardLive',
+  // Phase 6 Slice 1 (context-rebuild, 2026-07-25) — dev/test-only like the
+  // ragConfidenceGate/okfKnowledgePacks precedent above; resolves to
+  // isInternalDevTestContext() = FALSE under this bare node harness.
+  'turnIdentityV2',
+  // Phase 6 Slice 2 (context-rebuild, 2026-07-25) — dev/test-only, same pattern.
+  'promptComposerV2',
+  // Phase 6 Slice 3 (context-rebuild, 2026-07-25) — dev/test-only, same pattern.
+  'canonicalTurnManualChat',
+  // Phase 6 Slice 5 (context-rebuild, 2026-07-25) — dev/test-only, same pattern.
+  'atomicJdProfilePackGeneration',
+  // Phase 6 Slice 7 (context-rebuild, 2026-07-25) — dev/test-only, same pattern.
+  'assistantClaimsEnforcement',
+  // Phase 6 Slice 4 item 2 follow-up (context-rebuild, 2026-07-26) — dev/test-only, same pattern.
+  'pronounRegexShadowObservation',
+  // Phase 6 Slice 7 follow-up (context-rebuild, 2026-07-26) — dev/test-only, same pattern.
+  'modePolicyShadowObservation',
 ];
 
 const DEFAULT_ON_KEYS = new Set([
