@@ -1374,6 +1374,21 @@ export class DatabaseManager {
             this.db.pragma('user_version = 26');
         }
 
+        // Version 26 → 27: SD Requirements grilling gate checkpoint (ticket 09).
+        // Meeting-scoped durable artifact; restored into SessionTracker only for
+        // the same meeting id. Retained after meeting end as historical metadata.
+        if (version < 27) {
+            console.log('[DatabaseManager] Applying migration v26 → v27: meeting_sd_requirements');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS meeting_sd_requirements (
+                    meeting_id TEXT PRIMARY KEY,
+                    artifact_json TEXT NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+            `);
+            this.db.pragma('user_version = 27');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -2279,6 +2294,41 @@ export class DatabaseManager {
      */
     public getExtPath(): string {
         return this.resolvedExtPath;
+    }
+
+    // ============================================
+    // SD Requirements grilling gate checkpoint (v27 / ticket 09)
+    // ============================================
+
+    /** Persist working-copy artifact for mid-interview restore (same meeting only). */
+    public saveSdRequirementsCheckpoint(meetingId: string, artifact: unknown): void {
+        if (!this.db || !meetingId) return;
+        try {
+            this.db.prepare(`
+                INSERT INTO meeting_sd_requirements (meeting_id, artifact_json, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(meeting_id) DO UPDATE SET
+                    artifact_json = excluded.artifact_json,
+                    updated_at = excluded.updated_at
+            `).run(String(meetingId), JSON.stringify(artifact), Date.now());
+        } catch (e: any) {
+            console.warn('[DatabaseManager] saveSdRequirementsCheckpoint failed:', e?.message || e);
+        }
+    }
+
+    /** Load checkpoint for meeting id; null if absent / invalid. Never used for a different meeting. */
+    public getSdRequirementsCheckpoint(meetingId: string): any | null {
+        if (!this.db || !meetingId) return null;
+        try {
+            const row = this.db.prepare(
+                `SELECT artifact_json FROM meeting_sd_requirements WHERE meeting_id = ?`,
+            ).get(String(meetingId)) as { artifact_json?: string } | undefined;
+            if (!row?.artifact_json) return null;
+            return JSON.parse(row.artifact_json);
+        } catch (e: any) {
+            console.warn('[DatabaseManager] getSdRequirementsCheckpoint failed:', e?.message || e);
+            return null;
+        }
     }
 
     public saveMeeting(meeting: Meeting, startTimeMs: number, durationMs: number) {

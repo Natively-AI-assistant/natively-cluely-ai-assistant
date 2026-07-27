@@ -103,7 +103,13 @@ export class MeetingPersistence {
         // 2. Reset state immediately so new meeting can start or UI is clean
         this.session.reset();
 
-        const meetingId = crypto.randomUUID();
+        // Prefer the id stamped at startMeeting so SD Requirements checkpoints
+        // written mid-interview remain associated with this meeting row.
+        const priorId =
+            (metadataSnapshot && ((metadataSnapshot as any).id || (metadataSnapshot as any).meetingId))
+                ? String((metadataSnapshot as any).id || (metadataSnapshot as any).meetingId)
+                : null;
+        const meetingId = priorId || crypto.randomUUID();
 
         // 4. Initial Save (Placeholder)
         const minutes = Math.floor(durationMs / 60000);

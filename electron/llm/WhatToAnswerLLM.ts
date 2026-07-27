@@ -431,8 +431,20 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // injection path). Bounded like the hybrid retrieval above so a cold
             // embedder can't stall first-token; a miss just leaves the framework
             // skeleton (ticket 07) ungrounded rather than blocking the answer.
+            //
+            // Requirements grilling (Tier 0 / ticket 12): while sdPhase=requirements,
+            // filter inject to Understanding/FR/NFR allowlist and append the phase
+            // prompt contract. Full inject resumes at post_requirements (or when
+            // sdPhase is unset — legacy SD path).
+            const sdPhase = answerPlan?.sdPhase;
+            const requirementsGated =
+                answerPlan?.answerType === 'system_design_answer' && sdPhase === 'requirements';
             if (answerPlan?.answerType === 'system_design_answer') {
                 try {
+                    const {
+                        filterLessonChunksForPhase,
+                        requirementsPhaseContractFor,
+                    } = require('./sdRequirementsGate') as typeof import('./sdRequirementsGate');
                     const orchestrator = this.llmHelper.getKnowledgeOrchestrator?.();
                     if (orchestrator?.queryRelevantChunks) {
                         const { DocType } = require('../knowledge/types') as typeof import('../knowledge/types');
@@ -442,10 +454,19 @@ ANSWER SHAPE: ${intentResult.answerShape}
                             HYBRID_RETRIEVAL_BUDGET_MS,
                             [] as Array<{ text: string }>,
                         );
-                        if (Array.isArray(lessonChunks) && lessonChunks.length > 0) {
-                            const lessonBlock = `<reference_file name="hellointerview-system-design.md">\n${lessonChunks.map((c) => c.text).join('\n\n')}\n</reference_file>`;
+                        const chunksForInject = Array.isArray(lessonChunks)
+                            ? filterLessonChunksForPhase(lessonChunks, sdPhase)
+                            : [];
+                        if (chunksForInject.length > 0) {
+                            const lessonBlock = `<reference_file name="hellointerview-system-design.md">\n${chunksForInject.map((c) => c.text).join('\n\n')}\n</reference_file>`;
                             modeContextBlock = modeContextBlock ? `${modeContextBlock}\n\n${lessonBlock}` : lessonBlock;
                         }
+                    }
+                    const phaseContract = requirementsPhaseContractFor(sdPhase, answerPlan?.sdGrill);
+                    if (phaseContract) {
+                        modeContextBlock = modeContextBlock
+                            ? `${modeContextBlock}\n\n${phaseContract}`
+                            : phaseContract;
                     }
                 } catch (lessonErr: any) {
                     console.warn('[WhatToAnswerLLM] system-design lesson grounding skipped (non-fatal):', lessonErr?.message);
@@ -715,7 +736,31 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 }
                 tokenCount++;
                 streamedBuffer.push(token);
-                yield token;
+                // While Requirements gate is open, buffer tokens and soft-truncate
+                // later Delivery Framework headings before show (Tier 0 / ticket 12).
+                // Clarifier turns are short; buffering does not change the product
+                // shape vs streaming then repairing after the fact.
+                if (!requirementsGated) {
+                    yield token;
+                }
+            }
+
+            if (requirementsGated) {
+                try {
+                    const {
+                        enforceStructuralGate,
+                        enforceClarifierPacing,
+                    } = require('./sdRequirementsGate') as typeof import('./sdRequirementsGate');
+                    let gatedAnswer = enforceStructuralGate(streamedBuffer.join(''), 'requirements');
+                    const budget = answerPlan?.sdGrill?.clarifierBudget ?? 1;
+                    gatedAnswer = enforceClarifierPacing(gatedAnswer, 'requirements', budget);
+                    streamedBuffer.length = 0;
+                    streamedBuffer.push(gatedAnswer);
+                    yield gatedAnswer;
+                } catch (gateErr: any) {
+                    console.warn('[WhatToAnswerLLM] requirements structural gate threw:', gateErr?.message);
+                    yield streamedBuffer.join('');
+                }
             }
 
             // Post-stream code sanity check. Fire-and-forget log + telemetry on

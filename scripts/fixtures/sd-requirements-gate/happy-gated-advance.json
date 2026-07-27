@@ -1,0 +1,36 @@
+{
+  "id": "happy-gated-advance",
+  "title": "URL-shortener gated → fill via fixtures → advance → later sections allowed",
+  "problemKey": "url-shortener",
+  "problemClass": "crud_product",
+  "turns": [
+    {
+      "role": "interviewer",
+      "speaker": "system",
+      "text": "Design a URL shortener for our product."
+    },
+    {
+      "role": "interviewer",
+      "speaker": "system",
+      "text": "Functional: create short links and redirect. Scale about 1000 QPS. Latency p99 under 50ms. Prefer availability over strong consistency."
+    },
+    {
+      "role": "user",
+      "speaker": "user",
+      "text": "Looks good — let's move on to the design."
+    }
+  ],
+  "expect": {
+    "sdPhaseAfter": "post_requirements",
+    "checklistComplete": true,
+    "gateClosed": true,
+    "laterSectionsAllowed": true,
+    "softRefused": false,
+    "requiredSlotsFilled": [
+      "functional_requirements",
+      "scale_qps",
+      "latency",
+      "consistency_availability"
+    ]
+  }
+}

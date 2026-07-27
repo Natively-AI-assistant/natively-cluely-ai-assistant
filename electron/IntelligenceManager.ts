@@ -100,6 +100,20 @@ export class IntelligenceManager extends EventEmitter {
 
     setMeetingMetadata(metadata: any): void {
         this.session.setMeetingMetadata(metadata);
+        const meetingId =
+            (metadata && (metadata.id || metadata.meetingId))
+                ? String(metadata.id || metadata.meetingId)
+                : null;
+        this.session.bindSdRequirementsMeeting(meetingId, () => {
+            if (!meetingId) return null;
+            try {
+                const { DatabaseManager } = require('./db/DatabaseManager') as typeof import('./db/DatabaseManager');
+                return DatabaseManager.getInstance().getSdRequirementsCheckpoint(meetingId);
+            } catch (err: any) {
+                console.warn('[IntelligenceManager] SD Requirements restore skipped:', err?.message || err);
+                return null;
+            }
+        });
     }
 
     addTranscript(segment: import('./SessionTracker').TranscriptSegment, skipRefinementCheck: boolean = false): void {

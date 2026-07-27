@@ -148,6 +148,28 @@ export interface AnswerPlan {
   answerStyleTargetSeconds: number;
   /** True when a user-created custom mode requires uploaded/reference files as source of truth. */
   documentGroundedCustomModeActive?: boolean;
+  /**
+   * SD Requirements grilling phase (derived from the durable Requirements artifact).
+   * When `requirements`, WhatToAnswerLLM applies LESSON allowlist inject + structural
+   * Delivery Framework heading soft-truncate. Omitted → legacy full SD path.
+   */
+  sdPhase?: 'requirements' | 'post_requirements';
+  /**
+   * Grill pacing hint (SPEC 05): next checklist slot(s) and clarifier budget for
+   * this turn. Set by prepareSdRequirementsForAnswerPlan while gated.
+   */
+  sdGrill?: {
+    nextSlots: Array<
+      | 'functional_requirements'
+      | 'scale_qps'
+      | 'latency'
+      | 'consistency_availability'
+      | 'durability'
+      | 'read_write_ratio'
+      | 'data_flow_stages'
+    >;
+    clarifierBudget: number;
+  };
 }
 
 export interface PlanAnswerInput {
