@@ -245,6 +245,11 @@ export class GoogleSTT extends EventEmitter {
             this.pendingLanguageChange = undefined;
         }
 
+        // Release any open swap-drain window: flush the held transcripts (the
+        // renderer's post-stop drain grace still accepts them) and clear the
+        // deadline timer so it can't fire into a dead session.
+        this.finishDrain();
+
         if (this.stream) {
             this.stream.end();
             this.stream.destroy();
@@ -425,6 +430,30 @@ export class GoogleSTT extends EventEmitter {
         this.swapStream();
     }
 
+    // Swap-drain ordering (greptile review on PR #401): after a swap, the OLD
+    // stream may flush its pending final AFTER the new stream already produced
+    // results. Emitting in raw callback order would store pre-swap speech
+    // after newer speech, so while the old stream drains, the NEW stream's
+    // transcripts are held here and flushed once the drain finishes (old
+    // stream end/close/error, or the deadline below — Google flushes finals
+    // well under a second after end()).
+    private drainingStream: any = null;
+    private drainTimer: NodeJS.Timeout | null = null;
+    private pendingSwapTranscripts: { text: string; isFinal: boolean; confidence: number }[] = [];
+    private static readonly SWAP_DRAIN_DEADLINE_MS = 1000;
+
+    /** Flush the held new-stream transcripts and end the drain window. */
+    private finishDrain(): void {
+        if (this.drainTimer) {
+            clearTimeout(this.drainTimer);
+            this.drainTimer = null;
+        }
+        this.drainingStream = null;
+        const pending = this.pendingSwapTranscripts;
+        this.pendingSwapTranscripts = [];
+        for (const t of pending) this.emit('transcript', t);
+    }
+
     /**
      * Replace the live gRPC stream without dropping the tail: end() the old
      * stream (no destroy) so Google flushes its pending finals — the stale
@@ -437,6 +466,11 @@ export class GoogleSTT extends EventEmitter {
         this.stream = null;
         this.isStreaming = false;
         if (old) {
+            // A back-to-back swap while a previous drain is open: release the
+            // previous window first so its held transcripts keep their order.
+            if (this.drainingStream) this.finishDrain();
+            this.drainingStream = old;
+            this.drainTimer = setTimeout(() => this.finishDrain(), GoogleSTT.SWAP_DRAIN_DEADLINE_MS);
             try { old.end(); } catch { /* flush-only — old stream is abandoned either way */ }
         }
         if (this.isActive) this.startStream();
@@ -477,6 +511,9 @@ export class GoogleSTT extends EventEmitter {
                     // Stale event from a stream already replaced by swapStream()/
                     // restart — the abandoned stream erroring out (e.g. CANCELLED)
                     // must not clobber the new stream's state or alarm main.ts.
+                    // It DOES end that stream's drain window: no more tail
+                    // finals are coming, release the held new-stream results.
+                    if (this.drainingStream === s) this.finishDrain();
                     return;
                 }
                 this.isConnecting = false;
@@ -522,14 +559,22 @@ export class GoogleSTT extends EventEmitter {
                 this.emit('error', err);
             })
             .on('end', () => {
-                if (this.stream !== s) return; // stale — a newer stream owns the state
+                if (this.stream !== s) {
+                    // Stale — a newer stream owns the state; the drained stream
+                    // has flushed everything, so release the drain window.
+                    if (this.drainingStream === s) this.finishDrain();
+                    return;
+                }
                 console.log(`[GoogleSTT/${this.label}] Stream ended server-side (idle timeout)`);
                 this.isConnecting = false;
                 this.isStreaming = false;
                 this.stream = null;
             })
             .on('close', () => {
-                if (this.stream !== s) return; // stale — a newer stream owns the state
+                if (this.stream !== s) {
+                    if (this.drainingStream === s) this.finishDrain();
+                    return;
+                }
                 console.log(`[GoogleSTT/${this.label}] Stream closed server-side`);
                 this.isConnecting = false;
                 this.isStreaming = false;
@@ -544,13 +589,19 @@ export class GoogleSTT extends EventEmitter {
 
                     if (transcript) {
                         console.log(`[GoogleSTT/${this.label}] Transcript received`, { final: isFinal, length: transcript.length });
-                        // Late finals from an abandoned stream are still real
-                        // speech (the tail from before a swap) — always forward.
-                        this.emit('transcript', {
-                            text: transcript,
-                            isFinal,
-                            confidence: alt.confidence
-                        });
+                        const payload = { text: transcript, isFinal, confidence: alt.confidence };
+                        if (this.stream === s && this.drainingStream) {
+                            // NEW stream result while the old one is still
+                            // draining its pre-swap tail: hold it so the tail
+                            // (older speech) is stored first (greptile PR #401
+                            // — raw callback order reordered the transcript).
+                            this.pendingSwapTranscripts.push(payload);
+                        } else {
+                            // Current-stream result outside a drain window, or
+                            // the draining stream's own tail final (older
+                            // speech — forward immediately, it goes FIRST).
+                            this.emit('transcript', payload);
+                        }
                     }
 
                     // Only the CURRENT stream may trigger a language re-pin —

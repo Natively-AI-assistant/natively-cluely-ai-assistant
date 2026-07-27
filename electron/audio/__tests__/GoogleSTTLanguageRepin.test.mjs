@@ -164,6 +164,36 @@ test("an abandoned stream's late close/end/data must not clobber the new stream"
     }
 });
 
+test('swap drain preserves transcript order: pre-swap tail before new-stream results', async () => {
+    // greptile PR #401: the old stream's pending final used to arrive AFTER
+    // the new stream's first results and get stored out of order.
+    const streams = [];
+    const stt = await makeAutoModeSTT(streams);
+    try {
+        const transcripts = [];
+        stt.on('transcript', t => transcripts.push(t.text));
+
+        streams[0].emit('data', finalResult('привет', 'ru-ru'));
+        streams[0].emit('data', finalResult('как дела', 'ru-ru'));
+        assert.equal(streams.length, 2, 're-pin swap happened');
+
+        // New stream produces a result FIRST — must be held while old drains.
+        streams[1].emit('data', finalResult('новая фраза', 'ru-ru'));
+        assert.ok(!transcripts.includes('новая фраза'), 'new-stream result held during drain');
+
+        // Old stream flushes its pre-swap tail — forwarded immediately…
+        streams[0].emit('data', finalResult('хвост до свопа', 'ru-ru'));
+        // …then closes, releasing the held new-stream result AFTER the tail.
+        streams[0].emit('close');
+        const tailIdx = transcripts.indexOf('хвост до свопа');
+        const newIdx = transcripts.indexOf('новая фраза');
+        assert.ok(tailIdx !== -1 && newIdx !== -1, 'both finals delivered');
+        assert.ok(tailIdx < newIdx, `pre-swap tail must precede new-stream result (got ${transcripts.join(' | ')})`);
+    } finally {
+        stt.stop();
+    }
+});
+
 test('manual (non-auto) language selection never re-pins', async () => {
     const streams = [];
     const stt = new GoogleSTT('test');
