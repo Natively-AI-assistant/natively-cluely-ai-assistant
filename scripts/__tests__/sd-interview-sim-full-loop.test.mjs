@@ -37,6 +37,61 @@ describe('sd-interview-sim SPEC 08 full-loop defaults', () => {
     assert.match(CASUAL_SD_TONE_INSTRUCTION, /Delivery Framework/i);
     assert.match(CASUAL_SD_TONE_INSTRUCTION, /\bwe\b/i);
     assert.match(CASUAL_SD_TONE_INSTRUCTION, /casual/i);
+    assert.match(CASUAL_SD_TONE_INSTRUCTION, /lead/i);
+    assert.match(CASUAL_SD_TONE_INSTRUCTION, /resume/i);
+  });
+});
+
+describe('sd-interview-sim SPEC 09 candidate-led interviewer', () => {
+  test('DEFAULT_INTERVIEWER_SYSTEM_PROMPT forbids phase assignment', () => {
+    const {
+      DEFAULT_INTERVIEWER_SYSTEM_PROMPT,
+    } = require('../lib/sd-interview-sim/t2.js');
+    assert.match(DEFAULT_INTERVIEWER_SYSTEM_PROMPT, /candidate-led/i);
+    assert.match(DEFAULT_INTERVIEWER_SYSTEM_PROMPT, /FORBIDDEN/i);
+    assert.match(DEFAULT_INTERVIEWER_SYSTEM_PROMPT, /HAND_BACK/);
+    assert.match(DEFAULT_INTERVIEWER_SYSTEM_PROMPT, /clarifier/i);
+    assert.doesNotMatch(
+      DEFAULT_INTERVIEWER_SYSTEM_PROMPT,
+      /Ask one focused probe per turn/i,
+    );
+  });
+
+  test('hand_back flag or please-continue maps to thin driver continue', async () => {
+    const agent = createThinCandidateAgent();
+    const a = await agent({ interviewerTurn: { text: 'Thanks — please continue.', hand_back: true } });
+    const b = await agent({ interviewerTurn: { text: 'Thanks — please continue.' } });
+    assert.equal(a.action, 'continue');
+    assert.equal(b.action, 'continue');
+  });
+
+  test('live interviewer strips HAND_BACK token and sets hand_back', async () => {
+    const { createLiveInterviewerAgent } = require('../lib/sd-interview-sim/t2.js');
+    const agent = createLiveInterviewerAgent({
+      apiKey: 'test-key',
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return {
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: 'Thanks, please continue.\nHAND_BACK\n' }],
+                },
+              },
+            ],
+            usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 2 },
+          };
+        },
+      }),
+    });
+    const out = await agent({
+      scenario: { prompt: 'URL shortener' },
+      bundle: { turns: [{ role: 'assistant', text: 'We start with Requirements…' }] },
+    });
+    assert.equal(out.hand_back, true);
+    assert.doesNotMatch(out.text, /HAND_BACK/);
+    assert.match(out.text, /continue/i);
   });
 });
 

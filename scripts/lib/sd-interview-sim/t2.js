@@ -35,16 +35,36 @@ const DEFAULT_SUT_MODEL = 'gemini-3.5-flash';
 const DEFAULT_LIVE_MAX_TURNS = 32;
 
 /**
- * True when interviewer text is a non-specific continue cue.
+ * True when interviewer text is a non-specific continue / hand-back cue
+ * (candidate should resume the Delivery Framework showcase).
  * @param {string} text
  */
 function isNonspecificInterviewerText(text) {
   const t = String(text || '').trim();
   if (!t) return true;
-  if (t.length > 120) return false;
+  if (/\bHAND_BACK\b/.test(t)) return true;
+  if (t.length > 160) return false;
   return /^(continue|go on|next|keep going|proceed|go ahead)\b/i.test(t)
-    || /^(ok|okay|sure|yeah|yep)[,.]?\s*(continue|go on|next|keep going)?$/i.test(t);
+    || /^(ok|okay|sure|yeah|yep)[,.]?\s*(continue|go on|next|keep going)?$/i.test(t)
+    || /\b(please continue|back to you|go ahead and continue|carry on|resume)\b/i.test(t)
+    || /^thanks?[^.!?]*[.!]?\s*(please\s+)?continue\b/i.test(t);
 }
+
+/**
+ * Default interviewer policy for candidate-led T2 sims (SPEC 09).
+ * Open once; thereafter clarifier OR hand-back OR END — never assign next DF section.
+ */
+const DEFAULT_INTERVIEWER_SYSTEM_PROMPT = [
+  'You are a system-design interviewer in a **candidate-led** interview.',
+  'If there is no candidate answer yet: open with the problem and invite the candidate to lead the hellointerview Delivery Framework showcase (Requirements → Core Entities → API → HLD → Deep Dives). Do NOT assign those sections as a step-by-step homework list.',
+  'On later turns pick exactly one:',
+  '(A) ONE short clarifier about something the candidate just claimed, then stop;',
+  '(B) Hand the floor back with a brief line and the token HAND_BACK on its own line;',
+  '(C) When the showcase is complete, a short closing and END_INTERVIEW on its own line.',
+  'FORBIDDEN: telling the candidate which framework section to do next',
+  '(e.g. "now define core entities", "let\'s move to the API", "please do the HLD", "deep dive on X next").',
+  'Do not answer as the candidate. Optional fenced ```mermaid only when clarifying a design point.',
+].join(' ');
 
 /**
  * Opt-in gate for live T2 dual-agent runs.
@@ -137,7 +157,10 @@ function createThinCandidateAgent(opts = {}) {
     ) {
       advancedOnce = true;
       decision.action = 'advance';
-    } else if (isNonspecificInterviewerText(probeText)) {
+    } else if (
+      ctx?.interviewerTurn?.hand_back === true ||
+      isNonspecificInterviewerText(probeText)
+    ) {
       decision.action = 'continue';
     }
 
@@ -236,14 +259,7 @@ function createLiveInterviewerAgent(opts = {}) {
   const model = opts.model || DEFAULT_INTERVIEWER_MODEL;
   const apiKey = opts.apiKey || resolveGeminiApiKey();
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
-  const systemPrompt =
-    opts.systemPrompt ||
-    [
-      'You are a system-design interviewer.',
-      'Ask one focused probe per turn. Optionally include a fenced ```mermaid diagram.',
-      'When coverage is done, reply with a short closing and the token END_INTERVIEW on its own line.',
-      'Do not answer as the candidate.',
-    ].join(' ');
+  const systemPrompt = opts.systemPrompt || DEFAULT_INTERVIEWER_SYSTEM_PROMPT;
   const usdPer1k = opts.estimateUsdPer1kTokens != null ? opts.estimateUsdPer1kTokens : 0.0001;
 
   return async function liveInterviewerAgent(ctx) {
@@ -258,10 +274,13 @@ function createLiveInterviewerAgent(opts = {}) {
       .map((t) => `${t.role}: ${t.text}`)
       .join('\n')
       .slice(-6000);
+    const hasAssistant = (ctx.bundle?.turns || []).some((t) => t.role === 'assistant');
     const userText = [
       `Scenario: ${ctx.scenario?.prompt || ctx.scenario?.id || 'system design interview'}`,
-      history ? `Transcript so far:\n${history}` : 'No turns yet — open with Requirements.',
-      'Next interviewer probe:',
+      history ? `Transcript so far:\n${history}` : 'No turns yet.',
+      hasAssistant
+        ? 'Next interviewer move: clarifier OR HAND_BACK OR END_INTERVIEW. Do not assign the next Delivery Framework section.'
+        : 'Open once: invite the candidate to lead the Delivery Framework showcase. Do not assign sections step-by-step.',
     ].join('\n\n');
 
     const url =
@@ -292,13 +311,18 @@ function createLiveInterviewerAgent(opts = {}) {
     const estimated_usd = ((input_tokens + output_tokens) / 1000) * usdPer1k;
 
     const end_interview = /\bEND_INTERVIEW\b/.test(text);
-    const cleaned = text.replace(/\bEND_INTERVIEW\b/g, '').trim();
+    const hand_back = /\bHAND_BACK\b/.test(text);
+    const cleaned = text
+      .replace(/\bEND_INTERVIEW\b/g, '')
+      .replace(/\bHAND_BACK\b/g, '')
+      .trim();
     const attachments = extractMermaidAttachments(cleaned);
 
     return {
       text: cleaned,
       attachments,
       end_interview,
+      hand_back,
       spend: { input_tokens, output_tokens, estimated_usd },
     };
   };
@@ -593,6 +617,7 @@ module.exports = {
   DEFAULT_INTERVIEWER_MODEL,
   DEFAULT_SUT_MODEL,
   DEFAULT_LIVE_MAX_TURNS,
+  DEFAULT_INTERVIEWER_SYSTEM_PROMPT,
   get CASUAL_SD_TONE_INSTRUCTION() {
     return require('./liveSut').CASUAL_SD_TONE_INSTRUCTION;
   },
