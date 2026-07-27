@@ -293,7 +293,33 @@ export type IntelligenceFlagKey =
   // behavior. Exists so any future consumer of `ModePolicy` inherits
   // real-traffic evidence instead of a synthetic-fixture-only history.
   // Pattern 1 (dev/test-only default).
-  | 'modePolicyShadowObservation';
+  | 'modePolicyShadowObservation'
+  // ── Impossible-evidence-state gate, Stage 0 shadow (answer-pipeline-
+  // rebuild Phase 2, docs/answer-pipeline-rebuild/03_EVIDENCEPACK_DESIGN.md)
+  // ──────────────────────────────────────────────────────────────────────
+  // The manual-chat-no-mode path's evidence-selection ALREADY produces a
+  // typed EvidencePack when profile capabilities are granted
+  // (ProfileEvidenceService.retrieveEvidence, gated by contextOsEvidencePackEnabled)
+  // — but nothing validates the pack against `profileContextPolicy` before
+  // the prompt is built. RC-9 (live-confirmed, 2026-07-27) is the concrete
+  // failure this closes: a misclassified `unknown_answer`/`allowed` turn
+  // gets profile capability granted and consulted with no relevance check,
+  // 100% deterministic leak. This flag gates a SHADOW-ONLY validator
+  // (checkImpossibleEvidenceState in evidencePackValidation.ts): for every
+  // manual-chat-no-mode turn where a TurnContextContract was built, run the
+  // typed pack through the forbidden-direction checks only (profile item
+  // present when profileContextPolicy==='forbidden'; an 'allowed'-policy
+  // profile item with no requestedProperty-tied reasonIncluded) and log
+  // agreement/divergence — ZERO change to the prompt, the pack, or any
+  // return value. The design's own asymmetric-staging analysis is why
+  // required-direction enforcement (a genuinely different, higher-risk
+  // check) is explicitly OUT of scope for this flag: RC-8 (also live-
+  // confirmed the same day) shows a required-direction false-positive turns
+  // a fixable heuristic bug into a permanent structural refusal if enforced
+  // before its own dedicated shadow period. Pattern 1 (dev/test-only
+  // default), mirrors modePolicyShadowObservation/pronounRegexShadowObservation
+  // immediately above.
+  | 'contextOsImpossibleStateGateShadow';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -501,6 +527,7 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   assistantClaimsEnforcement: { env: 'NATIVELY_ASSISTANT_CLAIMS_ENFORCEMENT', setting: 'assistantClaimsEnforcementEnabled', default: isInternalDevTestContext },
   pronounRegexShadowObservation: { env: 'NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION', setting: 'pronounRegexShadowObservationEnabled', default: isInternalDevTestContext },
   modePolicyShadowObservation: { env: 'NATIVELY_MODE_POLICY_SHADOW_OBSERVATION', setting: 'modePolicyShadowObservationEnabled', default: isInternalDevTestContext },
+  contextOsImpossibleStateGateShadow: { env: 'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_SHADOW', setting: 'contextOsImpossibleStateGateShadowEnabled', default: isInternalDevTestContext },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);

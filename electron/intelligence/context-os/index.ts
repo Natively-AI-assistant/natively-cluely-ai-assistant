@@ -86,6 +86,12 @@ export {
   type ProfileEvidenceServiceInput,
 } from './ProfileEvidenceService';
 export {
+  checkImpossibleEvidenceState,
+  type ImpossibleStateViolation,
+  type ImpossibleStateViolationCode,
+  type ImpossibleStateCheckResult,
+} from './evidencePackValidation';
+export {
   TurnEvidenceCoordinator,
   allocateRequiredEvidenceFamilies,
   DEFAULT_EVIDENCE_PACK_MAX_CHARS,

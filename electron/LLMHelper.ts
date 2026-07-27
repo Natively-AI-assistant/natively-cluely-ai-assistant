@@ -5342,6 +5342,16 @@ const isMultimodal = !!(imagePaths?.length);
         const uc = userContent;
         const audit = {
           model: this.currentModelId,
+          // Correlation key (code-review finding, 2026-07-28) for the
+          // impossible-evidence-state shadow gate (ipcHandlers.ts,
+          // contextOsImpossibleStateGateShadow) to post-hoc join its own
+          // shadow-pack log line against this turn's REAL prompt-audit
+          // entry by turnId. Only populated when the coordinator-scoped
+          // typed pack governed this turn (contextOsGovernedPack non-null);
+          // the legacy raw-string-concat path has no pack here to read a
+          // turnId from — closing that gap fully is the coordinator-scope-
+          // widening work the design doc defers to Stage 4.
+          turnId: contextOsGovernedPack?.turnId ?? null,
           userContentLen: uc.length,
           hasTypedEvidencePack: uc.includes('<evidence_pack'),
           hasTurnContract: uc.includes('<turn_context_contract>'),

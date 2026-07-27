@@ -1243,6 +1243,68 @@ export function initializeIpcHandlers(appState: AppState): void {
               userExplicitSource: _userExplicitSource,
               turnSourceDecision: manualTurnSourceDecision,
             });
+            // IMPOSSIBLE-EVIDENCE-STATE GATE, Stage 0 (answer-pipeline-rebuild
+            // Phase 2, docs/answer-pipeline-rebuild/03_EVIDENCEPACK_DESIGN.md).
+            // SHADOW-ONLY: builds the same typed EvidencePack
+            // ProfileEvidenceService already produces when profile capability
+            // is granted, runs it through the forbidden-direction checks only
+            // (checkImpossibleEvidenceState), and logs agreement/divergence —
+            // zero change to `context`, `turnContract`, or any return value.
+            // Nested in its own try/catch (never rethrows) so a failure here
+            // can never affect the turnContract build above it, matching this
+            // block's own "Context OS is additive" convention.
+            if (turnContract && isIntelligenceFlagEnabled('contextOsImpossibleStateGateShadow')) {
+              try {
+                const { ProfileEvidenceService, checkImpossibleEvidenceState } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                const orchestratorForShadow = llmHelper.getKnowledgeOrchestrator?.();
+                const shadowResume = (orchestratorForShadow as any)?.activeResume?.structured_data ?? null;
+                const shadowJd = (orchestratorForShadow as any)?.activeJD?.structured_data ?? null;
+                const shadowPack = new ProfileEvidenceService().retrieveEvidence({
+                  question: String(message || ''),
+                  contract: turnContract,
+                  profile: shadowResume,
+                  jobDescription: shadowJd,
+                  answerType: answerPlan.answerType,
+                });
+                const shadowResult = checkImpossibleEvidenceState(shadowPack, answerPlan.profileContextPolicy);
+                // turnId/packId (code-review finding, 2026-07-28): lets a shadow
+                // log line be joined post-hoc against the prompt-audit ring
+                // (LLMHelper.ts ~5343, NATIVELY_CONTEXT_OS_PROMPT_AUDIT=1) by
+                // turnId, so the Stage 1 promotion decision can check this
+                // shadow pack's verdict against what the REAL generation
+                // actually did — the join only resolves for turns that go
+                // through the coordinator-scoped pack path (the audit object
+                // only carries a turnId when contextOsGovernedPack is
+                // non-null); the legacy raw-string-concat path this shadow
+                // gate mostly observes has no turnId in the ring yet. Closing
+                // that fully is the coordinator-scope-widening work the design
+                // doc defers to Stage 4 — this is the correlation data
+                // available without that widening.
+                if (!shadowResult.ok) {
+                  console.warn('[IMPOSSIBLE-STATE-GATE-SHADOW] violation', {
+                    turnId: shadowPack.turnId,
+                    packId: shadowPack.packId,
+                    answerType: answerPlan.answerType,
+                    profileContextPolicy: answerPlan.profileContextPolicy,
+                    requestedProperty: shadowPack.requestedProperty,
+                    violationCodes: shadowResult.violations.map((v) => v.code),
+                    violationSourceKinds: shadowResult.violations.map((v) => v.sourceKind),
+                  });
+                } else if (isIntelligenceFlagEnabled('trace')) {
+                  console.log('[IMPOSSIBLE-STATE-GATE-SHADOW] agreement', {
+                    turnId: shadowPack.turnId,
+                    packId: shadowPack.packId,
+                    answerType: answerPlan.answerType,
+                    profileContextPolicy: answerPlan.profileContextPolicy,
+                    itemCount: shadowPack.items.length,
+                  });
+                }
+              } catch (shadowGateErr: any) {
+                if (isIntelligenceFlagEnabled('trace')) {
+                  console.warn('[IMPOSSIBLE-STATE-GATE-SHADOW] skipped (non-fatal):', shadowGateErr?.message);
+                }
+              }
+            }
             // Real-custom-mode-repair (2026-07-11), Phase 4/7: the trace used to
             // be emitted HERE with a hardcoded `finalAction: 'answer'` — before
             // the clarification short-circuit below had even run. That produced
