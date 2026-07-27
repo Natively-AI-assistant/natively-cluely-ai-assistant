@@ -5929,7 +5929,7 @@ Provide only the answer, nothing else.`;
           return (
             <div
               key="streaming-precode"
-              className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14.5px] leading-relaxed"
+              className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed"
             >
               {isThinking ? (
                 <div className="flex items-center min-h-[24px] py-0.5">
@@ -5964,7 +5964,7 @@ Provide only the answer, nothing else.`;
             <div
               key="streaming"
               ref={(el) => registerStreamingNode(msg.id, el)}
-              className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14.5px] leading-relaxed"
+              className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed"
             >
               {/*
                * Blinking-dot indicator INSIDE the streaming bubble. Renders
@@ -6013,7 +6013,7 @@ Provide only the answer, nothing else.`;
         // bubble's "still typing" state is ever painted.
         if (msg.text) {
           return (
-            <div key="streaming" className="w-full ai-response-card my-2.5 transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14.5px] leading-relaxed">
+            <div key="streaming" className="w-full ai-response-card my-2.5 transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed">
               {msg.text}
               <span className="reveal-typing-cursor" aria-hidden="true">▍</span>
             </div>
@@ -6171,7 +6171,7 @@ Provide only the answer, nothing else.`;
                 isGlassTheme={isGlassTheme}
               />
             </div>
-            <div className="text-[14.5px] leading-relaxed markdown-content pr-6">
+            <div className="text-[14px] leading-relaxed markdown-content pr-6">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -6196,7 +6196,7 @@ Provide only the answer, nothing else.`;
                 isGlassTheme={isGlassTheme}
               />
             </div>
-            <div className="text-[14.5px] leading-relaxed markdown-content pr-6">
+            <div className="text-[14px] leading-relaxed markdown-content pr-6">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -6221,7 +6221,7 @@ Provide only the answer, nothing else.`;
                 isGlassTheme={isGlassTheme}
               />
             </div>
-            <div className="text-[14.5px] leading-relaxed markdown-content pr-6">
+            <div className="text-[14px] leading-relaxed markdown-content pr-6">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -6249,7 +6249,7 @@ Provide only the answer, nothing else.`;
                 isGlassTheme={isGlassTheme}
               />
             </div>
-            <div className="text-[14.5px] leading-relaxed">
+            <div className="text-[14px] leading-relaxed">
               {parts.map((part, i) => {
                 if (part.startsWith('```')) {
                   // Robust matching: handles unclosed blocks for streaming (```...$)
@@ -6320,7 +6320,7 @@ Provide only the answer, nothing else.`;
                 isGlassTheme={isGlassTheme}
               />
             </div>
-            <div className="text-[14.5px] leading-relaxed markdown-content pr-6">
+            <div className="text-[14px] leading-relaxed markdown-content pr-6">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}

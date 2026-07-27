@@ -5,6 +5,7 @@ import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
 import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords } from './speakability';
 import { applyModeFallback, type ActiveModeInfo } from './modeProfiles';
 import { classifyDocumentQuestionShape } from './documentGroundedPrompt';
+import { includesPlannerTerm } from '../services/modes/retrievalTextMatch';
 
 export type AnswerType =
   | 'identity_answer'
@@ -503,7 +504,7 @@ const TECHNICAL_SUBJECT_PATTERNS = [
   /\b(eventual consistency|strong consistency|consistency model|cap theorem|consensus|quorum|paxos|raft|two[- ]?phase commit)\b/i,
   /\b(amortized|complexity|big[- ]?o|asymptotic|np[- ]?complete)\b/i,
   /\b(closure|hoisting|prototype|garbage collection|event loop|promise|async)\b/i,
-  /\b(rest|graphql|grpc|microservice|monolith|cache|caching|cdn|load balanc|rate limit\w*|rate[- ]?limiter|message queue|pub[- ]?sub|webhook|idempoten\w*|backpressure|circuit breaker)\b/i,
+  /\b(rest|restful|graphql|graph\s*ql|apis?|grpc|microservice|monolith|cache|caching|cdn|load balanc|rate limit\w*|rate[- ]?limiter|message queue|pub[- ]?sub|webhook|idempoten\w*|backpressure|circuit breaker)\b/i,
   /\b(encryption|hashing|oauth|jwt|tls|ssl|cors|xss|csrf|sql injection)\b/i,
   /\b(pointer|reference|stack|heap|recursion|iteration|polymorphism|inheritance)\b/i,
   // Frameworks / cloud / data-eng subjects that appear in "explain X" concept
@@ -514,7 +515,93 @@ const TECHNICAL_SUBJECT_PATTERNS = [
   /\b(indexing|pandas|numpy|spark|hadoop|etl|dataframe)\b/i,
   /\b(a\/b test|ab test|retention|cohort|regression|classification|clustering)\b/i,
 ];
-const isLikelyTechnicalConcept = (text: string): boolean => includesAny(text, TECHNICAL_SUBJECT_PATTERNS);
+// CI/CD and related devops terms (live-confirmed leak, 2026-07-27): "what is
+// CI/CD" fell through to unknown_answer (profileContextPolicy: 'allowed')
+// instead of technical_concept_answer (forbidden) — a downstream relevance-
+// match then injected profile context because the profile happens to contain
+// devops-adjacent terms. Deliberately kept OUT of TECHNICAL_SUBJECT_PATTERNS
+// itself (not merged into the array above) — that array is also consulted
+// directly by the project_followup_answer negation guard below (~line 2535,
+// `!includesAny(textNoTechStack, TECHNICAL_SUBJECT_PATTERNS)`), and a code-
+// review pass confirmed live that merging it there misroutes genuine own-
+// project follow-ups ("how did you handle CI/CD?", "why did you choose
+// jenkins?") away from project_followup_answer/required. This array is only
+// consulted by isLikelyTechnicalConcept below, which the negation guard does
+// NOT use (same reason "framework"/RC-2's typo-tolerant list is excluded
+// from that guard — see the guard's own comment).
+const DEVOPS_CICD_PATTERNS = [
+  /\b(ci[\s/]*cd|continuous integration|continuous (delivery|deployment)|devops|jenkins|github actions|gitlab[- ]?ci|build pipeline)\b/i,
+];
+// Software-engineering concept vocabulary (live-confirmed leak, 2026-07-27,
+// n=20 harness run): "what is dependency injection" fell through to
+// unknown_answer (profileContextPolicy: 'allowed') instead of
+// technical_concept_answer (forbidden), and the full candidate profile
+// (~10.6K chars) was injected into a request that has nothing to do with the
+// candidate — confirmed via promptAuditLatest.hasRawCandidateProfile, 5/5
+// reps. A vocabulary sweep against sibling "what is X" phrasing found 12 more
+// common OOP/design-pattern/testing/infra terms with the identical gap.
+// Deliberately kept OUT of TECHNICAL_SUBJECT_PATTERNS (same reason as
+// DEVOPS_CICD_PATTERNS above): that array also feeds the project_followup_answer
+// negation guard below (~line 2547), and merging there would misroute genuine
+// own-project follow-ups ("how did you apply dependency injection in your
+// project?") away from project_followup_answer/required. Consulted only by
+// isLikelyTechnicalConcept, which the negation guard does not use.
+const SOFTWARE_ENGINEERING_CONCEPT_PATTERNS = [
+  /\b(dependency injection|inversion of control|ioc)\b/i,
+  // Code-review fix (2026-07-27): the original singular-only forms
+  // (`design pattern`, `factory pattern`, `observer pattern`, `memory leak`,
+  // `monorepo`) never matched plural phrasing ("what are design patterns",
+  // "what causes memory leaks") — the exact bug class this array exists to
+  // close, live-confirmed via before/after classification.
+  /\b(design patterns?|singletons?|factory patterns?|observer patterns?|solid principles?)\b/i,
+  /\b(memory leaks?|load balanc\w*)\b/i,
+  /\b(unit test\w*|\btdd\b|test[- ]?driven development|monorepos?)\b/i,
+];
+// BEHAVIORAL-PAST-EXPERIENCE GUARD (shared). A past-tense candidate frame
+// ("tell me about a time you fixed a memory leak", "describe how you improved
+// test coverage with unit testing at your last job") must defer away from a
+// forbidden-profile technical/debugging lane into behavioral/skill-experience
+// routing — the candidate is telling a STAR story about their own past, not
+// asking for a neutral definition. Originally inline in the debugging-question
+// branch only (manual regression 2026-06-12, stress seq_056; narrower verb
+// list: solved/fixed/faced/debugged/handled/dealt with/encountered/resolved/
+// found). Factored out and widened (2026-07-27, RC-9 code review): the
+// SOFTWARE_ENGINEERING_CONCEPT_PATTERNS vocabulary expansion above (design
+// pattern, load balancing, unit testing, etc.) widened the technical_concept
+// branch's surface into far more common behavioral-interview phrasing than the
+// old DSA-only terms did ("describe a time you set up load balancing under
+// pressure", "describe a design pattern you introduced to fix a messy
+// codebase", "describe how you improved test coverage with unit testing at
+// your last job") — none of which the original narrow verb list caught, since
+// none of those questions use "solved/fixed/faced/...". Both branches now
+// share this wider guard so they can't drift out of sync.
+const PAST_TENSE_STORY_FRAME_RE = /\b(tell me about|describe|share|give me an example of)\b.{0,60}\b(you|you'?ve|u)\b.{0,80}\b(solved|fixed|faced|debugged|handled|dealt with|encountered|resolved|found|improved|introduced|set up|built|designed|used|implemented|created|adopted|migrated|optimi[sz]ed|refactored|chose|architected)\b/i;
+const HARDEST_BUG_STORY_FRAME_RE = /\b(hardest|toughest|most difficult|trickiest|worst)\b.{0,30}\b(bug|error|issue|crash)\b.{0,40}\b(you|you'?ve|your career|you ever)\b/i;
+const isPastTensePersonalExperienceFrame = (text: string): boolean =>
+  PAST_TENSE_STORY_FRAME_RE.test(text) || HARDEST_BUG_STORY_FRAME_RE.test(text);
+// Typo-tolerant technical vocabulary (RC-2 fix): a one-edit-distance misspelling
+// of a common technical term ("qraphql") should route the same as the correctly
+// spelled term, rather than falling through to classifyUnmatchedFallback's
+// unknown_answer (which had no relevance-gated profile policy — see RC-1). Only
+// terms >= 4 chars are fuzzed by includesPlannerTerm, so short acronyms like
+// "api" rely on the exact TECHNICAL_SUBJECT_PATTERNS entry above instead.
+// "mutex" deliberately excluded (code-review 2026-07-27): levenshtein1('mute',
+// 'mutex') is true, and "mute" is a common word in a live-meeting/interview
+// product's transcripts — the exact `\bmutex\b` pattern in
+// TECHNICAL_SUBJECT_PATTERNS above already covers the correctly-spelled term.
+const TYPO_TOLERANT_TECHNICAL_TERMS = [
+  'graphql', 'database', 'algorithm', 'javascript', 'typescript', 'kubernetes',
+  'docker', 'postgres', 'postgresql', 'mongodb', 'redis', 'kafka',
+  'microservice', 'recursion', 'encryption', 'deadlock', 'semaphore',
+  'concurrency', 'asynchronous', 'polymorphism', 'inheritance', 'websocket',
+  'idempotent', 'middleware', 'endpoint', 'authentication', 'authorization',
+  'serverless', 'container', 'framework', 'compiler', 'interpreter',
+];
+const isLikelyTechnicalConcept = (text: string): boolean =>
+  includesAny(text, TECHNICAL_SUBJECT_PATTERNS)
+  || includesAny(text, DEVOPS_CICD_PATTERNS)
+  || includesAny(text, SOFTWARE_ENGINEERING_CONCEPT_PATTERNS)
+  || TYPO_TOLERANT_TECHNICAL_TERMS.some((term) => includesPlannerTerm(text, term));
 
 const DSA_PATTERNS = [
   /\btwo\s*sum\b/i,
@@ -2496,7 +2583,16 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
              && (followUpHasProjectContext(input, question)
                  || (!includesAny(textNoTechStack, DSA_PATTERNS)
                      && !includesAny(text, CODING_PATTERNS)
-                     && !isLikelyTechnicalConcept(textNoTechStack)))) {
+                     // Scoped to the exact TECHNICAL_SUBJECT_PATTERNS check only
+                     // (NOT the typo-tolerant isLikelyTechnicalConcept) — code-review
+                     // finding (2026-07-27): the broadened typo-tolerant matcher added
+                     // for RC-2 (see isLikelyTechnicalConcept above) includes exact
+                     // trigger words like "framework"/"api" that weren't guarded
+                     // before, and this negation would then wrongly exclude a genuine
+                     // project follow-up like "what frameworks did you use in your
+                     // project?" from project_followup routing (recreating the same
+                     // unknown_answer-leak bug class for a different question shape).
+                     && !includesAny(textNoTechStack, TECHNICAL_SUBJECT_PATTERNS)))) {
     // Phase 5: a drill-in on a project already on the table ("how is it built?",
     // "what was your role?", "what tech stack did you use?", "hardest part?",
     // "why did you build it?", "what did you learn?"). These are PROFILE questions
@@ -2567,8 +2663,9 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
              // (profile forbidden, neutral voice) where the model answered
              // "I'm Natively, an AI assistant. I don't have personal
              // experiences." A past-tense candidate frame defers to BEHAVIORAL.
-             && !/\b(tell me about|describe|share|give me an example of)\b.{0,60}\b(you|you'?ve|u)\b.{0,60}\b(solved|fixed|faced|debugged|handled|dealt with|encountered|resolved|found)\b/i.test(text)
-             && !/\b(hardest|toughest|most difficult|trickiest|worst)\b.{0,30}\b(bug|error|issue|crash)\b.{0,40}\b(you|you'?ve|your career|you ever)\b/i.test(text)) {
+             // Now shared with the technical_concept branch below — see
+             // isPastTensePersonalExperienceFrame's definition above.
+             && !isPastTensePersonalExperienceFrame(text)) {
     answerType = 'debugging_question_answer';
   } else if (isHypotheticalTech(text) && !hasWriteCodeVerb) {
     // HYPOTHETICAL application — "how would you use GraphQL?", "how would you
@@ -2598,7 +2695,20 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     answerType = 'technical_concept_answer';
   } else if (includesAny(text, TECHNICAL_CONCEPT_PATTERNS) &&
              !includesAny(text, CODING_PATTERNS) &&
-             (includesAny(textNoTechStack, DSA_PATTERNS) || isLikelyTechnicalConcept(textNoTechStack))) {
+             (includesAny(textNoTechStack, DSA_PATTERNS) || isLikelyTechnicalConcept(textNoTechStack)) &&
+             // BEHAVIORAL-PAST-EXPERIENCE GUARD (RC-9 code review, 2026-07-27):
+             // same guard as the debugging branch above. "describe a time you
+             // set up load balancing under pressure" / "describe how you
+             // improved test coverage with unit testing at your last job" are
+             // STAR stories about the candidate's own past, not neutral concept
+             // asks — live-confirmed to wrongly lose profile access (was
+             // behavioral_interview_answer/skill_experience/jd_fit before the
+             // SOFTWARE_ENGINEERING_CONCEPT_PATTERNS vocabulary expansion widened
+             // this branch's surface, technical_concept_answer/forbidden after,
+             // with no guard). Without this, the wider vocabulary above
+             // regresses exactly the class of question this guard was invented
+             // to protect, just via new terms instead of "bug".
+             !isPastTensePersonalExperienceFrame(text)) {
     // "Explain BFS", "what is a deadlock", "difference between TCP and UDP" —
     // generic technical CONCEPT, NO profile (spec Case F). Checked before
     // DSA/coding: a DSA noun with explain/what-is framing and NO coding verb is a

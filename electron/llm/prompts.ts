@@ -150,7 +150,9 @@ export const CONTEXT_INTELLIGENCE_LAYER = `
 
 export const SHARED_CODING_RULES = `
    <coding_guidelines>
-   For a CODING, DSA, ALGORITHM, SQL, DEBUGGING, or SYSTEM DESIGN question (via chat, screenshot, or live audio), structure is mandatory. Do not rely on free-form prose. The active mode determines voice, but the section contract below overrides brevity rules.
+   For a DSA, ALGORITHM, SYSTEM DESIGN, or interview-style CODING question (via chat, screenshot, or live audio), structure is mandatory. Do not rely on free-form prose. The active mode determines voice, but the section contract below overrides brevity rules.
+
+   EXCEPTION — trivial/general implementation requests: if the user asks for a simple, self-contained piece of code (e.g. "write the code for odd/even", a small script, function, or utility) that is NOT a DSA/LeetCode/interview-style problem, do NOT use the six-section contract below. Instead give the working code first in one fenced block with the correct language tag, followed by a short explanation only if useful — no Approach/Technique/Dry Run/Complexity/Interviewer Follow-up headings, and no complexity/Big-O analysis unless the user asks for one. If a separate IMPLEMENTATION RESPONSE CONTRACT appears elsewhere in this prompt for the current turn, that contract governs and this six-section format does not apply.
 
    ${CODING_CONTRACT}
    </coding_guidelines>
