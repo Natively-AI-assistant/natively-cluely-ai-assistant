@@ -141,6 +141,43 @@ describe('prepareSdRequirementsForAnswerPlan (live stamp)', () => {
     assert.equal(out.artifact.gateClosed, false);
   });
 
+  test('uiAdvance soft-refuses without speech phrase (ticket 17)', () => {
+    const plan = { answerType: 'system_design_answer', forbiddenContextLayers: [] };
+    const artifact = gate.createEmptyRequirementsArtifact('url shortener');
+    const out = live.prepareSdRequirementsForAnswerPlan({
+      answerPlan: plan,
+      artifact,
+      problemQuestion: 'url shortener',
+      interviewerTexts: [],
+      uiAdvance: true,
+    });
+    assert.ok(out.softRefuseSpoken);
+    assert.equal(out.sdPhase, 'requirements');
+    assert.equal(out.artifact.gateClosed, false);
+    const vm = gate.projectGateStatusViewModel(out.artifact, { softRefused: true });
+    assert.equal(vm.visible, true);
+    assert.equal(vm.shouldAutoExpand, true);
+  });
+
+  test('uiAdvance accepts when checklist complete (ticket 17)', () => {
+    const plan = { answerType: 'system_design_answer', forbiddenContextLayers: [] };
+    let artifact = gate.createEmptyRequirementsArtifact('url shortener');
+    for (const id of ['functional_requirements', 'scale_qps', 'latency', 'consistency_availability']) {
+      artifact = gate.fillSlotFromInterviewer(artifact, id, 'x');
+    }
+    const out = live.prepareSdRequirementsForAnswerPlan({
+      answerPlan: plan,
+      artifact,
+      problemQuestion: 'url shortener',
+      interviewerTexts: [],
+      uiAdvance: true,
+    });
+    assert.equal(out.softRefuseSpoken, null);
+    assert.equal(out.sdPhase, 'post_requirements');
+    assert.equal(out.artifact.gateClosed, true);
+    assert.equal(gate.projectGateStatusViewModel(out.artifact).visible, false);
+  });
+
   test('new SD problem resets prior gate-closed state', () => {
     const plan = { answerType: 'system_design_answer', forbiddenContextLayers: [] };
     let artifact = gate.createEmptyRequirementsArtifact('problem a');

@@ -159,6 +159,92 @@ export function listMissingRequiredSlots(artifact: RequirementsArtifact): Missin
   return missing;
 }
 
+/** Gate-relevant slot ids in checklist priority order (optionals excluded). */
+export function listGateRelevantSlotIds(artifact: RequirementsArtifact): SlotId[] {
+  const ids: SlotId[] = [...MANDATORY_SLOTS];
+  if (isDataFlowRequired(artifact)) ids.push('data_flow_stages');
+  return ids;
+}
+
+export type GateSlotRowStatus = 'filled' | 'missing' | 'assumed';
+
+export interface GateStatusSlotRow {
+  id: SlotId;
+  label: string;
+  status: GateSlotRowStatus;
+}
+
+/** Overlay projection for the Requirements gate-status strip (ticket 17). */
+export interface GateStatusViewModel {
+  visible: boolean;
+  filled: number;
+  required: number;
+  nextSlotLabel: string | null;
+  /** Collapsed primary line, e.g. `Requirements · 3/5`. */
+  progressLabel: string;
+  rows: GateStatusSlotRow[];
+  missingIds: SlotId[];
+  /** Soft-refuse just happened — overlay should expand and highlight missing. */
+  shouldAutoExpand: boolean;
+  checklistComplete: boolean;
+}
+
+export interface ProjectGateStatusOptions {
+  softRefused?: boolean;
+}
+
+function slotRowStatus(slot: SlotState | undefined): GateSlotRowStatus {
+  if (!slot?.filled) return 'missing';
+  if (slot.fillSource === 'assumption') return 'assumed';
+  return 'filled';
+}
+
+/**
+ * Project the durable Requirements artifact into overlay chrome fields.
+ * Hidden when there is no artifact or the gate has closed (post_requirements).
+ */
+export function projectGateStatusViewModel(
+  artifact: RequirementsArtifact | null | undefined,
+  opts: ProjectGateStatusOptions = {},
+): GateStatusViewModel {
+  const empty: GateStatusViewModel = {
+    visible: false,
+    filled: 0,
+    required: 0,
+    nextSlotLabel: null,
+    progressLabel: '',
+    rows: [],
+    missingIds: [],
+    shouldAutoExpand: false,
+    checklistComplete: false,
+  };
+  if (!artifact) return empty;
+  if (deriveSdPhase(artifact) !== 'requirements') return empty;
+
+  const relevant = listGateRelevantSlotIds(artifact);
+  const rows: GateStatusSlotRow[] = relevant.map((id) => ({
+    id,
+    label: SLOT_LABELS[id],
+    status: slotRowStatus(artifact.slots[id]),
+  }));
+  const missing = listMissingRequiredSlots(artifact);
+  const filled = rows.filter((r) => r.status !== 'missing').length;
+  const required = relevant.length;
+  const nextSlotLabel = missing[0]?.label ?? null;
+
+  return {
+    visible: true,
+    filled,
+    required,
+    nextSlotLabel,
+    progressLabel: `Requirements · ${filled}/${required}`,
+    rows,
+    missingIds: missing.map((m) => m.id),
+    shouldAutoExpand: Boolean(opts.softRefused),
+    checklistComplete: isChecklistComplete(artifact),
+  };
+}
+
 /** Mark that the candidate asked once about a slot (enables assumption fill). */
 export function markSlotAsked(artifact: RequirementsArtifact, slotId: SlotId): RequirementsArtifact {
   const slot = { ...artifact.slots[slotId], askedOnce: true };
@@ -226,11 +312,13 @@ export function acceptAdvance(artifact: RequirementsArtifact): RequirementsArtif
   return { ...artifact, advanceAccepted: true, gateClosed: true };
 }
 
-export type AdvanceChannel = 'mic' | 'assistant' | 'interviewer';
+export type AdvanceChannel = 'mic' | 'assistant' | 'interviewer' | 'ui';
 
 /** Candidate-channel advance only; interviewer speech never advances. */
 export function detectAdvanceSignal(text: string, channel: AdvanceChannel): boolean {
   if (channel === 'interviewer') return false;
+  // Overlay Advance button — always candidate-equivalent intent (no phrase regex).
+  if (channel === 'ui') return true;
   const t = String(text || '').trim();
   if (!t) return false;
   return ADVANCE_PHRASE_RE.test(t);

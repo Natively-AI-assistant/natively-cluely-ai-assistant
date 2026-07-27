@@ -7622,7 +7622,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       _,
       question?: string,
       imagePaths?: string[],
-      options?: { promptInstruction?: string; domContext?: string; domContextEnvelope?: unknown },
+      options?: {
+        promptInstruction?: string;
+        domContext?: string;
+        domContextEnvelope?: unknown;
+        sdRequirementsUiAdvance?: boolean;
+      },
     ) => {
       try {
         let screenContext: any;
@@ -7780,6 +7785,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 ? options.promptInstruction
                 : undefined,
             domContext: effectiveDomContext,
+            sdRequirementsUiAdvance: options?.sdRequirementsUiAdvance === true,
           },
         );
         if (answer) {
@@ -7812,6 +7818,28 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     },
   );
+
+  safeHandle('get-sd-requirements-gate-status', async () => {
+    try {
+      const intelligenceManager = appState.getIntelligenceManager();
+      return {
+        success: true,
+        viewModel: intelligenceManager.getSdRequirementsGateStatus?.() ?? {
+          visible: false,
+          filled: 0,
+          required: 0,
+          nextSlotLabel: null,
+          progressLabel: '',
+          rows: [],
+          missingIds: [],
+          shouldAutoExpand: false,
+          checklistComplete: false,
+        },
+      };
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'unknown_error', viewModel: null };
+    }
+  });
 
   safeHandle('generate-clarify', async () => {
     try {

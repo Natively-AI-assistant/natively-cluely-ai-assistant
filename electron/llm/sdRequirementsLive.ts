@@ -137,6 +137,11 @@ export interface PrepareSdRequirementsInput {
   candidateTexts?: string[];
   /** Optional Natively (assistant) spoken advance channel. */
   assistantAdvanceTexts?: string[];
+  /**
+   * Overlay Advance button (ticket 17). Candidate-equivalent; runs soft-refuse /
+   * accept via the `ui` channel without requiring an advance phrase.
+   */
+  uiAdvance?: boolean;
 }
 
 export interface PrepareSdRequirementsResult {
@@ -200,7 +205,7 @@ export function prepareSdRequirementsForAnswerPlan(
 
   let softRefuseSpoken: string | null = null;
 
-  const tryAdvance = (text: string, channel: 'mic' | 'assistant') => {
+  const tryAdvance = (text: string, channel: 'mic' | 'assistant' | 'ui') => {
     if (softRefuseSpoken || artifact.gateClosed) return;
     const result = softRefuseIfPrematureAdvance(artifact, text, channel);
     artifact = result.artifact;
@@ -218,6 +223,9 @@ export function prepareSdRequirementsForAnswerPlan(
   const latestAssistant = (input.assistantAdvanceTexts || []).filter(Boolean).slice(-1);
   for (const t of latestAssistant) {
     tryAdvance(String(t || ''), 'assistant');
+  }
+  if (input.uiAdvance) {
+    tryAdvance('ui-advance', 'ui');
   }
 
   const sdPhase = deriveSdPhase(artifact);

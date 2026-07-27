@@ -32,6 +32,25 @@ export interface DynamicActionPayload {
   }
 }
 
+export interface GateStatusSlotRow {
+  id: string
+  label: string
+  status: 'filled' | 'missing' | 'assumed'
+}
+
+/** Overlay projection for SD Requirements gate strip (ticket 17). */
+export interface GateStatusViewModel {
+  visible: boolean
+  filled: number
+  required: number
+  nextSlotLabel: string | null
+  progressLabel: string
+  rows: GateStatusSlotRow[]
+  missingIds: string[]
+  shouldAutoExpand: boolean
+  checklistComplete: boolean
+}
+
 export interface ElectronAPI {
   updateContentDimensions: (dimensions: {
     width: number
@@ -246,7 +265,12 @@ export interface ElectronAPI {
 
   // Intelligence Mode IPC
   generateAssist: () => Promise<{ insight: string | null }>
-  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string; domContext?: string; domContextEnvelope?: ContextEnvelope }) => Promise<{
+  generateWhatToSay: (question?: string, imagePaths?: string[], options?: {
+    promptInstruction?: string;
+    domContext?: string;
+    domContextEnvelope?: ContextEnvelope;
+    sdRequirementsUiAdvance?: boolean;
+  }) => Promise<{
     answer: string | null;
     question?: string;
     error?: string;
@@ -259,6 +283,12 @@ export interface ElectronAPI {
     imageCount?: number;
     usedImageInput?: boolean;
   }>
+  getSdRequirementsGateStatus: () => Promise<{
+    success: boolean;
+    viewModel: GateStatusViewModel | null;
+    error?: string;
+  }>
+  onSdRequirementsGateStatus: (callback: (viewModel: GateStatusViewModel) => void) => () => void
   generateClarify: () => Promise<{ clarification: string | null }>
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) => Promise<{ hint: string | null }>
   generateBrainstorm: (imagePaths?: string[], problemStatement?: string) => Promise<{ script: string | null }>

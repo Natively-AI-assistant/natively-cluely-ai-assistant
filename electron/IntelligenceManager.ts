@@ -70,6 +70,8 @@ export class IntelligenceManager extends EventEmitter {
             'negotiation_coaching',
             // Phase 3: Cluely-style dynamic action card emissions.
             'dynamic_action_emitted',
+            // Ticket 17: Requirements gate-status strip projection.
+            'sd_requirements_gate_status',
         ];
 
         for (const event of events) {
@@ -179,8 +181,16 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.runAssistMode();
     }
 
-    async runWhatShouldISay(question?: string, confidence?: number, imagePaths?: string[], options?: { skipCooldown?: boolean; forceFresh?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string }): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence?: number, imagePaths?: string[], options?: { skipCooldown?: boolean; forceFresh?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; sdRequirementsUiAdvance?: boolean }): Promise<string | null> {
         return this.engine.runWhatShouldISay(question, confidence, imagePaths, options);
+    }
+
+    getSdRequirementsGateStatus() {
+        return this.engine.getSdRequirementsGateStatus();
+    }
+
+    publishSdRequirementsGateStatus(softRefused: boolean = false): void {
+        this.engine.publishSdRequirementsGateStatus(softRefused);
     }
 
     async runFollowUp(intent: string, userRequest?: string): Promise<string | null> {
@@ -241,7 +251,10 @@ export class IntelligenceManager extends EventEmitter {
     // ============================================
 
     async stopMeeting(): Promise<string | null> {
-        return this.persistence.stopMeeting();
+        const meetingId = await this.persistence.stopMeeting();
+        // MeetingPersistence resets SessionTracker directly — hide gate strip.
+        this.engine.publishSdRequirementsGateStatus(false);
+        return meetingId;
     }
 
     async recoverUnprocessedMeetings(): Promise<void> {
@@ -317,5 +330,7 @@ export class IntelligenceManager extends EventEmitter {
     reset(): void {
         this.session.reset();
         this.engine.reset();
+        // Hide gate-status strip when the live Requirements artifact is cleared.
+        this.engine.publishSdRequirementsGateStatus(false);
     }
 }

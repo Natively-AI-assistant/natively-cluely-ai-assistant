@@ -70,6 +70,8 @@ export {
     detectAdvanceSignal,
     buildSoftRefuseSpoken,
     softRefuseIfPrematureAdvance,
+    listGateRelevantSlotIds,
+    projectGateStatusViewModel,
     hasLaterFrameworkHeadings,
     softTruncateToRequirements,
     enforceStructuralGate,
@@ -93,6 +95,10 @@ export type {
     MissingSlot,
     AdvanceChannel,
     NextSlotOptions,
+    GateSlotRowStatus,
+    GateStatusSlotRow,
+    GateStatusViewModel,
+    ProjectGateStatusOptions,
 } from "./sdRequirementsGate";
 export {
     prepareSdRequirementsForAnswerPlan,
