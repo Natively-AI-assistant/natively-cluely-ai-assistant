@@ -7,6 +7,17 @@
 'use strict';
 
 /**
+ * Candidate whiteboard contract (grill: ASCII replaces mermaid for SUT).
+ * HLD presentation includes a portable ASCII diagram in the spoken turn.
+ */
+const CANDIDATE_ASCII_HLD_INSTRUCTION = [
+  'When you present the High-Level Design (HLD), include at least one ASCII architecture diagram',
+  'in a fenced ```text or ```ascii code block using portable characters (+ - | / > v).',
+  'Treat it as you drawing on the whiteboard for a human reading the transcript.',
+  'Do not emit mermaid (no ```mermaid). Interviewer diagrams may still use mermaid; yours must be ASCII.',
+].join(' ');
+
+/**
  * Casual + candidate-led showcase contract for live SUT (SPEC 08 + SPEC 09).
  * Attitude only — not the GitHub /sondo-pr-voice pipeline. T2 sim only.
  */
@@ -19,6 +30,24 @@ const CASUAL_SD_TONE_INSTRUCTION = [
   'at the next unfinished phase.',
   'Spoken tone: casual, collaborative, short. Prefer "we". Hedge lightly when uncertain.',
   'No stiff corporate filler. No long monologue that ignores a live clarifier.',
+  CANDIDATE_ASCII_HLD_INSTRUCTION,
+].join('\n');
+
+/**
+ * Full-raw candidate instruction — no shortening (SD_INTERVIEW_SIM_T2_FULL_RAW=1).
+ */
+const FULL_RAW_SD_TONE_INSTRUCTION = [
+  'You are the candidate. You lead the system-design showcase.',
+  'Walk the hellointerview Delivery Framework in order as you go',
+  '(Requirements → Core Entities → API → HLD → Deep Dives). Do not wait for the interviewer',
+  'to tell you which section is next.',
+  'Speak freely and at full length — complete sentences, full paragraphs, real tradeoff discussion.',
+  'Do NOT shorten, summarize into bullets-only, or use telegram/caveman style.',
+  'Prefer "we". Hedge lightly when uncertain.',
+  'If the interviewer asks a clarifier: answer it thoroughly first, then resume the showcase',
+  'at the next unfinished phase. Include scale numbers and failure modes when they help.',
+  'No stiff corporate filler.',
+  CANDIDATE_ASCII_HLD_INSTRUCTION,
 ].join('\n');
 
 /**
@@ -178,6 +207,8 @@ function liveSideChannelSnapshot(intelligenceManager) {
 
 module.exports = {
   CASUAL_SD_TONE_INSTRUCTION,
+  FULL_RAW_SD_TONE_INSTRUCTION,
+  CANDIDATE_ASCII_HLD_INSTRUCTION,
   collectAnswer,
   estimateSpendFromText,
   createIntelligenceSessionAdapter,

@@ -51,6 +51,40 @@ function isNonspecificInterviewerText(text) {
 }
 
 /**
+ * True when the candidate's reply still opens a new topic or asks to continue —
+ * used to ignore a premature interviewer END_INTERVIEW so the loop can proceed.
+ * @param {string} text
+ */
+function candidateKeepsFloorOpen(text) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (
+    /\b(let'?s wrap|that wraps|no further questions|no more questions|i'?m done|we can stop|that'?s all from me)\b/i.test(
+      t,
+    )
+  ) {
+    return false;
+  }
+  const lastChunk = t.slice(-1500);
+  if (
+    /\b(should we (discuss|dive|look|focus|talk|move|cover|explore)|want to (discuss|dive|look|focus|talk)|or should we)\b/i.test(
+      lastChunk,
+    ) ||
+    /\b(or would you|would you (prefer|like|rather)|prefer to (discuss|dive|look|explore|talk))\b/i.test(
+      lastChunk,
+    ) ||
+    /\b(before we wrap|next (we|I)'d like|i'?d like to (move|dive|touch|address)|i have (one|a) question)\b/i.test(
+      lastChunk,
+    ) ||
+    /\bdoes that (approach|make sense|align|sound)\b[^?]{0,120}\?/i.test(lastChunk)
+  ) {
+    return true;
+  }
+  // Question mark still in the recent window ⇒ floor not surrendered yet.
+  return /\?/.test(lastChunk);
+}
+
+/**
  * Default interviewer policy for candidate-led T2 sims (SPEC 09).
  * Open once; thereafter clarifier OR hand-back OR END — never assign next DF section.
  */
@@ -64,6 +98,34 @@ const DEFAULT_INTERVIEWER_SYSTEM_PROMPT = [
   'FORBIDDEN: telling the candidate which framework section to do next',
   '(e.g. "now define core entities", "let\'s move to the API", "please do the HLD", "deep dive on X next").',
   'Do not answer as the candidate. Optional fenced ```mermaid only when clarifying a design point.',
+].join(' ');
+
+/**
+ * Full-raw interviewer policy — free-form talk, no length caps (SD_INTERVIEW_SIM_T2_FULL_RAW=1).
+ * Still candidate-led: no phase assignment; still END_INTERVIEW / HAND_BACK tokens when needed.
+ */
+const FULL_RAW_INTERVIEWER_SYSTEM_PROMPT = [
+  'You are a system-design interviewer in a **candidate-led** interview.',
+  'Speak naturally and at full length — do NOT shorten, summarize, or use telegram/caveman style.',
+  'Write complete sentences and full paragraphs. Ask detailed follow-ups when useful.',
+  'If there is no candidate answer yet: open with the full problem statement and invite the candidate',
+  'to lead the hellointerview Delivery Framework showcase',
+  '(Requirements → Core Entities → API → HLD → Deep Dives).',
+  'Do NOT assign those sections as a step-by-step homework list.',
+  'On later turns pick exactly one:',
+  '(A) A substantive clarifier or multi-part probe about something the candidate just claimed',
+  '(tradeoffs, failure modes, scale numbers, API contracts, data model edge cases) — full prose OK;',
+  '(B) Hand the floor back with a natural spoken handoff and the token HAND_BACK on its own line;',
+  '(C) Only when Requirements → Core Entities → API → HLD → Deep Dives are all thoroughly covered,',
+  'a full closing debrief and END_INTERVIEW on its own line. Do not end after one long monologue',
+  'if deep dives or scale/failure discussion are still thin.',
+  'Do NOT emit END_INTERVIEW if the candidate\'s last turn still asks an open follow-up',
+  '(e.g. "should we discuss X?", "or should we dive into Y?") or if your own prior probe is still unanswered.',
+  'Prefer (A) or (B) until the candidate has given a clear wrap-up or answered "any final questions?"',
+  'with a closing that does not open a new topic.',
+  'FORBIDDEN: telling the candidate which framework section to do next',
+  '(e.g. "now define core entities", "let\'s move to the API", "please do the HLD", "deep dive on X next").',
+  'Do not answer as the candidate. Optional fenced ```mermaid when clarifying a design point.',
 ].join(' ');
 
 /**
@@ -253,14 +315,24 @@ function resolveEndReasonAfterBudget(run) {
  *   systemPrompt?: string,
  *   fetchImpl?: typeof fetch,
  *   estimateUsdPer1kTokens?: number,
+ *   maxOutputTokens?: number,
+ *   historyChars?: number,
+ *   fullRaw?: boolean,
  * }} [opts]
  */
 function createLiveInterviewerAgent(opts = {}) {
   const model = opts.model || DEFAULT_INTERVIEWER_MODEL;
   const apiKey = opts.apiKey || resolveGeminiApiKey();
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
-  const systemPrompt = opts.systemPrompt || DEFAULT_INTERVIEWER_SYSTEM_PROMPT;
+  const fullRaw = opts.fullRaw === true;
+  const systemPrompt =
+    opts.systemPrompt ||
+    (fullRaw ? FULL_RAW_INTERVIEWER_SYSTEM_PROMPT : DEFAULT_INTERVIEWER_SYSTEM_PROMPT);
   const usdPer1k = opts.estimateUsdPer1kTokens != null ? opts.estimateUsdPer1kTokens : 0.0001;
+  const maxOutputTokens =
+    opts.maxOutputTokens != null ? opts.maxOutputTokens : fullRaw ? 4096 : 1024;
+  const historyChars =
+    opts.historyChars != null ? opts.historyChars : fullRaw ? 24000 : 6000;
 
   return async function liveInterviewerAgent(ctx) {
     if (!apiKey) {
@@ -273,14 +345,24 @@ function createLiveInterviewerAgent(opts = {}) {
     const history = (ctx.bundle?.turns || [])
       .map((t) => `${t.role}: ${t.text}`)
       .join('\n')
-      .slice(-6000);
+      .slice(-historyChars);
     const hasAssistant = (ctx.bundle?.turns || []).some((t) => t.role === 'assistant');
+    const turns = ctx.bundle?.turns || [];
+    const lastAssistant = [...turns].reverse().find((x) => x.role === 'assistant');
+    const floorStillOpen = lastAssistant && candidateKeepsFloorOpen(lastAssistant.text);
+    const nextMove = !hasAssistant
+      ? fullRaw
+        ? 'Open once with the full problem in natural prose; invite the candidate to lead the Delivery Framework showcase. Do not assign sections step-by-step. Do not shorten.'
+        : 'Open once: invite the candidate to lead the Delivery Framework showcase. Do not assign sections step-by-step.'
+      : floorStillOpen
+        ? 'Candidate still has an open question or unfinished thread. Do NOT emit END_INTERVIEW. Probe or answer that open thread, or HAND_BACK.'
+        : fullRaw
+          ? 'Next interviewer move: full-length clarifier/probe OR HAND_BACK OR END_INTERVIEW. Do not assign the next Delivery Framework section. Do not shorten.'
+          : 'Next interviewer move: clarifier OR HAND_BACK OR END_INTERVIEW. Do not assign the next Delivery Framework section.';
     const userText = [
       `Scenario: ${ctx.scenario?.prompt || ctx.scenario?.id || 'system design interview'}`,
       history ? `Transcript so far:\n${history}` : 'No turns yet.',
-      hasAssistant
-        ? 'Next interviewer move: clarifier OR HAND_BACK OR END_INTERVIEW. Do not assign the next Delivery Framework section.'
-        : 'Open once: invite the candidate to lead the Delivery Framework showcase. Do not assign sections step-by-step.',
+      nextMove,
     ].join('\n\n');
 
     const url =
@@ -293,7 +375,7 @@ function createLiveInterviewerAgent(opts = {}) {
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: userText }] }],
         systemInstruction: { parts: [{ text: systemPrompt }] },
-        generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+        generationConfig: { temperature: 0.4, maxOutputTokens },
       }),
     });
 
@@ -422,7 +504,8 @@ async function runT2DualAgent(config = {}) {
   let end_reason = 'scenario_stop';
   const injectLog = [];
   // Safety bound so a buggy agent cannot loop forever even without maxTurns.
-  const hardCap = effectiveMaxTurns != null ? effectiveMaxTurns * 2 + 8 : 64;
+  // Uncapped runs (null maxTurns) still stop around 128 steps (~64 dialogue turns).
+  const hardCap = effectiveMaxTurns != null ? effectiveMaxTurns * 2 + 8 : 128;
 
   for (let step = 0; step < hardCap; step += 1) {
     if (effectiveMaxTurns != null && run.spend.turn_count >= effectiveMaxTurns) {
@@ -592,8 +675,20 @@ async function runT2DualAgent(config = {}) {
     }
 
     if (interviewerTurn.end_interview || interviewerTurn.stop) {
-      end_reason = 'coverage_complete';
-      break;
+      const lastAssistant = [...run.bundle.turns].reverse().find((t) => t.role === 'assistant');
+      if (
+        lastAssistant &&
+        candidateKeepsFloorOpen(lastAssistant.text) &&
+        !(effectiveMaxTurns != null && run.spend.turn_count >= effectiveMaxTurns) &&
+        !budgetExceeded(run)
+      ) {
+        // Premature END — candidate still opening topics; keep interviewing.
+        interviewerTurn.end_interview = false;
+        interviewerTurn.stop = false;
+      } else {
+        end_reason = 'coverage_complete';
+        break;
+      }
     }
 
     if (effectiveMaxTurns != null && run.spend.turn_count >= effectiveMaxTurns) {
@@ -618,10 +713,15 @@ module.exports = {
   DEFAULT_SUT_MODEL,
   DEFAULT_LIVE_MAX_TURNS,
   DEFAULT_INTERVIEWER_SYSTEM_PROMPT,
+  FULL_RAW_INTERVIEWER_SYSTEM_PROMPT,
   get CASUAL_SD_TONE_INSTRUCTION() {
     return require('./liveSut').CASUAL_SD_TONE_INSTRUCTION;
   },
+  get FULL_RAW_SD_TONE_INSTRUCTION() {
+    return require('./liveSut').FULL_RAW_SD_TONE_INSTRUCTION;
+  },
   isNonspecificInterviewerText,
+  candidateKeepsFloorOpen,
   shouldRunT2DualAgent,
   t2SkipMessage,
   extractMermaidAttachments,

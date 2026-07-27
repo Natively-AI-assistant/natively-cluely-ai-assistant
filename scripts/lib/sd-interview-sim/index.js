@@ -210,6 +210,14 @@ module.exports = {
   retainLastN,
 };
 
+// Digest helpers (SPEC 11) — re-export for convenience
+Object.assign(module.exports, {
+  buildDigestMarkdown: require('./digest').buildDigestMarkdown,
+  writeCorpusDigest: require('./digest').writeCorpusDigest,
+  detectReviewTags: require('./digest').detectReviewTags,
+  truncateTurnText: require('./digest').truncateTurnText,
+});
+
 // Runner seam (fixture + stub). Required after exports so circular load sees helpers.
 Object.assign(module.exports, require('./runner'));
 // T2 dual-agent overnight path (env-gated; stubs by default in tests).

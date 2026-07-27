@@ -14,9 +14,11 @@ const {
   DEFAULT_LIVE_MAX_TURNS,
   isNonspecificInterviewerText,
   createThinCandidateAgent,
+  FULL_RAW_INTERVIEWER_SYSTEM_PROMPT,
 } = require('../lib/sd-interview-sim/t2.js');
 const {
   CASUAL_SD_TONE_INSTRUCTION,
+  FULL_RAW_SD_TONE_INSTRUCTION,
   createLiveWhatToAnswerSut,
 } = require('../lib/sd-interview-sim/liveSut.js');
 const {
@@ -31,6 +33,24 @@ describe('sd-interview-sim SPEC 08 full-loop defaults', () => {
   test('DEFAULT_LIVE_MAX_TURNS is at least 30', () => {
     assert.ok(DEFAULT_LIVE_MAX_TURNS >= 30);
     assert.equal(DEFAULT_LIVE_MAX_TURNS, 32);
+  });
+
+  test('FULL_RAW prompts drop short/caveman constraints', () => {
+    assert.match(FULL_RAW_INTERVIEWER_SYSTEM_PROMPT, /full length/i);
+    assert.doesNotMatch(FULL_RAW_INTERVIEWER_SYSTEM_PROMPT, /ONE short clarifier/);
+    assert.match(FULL_RAW_SD_TONE_INSTRUCTION, /full length/i);
+    assert.doesNotMatch(FULL_RAW_SD_TONE_INSTRUCTION, /collaborative, short/);
+  });
+
+  test('candidate tone forbids mermaid and requires ASCII HLD diagram', () => {
+    for (const instr of [CASUAL_SD_TONE_INSTRUCTION, FULL_RAW_SD_TONE_INSTRUCTION]) {
+      assert.match(instr, /ASCII/i);
+      assert.match(instr, /HLD/i);
+      assert.match(instr, /```(?:text|ascii)/i);
+      assert.match(instr, /Do not emit mermaid/i);
+      assert.doesNotMatch(instr, /optional ```mermaid/i);
+      assert.doesNotMatch(instr, /include .{0,40}```mermaid/i);
+    }
   });
 
   test('CASUAL_SD_TONE_INSTRUCTION mentions Delivery Framework and casual we', () => {

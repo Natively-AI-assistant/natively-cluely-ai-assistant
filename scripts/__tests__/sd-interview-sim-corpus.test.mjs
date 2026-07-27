@@ -88,6 +88,9 @@ describe('sd-interview-sim corpus redact + retain', () => {
       assert.ok(result.path.startsWith(dir));
       assert.ok(result.path.endsWith('write-run-1.json'));
       assert.ok(fs.existsSync(result.path));
+      assert.ok(result.digestPath);
+      assert.ok(fs.existsSync(result.digestPath));
+      assert.match(fs.readFileSync(result.digestPath, 'utf8'), /SD interview digest/);
 
       const onDisk = JSON.parse(fs.readFileSync(result.path, 'utf8'));
       assert.equal(onDisk.run_id, 'write-run-1');
@@ -107,21 +110,27 @@ describe('sd-interview-sim corpus redact + retain', () => {
       for (let i = 0; i < names.length; i += 1) {
         const p = path.join(dir, names[i]);
         fs.writeFileSync(p, JSON.stringify({ run_id: names[i] }), 'utf8');
+        const digest = path.join(dir, names[i].replace(/\.json$/, '.digest.md'));
+        fs.writeFileSync(digest, `# digest ${names[i]}\n`, 'utf8');
         // Stagger mtimes so sort is deterministic (oldest → newest).
         const when = new Date(Date.now() - (names.length - i) * 60_000);
         fs.utimesSync(p, when, when);
+        fs.utimesSync(digest, when, when);
       }
 
       const result = retainLastN(dir, 2);
 
       assert.equal(result.kept.length, 2);
-      assert.equal(result.deleted.length, 2);
+      assert.ok(result.deleted.includes('a.json'));
+      assert.ok(result.deleted.includes('a.digest.md'));
+      assert.ok(result.deleted.includes('b.json'));
+      assert.ok(result.deleted.includes('b.digest.md'));
       assert.deepEqual(result.kept.sort(), ['c.json', 'd.json'].sort());
-      assert.deepEqual(result.deleted.sort(), ['a.json', 'b.json'].sort());
       assert.ok(fs.existsSync(path.join(dir, 'c.json')));
       assert.ok(fs.existsSync(path.join(dir, 'd.json')));
+      assert.ok(fs.existsSync(path.join(dir, 'c.digest.md')));
       assert.equal(fs.existsSync(path.join(dir, 'a.json')), false);
-      assert.equal(fs.existsSync(path.join(dir, 'b.json')), false);
+      assert.equal(fs.existsSync(path.join(dir, 'a.digest.md')), false);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

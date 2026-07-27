@@ -8,6 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { writeCorpusDigest } = require('./digest');
 
 /** Repo-relative corpus directory. Contents are gitignored; see .gitignore. */
 const CORPUS_DIR_RELATIVE = 'traces/sd-interview-sim';
@@ -82,11 +83,12 @@ function resolveCorpusDir(opts = {}) {
 }
 
 /**
- * Serialize a finalize()'d bundle to the corpus dir after redaction.
+ * Serialize a finalize()'d bundle to the corpus dir after redaction,
+ * and write a paired review digest (`*.digest.md`).
  *
  * @param {object} bundle
- * @param {{ corpusDir?: string, repoRoot?: string, filename?: string }} [opts]
- * @returns {{ path: string, bundle: object }}
+ * @param {{ corpusDir?: string, repoRoot?: string, filename?: string, skipDigest?: boolean }} [opts]
+ * @returns {{ path: string, digestPath?: string | null, bundle: object }}
  */
 function writeCorpusBundle(bundle, opts = {}) {
   const dir = resolveCorpusDir(opts);
@@ -100,12 +102,19 @@ function writeCorpusBundle(bundle, opts = {}) {
   const filePath = path.join(dir, filename);
 
   fs.writeFileSync(filePath, `${JSON.stringify(redacted, null, 2)}\n`, 'utf8');
-  return { path: filePath, bundle: redacted };
+
+  let digestPath = null;
+  if (opts.skipDigest !== true) {
+    digestPath = writeCorpusDigest(redacted, { jsonPath: filePath }).path;
+  }
+
+  return { path: filePath, digestPath, bundle: redacted };
 }
 
 /**
- * Keep the newest `keepCount` `*.json` runs in `corpusDir`; delete older ones.
- * Sorted by mtime (newest first). Non-json entries are ignored.
+ * Keep the newest `keepCount` `*.json` runs in `corpusDir`; delete older ones
+ * and their paired `*.digest.md` files. Sorted by mtime (newest first).
+ * Non-json entries are ignored (except paired digests of deleted JSON).
  *
  * @param {string} corpusDir
  * @param {number} keepCount
@@ -132,8 +141,16 @@ function retainLastN(corpusDir, keepCount) {
   const kept = entries.slice(0, keepCount).map((e) => e.name);
   const deleted = [];
   for (const entry of entries.slice(keepCount)) {
-    fs.unlinkSync(path.join(corpusDir, entry.name));
+    const jsonFull = path.join(corpusDir, entry.name);
+    fs.unlinkSync(jsonFull);
     deleted.push(entry.name);
+
+    const digestName = entry.name.replace(/\.json$/i, '.digest.md');
+    const digestFull = path.join(corpusDir, digestName);
+    if (fs.existsSync(digestFull)) {
+      fs.unlinkSync(digestFull);
+      deleted.push(digestName);
+    }
   }
   return { kept, deleted };
 }

@@ -24,6 +24,7 @@
 //   SD_INTERVIEW_SIM_T2_INTERVIEWER_MODEL=gemini-3.1-flash-lite
 //   SD_INTERVIEW_SIM_T2_SUT_MODEL=gemini-3.5-flash
 //   SD_INTERVIEW_SIM_T2_SUT_TIMEOUT_MS=90000
+//   SD_INTERVIEW_SIM_T2_FULL_RAW=1   (full-length interviewer+candidate; no short/caveman tone)
 //   SD_INTERVIEW_SIM_CORPUS_DIR=traces/sd-interview-sim
 //   SD_INTERVIEW_SIM_T2_PROMPT='Design a URL shortener'
 //
@@ -65,6 +66,7 @@ const {
   createIntelligenceSessionAdapter,
   createLiveWhatToAnswerSut,
   liveSideChannelSnapshot,
+  FULL_RAW_SD_TONE_INSTRUCTION,
 } = require('./lib/sd-interview-sim/liveSut');
 
 const {
@@ -144,8 +146,10 @@ function createEchoStubSut(models) {
 
 /**
  * Boot AppState + Technical Interview mode; return live SUT + session adapter.
+ * @param {{ interviewer?: string, sut?: string }} models
+ * @param {{ promptInstruction?: string }} [sutOpts]
  */
-async function bootLiveSut(models) {
+async function bootLiveSut(models, sutOpts = {}) {
   if (!fs.existsSync(path.join(distRoot, 'main.js'))) {
     throw new Error(
       `dist-electron missing (${distRoot}). Run: npm run build:electron`,
@@ -271,6 +275,9 @@ async function bootLiveSut(models) {
   const sut = createLiveWhatToAnswerSut({
     intelligenceManager,
     timeoutMs: envInt('SD_INTERVIEW_SIM_T2_SUT_TIMEOUT_MS', 90_000),
+    ...(sutOpts.promptInstruction
+      ? { promptInstruction: sutOpts.promptInstruction }
+      : {}),
   });
 
   return {
@@ -304,10 +311,16 @@ async function main() {
   const sutModel =
     (process.env.SD_INTERVIEW_SIM_T2_SUT_MODEL || '').trim() || DEFAULT_SUT_MODEL;
 
-  const maxTurns = envInt('SD_INTERVIEW_SIM_T2_MAX_TURNS', DEFAULT_LIVE_MAX_TURNS);
+  // MAX_TURNS=0 → no soft turn cap (run until END_INTERVIEW / coverage); safety hardCap still applies.
+  const maxTurnsRaw = (process.env.SD_INTERVIEW_SIM_T2_MAX_TURNS || '').trim();
+  const maxTurns =
+    maxTurnsRaw === '0'
+      ? null
+      : envInt('SD_INTERVIEW_SIM_T2_MAX_TURNS', DEFAULT_LIVE_MAX_TURNS);
   const maxInterviews = envInt('SD_INTERVIEW_SIM_T2_MAX_INTERVIEWS', 5);
   const maxUsd = envFloat('SD_INTERVIEW_SIM_T2_MAX_USD', 1.5);
   const retainN = envInt('SD_INTERVIEW_SIM_T2_RETAIN', 20);
+  const fullRaw = process.env.SD_INTERVIEW_SIM_T2_FULL_RAW === '1';
 
   const corpusDir = resolveCorpusDir({
     corpusDir: process.env.SD_INTERVIEW_SIM_CORPUS_DIR || undefined,
@@ -325,7 +338,7 @@ async function main() {
 
   const prompt =
     (process.env.SD_INTERVIEW_SIM_T2_PROMPT || '').trim() ||
-    'Design a URL shortener like Bitly. Start with Requirements, then HLD.';
+    'Design a URL shortener like Bitly.';
 
   const models = { interviewer: interviewerModel, sut: sutModel };
 
@@ -336,7 +349,9 @@ async function main() {
   let candidateAgent = createThinCandidateAgent();
 
   if (wantLiveSut) {
-    liveBoot = await bootLiveSut(models);
+    liveBoot = await bootLiveSut(models, {
+      ...(fullRaw ? { promptInstruction: FULL_RAW_SD_TONE_INSTRUCTION } : {}),
+    });
     sut = liveBoot.sut;
     sessionTracker = liveBoot.sessionTracker;
     getSideChannelSnapshot = () =>
@@ -347,8 +362,13 @@ async function main() {
     });
   }
 
+  const interviewerOpts = {
+    model: interviewerModel,
+    ...(fullRaw ? { fullRaw: true } : {}),
+  };
+
   const interviewerAgent = live
-    ? createLiveInterviewerAgent({ model: interviewerModel })
+    ? createLiveInterviewerAgent(interviewerOpts)
     : createStubInterviewerAgent([
         {
           text: `${prompt}\n\n\`\`\`mermaid\nflowchart LR\n  Client --> API\n\`\`\``,
@@ -359,6 +379,7 @@ async function main() {
   console.log(
     `[sd-interview-sim-t2] mode=${live ? 'live-interviewer' : 'stub'} ` +
       `sut=${wantLiveSut ? 'live-wta' : 'echo-stub'} ` +
+      `fullRaw=${fullRaw ? '1' : '0'} ` +
       `models=${JSON.stringify(models)} maxTurns=${maxTurns} ` +
       `maxInterviews/night=${maxInterviews} maxUsd=${maxUsd} corpus=${corpusDir}`,
   );
@@ -372,15 +393,15 @@ async function main() {
       const { bundle, outcome, corpusPath } = await runT2DualAgent({
         scenario: { id: 'overnight-t2', prompt },
         interviewerAgent: live
-          ? createLiveInterviewerAgent({ model: interviewerModel })
+          ? createLiveInterviewerAgent(interviewerOpts)
           : interviewerAgent,
         candidateAgent,
         sut,
         sessionTracker,
         getSideChannelSnapshot,
-        maxTurns,
+        maxTurns: maxTurns == null ? undefined : maxTurns,
         budgets: {
-          maxTurns,
+          ...(maxTurns != null ? { maxTurns } : {}),
           maxEstimatedUsd: maxUsd,
         },
         models,
@@ -389,6 +410,7 @@ async function main() {
           tier: 'T2',
           sut_path: wantLiveSut ? 'runWhatShouldISay' : 'echo-stub',
           lessons_ingested: liveBoot?.lessonsIngested ?? 0,
+          full_raw: fullRaw,
         },
         nightlyCap,
         corpusDir,

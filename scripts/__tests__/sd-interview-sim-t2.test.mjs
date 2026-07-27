@@ -101,6 +101,69 @@ describe('sd-interview-sim T2 NightlyInterviewCap', () => {
 });
 
 describe('sd-interview-sim T2 dual-agent stub path ($0)', () => {
+  test('candidateKeepsFloorOpen detects open follow-ups', () => {
+    const { candidateKeepsFloorOpen } = require('../lib/sd-interview-sim/t2.js');
+    assert.equal(
+      candidateKeepsFloorOpen(
+        'Observability looks good. Should we discuss the deployment strategy next?',
+      ),
+      true,
+    );
+    assert.equal(
+      candidateKeepsFloorOpen(
+        'Hashing works. Does that approach make sense, or would you prefer to discuss storage?',
+      ),
+      true,
+    );
+    assert.equal(
+      candidateKeepsFloorOpen(
+        'I have one question: regarding write throughput, do we expect spikes?',
+      ),
+      true,
+    );
+    assert.equal(
+      candidateKeepsFloorOpen("That wraps it up — I'm done, no further questions."),
+      false,
+    );
+  });
+
+  test('ignores premature END_INTERVIEW when candidate still opens a topic', async () => {
+    let step = 0;
+    const interviewer = async () => {
+      step += 1;
+      if (step === 1) return { text: 'Design a URL shortener.' };
+      if (step === 2) return { text: 'Thanks, wrapping up.', end_interview: true };
+      return { text: 'One more probe on hot keys.', end_interview: true };
+    };
+    let sutN = 0;
+    const { bundle, outcome } = await runT2DualAgent({
+      scenario: { id: 'premature-end', prompt: 'URL shortener' },
+      interviewerAgent: interviewer,
+      candidateAgent: createThinCandidateAgent(),
+      sut: async () => {
+        sutN += 1;
+        if (sutN === 1) {
+          return {
+            text: 'Here is HLD. Should we dive into the caching layer next?',
+          };
+        }
+        if (sutN === 2) {
+          return {
+            text: 'Caching covered. Should we discuss deployment without downtime?',
+          };
+        }
+        return { text: "That wraps it up — I'm done, no further questions." };
+      },
+      maxTurns: 10,
+      provenance: { git_sha: 't2dead', tier: 'T2' },
+      models: { interviewer: 'stub', sut: 'stub' },
+    });
+
+    assert.ok(sutN >= 3, `expected continue past premature end, sutN=${sutN}`);
+    assert.ok(bundle.turns.length >= 6);
+    assert.equal(outcome.end_reason, 'coverage_complete');
+  });
+
   test('stub interviewer + thin candidate trigger SUT; injects speech; captures assistant', async () => {
     const injectLog = [];
     const sutCalls = [];
