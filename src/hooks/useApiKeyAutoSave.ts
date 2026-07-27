@@ -36,15 +36,31 @@ export function useApiKeyAutoSave(
   /** True while a debounce timer is outstanding (used for unmount flush). */
   const pendingRef = useRef(false);
   const inFlightRef = useRef(false);
+  /**
+   * Greptile: when a save is requested while another is in flight, remember to
+   * run again after the in-flight save finishes so the latest value is not dropped.
+   */
+  const queuedRef = useRef(false);
 
   const runSave = useCallback(() => {
     const v = valueRef.current;
-    if (!shouldSaveRef.current(v) || inFlightRef.current) return;
+    if (!shouldSaveRef.current(v)) return;
+    if (inFlightRef.current) {
+      // Trailing-edge: keep the newest value for a follow-up pass.
+      queuedRef.current = true;
+      return;
+    }
     inFlightRef.current = true;
+    queuedRef.current = false;
     Promise.resolve(onSaveRef.current())
       .catch((err) => console.error('[useApiKeyAutoSave]', err))
       .finally(() => {
         inFlightRef.current = false;
+        if (queuedRef.current) {
+          queuedRef.current = false;
+          // Re-enter with the latest valueRef (may have changed during the flight).
+          runSave();
+        }
       });
   }, []);
 
@@ -70,11 +86,10 @@ export function useApiKeyAutoSave(
 
   // Flush a pending debounce on unmount (registered after the debounce effect
   // so this cleanup runs first and still sees pendingRef === true).
-  // Greptile P2: must go through runSave() so an in-flight save is not
-  // duplicated by calling onSave directly.
+  // Must go through runSave() so in-flight + queued trailing-edge still apply.
   useEffect(
     () => () => {
-      if (pendingRef.current) {
+      if (pendingRef.current || queuedRef.current) {
         pendingRef.current = false;
         runSave();
       }

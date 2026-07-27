@@ -345,6 +345,42 @@ test('Greptile P1: permanent single-key re-entry preserves siblings when keychai
   assert.equal(healed.getGeminiApiKey(), GEMINI, 'Gemini sibling recovered from healed keyring');
 });
 
+test('Greptile P1 follow-up: staging fallback must NOT migrate-up over undecryptable keyring', () => {
+  // After permanent re-entry, a subsequent still-broken launch loads the sparse
+  // staging fallback and used to call migrate-up → overwrite credentials.enc with
+  // the sparse object, permanently deleting every sibling key in the old ciphertext.
+  const env = makeEnv();
+  const GEMINI = 'AIzaSy-SIBLING-gemini-key-322c';
+  const stagingMarker = path.join(env.userData, 'credentials.fallback.staging');
+  const beforeEnc = () => fs.readFileSync(encPath(env));
+
+  const cm = freshManager(env);
+  cm.setDeepgramApiKey(SECRET);
+  cm.setGeminiApiKey(GEMINI);
+  const originalEnc = Buffer.from(beforeEnc());
+
+  env.state.decryptShouldThrow = true;
+  freshManager(env); freshManager(env);
+  const broken = freshManager(env);
+  assert.equal(broken.setDeepgramApiKey('dg-STAGED-sparse'), true);
+  assert.ok(fs.existsSync(stagingMarker), 'staging marker written with sparse re-entry');
+
+  // Still-broken relaunch: loads staging fallback, must skip migrate-up.
+  const stillBroken = freshManager(env);
+  assert.equal(stillBroken.getDeepgramApiKey(), 'dg-STAGED-sparse');
+  assert.ok(
+    Buffer.from(beforeEnc()).equals(originalEnc),
+    'undecryptable keyring bytes must be byte-identical — migrate-up must not have rewritten them',
+  );
+
+  // Heal recovers siblings from the preserved keyring + staged Deepgram from fallback.
+  env.state.decryptShouldThrow = false;
+  const healed = freshManager(env);
+  assert.equal(healed.getDeepgramApiKey(), 'dg-STAGED-sparse');
+  assert.equal(healed.getGeminiApiKey(), GEMINI);
+  assert.ok(!fs.existsSync(stagingMarker), 'staging marker cleared after successful heal');
+});
+
 test('FALLBACK fall-through: an undecryptable keyring file no longer strands a readable fallback', () => {
   // Models a user already routed to the app-managed fallback (after a permanent keychain
   // failure) whose stale credentials.enc still exists. The OLD code early-returned on the

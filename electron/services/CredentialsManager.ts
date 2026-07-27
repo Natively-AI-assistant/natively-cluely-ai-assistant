@@ -21,6 +21,11 @@ const SALT_PATH = path.join(app.getPath('userData'), 'credentials.salt');
 // the UI can ask the user to re-enter keys when the store is permanently unreadable.
 const DECRYPT_FAIL_PATH = path.join(app.getPath('userData'), 'credentials.decryptfail');
 const DECRYPT_FAIL_THRESHOLD = 3;
+// Marker written alongside a fallback that was staged during permanent re-entry /
+// sparse recovery (issue #322 / Greptile). While present, migrate-up must NOT
+// overwrite credentials.enc — that fallback is partial and the keyring may still
+// hold sibling keys.
+const FALLBACK_STAGING_PATH = path.join(app.getPath('userData'), 'credentials.fallback.staging');
 
 export interface CustomProvider {
     id: string;
@@ -148,6 +153,12 @@ export class CredentialsManager {
      * permanently replace still-recoverable ciphertext (Greptile P1 / #322).
      */
     private recoveredFromReadableStore = false;
+    /**
+     * True when the readable store we recovered was a *staging* fallback
+     * (partial re-entry), not a full authoritative fallback. Migrate-up must
+     * not replace the undecryptable keyring with this sparse set.
+     */
+    private fallbackIsStagingPartial = false;
     /** True after DECRYPT_FAIL_THRESHOLD consecutive cold-start decrypt failures. */
     private credentialReentryNeeded = false;
 
@@ -169,6 +180,7 @@ export class CredentialsManager {
     public init(): void {
         this.existingStoreUnreadable = false;
         this.recoveredFromReadableStore = false;
+        this.fallbackIsStagingPartial = false;
         this.credentialReentryNeeded = false;
         this.loadCredentials();
         console.log('[CredentialsManager] Initialized');
@@ -964,12 +976,9 @@ export class CredentialsManager {
             return false;
         }
 
-        // Greptile P1: after an undecryptable launch with nothing readable loaded,
-        // in-memory credentials are empty or a sparse re-entry of one provider.
-        // Writing that set to the keyring (or a fallback that later wins via mtime)
-        // permanently destroys every other key still sitting in the undecryptable
-        // ciphertext. Refuse until we recovered a full readable store this session;
-        // permanent re-entry may stage into the fallback ONLY (keyring preserved).
+        // Greptile P1: never overwrite an undecryptable keyring with a sparse /
+        // staging credential set. Permanent re-entry and any subsequent saves
+        // while only a staging fallback was loaded must stay on the fallback path.
         if (this.existingStoreUnreadable && !this.recoveredFromReadableStore) {
             if (!this.credentialReentryNeeded) {
                 console.warn(
@@ -977,7 +986,13 @@ export class CredentialsManager {
                 );
                 return false;
             }
-            return this.persistFallbackOnlyPreservingKeyring(isEmpty);
+            return this.persistFallbackOnlyPreservingKeyring(isEmpty, /* staging */ true);
+        }
+        if (this.existingStoreUnreadable && this.fallbackIsStagingPartial) {
+            console.warn(
+                '[CredentialsManager] Staging-fallback session: persisting to fallback only (will not replace undecryptable keyring)',
+            );
+            return this.persistFallbackOnlyPreservingKeyring(isEmpty, /* staging */ true);
         }
 
         // Try the OS keyring first. When safeStorage is available, this is the
@@ -1000,6 +1015,7 @@ export class CredentialsManager {
                 // item is still broken.
                 if (!this.existingStoreUnreadable) {
                     this.removeFallbackFile();
+                    this.clearFallbackStagingMarker();
                 } else {
                     console.warn('[CredentialsManager] Recovery keyring write: preserving fallback until a cold-start decrypt proves the keyring readable (issue #322)');
                 }
@@ -1044,19 +1060,24 @@ export class CredentialsManager {
     }
 
     /**
-     * Permanent re-entry path (#322 / Greptile P1): stage credentials into the
-     * app-managed fallback while leaving the undecryptable keyring file untouched
-     * so a later heal can still recover sibling keys. Callers must only use this
-     * when `needsCredentialReentry()` is true and nothing readable was loaded.
+     * Stage credentials into the app-managed fallback while leaving the
+     * undecryptable keyring file untouched so a later heal can still recover
+     * sibling keys (#322 / Greptile P1). When `staging` is true, write the
+     * staging marker so a later launch will not migrate-up this partial set
+     * over the preserved keyring.
      */
-    private persistFallbackOnlyPreservingKeyring(isEmpty: boolean): boolean {
+    private persistFallbackOnlyPreservingKeyring(isEmpty: boolean, staging: boolean): boolean {
         try {
             const blob = encryptCredentialBlob(JSON.stringify(this.credentials), this.getFallbackKey());
             const tmpFb = FALLBACK_PATH + '.tmp';
             fs.writeFileSync(tmpFb, blob, { mode: 0o600 });
             fs.renameSync(tmpFb, FALLBACK_PATH);
+            if (staging) {
+                this.markFallbackStaging();
+                this.fallbackIsStagingPartial = true;
+            }
             console.warn(
-                '[CredentialsManager] Permanent re-entry: staged credentials to fallback only; preserving undecryptable keyring (issue #322 / Greptile P1)',
+                '[CredentialsManager] Staged credentials to fallback only; preserving undecryptable keyring (issue #322 / Greptile P1)',
             );
             if (!isEmpty) {
                 this.clearDecryptFailSidecar();
@@ -1068,6 +1089,29 @@ export class CredentialsManager {
                 (error as Error)?.message ?? String(error),
             );
             return false;
+        }
+    }
+
+    private markFallbackStaging(): void {
+        try {
+            fs.writeFileSync(
+                FALLBACK_STAGING_PATH,
+                JSON.stringify({ stagedAt: new Date().toISOString(), reason: 'sparse-reentry' }),
+                { mode: 0o600 },
+            );
+        } catch (err) {
+            console.warn('[CredentialsManager] Could not write fallback staging marker:', err);
+        }
+    }
+
+    private clearFallbackStagingMarker(): void {
+        this.fallbackIsStagingPartial = false;
+        try {
+            if (fs.existsSync(FALLBACK_STAGING_PATH)) {
+                fs.unlinkSync(FALLBACK_STAGING_PATH);
+            }
+        } catch (err) {
+            console.warn('[CredentialsManager] Could not remove fallback staging marker:', err);
         }
     }
 
@@ -1137,6 +1181,8 @@ export class CredentialsManager {
         } catch (err) {
             console.warn('[CredentialsManager] Could not remove fallback credential file:', err);
         }
+        // Staging marker is meaningless without its fallback blob.
+        this.clearFallbackStagingMarker();
     }
 
     /**
@@ -1232,10 +1278,12 @@ export class CredentialsManager {
                                 this.existingStoreUnreadable = false;
                                 this.clearDecryptFailSidecar();
                                 // Verified-healed: cold-start decrypt proved the keyring.
-                                // Persist merge (if any) then drop the fallback safety net.
+                                // Persist merge (if any) then drop the fallback safety net
+                                // and any sparse-staging marker.
                                 if (fallbackOverlay) {
                                     if (this.saveCredentials()) {
                                         this.removeFallbackFile();
+                                        this.clearFallbackStagingMarker();
                                     } else {
                                         console.warn(
                                             '[CredentialsManager] Merge persist failed — keeping fallback safety net',
@@ -1243,6 +1291,7 @@ export class CredentialsManager {
                                     }
                                 } else {
                                     this.removeFallbackFile();
+                                    this.clearFallbackStagingMarker();
                                 }
                                 this.removePlaintextFile();
                                 console.log('[CredentialsManager] Loaded encrypted credentials');
@@ -1270,7 +1319,11 @@ export class CredentialsManager {
                     if (typeof parsed === 'object' && parsed !== null) {
                         this.credentials = parsed;
                         this.recoveredFromReadableStore = true;
-                        console.log('[CredentialsManager] Loaded credentials from app-managed fallback');
+                        this.fallbackIsStagingPartial = fs.existsSync(FALLBACK_STAGING_PATH);
+                        console.log(
+                            '[CredentialsManager] Loaded credentials from app-managed fallback' +
+                            (this.fallbackIsStagingPartial ? ' (sparse staging — will not replace keyring)' : ''),
+                        );
                     } else {
                         throw new Error('Fallback credentials is not a valid object');
                     }
@@ -1280,14 +1333,23 @@ export class CredentialsManager {
                 }
 
                 // Migrate up: if the keyring is now available, re-persist via safeStorage.
-                // When this launch also had an undecryptable keyring file, saveCredentials
-                // preserves the fallback until a later cold-start decrypt proves healed.
-                // When nothing was recovered (empty after fallback parse fail), skip.
+                // NEVER migrate a sparse staging fallback over an undecryptable keyring —
+                // that permanently deletes sibling keys still in credentials.enc (Greptile).
                 let keyringNow = false;
                 try { keyringNow = safeStorage.isEncryptionAvailable(); } catch { keyringNow = false; }
-                if (keyringNow && Object.keys(this.credentials).length > 0 && this.recoveredFromReadableStore) {
-                    console.log('[CredentialsManager] Keyring now available — migrating fallback credentials to keyring');
-                    this.saveCredentials();
+                if (
+                    keyringNow &&
+                    Object.keys(this.credentials).length > 0 &&
+                    this.recoveredFromReadableStore
+                ) {
+                    if (this.existingStoreUnreadable && this.fallbackIsStagingPartial) {
+                        console.warn(
+                            '[CredentialsManager] Skipping migrate-up: staging fallback must not replace undecryptable keyring (Greptile P1)',
+                        );
+                    } else {
+                        console.log('[CredentialsManager] Keyring now available — migrating fallback credentials to keyring');
+                        this.saveCredentials();
+                    }
                 }
                 this.removePlaintextFile();
                 return;
