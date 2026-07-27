@@ -334,8 +334,13 @@ export type IntelligenceFlagKey =
   // doc's own risk analysis is why required-direction enforcement must wait:
   // RC-8 (a real, live false-refusal bug from the same session this gate
   // was designed in) shows that direction is unsafe to enforce before its
-  // own dedicated shadow period, so this flag structurally cannot affect a
-  // 'required'-policy turn (checkImpossibleEvidenceState never flags one).
+  // own dedicated shadow period. NOTE (corrected 2026-07-28, code-review
+  // finding): checkImpossibleEvidenceState DOES now flag 'required'-policy
+  // packs too (check #3, added for Stage 2's shadow observation) — this
+  // flag's enforcement gate stays safe not because the function never
+  // flags required, but because its enforceableViolations filter matches
+  // ONLY the forbidden-direction violation code by name. See that filter's
+  // own comment in ipcHandlers.ts before ever widening it.
   // Pattern 1 (dev/test-only default).
   | 'contextOsImpossibleStateGateEnforceForbidden';
 

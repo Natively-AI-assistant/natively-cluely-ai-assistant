@@ -1289,6 +1289,12 @@ export function initializeIpcHandlers(appState: AppState): void {
                     requestedProperty: shadowPack.requestedProperty,
                     violationCodes: shadowResult.violations.map((v) => v.code),
                     violationSourceKinds: shadowResult.violations.map((v) => v.sourceKind),
+                    // Code-review finding (2026-07-28), for check #3
+                    // (required_policy_zero_evidence) triage: collapses the
+                    // "no profile loaded at all" population out of the
+                    // dataset — that case is never RC-8-shaped (RC-8 needs a
+                    // profile to actually be loaded and mis-selected).
+                    hasProfileFactsForTurn: _hasProfileFactsForTurn,
                   });
                 } else if (isIntelligenceFlagEnabled('trace')) {
                   console.log('[IMPOSSIBLE-STATE-GATE-SHADOW] agreement', {
@@ -1713,9 +1719,18 @@ export function initializeIpcHandlers(appState: AppState): void {
         })();
         // IMPOSSIBLE-EVIDENCE-STATE GATE, Stage 1 enforcement (answer-pipeline-
         // rebuild Phase 2, docs/answer-pipeline-rebuild/03_EVIDENCEPACK_DESIGN.md).
-        // Forbidden-direction ONLY (checks #1/#2 — checkImpossibleEvidenceState
-        // never flags a 'required'-policy pack, so this cannot affect RC-8's
-        // fix). Mirrors _contractAllowsProfile immediately above: an
+        // Forbidden-direction ONLY. NOTE (corrected 2026-07-28, code-review
+        // finding): checkImpossibleEvidenceState DOES now also flag
+        // 'required'-policy packs (check #3, required_policy_zero_evidence,
+        // added for Stage 2's shadow observation) — the actual safety
+        // guarantee that this gate cannot affect RC-8's fix is NOT "the
+        // function never flags required" (that's now false) but the
+        // enforceableViolations filter below, which matches ONLY
+        // 'forbidden_policy_profile_item_present' by code. Do not widen that
+        // filter without re-reading the design doc's Stage 2/3 staging
+        // rationale first — enforcing check #3 before its own dedicated
+        // shadow period would reproduce RC-8 under real enforcement. Mirrors
+        // _contractAllowsProfile immediately above: an
         // independent, self-contained computation (not reusing Stage 0's
         // shadow-block pack, so this gate's correctness never depends on an
         // earlier block having run) that can only NARROW the legacy decision,
