@@ -218,9 +218,54 @@ export function initializeIpcHandlers(appState: AppState): void {
       };
       const modelAvailable = (modelId: string): boolean => {
         if (!modelId) return false;
+
+        // Greptile fix: consult disabled-provider and enabled-models filters so
+        // that disabling a provider or de-selecting a model in the UI immediately
+        // makes it unavailable for runtime refresh — preventing the default model
+        // from remaining active after the user explicitly filtered it out.
+        const disabledProviders: string[] = cm.getDisabledProviders?.() || [];
+
+        // Helper: extract the "provider family" prefix from a model ID so we can
+        // check whether the provider as a whole is disabled.
+        const providerFamily = (): string => {
+          if (modelId === 'natively') return 'natively';
+          if (modelId.startsWith('codex-cli')) return 'codex-cli';
+          if (modelId.startsWith('litellm/')) return 'litellm';
+          if (modelId.startsWith('or/')) return 'openrouter';
+          if (modelId.startsWith('ollama-')) return 'ollama';
+          if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return 'gemini';
+          if (isKnownGroqModel(modelId)) return 'groq';
+          if (modelId.startsWith('gpt-') || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.includes('openai')) return 'openai';
+          if (modelId.startsWith('claude-')) return 'claude';
+          if (/^deepseek-v/i.test(modelId)) return 'deepseek';
+          // OpenRouter namespaced models (legacy heuristic, removed in favor of `or/` prefix)
+          if (modelId === 'openrouter/auto') return 'openrouter';
+          return 'unknown';
+        };
+        const family = providerFamily();
+        if (disabledProviders.includes(family) || disabledProviders.includes(modelId)) return false;
+
+        // Check per-provider enabled-models filter. When the filter is populated
+        // (non-empty), the model must be in it — an empty filter means "no filter"
+        // (all models of that family are allowed).
+        const enabledForFamily = cm.getCloudEnabledModels(family);
+        if (enabledForFamily && enabledForFamily.length > 0 && !enabledForFamily.includes(modelId)) {
+          // Also check a modelId without provider prefix
+          const unprefixed = modelId.replace(/^(?:openai\/|anthropic\/|google\/)?/, '');
+          if (!enabledForFamily.includes(unprefixed)) return false;
+        }
+
         if (modelId === 'natively') return has(cm.getNativelyApiKey());
         if (modelId.startsWith('codex-cli')) return codexConfig.enabled === true && codexSignedIn;
-        if (modelId.startsWith('litellm/')) return has(cm.getLitellmBaseURL());
+        if (modelId.startsWith('litellm/')) {
+          // LiteLLM also has its own enabled-models filter.
+          const litellmEnabled = cm.getLitellmEnabledModels?.() || [];
+          if (litellmEnabled.length > 0) {
+            const litellmModelName = modelId.replace('litellm/', '');
+            if (!litellmEnabled.includes(litellmModelName)) return false;
+          }
+          return has(cm.getLitellmBaseURL());
+        }
         if (modelId.startsWith('ollama-')) return true; // live Ollama probe happens at execution time
         if (allProviders.some((p: any) => p?.id === modelId)) return true;
         if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return has(cm.getGeminiApiKey());
