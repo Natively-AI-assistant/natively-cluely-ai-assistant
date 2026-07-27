@@ -83,6 +83,25 @@ test('two consecutive finals in another language re-pin the primary', async () =
     }
 });
 
+test('adjacent finals in two DIFFERENT languages must not pool into one streak', async () => {
+    // greptile review on PR #401: uk-UA then ru-RU used to reach the shared
+    // threshold and re-pin to ru-RU after a single Russian final.
+    const streams = [];
+    const stt = await makeAutoModeSTT(streams);
+    try {
+        streams[0].emit('data', finalResult('привіт', 'uk-ua'));
+        streams[0].emit('data', finalResult('привет', 'ru-ru'));
+        assert.equal(streams.length, 1, 'mixed-language mismatches must not re-pin');
+
+        // A second consecutive final in the SAME language completes the streak.
+        streams[0].emit('data', finalResult('как дела', 'ru-ru'));
+        assert.equal(streams.length, 2, 'two consecutive ru-RU finals re-pin');
+        assert.equal(streams[1].request.config.languageCode, 'ru-RU');
+    } finally {
+        stt.stop();
+    }
+});
+
 test('a matching final resets the mismatch streak', async () => {
     const streams = [];
     const stt = await makeAutoModeSTT(streams);

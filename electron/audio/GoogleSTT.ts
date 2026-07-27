@@ -52,6 +52,12 @@ export class GoogleSTT extends EventEmitter {
     // re-pin the primary once the speaker has clearly switched languages.
     private autoMode = false;
     private languageMismatchStreak = 0;
+    // The streak is PER-LANGUAGE: adjacent finals in two DIFFERENT alternate
+    // languages (uk-UA then ru-RU) must not pool into one streak, or the
+    // stream re-pins to the second language after a single final in it
+    // (greptile review on PR #401). Tracks which language the current streak
+    // belongs to; a different detection restarts the streak at 1.
+    private mismatchLanguage: string | null = null;
     private static readonly LANGUAGE_REPIN_FINALS = 2;
 
     // Speech adaptation: bias recognition toward these exact tokens so English
@@ -142,6 +148,7 @@ export class GoogleSTT extends EventEmitter {
                 this.alternativeLanguageCodes = googleAutoDetectAlternates(preferred);
                 this.autoMode = true;
                 this.languageMismatchStreak = 0;
+                this.mismatchLanguage = null;
                 console.log(`[GoogleSTT/${this.label}] Language set to auto-detect (en-US + ${this.alternativeLanguageCodes.join('/')} alternates)`);
             } else {
                 const config = RECOGNITION_LANGUAGES[key];
@@ -154,6 +161,7 @@ export class GoogleSTT extends EventEmitter {
                 this.languageCode = config.bcp47;
                 this.autoMode = false;
                 this.languageMismatchStreak = 0;
+                this.mismatchLanguage = null;
 
                 if ('alternates' in config) {
                     this.alternativeLanguageCodes = (config as EnglishVariant).alternates;
@@ -393,10 +401,20 @@ export class GoogleSTT extends EventEmitter {
 
         if (detected === this.languageCode) {
             this.languageMismatchStreak = 0;
+            this.mismatchLanguage = null;
             return;
         }
-        if (++this.languageMismatchStreak < GoogleSTT.LANGUAGE_REPIN_FINALS) return;
+        // A different mismatch language restarts the streak — only CONSECUTIVE
+        // finals in the SAME language may accumulate toward a re-pin.
+        if (detected !== this.mismatchLanguage) {
+            this.mismatchLanguage = detected;
+            this.languageMismatchStreak = 1;
+            if (this.languageMismatchStreak < GoogleSTT.LANGUAGE_REPIN_FINALS) return;
+        } else if (++this.languageMismatchStreak < GoogleSTT.LANGUAGE_REPIN_FINALS) {
+            return;
+        }
         this.languageMismatchStreak = 0;
+        this.mismatchLanguage = null;
 
         const alternates = [this.languageCode, ...this.alternativeLanguageCodes]
             .filter(l => l !== detected)
