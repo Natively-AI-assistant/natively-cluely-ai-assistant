@@ -607,6 +607,20 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             wrapper.style.backgroundColor = 'transparent';
             wrapper.style.border = 'none';
             wrapper.style.boxShadow = 'none';
+            // The liquid-glass/modern .settings-shell-surface rules (index.css) set
+            // background/border-color/box-shadow/backdrop-filter with !important so
+            // they can win over the plain bg-bg-elevated/border-border-subtle Tailwind
+            // classes. A normal inline style (above) can't beat an !important
+            // stylesheet rule, so when a meeting-interface theme is active this reveal
+            // would otherwise stay opaque/blurred and hide the opacity mockup behind
+            // it. Force the same properties via setProperty(..., 'important') so the
+            // preview wins regardless of which theme is active; stopPreviewingOpacity
+            // removes these so .settings-shell-surface resumes control afterward.
+            wrapper.style.setProperty('background', 'transparent', 'important');
+            wrapper.style.setProperty('border-color', 'transparent', 'important');
+            wrapper.style.setProperty('box-shadow', 'none', 'important');
+            wrapper.style.setProperty('backdrop-filter', 'none', 'important');
+            wrapper.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
         }
         if (panel) {
             panel.style.visibility = 'hidden';
@@ -647,6 +661,15 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             wrapper.style.backgroundColor = '';
             wrapper.style.border = '';
             wrapper.style.boxShadow = '';
+            // Mirror of the setProperty(..., 'important') overrides in
+            // startPreviewingOpacity — remove them so .settings-shell-surface
+            // (liquid-glass/modern) or the plain Tailwind classes (default theme)
+            // resume normal control of the panel body.
+            wrapper.style.removeProperty('background');
+            wrapper.style.removeProperty('border-color');
+            wrapper.style.removeProperty('box-shadow');
+            wrapper.style.removeProperty('backdrop-filter');
+            wrapper.style.removeProperty('-webkit-backdrop-filter');
         }
         if (panel) {
             panel.style.visibility = '';
@@ -1408,6 +1431,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         setMicLevel(0);
     }, [isOpen, activeTab, selectedInput]);
 
+    // Mirrors App.tsx's interfaceThemeAttribute derivation exactly (undefined
+    // for 'default' so the [data-interface-theme="..."] scoped CSS rules in
+    // index.css simply never match — no separate "off" state to keep in
+    // sync). Deliberately derived from the live-synced `meetingInterfaceTheme`
+    // state already tracked above (line ~402, kept current via the
+    // storage/IPC listener at ~821-839) rather than threaded in as a prop,
+    // so there's exactly one source of truth for this window's copy of the
+    // theme instead of two that could drift.
+    const interfaceThemeAttribute = meetingInterfaceTheme === 'default' ? undefined : meetingInterfaceTheme;
+
     return (
         <AnimatePresence>
             {isOpen && (
@@ -1418,6 +1451,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
                     id="settings-backdrop"
+                    // Ancestor-only placement: the scoped liquid-glass/modern CSS in
+                    // index.css is written as descendant combinators
+                    // ([data-interface-theme="..."] .settings-shell-surface), which can
+                    // never match an element against itself. The attribute lives here;
+                    // the .settings-shell-surface class that consumes it lives on the
+                    // separate #settings-panel-wrapper below.
+                    data-interface-theme={interfaceThemeAttribute}
                     className={`fixed inset-0 z-50 flex items-center justify-center p-8 transition-colors duration-150 ${isPreviewingOpacity ? 'bg-transparent backdrop-blur-none pointer-events-none' : 'bg-black/60 backdrop-blur-sm'}`}
                     onClick={(e) => {
                         // Mirror Modes/Profile (App.tsx) close-on-outside-click.
@@ -1435,6 +1475,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                         // that renders via createPortal(..., document.body) will mount OUTSIDE
                         // this data-settings-theme scope and silently fall back to the blue
                         // brand accent — portals must be scoped to this subtree (or avoided).
+                        // NOTE: data-settings-theme="orchid" lives on this SAME element, so
+                        // its --accent-primary/--btn-primary-* declarations win here over
+                        // any --accent-primary inherited from the data-interface-theme
+                        // attribute on the #settings-backdrop ancestor (a same-element match
+                        // always beats an inherited value) — text/buttons/toggles stay orchid
+                        // regardless of meeting-interface theme. Only the .settings-shell-surface
+                        // class below (background/border/backdrop-filter/box-shadow) responds
+                        // to the meeting-interface theme.
                         data-settings-theme="orchid"
                         initial={{ scale: 0.94, opacity: 0, y: 20 }}
                         animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -1445,7 +1493,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             damping: 32,
                             mass: 1
                         }}
-                        className="bg-bg-elevated w-full max-w-4xl h-[80vh] rounded-2xl border border-border-subtle shadow-2xl overflow-hidden relative"
+                        className="settings-shell-surface bg-bg-elevated w-full max-w-4xl h-[80vh] rounded-2xl border border-border-subtle shadow-2xl overflow-hidden relative"
                     >
                         <div
                             id="settings-panel"
