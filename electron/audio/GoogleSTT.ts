@@ -245,10 +245,10 @@ export class GoogleSTT extends EventEmitter {
             this.pendingLanguageChange = undefined;
         }
 
-        // Release any open swap-drain window: flush the held transcripts (the
-        // renderer's post-stop drain grace still accepts them) and clear the
-        // deadline timer so it can't fire into a dead session.
-        this.finishDrain();
+        // Release every open swap-drain generation: flush held transcripts in
+        // order (the renderer's post-stop drain grace still accepts them) and
+        // clear the deadline timers so they can't fire into a dead session.
+        this.flushAllGenerations();
 
         if (this.stream) {
             this.stream.end();
@@ -430,28 +430,66 @@ export class GoogleSTT extends EventEmitter {
         this.swapStream();
     }
 
-    // Swap-drain ordering (greptile review on PR #401): after a swap, the OLD
-    // stream may flush its pending final AFTER the new stream already produced
-    // results. Emitting in raw callback order would store pre-swap speech
-    // after newer speech, so while the old stream drains, the NEW stream's
-    // transcripts are held here and flushed once the drain finishes (old
-    // stream end/close/error, or the deadline below — Google flushes finals
-    // well under a second after end()).
-    private drainingStream: any = null;
-    private drainTimer: NodeJS.Timeout | null = null;
-    private pendingSwapTranscripts: { text: string; isFinal: boolean; confidence: number }[] = [];
+    // Swap-drain ordering (greptile review on PR #401, two rounds): after a
+    // swap, the OLD stream may flush its pending final AFTER newer streams
+    // already produced results. Emitting in raw callback order would store
+    // pre-swap speech after newer speech. And a single one-slot drain window
+    // is not enough — a SECOND swap before the first drain finishes must not
+    // release the newer stream's transcripts past the oldest stream's tail.
+    //
+    // So streams are tracked as an ordered queue of GENERATIONS (oldest →
+    // newest; the last entry is the current stream). Only the FRONT (oldest
+    // unfinished) generation emits live; every younger generation holds its
+    // transcripts until all older generations finish draining (end/close/
+    // error, or the per-generation deadline — Google flushes finals well
+    // under a second after end()).
+    private streamGenerations: Array<{
+        s: any;
+        pending: { text: string; isFinal: boolean; confidence: number }[];
+        closed: boolean;
+        deadline: NodeJS.Timeout | null;
+    }> = [];
     private static readonly SWAP_DRAIN_DEADLINE_MS = 1000;
 
-    /** Flush the held new-stream transcripts and end the drain window. */
-    private finishDrain(): void {
-        if (this.drainTimer) {
-            clearTimeout(this.drainTimer);
-            this.drainTimer = null;
+    /** Mark a generation as finished draining and advance the queue front. */
+    private markGenerationClosed(s: any): void {
+        const gen = this.streamGenerations.find(g => g.s === s);
+        if (gen && !gen.closed) {
+            gen.closed = true;
+            if (gen.deadline) {
+                clearTimeout(gen.deadline);
+                gen.deadline = null;
+            }
         }
-        this.drainingStream = null;
-        const pending = this.pendingSwapTranscripts;
-        this.pendingSwapTranscripts = [];
-        for (const t of pending) this.emit('transcript', t);
+        this.advanceDrain();
+    }
+
+    /**
+     * Drop closed generations from the front of the queue. Each time a new
+     * generation becomes the front, flush the transcripts it accumulated
+     * while older generations were still draining.
+     */
+    private advanceDrain(): void {
+        while (this.streamGenerations.length && this.streamGenerations[0].closed) {
+            const gone = this.streamGenerations.shift()!;
+            if (gone.deadline) clearTimeout(gone.deadline);
+            const next = this.streamGenerations[0];
+            if (next) {
+                const held = next.pending;
+                next.pending = [];
+                for (const t of held) this.emit('transcript', t);
+            }
+        }
+    }
+
+    /** Flush every generation's held transcripts in order (session teardown). */
+    private flushAllGenerations(): void {
+        const gens = this.streamGenerations;
+        this.streamGenerations = [];
+        for (const g of gens) {
+            if (g.deadline) clearTimeout(g.deadline);
+            for (const t of g.pending) this.emit('transcript', t);
+        }
     }
 
     /**
@@ -466,11 +504,12 @@ export class GoogleSTT extends EventEmitter {
         this.stream = null;
         this.isStreaming = false;
         if (old) {
-            // A back-to-back swap while a previous drain is open: release the
-            // previous window first so its held transcripts keep their order.
-            if (this.drainingStream) this.finishDrain();
-            this.drainingStream = old;
-            this.drainTimer = setTimeout(() => this.finishDrain(), GoogleSTT.SWAP_DRAIN_DEADLINE_MS);
+            const gen = this.streamGenerations.find(g => g.s === old);
+            if (gen && !gen.closed) {
+                // Deadline so a stream that never closes can't hold every
+                // younger generation's transcripts hostage.
+                gen.deadline = setTimeout(() => this.markGenerationClosed(old), GoogleSTT.SWAP_DRAIN_DEADLINE_MS);
+            }
             try { old.end(); } catch { /* flush-only — old stream is abandoned either way */ }
         }
         if (this.isActive) this.startStream();
@@ -507,13 +546,13 @@ export class GoogleSTT extends EventEmitter {
                 interimResults: true,
             })
             .on('error', (err: Error) => {
+                // Whatever else this error means, this stream's generation is
+                // done draining — no more tail finals are coming.
+                this.markGenerationClosed(s);
                 if (this.stream !== s) {
                     // Stale event from a stream already replaced by swapStream()/
                     // restart — the abandoned stream erroring out (e.g. CANCELLED)
                     // must not clobber the new stream's state or alarm main.ts.
-                    // It DOES end that stream's drain window: no more tail
-                    // finals are coming, release the held new-stream results.
-                    if (this.drainingStream === s) this.finishDrain();
                     return;
                 }
                 this.isConnecting = false;
@@ -559,22 +598,16 @@ export class GoogleSTT extends EventEmitter {
                 this.emit('error', err);
             })
             .on('end', () => {
-                if (this.stream !== s) {
-                    // Stale — a newer stream owns the state; the drained stream
-                    // has flushed everything, so release the drain window.
-                    if (this.drainingStream === s) this.finishDrain();
-                    return;
-                }
+                this.markGenerationClosed(s);
+                if (this.stream !== s) return; // stale — a newer stream owns the state
                 console.log(`[GoogleSTT/${this.label}] Stream ended server-side (idle timeout)`);
                 this.isConnecting = false;
                 this.isStreaming = false;
                 this.stream = null;
             })
             .on('close', () => {
-                if (this.stream !== s) {
-                    if (this.drainingStream === s) this.finishDrain();
-                    return;
-                }
+                this.markGenerationClosed(s);
+                if (this.stream !== s) return; // stale — a newer stream owns the state
                 console.log(`[GoogleSTT/${this.label}] Stream closed server-side`);
                 this.isConnecting = false;
                 this.isStreaming = false;
@@ -590,16 +623,16 @@ export class GoogleSTT extends EventEmitter {
                     if (transcript) {
                         console.log(`[GoogleSTT/${this.label}] Transcript received`, { final: isFinal, length: transcript.length });
                         const payload = { text: transcript, isFinal, confidence: alt.confidence };
-                        if (this.stream === s && this.drainingStream) {
-                            // NEW stream result while the old one is still
-                            // draining its pre-swap tail: hold it so the tail
-                            // (older speech) is stored first (greptile PR #401
-                            // — raw callback order reordered the transcript).
-                            this.pendingSwapTranscripts.push(payload);
+                        // Generation-ordered emission (greptile PR #401): only
+                        // the OLDEST unfinished generation emits live; younger
+                        // generations hold their results until every older
+                        // stream has drained its pre-swap tail. A stream not
+                        // in the queue anymore (already advanced past) is
+                        // pathologically late — forward as-is.
+                        const gen = this.streamGenerations.find(g => g.s === s);
+                        if (gen && gen !== this.streamGenerations[0]) {
+                            gen.pending.push(payload);
                         } else {
-                            // Current-stream result outside a drain window, or
-                            // the draining stream's own tail final (older
-                            // speech — forward immediately, it goes FIRST).
                             this.emit('transcript', payload);
                         }
                     }
@@ -613,6 +646,9 @@ export class GoogleSTT extends EventEmitter {
             });
 
         this.stream = s;
+        // Register this stream as the newest generation in the drain queue —
+        // it emits live only once every older generation has drained.
+        this.streamGenerations.push({ s, pending: [], closed: false, deadline: null });
 
         // gRPC streams are writable immediately — no handshake needed.
         const bufferedCount = this.buffer.length;

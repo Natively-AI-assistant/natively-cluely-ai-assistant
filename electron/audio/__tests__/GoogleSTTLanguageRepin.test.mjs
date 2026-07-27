@@ -194,6 +194,47 @@ test('swap drain preserves transcript order: pre-swap tail before new-stream res
     }
 });
 
+test('nested swaps keep all three generations in chronological order', async () => {
+    // greptile PR #401 round 2: a second swap before the first drain finished
+    // used to release the middle stream's held finals and untrack the oldest
+    // stream, whose late tail then landed after newer speech.
+    const streams = [];
+    const stt = await makeAutoModeSTT(streams);
+    try {
+        const transcripts = [];
+        stt.on('transcript', t => transcripts.push(t.text));
+
+        // Swap #1: A → B (two ru finals re-pin).
+        streams[0].emit('data', finalResult('а один', 'ru-ru'));
+        streams[0].emit('data', finalResult('а два', 'ru-ru'));
+        assert.equal(streams.length, 2);
+
+        // Swap #2 while A is still draining: B → C (two uk finals re-pin).
+        streams[1].emit('data', finalResult('б один', 'uk-ua'));
+        streams[1].emit('data', finalResult('б два', 'uk-ua'));
+        assert.equal(streams.length, 3);
+
+        // C produces a result — must wait behind BOTH drains.
+        streams[2].emit('data', finalResult('ц один', 'uk-ua'));
+        assert.ok(!transcripts.includes('ц один'), 'newest generation held');
+        // B's held finals must NOT have been released by swap #2.
+        assert.ok(!transcripts.includes('б один'), 'middle generation still held while A drains');
+
+        // A's late tail arrives — A is the front, so it forwards immediately.
+        streams[0].emit('data', finalResult('а хвост', 'ru-ru'));
+        assert.ok(transcripts.includes('а хвост'));
+
+        // A closes → B becomes front (its held finals flush), B closes → C flushes.
+        streams[0].emit('close');
+        assert.ok(transcripts.includes('б один') && transcripts.includes('б два'));
+        assert.ok(!transcripts.includes('ц один'), 'C still held until B drains');
+        streams[1].emit('close');
+        assert.deepEqual(transcripts, ['а один', 'а два', 'а хвост', 'б один', 'б два', 'ц один']);
+    } finally {
+        stt.stop();
+    }
+});
+
 test('manual (non-auto) language selection never re-pins', async () => {
     const streams = [];
     const stt = new GoogleSTT('test');
