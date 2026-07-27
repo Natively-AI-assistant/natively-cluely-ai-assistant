@@ -4505,6 +4505,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     app.quit();
   });
 
+  // Generic "restart now" action for banners that need a fresh process —
+  // e.g. macOS Screen Recording grants often don't take effect in an
+  // already-running process until the app is relaunched.
+  safeHandle('restart-app', () => {
+    console.log('[IPC] restart-app requested');
+    app.relaunch();
+    app.exit(0);
+  });
+
   safeHandle('quit-and-install-update', async () => {
     try {
       console.log('[IPC] Quit and install update requested');
@@ -10059,9 +10068,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         void (async () => {
           try {
             await ModesManager.getInstance().prewarmModeReferenceIndex(activeMode.id);
-            BrowserWindow.getAllWindows().forEach((win) => {
-              if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId: activeMode.id });
-            });
           } catch (warmErr: any) {
             console.warn('[IPC] mode reference prewarm failed (non-fatal):', warmErr?.message);
           }
@@ -10113,11 +10119,6 @@ export function initializeIpcHandlers(appState: AppState): void {
       const file = await ingestModeReferenceFile({
         modeId,
         filePath: result.filePaths[0],
-        onIndexStatus: (phase, fileId) => {
-          BrowserWindow.getAllWindows().forEach((win) => {
-            if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId, fileId, phase });
-          });
-        },
       });
       return { success: true, file };
     } catch (error: any) {
@@ -11110,11 +11111,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         const file = await ingestModeReferenceFile({
           modeId: params.modeId,
           filePath: candidate,
-          onIndexStatus: (phase, fileId) => {
-            BrowserWindow.getAllWindows().forEach((win) => {
-              if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId: params.modeId, fileId, phase });
-            });
-          },
         });
         return { success: true, file };
       } catch (error: any) {

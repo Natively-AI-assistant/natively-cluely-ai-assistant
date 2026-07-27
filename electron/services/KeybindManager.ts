@@ -274,6 +274,14 @@ export class KeybindManager {
                     });
                     if (globalShortcut.isRegistered(acc)) {
                         console.log(`[KeybindManager] Registered global shortcut: ${acc} -> ${kb.id}`);
+                        // Let any stale "hotkey conflict" banner for this id clear itself
+                        // (e.g. after the user rebinds it in Settings) instead of lingering
+                        // until manually dismissed.
+                        BrowserWindow.getAllWindows().forEach(win => {
+                            if (!win.isDestroyed()) {
+                                win.webContents.send('keybinds:registration-succeeded', { id: kb.id, accelerator: acc });
+                            }
+                        });
                     } else {
                         console.warn(`[KeybindManager] Failed to register global shortcut (likely in use by OS): ${acc}`);
                         // Notify renderer so the UI can surface a warning to the user (issue #136)

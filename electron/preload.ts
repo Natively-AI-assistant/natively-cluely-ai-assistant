@@ -48,6 +48,7 @@ interface ElectronAPI {
 
   analyzeImageFile: (path: string) => Promise<void>;
   quitApp: () => Promise<void>;
+  restartApp: () => Promise<void>;
 
   // LLM Model Management
   getCurrentLlmConfig: () => Promise<{
@@ -357,9 +358,6 @@ interface ElectronAPI {
       terminal?: boolean;
       stuck?: boolean;
     }) => void,
-  ) => () => void;
-  onAudioInputAutoSwitched: (
-    callback: (payload: { from: string; to: string; reason: string; message?: string }) => void,
   ) => () => void;
 
   // STT Status Events
@@ -961,7 +959,6 @@ interface ElectronAPI {
   modesGetReferenceFileStatus: (
     modeId: string,
   ) => Promise<{ success: boolean; statuses?: Array<{ fileId: string; fileName: string; status: string; chunkCount: number }>; error?: string }>;
-  onModeFileIndexStatus: (callback: (data: { modeId: string; fileId?: string }) => void) => () => void;
   onKnowledgeIndexProgress: (callback: (data: { fileId: string; status: string; startedAt?: number; finishedAt?: number; error?: string }) => void) => () => void;
   knowledgeListPacks: (modeId: string) => Promise<{ success: boolean; packs: Array<{ id: string; sourceId: string; fileName: string; cardCount: number; entityCount: number; relationCount: number; packVersion: number; updatedAt: string }>; error?: string }>;
   knowledgeGetPack: (fileId: string) => Promise<{ success: boolean; pack: any | null; error?: string }>;
@@ -1175,6 +1172,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   analyzeImageFile: (path: string) => ipcRenderer.invoke('analyze-image-file', path),
   quitApp: () => ipcRenderer.invoke('quit-app'),
+  restartApp: () => ipcRenderer.invoke('restart-app'),
   toggleWindow: () => ipcRenderer.invoke('toggle-window'),
   showWindow: (inactive?: boolean) => ipcRenderer.invoke('show-window', inactive),
   hideWindow: () => ipcRenderer.invoke('hide-window'),
@@ -1594,15 +1592,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('audio-capture-failed', subscription);
     return () => {
       ipcRenderer.removeListener('audio-capture-failed', subscription);
-    };
-  },
-  onAudioInputAutoSwitched: (
-    callback: (payload: { from: string; to: string; reason: string; message?: string }) => void,
-  ) => {
-    const subscription = (_: any, payload: any) => callback(payload);
-    ipcRenderer.on('audio-input-auto-switched', subscription);
-    return () => {
-      ipcRenderer.removeListener('audio-input-auto-switched', subscription);
     };
   },
 
@@ -2265,6 +2254,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('keybinds:registration-failed', subscription);
     };
   },
+  onKeybindRegistrationSucceeded: (callback: (data: { id: string; accelerator: string }) => void) => {
+    const subscription = (_: any, data: { id: string; accelerator: string }) => callback(data);
+    ipcRenderer.on('keybinds:registration-succeeded', subscription);
+    return () => {
+      ipcRenderer.removeListener('keybinds:registration-succeeded', subscription);
+    };
+  },
 
   // Global shortcut listener — fired stealthily from main process without focusing the window
   onGlobalShortcut: (callback: (data: { action: string }) => void) => {
@@ -2525,13 +2521,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   knowledgeRestoreCardVersion: (params: { cardId: string; versionId: string }) =>
     ipcRenderer.invoke('knowledge:restore-card-version', params),
   knowledgeGetCardHistory: (cardId: string) => ipcRenderer.invoke('knowledge:get-card-history', cardId),
-  onModeFileIndexStatus: (callback: (data: { modeId: string; fileId?: string }) => void) => {
-    const subscription = (_: any, data: { modeId: string; fileId?: string }) => callback(data);
-    ipcRenderer.on('mode-file-index-status', subscription);
-    return () => {
-      ipcRenderer.removeListener('mode-file-index-status', subscription);
-    };
-  },
   onKnowledgeIndexProgress: (callback: (data: { fileId: string; status: string; startedAt?: number; finishedAt?: number; error?: string }) => void) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('knowledge-index-progress', subscription);

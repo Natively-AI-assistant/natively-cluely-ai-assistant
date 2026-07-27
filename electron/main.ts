@@ -784,6 +784,32 @@ function clearSystemAudioPermissionWarning(): void {
 }
 
 /**
+ * Lightweight cache for screen recording capability checks to prevent the 6+
+ * independent call sites from racing each other and showing conflicting banners.
+ *
+ * Root cause of false-positive "permission denied" banners on packaged builds:
+ * macOS Screen Recording permission grants (unlike mic/camera) often do NOT
+ * immediately update the in-process TCC cache when granted via System Settings
+ * while the app is running. The OS may require a full app restart before both
+ * systemPreferences.getMediaAccessStatus('screen') AND desktopCapturer.getSources()
+ * see the fresh grant. This cache prevents repeated checks from flooding the
+ * user with banners, and provides a clear "granted but needs restart" message
+ * when we detect the discrepancy.
+ *
+ * TTL: 3 seconds — short enough that a user who grants permission via System
+ * Settings and immediately returns to the app will see a fresh check within
+ * moments, but long enough that the 6 call sites during a single meeting-start
+ * sequence (system-audio pipeline setup, meeting start, resume-capture, etc.)
+ * all share the same result and can't disagree moment-to-moment.
+ */
+type CachedCapability = {
+  result: MacScreenCaptureCapability;
+  timestamp: number;
+};
+let screenCapabilityCache: CachedCapability | null = null;
+const SCREEN_CAPABILITY_CACHE_TTL_MS = 3000;
+
+/**
  * B5: Whether the dev-mode TCC bypass is enabled.
  *
  * Pre-fix this bypass was unconditional in dev mode: every `npm run app:dev`
@@ -809,33 +835,51 @@ function getMacScreenCaptureStatus(): MacScreenCaptureStatus {
   }
 
   try {
-    return systemPreferences.getMediaAccessStatus('screen') as MacScreenCaptureStatus;
+    const status = systemPreferences.getMediaAccessStatus('screen') as MacScreenCaptureStatus;
+    console.log(`[Main] Screen recording permission status: ${status} (packaged=${app.isPackaged})`);
+    return status;
   } catch (error) {
     console.error('[Main] Failed to check screen recording permission:', error);
     return 'not-determined';
   }
 }
 
-async function resolveMacScreenCaptureCapability(context: string): Promise<MacScreenCaptureCapability> {
+async function resolveMacScreenCaptureCapability(context: string, options?: { bypassCache?: boolean }): Promise<MacScreenCaptureCapability> {
+  const isMac = process.platform === 'darwin';
+
+  // Check cache first (unless explicitly bypassed)
+  if (!options?.bypassCache && screenCapabilityCache) {
+    const age = Date.now() - screenCapabilityCache.timestamp;
+    if (age < SCREEN_CAPABILITY_CACHE_TTL_MS) {
+      console.log(`[Main] Using cached screen capability result (age=${age}ms) for context: ${context}`);
+      return screenCapabilityCache.result;
+    }
+  }
+
   const status = getMacScreenCaptureStatus();
 
-  const isMac = process.platform === 'darwin';
   // B5: Mirror getMacScreenCaptureStatus's opt-in bypass policy. Default in
   // dev is to run the full capability resolution so devs see the real path.
   if (!isMac || isDevTccBypassEnabled()) {
     clearSystemAudioPermissionWarning();
-    return { status, capturable: true, effectiveDenied: false, sourceCount: 0 };
+    const result = { status, capturable: true, effectiveDenied: false, sourceCount: 0 };
+    screenCapabilityCache = { result, timestamp: Date.now() };
+    return result;
   }
 
   if (isMac && status === 'restricted') {
     const message = formatPermissionMessage('mac-screen-recording-restricted');
     rememberSystemAudioPermissionWarning(message);
-    return { status, capturable: false, effectiveDenied: true, sourceCount: 0, message };
+    const result = { status, capturable: false, effectiveDenied: true, sourceCount: 0, message };
+    screenCapabilityCache = { result, timestamp: Date.now() };
+    return result;
   }
 
   if (status !== 'denied') {
     clearSystemAudioPermissionWarning();
-    return { status, capturable: true, effectiveDenied: false, sourceCount: 0 };
+    const result = { status, capturable: true, effectiveDenied: false, sourceCount: 0 };
+    screenCapabilityCache = { result, timestamp: Date.now() };
+    return result;
   }
 
   try {
@@ -844,7 +888,7 @@ async function resolveMacScreenCaptureCapability(context: string): Promise<MacSc
         types: ['screen'],
         thumbnailSize: { width: 1, height: 1 },
       }),
-      5000,
+      15000,
       `screen-capture-probe-timeout-${context}`,
     );
     const sourceCount = sources.filter((source) => source.id.startsWith('screen:')).length;
@@ -852,25 +896,33 @@ async function resolveMacScreenCaptureCapability(context: string): Promise<MacSc
 
     if (capturable) {
       clearSystemAudioPermissionWarning();
-      console.warn(`[Main] Screen Recording status is denied during ${context}, but capture probe succeeded; continuing without permission banner.`);
+      console.warn(`[Main] Screen Recording status is denied during ${context}, but capture probe succeeded (sourceCount=${sourceCount}); continuing without permission banner.`);
     } else {
-      rememberSystemAudioPermissionWarning(formatPermissionMessage('screen-recording-denied'));
+      const message = formatPermissionMessage('screen-recording-denied');
+      rememberSystemAudioPermissionWarning(message);
+      console.warn(`[Main] Screen Recording capture probe returned 0 screens during ${context} (status=denied, packaged=${app.isPackaged}) — showing permission banner.`);
     }
 
-    return { status, capturable, effectiveDenied: !capturable, sourceCount };
+    const result = { status, capturable, effectiveDenied: !capturable, sourceCount };
+    screenCapabilityCache = { result, timestamp: Date.now() };
+    return result;
   } catch (error: any) {
     // Did the timeout fire?
     if (error?.message?.includes('screen-capture-probe-timeout')) {
       const message = formatPermissionMessage('screen-recording-denied');
       rememberSystemAudioPermissionWarning(message + ' (probe timed out)');
       console.warn(`[Main] Screen Recording capture probe timed out during ${context} — treating as denied.`);
-      return { status, capturable: false, effectiveDenied: true, sourceCount: 0, message, error: error.message };
+      const result = { status, capturable: false, effectiveDenied: true, sourceCount: 0, message, error: error.message };
+      screenCapabilityCache = { result, timestamp: Date.now() };
+      return result;
     }
     const errorMessage = error instanceof Error ? error.message : String(error);
     const message = formatPermissionMessage('screen-recording-denied');
     rememberSystemAudioPermissionWarning(message);
     console.warn(`[Main] Screen Recording capture probe failed during ${context}: ${errorMessage}`);
-    return { status, capturable: false, effectiveDenied: true, sourceCount: 0, message, error: errorMessage };
+    const result = { status, capturable: false, effectiveDenied: true, sourceCount: 0, message, error: errorMessage };
+    screenCapabilityCache = { result, timestamp: Date.now() };
+    return result;
   }
 }
 
@@ -899,9 +951,16 @@ function formatPermissionMessage(reason: PermissionReason, extra?: { device?: st
   const isMac = process.platform === 'darwin';
   switch (reason) {
     case 'screen-recording-denied':
-      return isMac
-        ? 'Screen Recording permission denied. Interviewer audio will not be captured. Enable in System Settings → Privacy & Security → Screen Recording, then restart the app.'
-        : 'System audio capture is unavailable. Interviewer audio will not be captured. Check your audio device routing in Settings and restart the meeting.';
+      if (!isMac) {
+        return 'System audio capture is unavailable. Interviewer audio will not be captured. Check your audio device routing in Settings and restart the meeting.';
+      }
+      // macOS: differentiate dev builds from packaged builds because TCC grants
+      // are per (bundle-id, code-signature) tuple — granting to a signed packaged
+      // build does NOT grant to the unsigned dev build (and vice versa).
+      if (!app.isPackaged) {
+        return 'Screen Recording permission denied. macOS requires a separate permission grant for dev builds (unsigned) vs. packaged builds (signed). Either: (1) grant Screen Recording permission to THIS dev build in System Settings → Privacy & Security → Screen Recording, then restart, OR (2) run with NATIVELY_DEV_BYPASS_SCREEN_TCC=1 to skip TCC checks during development.';
+      }
+      return 'Screen Recording permission denied. Interviewer audio will not be captured. Enable in System Settings → Privacy & Security → Screen Recording, then restart the app.';
     case 'mac-screen-recording-restricted':
       if (!isMac) return formatPermissionMessage('system-audio-stuck');
       return 'Screen Recording is restricted by device policy. Interviewer audio will not be captured. Contact your administrator to allow screen capture for Natively.';
@@ -1936,13 +1995,6 @@ export class AppState {
       const { ModesManager } = require('./services/ModesManager');
       const modesManager = ModesManager.getInstance();
       await modesManager.retryAllLexicalOnlyFiles().catch(() => { /* logged inside */ });
-      // Capture which modes actually had retry-eligible files BEFORE the retry,
-      // so we only nudge those renderers to re-fetch status (LOW #8) instead of
-      // broadcasting a no-op 'done' to every mode on every pipeline-ready event.
-      const affectedModeIds: string[] = modesManager.getModesWithRetryEligibleFiles();
-      for (const modeId of affectedModeIds) {
-        this.broadcast('mode-file-index-status', { modeId, phase: 'done' });
-      }
     }).catch(() => { /* provider unavailable — lexical fallback remains valid */ })
       .finally(() => { this.modeReferenceRetryPromise = null; });
   }
@@ -3255,11 +3307,6 @@ export class AppState {
               // recreates the mic capture, so defer it off the data handler to
               // avoid re-entrancy on the live stream.
               console.warn(`${prefix}Mic native rate ${nativeRate}Hz indicates Bluetooth HFP (degraded). Auto-switching to built-in mic "${builtIn.name}".`);
-              this.broadcast('audio-input-auto-switched', {
-                from: 'Bluetooth mic',
-                to: builtIn.name,
-                reason: 'bluetooth-hfp-avoided',
-              });
               const outputId = this._lastRequestedOutputDeviceId;
               setImmediate(() => {
                 if (this.isMeetingActive && this.microphoneCapture === capture) {
@@ -3930,11 +3977,6 @@ export class AppState {
           console.warn(`[Main] I/O conflict detected (${conflict} on both sides). Auto-switching mic to "${fallback.name}".`);
           wantedInput = this.normalizeDeviceId(fallback.id);
           micAutoSwitched = true;
-          this.broadcast('audio-input-auto-switched', {
-            from: conflict,
-            to: fallback.name,
-            reason: 'same-device-conflict',
-          });
         } else {
           console.warn(`[Main] I/O conflict detected (${conflict}) but no alternate input available — system audio will likely be silent.`);
         }
@@ -3981,11 +4023,6 @@ export class AppState {
             console.warn(`[Main] Bluetooth mic ("${fromLabel}") would force HFP (low quality). Auto-switching mic to "${builtIn.name}" to keep it in A2DP.`);
             wantedInput = this.normalizeDeviceId(builtIn.id);
             micAutoSwitched = true;
-            this.broadcast('audio-input-auto-switched', {
-              from: fromLabel,
-              to: builtIn.name,
-              reason: 'bluetooth-hfp-avoided',
-            });
           } else if (!builtIn) {
             console.warn(`[Main] Bluetooth mic ("${fromLabel}") will run in HFP — no built-in mic available to switch to.`);
           }

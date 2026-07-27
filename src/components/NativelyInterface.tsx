@@ -1953,6 +1953,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // can't fire two concurrent tccutil sequences (whose second-arriving response
   // would clobber the first's banner mid-render).
   const [tccRepairing, setTccRepairing] = useState(false);
+  // Guards the "Restart Now" button on the screen-recording banner — macOS
+  // often doesn't apply a fresh Screen Recording grant to an already-running
+  // process, so a real relaunch is the only reliable fix once the user has
+  // granted permission in System Settings but still sees this banner.
+  const [appRestarting, setAppRestarting] = useState(false);
   useEffect(() => {
     const unsub = window.electronAPI?.onSystemAudioPermissionDenied?.((message: string) => {
       // screen-recording-permission is implicitly system-channel (it's the
@@ -1994,18 +1999,32 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [sttNotConfigured, setSttNotConfigured] = useState(false);
   useEffect(() => {
     let mounted = true;
+    // Track whether the live listener has fired — if it has, the mount-time
+    // promise must not overwrite it (prevents race where slow getSttProvider()
+    // clobbers a fresher stt-config-changed event that arrived first).
+    let liveListenerHasFired = false;
+
     // Check current STT config on mount
     window.electronAPI
       ?.getSttProvider?.()
       .then((provider: string) => {
-        if (mounted) setSttNotConfigured(provider === 'none');
+        // Only apply this result if the live listener hasn't already given us
+        // a more recent value. This prevents the false-positive "Transcription
+        // Not Configured" banner that appeared when the config-changed event
+        // fired while this promise was in flight.
+        if (mounted && !liveListenerHasFired) {
+          setSttNotConfigured(provider === 'none');
+        }
       })
       .catch(() => {});
 
     // Listen for live config changes (e.g. user saves a key in Settings while meeting is active)
     const unsub = window.electronAPI?.onSttConfigChanged?.(
       (data: { configured: boolean; provider: string }) => {
-        if (mounted) setSttNotConfigured(!data.configured);
+        if (mounted) {
+          liveListenerHasFired = true;
+          setSttNotConfigured(!data.configured);
+        }
       },
     );
     return () => {
@@ -6732,6 +6751,18 @@ Provide only the answer, nothing else.`;
     return unsubscribe;
   }, []);
 
+  // Clears a stale conflict banner once the shortcut re-registers successfully
+  // (e.g. right after the user rebinds it via the "Rebind" button → Settings),
+  // instead of leaving it up until the user manually dismisses it.
+  useEffect(() => {
+    if (!window.electronAPI?.onKeybindRegistrationSucceeded) return;
+    const unsubscribe = window.electronAPI.onKeybindRegistrationSucceeded(({ id }) => {
+      if (id !== 'chat:focusInput') return;
+      setStealthHotkeyConflict(null);
+    });
+    return unsubscribe;
+  }, []);
+
   // ── Click-to-activate: engage CGEventTap on chat-input click only
   //    (opt-IN model) ──
   //
@@ -7294,6 +7325,25 @@ Provide only the answer, nothing else.`;
                               {tccRepairing ? t('Resetting…') : t('Repair Permissions')}
                             </button>
                           )}
+                          {isMac && systemAudioWarning.kind === 'screen-recording-permission' && (
+                            <button
+                              onClick={async () => {
+                                if (appRestarting) return; // in-flight guard
+                                setAppRestarting(true);
+                                try {
+                                  await window.electronAPI?.restartApp?.();
+                                } catch (err) {
+                                  console.warn('[UI] restart-app failed:', err);
+                                  setAppRestarting(false);
+                                }
+                              }}
+                              disabled={appRestarting}
+                              className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                              title={t('macOS often needs a full app restart before a fresh Screen Recording grant takes effect — restart now instead of manually quitting and reopening')}
+                            >
+                              {appRestarting ? t('Restarting…') : t('Restart Now')}
+                            </button>
+                          )}
                         </>
                       );
                     })()}
@@ -7648,6 +7698,24 @@ Provide only the answer, nothing else.`;
                       data-stealth-ignore="true"
                     >
                       {t('Open Settings')}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (appRestarting) return; // in-flight guard
+                        setAppRestarting(true);
+                        try {
+                          await window.electronAPI?.restartApp?.();
+                        } catch (err) {
+                          console.warn('[UI] restart-app failed:', err);
+                          setAppRestarting(false);
+                        }
+                      }}
+                      disabled={appRestarting}
+                      className="px-2 py-1 rounded-md bg-amber-500/10 hover:bg-amber-500/20 transition-colors text-[11px] font-medium overlay-text-primary whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+                      data-stealth-ignore="true"
+                      title={t('Accessibility grants often need a full app restart to take effect')}
+                    >
+                      {appRestarting ? t('Restarting…') : t('Restart Now')}
                     </button>
                     <button
                       onClick={() => setStealthPermissionMissing(false)}
