@@ -434,8 +434,8 @@ ANSWER SHAPE: ${intentResult.answerShape}
             //
             // Requirements grilling (Tier 0 / ticket 12): while sdPhase=requirements,
             // filter inject to Understanding/FR/NFR allowlist and append the phase
-            // prompt contract. Full inject resumes at post_requirements (or when
-            // sdPhase is unset — legacy SD path).
+            // prompt contract. Post-gate (SPEC 02): consume similarity, score-gate
+            // ~0.5, prefer Deep Dive/NFR order; omit <reference_file> when empty.
             const sdPhase = answerPlan?.sdPhase;
             const requirementsGated =
                 answerPlan?.answerType === 'system_design_answer' && sdPhase === 'requirements';
@@ -445,18 +445,25 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         filterLessonChunksForPhase,
                         requirementsPhaseContractFor,
                     } = require('./sdRequirementsGate') as typeof import('./sdRequirementsGate');
+                    const {
+                        applyScoreGate,
+                        preferDeepDiveSections,
+                    } = require('./sdLessonScoreGate') as typeof import('./sdLessonScoreGate');
                     const orchestrator = this.llmHelper.getKnowledgeOrchestrator?.();
                     if (orchestrator?.queryRelevantChunks) {
                         const { DocType } = require('../knowledge/types') as typeof import('../knowledge/types');
+                        type LessonChunk = { text: string; similarity: number };
                         const lessonQuery = answerPlan?.question?.trim() || cleanedTranscript;
                         const { value: lessonChunks } = await raceWithBudget(
-                            orchestrator.queryRelevantChunks(lessonQuery, DocType.LESSON, 5) as Promise<Array<{ text: string }>>,
+                            orchestrator.queryRelevantChunks(lessonQuery, DocType.LESSON, 5) as Promise<LessonChunk[]>,
                             HYBRID_RETRIEVAL_BUDGET_MS,
-                            [] as Array<{ text: string }>,
+                            [] as LessonChunk[],
                         );
-                        const chunksForInject = Array.isArray(lessonChunks)
-                            ? filterLessonChunksForPhase(lessonChunks, sdPhase)
-                            : [];
+                        const scored = Array.isArray(lessonChunks) ? lessonChunks : [];
+                        const chunksForInject = preferDeepDiveSections(
+                            filterLessonChunksForPhase(applyScoreGate(scored, sdPhase), sdPhase),
+                            sdPhase,
+                        );
                         if (chunksForInject.length > 0) {
                             const lessonBlock = `<reference_file name="hellointerview-system-design.md">\n${chunksForInject.map((c) => c.text).join('\n\n')}\n</reference_file>`;
                             modeContextBlock = modeContextBlock ? `${modeContextBlock}\n\n${lessonBlock}` : lessonBlock;
