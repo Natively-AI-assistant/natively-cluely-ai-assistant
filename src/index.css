@@ -2121,37 +2121,6 @@ body {
   50% { opacity: 0.9; }
 }
 
-/* ─── Streaming "typing" cursor ───────────────────────────────────────────
-   Trailing glyph appended (as a real DOM node, see appendTypingCursorNode in
-   NativelyInterface.tsx) at the true tail of whatever is currently revealed —
-   inside the streaming imperative bubble AND the JIT-RAG state-rendered
-   bubble. Recreated on every paint while more text is being revealed, so it
-   renders solid (no time to blink) during active reveal, and blinks during
-   the natural idle gaps between bursts — exactly like a real terminal/typing
-   cursor. It disappears the instant the row finalizes, because finalizing
-   unmounts the whole streaming node (key="streaming"), taking this with it. */
-@keyframes natively-typing-cursor-blink {
-  0%, 45% { opacity: 1; }
-  50%, 95% { opacity: 0; }
-  100% { opacity: 1; }
-}
-
-.reveal-typing-cursor {
-  display: inline;
-  font-weight: normal;
-  font-style: normal;
-  font-family: inherit;
-  color: currentColor;
-  opacity: 0.65;
-  animation: natively-typing-cursor-blink 1s steps(1) infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .reveal-typing-cursor {
-    display: none;
-  }
-}
-
 /* ─── Word-level reveal entrance (premium "typing" feel) ──────────────────
    Each newly-revealed word — the imperative reveal-tail path
    (paintRevealedNow/appendRevealTailDelta) AND the JIT-RAG plain-text bubble

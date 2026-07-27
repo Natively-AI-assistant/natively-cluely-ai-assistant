@@ -324,35 +324,6 @@ import { DOM_CONTEXT_MAX_CHARS } from '../constants/domCapture';
 // reportShellSize's sync call below).
 const STREAMING_HEIGHT_GROW_BUFFER_PX = 96; // ~4 lines of headroom per forced grow
 
-// ── "Always shown as typing" cursor glyph ───────────────────────────────────
-// Appends a small blinking cursor as the TRUE last DOM node inside `root`,
-// walking down through *element* children only (never descending into a text
-// node) so it lands inline with the actual last line of rendered content —
-// whatever block that line happens to be inside (paragraph, list item, table
-// cell, inline code, bold run, ...) — instead of trailing the whole subtree
-// as a new block-level line. A naive `root.innerHTML += '<span>...'` or a
-// sibling appended after the root's last child would sit BELOW the last
-// paragraph (block elements force a line break), not at its tail.
-//
-// This is a plain DOM append happening AFTER innerHTML/React has already
-// rendered — not a string concatenated into the markdown source before
-// marked.parse/ReactMarkdown. That matters for two reasons: (1) DOMPurify
-// never sees it, so there's no sanitizer interaction to reason about, and
-// (2) it can never be swallowed/escaped by an unterminated code fence the
-// way an injected `<span>` string would be if it landed inside `marked`'s
-// literal-code handling.
-function appendTypingCursorNode(root: HTMLElement) {
-  let target: Element = root;
-  while (target.lastElementChild) {
-    target = target.lastElementChild;
-  }
-  const cursor = document.createElement('span');
-  cursor.className = 'reveal-typing-cursor';
-  cursor.setAttribute('aria-hidden', 'true');
-  cursor.textContent = '▍'; // ▍ left three-quarters block
-  target.appendChild(cursor);
-}
-
 interface Message {
   id: string;
   role: 'user' | 'system' | 'interviewer';
@@ -700,7 +671,6 @@ export const StreamingHighlightedCode = React.memo(
               </span>
               <span style={CODE_STREAM_LINE_FONT}>
                 {partialLine}
-                <span className="reveal-typing-cursor" aria-hidden="true">▍</span>
               </span>
             </div>
           </div>
@@ -1979,12 +1949,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     channel?: 'system' | 'mic';
   };
   const [systemAudioWarning, setSystemAudioWarning] = useState<SystemAudioWarning | null>(null);
-  // Transient, informational notice when the mic is auto-switched (e.g. a
-  // Bluetooth mic that would drop to low-quality HFP "call mode" — capture is
-  // moved to the built-in mic while the BT device stays in high-quality A2DP
-  // for playback). Distinct from systemAudioWarning (failures); this is a
-  // success/info message that auto-dismisses.
-  const [audioNotice, setAudioNotice] = useState<string | null>(null);
   // UX2: in-flight guard for the "Repair Permissions" button so a double-click
   // can't fire two concurrent tccutil sequences (whose second-arriving response
   // would clobber the first's banner mid-render).
@@ -1999,32 +1963,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     });
     return () => unsub?.();
   }, []);
-
-  // Audio-input auto-switch notice (mic rerouted to avoid Bluetooth HFP, or to
-  // resolve a same-device input/output conflict). The switch happens during
-  // audio (re)configuration, which can run before isMeetingActive flips, so
-  // this subscription is always on. Auto-dismisses after a few seconds.
-  useEffect(() => {
-    const unsub = window.electronAPI?.onAudioInputAutoSwitched?.((payload) => {
-      const msg = payload.message
-        ?? (payload.reason === 'bluetooth-hfp-avoided'
-          ? `Using ${payload.to} for better quality while ${payload.from} plays audio.`
-          : payload.reason === 'same-device-conflict'
-            ? `Switched microphone to ${payload.to} so system audio can be captured.`
-            : payload.to
-              ? `Microphone switched to ${payload.to}.`
-              : 'Microphone quality is degraded.');
-      console.log('[NativelyInterface] Audio input auto-switched:', payload);
-      setAudioNotice(msg);
-    });
-    return () => unsub?.();
-  }, []);
-
-  useEffect(() => {
-    if (!audioNotice) return;
-    const t = setTimeout(() => setAudioNotice(null), 6000);
-    return () => clearTimeout(t);
-  }, [audioNotice]);
 
   useEffect(() => {
     const unsub = window.electronAPI?.onAudioCaptureFailed?.((payload) => {
@@ -3294,22 +3232,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // DOMPurify strips any script/event-handler injection.
     const rawHtml = marked.parse(revealed, { async: false }) as string;
     node.innerHTML = DOMPurify.sanitize(rawHtml);
-    // Trailing blinking "typing" cursor (appendTypingCursorNode, module scope
-    // above). Recreated on every paint — while the reveal ticker is actively
-    // painting frame after frame, that means the cursor is torn down and
-    // rebuilt before its CSS blink animation ever completes a cycle, so it
-    // reads as solid during active reveal; the instant the ticker pauses
-    // between bursts (nothing left to reveal THIS frame, more still expected)
-    // this call simply doesn't fire again, so the last-painted cursor node
-    // survives untouched and its blink animation actually runs — visually
-    // "still typing, briefly paused" rather than a flicker. It disappears
-    // the moment the row finalizes because finalizing unmounts this entire
-    // key="streaming" node (see the DOM-ownership comment above). Hidden
-    // under prefers-reduced-motion, matching this file's snap-not-animate
-    // convention elsewhere (prefersReducedMotionRef).
-    if (!prefersReducedMotionRef.current) {
-      appendTypingCursorNode(node);
-    }
   }, []);
 
   // Mode-aware paint sink's "code" branch: same cursor-over-accumulated-text
@@ -5732,10 +5654,7 @@ Provide only the answer, nothing else.`;
                   />
                 </div>
               ) : (
-                <>
-                  {msg.text}
-                  <span className="reveal-typing-cursor" aria-hidden="true">▍</span>
-                </>
+                msg.text
               )}
             </div>
           );
@@ -5802,14 +5721,11 @@ Provide only the answer, nothing else.`;
         // not yet reconciled — keep showing accumulated text instead of blank.
         // Also the ENTIRE-duration render path for the JIT-RAG/meeting-recall
         // stream (commitRagText commits paced text via plain setMessages,
-        // never registering streamingMsgIdRef — see ragRevealTick above), so
-        // the trailing cursor belongs here too: this is the only place that
-        // bubble's "still typing" state is ever painted.
+        // never registering streamingMsgIdRef — see ragRevealTick above).
         if (msg.text) {
           return (
             <div key="streaming" className="w-full ai-response-card my-2.5 transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed">
               {msg.text}
-              <span className="reveal-typing-cursor" aria-hidden="true">▍</span>
             </div>
           );
         }
