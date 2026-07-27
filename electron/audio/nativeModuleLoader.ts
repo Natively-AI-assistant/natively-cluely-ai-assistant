@@ -26,6 +26,10 @@ export interface NativeModule {
   // rebuild — WindowHelper checks `typeof` and degrades to plain panel
   // type if missing. Caller passes BrowserWindow.getNativeWindowHandle().
   applyStealthToWindow?: (handle: Buffer) => void;
+  // macOS-only (#307): live-rename LaunchServices display name so Activity
+  // Monitor's Process Name column matches Process Disguise. Optional —
+  // missing SPI / stale binary returns false; caller degrades to process.title.
+  setProcessDisplayName?: (name: string) => boolean;
   // macOS-only: Accessibility permission gate for CGEventTap. Returns
   // true if the process is currently trusted; false otherwise. Cheap;
   // safe to poll to drive UI state.
@@ -78,6 +82,8 @@ const REQUIRED_CONSTRUCTORS = ['SystemAudioCapture', 'MicrophoneCapture'];
 // skips revocation check if validateDodoKey is missing,
 // skips server deactivation if deactivateDodoKey is missing.
 const SOFT_REQUIRED_METHODS = ['verifyDodoKey', 'validateDodoKey', 'deactivateDodoKey'];
+// macOS-only soft methods: warn in validateNativeModuleMacExtras() below.
+const SOFT_REQUIRED_MAC_METHODS = ['setProcessDisplayName', 'applyStealthToWindow'];
 
 /**
  * Validates that a loaded native module conforms to the NativeModule interface.
@@ -108,6 +114,19 @@ function validateNativeModule(mod: any): asserts mod is NativeModule {
                 `Dodo license validation/deactivation will be unavailable until binary is rebuilt. ` +
                 `Run \`npm run build:native\` to refresh the Rust native module.`
             );
+        }
+    }
+
+    // macOS soft methods (#307 Process Disguise AM rename, stealth window).
+    // Stale binaries degrade gracefully; warn so release builds notice a missed rebuild.
+    if (process.platform === 'darwin') {
+        for (const fn of SOFT_REQUIRED_MAC_METHODS) {
+            if (typeof mod[fn] !== 'function') {
+                console.warn(
+                    `[nativeModuleLoader] WARNING: macOS method "${fn}" not found in binary — ` +
+                    `Process Disguise / stealth window features will degrade until \`npm run build:native\`.`,
+                );
+            }
         }
     }
 

@@ -1138,6 +1138,7 @@ dependencies = [
  "core-foundation 0.10.1",
  "core-graphics",
  "cpal",
+ "libc",
  "machine-uid",
  "napi",
  "napi-derive",

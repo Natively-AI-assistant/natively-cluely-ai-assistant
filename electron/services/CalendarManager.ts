@@ -94,7 +94,12 @@ export class CalendarManager extends EventEmitter {
 
                         if (error) {
                             res.end('Authentication failed! You can close this window.');
-                            finish(() => reject(new Error(error)));
+                            // Map Google OAuth error codes to actionable copy (#257).
+                            const mapped =
+                                error === 'access_denied'
+                                    ? 'access_denied: Google blocked sign-in (app unverified or account not on the test-user list).'
+                                    : error;
+                            finish(() => reject(new Error(mapped)));
                             return;
                         }
 
@@ -120,10 +125,19 @@ export class CalendarManager extends EventEmitter {
                 finish(() => reject(new Error('Calendar auth timed out — port released.')));
             }, 5 * 60 * 1000);
 
-            server.listen(11111, () => {
-                // 3. Open Browser
+            server.listen(11111, async () => {
+                // 3. Open Browser — await so a failed launch surfaces immediately (#257).
                 const authUrl = this.getAuthUrl();
-                shell.openExternal(authUrl);
+                try {
+                    const opened = await shell.openExternal(authUrl);
+                    if (opened === false) {
+                        finish(() =>
+                            reject(new Error('Could not open the browser for Google sign-in.')),
+                        );
+                    }
+                } catch (err) {
+                    finish(() => reject(err));
+                }
             });
 
             server.on('error', (err) => {

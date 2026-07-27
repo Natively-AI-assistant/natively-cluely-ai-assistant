@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 // the analytics chunk" gesture, but it triggered Vite's dynamic-import
 // warning at build time and made the chunk boundary platform-dependent.
 import { analytics } from '../../lib/analytics/analytics.service';
+import { formatCalendarConnectError } from '../../lib/calendarConnectError';
 
 interface ConnectCalendarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: 'default' | 'dark';
@@ -19,6 +20,8 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
     const t = useT();
     const [loading, setLoading] = useState(false);
     const [connected, setConnected] = useState(false);
+    // Issue #257: IPC returns { success: false, error } without throwing — surface it.
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         if (window.electronAPI) {
@@ -38,6 +41,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
         if (connected) return; // For now no disconnect here
 
         setLoading(true);
+        setError(null);
         try {
             const res = await window.electronAPI.calendarConnect();
             if (res.success) {
@@ -45,9 +49,12 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                 onConnect?.();
                 // Track calendar connection (analytics imported statically above)
                 analytics.trackCalendarConnected();
+            } else {
+                setError(formatCalendarConnectError(res.error));
             }
         } catch (err) {
             console.error(err);
+            setError(formatCalendarConnectError(err));
         } finally {
             setLoading(false);
         }
@@ -143,6 +150,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
     }
 
     return (
+      <div className={`flex flex-col items-start gap-1.5 ${className}`}>
         <button
             onClick={handleClick}
             disabled={loading}
@@ -157,7 +165,6 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                 active:scale-[0.98]
                 overflow-hidden
                 ${loading ? 'opacity-80 cursor-wait' : ''}
-                ${className}
             `}
             style={{
                 // Base Fill: Dark Purple
@@ -215,6 +222,12 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                 )}
             </span>
         </button>
+        {error && (
+          <p className="max-w-[280px] text-[11px] leading-snug text-rose-300/90 px-1" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
     );
 };
 

@@ -6122,6 +6122,16 @@ export class AppState {
     return this.screenshotHelper.getImagePreview(filepath)
   }
 
+  /** #351: clipboard image → screenshots dir; null if clipboard has no image. */
+  public async importImageFromClipboard(): Promise<string | null> {
+    return this.screenshotHelper.importImageFromClipboard()
+  }
+
+  /** #351: Finder/Desktop image path → copy into screenshots dir. */
+  public async importImageFromPath(filePath: string): Promise<string> {
+    return this.screenshotHelper.importImageFromPath(filePath)
+  }
+
   public async deleteScreenshot(
     path: string
   ): Promise<{ success: boolean; error?: string }> {
@@ -6698,8 +6708,32 @@ export class AppState {
 
     console.log(`[AppState] Applying disguise: ${mode} (${appName}) on ${process.platform}`);
 
-    // 1. Update process title (affects Activity Monitor / Task Manager)
+    // 1. Update process title (affects Task Manager / some process lists)
     process.title = appName;
+
+    // 1b. macOS Activity Monitor "Process Name" is the LaunchServices display
+    // name (#307 / process_name.rs) — NOT process.title and not the binary
+    // basename. Call even when undetectable: unlike app.setName()/dock.setIcon,
+    // the LS SPI does not re-register a dock tile.
+    if (isMac) {
+      try {
+        const native = loadNativeModule() as { setProcessDisplayName?: (n: string) => boolean };
+        if (typeof native.setProcessDisplayName === 'function') {
+          const ok = native.setProcessDisplayName(appName.trim());
+          if (!ok) {
+            console.warn(
+              '[AppState] setProcessDisplayName returned false — Activity Monitor may still show Natively',
+            );
+          }
+        } else {
+          console.warn(
+            '[AppState] setProcessDisplayName unavailable (rebuild native module) — AM name unchanged',
+          );
+        }
+      } catch (e) {
+        console.warn('[AppState] setProcessDisplayName failed:', e);
+      }
+    }
 
     // 2. Update app name (affects macOS Menu / Dock)
     // Skip when undetectable — app.setName() causes macOS to re-register
@@ -6762,13 +6796,20 @@ export class AppState {
     }
     this._disguiseTimers = [];
 
-    // Periodically re-assert process.title only — it can drift on some systems.
-    // NOTE: We intentionally do NOT call app.setName() here — it was already called
-    // synchronously above, and repeated calls on macOS cause the system to briefly
-    // show a second dock tile while re-registering the app identity.
+    // Periodically re-assert process.title (and LS display name on macOS) — both
+    // can drift. Do NOT call app.setName() here: repeated calls briefly spawn a
+    // second dock tile while macOS re-registers the app identity.
     const scheduleUpdate = (ms: number) => {
       const ts = setTimeout(() => {
         process.title = appName;
+        if (isMac) {
+          try {
+            const native = loadNativeModule() as { setProcessDisplayName?: (n: string) => boolean };
+            native.setProcessDisplayName?.(appName.trim());
+          } catch {
+            // best-effort
+          }
+        }
         this._disguiseTimers = this._disguiseTimers.filter(t => t !== ts);
       }, ms);
       this._disguiseTimers.push(ts);

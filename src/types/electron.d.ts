@@ -74,6 +74,12 @@ export interface ElectronAPI {
   onDebugError: (callback: (error: string) => void) => () => void
   takeScreenshot: () => Promise<{ path: string; preview: string }>
   takeSelectiveScreenshot: () => Promise<{ path: string; preview: string; cancelled?: boolean }>
+  /** #351: clipboard image → attachable screenshot path; `{ empty: true }` if none. */
+  attachImageFromClipboard: () => Promise<
+    { path: string; preview: string } | { empty: true }
+  >
+  /** #351: copy an on-disk image into the screenshots dir for attach. */
+  attachImageFromPath: (filePath: string) => Promise<{ path: string; preview: string }>
   moveWindowLeft: () => Promise<void>
   moveWindowRight: () => Promise<void>
   moveWindowUp: () => Promise<void>

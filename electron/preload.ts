@@ -37,6 +37,10 @@ interface ElectronAPI {
   onDebugError: (callback: (error: string) => void) => () => void;
   takeScreenshot: () => Promise<void>;
   takeSelectiveScreenshot: () => Promise<{ path: string; preview: string; cancelled?: boolean }>;
+  attachImageFromClipboard: () => Promise<
+    { path: string; preview: string } | { empty: true }
+  >;
+  attachImageFromPath: (filePath: string) => Promise<{ path: string; preview: string }>;
   moveWindowLeft: () => Promise<void>;
   moveWindowRight: () => Promise<void>;
   moveWindowUp: () => Promise<void>;
@@ -1060,6 +1064,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRecognitionLanguages: () => ipcRenderer.invoke('get-recognition-languages'),
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
   takeSelectiveScreenshot: () => ipcRenderer.invoke('take-selective-screenshot'),
+  attachImageFromClipboard: () => ipcRenderer.invoke('attach-image-from-clipboard'),
+  attachImageFromPath: (filePath: string) =>
+    ipcRenderer.invoke('attach-image-from-path', filePath),
   getScreenshots: () => ipcRenderer.invoke('get-screenshots'),
   deleteScreenshot: (path: string) => ipcRenderer.invoke('delete-screenshot', path),
 

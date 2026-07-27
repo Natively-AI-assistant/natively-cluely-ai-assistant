@@ -36,6 +36,7 @@ import {
 import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
+import { formatCalendarConnectError } from '../lib/calendarConnectError';
 import icon from './icon.png';
 
 // ---------------------------------------------------------------------------
@@ -1225,6 +1226,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
     const [calendarStatus, setCalendarStatus] = useState<{ connected: boolean; email?: string }>({ connected: false });
     const [isCalendarsLoading, setIsCalendarsLoading] = useState(false);
+    const [calendarConnectError, setCalendarConnectError] = useState<string | null>(null);
     const [calendarEvents, setCalendarEvents] = useState<Array<{ id: string; title: string; startTime: string; endTime: string; link?: string }>>([]);
     const [isCalendarRefreshing, setIsCalendarRefreshing] = useState(false);
 
@@ -3187,19 +3189,26 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     <Calendar size={24} className="text-text-tertiary mb-3" />
                                                     <h4 className="text-sm font-bold text-text-primary mb-1">{t('No calendars')}</h4>
                                                     <p className="text-xs text-text-secondary">{t('Get started by connecting a Google account.')}</p>
+                                                    <p className="text-[11px] text-text-tertiary mt-2 leading-snug">
+                                                        {t('Calendar sync is limited to approved Google test accounts until the app finishes Google verification.')}
+                                                    </p>
                                                 </div>
 
                                                 <button
                                                     onClick={async () => {
                                                         setIsCalendarsLoading(true);
+                                                        setCalendarConnectError(null);
                                                         try {
                                                             const res = await window.electronAPI.calendarConnect();
                                                             if (res.success) {
                                                                 const status = await window.electronAPI.getCalendarStatus();
                                                                 setCalendarStatus(status);
+                                                            } else {
+                                                                setCalendarConnectError(formatCalendarConnectError(res.error));
                                                             }
                                                         } catch (e) {
                                                             console.error(e);
+                                                            setCalendarConnectError(formatCalendarConnectError(e));
                                                         } finally {
                                                             setIsCalendarsLoading(false);
                                                         }
@@ -3217,6 +3226,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     </svg>
                                                     {isCalendarsLoading ? t('Connecting...') : t('Connect Google')}
                                                 </button>
+                                                {calendarConnectError && (
+                                                    <p className="mt-3 text-[11px] leading-snug text-rose-500 dark:text-rose-400" role="alert">
+                                                        {calendarConnectError}
+                                                    </p>
+                                                )}
                                             </div>
                                         )}
                                     </div>

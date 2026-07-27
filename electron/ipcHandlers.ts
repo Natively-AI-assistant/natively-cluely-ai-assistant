@@ -617,6 +617,25 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // #351: paste/drop image attachments — same { path, preview } shape as screenshots.
+  safeHandle('attach-image-from-clipboard', async () => {
+    const screenshotPath = await appState.importImageFromClipboard();
+    if (!screenshotPath) {
+      return { empty: true as const };
+    }
+    const preview = await appState.getImagePreview(screenshotPath);
+    return { path: screenshotPath, preview };
+  });
+
+  safeHandle('attach-image-from-path', async (_event, filePath: string) => {
+    if (typeof filePath !== 'string' || !filePath.trim()) {
+      throw new Error('Image path is required');
+    }
+    const screenshotPath = await appState.importImageFromPath(filePath);
+    const preview = await appState.getImagePreview(screenshotPath);
+    return { path: screenshotPath, preview };
+  });
+
   safeHandle('get-screenshots', async () => {
     // console.log({ view: appState.getView() })
     try {

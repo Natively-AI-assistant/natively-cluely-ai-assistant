@@ -25,6 +25,9 @@ pub mod stealth_window;
 #[cfg(target_os = "macos")]
 pub mod keyboard_tap;
 
+#[cfg(target_os = "macos")]
+pub mod process_name;
+
 use crate::audio_config::{CHUNK_BATCH_COUNT, CHUNK_BATCH_TIMEOUT_MS, DSP_POLL_MS};
 use crate::resampler::Resampler;
 use crate::silence_suppression::{FrameAction, SilenceSuppressionConfig, SilenceSuppressor};

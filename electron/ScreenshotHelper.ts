@@ -2,7 +2,7 @@
 
 import path from "node:path"
 import fs from "node:fs"
-import { app, desktopCapturer, screen, systemPreferences } from "electron"
+import { app, clipboard, desktopCapturer, nativeImage, screen, systemPreferences } from "electron"
 import { v4 as uuidv4 } from "uuid"
 import util from "util"
 import sharp from "sharp"
@@ -436,6 +436,23 @@ async function stitchImages(captures: DisplayCapture[], selection: Electron.Rect
   return stitched;
 }
 
+/** Extensions accepted for paste/drop import into the overlay attach pipeline (#351). */
+export const ATTACHABLE_IMAGE_EXTENSIONS = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.gif',
+  '.bmp',
+]);
+
+/** Reject oversized drops/pastes before decoding (25 MB). */
+export const MAX_ATTACHABLE_IMAGE_BYTES = 25 * 1024 * 1024;
+
+export function isAttachableImagePath(filePath: string): boolean {
+  return ATTACHABLE_IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
 export class ScreenshotHelper {
   private screenshotQueue: string[] = []
   private extraScreenshotQueue: string[] = []
@@ -783,6 +800,91 @@ export class ScreenshotHelper {
       console.error('[ScreenshotHelper] Failed to take selective screenshot:', error);
       throw error
     }
+  }
+
+  /**
+   * Push a screenshot path onto the queue and delete the oldest when over the cap.
+   * Shared by capture and paste/drop import (#351).
+   */
+  private async enqueueScreenshot(screenshotPath: string): Promise<void> {
+    this.screenshotQueue.push(screenshotPath);
+    if (this.screenshotQueue.length > this.MAX_SCREENSHOTS) {
+      const removedPath = this.screenshotQueue.shift();
+      if (removedPath) {
+        try {
+          await fs.promises.unlink(removedPath);
+        } catch {
+          // best-effort cleanup
+        }
+      }
+    }
+  }
+
+  /**
+   * Write a PNG buffer into the screenshots directory and enqueue it so it
+   * participates in the same attach/LLM path as a captured screenshot (#351).
+   */
+  public async importImageFromPngBuffer(
+    pngBuffer: Buffer,
+    prefix: 'paste' | 'drop' | 'import' = 'import',
+  ): Promise<string> {
+    if (!pngBuffer || pngBuffer.length === 0) {
+      throw new Error('No image data to import');
+    }
+    if (pngBuffer.length > MAX_ATTACHABLE_IMAGE_BYTES) {
+      throw new Error('Image is too large to attach (max 25 MB)');
+    }
+    const screenshotPath = path.join(this.screenshotDir, `${prefix}-${uuidv4()}.png`);
+    await fs.promises.writeFile(screenshotPath, pngBuffer);
+    await this.enqueueScreenshot(screenshotPath);
+    return screenshotPath;
+  }
+
+  /**
+   * Import the current clipboard image (Cmd+V of a screenshot/diagram).
+   * Returns null when the clipboard has no image (text-only paste should proceed).
+   */
+  public async importImageFromClipboard(): Promise<string | null> {
+    const image = clipboard.readImage();
+    if (image.isEmpty()) return null;
+    const png = image.toPNG();
+    if (!png || png.length === 0) return null;
+    return this.importImageFromPngBuffer(Buffer.from(png), 'paste');
+  }
+
+  /**
+   * Copy an on-disk image into the screenshots dir (Finder drag-drop / file paste).
+   * Never returns the original path — LLM attach requires userData-scoped files.
+   */
+  public async importImageFromPath(filePath: string): Promise<string> {
+    if (typeof filePath !== 'string' || !filePath.trim()) {
+      throw new Error('Image path is required');
+    }
+    const resolved = path.resolve(filePath);
+    if (!isAttachableImagePath(resolved)) {
+      throw new Error('Unsupported image type. Use PNG, JPEG, WebP, GIF, or BMP.');
+    }
+    let stat: fs.Stats;
+    try {
+      stat = await fs.promises.stat(resolved);
+    } catch {
+      throw new Error('Image file not found');
+    }
+    if (!stat.isFile()) {
+      throw new Error('Image path is not a file');
+    }
+    if (stat.size > MAX_ATTACHABLE_IMAGE_BYTES) {
+      throw new Error('Image is too large to attach (max 25 MB)');
+    }
+    const image = nativeImage.createFromPath(resolved);
+    if (image.isEmpty()) {
+      throw new Error('Could not read image file');
+    }
+    const png = image.toPNG();
+    if (!png || png.length === 0) {
+      throw new Error('Could not convert image to PNG');
+    }
+    return this.importImageFromPngBuffer(Buffer.from(png), 'drop');
   }
 
   public getView(): "queue" | "solutions" {

@@ -43,6 +43,8 @@ objc2-foundation = "0.2"
 # core-foundation gives us the CFRunLoop the tap must attach to.
 core-graphics = "0.24"
 core-foundation = "0.10"
+# process_name.rs: dlsym for private LaunchServices SPI (_LSSetApplicationInformationItem)
+libc = "0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 wasapi = "0.13.0"

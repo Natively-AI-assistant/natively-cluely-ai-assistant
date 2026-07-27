@@ -1426,6 +1426,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [attachedContext, setAttachedContext] = useState<Array<{ path: string; preview: string }>>(
     [],
   );
+  // Issue #334: selective/full screenshot failures were only console.error'd, so a
+  // failed crop (or other IPC error) looked like a dead hotkey. Surface a short
+  // notice above the input; auto-dismisses like other transient overlay notices.
+  const [screenshotNotice, setScreenshotNotice] = useState<string | null>(null);
 
   // Settings State with Persistence
   const [isUndetectable, setIsUndetectable] = useState(false);
@@ -2998,15 +3002,123 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => unsubscribe();
   }, []);
 
-  const handleScreenshotAttach = (data: { path: string; preview: string }) => {
+  const handleScreenshotAttach = useCallback((data: { path: string; preview: string }) => {
     setIsExpanded(true);
+    setScreenshotNotice(null);
     setAttachedContext((prev) => {
       // Prevent duplicates and cap at 5
       if (prev.some((s) => s.path === data.path)) return prev;
       const updated = [...prev, data];
       return updated.slice(-5); // Keep last 5
     });
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!screenshotNotice) return;
+    const timer = setTimeout(() => setScreenshotNotice(null), 6000);
+    return () => clearTimeout(timer);
+  }, [screenshotNotice]);
+
+  const reportScreenshotFailure = useCallback((err: unknown, logLabel: string) => {
+    console.error(logLabel, err);
+    setIsExpanded(true);
+    const msg =
+      err instanceof Error && err.message.trim()
+        ? err.message.trim()
+        : t('Screenshot failed. Nothing was attached.');
+    setScreenshotNotice(msg);
+  }, [t]);
+
+  // #351: paste/drop → same attach path as capture hotkeys.
+  const attachImageFromPath = useCallback(
+    async (filePath: string) => {
+      if (!window.electronAPI?.attachImageFromPath) {
+        setScreenshotNotice(t('Image attach is not available in this build.'));
+        return false;
+      }
+      try {
+        const data = await window.electronAPI.attachImageFromPath(filePath);
+        if (data?.path && data.preview) {
+          handleScreenshotAttach(data);
+          return true;
+        }
+        setIsExpanded(true);
+        setScreenshotNotice(t('Screenshot failed. Nothing was attached.'));
+        return false;
+      } catch (err) {
+        reportScreenshotFailure(err, 'Error attaching dropped image:');
+        return false;
+      }
+    },
+    [handleScreenshotAttach, reportScreenshotFailure, t],
+  );
+
+  const handleOverlayImagePaste = useCallback(
+    async (e: React.ClipboardEvent) => {
+      const files = Array.from(e.clipboardData?.files ?? []).filter(
+        (f) =>
+          f.type.startsWith('image/') ||
+          /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name),
+      );
+      const items = Array.from(e.clipboardData?.items ?? []);
+      const hasClipboardImageItem = items.some((item) => item.type.startsWith('image/'));
+      if (files.length === 0 && !hasClipboardImageItem) return;
+
+      // Prevent pasting binary/image garbage into the text field when we handle it.
+      e.preventDefault();
+
+      let attached = false;
+      for (const file of files.slice(0, 5)) {
+        const filePath = (file as File & { path?: string }).path;
+        if (filePath) {
+          attached = (await attachImageFromPath(filePath)) || attached;
+        }
+      }
+      if (attached) return;
+
+      if (!window.electronAPI?.attachImageFromClipboard) {
+        setScreenshotNotice(t('Image attach is not available in this build.'));
+        return;
+      }
+      try {
+        const data = await window.electronAPI.attachImageFromClipboard();
+        if (data && 'path' in data && data.path) {
+          handleScreenshotAttach(data);
+          return;
+        }
+        setIsExpanded(true);
+        setScreenshotNotice(t('No image found on the clipboard.'));
+      } catch (err) {
+        reportScreenshotFailure(err, 'Error attaching clipboard image:');
+      }
+    },
+    [attachImageFromPath, handleScreenshotAttach, reportScreenshotFailure, t],
+  );
+
+  const handleOverlayImageDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const files = Array.from(e.dataTransfer?.files ?? []).filter(
+        (f) =>
+          f.type.startsWith('image/') ||
+          /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name),
+      );
+      if (files.length === 0) return;
+
+      let attachedAny = false;
+      for (const file of files.slice(0, 5)) {
+        const filePath = (file as File & { path?: string }).path;
+        if (!filePath) continue;
+        attachedAny = (await attachImageFromPath(filePath)) || attachedAny;
+      }
+      if (!attachedAny) {
+        setIsExpanded(true);
+        setScreenshotNotice(t('Could not read the dropped image.'));
+      }
+    },
+    [attachImageFromPath, t],
+  );
 
   // STT Status listener — must survive isExpanded changes.
   // If registered inside the [isExpanded] effect, events are dropped during cleanup.
@@ -6419,9 +6531,13 @@ Provide only the answer, nothing else.`;
         const data = await window.electronAPI.takeScreenshot();
         if (data && data.path) {
           handleScreenshotAttach(data as { path: string; preview: string });
+        } else {
+          // Unexpected empty success — don't leave the hotkey looking dead (#334).
+          setIsExpanded(true);
+          setScreenshotNotice(t('Screenshot failed. Nothing was attached.'));
         }
       } catch (err) {
-        console.error('Error triggering screenshot:', err);
+        reportScreenshotFailure(err, 'Error triggering screenshot:');
       }
     },
     selectiveScreenshot: async () => {
@@ -6429,9 +6545,13 @@ Provide only the answer, nothing else.`;
         const data = await window.electronAPI.takeSelectiveScreenshot();
         if (data && !data.cancelled && data.path) {
           handleScreenshotAttach(data as { path: string; preview: string });
+        } else if (!data?.cancelled) {
+          // Empty non-cancel result (should be rare). User Esc cancel stays quiet.
+          setIsExpanded(true);
+          setScreenshotNotice(t('Screenshot failed. Nothing was attached.'));
         }
       } catch (err) {
-        console.error('Error triggering selective screenshot:', err);
+        reportScreenshotFailure(err, 'Error triggering selective screenshot:');
       }
     },
   });
@@ -6460,9 +6580,12 @@ Provide only the answer, nothing else.`;
         const data = await window.electronAPI.takeScreenshot();
         if (data && data.path) {
           handleScreenshotAttach(data as { path: string; preview: string });
+        } else {
+          setIsExpanded(true);
+          setScreenshotNotice(t('Screenshot failed. Nothing was attached.'));
         }
       } catch (err) {
-        console.error('Error triggering screenshot:', err);
+        reportScreenshotFailure(err, 'Error triggering screenshot:');
       }
     },
     selectiveScreenshot: async () => {
@@ -6470,9 +6593,12 @@ Provide only the answer, nothing else.`;
         const data = await window.electronAPI.takeSelectiveScreenshot();
         if (data && !data.cancelled && data.path) {
           handleScreenshotAttach(data as { path: string; preview: string });
+        } else if (!data?.cancelled) {
+          setIsExpanded(true);
+          setScreenshotNotice(t('Screenshot failed. Nothing was attached.'));
         }
       } catch (err) {
-        console.error('Error triggering selective screenshot:', err);
+        reportScreenshotFailure(err, 'Error triggering selective screenshot:');
       }
     },
   };
@@ -7726,6 +7852,23 @@ Provide only the answer, nothing else.`;
 
               {/* Input Area */}
               <div className="p-3 pt-0">
+                {/* Issue #334: fail-loud when screenshot IPC errors / returns empty */}
+                {screenshotNotice && (
+                  <div
+                    className="mb-2 px-3 py-2 rounded-xl border border-amber-400/40 bg-amber-500/10 text-[11px] flex items-center gap-2"
+                    role="status"
+                  >
+                    <span className="overlay-text-primary flex-1">{screenshotNotice}</span>
+                    <button
+                      onClick={() => setScreenshotNotice(null)}
+                      className="px-1.5 py-1 rounded-md hover:bg-white/10 transition-colors text-[11px] overlay-text-muted"
+                      aria-label={t('Dismiss')}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
                 {/* Latent Context Preview (Attached Screenshot) */}
                 {attachedContext.length > 0 && (
                   <div
@@ -7734,8 +7877,8 @@ Provide only the answer, nothing else.`;
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-[11px] font-medium overlay-text-primary">
-                        {attachedContext.length} screenshot{attachedContext.length > 1 ? 's' : ''}{' '}
-                        attached
+                        {attachedContext.length}{' '}
+                        {attachedContext.length > 1 ? t('images attached') : t('image attached')}
                       </span>
                       <button
                         onClick={() => setAttachedContext([])}
@@ -7847,13 +7990,24 @@ Provide only the answer, nothing else.`;
                                     overlay no longer accidentally engage the
                                     tap and break inputs in Settings/Model
                                     Selector windows. */}
-                <div className="relative group" data-stealth-engage="true">
+                <div
+                  className="relative group"
+                  data-stealth-engage="true"
+                  onDragOver={(e) => {
+                    if (Array.from(e.dataTransfer?.types ?? []).includes('Files')) {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'copy';
+                    }
+                  }}
+                  onDrop={handleOverlayImageDrop}
+                >
                   <input
                     ref={textInputRef}
                     data-testid="overlay-chat-input"
                     type="text"
                     value={inputValue}
                     onChange={(e) => { setInputValue(e.target.value); setSkillPickerIndex(0); }}
+                    onPaste={handleOverlayImagePaste}
                     onKeyDown={(e) => {
                       if (filteredSkills.length > 0 && skillPickerQuery !== null) {
                         if (e.key === 'ArrowUp') {
