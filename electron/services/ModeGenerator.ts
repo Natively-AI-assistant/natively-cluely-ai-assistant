@@ -19,7 +19,7 @@
 //   the same local backend or a deterministic stub for plumbing checks.
 // - The generated `customContext` is what becomes the mode's "Real-time prompt"
 //   (ModesManager.getActiveModePinnedInstructions). It is capped at
-//   PINNED_INSTRUCTIONS_MAX_CHARS (1200) at INJECTION time, so we target well
+//   PINNED_INSTRUCTIONS_MAX_CHARS (2400) at INJECTION time, so we target well
 //   under that here and hard-trim as a safety net.
 // - Document grounding: a custom mode only becomes documentGroundedCustomModeActive
 //   when its customContext matches BOTH DOCUMENT_SOURCE_RE and

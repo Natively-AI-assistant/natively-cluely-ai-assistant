@@ -1163,10 +1163,17 @@ export class ModesManager {
     }
 
     // Hard cap for the always-pinned "Real-time prompt" (mode customContext).
-    // Roughly 300 tokens — enough for real mode instructions, small enough that
-    // a pasted document can't crowd out the transcript. Anything longer remains
-    // fully available to RETRIEVAL (reference-file path), so nothing is lost.
-    private static readonly PINNED_INSTRUCTIONS_MAX_CHARS = 1_200;
+    // Sized to the budget this layer is already allocated: LAYER_BUDGET
+    // .custom_context in llm/contextRoute.ts reserves 600 tokens, which is
+    // ~2,400 chars, so pinning up to that spends the allocation without
+    // crowding the transcript. The previous 1,200 was ~300 tokens — half the
+    // reserved budget — and the remainder was NOT recoverable in practice: the
+    // comment here used to claim retrieval covered it, but customContext only
+    // reaches retrieval through the same MIN_RELEVANCE_SCORE floor as reference
+    // files, and a conversational question against prose chunks scores below
+    // that floor (see ModeContextRetriever's adaptive-threshold notes), so a
+    // user with no uploaded reference file lost everything past the cap.
+    private static readonly PINNED_INSTRUCTIONS_MAX_CHARS = 2_400;
 
     /**
      * PI v3 (W2): the active mode's user-authored "Real-time prompt"
