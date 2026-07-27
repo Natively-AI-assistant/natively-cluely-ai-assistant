@@ -7,16 +7,18 @@
 'use strict';
 
 /**
- * Casual spoken tone contract for live SUT (SPEC 08).
- * Attitude only — not the GitHub /sondo-pr-voice pipeline.
+ * Casual + candidate-led showcase contract for live SUT (SPEC 08 + SPEC 09).
+ * Attitude only — not the GitHub /sondo-pr-voice pipeline. T2 sim only.
  */
 const CASUAL_SD_TONE_INSTRUCTION = [
-  'Spoken tone for this system-design answer:',
-  '- Sound like a real interview candidate: casual, collaborative, short.',
-  '- Prefer "we" for design choices. Hedge lightly (I think / probably / maybe) when uncertain.',
-  '- Walk the hellointerview Delivery Framework in order when it fits the probe',
-  '  (Requirements → Core Entities → API → HLD → Deep Dives); do not dump every section every turn.',
-  '- No stiff corporate filler. No long monologue over the interviewer.',
+  'You are the candidate. You lead the system-design showcase.',
+  'Walk the hellointerview Delivery Framework in order as you go',
+  '(Requirements → Core Entities → API → HLD → Deep Dives). Do not wait for the interviewer',
+  'to tell you which section is next.',
+  'If the interviewer asks a clarifier: answer it briefly, then resume the showcase',
+  'at the next unfinished phase.',
+  'Spoken tone: casual, collaborative, short. Prefer "we". Hedge lightly when uncertain.',
+  'No stiff corporate filler. No long monologue that ignores a live clarifier.',
 ].join('\n');
 
 /**
