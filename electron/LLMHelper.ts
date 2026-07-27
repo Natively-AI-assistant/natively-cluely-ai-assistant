@@ -5654,6 +5654,33 @@ const isMultimodal = !!(imagePaths?.length);
       }
     }
 
+    // OpenRouter — checked LAST among specific-provider guards so that all
+    // named-prefix providers (Groq meta-llama/*, LiteLLM litellm/*, OpenAI, Claude,
+    // DeepSeek) are matched before the generic slash-contains check fires.
+    if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
+      const openRouterSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
+      const finalOpenRouterSystem = this.injectLanguageInstruction(openRouterSystem);
+      if (isMultimodal && imagePaths) {
+        yield* this.streamWithOpenaiMultimodal(
+          userContent,
+          imagePaths,
+          finalOpenRouterSystem,
+          this.currentModelId,
+          abortSignal,
+          this.openrouterClient,
+        );
+      } else {
+        yield* this.streamWithOpenai(
+          userContent,
+          finalOpenRouterSystem,
+          this.currentModelId,
+          abortSignal,
+          this.openrouterClient,
+        );
+      }
+      return;
+    }
+
     // 3b. Natively API — TTFT RACE (REPORT_TO_CHATGPT §21 L1 / §18)
     // Was: serial Natively→Groq→Gemini waterfall that only fell over on a
     // THROW. A provider that connected then stalled before the first token
