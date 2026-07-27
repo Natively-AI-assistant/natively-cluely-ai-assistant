@@ -1,0 +1,555 @@
+// scripts/lib/sd-interview-sim/t2.js
+//
+// T2 dual-agent overnight path (ticket 05).
+// - Interviewer-agent: generates probes + optional mermaid (default Flash-Lite when live)
+// - Thin candidate-agent: only triggers Natively SUT (never a second WTA brain)
+// - Caps: max turns, max interviews/night, optional token/USD → budget_hit + still export
+// - Opt-in: RUN_SD_INTERVIEW_SIM_T2=1 + Gemini key (mirrors shouldRunRealApi style)
+// - Corpus = workflow debug fuel — no fine-tune / train-job hooks
+//
+// Prefer headless orchestration. Never on PR CI.
+
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { writeCorpusBundle } = require('./corpus');
+const { checkMermaidSyntax } = require('./mermaid');
+const { resolveGeminiApiKey } = require('../sd-grounding-harness.js');
+
+/** Lazy helpers — avoid circular load with index.js ↔ runner.js ↔ t2.js. */
+function bundleApi() {
+  return require('./index');
+}
+
+function defaultInjectSpeech(...args) {
+  return require('./runner').injectSpeech(...args);
+}
+/** Default interviewer-agent model (cheap probes). */
+const DEFAULT_INTERVIEWER_MODEL = 'gemini-3.1-flash-lite';
+
+/** Default SUT / product model label (corpus provenance; not a second WTA). */
+const DEFAULT_SUT_MODEL = 'gemini-3.5-flash';
+
+/**
+ * Opt-in gate for live T2 dual-agent runs.
+ * Requires RUN_SD_INTERVIEW_SIM_T2=1 plus a Gemini/Google API key.
+ * Does NOT honor RUN_SD_GROUNDING_E2E / RUN_NATIVELY_API_E2E alone —
+ * dual-agent spend must be intentional.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {boolean}
+ */
+function shouldRunT2DualAgent(env = process.env) {
+  if (env.RUN_SD_INTERVIEW_SIM_T2 !== '1') return false;
+  return Boolean(resolveGeminiApiKey(env));
+}
+
+function t2SkipMessage() {
+  return (
+    '[sd-interview-sim-t2] SKIP — set RUN_SD_INTERVIEW_SIM_T2=1 and GEMINI_API_KEY ' +
+    '(overnight / workflow_dispatch only; never PR). Corpus is workflow debug fuel, not fine-tune.'
+  );
+}
+
+/**
+ * Pull fenced ```mermaid blocks into attachment objects.
+ *
+ * @param {string} text
+ * @returns {Array<{ kind: 'mermaid', source: string, syntaxValid: boolean }>}
+ */
+function extractMermaidAttachments(text) {
+  const src = String(text || '');
+  const attachments = [];
+  const re = /```mermaid\s*\n([\s\S]*?)```/gi;
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const source = String(m[1] || '').trim();
+    if (!source) continue;
+    attachments.push({
+      kind: 'mermaid',
+      source,
+      syntaxValid: checkMermaidSyntax(source),
+    });
+  }
+  return attachments;
+}
+
+/**
+ * Stub interviewer-agent: yields canned probes in order (T0/$0 path).
+ *
+ * @param {Array<object>} probes
+ */
+function createStubInterviewerAgent(probes = []) {
+  let i = 0;
+  return async function stubInterviewerAgent(_ctx) {
+    if (i >= probes.length) {
+      return { text: 'End of stub probes.', end_interview: true };
+    }
+    const probe = probes[i];
+    i += 1;
+    return { ...probe };
+  };
+}
+
+/**
+ * Thin candidate-agent: only decides to trigger the SUT (or stop).
+ * Never produces answer text — Natively remains the answer brain.
+ *
+ * @param {{ onDecision?: (d: object) => void }} [opts]
+ */
+function createThinCandidateAgent(opts = {}) {
+  return async function thinCandidateAgent(ctx) {
+    const decision = { action: 'trigger' };
+    if (ctx?.interviewerTurn?.end_interview || ctx?.interviewerTurn?.stop) {
+      decision.action = 'trigger'; // still let SUT answer the final probe
+    }
+    if (typeof opts.onDecision === 'function') opts.onDecision(decision);
+    return decision;
+  };
+}
+
+/**
+ * Persist nightly interview counts so maxInterviewsPerNight survives process restarts.
+ */
+class NightlyInterviewCap {
+  /**
+   * @param {{
+   *   maxInterviewsPerNight?: number,
+   *   stateDir?: string,
+   *   stateFile?: string,
+   *   now?: () => Date,
+   * }} [opts]
+   */
+  constructor(opts = {}) {
+    this.maxInterviewsPerNight =
+      opts.maxInterviewsPerNight != null ? opts.maxInterviewsPerNight : 10;
+    this.now = typeof opts.now === 'function' ? opts.now : () => new Date();
+    this.stateFile =
+      opts.stateFile ||
+      path.join(opts.stateDir || process.cwd(), 'sd-interview-sim-t2-nightly.json');
+  }
+
+  _nightKey(d = this.now()) {
+    // UTC calendar day — overnight jobs are schedule-oriented.
+    return d.toISOString().slice(0, 10);
+  }
+
+  _load() {
+    try {
+      if (!fs.existsSync(this.stateFile)) return { night: this._nightKey(), count: 0 };
+      const raw = JSON.parse(fs.readFileSync(this.stateFile, 'utf8'));
+      const night = this._nightKey();
+      if (raw?.night !== night) return { night, count: 0 };
+      return { night, count: Number(raw.count) || 0 };
+    } catch {
+      return { night: this._nightKey(), count: 0 };
+    }
+  }
+
+  _save(state) {
+    fs.mkdirSync(path.dirname(this.stateFile), { recursive: true });
+    fs.writeFileSync(this.stateFile, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+  }
+
+  remaining() {
+    const { count } = this._load();
+    return Math.max(0, this.maxInterviewsPerNight - count);
+  }
+
+  canStart() {
+    return this.remaining() > 0;
+  }
+
+  recordStart() {
+    const state = this._load();
+    state.count += 1;
+    this._save(state);
+    return state;
+  }
+}
+
+function resolveEndReasonAfterBudget(run) {
+  const { budgets, spend } = run;
+  const turnCap =
+    budgets.maxTurns != null && spend.turn_count >= budgets.maxTurns;
+  const spendCap =
+    (budgets.maxInputTokens != null && spend.input_tokens >= budgets.maxInputTokens) ||
+    (budgets.maxOutputTokens != null && spend.output_tokens >= budgets.maxOutputTokens) ||
+    (budgets.maxEstimatedUsd != null && spend.estimated_usd >= budgets.maxEstimatedUsd);
+  if (turnCap && !spendCap) return 'max_turns';
+  if (spendCap) return 'budget_hit';
+  if (turnCap) return 'max_turns';
+  return 'budget_hit';
+}
+
+/**
+ * Live interviewer-agent via Gemini generateContent (Flash-Lite by default).
+ * Only constructed when callers opt in; unit tests use stubs.
+ *
+ * @param {{
+ *   apiKey?: string,
+ *   model?: string,
+ *   systemPrompt?: string,
+ *   fetchImpl?: typeof fetch,
+ *   estimateUsdPer1kTokens?: number,
+ * }} [opts]
+ */
+function createLiveInterviewerAgent(opts = {}) {
+  const model = opts.model || DEFAULT_INTERVIEWER_MODEL;
+  const apiKey = opts.apiKey || resolveGeminiApiKey();
+  const fetchImpl = opts.fetchImpl || globalThis.fetch;
+  const systemPrompt =
+    opts.systemPrompt ||
+    [
+      'You are a system-design interviewer.',
+      'Ask one focused probe per turn. Optionally include a fenced ```mermaid diagram.',
+      'When coverage is done, reply with a short closing and the token END_INTERVIEW on its own line.',
+      'Do not answer as the candidate.',
+    ].join(' ');
+  const usdPer1k = opts.estimateUsdPer1kTokens != null ? opts.estimateUsdPer1kTokens : 0.0001;
+
+  return async function liveInterviewerAgent(ctx) {
+    if (!apiKey) {
+      throw new Error('createLiveInterviewerAgent requires a Gemini API key');
+    }
+    if (typeof fetchImpl !== 'function') {
+      throw new Error('createLiveInterviewerAgent requires fetch');
+    }
+
+    const history = (ctx.bundle?.turns || [])
+      .map((t) => `${t.role}: ${t.text}`)
+      .join('\n')
+      .slice(-6000);
+    const userText = [
+      `Scenario: ${ctx.scenario?.prompt || ctx.scenario?.id || 'system design interview'}`,
+      history ? `Transcript so far:\n${history}` : 'No turns yet — open with Requirements.',
+      'Next interviewer probe:',
+    ].join('\n\n');
+
+    const url =
+      `https://generativelanguage.googleapis.com/v1beta/models/` +
+      `${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+    const res = await fetchImpl(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: userText }] }],
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Gemini interviewer HTTP ${res.status}: ${errText.slice(0, 200)}`);
+    }
+
+    const data = await res.json();
+    const text =
+      data?.candidates?.[0]?.content?.parts?.map((p) => p?.text || '').join('') || '';
+    const usage = data?.usageMetadata || {};
+    const input_tokens = Number(usage.promptTokenCount) || 0;
+    const output_tokens = Number(usage.candidatesTokenCount) || 0;
+    const estimated_usd = ((input_tokens + output_tokens) / 1000) * usdPer1k;
+
+    const end_interview = /\bEND_INTERVIEW\b/.test(text);
+    const cleaned = text.replace(/\bEND_INTERVIEW\b/g, '').trim();
+    const attachments = extractMermaidAttachments(cleaned);
+
+    return {
+      text: cleaned,
+      attachments,
+      end_interview,
+      spend: { input_tokens, output_tokens, estimated_usd },
+    };
+  };
+}
+
+/**
+ * Headless T2 dual-agent interview loop.
+ * Always finalizes (and optionally writes corpus) on any end including budget_hit.
+ *
+ * @param {{
+ *   scenario?: { id?: string, prompt?: string },
+ *   interviewerAgent: (ctx: object) => Promise<object> | object,
+ *   candidateAgent?: (ctx: object) => Promise<object> | object,
+ *   sut: (ctx: object) => Promise<object> | object,
+ *   budgets?: object,
+ *   maxTurns?: number,
+ *   provenance?: object,
+ *   models?: { interviewer?: string, sut?: string },
+ *   sessionTracker?: { addTranscript?: Function },
+ *   onInject?: (seg: object) => void,
+ *   inject?: typeof injectSpeech,
+ *   getSideChannelSnapshot?: Function,
+ *   nightlyCap?: NightlyInterviewCap | null,
+ *   corpusDir?: string,
+ *   writeBundle?: boolean,
+ * }} config
+ * @returns {Promise<{ bundle: object, outcome: object, corpusPath?: string | null }>}
+ */
+async function runT2DualAgent(config = {}) {
+  const {
+    createRun,
+    appendTurn,
+    appendSideChannel,
+    recordSpend,
+    budgetExceeded,
+    finalize,
+  } = bundleApi();
+
+  const {
+    scenario = {},
+    interviewerAgent,
+    candidateAgent = createThinCandidateAgent(),
+    sut,
+    budgets = {},
+    maxTurns,
+    provenance = {},
+    models = {},
+    sessionTracker = null,
+    onInject,
+    inject = defaultInjectSpeech,
+    getSideChannelSnapshot,
+    nightlyCap = null,
+    corpusDir,
+    writeBundle = true,
+  } = config;
+
+  if (typeof interviewerAgent !== 'function') {
+    throw new Error('runT2DualAgent requires interviewerAgent');
+  }
+  if (typeof sut !== 'function') {
+    throw new Error('runT2DualAgent requires sut (Natively trigger target)');
+  }
+
+  const effectiveMaxTurns = maxTurns != null ? maxTurns : budgets.maxTurns;
+  const runBudgets = { ...budgets };
+  if (effectiveMaxTurns != null && runBudgets.maxTurns == null) {
+    runBudgets.maxTurns = effectiveMaxTurns;
+  }
+
+  const run = createRun({
+    provenance: {
+      ...provenance,
+      tier: provenance.tier || 'T2',
+      models: {
+        interviewer: models.interviewer || DEFAULT_INTERVIEWER_MODEL,
+        sut: models.sut || DEFAULT_SUT_MODEL,
+        ...(provenance.models || {}),
+      },
+    },
+    budgets: runBudgets,
+  });
+
+  const maybeExport = (result) => {
+    if (!writeBundle || !corpusDir) return { ...result, corpusPath: null };
+    const written = writeCorpusBundle(result.bundle, {
+      corpusDir,
+      filename: `t2-${result.bundle.run_id}.json`,
+    });
+    return { ...result, corpusPath: written.path };
+  };
+
+  if (nightlyCap && !nightlyCap.canStart()) {
+    return maybeExport(finalize(run, { end_reason: 'budget_hit' }));
+  }
+  if (nightlyCap) nightlyCap.recordStart();
+
+  let end_reason = 'scenario_stop';
+  const injectLog = [];
+  // Safety bound so a buggy agent cannot loop forever even without maxTurns.
+  const hardCap = effectiveMaxTurns != null ? effectiveMaxTurns * 2 + 8 : 64;
+
+  for (let step = 0; step < hardCap; step += 1) {
+    if (effectiveMaxTurns != null && run.spend.turn_count >= effectiveMaxTurns) {
+      end_reason = 'max_turns';
+      break;
+    }
+    if (budgetExceeded(run)) {
+      end_reason = resolveEndReasonAfterBudget(run);
+      break;
+    }
+
+    const probeCtx = {
+      scenario,
+      bundle: run.bundle,
+      turnCount: run.spend.turn_count,
+      injectLog: [...injectLog],
+      spend: { ...run.spend },
+    };
+    const probeRaw = await Promise.resolve(interviewerAgent(probeCtx));
+    const probe =
+      probeRaw && typeof probeRaw === 'object'
+        ? probeRaw
+        : { text: String(probeRaw ?? '') };
+
+    let attachments = Array.isArray(probe.attachments) ? [...probe.attachments] : [];
+    if (attachments.length === 0) {
+      attachments = extractMermaidAttachments(probe.text || '');
+    }
+
+    const interviewerTurn = {
+      role: 'interviewer',
+      text: probe.text ?? '',
+      attachments,
+      stop: probe.stop === true,
+      end_interview: probe.end_interview === true,
+      continue: probe.continue === true,
+      continueText: probe.continueText,
+    };
+
+    const injected = inject(sessionTracker, [interviewerTurn], {
+      baseTs: Date.now() + run.spend.turn_count * 1000,
+      onSegment: (seg) => {
+        injectLog.push(seg);
+        if (typeof onInject === 'function') onInject(seg);
+      },
+    });
+
+    appendTurn(run, {
+      role: 'interviewer',
+      text: interviewerTurn.text,
+      attachments: interviewerTurn.attachments,
+    });
+
+    if (probe.spend) recordSpend(run, probe.spend);
+
+    if (effectiveMaxTurns != null && run.spend.turn_count >= effectiveMaxTurns) {
+      end_reason = 'max_turns';
+      break;
+    }
+    if (budgetExceeded(run)) {
+      end_reason = resolveEndReasonAfterBudget(run);
+      break;
+    }
+
+    const decision = await Promise.resolve(
+      candidateAgent({
+        scenario,
+        interviewerTurn,
+        injectLog: [...injectLog],
+        injected,
+        bundle: run.bundle,
+        turnCount: run.spend.turn_count,
+      }),
+    );
+    const action =
+      decision && typeof decision === 'object' ? decision.action || 'trigger' : 'trigger';
+
+    if (action === 'stop') {
+      end_reason = 'scenario_stop';
+      break;
+    }
+
+    // Thin candidate: trigger (or continue/advance) — SUT produces the answer.
+    if (action === 'trigger' || action === 'continue' || action === 'advance') {
+      const answer = await Promise.resolve(
+        sut({
+          scenario,
+          interviewerTurn,
+          injectLog: [...injectLog],
+          injected,
+          bundle: run.bundle,
+          turnCount: run.spend.turn_count,
+          candidateAction: action,
+        }),
+      );
+      const answerObj =
+        answer && typeof answer === 'object' ? answer : { text: String(answer ?? '') };
+
+      appendTurn(run, {
+        role: 'assistant',
+        text: answerObj.text ?? '',
+        attachments: answerObj.attachments || [],
+      });
+
+      if (answerObj.spend) recordSpend(run, answerObj.spend);
+
+      const explicitSnapshot =
+        answerObj.sideChannel ||
+        answerObj.side_channel ||
+        probe.sideChannel ||
+        probe.side_channel ||
+        null;
+
+      if (explicitSnapshot || typeof getSideChannelSnapshot === 'function') {
+        let payload =
+          explicitSnapshot && typeof explicitSnapshot === 'object'
+            ? { ...explicitSnapshot }
+            : null;
+        if (!payload && typeof getSideChannelSnapshot === 'function') {
+          const hooked = await Promise.resolve(
+            getSideChannelSnapshot({
+              scenario,
+              interviewerTurn,
+              answer: answerObj,
+              bundle: run.bundle,
+              turnCount: run.spend.turn_count,
+            }),
+          );
+          if (hooked && typeof hooked === 'object') payload = { ...hooked };
+        }
+        if (payload) {
+          const lastTurn = run.bundle.turns[run.bundle.turns.length - 1];
+          appendSideChannel(run, {
+            ...payload,
+            turn_idx:
+              payload.turn_idx != null ? payload.turn_idx : lastTurn ? lastTurn.idx : null,
+            checkpoint: payload.checkpoint != null ? payload.checkpoint : 'after_assistant',
+          });
+        }
+      }
+
+      if (action === 'continue' || action === 'advance' || interviewerTurn.continue) {
+        if (effectiveMaxTurns != null && run.spend.turn_count >= effectiveMaxTurns) {
+          end_reason = 'max_turns';
+          break;
+        }
+        appendTurn(run, {
+          role: 'user_driver',
+          text:
+            (decision && decision.continueText) ||
+            answerObj.continueText ||
+            interviewerTurn.continueText ||
+            (action === 'advance' ? 'advance' : 'continue'),
+        });
+      }
+    }
+
+    if (interviewerTurn.end_interview || interviewerTurn.stop) {
+      end_reason = 'coverage_complete';
+      break;
+    }
+
+    if (effectiveMaxTurns != null && run.spend.turn_count >= effectiveMaxTurns) {
+      end_reason = 'max_turns';
+      break;
+    }
+    if (budgetExceeded(run)) {
+      end_reason = resolveEndReasonAfterBudget(run);
+      break;
+    }
+  }
+
+  if (end_reason === 'scenario_stop' && run.spend.turn_count >= hardCap) {
+    end_reason = 'max_turns';
+  }
+
+  return maybeExport(finalize(run, { end_reason }));
+}
+
+module.exports = {
+  DEFAULT_INTERVIEWER_MODEL,
+  DEFAULT_SUT_MODEL,
+  shouldRunT2DualAgent,
+  t2SkipMessage,
+  extractMermaidAttachments,
+  createStubInterviewerAgent,
+  createThinCandidateAgent,
+  createLiveInterviewerAgent,
+  NightlyInterviewCap,
+  runT2DualAgent,
+};

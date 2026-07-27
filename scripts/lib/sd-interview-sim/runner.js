@@ -143,9 +143,62 @@ class SdInterviewSimRunner {
   }
 
   /**
+   * Dual-agent (T2) path — delegates to runT2DualAgent so caps/export stay shared.
+   * Prefer headless; live agents are caller-supplied (stubs in default tests).
+   *
+   * @returns {Promise<{ bundle: object, outcome: object }>}
+   */
+  async _runDualAgent() {
+    // Lazy require avoids circular load with t2.js ↔ runner.js
+    const { runT2DualAgent, createThinCandidateAgent } = require('./t2');
+    const {
+      scenario = {},
+      sut,
+      interviewerAgent,
+      candidateAgent,
+      budgets = {},
+      provenance = {},
+      maxTurns,
+      models,
+      sessionTracker = null,
+      onInject,
+      inject = injectSpeech,
+      getSideChannelSnapshot,
+      nightlyCap,
+      corpusDir,
+      writeBundle,
+    } = this.config;
+
+    return runT2DualAgent({
+      scenario,
+      sut,
+      interviewerAgent,
+      candidateAgent: candidateAgent || createThinCandidateAgent(),
+      budgets,
+      maxTurns,
+      provenance: {
+        tier: provenance.tier || 'T2',
+        ...provenance,
+      },
+      models: models || provenance.models,
+      sessionTracker,
+      onInject,
+      inject,
+      getSideChannelSnapshot,
+      nightlyCap,
+      corpusDir,
+      writeBundle,
+    });
+  }
+
+  /**
    * @returns {Promise<{ bundle: object, outcome: object }>}
    */
   async run() {
+    if (typeof this.config.interviewerAgent === 'function') {
+      return this._runDualAgent();
+    }
+
     const {
       scenario = {},
       sut,

@@ -212,3 +212,5 @@ module.exports = {
 
 // Runner seam (fixture + stub). Required after exports so circular load sees helpers.
 Object.assign(module.exports, require('./runner'));
+// T2 dual-agent overnight path (env-gated; stubs by default in tests).
+Object.assign(module.exports, require('./t2'));
