@@ -111,10 +111,26 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         if (std) {
             std.ids.forEach((id, i) => {
                 if (!list.some(m => m.id === id)) {
-                    list.push({ id, label: std.names[i] || id });
+                    const idLower = id.toLowerCase();
+                    const nameLower = (std.names[i] || id).toLowerCase();
+                    const supportsVision = idLower.includes('claude-3') || idLower.includes('gpt-4o') || idLower.includes('gemini') || idLower.includes('vision') || nameLower.includes('vision') || nameLower.includes('multimodal');
+                    const supportsReasoning = idLower.includes('r1') || idLower.includes('o1') || idLower.includes('o3') || idLower.includes('thinking') || nameLower.includes('reasoning') || nameLower.includes('thinking');
+                    list.push({ id, label: std.names[i] || id, supportsVision, supportsReasoning });
                 }
             });
         }
+
+        // Infer missing capability flags for cached models
+        list = list.map(m => {
+            if (m.supportsVision !== undefined && m.supportsReasoning !== undefined) return m;
+            const idLower = m.id.toLowerCase();
+            const labelLower = m.label.toLowerCase();
+            return {
+                ...m,
+                supportsVision: m.supportsVision ?? (idLower.includes('claude-3') || idLower.includes('gpt-4o') || idLower.includes('gemini') || idLower.includes('vision') || labelLower.includes('vision') || labelLower.includes('multimodal')),
+                supportsReasoning: m.supportsReasoning ?? (idLower.includes('r1') || idLower.includes('o1') || idLower.includes('o3') || idLower.includes('thinking') || labelLower.includes('reasoning') || labelLower.includes('thinking')),
+            };
+        });
 
         setFetchedModels(list);
     }, [providerId]);
@@ -193,24 +209,33 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         }
     };
 
+    // Auto-fetch models when modal is opened if we haven't fetched from API yet
+    useEffect(() => {
+        if (isManageModalOpen && fetchedModels.length <= 5 && hasStoredKey && !isFetching) {
+            handleFetchModels();
+        }
+    }, [isManageModalOpen]);
+
     const handleToggleModel = (modelId: string) => {
         if (!onSetEnabledModels) return;
 
         let currentEnabled: string[];
         if (!enabledModels || enabledModels.length === 0) {
+            // When all are enabled by default, toggling off one model leaves all remaining enabled
             currentEnabled = fetchedModels.map(m => m.id);
         } else {
             currentEnabled = enabledModels.filter(m => m !== '_none_');
         }
 
-        let next: string[];
-        if (currentEnabled.includes(modelId)) {
-            next = currentEnabled.filter(id => id !== modelId);
-            if (next.length === 0) next = ['_none_'];
+        const enabledSet = new Set(currentEnabled);
+        if (enabledSet.has(modelId)) {
+            enabledSet.delete(modelId);
         } else {
-            next = [...currentEnabled, modelId];
+            enabledSet.add(modelId);
         }
 
+        let next = Array.from(enabledSet);
+        if (next.length === 0) next = ['_none_'];
         onSetEnabledModels(next);
         // @ts-ignore
         window.electronAPI?.setCloudEnabledModels?.(providerId, next);

@@ -235,10 +235,12 @@ async function fetchOpenRouterModels(apiKey: string): Promise<ProviderModel[]> {
     return models
         .map((m: any) => {
             const inputModalities: string[] = m.architecture?.modality?.split('->')?.[0]?.split('+')?.map((s: string) => s.trim().toLowerCase()) || [];
-            const supportsVision = inputModalities.includes('image') || Boolean(m.architecture?.instruct_type?.includes('vision'));
             const idLower = (m.id || '').toLowerCase();
             const nameLower = (m.name || '').toLowerCase();
-            const supportsReasoning = idLower.includes('reasoner') || idLower.includes('r1') || idLower.includes('o1') || idLower.includes('o3') || idLower.includes('thinking') || nameLower.includes('thinking') || nameLower.includes('reasoning');
+
+            const supportsVision = inputModalities.includes('image') || Boolean(m.architecture?.instruct_type?.includes('vision')) || idLower.includes('claude-3') || idLower.includes('gpt-4o') || idLower.includes('gemini') || idLower.includes('vision') || idLower.includes('pixtral') || nameLower.includes('vision');
+
+            const supportsReasoning = idLower.includes('reasoner') || idLower.includes('r1') || idLower.includes('o1') || idLower.includes('o3') || idLower.includes('thinking') || nameLower.includes('thinking') || nameLower.includes('reasoning') || idLower.includes('qwq');
 
             return {
                 id: m.id,
