@@ -4338,13 +4338,35 @@ export function initializeIpcHandlers(appState: AppState): void {
               // gating is that enabling mid-session starts with empty history (negligible).
               if (isIntelligenceFlagEnabled('conversationMemoryV2')) {
                 try {
-                  _manualConversationMemory.record({
-                    sessionId: String(senderId),
-                    userMessage: message,
-                    assistantAnswer: fullResponse,
-                    mode: manualActiveMode?.templateType,
-                    timestamp: Date.now(),
-                  });
+                  // Code-review finding (2026-07-28): closes a race the
+                  // clearAllSessions()-on-mode-switch fix (modes:set-active)
+                  // doesn't cover by itself — manualActiveMode is captured
+                  // ONCE near the top of this handler, before the stream
+                  // starts; if the user switches modes WHILE this answer is
+                  // still generating, clearAllSessions() fires and empties
+                  // the map, but this record() call (deep in the stream's
+                  // "done" callback, unguarded by any streamId/supersession
+                  // check) still runs afterward and writes the OLD mode's
+                  // turn back in — resurrecting exactly the cross-mode
+                  // recall bug the switch-time clear exists to prevent.
+                  // Compare the mode captured at handler-start against the
+                  // LIVE mode at record time; skip the write on mismatch.
+                  // Uses .id, not .templateType: ModesManager.isCustomMode()
+                  // collapses every custom (including document-grounded)
+                  // mode's templateType to 'general', so two DIFFERENT
+                  // custom modes would be indistinguishable by templateType
+                  // alone — exactly the case this guard must catch.
+                  const { ModesManager: _ModesManagerForRecordGuard } = require('./services/ModesManager');
+                  const liveModeIdAtRecord = _ModesManagerForRecordGuard.getInstance().getActiveMode()?.id ?? null;
+                  if (liveModeIdAtRecord === (manualActiveMode?.id ?? null)) {
+                    _manualConversationMemory.record({
+                      sessionId: String(senderId),
+                      userMessage: message,
+                      assistantAnswer: fullResponse,
+                      mode: manualActiveMode?.templateType,
+                      timestamp: Date.now(),
+                    });
+                  }
                   // CODING THREAD STATE (spoken-answer-quality sprint 2026-06-15): record a
                   // coding turn so original-vs-current problem resolution works on later
                   // follow-ups. Only for coding answers; isContinuation reuses the same
@@ -10033,6 +10055,23 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch {
         /* non-fatal — session may not exist during startup */
       }
+      // Answer-pipeline-rebuild Phase 3 (2026-07-28), same bug class as the
+      // BUG-MODE-BLEEDING fix immediately above: _manualConversationMemory
+      // (conversationMemoryV2's bare/refinement follow-up recall) records
+      // each turn's mode but never checks it back on read — a follow-up in a
+      // NEW mode after switching away from a document-grounded mode could
+      // re-inject that mode's prior answer as "PRIOR EXCHANGE"/"PRIOR
+      // ANSWER" context, bypassing the new mode's own source-isolation
+      // contract. Cleared here, not just on window-destroy (the only other
+      // clearSession call site), for the same reason IntelligenceManager's
+      // context is cleared here: mode is a global (ModesManager singleton)
+      // switch, so stale prior-mode turns must not survive it.
+      try { _manualConversationMemory.clearAllSessions(); } catch { /* non-fatal */ }
+      // Code-review finding (2026-07-28): sibling per-session store with the
+      // same latent gap (see CodingConversationState.clearAllSessions's own
+      // comment) — cleared alongside conversation memory for defense in
+      // depth, not because a live path currently reaches it unguarded.
+      try { _manualCodingState.clearAllSessions(); } catch { /* non-fatal */ }
 
       ModesManager.getInstance().setActiveMode(id);
       // Broadcast mode change to all windows so indicators update immediately

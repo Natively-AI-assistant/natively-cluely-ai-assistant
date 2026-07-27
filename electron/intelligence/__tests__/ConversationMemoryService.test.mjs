@@ -75,6 +75,44 @@ describe('ConversationMemoryService — isolation', () => {
   });
 });
 
+describe('ConversationMemoryService — clearAllSessions (answer-pipeline-rebuild Phase 3, 2026-07-28)', () => {
+  test('wipes every session, not just one', () => {
+    const svc = new ConversationMemoryService();
+    seed(svc, 's1');
+    svc.record({ sessionId: 's2', userMessage: 'x', assistantAnswer: 'y', timestamp: 1 });
+    svc.record({ sessionId: 's3', userMessage: 'z', assistantAnswer: 'w', timestamp: 1 });
+    svc.clearAllSessions();
+    assert.equal(svc.getRecentTurns('s1').length, 0);
+    assert.equal(svc.getRecentTurns('s2').length, 0);
+    assert.equal(svc.getRecentTurns('s3').length, 0);
+    assert.equal(svc.sessionCount, 0);
+  });
+
+  test('cross-mode contamination reproduction: without the clear, a follow-up in a NEW mode recalls the prior mode\'s answer', () => {
+    // Reproduces the exact mechanism this fix closes: mode is recorded per
+    // turn but never checked on read, so resolveSameSession/
+    // getLastAssistantAnswer happily return a turn recorded under a
+    // DIFFERENT (e.g. document-grounded) mode once the user has switched
+    // away from it — unless the caller clears the session on mode switch.
+    const svc = new ConversationMemoryService();
+    svc.record({
+      sessionId: 'sender-1',
+      userMessage: 'summarize chapter 3',
+      assistantAnswer: 'Chapter 3 covers the reconciliation pipeline design from the uploaded thesis document.',
+      mode: 'document-grounded-thesis-review',
+      timestamp: 1000,
+    });
+    // Without a clear, the prior document-grounded turn is still recallable
+    // even though the user has since switched to a different mode.
+    assert.match(svc.getLastAssistantAnswer('sender-1'), /reconciliation pipeline/);
+
+    // The fix: modes:set-active calls clearAllSessions() on every switch.
+    svc.clearAllSessions();
+    assert.equal(svc.getLastAssistantAnswer('sender-1'), null, 'after a mode switch, the prior mode\'s turn must not be recallable');
+    assert.equal(svc.resolveSameSession('sender-1', 'why?'), null);
+  });
+});
+
 describe('ConversationMemoryService — cross-session (optional long-term)', () => {
   test('returns [] when no provider (memory disabled) — never blocks', async () => {
     const svc = new ConversationMemoryService();
