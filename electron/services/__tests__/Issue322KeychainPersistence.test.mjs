@@ -257,8 +257,9 @@ test('PERMANENT: 3 distinct cold-start decrypt failures escalate to needsCredent
   assert.ok(fs.existsSync(encPath(env)), 'the undecryptable keyring file is PRESERVED, never deleted');
 });
 
-test('RE-ENTER heals: saving a real key during permanent-fail persists and clears the banner', () => {
+test('RE-ENTER heals: saving a real key during permanent-fail stages to fallback and clears the banner', () => {
   const env = makeEnv();
+  const fallbackFile = path.join(env.userData, 'credentials.fallback.enc');
 
   const cm = freshManager(env);
   cm.setDeepgramApiKey(SECRET);
@@ -269,20 +270,79 @@ test('RE-ENTER heals: saving a real key during permanent-fail persists and clear
   const broken = freshManager(env);
   assert.equal(broken.needsCredentialReentry(), true);
 
-  // User re-enters a NEW key. Decrypt is still "broken" for the OLD ciphertext, but the
-  // fresh write creates a new readable item (the test mock always decrypts what it wrote
-  // unless decryptShouldThrow — so flip it off to model the healed, re-keyed item).
-  env.state.decryptShouldThrow = false;
+  // Greptile P1: permanent re-entry must NOT overwrite the undecryptable keyring with a
+  // sparse object. It stages to the fallback only; the keyring ciphertext is preserved
+  // for a later heal/merge.
   const NEW = 'dg-REENTERED-KEY-987zzz';
   const persisted = broken.setDeepgramApiKey(NEW);
-  assert.equal(persisted, true, 're-entered key persists');
-  assert.equal(broken.needsCredentialReentry(), false, 're-key clears the banner immediately');
-  assert.ok(!fs.existsSync(sidecarPath(env)), 're-key deletes the decrypt-fail sidecar');
+  assert.equal(persisted, true, 're-entered key stages to fallback');
+  assert.equal(broken.needsCredentialReentry(), false, 're-entry clears the banner immediately');
+  assert.ok(!fs.existsSync(sidecarPath(env)), 're-entry deletes the decrypt-fail sidecar');
+  assert.ok(fs.existsSync(fallbackFile), 're-entry wrote the fallback stage file');
+  assert.ok(fs.existsSync(encPath(env)), 'undecryptable keyring file is still preserved');
 
-  // Next cold start reads the re-keyed value cleanly.
+  // Still-broken launch serves the staged re-entry from fallback.
+  const staged = freshManager(env);
+  assert.equal(staged.getDeepgramApiKey(), NEW, 'staged re-entry is readable via fallback while keyring is down');
+
+  // Keychain heals: keyring decrypts the ORIGINAL store; merge prefers newer fallback fields.
+  env.state.decryptShouldThrow = false;
   const after = freshManager(env);
-  assert.equal(after.getDeepgramApiKey(), NEW, 'the re-entered key survives restart');
+  assert.equal(after.getDeepgramApiKey(), NEW, 'healed launch merges re-entered key from fallback');
   assert.equal(after.needsCredentialReentry(), false);
+});
+
+test('Greptile P1: sparse single-key save during unreadable launch must not destroy sibling keys', () => {
+  const env = makeEnv();
+  const GEMINI = 'AIzaSy-SIBLING-gemini-key-322';
+  const fallbackFile = path.join(env.userData, 'credentials.fallback.enc');
+
+  const cm = freshManager(env);
+  cm.setDeepgramApiKey(SECRET);
+  cm.setGeminiApiKey(GEMINI);
+
+  // Transient unreadable launch (below re-entry threshold) — memory is empty/sparse.
+  env.state.decryptShouldThrow = true;
+  const broken = freshManager(env);
+  assert.equal(broken.wasExistingStoreUnreadable(), true);
+  assert.equal(broken.didRecoverFromReadableStore(), false);
+  assert.equal(broken.needsCredentialReentry(), false);
+
+  // Autosave of ONE provider key must be refused — writing it would clobber siblings.
+  const persisted = broken.setOpenAiSttApiKey('sk-sparse-only-openai-stt');
+  assert.equal(persisted, false, 'sparse persist must be refused while store is unreadable and unrecovered');
+  assert.ok(fs.existsSync(encPath(env)), 'keyring ciphertext preserved');
+  assert.ok(!fs.existsSync(fallbackFile), 'no sparse fallback staged on transient refusal');
+
+  // Keychain heals — BOTH original keys must still be present.
+  env.state.decryptShouldThrow = false;
+  const healed = freshManager(env);
+  assert.equal(healed.getDeepgramApiKey(), SECRET, 'Deepgram sibling must survive sparse-save attempt');
+  assert.equal(healed.getGeminiApiKey(), GEMINI, 'Gemini sibling must survive sparse-save attempt');
+  assert.equal(healed.getOpenAiSttApiKey(), undefined, 'refused sparse key must not appear after heal');
+});
+
+test('Greptile P1: permanent single-key re-entry preserves siblings when keychain later heals', () => {
+  const env = makeEnv();
+  const GEMINI = 'AIzaSy-SIBLING-gemini-key-322b';
+
+  const cm = freshManager(env);
+  cm.setDeepgramApiKey(SECRET);
+  cm.setGeminiApiKey(GEMINI);
+
+  env.state.decryptShouldThrow = true;
+  freshManager(env); freshManager(env);
+  const broken = freshManager(env);
+  assert.equal(broken.needsCredentialReentry(), true);
+
+  const NEW = 'dg-REENTERED-ONLY-deepgram';
+  assert.equal(broken.setDeepgramApiKey(NEW), true, 'permanent re-entry stages to fallback');
+
+  // Heal: keyring still holds Gemini+old Deepgram; fallback holds NEW Deepgram → merge.
+  env.state.decryptShouldThrow = false;
+  const healed = freshManager(env);
+  assert.equal(healed.getDeepgramApiKey(), NEW, 're-entered Deepgram wins from fallback');
+  assert.equal(healed.getGeminiApiKey(), GEMINI, 'Gemini sibling recovered from healed keyring');
 });
 
 test('FALLBACK fall-through: an undecryptable keyring file no longer strands a readable fallback', () => {

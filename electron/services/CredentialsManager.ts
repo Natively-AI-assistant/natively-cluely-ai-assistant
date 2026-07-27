@@ -141,6 +141,13 @@ export class CredentialsManager {
      * keyring readable again ("verified-healed").
      */
     private existingStoreUnreadable = false;
+    /**
+     * True when this launch successfully populated `credentials` from a readable
+     * on-disk store (keyring or fallback). While the keyring is unreadable and
+     * this is false, in-memory state is empty/sparse — persisting it would
+     * permanently replace still-recoverable ciphertext (Greptile P1 / #322).
+     */
+    private recoveredFromReadableStore = false;
     /** True after DECRYPT_FAIL_THRESHOLD consecutive cold-start decrypt failures. */
     private credentialReentryNeeded = false;
 
@@ -161,6 +168,7 @@ export class CredentialsManager {
      */
     public init(): void {
         this.existingStoreUnreadable = false;
+        this.recoveredFromReadableStore = false;
         this.credentialReentryNeeded = false;
         this.loadCredentials();
         console.log('[CredentialsManager] Initialized');
@@ -179,6 +187,14 @@ export class CredentialsManager {
      */
     public wasExistingStoreUnreadable(): boolean {
         return this.existingStoreUnreadable;
+    }
+
+    /**
+     * True when credentials were loaded from a readable on-disk store this launch.
+     * Exposed for tests covering the sparse-recovery guard (Greptile P1).
+     */
+    public didRecoverFromReadableStore(): boolean {
+        return this.recoveredFromReadableStore;
     }
 
     /**
@@ -948,6 +964,22 @@ export class CredentialsManager {
             return false;
         }
 
+        // Greptile P1: after an undecryptable launch with nothing readable loaded,
+        // in-memory credentials are empty or a sparse re-entry of one provider.
+        // Writing that set to the keyring (or a fallback that later wins via mtime)
+        // permanently destroys every other key still sitting in the undecryptable
+        // ciphertext. Refuse until we recovered a full readable store this session;
+        // permanent re-entry may stage into the fallback ONLY (keyring preserved).
+        if (this.existingStoreUnreadable && !this.recoveredFromReadableStore) {
+            if (!this.credentialReentryNeeded) {
+                console.warn(
+                    '[CredentialsManager] Refusing to persist sparse credentials over an undecryptable store (issue #322 / Greptile P1)',
+                );
+                return false;
+            }
+            return this.persistFallbackOnlyPreservingKeyring(isEmpty);
+        }
+
         // Try the OS keyring first. When safeStorage is available, this is the
         // preferred path. On Windows the underlying DPAPI can still throw after
         // isEncryptionAvailable() returns true (e.g. policy restrictions, roaming
@@ -1009,6 +1041,53 @@ export class CredentialsManager {
             console.error('[CredentialsManager] Failed to save credentials:', (error as Error)?.message ?? String(error));
             return false;
         }
+    }
+
+    /**
+     * Permanent re-entry path (#322 / Greptile P1): stage credentials into the
+     * app-managed fallback while leaving the undecryptable keyring file untouched
+     * so a later heal can still recover sibling keys. Callers must only use this
+     * when `needsCredentialReentry()` is true and nothing readable was loaded.
+     */
+    private persistFallbackOnlyPreservingKeyring(isEmpty: boolean): boolean {
+        try {
+            const blob = encryptCredentialBlob(JSON.stringify(this.credentials), this.getFallbackKey());
+            const tmpFb = FALLBACK_PATH + '.tmp';
+            fs.writeFileSync(tmpFb, blob, { mode: 0o600 });
+            fs.renameSync(tmpFb, FALLBACK_PATH);
+            console.warn(
+                '[CredentialsManager] Permanent re-entry: staged credentials to fallback only; preserving undecryptable keyring (issue #322 / Greptile P1)',
+            );
+            if (!isEmpty) {
+                this.clearDecryptFailSidecar();
+            }
+            return true;
+        } catch (error) {
+            console.error(
+                '[CredentialsManager] Failed to stage re-entry credentials to fallback:',
+                (error as Error)?.message ?? String(error),
+            );
+            return false;
+        }
+    }
+
+    /**
+     * Merge `overlay` into `base`. Non-empty overlay string/object fields win;
+     * empty/missing overlay fields keep the base value. Used when a healed
+     * keyring load coexists with a newer fallback that may hold re-entered keys.
+     */
+    private mergeCredentials(
+        base: StoredCredentials,
+        overlay: StoredCredentials,
+    ): StoredCredentials {
+        const merged: StoredCredentials = { ...base };
+        for (const key of Object.keys(overlay) as (keyof StoredCredentials)[]) {
+            const next = overlay[key];
+            if (next === undefined || next === null) continue;
+            if (typeof next === 'string' && next.length === 0) continue;
+            (merged as any)[key] = next;
+        }
+        return merged;
     }
 
     /** Increment the decrypt-fail sidecar; escalate to re-entry at the threshold. */
@@ -1093,63 +1172,16 @@ export class CredentialsManager {
 
     private loadCredentials(): void {
         try {
-            // 1) Encrypted keyring file is authoritative when the keyring is available.
-            //    However, if a previous saveCredentials() hit the fallback path AND the
-            //    stale-keyring cleanup failed (rare — locked file, permissions, etc.),
-            //    the on-disk keyring is stale relative to the fallback we just wrote.
-            //    Reading it would silently discard the fresh fallback. Detect this via
-            //    mtimes: when the fallback is newer than the keyring, drop the keyring
-            //    before loading.
-            //
-            //    Caveat: this check assumes that any legitimate round-trip through
-            //    the keyring path leaves the keyring mtime >= fallback mtime (the
-            //    fallback is removed by removeFallbackFile() on line ~1035 immediately
-            //    after a keyring load). It will mis-fire in two scenarios:
-            //      (a) backup-restore copies a stale fallback next to a current keyring
-            //          — the fallback is newer (from the restore time) but contains
-            //          STALE data from another machine. This is rare; the user will
-            //          re-enter the key on first save.
-            //      (b) cross-machine copy where both files share a salt (impossible —
-            //          SALT_PATH is machine-bound via os.userInfo/MachineGuid, so a
-            //          cross-machine fallback cannot decrypt anyway).
-            //    Both edge cases are bounded and recoverable; the worst outcome is a
-            //    single re-entry of the affected credential.
+            // 1) Try the OS keyring file when available.
+            //    IMPORTANT (Greptile P1 / #322): never delete the keyring before
+            //    attempting decrypt solely because a newer fallback exists. A
+            //    sparse re-entry staged to fallback must not destroy still-
+            //    recoverable ciphertext. Prefer: decrypt keyring → if success
+            //    and a newer fallback also decrypts, merge (fallback wins on
+            //    non-empty fields) → only then drop the redundant file.
             if (fs.existsSync(CREDENTIALS_PATH)) {
                 let keyringAvailable = false;
                 try { keyringAvailable = safeStorage.isEncryptionAvailable(); } catch { keyringAvailable = false; }
-
-                if (keyringAvailable && fs.existsSync(FALLBACK_PATH)) {
-                    try {
-                        const keyringMtime = fs.statSync(CREDENTIALS_PATH).mtimeMs;
-                        const fallbackMtime = fs.statSync(FALLBACK_PATH).mtimeMs;
-                        // The fallback's mtime reflects the LAST time a saveCredentials()
-                        // completed its atomic rename. If the keyring is older than the
-                        // fallback, the only way that can happen on a healthy machine is
-                        // a saveCredentials() that hit the fallback path because the
-                        // keyring write threw (rare — DPAPI policy/roaming profile), or a
-                        // one-time migration when isEncryptionAvailable() flipped back
-                        // from false to true (in which case the migrate-up branch at line
-                        // ~1067 deletes the fallback immediately after re-writing the
-                        // keyring, so this comparison won't see the new mtimes).
-                        //
-                        // KNOWN MIS-FIRE: a user-side backup-restore that drops a stale
-                        // `credentials.fallback.enc` (different machine, different salt)
-                        // next to a current `credentials.enc` would trigger this branch.
-                        // The fallback would then "win" — but the fallback decrypts with
-                        // THIS machine's salt and key material, so decryption would fail
-                        // with an auth error (the GCM tag wouldn't verify) and loadCredentials
-                        // would log "Failed to read app-managed fallback" and start fresh.
-                        // The user would simply re-enter the affected key on next save.
-                        // Bounded and recoverable; documented in the comment block above.
-                        if (fallbackMtime > keyringMtime) {
-                            console.warn('[CredentialsManager] Stale keyring file detected (older than fallback); removing before load');
-                            this.removeKeyringFile();
-                        }
-                    } catch (statErr) {
-                        // statSync failed — proceed with the normal path; if the keyring
-                        // is unreadable we'll fall through to the fallback below.
-                    }
-                }
 
                 if (keyringAvailable && fs.existsSync(CREDENTIALS_PATH)) {
                     // Issue #322: decryptString MUST be in its own try/catch. A throw
@@ -1173,12 +1205,45 @@ export class CredentialsManager {
                         try {
                             const parsed = JSON.parse(decrypted);
                             if (typeof parsed === 'object' && parsed !== null) {
-                                this.credentials = parsed;
+                                let loaded = parsed as StoredCredentials;
+                                // Healed keyring + newer fallback (e.g. permanent
+                                // re-entry staged during the outage): merge so
+                                // sibling keys from the keyring survive and
+                                // re-entered fields from the fallback win.
+                                const fallbackOverlay = this.tryReadFallbackCredentials();
+                                if (fallbackOverlay) {
+                                    let preferFallback = false;
+                                    try {
+                                        preferFallback =
+                                            fs.statSync(FALLBACK_PATH).mtimeMs >
+                                            fs.statSync(CREDENTIALS_PATH).mtimeMs;
+                                    } catch {
+                                        preferFallback = true;
+                                    }
+                                    if (preferFallback) {
+                                        console.warn(
+                                            '[CredentialsManager] Merging newer fallback into healed keyring (issue #322 / Greptile P1)',
+                                        );
+                                        loaded = this.mergeCredentials(loaded, fallbackOverlay);
+                                    }
+                                }
+                                this.credentials = loaded;
+                                this.recoveredFromReadableStore = true;
                                 this.existingStoreUnreadable = false;
                                 this.clearDecryptFailSidecar();
-                                // Verified-healed: only a successful cold-start decrypt
-                                // may drop the fallback safety net.
-                                this.removeFallbackFile();
+                                // Verified-healed: cold-start decrypt proved the keyring.
+                                // Persist merge (if any) then drop the fallback safety net.
+                                if (fallbackOverlay) {
+                                    if (this.saveCredentials()) {
+                                        this.removeFallbackFile();
+                                    } else {
+                                        console.warn(
+                                            '[CredentialsManager] Merge persist failed — keeping fallback safety net',
+                                        );
+                                    }
+                                } else {
+                                    this.removeFallbackFile();
+                                }
                                 this.removePlaintextFile();
                                 console.log('[CredentialsManager] Loaded encrypted credentials');
                                 return;
@@ -1204,6 +1269,7 @@ export class CredentialsManager {
                     const parsed = JSON.parse(decrypted);
                     if (typeof parsed === 'object' && parsed !== null) {
                         this.credentials = parsed;
+                        this.recoveredFromReadableStore = true;
                         console.log('[CredentialsManager] Loaded credentials from app-managed fallback');
                     } else {
                         throw new Error('Fallback credentials is not a valid object');
@@ -1216,9 +1282,10 @@ export class CredentialsManager {
                 // Migrate up: if the keyring is now available, re-persist via safeStorage.
                 // When this launch also had an undecryptable keyring file, saveCredentials
                 // preserves the fallback until a later cold-start decrypt proves healed.
+                // When nothing was recovered (empty after fallback parse fail), skip.
                 let keyringNow = false;
                 try { keyringNow = safeStorage.isEncryptionAvailable(); } catch { keyringNow = false; }
-                if (keyringNow && Object.keys(this.credentials).length > 0) {
+                if (keyringNow && Object.keys(this.credentials).length > 0 && this.recoveredFromReadableStore) {
                     console.log('[CredentialsManager] Keyring now available — migrating fallback credentials to keyring');
                     this.saveCredentials();
                 }
@@ -1239,6 +1306,22 @@ export class CredentialsManager {
             console.error('[CredentialsManager] Failed to load credentials:', error);
             this.credentials = {};
         }
+    }
+
+    /** Best-effort read of the app-managed fallback; null if missing/unreadable. */
+    private tryReadFallbackCredentials(): StoredCredentials | null {
+        if (!fs.existsSync(FALLBACK_PATH)) return null;
+        try {
+            const blob = fs.readFileSync(FALLBACK_PATH);
+            const decrypted = decryptCredentialBlob(blob, this.getFallbackKey());
+            const parsed = JSON.parse(decrypted);
+            if (typeof parsed === 'object' && parsed !== null) {
+                return parsed as StoredCredentials;
+            }
+        } catch {
+            // ignore — caller keeps keyring-only load
+        }
+        return null;
     }
 }
 

@@ -70,18 +70,16 @@ export function useApiKeyAutoSave(
 
   // Flush a pending debounce on unmount (registered after the debounce effect
   // so this cleanup runs first and still sees pendingRef === true).
+  // Greptile P2: must go through runSave() so an in-flight save is not
+  // duplicated by calling onSave directly.
   useEffect(
     () => () => {
       if (pendingRef.current) {
         pendingRef.current = false;
-        try {
-          void Promise.resolve(onSaveRef.current()).catch(() => {});
-        } catch {
-          /* renderer unmounting */
-        }
+        runSave();
       }
     },
-    [],
+    [runSave],
   );
 
   const onBlur = useCallback(() => {
