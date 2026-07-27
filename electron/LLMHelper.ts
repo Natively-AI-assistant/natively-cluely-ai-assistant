@@ -700,6 +700,11 @@ export class LLMHelper {
     return this.lastProviderModel;
   }
 
+  /** E2E-only: clear the last-reported model so a failed/aborted rep can't be misattributed to the prior rep's model. */
+  public resetLastProviderModel(): void {
+    this.lastProviderModel = null;
+  }
+
   /**
    * Enable or disable local-only mode.
    * When enabled, cloud providers (Gemini, OpenAI, Claude, Groq) will be blocked.

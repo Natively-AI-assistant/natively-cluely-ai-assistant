@@ -11462,6 +11462,42 @@ export function initializeIpcHandlers(appState: AppState): void {
       });
     });
 
+    // E2E-only: expose LLMHelper.getLastProviderModel() — the server-chosen
+    // model reported by the Natively SSE stream's inline `model` field (see
+    // LLMHelper.ts streamNativelyApi parsing). Lets the harness confirm which
+    // real provider/model actually served each request instead of assuming
+    // the configured cascade default.
+    safeHandle('__e2e__:last-provider-model', async () => {
+      try {
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        return { success: true, model: llmHelper.getLastProviderModel?.() ?? null };
+      } catch (e: any) {
+        return { success: false, error: e?.message || String(e) };
+      }
+    });
+
+    // E2E-only: reset the IntelligenceManager's rolling transcript between
+    // independent manual-chat reps. `gemini-chat-stream` (the real handler
+    // __e2e__:manual-ask also drives) auto-injects up to 100s of rolling
+    // context via `intelligenceManager.getFormattedContext(100)` and appends
+    // each answer via `addAssistantMessage` — so back-to-back manual asks in
+    // one session are NOT independent samples unless this is cleared between
+    // them (mirrors what __e2e__:ask already does via `im.reset?.()`).
+    safeHandle('__e2e__:reset-session', async () => {
+      try {
+        const im = appState.getIntelligenceManager();
+        im.reset?.();
+        // Also clear the last-reported provider/model so a rep that errors or
+        // times out before any SSE `model` chunk arrives can't be misattributed
+        // to whatever model served the previous rep (harness data-quality gap).
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        llmHelper.resetLastProviderModel?.();
+        return { success: true };
+      } catch (e: any) {
+        return { success: false, error: e?.message || String(e) };
+      }
+    });
+
     // Force pro-active state for E2E (modes:* handlers are pro-gated). Uses the
     // real CredentialsManager trial token so the real isProOrTrialActive() passes.
     safeHandle('__e2e__:enable-pro', async () => {
