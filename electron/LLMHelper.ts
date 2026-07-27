@@ -12,7 +12,7 @@ import {
   UNIVERSAL_RECAP_PROMPT, UNIVERSAL_FOLLOWUP_PROMPT, UNIVERSAL_FOLLOW_UP_QUESTIONS_PROMPT, UNIVERSAL_ASSIST_PROMPT,
   CUSTOM_SYSTEM_PROMPT, CUSTOM_ANSWER_PROMPT, CUSTOM_WHAT_TO_ANSWER_PROMPT,
   CUSTOM_RECAP_PROMPT, CUSTOM_FOLLOWUP_PROMPT, CUSTOM_FOLLOW_UP_QUESTIONS_PROMPT, CUSTOM_ASSIST_PROMPT,
-  CHAT_MODE_PROMPT, CORE_IDENTITY, EXECUTION_CONTRACT
+  CHAT_MODE_PROMPT, CORE_IDENTITY, EXECUTION_CONTRACT, IMAGE_TRUST_TRAILER
 } from "./llm/prompts"
 import {
   TINY_SYSTEM_PROMPT, TINY_ANSWER_PROMPT, TINY_WHAT_TO_ANSWER_PROMPT,
@@ -232,8 +232,29 @@ function openaiReasoningParam(model: string): { reasoning_effort: OpenAiReasonin
   return effort ? { reasoning_effort: effort } : {};
 }
 
-// Simple prompt for image analysis (not interview copilot - kept separate)
-const IMAGE_ANALYSIS_PROMPT = `Analyze concisely. Be direct. No markdown formatting. Return plain text only.`
+// Simple prompt for image analysis (not interview copilot - kept separate).
+// Security fix (code-review finding, Phase 3, 2026-07-28): this prompt is
+// used by debugSolutionWithImages, which feeds
+// ProcessingHelper.processScreenshots()'s debug path — the app's PRIMARY
+// screenshot-capture "solve"/"debug" hotkey flow, and arguably the single
+// most natural attack surface for an image-embedded prompt-injection
+// attempt (a crafted on-screen webpage/editor/document). (extractProblemFromImages,
+// also listed as a consumer in an earlier version of this comment, has zero
+// live callers — confirmed dead code as of this pass; corrected here so a
+// future reader doesn't chase a phantom call site.) This bare one-line
+// prompt previously composed NONE of CORE_IDENTITY's protections.
+// Deliberately does NOT compose the FULL CORE_IDENTITY here — that's a
+// large, comprehensive prompt (anti-AI-tells, behavioral-admission
+// templates, etc.) meant for full conversational answer surfaces, and its
+// <accuracy_admissions> templates (which mandate exact opening sentences)
+// would directly conflict with generateRollingScript's sibling strict
+// JSON-only contract. Uses IMAGE_TRUST_TRAILER instead — the same
+// compact-trailer pattern SECURITY_TRAILER already establishes for short
+// prompts that don't compose CORE_IDENTITY (see that constant's own header
+// comment in prompts.ts for the full protection list and rationale).
+const IMAGE_ANALYSIS_PROMPT = `Analyze concisely. Be direct. No markdown formatting. Return plain text only.
+
+${IMAGE_TRUST_TRAILER}`
 
 export class LLMHelper {
   private client: GoogleGenAI | null = null
@@ -1590,7 +1611,9 @@ Output EXACTLY this JSON structure, and nothing else (no markdown fences around 
 CRITICAL RULES:
 - The scripts MUST sound like a human speaking out loud in an interview. Use "I", "we", "my first thought is".
 - The JSON must be perfectly valid. Escape any internal quotes with backslash.
-- Do NOT wrap the JSON in markdown fences.`;
+- Do NOT wrap the JSON in markdown fences.
+
+${IMAGE_TRUST_TRAILER}`;
 
     const userPrompt = `Please analyze the coding problem shown in the screenshot(s) and generate the Rolling Interview Script JSON.`;
 
