@@ -1711,9 +1711,74 @@ export function initializeIpcHandlers(appState: AppState): void {
               || allowsEvidence(turnContract, 'profile_jd');
           } catch { return true; }
         })();
+        // IMPOSSIBLE-EVIDENCE-STATE GATE, Stage 1 enforcement (answer-pipeline-
+        // rebuild Phase 2, docs/answer-pipeline-rebuild/03_EVIDENCEPACK_DESIGN.md).
+        // Forbidden-direction ONLY (checks #1/#2 — checkImpossibleEvidenceState
+        // never flags a 'required'-policy pack, so this cannot affect RC-8's
+        // fix). Mirrors _contractAllowsProfile immediately above: an
+        // independent, self-contained computation (not reusing Stage 0's
+        // shadow-block pack, so this gate's correctness never depends on an
+        // earlier block having run) that can only NARROW the legacy decision,
+        // never widen it — leak-safe by construction. Fails OPEN (returns
+        // true) on any internal error, same as _contractAllowsProfile's own
+        // catch — a gate failure must never break chat.
+        const _impossibleStateGateAllowsProfile = (() => {
+          if (!turnContract || !isIntelligenceFlagEnabled('contextOsImpossibleStateGateEnforceForbidden')) return true;
+          try {
+            const { ProfileEvidenceService, checkImpossibleEvidenceState } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            const orchestratorForGate = llmHelper.getKnowledgeOrchestrator?.();
+            const gateResume = (orchestratorForGate as any)?.activeResume?.structured_data ?? null;
+            const gateJd = (orchestratorForGate as any)?.activeJD?.structured_data ?? null;
+            const gatePack = new ProfileEvidenceService().retrieveEvidence({
+              question: String(message || ''),
+              contract: turnContract,
+              profile: gateResume,
+              jobDescription: gateJd,
+              answerType: answerPlan.answerType,
+            });
+            const gateResult = checkImpossibleEvidenceState(gatePack, answerPlan.profileContextPolicy);
+            // Code-review finding (2026-07-28): check #2
+            // (allowed_policy_unrelated_profile_item) has a live, reproduced
+            // false-refusal path — ordinary second-person skill/experience
+            // phrasing ("familiar with graphql") misclassifies as
+            // unknown_answer/allowed (requestedProperty stays 'unknown'
+            // because detectRequestedProperty only recognizes narrow
+            // first-person-possessive phrasing like "my experience"), and
+            // check #2 then suppresses a legitimate, high-confidence résumé
+            // skill match. Stage 0's shadow period never observed a single
+            // allowed-policy turn (all 19 reps were forbidden/required), so
+            // check #2 would have been enforced with zero real-world
+            // false-positive validation — the same RC-8-shaped risk class,
+            // reached via the allowed branch instead of required. Stage 1
+            // enforcement is scoped to check #1
+            // (forbidden_policy_profile_item_present) ONLY, confirmed live
+            // and necessary (SourceAuthorityKernel's unknown/mixed-owner
+            // capability grant doesn't consult answerType at all, so a
+            // forbidden-policy turn really can get profile capability
+            // granted underneath it — RC-1's exact mechanism). Check #2
+            // stays shadow-only (Stage 0's block above still logs it,
+            // unaffected by this filter) until it has real allowed-policy
+            // shadow observations across ordinary second-person phrasing.
+            const enforceableViolations = gateResult.violations.filter(
+              (v) => v.code === 'forbidden_policy_profile_item_present',
+            );
+            if (enforceableViolations.length > 0) {
+              if (isIntelligenceFlagEnabled('trace')) {
+                console.warn('[IMPOSSIBLE-STATE-GATE-ENFORCE] blocked profile injection', {
+                  turnId: gatePack.turnId,
+                  answerType: answerPlan.answerType,
+                  profileContextPolicy: answerPlan.profileContextPolicy,
+                  violationCodes: enforceableViolations.map((v) => v.code),
+                });
+              }
+              return false;
+            }
+            return true;
+          } catch { return true; }
+        })();
         const sourceOwnershipAllowsProfile = ((manualOwnership && !_ownerEnforcementOff)
           ? manualOwnership.profileAllowed
-          : legacyDocGuardEligible) && _contractAllowsProfile;
+          : legacyDocGuardEligible) && _contractAllowsProfile && _impossibleStateGateAllowsProfile;
         // TurnEvidenceCoordinator wiring gap fix (grounding campaign, 2026-07-18):
         // this legacy fast path and the coordinator below (`coordinatorInScopeKinds`,
         // ~line 2179) previously raced with no reconciliation. When the canonical

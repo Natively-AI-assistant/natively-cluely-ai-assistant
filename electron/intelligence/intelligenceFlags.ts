@@ -319,7 +319,25 @@ export type IntelligenceFlagKey =
   // before its own dedicated shadow period. Pattern 1 (dev/test-only
   // default), mirrors modePolicyShadowObservation/pronounRegexShadowObservation
   // immediately above.
-  | 'contextOsImpossibleStateGateShadow';
+  | 'contextOsImpossibleStateGateShadow'
+  // ── Impossible-evidence-state gate, Stage 1 enforcement (answer-pipeline-
+  // rebuild Phase 2, docs/answer-pipeline-rebuild/03_EVIDENCEPACK_DESIGN.md)
+  // ──────────────────────────────────────────────────────────────────────
+  // The first REAL behavior change in the design's asymmetric rollout —
+  // separate flag from contextOsImpossibleStateGateShadow (Stage 0,
+  // observation-only) since this stage actually narrows what the legacy
+  // fast path injects. Mirrors _contractAllowsProfile's established pattern
+  // in ipcHandlers.ts (ANDed into sourceOwnershipAllowsProfile, so it can
+  // only narrow the legacy decision, never widen it — leak-safe by
+  // construction) and fails OPEN on any internal error (a gate failure must
+  // never break chat). Forbidden-direction ONLY (checks #1/#2) — the design
+  // doc's own risk analysis is why required-direction enforcement must wait:
+  // RC-8 (a real, live false-refusal bug from the same session this gate
+  // was designed in) shows that direction is unsafe to enforce before its
+  // own dedicated shadow period, so this flag structurally cannot affect a
+  // 'required'-policy turn (checkImpossibleEvidenceState never flags one).
+  // Pattern 1 (dev/test-only default).
+  | 'contextOsImpossibleStateGateEnforceForbidden';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -528,6 +546,7 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   pronounRegexShadowObservation: { env: 'NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION', setting: 'pronounRegexShadowObservationEnabled', default: isInternalDevTestContext },
   modePolicyShadowObservation: { env: 'NATIVELY_MODE_POLICY_SHADOW_OBSERVATION', setting: 'modePolicyShadowObservationEnabled', default: isInternalDevTestContext },
   contextOsImpossibleStateGateShadow: { env: 'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_SHADOW', setting: 'contextOsImpossibleStateGateShadowEnabled', default: isInternalDevTestContext },
+  contextOsImpossibleStateGateEnforceForbidden: { env: 'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_ENFORCE_FORBIDDEN', setting: 'contextOsImpossibleStateGateEnforceForbiddenEnabled', default: isInternalDevTestContext },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);

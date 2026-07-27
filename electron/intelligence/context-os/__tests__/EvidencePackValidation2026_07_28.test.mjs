@@ -125,6 +125,43 @@ describe('checkImpossibleEvidenceState — allowed direction, relevance admissio
   });
 });
 
+describe('Stage 1 enforcement filter (code-review finding, 2026-07-28): check #2 must be observed but never enforced', () => {
+  // Reproduces the reviewer's live finding: "familiar with graphql" (ordinary
+  // second-person skill phrasing) misclassifies as unknown_answer/allowed
+  // with requestedProperty left 'unknown' (detectRequestedProperty only
+  // recognizes narrow first-person-possessive phrasing like "my
+  // experience"). The candidate's résumé genuinely lists GraphQL as a
+  // skill — this is a real, high-confidence, correctly-selected evidence
+  // item, not noise. Check #2 still flags it (requestedProperty==='unknown'
+  // means no affirmative reason can ever be constructed, by design), but
+  // ipcHandlers.ts's Stage 1 gate must filter this violation out before
+  // deciding to block, or it would suppress a legitimate profile answer —
+  // the same RC-8-shaped risk class, reached via 'allowed' instead of
+  // 'required'.
+  const graphqlSkillPack = packWith(
+    [profileItem({ text: 'Skills: GraphQL, Node.js, PostgreSQL', supports: { property: 'unknown' }, score: { propertyMatch: 1, final: 0.9 } })],
+    'unknown',
+  );
+
+  test('check #2 still flags it in shadow observation (Stage 0 must keep seeing this data)', () => {
+    const r = checkImpossibleEvidenceState(graphqlSkillPack, 'allowed');
+    assert.equal(r.ok, false);
+    assert.equal(r.violations[0].code, 'allowed_policy_unrelated_profile_item');
+  });
+
+  test('the Stage 1 enforcement filter (forbidden_policy_profile_item_present only) does NOT enforce this violation', () => {
+    const r = checkImpossibleEvidenceState(graphqlSkillPack, 'allowed');
+    const enforceableViolations = r.violations.filter((v) => v.code === 'forbidden_policy_profile_item_present');
+    assert.equal(enforceableViolations.length, 0, 'the GraphQL skill match must not be blocked by Stage 1 — only check #1 is enforced');
+  });
+
+  test('a genuine forbidden-direction leak (check #1) IS enforced by the same filter', () => {
+    const r = checkImpossibleEvidenceState(packWith([profileItem()]), 'forbidden');
+    const enforceableViolations = r.violations.filter((v) => v.code === 'forbidden_policy_profile_item_present');
+    assert.equal(enforceableViolations.length, 1, 'a real forbidden-direction leak must still be blocked');
+  });
+});
+
 describe('checkImpossibleEvidenceState — required direction is explicitly out of scope for Stage 0', () => {
   test('required policy + profile item present -> ok (no check applied; this is the expected case, not a violation)', () => {
     const r = checkImpossibleEvidenceState(packWith([profileItem()]), 'required');
