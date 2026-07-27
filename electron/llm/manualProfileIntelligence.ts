@@ -1099,7 +1099,23 @@ const makeEvidenceSelection = ({
 // null) instead of dumping every item verbatim and ignoring the filter.
 const QUALIFIER_PATTERNS = [
   /\b(that|which|where|whose|who)\b.*\b(use[ds]?|using|used|built|made|involve[ds]?|with|related|based|for|require[ds]?|need[s]?)\b/,
-  /\b(use[ds]?|using|used|involv\w+|relat\w+|based\s+on|about|regarding|with)\b\s+\w/,
+  // NOTE: deliberately excludes bare "about" (but keeps "regarding") —
+  // "about" is the ordinary opener for completely unfiltered questions ("tell
+  // me about your experience [at Stripe]", "tell me about your experience")
+  // and matching on it caused `qualified` to wrongly become true for those,
+  // which disables the deterministic company/experience lookup branches below
+  // (they're all gated on `!qualified`) and falls through to zero evidence →
+  // a false "insufficient evidence" refusal even though the profile has the
+  // answer. "regarding" is kept: unlike "about", it almost always introduces
+  // a genuine narrowing topic ("projects regarding payments") rather than a
+  // bare unfiltered opener, and a code-review pass confirmed live that
+  // removing it alongside "about" let genuine narrowing questions
+  // ("what projects do you have regarding cloud infrastructure") wrongly
+  // skip the qualifier gate. Genuine technology/project-narrowing phrasing
+  // ("about your experience WITH Kafka") still qualifies via the `with`
+  // alternative below — so no real filter case is lost by dropping "about"
+  // alone. Live-confirmed regression, 2026-07-27.
+  /\b(use[ds]?|using|used|involv\w+|relat\w+|based\s+on|regarding|with)\b\s+\w/,
   /\bwhich\s+(one|project|skill|role|job|experience)\b/,
   /\bany\s+(project|experience|skill)s?\b.*\b(with|using|in|for|that)\b/,
   /\b(only|just|specifically|particular|specific)\b/,

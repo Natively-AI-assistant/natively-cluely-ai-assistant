@@ -1,19 +1,36 @@
-// Phase 0 reproduction harness for the answer-pipeline-rebuild effort.
+// Phase 0/2 reproduction+coverage harness for the answer-pipeline-rebuild effort.
 //
 // Drives the REAL manual-chat surface (gemini-chat-stream) through a real
 // Electron process against the REAL natively-api backend and real provider
-// keys. No mocks. Reproduces 3 known bugs:
-//   Case 1: "write the code for odd even"          (no profile loaded)
-//   Case 2: "what is an api"                        (profile p01 loaded)
-//   Case 3: "what is a qraphql query"                (profile p01 loaded)
+// keys. No mocks.
+//
+// Covers BOTH leak directions, not just one:
+//   - "forbidden" cases: generic/technical questions that must NEVER surface
+//     profile content (the original 3 reported bugs + additional coverage of
+//     the same bug class across other generic-technical vocabulary and
+//     trivial-code requests).
+//   - "required" cases: genuine experience/profile questions that MUST still
+//     surface profile content. Added 2026-07-27 per code-review finding: every
+//     prior assertion in this harness tested only the absence direction, so a
+//     fix that over-broadly forbids profile everywhere would pass all of them
+//     undetected.
+//
+// The original 3 P0 cases (case1/case2/case3) are the ones with confirmed
+// live root causes (see docs/answer-pipeline-rebuild/01_CONFIRMED_ROOT_CAUSES.md)
+// and are the ones that should be run at high rep count (PHASE0_REPS, spec
+// default 20) for the determinism gate. The expansion cases added alongside
+// them are coverage/regression breadth, not yet individually root-caused, and
+// default to a lower rep count (PHASE0_EXPANSION_REPS) to control real
+// provider spend — raise it once quota/budget allows.
 //
 // Usage:
 //   bash tests/e2e-modes/ensure-backend.sh   # only if not already running on :3000
 //   node tests/context-os-real-backend/run-phase0-reproduction.mjs
 //
 // Env overrides:
-//   PHASE0_REPS=3            reps per case
-//   PHASE0_TIMEOUT_MS=45000  per-request hard timeout
+//   PHASE0_REPS=3               reps per case for the 3 original P0 cases (spec: 20)
+//   PHASE0_EXPANSION_REPS=3     reps per case for the expansion coverage cases
+//   PHASE0_TIMEOUT_MS=45000     per-request hard timeout
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -29,6 +46,7 @@ const now = () => new Date().toISOString();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const hash = (s) => crypto.createHash('sha1').update(s || '').digest('hex').slice(0, 12);
 const REPS = Number(process.env.PHASE0_REPS || 3);
+const EXPANSION_REPS = Number(process.env.PHASE0_EXPANSION_REPS || 3);
 const TIMEOUT_MS = Number(process.env.PHASE0_TIMEOUT_MS || 45_000);
 const BACKEND_URL = process.env.NATIVELY_API_URL || 'http://127.0.0.1:3000';
 
@@ -241,8 +259,8 @@ async function main() {
       return { rawMs, filteredMs };
     };
 
-    const runCase = async (caseId, question, { expectProfileLoaded }) => {
-      for (let rep = 1; rep <= REPS; rep++) {
+    const runCase = async (caseId, question, { expectProfileLoaded, expectSentinelPresent = false, reps = REPS }) => {
+      for (let rep = 1; rep <= reps; rep++) {
         await invoke('__e2e__:reset-session').catch(() => {});
         await invoke('__e2e__:context-os-benchmark-audit-clear').catch(() => {});
         await invoke('__e2e__:context-os-prompt-audit-clear').catch(() => {});
@@ -254,6 +272,13 @@ async function main() {
           results.push({
             caseId, rep, question, real_backend: true, mock: false, error: String(error?.message || error),
             failed: true,
+            // A required-direction case (expectSentinelPresent) that errors out
+            // never got its required profile content — that's unambiguously a
+            // violation, not a neutral non-event. Without this, an error mid-run
+            // would silently read as "clean" for exactly the direction this
+            // harness expansion was built to catch (code-review finding, 2026-07-27).
+            expectSentinelPresent,
+            violation: expectSentinelPresent,
           });
           continue;
         }
@@ -263,7 +288,11 @@ async function main() {
           // listeners on the same untagged IPC channel could pick up its stray tokens
           // and silently corrupt that rep's TFFT/answer. Hard-stop rather than risk
           // cross-rep contamination that would be invisible in the output.
-          results.push({ caseId, rep, question, real_backend: true, mock: false, timedOut: true, failed: true });
+          results.push({
+            caseId, rep, question, real_backend: true, mock: false, timedOut: true, failed: true,
+            expectSentinelPresent,
+            violation: expectSentinelPresent,
+          });
           throw new Error(`${caseId} rep ${rep} timed out after ${TIMEOUT_MS}ms — stopping run to avoid cross-rep stream contamination (no confirmed cancel path for gemini-chat-stream)`);
         }
         const wallMs = Date.now() - startedAt;
@@ -273,6 +302,7 @@ async function main() {
         const promptAudit = await invoke('__e2e__:context-os-prompt-audit').catch(() => null);
         const answer = response.answer || '';
         const sentinelHit = SENTINELS.find((s) => answer.toLowerCase().includes(String(s).toLowerCase())) || null;
+        const violation = expectSentinelPresent ? !sentinelHit : Boolean(sentinelHit);
         const hasCodeFenceFirst = /^\s*```/.test(answer);
         // A genuine unwanted DSA-contract section (## Complexity heading, or the
         // contract's specific "Time Complexity: ... / Space Complexity: ..." dual
@@ -300,8 +330,17 @@ async function main() {
           answerPreview: preview(answer, 100),
           providerModel: providerModel?.model ?? null,
           expectProfileLoaded,
+          expectSentinelPresent,
           sentinelLeak: Boolean(sentinelHit),
           sentinelMatched: sentinelHit,
+          // Direction-aware violation: for "forbidden" cases (the majority),
+          // any sentinel hit is a leak. For "required" cases (profile/experience
+          // questions that must surface profile content), the violation is the
+          // OPPOSITE — sentinel absence. Without this, a fix that over-broadly
+          // forbids profile context everywhere would silently pass every
+          // "forbidden" assertion in this harness while breaking real profile
+          // Q&A, undetected (code-review finding, 2026-07-27).
+          violation,
           hasCodeFenceFirst,
           hasComplexitySection,
           benchmarkAuditRecordCount: benchmarkAudit?.records?.length ?? 0,
@@ -325,14 +364,26 @@ async function main() {
               }
             : null,
         });
-        console.log(`[phase0] ${caseId} rep ${rep}/${REPS}: success=${response.success} tfft_raw=${rawMs?.toFixed(0)}ms tfft_filtered=${filteredMs?.toFixed(0)}ms sentinelLeak=${Boolean(sentinelHit)} model=${providerModel?.model}`);
+        console.log(`[phase0] ${caseId} rep ${rep}/${reps}: success=${response.success} tfft_raw=${rawMs?.toFixed(0)}ms tfft_filtered=${filteredMs?.toFixed(0)}ms sentinelLeak=${Boolean(sentinelHit)} violation=${violation} model=${providerModel?.model}`);
       }
     };
 
     // Case 1 FIRST, before any profile is ingested.
     await runCase('case1_odd_even', 'write the code for odd even', { expectProfileLoaded: false });
 
-    // Ingest p01 profile for cases 2 & 3.
+    // Additional trivial-code coverage (RC-7 bug class) — no profile loaded yet.
+    // Forbidden: unwanted six-section DSA/complexity contract on simple utility code.
+    const TRIVIAL_CODE_CASES = [
+      ['case1b_reverse_string', 'write a function to reverse a string'],
+      ['case1c_check_prime', 'write code to check if a number is prime'],
+      ['case1d_array_max', 'write a function to find the max value in an array'],
+      ['case1e_sum_list', 'write code to sum a list of numbers'],
+    ];
+    for (const [caseId, question] of TRIVIAL_CODE_CASES) {
+      await runCase(caseId, question, { expectProfileLoaded: false, reps: EXPANSION_REPS });
+    }
+
+    // Ingest p01 profile for cases 2 & 3 and all subsequent cases.
     const ingest = await invoke('__e2e__:ingest-profile-doc', { filePath: path.join(P01_DIR, 'resume.pdf'), docType: 'resume' });
     if (!ingest?.success) {
       console.error('[phase0] profile ingestion failed:', ingest?.error);
@@ -342,6 +393,38 @@ async function main() {
 
     await runCase('case2_what_is_api', 'what is an api', { expectProfileLoaded: true });
     await runCase('case3_qraphql', 'what is a qraphql query', { expectProfileLoaded: true });
+
+    // Additional generic-technical coverage (RC-2 bug class) — profile loaded,
+    // must NOT leak, same as case2/case3 but broader vocabulary from the
+    // spec's core-generic question list.
+    const GENERIC_TECHNICAL_CASES = [
+      ['case2b_database_index', 'what is a database index'],
+      ['case2c_dependency_injection', 'what is dependency injection'],
+      ['case2d_race_condition', 'what is a race condition'],
+      ['case2e_rest', 'what is REST'],
+      ['case2f_big_o', 'what is Big O notation'],
+      ['case2g_hash_map', 'what is a hash map'],
+      ['case2h_ci_cd', 'what is CI/CD'],
+      ['case2i_microservice', 'what is a microservice'],
+      ['case2j_tcp_udp', 'what is the difference between TCP and UDP'],
+    ];
+    for (const [caseId, question] of GENERIC_TECHNICAL_CASES) {
+      await runCase(caseId, question, { expectProfileLoaded: true, reps: EXPANSION_REPS });
+    }
+
+    // "Required" direction (code-review finding, 2026-07-27): genuine
+    // experience/profile questions that MUST still surface profile content.
+    // Every case above only tests that profile is absent; without these, an
+    // over-broad forbid-profile-everywhere fix would pass 100% of this
+    // harness while silently breaking real profile Q&A.
+    const PROFILE_REQUIRED_CASES = [
+      ['case3b_stripe_experience', 'tell me about your experience at Stripe'],
+      ['case3c_project_walkthrough', 'walk me through the Merchant Settlement Reconciliation Pipeline project'],
+      ['case3d_last_role', 'what did you do in your last role?'],
+    ];
+    for (const [caseId, question] of PROFILE_REQUIRED_CASES) {
+      await runCase(caseId, question, { expectProfileLoaded: true, expectSentinelPresent: true, reps: EXPANSION_REPS });
+    }
 
     await invoke('__e2e__:clear-profile').catch(() => {});
     } catch (error) {
@@ -361,49 +444,78 @@ async function main() {
   const summarize = (caseId) => {
     const rows = results.filter((r) => r.caseId === caseId);
     const ok = rows.filter((r) => r.success);
-    const leaks = rows.filter((r) => r.sentinelLeak);
+    const violations = rows.filter((r) => r.violation);
     const avgRaw = ok.length ? (ok.reduce((a, r) => a + (r.tfft_raw_ms || 0), 0) / ok.length).toFixed(0) : 'n/a';
     const avgFiltered = ok.length ? (ok.reduce((a, r) => a + (r.tfft_filtered_ms || 0), 0) / ok.length).toFixed(0) : 'n/a';
-    return { rows, ok, leaks, avgRaw, avgFiltered };
+    return { rows, ok, violations, avgRaw, avgFiltered };
   };
 
+  const CASE_LABELS = [
+    ['case1_odd_even', 'Case 1 [P0] — "write the code for odd even" (no profile, forbidden: complexity bloat)'],
+    ['case1b_reverse_string', 'Case 1b — "reverse a string" (no profile, forbidden: complexity bloat)'],
+    ['case1c_check_prime', 'Case 1c — "check if a number is prime" (no profile, forbidden: complexity bloat)'],
+    ['case1d_array_max', 'Case 1d — "find the max value in an array" (no profile, forbidden: complexity bloat)'],
+    ['case1e_sum_list', 'Case 1e — "sum a list of numbers" (no profile, forbidden: complexity bloat)'],
+    ['case2_what_is_api', 'Case 2 [P0] — "what is an api" (profile loaded, forbidden: profile leak)'],
+    ['case3_qraphql', 'Case 3 [P0] — "what is a qraphql query" (profile loaded, forbidden: profile leak)'],
+    ['case2b_database_index', 'Case 2b — "what is a database index" (forbidden: profile leak)'],
+    ['case2c_dependency_injection', 'Case 2c — "what is dependency injection" (forbidden: profile leak)'],
+    ['case2d_race_condition', 'Case 2d — "what is a race condition" (forbidden: profile leak)'],
+    ['case2e_rest', 'Case 2e — "what is REST" (forbidden: profile leak)'],
+    ['case2f_big_o', 'Case 2f — "what is Big O notation" (forbidden: profile leak)'],
+    ['case2g_hash_map', 'Case 2g — "what is a hash map" (forbidden: profile leak)'],
+    ['case2h_ci_cd', 'Case 2h — "what is CI/CD" (forbidden: profile leak)'],
+    ['case2i_microservice', 'Case 2i — "what is a microservice" (forbidden: profile leak)'],
+    ['case2j_tcp_udp', 'Case 2j — "TCP vs UDP" (forbidden: profile leak)'],
+    ['case3b_stripe_experience', 'Case 3b — "experience at Stripe" (REQUIRED: profile must appear)'],
+    ['case3c_project_walkthrough', 'Case 3c — "Merchant Settlement Reconciliation Pipeline" (REQUIRED: profile must appear)'],
+    ['case3d_last_role', 'Case 3d — "what did you do in your last role" (REQUIRED: profile must appear)'],
+  ];
+
   const md = [];
-  md.push('# Phase 0 — Reproduction Results (real backend, real providers)');
+  md.push('# Phase 0/2 — Reproduction + Coverage Results (real backend, real providers)');
   md.push('');
-  md.push(`Generated: ${now()}  \nBackend: ${BACKEND_URL} (${backendState.started ? 'started by this run' : 'already running'})  \nReps per case: ${REPS}`);
+  md.push(`Generated: ${now()}  \nBackend: ${BACKEND_URL} (${backendState.started ? 'started by this run' : 'already running'})  \nReps per P0 case: ${REPS}  \nReps per expansion case: ${EXPANSION_REPS}`);
   md.push('');
-  for (const [caseId, label] of [
-    ['case1_odd_even', 'Case 1 — "write the code for odd even" (no profile)'],
-    ['case2_what_is_api', 'Case 2 — "what is an api" (profile p01 loaded)'],
-    ['case3_qraphql', 'Case 3 — "what is a qraphql query" (profile p01 loaded)'],
-  ]) {
-    const { rows, ok, leaks, avgRaw, avgFiltered } = summarize(caseId);
+  md.push('Direction legend: **forbidden** = sentinel (profile content) must NEVER appear; a hit is a violation. **REQUIRED** = sentinel must appear; an absence is a violation.');
+  md.push('');
+  let totalViolations = 0;
+  for (const [caseId, label] of CASE_LABELS) {
+    const rows = results.filter((r) => r.caseId === caseId);
+    if (!rows.length) continue; // case wasn't run this pass (e.g. profile ingestion failed)
+    const { ok, violations, avgRaw, avgFiltered } = summarize(caseId);
+    totalViolations += violations.length;
     md.push(`## ${label}`);
     md.push('');
-    md.push(`- Reps: ${rows.length}, succeeded: ${ok.length}, sentinel leaks: ${leaks.length}/${rows.length}`);
+    md.push(`- Reps: ${rows.length}, succeeded: ${ok.length}, **violations: ${violations.length}/${rows.length}**`);
     md.push(`- Avg TFFT raw: ${avgRaw}ms, avg TFFT filtered: ${avgFiltered}ms`);
-    if (caseId === 'case1_odd_even') {
+    if (/^case1/.test(caseId)) {
       const fenceFirst = rows.filter((r) => r.hasCodeFenceFirst).length;
       const complexity = rows.filter((r) => r.hasComplexitySection).length;
       md.push(`- Code-fence-first: ${fenceFirst}/${rows.length}; complexity/Big-O section present: ${complexity}/${rows.length}`);
     }
     md.push('');
-    md.push('| rep | success | model | tfft_raw_ms | tfft_filtered_ms | sentinelLeak | sourceOwner | sourceAuthority | answerPolicy | preview |');
-    md.push('|---|---|---|---|---|---|---|---|---|---|');
+    md.push('| rep | success | model | tfft_raw_ms | tfft_filtered_ms | sentinelLeak | violation | sourceOwner | sourceAuthority | answerPolicy | preview |');
+    md.push('|---|---|---|---|---|---|---|---|---|---|---|');
     for (const r of rows) {
-      md.push(`| ${r.rep} | ${r.success} | ${r.providerModel || 'n/a'} | ${r.tfft_raw_ms?.toFixed(0) ?? 'n/a'} | ${r.tfft_filtered_ms?.toFixed(0) ?? 'n/a'} | ${r.sentinelLeak} | ${r.benchmarkAuditTerminal?.sourceOwner ?? 'n/a'} | ${r.benchmarkAuditTerminal?.sourceAuthority ?? 'n/a'} | ${r.benchmarkAuditTerminal?.answerPolicy ?? 'n/a'} | ${JSON.stringify(r.answerPreview)} |`);
+      md.push(`| ${r.rep} | ${r.success} | ${r.providerModel || 'n/a'} | ${r.tfft_raw_ms?.toFixed(0) ?? 'n/a'} | ${r.tfft_filtered_ms?.toFixed(0) ?? 'n/a'} | ${r.sentinelLeak} | ${r.violation ? '**YES**' : 'no'} | ${r.benchmarkAuditTerminal?.sourceOwner ?? 'n/a'} | ${r.benchmarkAuditTerminal?.sourceAuthority ?? 'n/a'} | ${r.benchmarkAuditTerminal?.answerPolicy ?? 'n/a'} | ${JSON.stringify(r.answerPreview)} |`);
     }
     md.push('');
   }
   md.push('## Notes');
   md.push('');
+  md.push(`- **Total violations across all cases/reps this run: ${totalViolations}.**`);
   md.push('- `benchmarkAuditTerminal` / `promptAuditLatest` are populated only if `recordContextOsBenchmarkAudit` / the `NATIVELY_CONTEXT_OS_PROMPT_AUDIT` ring actually fire on the manual-chat (no-mode) code path — if these are consistently null/empty, that itself is evidence the manual-chat path uses a different (unaudited) trace mechanism, per Phase 1 RC-3.');
   md.push('- Sentinel strings checked (fictional p01 identity, never real user data): ' + SENTINELS.map((s) => `"${s}"`).join(', '));
   md.push('- No API keys, .env content, or full personal profile text are logged by this script or its outputs.');
   fs.writeFileSync(path.join(outDir, 'summary.md'), md.join('\n'));
   fs.writeFileSync(path.join(repoRoot, 'docs/answer-pipeline-rebuild/00_REPRODUCTION.md'), md.join('\n'));
 
-  console.log('[phase0] done. Results written to', outDir, 'and docs/answer-pipeline-rebuild/00_REPRODUCTION*.');
+  console.log(`[phase0] done. ${totalViolations} violation(s) across ${results.length} rep(s). Results written to`, outDir, 'and docs/answer-pipeline-rebuild/00_REPRODUCTION*.');
+  if (totalViolations > 0) {
+    console.error(`[phase0] FAILING: ${totalViolations} violation(s) detected — see summary.md for which cases/reps.`);
+    process.exitCode = 1;
+  }
   if (runError) {
     console.error('[phase0] Run ended early due to an error (partial results above are real, not fabricated):', runError.message);
     process.exitCode = 1;

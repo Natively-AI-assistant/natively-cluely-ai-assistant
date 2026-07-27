@@ -40,6 +40,16 @@ describe('RC-2 regression: generic technical questions must not leak profile via
     'what is a qraphql query',
     'what is a graph ql query',
     'what is restful api design',
+    // Live-confirmed by the Phase 2 harness expansion (2026-07-27): "what is
+    // CI/CD" classified identically to safe siblings (unknown_answer/allowed)
+    // but, unlike them, actually leaked profile 3/3 live reps — this specific
+    // profile's résumé happens to keyword-overlap with devops-adjacent terms,
+    // which a downstream relevance-match then surfaced. Root cause: CI/CD
+    // vocabulary was simply absent from TECHNICAL_SUBJECT_PATTERNS.
+    'what is CI/CD',
+    'what is ci cd',
+    'what is cicd',
+    'what is devops',
   ];
   for (const q of cases) {
     test(`"${q}" must NOT classify as unknown_answer and must forbid profile context`, () => {
@@ -62,6 +72,31 @@ describe('RC-2 fix must not regress genuine project follow-up routing (code-revi
     test(`"${q}" must NOT fall through to unknown_answer`, () => {
       const r = p(q);
       assert.notEqual(r.answerType, 'unknown_answer', `got answerType=${r.answerType}`);
+    });
+  }
+});
+
+describe('CI/CD fix must not regress genuine project follow-up routing (code-review 2026-07-27, second finding)', () => {
+  // Same bug class as the "framework" case above: a code-review pass on the
+  // first version of the CI/CD fix found it added the new vocabulary directly
+  // into TECHNICAL_SUBJECT_PATTERNS, which the project_followup_answer
+  // negation guard (AnswerPlanner.ts ~line 2535) also consults directly —
+  // live-confirmed to misroute these into unknown_answer/forbidden-profile
+  // types instead of project_followup_answer/required. Fixed by moving the
+  // CI/CD vocabulary into a separate DEVOPS_CICD_PATTERNS array consulted
+  // only by isLikelyTechnicalConcept, not the negation guard.
+  const projectFollowUps = [
+    'how did you handle CI/CD?',
+    'how did you handle CI/CD in your project?',
+    'how did you design the devops setup?',
+    'why did you choose jenkins?',
+    'why did you choose jenkins for your project?',
+  ];
+  for (const q of projectFollowUps) {
+    test(`"${q}" must route to project_followup_answer with profile required`, () => {
+      const r = p(q);
+      assert.equal(r.answerType, 'project_followup_answer', `got answerType=${r.answerType}`);
+      assert.equal(profileContextPolicyFor(r.answerType), 'required', `answerType ${r.answerType} has policy ${profileContextPolicyFor(r.answerType)}, expected 'required'`);
     });
   }
 });

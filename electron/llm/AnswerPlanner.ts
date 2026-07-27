@@ -515,6 +515,23 @@ const TECHNICAL_SUBJECT_PATTERNS = [
   /\b(indexing|pandas|numpy|spark|hadoop|etl|dataframe)\b/i,
   /\b(a\/b test|ab test|retention|cohort|regression|classification|clustering)\b/i,
 ];
+// CI/CD and related devops terms (live-confirmed leak, 2026-07-27): "what is
+// CI/CD" fell through to unknown_answer (profileContextPolicy: 'allowed')
+// instead of technical_concept_answer (forbidden) — a downstream relevance-
+// match then injected profile context because the profile happens to contain
+// devops-adjacent terms. Deliberately kept OUT of TECHNICAL_SUBJECT_PATTERNS
+// itself (not merged into the array above) — that array is also consulted
+// directly by the project_followup_answer negation guard below (~line 2535,
+// `!includesAny(textNoTechStack, TECHNICAL_SUBJECT_PATTERNS)`), and a code-
+// review pass confirmed live that merging it there misroutes genuine own-
+// project follow-ups ("how did you handle CI/CD?", "why did you choose
+// jenkins?") away from project_followup_answer/required. This array is only
+// consulted by isLikelyTechnicalConcept below, which the negation guard does
+// NOT use (same reason "framework"/RC-2's typo-tolerant list is excluded
+// from that guard — see the guard's own comment).
+const DEVOPS_CICD_PATTERNS = [
+  /\b(ci[\s/]*cd|continuous integration|continuous (delivery|deployment)|devops|jenkins|github actions|gitlab[- ]?ci|build pipeline)\b/i,
+];
 // Typo-tolerant technical vocabulary (RC-2 fix): a one-edit-distance misspelling
 // of a common technical term ("qraphql") should route the same as the correctly
 // spelled term, rather than falling through to classifyUnmatchedFallback's
@@ -535,6 +552,7 @@ const TYPO_TOLERANT_TECHNICAL_TERMS = [
 ];
 const isLikelyTechnicalConcept = (text: string): boolean =>
   includesAny(text, TECHNICAL_SUBJECT_PATTERNS)
+  || includesAny(text, DEVOPS_CICD_PATTERNS)
   || TYPO_TOLERANT_TECHNICAL_TERMS.some((term) => includesPlannerTerm(text, term));
 
 const DSA_PATTERNS = [
