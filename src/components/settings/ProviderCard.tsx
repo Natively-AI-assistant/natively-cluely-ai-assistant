@@ -97,40 +97,40 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         const cacheKey = `cached-models-${providerId}`;
         const cachedStr = localStorage.getItem(cacheKey);
         let list: FetchedModel[] = [];
+        let cacheHasModalityData = false;
 
         if (cachedStr) {
             try {
                 const parsed = JSON.parse(cachedStr);
                 if (Array.isArray(parsed) && parsed.length > 0) {
                     list = parsed;
+                    // Check if cached data has real modality fields (not just heuristic placeholders).
+                    // If even one model has the flag explicitly set (true or false), we treat it as rich.
+                    cacheHasModalityData = parsed.some((m: any) => m.supportsVision === true || m.supportsVision === false);
                 }
             } catch { /* noop */ }
         }
 
+        // If cache lacks real modality data, discard it — the auto-fetch on modal open
+        // will pull fresh accurate data from the API instead.
+        if (!cacheHasModalityData) {
+            list = [];
+        }
+
+        // Merge in standard preset models (only if not already in list)
         const std = STANDARD_CLOUD_MODELS[providerId];
         if (std) {
             std.ids.forEach((id, i) => {
                 if (!list.some(m => m.id === id)) {
                     const idLower = id.toLowerCase();
                     const nameLower = (std.names[i] || id).toLowerCase();
+                    // Heuristic is acceptable for the small hardcoded preset list
                     const supportsVision = idLower.includes('claude-3') || idLower.includes('gpt-4o') || idLower.includes('gemini') || idLower.includes('vision') || nameLower.includes('vision') || nameLower.includes('multimodal');
-                    const supportsReasoning = idLower.includes('r1') || idLower.includes('o1') || idLower.includes('o3') || idLower.includes('thinking') || nameLower.includes('reasoning') || nameLower.includes('thinking');
+                    const supportsReasoning = idLower.includes('/r1') || idLower.includes('o1') || idLower.includes('o3') || idLower.includes('thinking') || nameLower.includes('reasoning') || nameLower.includes('thinking');
                     list.push({ id, label: std.names[i] || id, supportsVision, supportsReasoning });
                 }
             });
         }
-
-        // Infer missing capability flags for cached models
-        list = list.map(m => {
-            if (m.supportsVision !== undefined && m.supportsReasoning !== undefined) return m;
-            const idLower = m.id.toLowerCase();
-            const labelLower = m.label.toLowerCase();
-            return {
-                ...m,
-                supportsVision: m.supportsVision ?? (idLower.includes('claude-3') || idLower.includes('gpt-4o') || idLower.includes('gemini') || idLower.includes('vision') || labelLower.includes('vision') || labelLower.includes('multimodal')),
-                supportsReasoning: m.supportsReasoning ?? (idLower.includes('r1') || idLower.includes('o1') || idLower.includes('o3') || idLower.includes('thinking') || labelLower.includes('reasoning') || labelLower.includes('thinking')),
-            };
-        });
 
         setFetchedModels(list);
     }, [providerId]);
@@ -149,8 +149,12 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         finally { setIsLoadingKeyInfo(false); }
     };
 
+    // Load OpenRouter key info & preferences — guarded so it only fires
+    // once when the key first becomes available, not on every parent re-render.
+    const keyInfoFetchedRef = useRef(false);
     useEffect(() => {
-        if (providerId === 'openrouter' && hasStoredKey) {
+        if (providerId === 'openrouter' && hasStoredKey && !keyInfoFetchedRef.current) {
+            keyInfoFetchedRef.current = true;
             fetchOpenrouterKeyInfo();
             // @ts-ignore
             window.electronAPI?.getOpenrouterPreferences().then((res: any) => {
@@ -159,6 +163,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                 }
             }).catch(() => {});
         }
+        // Reset so fetching retriggers if the key is removed then re-added
+        if (!hasStoredKey) keyInfoFetchedRef.current = false;
     }, [providerId, hasStoredKey]);
 
     const handleUpdateOpenrouterPrefs = async (newPrefs: Partial<typeof openrouterPrefs>) => {
@@ -209,12 +215,18 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         }
     };
 
-    // Auto-fetch models when modal is opened if we haven't fetched from API yet
+    // Auto-fetch full model catalog when modal opens — only if we're showing
+    // fewer than 10 models (preset-only state) and haven't already fetched.
+    // A ref guard prevents duplicate calls if the effect fires more than once.
+    const autoFetchedRef = useRef(false);
     useEffect(() => {
-        if (isManageModalOpen && fetchedModels.length <= 5 && hasStoredKey && !isFetching) {
+        if (isManageModalOpen && !autoFetchedRef.current && fetchedModels.length <= 10 && hasStoredKey && !isFetching) {
+            autoFetchedRef.current = true;
             handleFetchModels();
         }
-    }, [isManageModalOpen]);
+        // Reset guard when modal is closed so next open can re-fetch if still stale
+        if (!isManageModalOpen) autoFetchedRef.current = false;
+    }, [isManageModalOpen, hasStoredKey]);
 
     const handleToggleModel = (modelId: string) => {
         if (!onSetEnabledModels) return;
