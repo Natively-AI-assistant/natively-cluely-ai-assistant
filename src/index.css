@@ -440,6 +440,50 @@
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
+/* Settings panel body — liquid-glass material for the launcher-embedded
+   Settings modal (SettingsOverlay.tsx #settings-panel-wrapper). Mirrors
+   .overlay-shell-surface's background/border/backdrop-filter/box-shadow
+   values above so Settings reads as the same material as the meeting
+   interface once that theme is active — the user's literal complaint was
+   the body "color and effect" not matching.
+   Deliberately a SEPARATE class (not .overlay-shell-surface) rather than
+   reusing it: the unscoped .overlay-shell-surface base rule further below
+   (no [data-interface-theme] qualifier) would swap Settings' default-theme
+   background source and add a permanent backdrop-filter blur it doesn't
+   have today, visibly changing the default-theme look. .settings-shell-surface
+   has NO unscoped base rule, so with no data-interface-theme attribute
+   present (default theme) it matches nothing and is a pure no-op — the
+   existing bg-bg-elevated/border-border-subtle Tailwind classes on the
+   wrapper render exactly as before.
+   No ::before gloss/noise mirror here on purpose — out of the requested
+   scope (background/backdrop-filter/border/box-shadow only) and not
+   visually verifiable in this pass.
+   var(--overlay-opacity, 0.65) fallback: --overlay-opacity is set at
+   :root with default 0.65 (index.css ~88) and is NOT overridden anywhere
+   in the launcher/Settings window (only NativelyInterface's overlay window
+   sets it inline to the live slider value), so this resolves to the fixed
+   0.65 default — Settings doesn't need to (and isn't wired to) track the
+   live in-meeting opacity slider. The explicit fallback is defensive only,
+   matching the codebase's existing var(--x, fallback) convention for
+   cross-window custom properties. */
+[data-interface-theme="liquid-glass"] .settings-shell-surface {
+  background:
+    linear-gradient(135deg,
+      rgba(255, 255, 255, 0.16) 0%,
+      rgba(255, 255, 255, 0.07) 45%,
+      rgba(255, 255, 255, 0.04) 65%,
+      rgba(255, 255, 255, 0.12) 100%
+    ),
+    rgb(12 18 32 / calc(0.15 + (var(--overlay-opacity, 0.65) * 0.69))) !important;
+  border-color: transparent !important;
+  backdrop-filter: blur(calc(var(--overlay-opacity, 0.65) * 25px)) saturate(165%) !important;
+  -webkit-backdrop-filter: blur(calc(var(--overlay-opacity, 0.65) * 25px)) saturate(165%) !important;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.44),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.13),
+    0 20px 40px -10px rgba(0, 0, 0, 0.4) !important;
+}
+
 /* ───────────────────────────────────────────────────────────────────────
    Jelly-clay × Liquid-glass UI elements (glass mode only).
    ───────────────────────────────────────────────────────────────────────
@@ -1348,6 +1392,30 @@
   filter: blur(6px);
   pointer-events: none;
   z-index: 0;
+}
+
+/* Settings panel body — modern-theme material for the launcher-embedded
+   Settings modal (SettingsOverlay.tsx #settings-panel-wrapper). Mirrors
+   .overlay-shell-surface's background/border/backdrop-filter/box-shadow
+   above; see the liquid-glass .settings-shell-surface rule (~line 445)
+   for the full rationale on why this is a dedicated class rather than a
+   reuse of .overlay-shell-surface, and why the var(--overlay-opacity, 0.65)
+   fallback is present (same reasoning applies here). No ::before gloss
+   mirror — out of the requested background/backdrop-filter/border/box-shadow
+   scope. */
+[data-interface-theme="modern"] .settings-shell-surface {
+  background: linear-gradient(160deg,
+      rgba(90, 90, 108, calc(var(--overlay-opacity, 0.65) * 1.1)) 0%,
+      rgba(55, 55, 70, calc(var(--overlay-opacity, 0.65) * 1.16)) 50%,
+      rgba(36, 36, 50, calc(var(--overlay-opacity, 0.65) * 1.21)) 100%
+    ) !important;
+  border-color: rgba(255, 255, 255, 0.20) !important;
+  backdrop-filter: blur(calc(var(--overlay-opacity, 0.65) * 3.75px)) !important;
+  -webkit-backdrop-filter: blur(calc(var(--overlay-opacity, 0.65) * 3.75px)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 0.5px rgba(255, 255, 255, 0.08),
+    0 20px 40px -10px rgba(0, 0, 0, 0.4) !important;
 }
 
 /* TopPill — match the main modern panel material */
