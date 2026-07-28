@@ -273,6 +273,8 @@ export class LLMHelper {
   private openaiApiKey: string | null = null
   private claudeApiKey: string | null = null
   private deepseekApiKey: string | null = null
+  private openrouterApiKey: string | null = null
+  private openrouterClient: OpenAI | null = null
   private litellmApiKey: string | null = null
   private litellmBaseURL: string = "http://localhost:4000/v1"
   // Manual output-ceiling override (Settings → LiteLLM Proxy dropdown).
@@ -623,6 +625,26 @@ export class LLMHelper {
     console.log("[LLMHelper] DeepSeek API Key updated.");
   }
 
+  public setOpenrouterApiKey(apiKey: string) {
+    const trimmed = (apiKey || '').trim();
+    if (!trimmed) {
+      this.openrouterApiKey = null;
+      this.openrouterClient = null;
+      console.log("[LLMHelper] OpenRouter API Key cleared.");
+      return;
+    }
+    this.openrouterApiKey = trimmed;
+    this.openrouterClient = new OpenAI({
+      apiKey: trimmed,
+      baseURL: 'https://openrouter.ai/api/v1',
+      defaultHeaders: {
+        'HTTP-Referer': 'https://natively.ai',
+        'X-Title': 'Natively AI',
+      },
+    });
+    console.log("[LLMHelper] OpenRouter API Key updated.");
+  }
+
   /**
    * Configure the LiteLLM proxy. baseURL is required (the proxy location);
    * apiKey is the optional virtual/master key (`sk-...`). A keyless local
@@ -887,10 +909,14 @@ export class LLMHelper {
 
   // --- Model Type Checkers ---
   private isOpenAiModel(modelId: string): boolean {
+    // `or/` prefix is OpenRouter — never match as native OpenAI
+    if (modelId.startsWith('or/')) return false;
     return modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-") || modelId.includes("openai");
   }
 
   private isClaudeModel(modelId: string): boolean {
+    // `or/` prefix is OpenRouter — never match as native Claude
+    if (modelId.startsWith('or/')) return false;
     return modelId.startsWith("claude-");
   }
 
@@ -956,6 +982,8 @@ export class LLMHelper {
   }
 
   private isGroqModel(modelId: string): boolean {
+    // `or/` prefix is OpenRouter — never match as native Groq
+    if (modelId.startsWith('or/')) return false;
     return modelId.startsWith("llama-") || modelId.startsWith("mixtral-") || modelId.startsWith("gemma-") || modelId.startsWith("meta-llama/") || modelId.startsWith("qwen/") || modelId.startsWith("qwen-");
   }
 
@@ -965,6 +993,32 @@ export class LLMHelper {
 
   private isCodexCliModel(modelId: string): boolean {
     return modelId === "codex-cli" || modelId.startsWith("codex-cli:");
+  }
+
+  /**
+   * Returns true when the currently-selected model should be routed through
+   * the OpenRouter client. Uses the `or/` prefix (same pattern as LiteLLM's
+   * `litellm/` prefix) so the check is unambiguous — no heuristic, no slash
+   * guessing. OpenRouter models are stored as `or/<provider>/<model>` (e.g.
+   * `or/openai/gpt-4o`, `or/anthropic/claude-sonnet-4`, `or/openrouter/auto`).
+   * The prefix is stripped before sending to the OpenRouter API.
+   *
+   * We additionally require that the openrouterClient is initialised so we
+   * never route when the key is absent.
+   */
+  private isOpenRouterModel(modelId: string): boolean {
+    if (!this.openrouterClient) return false;
+    return modelId.startsWith('or/') || modelId === 'openrouter/auto';
+  }
+
+  /**
+   * Strip the `or/` prefix from an OpenRouter model ID before sending it to
+   * the API. OpenRouter expects the bare `provider/model` format (e.g.
+   * `openai/gpt-4o`, `anthropic/claude-sonnet-4`), not the `or/` prefix.
+   */
+  private resolveOpenRouterModel(modelId: string): string {
+    if (modelId.startsWith('or/')) return modelId.slice(3);
+    return modelId;
   }
 
   private isCodexAvailable(): boolean {
@@ -2464,6 +2518,19 @@ const isMultimodal = !!(imagePaths?.length);
         }
         // No key or call failed — fall through to default routing
       }
+      // OpenRouter — checked after Groq (unique `or/` prefix prevents conflicts
+      // with any other provider guard). The `or/` prefix is stripped by
+      // generateWithOpenai/streamWithOpenai before sending to the API.
+      if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
+        return await this.generateWithOpenai(
+          cloudUserContent,
+          openaiSystemPrompt,
+          cloudIsMultimodal ? cloudImagePaths : undefined,
+          this.currentModelId,
+          this.openrouterClient,
+        );
+      }
+
       if (this.isOpenAiModel(this.currentModelId) && this.openaiClient) {
         return await this.generateWithOpenai(cloudUserContent, openaiSystemPrompt, cloudImagePaths);
       }
@@ -2489,8 +2556,6 @@ const isMultimodal = !!(imagePaths?.length);
         // CACHE: pass system separately so Groq prefix-cache hits across turns.
         return await this.generateWithGroq(cloudUserContent, this.currentModelId, skipSystemPrompt ? undefined : finalGroqPrompt);
       }
-
-      // Fallback (Gemini) - logic handled below by SMART DYNAMIC FALLBACK list
 
       // ============================================================
       // SMART DYNAMIC FALLBACK (Non-Streaming)
@@ -3056,15 +3121,17 @@ const isMultimodal = !!(imagePaths?.length);
    * Non-streaming OpenAI generation with proper system/user separation.
    * PREFIX CACHING: see streamWithOpenai for the caching contract.
    */
-  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string, clientOverride?: OpenAI): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
-    if (!this.openaiClient) throw new Error("OpenAI client not initialized");
+    const client = clientOverride || this.openaiClient;
+    if (!client) throw new Error("OpenAI client not initialized");
     this.assertOutboundScopes('openai', userMessage, imagePaths);
 
     await this.rateLimiters.openai.acquire();
 
-    // Use explicit override, then current model if it's OpenAI, else baseline constant
-    const model = modelId || (this.isOpenAiModel(this.currentModelId) ? this.currentModelId : OPENAI_MODEL);
+    // Use explicit override, then current model if it's OpenAI, else baseline constant.
+    // Strip `or/` prefix if present (OpenRouter model stored with LiteLLM-style prefix).
+    const model = (modelId || (this.isOpenAiModel(this.currentModelId) ? this.currentModelId : OPENAI_MODEL)).replace(/^or\//, '');
 
     const messages: any[] = [];
     if (systemPrompt) {
@@ -3085,6 +3152,28 @@ const isMultimodal = !!(imagePaths?.length);
     }
 
     const cacheKey = this.getOpenAiPromptCacheKey(systemPrompt);
+    const extraOpenRouterParams: Record<string, any> = {};
+    // Use clientOverride as the signal for OpenRouter routing (the `or/` prefix
+    // has been stripped from `model` by this point, so isOpenRouterModel would
+    // return false for the bare model name).
+    if (clientOverride && this.openrouterClient === clientOverride) {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const prefs = CredentialsManager.getInstance().getOpenrouterPreferences();
+        if (prefs.reasoningEffort === 'none') {
+          extraOpenRouterParams.reasoning = { exclude: true };
+        } else if (prefs.reasoningEffort) {
+          extraOpenRouterParams.reasoning = { effort: prefs.reasoningEffort };
+        }
+        if (prefs.providerSort || prefs.allowFallbacks !== undefined) {
+          extraOpenRouterParams.provider = {
+            sort: prefs.providerSort || 'latency',
+            allow_fallbacks: prefs.allowFallbacks ?? true,
+          };
+        }
+      } catch { /* optional */ }
+    }
+
     const request = {
       model,
       messages,
@@ -3092,12 +3181,13 @@ const isMultimodal = !!(imagePaths?.length);
       max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
       ...openaiReasoningParam(model), // minimal reasoning for gpt-5/o-series (fast TTFT)
       ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
+      ...extraOpenRouterParams,
     };
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
     });
     const response = await this.withTimeout(
-      this.withRetry(() => this.openaiClient!.chat.completions.create(request)),
+      this.withRetry(() => client!.chat.completions.create(request)),
       60000,
       `OpenAI (${model})`
     );
@@ -5610,6 +5700,33 @@ const isMultimodal = !!(imagePaths?.length);
       }
     }
 
+    // OpenRouter — checked after Groq (unique `or/` prefix prevents conflicts
+    // with any other provider guard). The `or/` prefix is stripped by
+    // streamWithOpenai/streamWithOpenaiMultimodal before sending to the API.
+    if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
+      const openRouterSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
+      const finalOpenRouterSystem = this.injectLanguageInstruction(openRouterSystem);
+      if (isMultimodal && imagePaths) {
+        yield* this.streamWithOpenaiMultimodal(
+          userContent,
+          imagePaths,
+          finalOpenRouterSystem,
+          this.currentModelId,
+          abortSignal,
+          this.openrouterClient,
+        );
+      } else {
+        yield* this.streamWithOpenai(
+          userContent,
+          finalOpenRouterSystem,
+          this.currentModelId,
+          abortSignal,
+          this.openrouterClient,
+        );
+      }
+      return;
+    }
+
     // 3b. Natively API — TTFT RACE (REPORT_TO_CHATGPT §21 L1 / §18)
     // Was: serial Natively→Groq→Gemini waterfall that only fell over on a
     // THROW. A provider that connected then stalled before the first token
@@ -6265,15 +6382,17 @@ const isMultimodal = !!(imagePaths?.length);
    * the cache hits naturally. Do NOT inline per-request data into the system
    * string above the static body, or the cache prefix will be invalidated.
    */
-  private async * streamWithOpenai(userMessage: string, systemPrompt?: string, modelId?: string, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  private async * streamWithOpenai(userMessage: string, systemPrompt?: string, modelId?: string, abortSignal?: AbortSignal, clientOverride?: OpenAI): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
-    if (!this.openaiClient) throw new Error("OpenAI client not initialized");
+    const client = clientOverride || this.openaiClient;
+    if (!client) throw new Error("OpenAI client not initialized");
     this.assertOutboundScopes('openai', userMessage);
 
     await this.rateLimiters.openai.acquire();
 
-    // Use explicit override, then currentModelId if it's an OpenAI model, else baseline constant
-    const model = modelId || (this.isOpenAiModel(this.currentModelId) ? this.currentModelId : OPENAI_MODEL);
+    // Use explicit override, then currentModelId if it's an OpenAI model, else baseline constant.
+    // Strip `or/` prefix if present (OpenRouter model stored with LiteLLM-style prefix).
+    const model = (modelId || (this.isOpenAiModel(this.currentModelId) ? this.currentModelId : OPENAI_MODEL)).replace(/^or\//, '');
 
     const messages: any[] = [];
     if (systemPrompt) {
@@ -6283,6 +6402,28 @@ const isMultimodal = !!(imagePaths?.length);
 
     const cacheKey = this.getOpenAiPromptCacheKey(systemPrompt);
     if (abortSignal?.aborted) return;
+    const extraOpenRouterParams: Record<string, any> = {};
+    // Use clientOverride as the signal for OpenRouter routing (the `or/` prefix
+    // has been stripped from `model` by this point, so isOpenRouterModel would
+    // return false for the bare model name).
+    if (clientOverride && this.openrouterClient === clientOverride) {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const prefs = CredentialsManager.getInstance().getOpenrouterPreferences();
+        if (prefs.reasoningEffort === 'none') {
+          extraOpenRouterParams.reasoning = { exclude: true };
+        } else if (prefs.reasoningEffort) {
+          extraOpenRouterParams.reasoning = { effort: prefs.reasoningEffort };
+        }
+        if (prefs.providerSort || prefs.allowFallbacks !== undefined) {
+          extraOpenRouterParams.provider = {
+            sort: prefs.providerSort || 'latency',
+            allow_fallbacks: prefs.allowFallbacks ?? true,
+          };
+        }
+      } catch { /* optional */ }
+    }
+
     const request = {
       model,
       messages,
@@ -6293,11 +6434,12 @@ const isMultimodal = !!(imagePaths?.length);
       max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
       ...openaiReasoningParam(model), // minimal reasoning for gpt-5/o-series (fast TTFT)
       ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
+      ...extraOpenRouterParams,
     };
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
     });
-    const stream = await this.openaiClient.chat.completions.create(request, { signal: abortSignal });
+    const stream = await client.chat.completions.create(request, { signal: abortSignal });
 
     try {
       for await (const chunk of stream) {
@@ -6456,15 +6598,17 @@ const isMultimodal = !!(imagePaths?.length);
   /**
    * Stream multimodal (image + text) response from OpenAI with system/user separation
    */
-  private async * streamWithOpenaiMultimodal(userMessage: string, imagePaths: string[], systemPrompt?: string, modelId?: string, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  private async * streamWithOpenaiMultimodal(userMessage: string, imagePaths: string[], systemPrompt?: string, modelId?: string, abortSignal?: AbortSignal, clientOverride?: OpenAI): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
-    if (!this.openaiClient) throw new Error("OpenAI client not initialized");
+    const client = clientOverride || this.openaiClient;
+    if (!client) throw new Error("OpenAI client not initialized");
     this.assertOutboundScopes('openai', userMessage, imagePaths);
 
     await this.rateLimiters.openai.acquire();
 
-    // Use explicit override, then currentModelId if it's an OpenAI model, else baseline constant
-    const model = modelId || (this.isOpenAiModel(this.currentModelId) ? this.currentModelId : OPENAI_MODEL);
+    // Use explicit override, then currentModelId if it's an OpenAI model, else baseline constant.
+    // Strip `or/` prefix if present (OpenRouter model stored with LiteLLM-style prefix).
+    const model = (modelId || (this.isOpenAiModel(this.currentModelId) ? this.currentModelId : OPENAI_MODEL)).replace(/^or\//, '');
 
     const messages: any[] = [];
     if (systemPrompt) {
@@ -6482,7 +6626,29 @@ const isMultimodal = !!(imagePaths?.length);
 
     const cacheKey = this.getOpenAiPromptCacheKey(systemPrompt);
     if (abortSignal?.aborted) return;
-    const stream = await this.openaiClient.chat.completions.create({
+    const extraOpenRouterParams: Record<string, any> = {};
+    // Use clientOverride as the signal for OpenRouter routing (the `or/` prefix
+    // has been stripped from `model` by this point, so isOpenRouterModel would
+    // return false for the bare model name).
+    if (clientOverride && this.openrouterClient === clientOverride) {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const prefs = CredentialsManager.getInstance().getOpenrouterPreferences();
+        if (prefs.reasoningEffort === 'none') {
+          extraOpenRouterParams.reasoning = { exclude: true };
+        } else if (prefs.reasoningEffort) {
+          extraOpenRouterParams.reasoning = { effort: prefs.reasoningEffort };
+        }
+        if (prefs.providerSort || prefs.allowFallbacks !== undefined) {
+          extraOpenRouterParams.provider = {
+            sort: prefs.providerSort || 'latency',
+            allow_fallbacks: prefs.allowFallbacks ?? true,
+          };
+        }
+      } catch { /* optional */ }
+    }
+
+    const stream = await client.chat.completions.create({
       model,
       messages,
       stream: true,
@@ -6490,6 +6656,7 @@ const isMultimodal = !!(imagePaths?.length);
       max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
       ...openaiReasoningParam(model), // minimal reasoning for gpt-5/o-series (fast TTFT)
       ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
+      ...extraOpenRouterParams,
     }, { signal: abortSignal });
 
     try {

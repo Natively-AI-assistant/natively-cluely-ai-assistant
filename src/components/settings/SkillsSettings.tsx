@@ -9,6 +9,10 @@ import {
     RefreshCw,
     Trash2,
     X,
+    Plus,
+    FileText,
+    Save,
+    Loader2,
 } from 'lucide-react';
 import type {
     SkillSummary,
@@ -93,6 +97,10 @@ export const SkillsSettings: React.FC = () => {
     // has fully exited the entire card.
     const dragDepthRef = useRef(0);
     const [showAdvanced, setShowAdvanced] = useState(false);
+    const [isCreatingOpen, setIsCreatingOpen] = useState(false);
+    const [newSkillName, setNewSkillName] = useState('');
+    const [newSkillContent, setNewSkillContent] = useState('');
+    const [creatingSkill, setCreatingSkill] = useState(false);
 
     const loadSkills = useCallback(async () => {
         setLoading(true);
@@ -316,6 +324,53 @@ export const SkillsSettings: React.FC = () => {
         }
     };
 
+    const handleCreateSkill = async () => {
+        if (!newSkillName.trim()) {
+            setStatus(t('Please enter a skill file name.'));
+            return;
+        }
+        if (!newSkillContent.trim()) {
+            setStatus(t('Please enter skill content / instructions.'));
+            return;
+        }
+
+        setCreatingSkill(true);
+        setStatus(null);
+        setSuccess(null);
+
+        try {
+            let filename = newSkillName.trim();
+            if (!filename.endsWith('.md')) {
+                filename += '.md';
+            }
+
+            const contentBase64 = btoa(
+                encodeURIComponent(newSkillContent).replace(/%([0-9A-F]{2})/g, (_, p1) =>
+                    String.fromCharCode(parseInt(p1, 16))
+                )
+            );
+
+            const payload: SkillUploadPayload = {
+                kind: 'file',
+                filename,
+                contentBase64,
+            };
+
+            const outcome = await runUpload(payload, true);
+            if (outcome?.stage === 'installed') {
+                setSuccess(`Created skill "${outcome.preview.name}" successfully.`);
+                setNewSkillName('');
+                setNewSkillContent('');
+                setIsCreatingOpen(false);
+                await loadSkills();
+            }
+        } catch (err: any) {
+            setStatus(err?.message || 'Could not create skill.');
+        } finally {
+            setCreatingSkill(false);
+        }
+    };
+
     const handleCancel = () => {
         setPreview(null);
         setStatus(null);
@@ -462,6 +517,91 @@ export const SkillsSettings: React.FC = () => {
                         </span>
                     </label>
                 </div>
+            </div>
+
+            {/* Create Skill directly card */}
+            <div className="rounded-xl border border-border-subtle p-4 bg-bg-card space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Plus size={15} className="text-accent-primary" />
+                            <h4 className="text-sm font-semibold text-text-primary">{t('Create Custom Skill')}</h4>
+                        </div>
+                        <p className="text-xs text-text-secondary">
+                            {t('Write custom instructions directly in Natively to create a new SKILL.md file.')}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsCreatingOpen(!isCreatingOpen)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-bg-input border border-border-subtle hover:border-border-muted text-text-primary transition-colors shrink-0"
+                    >
+                        <Plus size={13} className={`transition-transform duration-200 ${isCreatingOpen ? 'rotate-45' : ''}`} />
+                        <span>{isCreatingOpen ? t('Close') : t('Create Skill')}</span>
+                    </button>
+                </div>
+
+                {isCreatingOpen && (
+                    <div className="pt-2 space-y-3 border-t border-border-subtle mt-3">
+                        <div>
+                            <label className="block text-xs font-medium text-text-secondary mb-1 uppercase tracking-wide">
+                                {t('Skill File Name')}
+                            </label>
+                            <input
+                                type="text"
+                                value={newSkillName}
+                                onChange={(e) => setNewSkillName(e.target.value)}
+                                placeholder="e.g. git-commit-helper.md"
+                                className="w-full bg-bg-input border border-border-subtle focus:border-accent-primary/50 rounded-xl px-3.5 py-2 text-xs font-mono text-text-primary outline-none transition-colors"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-medium text-text-secondary mb-1 uppercase tracking-wide">
+                                {t('Skill Instructions & Content')}
+                            </label>
+                            <textarea
+                                value={newSkillContent}
+                                onChange={(e) => setNewSkillContent(e.target.value)}
+                                rows={6}
+                                placeholder={`# My Custom Skill\n\nProvide clear instructions for AI assistance...`}
+                                className="w-full bg-bg-input border border-border-subtle focus:border-accent-primary/50 rounded-xl p-3 text-xs font-mono text-text-primary outline-none transition-colors custom-scrollbar resize-y"
+                            />
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-1">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setNewSkillName('');
+                                    setNewSkillContent('');
+                                    setIsCreatingOpen(false);
+                                }}
+                                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary transition-colors"
+                            >
+                                {t('Cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleCreateSkill}
+                                disabled={creatingSkill || !newSkillName.trim() || !newSkillContent.trim()}
+                                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-accent-primary hover:bg-accent-primary/90 text-white disabled:opacity-50 transition-colors"
+                            >
+                                {creatingSkill ? (
+                                    <>
+                                        <Loader2 size={13} className="animate-spin" />
+                                        <span>{t('Saving…')}</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save size={13} />
+                                        <span>{t('Save Skill')}</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Preview card — shown when validate-only succeeded. */}

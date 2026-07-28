@@ -3,6 +3,8 @@ import { Check, Loader2 } from 'lucide-react';
 import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, getCodexCliModelDisplayName, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
+import { LobeProviderIcon } from './settings/LobeProviderIcon';
+
 // Define Model Types
 interface ModelOption {
     id: string;
@@ -90,30 +92,62 @@ const ModelSelectorWindow = () => {
 
                 // Build the list
                 const models: ModelOption[] = [];
+                const disabledList = creds?.disabledProviders || [];
 
-                if (creds?.hasNativelyKey) {
+                if (creds?.hasNativelyKey && !disabledList.includes('natively')) {
                     models.push({ id: 'natively', name: 'Natively API', type: 'cloud', provider: 'natively' });
                 }
 
-                // Cloud Models — standard models + unique preferred models
+                // Cloud Models — user-enabled models if set, else default models
                 for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
+                    if (disabledList.includes(prov)) continue;
                     if (!cfg.hasKeyCheck(creds)) continue;
-                    cfg.ids.forEach((id, i) => {
-                        models.push({ id, name: cfg.names[i], type: 'cloud', provider: prov });
-                    });
-                    const pm = creds?.[cfg.pmKey];
-                    if (pm && !cfg.ids.includes(pm)) {
-                        models.push({ id: pm, name: prettifyModelId(pm), type: 'cloud', provider: prov });
+                    const enabledList = creds?.cloudEnabledModels?.[prov] || [];
+                    if (enabledList.includes('_none_')) continue;
+
+                    const providerPool: { id: string; label: string }[] = cfg.ids.map((id, i) => ({ id, label: cfg.names[i] || id }));
+                    const cacheKey = `cached-models-${prov}`;
+                    const cachedStr = localStorage.getItem(cacheKey);
+                    if (cachedStr) {
+                        try {
+                            const parsed = JSON.parse(cachedStr);
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                parsed.forEach((m: any) => {
+                                    if (m?.id && !providerPool.some(p => p.id === m.id)) {
+                                        providerPool.push({ id: m.id, label: m.label || m.id });
+                                    }
+                                });
+                            }
+                        } catch { /* noop */ }
+                    }
+
+                    if (enabledList.length > 0) {
+                        providerPool.forEach(m => {
+                            if (enabledList.includes(m.id)) {
+                                models.push({ id: m.id, name: m.label, type: 'cloud', provider: prov });
+                            }
+                        });
+                        enabledList.forEach((id: string) => {
+                            if (id !== '_none_' && !models.some(m => m.id === id)) {
+                                models.push({ id, name: prettifyModelId(id), type: 'cloud', provider: prov });
+                            }
+                        });
+                    } else {
+                        providerPool.forEach(m => {
+                            models.push({ id: m.id, name: m.label, type: 'cloud', provider: prov });
+                        });
                     }
                 }
 
                 // Custom Providers
-                customProviders.forEach((p: any) => {
-                    models.push({ id: p.id, name: p.name, type: 'custom' });
-                });
+                if (!disabledList.includes('custom')) {
+                    customProviders.forEach((p: any) => {
+                        models.push({ id: p.id, name: p.name, type: 'custom' });
+                    });
+                }
 
                 // Codex CLI
-                if (codexCliConfig?.enabled) {
+                if (codexCliConfig?.enabled && !disabledList.includes('codex-cli')) {
                     models.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})`, type: 'codex-cli', provider: 'codex-cli' });
                     CODEX_CLI_MODEL_PRESETS.forEach(model => {
                         const id = codexCliSelectorId(model.id);
@@ -122,19 +156,27 @@ const ModelSelectorWindow = () => {
                 }
 
                 // Ollama
-                ollamaModels.forEach((m: string) => {
-                    models.push({ id: `ollama-${m}`, name: `${m} (Local)`, type: 'ollama' });
-                });
+                if (!disabledList.includes('ollama')) {
+                    ollamaModels.forEach((m: string) => {
+                        models.push({ id: `ollama-${m}`, name: `${m} (Local)`, type: 'ollama' });
+                    });
+                }
 
                 // LiteLLM proxy — auto-discovered from the configured proxy's /v1/models.
                 // Wrapped in try/catch so a missing/offline proxy never blocks the list.
-                try {
-                    const litellmModels = await window.electronAPI?.getAvailableLiteLLMModels?.() || [];
-                    litellmModels.forEach((m: string) => {
-                        models.push({ id: `litellm/${m}`, name: `${m} (LiteLLM)`, type: 'cloud', provider: 'litellm' });
-                    });
-                } catch {
-                    // LiteLLM proxy may not be running — ignore.
+                if (!disabledList.includes('litellm')) {
+                    try {
+                        const litellmModels = await window.electronAPI?.getAvailableLiteLLMModels?.() || [];
+                        const enabledList = creds?.litellmEnabledModels || [];
+                        litellmModels.forEach((m: string) => {
+                            const isEnabled = enabledList.length === 0 || (enabledList.includes(m) && !enabledList.includes('_none_'));
+                            if (isEnabled) {
+                                models.push({ id: `litellm/${m}`, name: `${m} (LiteLLM)`, type: 'cloud', provider: 'litellm' });
+                            }
+                        });
+                    } catch {
+                        // LiteLLM proxy may not be running — ignore.
+                    }
                 }
 
                 if (cancelled) return;
@@ -165,9 +207,13 @@ const ModelSelectorWindow = () => {
         const unsubscribe = window.electronAPI?.onModelChanged?.((modelId: string) => {
             setCurrentModel(modelId);
         });
+        const unsubscribeCreds = window.electronAPI?.onCredentialsChanged?.(() => {
+            loadModels();
+        });
         return () => {
             cancelled = true;
             unsubscribe?.();
+            unsubscribeCreds?.();
         };
     }, []);
 
@@ -184,8 +230,8 @@ const ModelSelectorWindow = () => {
         : 'bg-[#1E1E1E]/80 border-white/10 shadow-black/40';
 
     return (
-        <div className="w-fit h-fit bg-transparent flex flex-col">
-            <div className={`w-[140px] h-[200px] backdrop-blur-md border rounded-[16px] overflow-hidden shadow-2xl p-2 flex flex-col animate-scale-in origin-top-left overlay-shell-surface ${panelClass}`}>
+        <div className="w-full h-full bg-transparent flex flex-col">
+            <div className={`w-full h-[290px] backdrop-blur-md border rounded-[16px] overflow-hidden shadow-2xl p-2 flex flex-col animate-scale-in origin-top-left overlay-shell-surface ${panelClass}`}>
                 <div className="relative z-[1] flex-1 min-h-0 flex flex-col">
                     {isLoading ? (
                         <div className={`flex items-center justify-center py-4 overlay-text-muted ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -213,7 +259,10 @@ const ModelSelectorWindow = () => {
                                                 }
                                             `}
                                         >
-                                            <span className="text-[12px] font-medium truncate flex-1 min-w-0">{model.name}</span>
+                                            <div className="flex items-center gap-2 flex-1 min-w-0 pr-2">
+                                                <LobeProviderIcon provider={model.provider || model.id} name={model.name} size={14} />
+                                                <span className="text-[12px] font-medium truncate flex-1 min-w-0">{model.name}</span>
+                                            </div>
                                             {isSelected && <Check className={`w-3.5 h-3.5 shrink-0 ml-2 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`} />}
                                         </button>
                                     );

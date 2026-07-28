@@ -160,10 +160,8 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
             <div aria-hidden style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'rgba(255,255,255,.12)',pointerEvents:'none',zIndex:5}} />
             {/* Aurora pulse */}
             {!reduced && (
-              <motion.div aria-hidden
-                animate={{opacity:[.07,.16,.07]}}
-                transition={{duration:7,repeat:Infinity,ease:'easeInOut'}}
-                style={{position:'absolute',top:'-80px',left:'50%',transform:'translateX(-50%)',width:'440px',height:'280px',background:'radial-gradient(ellipse,rgba(139,92,246,.28) 0%,transparent 65%)',pointerEvents:'none',zIndex:1}}
+              <div aria-hidden
+                style={{position:'absolute',top:'-80px',left:'50%',transform:'translateX(-50%)',width:'440px',height:'280px',background:'radial-gradient(ellipse,rgba(139,92,246,.18) 0%,transparent 65%)',pointerEvents:'none',zIndex:1,opacity:0.1}}
               />
             )}
             {/* Grain */}
@@ -319,10 +317,8 @@ function HeroCard({ title, price, period, icon: Icon, spec, accent, reduced, onC
           }}
         >
           {!reduced && (
-            <motion.div aria-hidden
-              style={{position:'absolute',inset:0,pointerEvents:'none',background:'linear-gradient(90deg,transparent,rgba(255,255,255,.1),transparent)',transform:'skewX(-14deg)'}}
-              animate={{x:['-130%','230%']}}
-              transition={{duration:1.8,ease:'easeInOut',repeat:Infinity,repeatDelay:5.5}}
+            <div aria-hidden
+              style={{position:'absolute',inset:0,pointerEvents:'none',background:'linear-gradient(90deg,transparent,rgba(255,255,255,.05),transparent)',transform:'skewX(-14deg)'}}
             />
           )}
           <span style={{position:'relative',zIndex:1,fontSize:'12.5px',fontWeight:650,color:a.btnColor,letterSpacing:'-.015em'}}>

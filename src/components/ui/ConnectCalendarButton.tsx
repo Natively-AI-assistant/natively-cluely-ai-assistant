@@ -82,20 +82,13 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                     `,
                 }}
             >
-                {/* 1. Iridescent Aurora Border (Animated) */}
-                <motion.div
+                {/* 1. Iridescent Aurora Border — CSS animation (compositor-only, no JS rAF) */}
+                <div
                     className="absolute inset-0 rounded-full opacity-60 pointer-events-none"
-                    animate={{
-                        background: [
-                            'radial-gradient(circle at 0% 0%, rgba(216, 180, 254, 0.3), transparent 60%)',
-                            'radial-gradient(circle at 100% 100%, rgba(216, 180, 254, 0.3), transparent 60%)',
-                            'radial-gradient(circle at 0% 0%, rgba(216, 180, 254, 0.3), transparent 60%)',
-                        ]
-                    }}
-                    transition={{
-                        duration: 6,
-                        repeat: Infinity,
-                        ease: "linear"
+                    style={{
+                        background: 'radial-gradient(circle at 0% 0%, rgba(216, 180, 254, 0.3), transparent 60%)',
+                        animation: 'calendar-aurora 6s linear infinite',
+                        willChange: 'opacity',
                     }}
                 />
 
@@ -108,19 +101,11 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                     }}
                 />
 
-                {/* 3. Slow Elegant Shimmer */}
+                {/* 3. Slow Elegant Shimmer — CSS transform (compositor thread only) */}
                 <div className="absolute inset-0 overflow-hidden rounded-full pointer-events-none">
-                    <motion.div
-                        animate={{
-                            x: ['-200%', '200%'],
-                        }}
-                        transition={{
-                            duration: 4,
-                            repeat: Infinity,
-                            repeatDelay: 3,
-                            ease: "easeInOut"
-                        }}
+                    <div
                         className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12 blur-md"
+                        style={{ animation: 'calendar-shimmer 7s ease-in-out infinite', willChange: 'transform' }}
                     />
                 </div>
 

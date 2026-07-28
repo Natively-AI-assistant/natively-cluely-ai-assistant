@@ -1999,6 +1999,32 @@ body {
   background: transparent;
 }
 
+/* Custom Dark Theme Scrollbar Utility */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
 /* Liquid Glass Effect Base - Refined Matte Look */
 /* Used for floating elements on top of the vibrant background */
 .liquid-glass {
@@ -2126,6 +2152,20 @@ body {
   35% { filter: drop-shadow(0 0 5px rgba(167, 139, 250, 0.18)) drop-shadow(0 0 12px rgba(99, 102, 241, 0.12)); }
   72% { filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.10)) drop-shadow(0 0 18px rgba(99, 102, 241, 0.05)); }
   100% { filter: drop-shadow(0 0 0 rgba(167, 139, 250, 0)); }
+}
+
+/* ─── ConnectCalendarButton (connected state) animations ─────────────────
+   CSS keyframes replace framer-motion repeat:Infinity JS loops to keep
+   these on the compositor thread and prevent rasterizer tile churn.
+   ─────────────────────────────────────────────────────────────────────── */
+@keyframes calendar-aurora {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.75; }
+}
+
+@keyframes calendar-shimmer {
+  0% { transform: translateX(-200%) skewX(-12deg); }
+  40%, 100% { transform: translateX(200%) skewX(-12deg); }
 }
 
 .aurora-focus {

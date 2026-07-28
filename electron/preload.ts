@@ -84,6 +84,9 @@ interface ElectronAPI {
     provider: 'gemini' | 'groq' | 'openai' | 'claude',
     apiKey?: string,
   ) => Promise<{ success: boolean; error?: string }>;
+  testLiteLLMModelConnection: (
+    modelId: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   selectServiceAccount: () => Promise<{
     success: boolean;
     path?: string;
@@ -97,8 +100,16 @@ interface ElectronAPI {
   setOpenaiApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setClaudeApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setDeepseekApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  setOpenrouterApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => Promise<{ success: boolean; error?: string }>;
   getAvailableLiteLLMModels: () => Promise<string[]>;
+  getAllDiscoveredLiteLLMModels: () => Promise<string[]>;
+  refreshLiteLLMModels: () => Promise<string[]>;
+  getDisabledProviders: () => Promise<string[]>;
+  setDisabledProviders: (providers: string[]) => Promise<{ success: boolean; error?: string }>;
+  getLitellmEnabledModels: () => Promise<string[]>;
+  setLitellmEnabledModels: (models: string[]) => Promise<{ success: boolean; error?: string }>;
+  setCloudEnabledModels: (provider: string, models: string[]) => Promise<{ success: boolean; error?: string }>;
   setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   // ── In-app review / testimonial prompt ─────────────────────────────────
   reviewGetPromptState: () => Promise<{
@@ -169,6 +180,7 @@ interface ElectronAPI {
     hasOpenaiKey: boolean;
     hasClaudeKey: boolean;
     hasDeepseekKey: boolean;
+    hasOpenrouterKey?: boolean;
     hasNativelyKey: boolean;
     googleServiceAccountPath: string | null;
     sttProvider: string;
@@ -181,6 +193,17 @@ interface ElectronAPI {
     hasIbmWatsonKey: boolean;
     ibmWatsonRegion: string;
     hasSonioxKey: boolean;
+    hasLitellmBaseURL?: boolean;
+    litellmBaseURL?: string | null;
+    litellmMaxTokens?: number | null;
+    disabledProviders?: string[];
+    litellmEnabledModels?: string[];
+    geminiPreferredModel?: string;
+    groqPreferredModel?: string;
+    openaiPreferredModel?: string;
+    claudePreferredModel?: string;
+    deepseekPreferredModel?: string;
+    openrouterPreferredModel?: string;
   }>;
   // Free Trial
   startTrial: () => Promise<{
@@ -496,6 +519,8 @@ interface ElectronAPI {
   // Groq Fast Text Mode
   getGroqFastTextMode: () => Promise<{ enabled: boolean }>;
   setGroqFastTextMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  getOnnxMemoryGuardDisabled: () => Promise<{ disabled: boolean }>;
+  setOnnxMemoryGuardDisabled: (disabled: boolean) => Promise<{ success: boolean; error?: string }>;
   getCodexCliConfig: () => Promise<{
     enabled: boolean;
     path: string;
@@ -1316,6 +1341,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('switch-to-gemini', apiKey, modelId),
   testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey: string) =>
     ipcRenderer.invoke('test-llm-connection', provider, apiKey),
+  testLiteLLMModelConnection: (modelId: string) =>
+    ipcRenderer.invoke('test-litellm-model-connection', modelId),
   selectServiceAccount: () => ipcRenderer.invoke('select-service-account'),
 
   // API Key Management
@@ -1324,9 +1351,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setOpenaiApiKey: (apiKey: string) => ipcRenderer.invoke('set-openai-api-key', apiKey),
   setClaudeApiKey: (apiKey: string) => ipcRenderer.invoke('set-claude-api-key', apiKey),
   setDeepseekApiKey: (apiKey: string) => ipcRenderer.invoke('set-deepseek-api-key', apiKey),
+  setOpenrouterApiKey: (apiKey: string) => ipcRenderer.invoke('set-openrouter-api-key', apiKey),
+  getOpenrouterKeyInfo: () => ipcRenderer.invoke('get-openrouter-key-info'),
+  getOpenrouterPreferences: () => ipcRenderer.invoke('get-openrouter-preferences'),
+  setOpenrouterPreferences: (prefs: { reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'max'; providerSort?: 'latency' | 'price' | 'throughput'; allowFallbacks?: boolean }) => ipcRenderer.invoke('set-openrouter-preferences', prefs),
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => ipcRenderer.invoke('set-litellm-config', config),
   getAvailableLiteLLMModels: () => ipcRenderer.invoke('get-available-litellm-models'),
+  getAllDiscoveredLiteLLMModels: () => ipcRenderer.invoke('get-all-discovered-litellm-models'),
+  refreshLiteLLMModels: () => ipcRenderer.invoke('refresh-litellm-models'),
+  getDisabledProviders: () => ipcRenderer.invoke('get-disabled-providers'),
+  setDisabledProviders: (providers: string[]) => ipcRenderer.invoke('set-disabled-providers', providers),
+  getLitellmEnabledModels: () => ipcRenderer.invoke('get-litellm-enabled-models'),
+  setLitellmEnabledModels: (models: string[]) => ipcRenderer.invoke('set-litellm-enabled-models', models),
+  setCloudEnabledModels: (provider: string, models: string[]) => ipcRenderer.invoke('set-cloud-enabled-models', provider, models),
   setNativelyApiKey: (apiKey: string) => ipcRenderer.invoke('set-natively-api-key', apiKey),
+  onCredentialsChanged: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on('credentials-changed', subscription);
+    return () => { ipcRenderer.removeListener('credentials-changed', subscription); };
+  },
 
   // ── In-app review / testimonial prompt ─────────────────────────────────
   reviewGetPromptState: () => ipcRenderer.invoke('review:get-prompt-state'),
@@ -1444,13 +1487,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('stt-config-changed', subscription);
     return () => {
       ipcRenderer.removeListener('stt-config-changed', subscription);
-    };
-  },
-  onCredentialsChanged: (callback: () => void) => {
-    const subscription = () => callback();
-    ipcRenderer.on('credentials-changed', subscription);
-    return () => {
-      ipcRenderer.removeListener('credentials-changed', subscription);
     };
   },
   // Hindsight: the app-managed companion server inherited the OLD AI-provider env at
@@ -1950,6 +1986,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Groq Fast Text Mode
   getGroqFastTextMode: () => ipcRenderer.invoke('get-groq-fast-text-mode'),
   setGroqFastTextMode: (enabled: boolean) => ipcRenderer.invoke('set-groq-fast-text-mode', enabled),
+  getOnnxMemoryGuardDisabled: () => ipcRenderer.invoke('onnx-get-memory-guard-disabled'),
+  setOnnxMemoryGuardDisabled: (disabled: boolean) => ipcRenderer.invoke('onnx-set-memory-guard-disabled', disabled),
   getCodexCliConfig: () => ipcRenderer.invoke('get-codex-cli-config'),
   setCodexCliConfig: (config: {
     enabled: boolean;

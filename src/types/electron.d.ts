@@ -147,8 +147,10 @@ export interface ElectronAPI {
   setOpenaiApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setClaudeApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setDeepseekApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setOpenrouterApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => Promise<{ success: boolean; error?: string }>
   getAvailableLiteLLMModels: () => Promise<string[]>
+  setCloudEnabledModels: (provider: string, models: string[]) => Promise<{ success: boolean; error?: string }>
   setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   // ── In-app review / testimonial prompt ─────────────────────────────────
   reviewGetPromptState: () => Promise<{
@@ -183,7 +185,7 @@ export interface ElectronAPI {
   }) => Promise<{ ok: boolean; error?: string; status?: number }>
   getNativelyPricing: () => Promise<{ ok: boolean; currency?: string; fetchedAt?: string; stale?: boolean; products?: Record<string, { id: string; dodoProductId: string; name: string; amount: number | null; currency: string; formattedPrice: string | null; interval: 'month' | 'year' | 'lifetime'; checkoutUrl: string; coupon: { code: string; eligible: boolean; discountPercent: number; reason?: string } }>; error?: string; status?: number }>
   getNativelyUsage: () => Promise<{ ok: boolean; error?: string; plan?: string; quota?: { transcription: { used: number; limit: number; remaining: number }; ai: { used: number; limit: number; remaining: number }; search: { used: number; limit: number; remaining: number }; resets_at: string }; member_since?: string }>
-  getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
+  getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasOpenrouterKey?: boolean; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; openrouterPreferredModel?: string; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string; disabledProviders?: string[]; litellmEnabledModels?: string[]; cloudEnabledModels?: Record<string, string[]> }>
   // Permissions
   checkPermissions:     () => Promise<{ microphone: 'granted'|'denied'|'not-determined'|'restricted'; screen: 'granted'|'denied'|'not-determined'|'restricted'; platform: string }>
   requestMicPermission: () => Promise<boolean>
@@ -212,6 +214,13 @@ export interface ElectronAPI {
   setSonioxApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setIbmWatsonRegion: (region: string) => Promise<{ success: boolean; error?: string }>
   testSttConnection: (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox', apiKey: string, region?: string) => Promise<{ success: boolean; error?: string }>
+  getDisabledProviders: () => Promise<string[]>
+  setDisabledProviders: (providers: string[]) => Promise<{ success: boolean; error?: string }>
+  getLitellmEnabledModels: () => Promise<string[]>
+  setLitellmEnabledModels: (models: string[]) => Promise<{ success: boolean; error?: string }>
+  getAllDiscoveredLiteLLMModels: () => Promise<string[]>
+  refreshLiteLLMModels: () => Promise<string[]>
+  testLiteLLMModelConnection: (modelId: string) => Promise<{ success: boolean; error?: string }>
 
   // STT Config Events (fired when STT provider/key changes during a meeting)
   onSttConfigChanged: (callback: (data: { configured: boolean; provider: string }) => void) => () => void
@@ -250,6 +259,9 @@ export interface ElectronAPI {
 
   // STT Status Events
   onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
+
+  getOnnxMemoryGuardDisabled: () => Promise<{ disabled: boolean }>
+  setOnnxMemoryGuardDisabled: (disabled: boolean) => Promise<{ success: boolean; error?: string }>
 
   getNativeAudioStatus: () => Promise<{ connected: boolean }>
 

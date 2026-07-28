@@ -219,9 +219,54 @@ export function initializeIpcHandlers(appState: AppState): void {
       };
       const modelAvailable = (modelId: string): boolean => {
         if (!modelId) return false;
+
+        // Greptile fix: consult disabled-provider and enabled-models filters so
+        // that disabling a provider or de-selecting a model in the UI immediately
+        // makes it unavailable for runtime refresh — preventing the default model
+        // from remaining active after the user explicitly filtered it out.
+        const disabledProviders: string[] = cm.getDisabledProviders?.() || [];
+
+        // Helper: extract the "provider family" prefix from a model ID so we can
+        // check whether the provider as a whole is disabled.
+        const providerFamily = (): string => {
+          if (modelId === 'natively') return 'natively';
+          if (modelId.startsWith('codex-cli')) return 'codex-cli';
+          if (modelId.startsWith('litellm/')) return 'litellm';
+          if (modelId.startsWith('or/')) return 'openrouter';
+          if (modelId.startsWith('ollama-')) return 'ollama';
+          if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return 'gemini';
+          if (isKnownGroqModel(modelId)) return 'groq';
+          if (modelId.startsWith('gpt-') || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.includes('openai')) return 'openai';
+          if (modelId.startsWith('claude-')) return 'claude';
+          if (/^deepseek-v/i.test(modelId)) return 'deepseek';
+          // OpenRouter namespaced models (legacy heuristic, removed in favor of `or/` prefix)
+          if (modelId === 'openrouter/auto') return 'openrouter';
+          return 'unknown';
+        };
+        const family = providerFamily();
+        if (disabledProviders.includes(family) || disabledProviders.includes(modelId)) return false;
+
+        // Check per-provider enabled-models filter. When the filter is populated
+        // (non-empty), the model must be in it — an empty filter means "no filter"
+        // (all models of that family are allowed).
+        const enabledForFamily = cm.getCloudEnabledModels(family);
+        if (enabledForFamily && enabledForFamily.length > 0 && !enabledForFamily.includes(modelId)) {
+          // Also check a modelId without provider prefix
+          const unprefixed = modelId.replace(/^(?:openai\/|anthropic\/|google\/)?/, '');
+          if (!enabledForFamily.includes(unprefixed)) return false;
+        }
+
         if (modelId === 'natively') return has(cm.getNativelyApiKey());
         if (modelId.startsWith('codex-cli')) return codexConfig.enabled === true && codexSignedIn;
-        if (modelId.startsWith('litellm/')) return has(cm.getLitellmBaseURL());
+        if (modelId.startsWith('litellm/')) {
+          // LiteLLM also has its own enabled-models filter.
+          const litellmEnabled = cm.getLitellmEnabledModels?.() || [];
+          if (litellmEnabled.length > 0) {
+            const litellmModelName = modelId.replace('litellm/', '');
+            if (!litellmEnabled.includes(litellmModelName)) return false;
+          }
+          return has(cm.getLitellmBaseURL());
+        }
         if (modelId.startsWith('ollama-')) return true; // live Ollama probe happens at execution time
         if (allProviders.some((p: any) => p?.id === modelId)) return true;
         if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return has(cm.getGeminiApiKey());
@@ -255,16 +300,27 @@ export function initializeIpcHandlers(appState: AppState): void {
         } catch { /* LiteLLM fallback discovery best-effort */ }
       }
 
-      const next = has(cm.getNativelyApiKey()) ? 'natively'
-        : has(cm.getGeminiApiKey()) ? 'gemini-3.6-flash'
-        : has(cm.getOpenaiApiKey()) ? 'gpt-5.4'
-        : has(cm.getClaudeApiKey()) ? 'claude-sonnet-4-6'
-        : has(cm.getGroqApiKey()) ? 'llama-3.3-70b-versatile'
-        : has(cm.getDeepseekApiKey()) ? 'deepseek-v4-flash'
-        : (codexConfig.enabled === true && codexSignedIn) ? 'codex-cli'
-        : litellmFallbackModel
-          || allProviders[0]?.id
-          || 'natively';
+      const next = modelAvailable('natively') ? 'natively'
+        : modelAvailable('gemini-3.6-flash') ? 'gemini-3.6-flash'
+        : modelAvailable('gpt-5.4') ? 'gpt-5.4'
+        : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
+        : modelAvailable('llama-3.3-70b-versatile') ? 'llama-3.3-70b-versatile'
+        : modelAvailable('deepseek-v4-flash') ? 'deepseek-v4-flash'
+        : (codexConfig.enabled === true && codexSignedIn && modelAvailable('codex-cli')) ? 'codex-cli'
+        : litellmFallbackModel && modelAvailable(litellmFallbackModel) ? litellmFallbackModel
+        : allProviders.find((p: any) => modelAvailable(p?.id))?.id
+          || null;
+      if (!next) {
+        // All providers are disabled or no configured credential exists.
+        // Do NOT install any model here — every candidate was already
+        // rejected by modelAvailable() above (including gemini-3.6-flash
+        // and natively). Persisting a rejected model would re-activate a
+        // disabled provider, which is the exact bug Greptile flagged.
+        // Leave the persisted default untouched; the routing chain will
+        // fail at execution time with "No AI providers configured".
+        console.warn('[IPC] refreshRuntimeDefaultIfUnavailable: no available model found — all providers disabled or unconfigured');
+        return null;
+      }
       cm.setDefaultModel(next);
       llmHelper.setModel(next, allProviders);
       appState.broadcast('model-changed', next);
@@ -5556,6 +5612,76 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('set-openrouter-api-key', async (_, apiKey: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const keyChanged = cm.getOpenrouterApiKey() !== apiKey;
+      cm.setOpenrouterApiKey(apiKey);
+
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      if (typeof (llmHelper as any).setOpenrouterApiKey === 'function') {
+        (llmHelper as any).setOpenrouterApiKey(apiKey);
+      }
+
+      appState.getIntelligenceManager().resetEngine();
+      appState.getIntelligenceManager().initializeLLMs();
+
+      if (keyChanged) {
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error saving OpenRouter API key:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('get-openrouter-key-info', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const apiKey = CredentialsManager.getInstance().getOpenrouterApiKey();
+      if (!apiKey) {
+        return { success: false, error: 'No OpenRouter API key set' };
+      }
+      const axios = require('axios');
+      const response = await axios.get('https://openrouter.ai/api/v1/key', {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://natively.ai',
+          'X-Title': 'Natively AI',
+        },
+        timeout: 10000,
+      });
+      return { success: true, data: response.data?.data };
+    } catch (error: any) {
+      const msg = error?.response?.data?.error?.message || error.message || 'Failed to fetch key info';
+      return { success: false, error: msg };
+    }
+  });
+
+  safeHandle('get-openrouter-preferences', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return { success: true, preferences: CredentialsManager.getInstance().getOpenrouterPreferences() };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('set-openrouter-preferences', async (_, prefs: any) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setOpenrouterPreferences(prefs);
+      broadcastCredentialsChanged();
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
   safeHandle('set-litellm-config', async (_, config: { apiKey: string; baseURL: string; maxTokens?: number }) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -5606,10 +5732,33 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  // Discover models from the configured LiteLLM proxy (OpenAI-compatible /v1/models).
-  // Returns [] on any failure (proxy down, auth rejected, timeout) so the model
-  // selector degrades gracefully rather than throwing.
+  // Local-first non-blocking get-available-litellm-models (loads from SQLite/CredentialsManager cache).
+  // If litellmEnabledModels is set, returns only those. Otherwise fallbacks to all cached litellmModels.
   safeHandle('get-available-litellm-models', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const enabled = cm.getLitellmEnabledModels();
+      if (enabled && enabled.length > 0) {
+        return enabled;
+      }
+      return cm.getLitellmModels();
+    } catch {
+      return [];
+    }
+  });
+
+  safeHandle('get-all-discovered-litellm-models', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getLitellmModels();
+    } catch {
+      return [];
+    }
+  });
+
+  // Dedicated network-discovery handler for LiteLLM models, called on-demand (e.g. from refresh buttons)
+  safeHandle('refresh-litellm-models', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -5621,9 +5770,75 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!resp.ok) return [];
       const data: any = await resp.json();
       const models = (data?.data || []).map((m: any) => m?.id).filter(Boolean);
+      
+      // Save to SQLite cache
+      cm.setLitellmModels(models);
+      broadcastCredentialsChanged();
       return models;
+    } catch (error) {
+      console.error('Error refreshing LiteLLM models:', error);
+      return [];
+    }
+  });
+
+  safeHandle('get-disabled-providers', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getDisabledProviders();
     } catch {
       return [];
+    }
+  });
+
+  safeHandle('set-disabled-providers', async (event, providers: string[]) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setDisabledProviders(providers);
+      // If the currently-active model belongs to a provider that was just disabled,
+      // fall back to the next available provider immediately so the live LLMHelper
+      // instance stays in sync (not just the credential store).
+      await refreshRuntimeDefaultIfUnavailable();
+      broadcastCredentialsChanged();
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('get-litellm-enabled-models', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getLitellmEnabledModels();
+    } catch {
+      return [];
+    }
+  });
+
+  safeHandle('set-litellm-enabled-models', async (event, models: string[]) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setLitellmEnabledModels(models);
+      // If the active model was removed from the enabled list, reset the live
+      // LLMHelper so it doesn't keep routing to a model the user de-selected.
+      await refreshRuntimeDefaultIfUnavailable();
+      broadcastCredentialsChanged();
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('set-cloud-enabled-models', async (event, provider: string, models: string[]) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setCloudEnabledModels(provider, models);
+      // If the active model was removed from the enabled list, reset the live
+      // LLMHelper so it doesn't keep routing to a model the user de-selected.
+      await refreshRuntimeDefaultIfUnavailable();
+      broadcastCredentialsChanged();
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
     }
   });
 
@@ -6429,6 +6644,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenaiKey: hasKey(creds.openaiApiKey),
         hasClaudeKey: hasKey(creds.claudeApiKey),
         hasDeepseekKey: hasKey(creds.deepseekApiKey),
+        hasOpenrouterKey: hasKey(creds.openrouterApiKey),
         hasLitellmBaseURL: hasKey(creds.litellmBaseURL),
         // The base URL is config, not a secret — returned in full so Settings can
         // prefill it (unlike API keys, which are only reported as booleans).
@@ -6465,6 +6681,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         openaiPreferredModel: creds.openaiPreferredModel || undefined,
         claudePreferredModel: creds.claudePreferredModel || undefined,
         deepseekPreferredModel: creds.deepseekPreferredModel || undefined,
+        openrouterPreferredModel: creds.openrouterPreferredModel || undefined,
+        disabledProviders: creds.disabledProviders || [],
+        litellmEnabledModels: creds.litellmEnabledModels || [],
+        cloudEnabledModels: creds.cloudEnabledModels || {},
       };
     } catch (error: any) {
       // SECURITY FIX (P0): Error fallback returns masked keys, not raw strings
@@ -6474,6 +6694,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenaiKey: false,
         hasClaudeKey: false,
         hasDeepseekKey: false,
+        hasOpenrouterKey: false,
         hasLitellmBaseURL: false,
         litellmBaseURL: null,
         litellmMaxTokens: null,
@@ -6498,6 +6719,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         sttAzureKey: '',
         sttIbmKey: '',
         sttSonioxKey: '',
+        disabledProviders: [],
+        litellmEnabledModels: [],
       };
     }
   });
@@ -6508,7 +6731,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'fetch-provider-models',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'openrouter', apiKey: string) => {
       try {
         // Fall back to stored key if no key was explicitly provided
         let key = apiKey?.trim();
@@ -6520,6 +6743,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'openai') key = cm.getOpenaiApiKey();
           else if (provider === 'claude') key = cm.getClaudeApiKey();
           else if (provider === 'deepseek') key = cm.getDeepseekApiKey();
+          else if ((provider as string) === 'openrouter') key = cm.getOpenrouterApiKey();
         }
 
         if (!key) {
@@ -6540,7 +6764,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'set-provider-preferred-model',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', modelId: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'openrouter', modelId: string) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);
@@ -7201,6 +7425,19 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('onnx-get-memory-guard-disabled', async () => {
+    return { disabled: !!SettingsManager.getInstance().get('onnxMemoryGuardDisabled') };
+  });
+
+  safeHandle('onnx-set-memory-guard-disabled', async (_, disabled: boolean) => {
+    try {
+      SettingsManager.getInstance().set('onnxMemoryGuardDisabled', !!disabled);
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  });
+
   // Per-channel model overrides (mic / system audio). When enabled, the two
   // STT instances pick their own model via these slots. When disabled, both
   // fall back to localWhisperModel (the existing global setting).
@@ -7331,7 +7568,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'test-llm-connection',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey?: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'openrouter', apiKey?: string) => {
       console.log(`[IPC] Received test-llm-connection request for provider: ${provider}`);
       try {
         if (!apiKey || !apiKey.trim()) {
@@ -7342,6 +7579,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'openai') apiKey = creds.getOpenaiApiKey();
           else if (provider === 'claude') apiKey = creds.getClaudeApiKey();
           else if (provider === 'deepseek') apiKey = creds.getDeepseekApiKey();
+          else if ((provider as string) === 'openrouter') apiKey = creds.getOpenrouterApiKey();
         }
 
         if (!apiKey || !apiKey.trim()) {
@@ -7420,6 +7658,18 @@ export function initializeIpcHandlers(appState: AppState): void {
               timeout: 15000,
             },
           );
+        } else if ((provider as string) === 'openrouter') {
+          response = await axios.get(
+            'https://openrouter.ai/api/v1/models',
+            {
+              headers: {
+                'Authorization': `Bearer ${apiKey.trim()}`,
+                'HTTP-Referer': 'https://natively.ai',
+                'X-Title': 'Natively AI',
+              },
+              timeout: 15000,
+            },
+          );
         }
 
         if (response && (response.status === 200 || response.status === 201)) {
@@ -7451,6 +7701,57 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: msg };
       }
     },
+  );
+
+  safeHandle(
+    'test-litellm-model-connection',
+    async (_, modelId: string) => {
+      console.log(`[IPC] Received test-litellm-model-connection request for model: ${modelId}`);
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const cm = CredentialsManager.getInstance();
+        const baseURL = (cm.getLitellmBaseURL() || 'http://localhost:4000/v1').replace(/\/+$/, '');
+        const apiKey = cm.getLitellmApiKey();
+        const headers: Record<string, string> = { 
+          'Content-Type': 'application/json'
+        };
+        if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+        const axios = require('axios');
+        const response = await axios.post(
+          `${baseURL}/chat/completions`,
+          {
+            model: modelId,
+            messages: [{ role: 'user', content: 'Hello' }],
+            max_tokens: 10,
+          },
+          {
+            headers,
+            timeout: 10000,
+          }
+        );
+        if (response && (response.status === 200 || response.status === 201)) {
+          return { success: true };
+        } else {
+          return { success: false, error: 'Request failed with status ' + response?.status };
+        }
+      } catch (error: any) {
+        const safeInfo = {
+          modelId,
+          status: error?.response?.status,
+          statusText: error?.response?.statusText,
+          code: error?.code,
+          message: error?.message,
+          responseError: error?.response?.data?.error?.message || error?.response?.data?.message,
+        };
+        console.error('LiteLLM connection test failed:', safeInfo);
+        const rawMsg =
+          error?.response?.data?.error?.message ||
+          error?.response?.data?.message ||
+          error?.message ||
+          'Connection failed';
+        return { success: false, error: rawMsg };
+      }
+    }
   );
 
   safeHandle('get-groq-fast-text-mode', () => {
