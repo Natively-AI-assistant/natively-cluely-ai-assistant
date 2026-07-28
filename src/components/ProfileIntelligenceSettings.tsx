@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
     Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star, Sparkles,
-    User, CheckCircle, ArrowUpRight, Paperclip, Plus, FileText,
-    GraduationCap, FolderKanban, Layers, Mail,
+    User, CheckCircle, ArrowUpRight, ChevronRight, Paperclip, Plus, FileText,
+    GraduationCap, FolderKanban, Layers, Mail, MessageSquare,
 } from 'lucide-react';
 import { PremiumUpgradeModal } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -582,17 +582,416 @@ const NAV_ITEMS = [
     { id: 'tavily',      label: 'Tavily Search',      Icon: Globe },
 ];
 
+// ─── Pro Gate ─────────────────────────────────────────────────────────────────
+// Mirrors the Modes Manager's Pro gate (same Apple-style hero + bento grid
+// language) so the two premium surfaces feel like one product, not two.
+const PI_GATE_FEATURES: Array<{
+    key: string;
+    label: string;
+    desc?: string;
+    hex: string;
+    Icon: typeof User;
+    col: string;
+    row: string;
+    type: 'hero' | 'wide' | 'small';
+}> = [
+    { key: 'identity', label: 'Identity', desc: 'Who you are, extracted from your resume.', hex: '#a78bfa', Icon: User, col: '1 / 3', row: '1 / 3', type: 'hero' },
+    // NOTE: wide-card descriptions must reliably render as ONE line at 11px in
+    // the ~170px text column (see ModesProGate reference, which uses the same
+    // single-line rule). Row 1 and row 3 are now sized to that one-line content
+    // (see PI_GATE_ROW_PX below), not a fixed budget copied from Modes — a
+    // wrapped second line is now guarded by WebkitLineClamp: 1 (it will
+    // ellipsize instead of crowding the card). Keep these short; verify with
+    // the pi-gate screenshot/measurement script before lengthening any of them
+    // again.
+    { key: 'profile', label: 'Profile', desc: 'Every skill and role — mapped.', hex: '#34d399', Icon: FileText, col: '3 / 5', row: '1 / 2', type: 'wide' },
+    { key: 'company', label: 'Company Intel', hex: '#fbbf24', Icon: Building2, col: '3 / 4', row: '2 / 3', type: 'small' },
+    { key: 'cover', label: 'Cover Letter', hex: '#fb7185', Icon: Mail, col: '4 / 5', row: '2 / 3', type: 'small' },
+    { key: 'talking', label: 'Talking Points', desc: 'Every fit gap — answered.', hex: '#f472b6', Icon: MessageSquare, col: '1 / 3', row: '3 / 4', type: 'wide' },
+    { key: 'search', label: 'Web Search', desc: 'Live research, on demand.', hex: '#38bdf8', Icon: Globe, col: '3 / 5', row: '3 / 4', type: 'wide' },
+];
+
+// Row heights are content-sized (measured against real rendered card content
+// via the getBoundingClientRect verification harness), NOT copy-pasted from
+// ModesProGate's fixed 258px/3-equal-rows grid — PI's card copy has a
+// different length profile than Modes', so an equal-thirds split leaves the
+// wide cards' single-line descriptions swimming in empty vertical space.
+//
+// Derivation (re-derive with the harness before changing — do not eyeball):
+//   row(core) = ink + 2*padding; row(track) = core + 14
+//   (the "+14" is .pig-bento-shell's 6px padding + 1px border, both sides)
+// Row 1 & row 3 both hold a wide card (Profile / Talking Points & Web Search)
+// and are kept EQUAL so the top and bottom wide rows read as symmetric, not
+// like a layout bug. Measured wide-card ink (icon + title + 1-line desc) is
+// ~32.5px; with the card's own 13px vertical padding, core ≈ 58.5 → row ≈ 73.
+//
+// Row 2 (the two small cards, Company Intel / Cover Letter) is NOT free —
+// the hero spans rows 1+2, so heroCore = row1 + row2 + gap(12) - 14. Measured
+// hero ink (icon + title + 2-line desc) is ~117px; with the hero's own 16px
+// padding, its target core is ~150 (unchanged from the pre-existing,
+// never-complained-about hero). That fixes row2 = 150 - row1 - 12 + 14 = 83,
+// independent of what the small cards themselves would otherwise need — they
+// simply inherit whatever room row2 ends up with and center within it.
+const PI_GATE_ROW_PX = { row1: 73, row2: 83, row3: 73 } as const;
+const PI_GATE_GAP_PX = 12;
+const PI_GATE_GRID_HEIGHT_PX =
+    PI_GATE_ROW_PX.row1 + PI_GATE_ROW_PX.row2 + PI_GATE_ROW_PX.row3 + PI_GATE_GAP_PX * 2;
+
+const PI_GATE_CSS = `
+    .pi-pro-gate {
+        --pig-bg: #141414;
+        --pig-hero: #ffffff;
+        --pig-sub: rgba(255,255,255,0.5);
+        --pig-sub-low: rgba(255,255,255,0.4);
+        --pig-border: rgba(255,255,255,0.05);
+        --pig-shell-bg: rgba(255,255,255,0.02);
+        --pig-shell-border: rgba(255,255,255,0.04);
+        --pig-shell-hover: rgba(255,255,255,0.08);
+        --pig-core-bg1: rgba(255,255,255,0.05);
+        --pig-core-bg2: rgba(255,255,255,0.01);
+        --pig-core-shadow1: rgba(255,255,255,0.12);
+        --pig-core-shadow2: rgba(255,255,255,0.04);
+        --pig-cta-bg: #ffffff;
+        --pig-cta-text: #141414;
+        --pig-cta-ring: rgba(0,0,0,0.08);
+        --pig-close-bg: rgba(255,255,255,0.06);
+        --pig-close-hover: rgba(255,255,255,0.12);
+        --pig-glow-op: 0.15;
+        --pig-glow-hover: 0.25;
+        --pig-noise: 0.04;
+    }
+    .pi-pro-gate[data-theme='light'] {
+        --pig-bg: #fbfbfd;
+        --pig-hero: #1d1d1f;
+        --pig-sub: #86868b;
+        --pig-sub-low: #6e6e73;
+        --pig-border: rgba(0,0,0,0.08);
+        --pig-shell-bg: #f5f5f7;
+        --pig-shell-border: rgba(0,0,0,0.05);
+        --pig-shell-hover: rgba(0,0,0,0.1);
+        --pig-core-bg1: #ffffff;
+        --pig-core-bg2: #fdfdfd;
+        --pig-core-shadow1: rgba(0,0,0,0.02);
+        --pig-core-shadow2: #ffffff;
+        --pig-cta-bg: #000000;
+        --pig-cta-text: #ffffff;
+        --pig-cta-ring: rgba(255,255,255,0.1);
+        --pig-close-bg: rgba(0,0,0,0.05);
+        --pig-close-hover: rgba(0,0,0,0.1);
+        --pig-glow-op: 0.05;
+        --pig-glow-hover: 0.1;
+        --pig-noise: 0;
+    }
+
+    @keyframes pig-fade-up {
+        from { opacity: 0; transform: translateY(8px) scale(0.99); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes pig-fade-in {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+    }
+    .pig-hero { animation: pig-fade-up 800ms cubic-bezier(0.16, 1, 0.3, 1) 0ms both; }
+    .pig-sub  { animation: pig-fade-up 800ms cubic-bezier(0.16, 1, 0.3, 1) 100ms both; }
+    .pig-grid { animation: pig-fade-up 900ms cubic-bezier(0.16, 1, 0.3, 1) 250ms both; }
+    .pig-foot { animation: pig-fade-in 800ms cubic-bezier(0.16, 1, 0.3, 1) 500ms both; }
+
+    .pig-bento-shell {
+        padding: 6px;
+        background: var(--pig-shell-bg);
+        border-radius: 24px;
+        border: 1px solid var(--pig-shell-border);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        transition: transform 300ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 300ms cubic-bezier(0.23, 1, 0.32, 1), border 300ms ease;
+        cursor: default;
+    }
+    .pig-bento-shell:hover {
+        transform: scale(1.02);
+        box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+        border: 1px solid var(--pig-shell-hover);
+    }
+    .pig-bento-core {
+        background: linear-gradient(135deg, var(--pig-core-bg1) 0%, var(--pig-core-bg2) 100%);
+        box-shadow: inset 0 1px 1px var(--pig-core-shadow1), inset 0 0 0 1px var(--pig-core-shadow2);
+        border-radius: calc(24px - 6px);
+        overflow: hidden;
+        position: relative;
+        height: 100%;
+        width: 100%;
+    }
+    .pig-bento-core::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: var(--pig-noise);
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        z-index: 10;
+    }
+    .pig-glow {
+        position: absolute;
+        width: 120px; height: 120px;
+        border-radius: 50%;
+        filter: blur(40px);
+        opacity: var(--pig-glow-op);
+        pointer-events: none;
+        transition: opacity 300ms ease;
+        z-index: 0;
+    }
+    .pig-bento-shell:hover .pig-glow { opacity: var(--pig-glow-hover); }
+    .pig-bento-content { position: relative; z-index: 1; height: 100%; }
+
+    .pig-cta-group {
+        padding: 6px 6px 6px 20px;
+        height: 44px;
+        border-radius: 22px;
+        background: var(--pig-cta-bg);
+        color: var(--pig-cta-text);
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        border: none;
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center; gap: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 200ms ease;
+    }
+    .pig-cta-group:hover { transform: scale(0.97); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
+    .pig-cta-group:active { transform: scale(0.94); }
+    .pig-cta-icon-ring {
+        width: 32px; height: 32px;
+        border-radius: 16px;
+        background: var(--pig-cta-ring);
+        display: flex; align-items: center; justify-content: center;
+        transition: transform 300ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .pig-cta-group:hover .pig-cta-icon-ring { transform: translateX(2px) scale(1.05); }
+
+    .pig-close-btn {
+        display: flex; align-items: center; justify-content: center;
+        width: 28px; height: 28px; border-radius: 50%; border: none;
+        background: var(--pig-close-bg);
+        color: var(--pig-sub);
+        cursor: pointer; transition: background 150ms ease, transform 150ms ease, color 150ms ease;
+    }
+    .pig-close-btn:hover { background: var(--pig-close-hover); color: var(--pig-hero); }
+    .pig-close-btn:active { transform: scale(0.9); }
+
+    .pig-text-btn {
+        background: transparent; border: none; padding: 0; cursor: pointer;
+        font-size: 12px; color: var(--pig-sub-low); text-align: left;
+        display: flex; align-items: center; gap: 4px; transition: color 200ms ease;
+    }
+    .pig-text-btn:hover { color: var(--pig-sub); }
+
+    @media (prefers-reduced-motion: reduce) {
+        .pig-hero, .pig-sub, .pig-grid, .pig-foot { animation-duration: 200ms; animation-timing-function: ease; }
+        .pig-bento-shell { transition-duration: 0ms; }
+        .pig-bento-shell:hover { transform: none; }
+    }
+`;
+
+function ProfileIntelligenceProGate({ onUnlock, onOpenNativelyAPI, onClose }: {
+    onUnlock: () => void;
+    onOpenNativelyAPI?: () => void;
+    onClose?: () => void;
+}) {
+    const theme = useResolvedTheme();
+
+    return (
+        <div className="pi-pro-gate" data-theme={theme} style={{
+            position: 'relative',
+            display: 'flex', flexDirection: 'column', height: '100%',
+            background: 'var(--pig-bg)', overflow: 'hidden',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif',
+            WebkitFontSmoothing: 'antialiased',
+        } as React.CSSProperties}>
+            <style>{PI_GATE_CSS}</style>
+
+            {/* ── Header ──────────────────────────────────────────────────────── */}
+            <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                padding: '16px 20px', flexShrink: 0,
+            }}>
+                {onClose && (
+                    <button className="pig-close-btn" onClick={onClose}>
+                        <X size={14} strokeWidth={2.5} />
+                    </button>
+                )}
+            </div>
+
+            {/* ── Main content ────────────────────────────────────────────────── */}
+            <div style={{
+                flex: 1, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                padding: '0 32px',
+            }}>
+                <div style={{ textAlign: 'center', marginBottom: 36, maxWidth: 400 }}>
+                    <h1 className="pig-hero" style={{
+                        margin: '0 0 10px', fontSize: 34, fontWeight: 700,
+                        letterSpacing: '-0.04em', lineHeight: 1.1,
+                        color: 'var(--pig-hero)',
+                    }}>
+                        Every answer.<br/>Grounded in you.
+                    </h1>
+                    <p className="pig-sub" style={{
+                        margin: 0, fontSize: 15, lineHeight: 1.4, fontWeight: 400,
+                        color: 'var(--pig-sub)', letterSpacing: '-0.01em',
+                    }}>
+                        Six intelligence layers turn your background into evidence-backed, personalized answers. Designed for professionals.
+                    </p>
+                </div>
+
+                <div className="pig-grid" style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gridTemplateRows: `${PI_GATE_ROW_PX.row1}px ${PI_GATE_ROW_PX.row2}px ${PI_GATE_ROW_PX.row3}px`,
+                    gap: PI_GATE_GAP_PX,
+                    width: '100%',
+                    maxWidth: 520,
+                    height: PI_GATE_GRID_HEIGHT_PX,
+                    marginBottom: 24,
+                }}>
+                    {PI_GATE_FEATURES.map(f => {
+                        const isHero = f.type === 'hero';
+                        const isSmall = f.type === 'small';
+                        return (
+                            <div key={f.key} className="pig-bento-shell" style={{ gridColumn: f.col, gridRow: f.row }}>
+                                <div className="pig-bento-core">
+                                    <div className="pig-glow" style={{
+                                        background: f.hex,
+                                        ...(isHero ? { top: -20, left: -20 } : isSmall ? { bottom: -20, right: -20 } : { top: -30, left: '42%' }),
+                                    }} />
+                                    {isHero ? (
+                                        // Hero card: normal top-down flow, no push-to-bottom — the same
+                                        // pixels that read as a dead gap in the middle read as intentional
+                                        // framing once they sit as trailing space below the text instead.
+                                        <div className="pig-bento-content" style={{
+                                            padding: 16,
+                                            display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                                            gap: 14,
+                                            height: '100%',
+                                        }}>
+                                            <div style={{
+                                                width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                                                background: `color-mix(in srgb, ${f.hex} 15%, var(--pig-core-bg1))`,
+                                                border: `1px solid color-mix(in srgb, ${f.hex} 30%, transparent)`,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                color: 'var(--pig-hero)',
+                                            }}>
+                                                <f.Icon size={20} strokeWidth={1.5} />
+                                            </div>
+                                            <div>
+                                                <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 600, color: 'var(--pig-hero)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+                                                    {f.label}
+                                                </h3>
+                                                {f.desc && (
+                                                    <p style={{ margin: 0, fontSize: 12, color: 'var(--pig-sub)', lineHeight: 1.4 }}>
+                                                        {f.desc}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="pig-bento-content" style={{
+                                            padding: isSmall ? 0 : '13px 16px',
+                                            display: 'flex',
+                                            flexDirection: isSmall ? 'column' : 'row',
+                                            alignItems: 'center',
+                                            justifyContent: isSmall ? 'center' : 'flex-start',
+                                            gap: isSmall ? 6 : 12,
+                                            height: '100%',
+                                        }}>
+                                            <div style={{
+                                                width: isSmall ? 'auto' : 28,
+                                                height: isSmall ? 'auto' : 28,
+                                                borderRadius: isSmall ? 0 : 10, flexShrink: 0,
+                                                background: isSmall ? 'transparent' : `color-mix(in srgb, ${f.hex} 15%, var(--pig-core-bg1))`,
+                                                border: isSmall ? 'none' : `1px solid color-mix(in srgb, ${f.hex} 30%, transparent)`,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                color: isSmall ? f.hex : 'var(--pig-hero)',
+                                            }}>
+                                                <f.Icon size={isSmall ? 18 : 16} color={isSmall ? f.hex : 'currentColor'} strokeWidth={1.5} />
+                                            </div>
+                                            <div style={{
+                                                display: 'flex', flexDirection: 'column',
+                                                alignItems: isSmall ? 'center' : 'flex-start',
+                                                minWidth: isSmall ? undefined : 0,
+                                            }}>
+                                                {/* lineHeight is explicit (not inherited) so this card's fit is a
+                                                    self-contained calculation against its own content-sized row
+                                                    (PI_GATE_ROW_PX), not dependent on an ancestor's line-height.
+                                                    WebkitLineClamp is 1 (not 2): the row is sized for exactly one
+                                                    line of description, so a future longer string should ellipsize
+                                                    instead of crowding the card's padding. */}
+                                                <h3 style={{ margin: 0, fontSize: isSmall ? 11 : 14, lineHeight: 1.2, fontWeight: 600, color: 'var(--pig-hero)', letterSpacing: '-0.02em', marginBottom: isSmall ? 0 : 2 }}>
+                                                    {f.label}
+                                                </h3>
+                                                {f.desc && (
+                                                    <p style={{
+                                                        margin: 0, fontSize: 11, color: 'var(--pig-sub)', lineHeight: 1.25,
+                                                        display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                                                    } as React.CSSProperties}>
+                                                        {f.desc}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* ── Footer ──────────────────────────────────────────────────────── */}
+            <div className="pig-foot" style={{
+                padding: '24px 32px',
+                borderTop: '1px solid var(--pig-border)',
+                display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
+                flexShrink: 0, background: 'var(--pig-bg)',
+            }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+                    {onOpenNativelyAPI && (
+                        <button className="pig-text-btn" onClick={onOpenNativelyAPI}>
+                            I have a license <ChevronRight size={12} />
+                        </button>
+                    )}
+                </div>
+
+                <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--pig-sub-low)', letterSpacing: '-0.01em', lineHeight: 1.4 }}>
+                    Currently your answers carry no personal context.<br/>
+                    <span style={{ color: '#fbbf24' }}>Unlock Pro to ground every answer in your identity, experience, and research.</span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button className="pig-cta-group" onClick={onUnlock}>
+                        Unlock Pro
+                        <div className="pig-cta-icon-ring">
+                            <ArrowUpRight size={14} strokeWidth={2.5} />
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 export function ProfileIntelligenceSettings({
     onClose,
+    onOpenNativelyAPI,
 }: {
     onClose: () => void;
+    onOpenNativelyAPI?: () => void;
 }) {
     const cachedPremium = readPremiumCache();
     const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
     const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
     const [isTrialActive] = useState(false);
     const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+    const [licenseLoaded, setLicenseLoaded] = useState(false);
     const hasProfileAccess = isPremium || isTrialActive;
     const theme = useResolvedTheme();
 
@@ -664,12 +1063,12 @@ export function ProfileIntelligenceSettings({
                 if (plan) setPremiumPlan(plan);
                 else if (!live) setPremiumPlan('');
                 writePremiumCache(live, plan);
-            }).catch(() => {});
+            }).catch(() => {}).finally(() => setLicenseLoaded(true));
         } else {
             window.electronAPI?.licenseCheckPremium?.().then((live: boolean) => {
                 setIsPremium(!!live);
                 writePremiumCache(!!live, premiumPlan);
-            }).catch(() => {});
+            }).catch(() => {}).finally(() => setLicenseLoaded(true));
         }
         window.electronAPI?.profileGetStatus?.().then(setProfileStatus).catch(() => {});
         window.electronAPI?.profileGetProfile?.().then((data: any) => {
@@ -2046,6 +2445,47 @@ export function ProfileIntelligenceSettings({
         !isPremium && !isTrialActive  ? 'pi-cta--shimmer' : '',
     ].filter(Boolean).join(' ');
 
+    // ── Shared premium-modal lifecycle handlers (used by both the gate and the
+    //    unlocked panel's own CTA, so activating/deactivating behaves the same
+    //    regardless of which surface triggered the modal) ──────────────────────
+    const handlePremiumActivated = async () => {
+        setIsPremium(true);
+        try {
+            const details = await window.electronAPI?.licenseGetDetails?.();
+            const plan = details?.plan ?? '';
+            if (plan) setPremiumPlan(plan);
+            writePremiumCache(true, plan);
+        } catch { writePremiumCache(true, premiumPlan); }
+        const status = await window.electronAPI?.profileGetStatus?.();
+        if (status) setProfileStatus(status);
+    };
+    const handlePremiumDeactivated = () => {
+        setIsPremium(false); setPremiumPlan('');
+        writePremiumCache(false, '');
+        setProfileStatus(prev => ({ ...prev, profileMode: false }));
+    };
+
+    // ── Non-pro users see the gate (wait for license verification) ────────────
+    if (!hasProfileAccess) {
+        if (!licenseLoaded) return null;
+        return (
+            <>
+                <ProfileIntelligenceProGate
+                    onUnlock={() => setIsPremiumModalOpen(true)}
+                    onOpenNativelyAPI={onOpenNativelyAPI}
+                    onClose={onClose}
+                />
+                <PremiumUpgradeModal
+                    isOpen={isPremiumModalOpen}
+                    onClose={() => setIsPremiumModalOpen(false)}
+                    isPremium={isPremium}
+                    onActivated={handlePremiumActivated}
+                    onDeactivated={handlePremiumDeactivated}
+                />
+            </>
+        );
+    }
+
     return (
         <div
             className="pi-root"
@@ -2141,22 +2581,8 @@ export function ProfileIntelligenceSettings({
                 isOpen={isPremiumModalOpen}
                 onClose={() => setIsPremiumModalOpen(false)}
                 isPremium={isPremium}
-                onActivated={async () => {
-                    setIsPremium(true);
-                    try {
-                        const details = await window.electronAPI?.licenseGetDetails?.();
-                        const plan = details?.plan ?? '';
-                        if (plan) setPremiumPlan(plan);
-                        writePremiumCache(true, plan);
-                    } catch { writePremiumCache(true, premiumPlan); }
-                    const status = await window.electronAPI?.profileGetStatus?.();
-                    if (status) setProfileStatus(status);
-                }}
-                onDeactivated={() => {
-                    setIsPremium(false); setPremiumPlan('');
-                    writePremiumCache(false, '');
-                    setProfileStatus(prev => ({ ...prev, profileMode: false }));
-                }}
+                onActivated={handlePremiumActivated}
+                onDeactivated={handlePremiumDeactivated}
             />
         </div>
     );

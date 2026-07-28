@@ -1045,6 +1045,7 @@ const App: React.FC = () => {
                           ) : (
                             <ProfileIntelligenceSettings
                               onClose={closeManagerPanel}
+                              onOpenNativelyAPI={() => openSettingsExclusive('plans')}
                             />
                           )}
                         </motion.div>
