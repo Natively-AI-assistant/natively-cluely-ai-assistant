@@ -44,6 +44,10 @@ const ENV_KEYS = [
   'NATIVELY_ASSISTANT_CLAIMS_ENFORCEMENT',
   'NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION',
   'NATIVELY_MODE_POLICY_SHADOW_OBSERVATION',
+  // EvidencePack impossible-evidence-state gate, Stage 0/1 (answer-pipeline-rebuild,
+  // 2026-07-28) — dev/test-only, same pattern.
+  'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_SHADOW',
+  'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_ENFORCE_FORBIDDEN',
 ];
 
 // The full flag set — Meeting Notes V3 product flags intentionally ship default ON;
@@ -89,6 +93,10 @@ const ALL_FLAG_KEYS = [
   'pronounRegexShadowObservation',
   // Phase 6 Slice 7 follow-up (context-rebuild, 2026-07-26) — dev/test-only, same pattern.
   'modePolicyShadowObservation',
+  // EvidencePack impossible-evidence-state gate, Stage 0/1 (answer-pipeline-rebuild,
+  // 2026-07-28) — dev/test-only, same pattern.
+  'contextOsImpossibleStateGateShadow',
+  'contextOsImpossibleStateGateEnforceForbidden',
 ];
 
 const DEFAULT_ON_KEYS = new Set([

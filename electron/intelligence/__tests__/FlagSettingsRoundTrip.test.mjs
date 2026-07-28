@@ -127,6 +127,10 @@ const EXPECTED_KEYS = [
   'pronounRegexShadowObservation',
   // Phase 6 Slice 7 follow-up (context-rebuild, 2026-07-26) — dev/test-only.
   'modePolicyShadowObservation',
+  // EvidencePack impossible-evidence-state gate, Stage 0/1 (answer-pipeline-rebuild,
+  // 2026-07-28) — dev/test-only.
+  'contextOsImpossibleStateGateShadow',
+  'contextOsImpossibleStateGateEnforceForbidden',
 ];
 
 // All NATIVELY_* env vars these flags read — cleared before/after so a leaked env from the
