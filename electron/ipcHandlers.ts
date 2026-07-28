@@ -24,6 +24,7 @@ import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/s
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
+import { mintTurnId } from './llm/turnIdentity';
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
 import { buildProfileJitPrompt } from './llm/ProfileJitPromptBuilder';
 import { decideSessionWritePolicy, type FinalGenerationMode, type SessionWriteDecision } from './llm/FinalAnswerGenerationPolicy';
@@ -870,6 +871,16 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
         myController = new AbortController();
         _chatStreamsBySender.set(senderId, { streamId: myStreamId, controller: myController });
+        // Renderer-submit mint point for manual chat (Phase 6 Slice 1, context-rebuild):
+        // this turn's stable identity, threaded into SourceAuthorityKernel.build below
+        // (via buildTurnContractIfEnabled's turnId param) instead of letting the kernel
+        // mint its own randomUUID(). Mirrors IntelligenceEngine.ts's _wtaTurnId mint point
+        // for the WTA surface, which was never reverted and has been live since Phase 3 of
+        // context-rebuild — this restores parity for the manual-chat surface, lost in commit
+        // 408827c6 (a collateral revert of unfinished Phase 6 work bundled into an unrelated
+        // fix; its dependency file electron/llm/turnIdentity.ts is now committed, so this
+        // specific piece can be safely reconstructed on its own).
+        const myTurnId = mintTurnId();
 
         // Reap this sender's conversation memory when the renderer goes away, so the
         // per-process store cannot grow unbounded across window reloads / churn and
@@ -1242,6 +1253,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               // mode's persisted default. See explicitSourceSwitch.ts.
               userExplicitSource: _userExplicitSource,
               turnSourceDecision: manualTurnSourceDecision,
+              turnId: myTurnId,
             });
             // IMPOSSIBLE-EVIDENCE-STATE GATE, Stage 0 (answer-pipeline-rebuild
             // Phase 2, docs/answer-pipeline-rebuild/03_EVIDENCEPACK_DESIGN.md).
