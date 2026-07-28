@@ -50,7 +50,7 @@ import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, 
 import { profileInterceptAllowedByRoute, modeAnswerType, type StreamRouteOptions } from "./llm/streamContextPolicy"
 import type { ActiveModeDocumentGroundingInfo } from "./services/ModesManager"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
-import { deepVariableReplacer, getByPath, injectImageIntoMessages } from './utils/curlUtils';
+import { deepVariableReplacer, getByPath, injectImageIntoMessages, flattenStructuredJsonAnswer } from './utils/curlUtils';
 import { getImageOptimizer } from './services/screen/ImageOptimizer';
 import curl2Json from "@bany/curl-to-json";
 import { CustomProvider, CurlProvider } from './services/CredentialsManager';
@@ -2425,7 +2425,7 @@ const isMultimodal = !!(imagePaths?.length);
       }
 
       if (this.activeCurlProvider) {
-        return await this.chatWithCurl(cloudUserContent, skipSystemPrompt ? undefined : this.injectLanguageInstruction(CUSTOM_SYSTEM_PROMPT), cloudImagePaths?.[0]);
+        return await this.chatWithCurl(cloudUserContent, skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || CUSTOM_SYSTEM_PROMPT), cloudImagePaths?.[0]);
       }
 
       if (this.customProvider) {
@@ -3260,7 +3260,7 @@ const isMultimodal = !!(imagePaths?.length);
 
       const answer = getByPath(response.data, responsePath);
 
-      if (typeof answer === 'string') return answer;
+      if (typeof answer === 'string') return flattenStructuredJsonAnswer(answer) ?? answer;
       return JSON.stringify(answer); // Fallback if they pointed to an object
 
     } catch (error: any) {
