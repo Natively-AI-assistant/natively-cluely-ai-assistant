@@ -29,16 +29,19 @@ function readVersion() {
   return String(pkg.version);
 }
 
-function findArtifacts() {
+function findArtifacts(version) {
   const dirs = [path.join(repoRoot, 'release'), path.join(repoRoot, 'dist')];
+  const versionNeedle = String(version);
   const patterns = [/\.dmg$/i, /\.zip$/i, /latest-mac\.yml$/i, /\.blockmap$/i];
   const found = [];
   for (const dir of dirs) {
     if (!fs.existsSync(dir)) continue;
     for (const name of fs.readdirSync(dir)) {
-      if (patterns.some((re) => re.test(name))) {
-        found.push(path.join(dir, name));
-      }
+      if (!patterns.some((re) => re.test(name))) continue;
+      // Always include updater metadata; for binaries only ship this version.
+      const isMeta = /latest-mac\.yml$/i.test(name);
+      if (!isMeta && !name.includes(versionNeedle)) continue;
+      found.push(path.join(dir, name));
     }
   }
   // Prefer release/ over dist/ duplicates by basename
@@ -52,7 +55,7 @@ function findArtifacts() {
 function main() {
   const version = readVersion();
   const tag = `v${version}`;
-  const artifacts = findArtifacts();
+  const artifacts = findArtifacts(version);
   if (!artifacts.length) {
     fail('No .dmg/.zip artifacts found in release/ or dist/. Run `npm run app:build:fork` first.');
   }
