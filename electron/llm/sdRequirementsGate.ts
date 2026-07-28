@@ -575,8 +575,11 @@ export function enforceStructuralGate(text: string, sdPhase: SdPhase | undefined
  */
 export const POST_REQUIREMENTS_REWIND_START_PATTERNS: RegExp[] = [
   /Here is the current draft of our requirements/i,
+  /Here is the updated draft of our requirements/i,
   /\*\*Requirements Draft:\*\*/i,
+  /\*\*Updated Requirements Draft:\*\*/i,
   /Requirements Draft:/i,
+  /Updated Requirements Draft:/i,
   /Clarify Requirements:/i,
   /Let's step back and formalize the \*\*Requirements\*\*/i,
   /(?:^|\n)\s*\*\*Functional Requirements:?\*\*\s*(?:\n|$)/i,

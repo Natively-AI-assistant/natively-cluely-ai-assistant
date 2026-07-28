@@ -18,6 +18,7 @@ import {
   fillSlotFromInterviewer,
   softRefuseIfPrematureAdvance,
   deriveSdPhase,
+  isChecklistComplete,
   isDataFlowRequired,
   nextEligibleSlots,
   clarifierBudgetFor,
@@ -302,13 +303,10 @@ export function appendSimPostRequirementsNudge(
 }
 
 /**
- * Sim-only (SPEC 15 live miss): strip late Requirements Draft restatements from
- * the completed WTA answer when T2 pins sdProblemKey and the session artifact is
- * already post_requirements.
- *
- * Independent of answerType — clarifier turns often plan as general_meeting_answer,
- * which early-returns from prepareSdRequirementsForAnswerPlan and never arms the
- * WTA stream strip.
+ * Sim-only (SPEC 15/16/17): strip late Requirements Draft restatements from the
+ * completed WTA answer when T2 pins sdProblemKey and Requirements are done —
+ * either gateClosed (post_requirements) OR checklist complete (advance may not
+ * have fired yet). Independent of answerType.
  */
 export function applySimPostRequirementsAnswerStrip(
   text: string,
@@ -320,6 +318,10 @@ export function applySimPostRequirementsAnswerStrip(
   const pinned =
     typeof opts.sdProblemKey === 'string' && opts.sdProblemKey.trim().length > 0;
   if (!pinned) return String(text || '');
-  if (deriveSdPhase(opts.artifact) !== 'post_requirements') return String(text || '');
+  const artifact = opts.artifact ?? null;
+  const requirementsDone =
+    deriveSdPhase(artifact) === 'post_requirements' ||
+    (artifact != null && isChecklistComplete(artifact));
+  if (!requirementsDone) return String(text || '');
   return stripPostRequirementsRewind(text);
 }
