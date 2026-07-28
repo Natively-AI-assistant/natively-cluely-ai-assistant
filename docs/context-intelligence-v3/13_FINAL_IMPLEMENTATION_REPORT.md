@@ -38,9 +38,9 @@ Total production change: **51 lines across 3 files, purely additive** — one `t
 | 1 — Investigation | **COMPLETE** | `01_INVESTIGATION_REPORT.md` — 22 findings + reproduction |
 | 2 — Benchmarks | **PARTIAL** | `02_RETRIEVAL_BENCHMARK.md`, `03_KEEP_REMOVE_MATRIX.md` — 5 of 11 configs executed |
 | 3 — Contracts | **COMPLETE** | `04`–`08` |
-| 4 — Core implementation | **PARTIAL** | `electron/context-intelligence/` — contracts, source authority, scope filter, mode registry, turn classifier, BM25, AnswerTrace · **66 tests** |
+| 4 — Core implementation | **SUBSTANTIALLY COMPLETE** | contracts · source authority + scope filter · mode registry · turn classifier · BM25 · AnswerTrace · **context packer · prompt composer · conversation state** · **120 tests** |
 | 5 — Ingestion migration | **DONE** (scope-reduced by decision) | `retrieval/legacy-adapter.ts` — scopeId + the dropped signals |
-| 6 — Surface integration | **PARTIAL** — orchestrator + flag built and tested; no surface wired yet | `orchestration/orchestrator.ts`, `contracts/flag.ts` |
+| 6 — Surface integration | **PARTIAL** — orchestrator, flag, composer and packer built and tested end-to-end; **no surface wired yet** | `orchestration/orchestrator.ts` |
 | 7 — UI simplification | **NOT STARTED** | — |
 | 8 — Full verification | **PARTIAL** — F21 unblocked it; suite now runs (6593 tests, 67 s). Golden suite + provider eval not run | §1.6.1 of `01_…` |
 | 9 — Legacy removal | **BLOCKED, deliberately not executed** | `11_LEGACY_REMOVAL_MATRIX.md` |
@@ -132,9 +132,19 @@ I also proposed re-ordering §25.3 to put `AnswerTrace` emission before surface 
 | `contracts/flag.ts` | One flag, `DEFAULT_ENABLED=false`, **identical in dev/test/prod** — tested against every `isInternalDevTestContext` condition |
 | `retrieval/legacy-adapter.ts` | Stamps `scopeId`; carries `answerabilityScore`/`rerankScore` the legacy type drops; **fails closed** on unknown type/version |
 | `orchestration/orchestrator.ts` | One frozen decision; injected retrieval; answerability by **claim authority, not similarity** |
-| `__tests__/` | **92 tests, 92 pass, process exits cleanly** |
+| `generation/context-packer.ts` | Deterministic, budgeted, dedup'd; **XML-escapes evidence** so retrieved text cannot forge a tag |
+| `generation/prompt-composer.ts` | THE composer. Safety rules first; realtime instructions contained in a self-limiting tag |
+| `question/conversation-state.ts` | Size-bounded, scope-keyed, **resets on meeting change**; prior assistant output is a referent, never evidence |
+| `__tests__/` | **120 tests, 120 pass, process exits cleanly** |
 
-Two classifier bugs were found by its own tests and fixed rather than papered over:
+**Four bugs were found by these tests and fixed rather than papered over** — each in code written minutes earlier, and each of a kind that fails silently in production:
+
+- `SKILL_RE` required "experience **with** X", so *"Tell me about your Kubernetes experience"* classified as `AMBIGUOUS` with **no claims** — no source required, fabrication permitted.
+- `extractEntities` captured sentence-initial capitals, so *"Tell me about the Cassandra migration"* set `activeTopic = "Tell"` and the next pronoun resolved against a verb.
+- A hard `worker.unref()` threw against the **mock** Worker in test doubles, silently disabling the model.
+- And the two classifier bugs below.
+
+
 - "How does TCP congestion control work?" was mis-detected as a *follow-up* because it begins with "how" — denying it the fast path. Fixed by bounding follow-up detection to short, subject-less questions.
 - Mixed questions ("tell me about your WebRTC project **and** explain how WebRTC connects") lost their general half. Fixed by classifying **per clause** and unioning — which is what §3.7 claim-level grounding actually requires.
 
