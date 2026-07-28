@@ -1614,7 +1614,12 @@ export class IntelligenceEngine extends EventEmitter {
                 answerPlanRaw,
                 sdGateQuestion,
                 options?.screenContext,
-                { uiAdvance: options?.sdRequirementsUiAdvance === true },
+                {
+                    uiAdvance: options?.sdRequirementsUiAdvance === true,
+                    sdProblemKeyPinned:
+                        typeof options?.sdProblemKey === 'string' &&
+                        options.sdProblemKey.trim().length > 0,
+                },
             );
             const answerPlan = sdPrepared.answerPlan;
             if (sdPrepared.softRefuseSpoken) {
@@ -3329,7 +3334,7 @@ export class IntelligenceEngine extends EventEmitter {
         answerPlan: import('./llm/AnswerPlanner').AnswerPlan,
         problemQuestion: string,
         screenContext?: ScreenContext | null,
-        gateOpts?: { uiAdvance?: boolean },
+        gateOpts?: { uiAdvance?: boolean; sdProblemKeyPinned?: boolean },
     ): { answerPlan: import('./llm/AnswerPlanner').AnswerPlan; softRefuseSpoken: string | null } {
         if (answerPlan.answerType !== 'system_design_answer') {
             this.publishSdRequirementsGateStatus(false);
@@ -3344,6 +3349,16 @@ export class IntelligenceEngine extends EventEmitter {
                 .filter((it) => it.role === 'user')
                 .map((it) => it.text)
                 .slice(-1);
+            // SPEC 13: when T2 pins sdProblemKey, also fill remaining checklist
+            // slots from recent SUT (assistant) answers — candidate-led sims
+            // state FR/NFR in assistant speech, not interviewer speech.
+            const candidateFillTexts = gateOpts?.sdProblemKeyPinned
+                ? (ctx as ContextItem[])
+                    .filter((it) => it.role === 'assistant')
+                    .map((it) => it.text)
+                    .filter(Boolean)
+                    .slice(-3)
+                : undefined;
             const { screenEvidenceText } = require('./llm/sdRequirementsLive') as typeof import('./llm/sdRequirementsLive');
             const screenBlob = screenEvidenceText(screenContext as any);
             // Only treat the current question as advance when it itself matches
@@ -3357,6 +3372,7 @@ export class IntelligenceEngine extends EventEmitter {
                 interviewerTexts,
                 screenTexts: screenBlob ? [screenBlob] : undefined,
                 candidateTexts,
+                candidateFillTexts,
                 assistantAdvanceTexts: detectAdvanceSignal(problemQuestion, 'mic')
                     ? [problemQuestion]
                     : undefined,
