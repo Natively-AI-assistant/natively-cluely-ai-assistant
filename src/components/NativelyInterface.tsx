@@ -2,6 +2,7 @@ import { animate, AnimatePresence, motion, useMotionValue, useTransform } from '
 import {
   ArrowRight,
   ChevronDown,
+  ChevronsDown,
   Code,
   Copy,
   Check,
@@ -2808,30 +2809,38 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // rAF-coalesced scroll listener below (used today for checkCodeVisibility)
   // rather than adding a second `scroll` listener / rAF loop.
   //
-  // Order matters: the near-bottom re-arm check runs BEFORE the
-  // decreased-scrollTop interrupt check. A content-height shrink (e.g. a
-  // message removed, or finalize replacing streamed text) can make the
-  // browser clamp scrollTop downward on its own, which looks identical to a
-  // user scrolling up (delta < 0) — but those clamps always land AT the
-  // bottom, so checking distance-from-bottom first makes them self-healing
-  // instead of falsely arming suppression.
+  // Order matters, but NOT the way an earlier version of this comment
+  // claimed. The arm check (delta < 0) now runs FIRST, unconditionally on
+  // direction — a distance-gated re-arm-first ordering silently swallowed
+  // any real upward scroll that hadn't yet traveled past the re-arm
+  // tolerance, which is every scrollbar-thumb-drag under ~28px and, during
+  // active auto-follow (where the view sits within a few px of bottom by
+  // design), effectively the first several frames of ANY upward gesture on
+  // this path — a real bug, not a hypothetical: it made scrollbar-drag
+  // interrupts nearly impossible to trigger, and is one of the few
+  // interrupt channels left when OS-level click-through (stealth mode) is
+  // active and native `wheel` events never reach this window at all (see
+  // WindowHelper.syncOverlayInteractionPolicy — no per-element hover
+  // exception exists for the chat scroll container).
   //
-  // That same native clamp is also why this re-arm is gated OFF while a
-  // width/height transition is actively in flight (heightReportSuppressedUntilRef
-  // is the existing "spring is running" signal, set in startTransition). A
-  // transition growing clientHeight shrinks the max scrollable position
-  // (scrollHeight - clientHeight), and if the user's post-interrupt scrollTop
-  // is within that shrinking margin, the BROWSER forces it back toward the
-  // bottom on its own — no user input involved. Read purely by geometry, that
-  // native clamp is indistinguishable from "the user scrolled back down" and
-  // would silently clear a real interrupt within the same transition that
-  // triggered it. Verified live (see the code-block-transition repro during
-  // this fix): with this guard absent, a genuine wheel-armed interrupt got
-  // erased mid-transition even though pinScrollBottomIfNeeded itself never
-  // wrote a single frame. A deliberate user wheel-down tick still re-arms
-  // immediately regardless of an in-flight transition — see onWheel's
-  // deltaY>0 branch above, which is unambiguous because it can only
-  // originate from real input.
+  // This does NOT reopen the native-clamp false-positive the old ordering
+  // was defending against (a content-height SHRINK — e.g. finalize
+  // replacing streamed text, or a code block collapsing — can make the
+  // browser clamp scrollTop down on its own, which also reads as delta<0).
+  // Two things jointly rule that out:
+  //   1. `!isAutoScrollSuppressed()` already gates the arm branch. A shrink
+  //      that happens while ALREADY suppressed is a no-op here regardless of
+  //      ordering — suppression can't be armed twice.
+  //   2. A shrink while NOT yet suppressed always originates from a
+  //      `messages` state change (finalize/edit) or a layout change our own
+  //      effects observe synchronously in the same commit — the streaming
+  //      effect (when not suppressed) and pinScrollBottomIfNeeded (when
+  //      wasAtBottomRef is true) both re-pin scrollTop AND resync
+  //      lastScrollTopRef in that same synchronous pass, strictly before the
+  //      browser's own resulting `scroll` event can fire asynchronously and
+  //      reach this handler. By the time this handler runs, lastScrollTopRef
+  //      already reflects the corrected position, so the native clamp's own
+  //      delta reads as ~0, not negative.
   const handleScrollInterrupt = useCallback(() => {
     if (!autoScroll) return;
     const container = scrollContainerRef.current;
@@ -2840,19 +2849,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       container.scrollHeight - (container.scrollTop + container.clientHeight);
     const delta = container.scrollTop - lastScrollTopRef.current;
     lastScrollTopRef.current = container.scrollTop;
-
-    const transitionInFlight = Date.now() < heightReportSuppressedUntilRef.current;
-    if (distanceFromBottom <= 28 && !transitionInFlight) {
-      // Looser tolerance than the 8px used for the sticky-bottom transition
-      // pin (wasAtBottomRef) — this is a manual re-arm, not a pixel-perfect
-      // "still at bottom" check. Lets a user who scrolled up, read, then
-      // scrolled back down themselves resume live-following without waiting
-      // for the next message.
-      autoScrollSuppressedForMsgIdRef.current = null;
-      setJumpToLatestVisible(false);
-      clearScrollHeadroom();
-      return;
-    }
 
     // Only arm on a FRESH interrupt (not already suppressed for this stream).
     // Without this guard, once reserveScrollHeadroomIfNeeded's spacer growth
@@ -2881,6 +2877,34 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // withheld — scrolling up in a finished, static conversation must not
       // surface a pill with no suppression behind it.
       setJumpToLatestVisible(streamingMsgIdRef.current !== null);
+      return;
+    }
+
+    // Re-arm check — runs only when the arm branch above didn't fire this
+    // frame. Still gated OFF while a width/height transition is actively in
+    // flight (heightReportSuppressedUntilRef, the existing "spring is
+    // running" signal set in startTransition): a transition growing
+    // clientHeight shrinks the max scrollable position, and if the user's
+    // post-interrupt scrollTop falls within that shrinking margin, the
+    // BROWSER forces it back toward the bottom on its own — no user input
+    // involved. Read purely by geometry, that native clamp is
+    // indistinguishable from "the user scrolled back down" and would
+    // silently clear a real interrupt within the same transition that
+    // triggered it — verified live via the code-block-transition repro
+    // during the original version of this fix. A deliberate user wheel-down
+    // tick still re-arms immediately regardless of an in-flight transition
+    // (see onWheel's deltaY>0 branch above, unambiguous since it can only
+    // originate from real input).
+    const transitionInFlight = Date.now() < heightReportSuppressedUntilRef.current;
+    if (distanceFromBottom <= 28 && !transitionInFlight) {
+      // Looser tolerance than the 8px used for the sticky-bottom transition
+      // pin (wasAtBottomRef) — this is a manual re-arm, not a pixel-perfect
+      // "still at bottom" check. Lets a user who scrolled up, read, then
+      // scrolled back down themselves resume live-following without waiting
+      // for the next message.
+      autoScrollSuppressedForMsgIdRef.current = null;
+      setJumpToLatestVisible(false);
+      clearScrollHeadroom();
     }
   }, [autoScroll, setJumpToLatestVisible, clearScrollHeadroom, isAutoScrollSuppressed]);
 
@@ -7927,6 +7951,7 @@ Provide only the answer, nothing else.`;
                 <AnimatePresence>
                   {autoScroll && showJumpToLatest && (
                     <motion.button
+                      key="jump-to-latest"
                       type="button"
                       // Same "don't steal focus from the chat input" idiom
                       // ResizeToggle uses — see its onMouseDown comment.
@@ -7953,13 +7978,47 @@ Provide only the answer, nothing else.`;
                       // buttons etc.) — deliberately a lighter tone so
                       // embedded controls pop against the panel body instead
                       // of blending into it.
+                      //
+                      // No inline border here (a previous version hardcoded
+                      // one): every other .overlay-icon-surface consumer in
+                      // this file (e.g. the X/remove-attachment button) is
+                      // borderless and lets each theme's CSS own the edge
+                      // treatment entirely — modern's rule sets a real
+                      // `border` with !important, but liquid-glass's rule
+                      // deliberately has NO border at all, relying purely on
+                      // its box-shadow insets for the glass edge highlight
+                      // (matching border-color:transparent on the sibling
+                      // .overlay-resize-toggle-surface glass rule). A
+                      // hardcoded inline border here would sit on top of the
+                      // glass box-shadow and read as a generic flat outline
+                      // instead of the intended glass look — dropping it
+                      // lets default/liquid-glass/modern each fully own their
+                      // own established per-theme styling, which is what
+                      // "same style as default, liquid-glass-y in glass,
+                      // modern-y in modern" actually means here.
                       className="absolute right-3 bottom-full mb-2 z-20 no-drag flex h-[28px] w-[28px] items-center justify-center overflow-hidden rounded-full overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
-                      style={{
-                        ...appearance.iconStyle,
-                        borderWidth: '1px',
-                        borderStyle: 'solid',
-                        borderColor: 'rgba(255, 255, 255, 0.14)',
-                      }}
+                      // `position: 'absolute'` inline is NOT redundant with the
+                      // `absolute` Tailwind class above — modern theme's own
+                      // `[data-interface-theme="modern"] .overlay-icon-surface`
+                      // rule (index.css) sets `position: relative` (needed for
+                      // that rule's own ::before gloss pseudo-element, which
+                      // every other .overlay-icon-surface consumer wants,
+                      // since none of them are absolutely positioned floating
+                      // chrome like this pill is). That selector is MORE
+                      // specific than a bare `.absolute` utility class (two
+                      // class-level selectors vs one) and isn't tagged
+                      // !important, so in modern theme it silently won the
+                      // cascade and knocked this button out of its intended
+                      // floating position back into normal document flow —
+                      // confirmed live: the pill rendered pinned to the row's
+                      // LEFT edge instead of floating top-right in modern
+                      // theme only (default/liquid-glass don't set `position`
+                      // on this class at all, so they were unaffected). An
+                      // inline style always wins over a non-!important class
+                      // rule regardless of selector specificity, so this is
+                      // the surgical fix — no change to the shared class used
+                      // by every other embedded icon button in the app.
+                      style={{ ...appearance.iconStyle, position: 'absolute' }}
                       initial={prefersReducedMotionRef.current ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={prefersReducedMotionRef.current ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
@@ -7967,13 +8026,41 @@ Provide only the answer, nothing else.`;
                       whileTap={prefersReducedMotionRef.current ? undefined : { scale: 0.92 }}
                       transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
                     >
-                      {/* Jelly-gloss sheen — identical to ResizeToggle's */}
-                      <span className="pointer-events-none absolute inset-x-1 top-0.5 h-[45%] rounded-full bg-gradient-to-b from-white/20 to-white/0 blur-[0.5px]" />
+                      {/* No manual gloss-sheen span here (an earlier version
+                          copied ResizeToggle's jelly-gloss <span> wholesale).
+                          Removed: the other overlay-icon-surface consumer in
+                          this file (the X/remove-attachment button, ~line
+                          8116) has no such decoration and relies entirely on
+                          the shared CSS class for its per-theme look — modern
+                          theme's own `.overlay-icon-surface::before` rule
+                          already generates an equivalent gloss pseudo-element
+                          purely in CSS, so a manual span duplicated it there,
+                          and liquid-glass's box-shadow insets already supply
+                          its own highlight. In DEFAULT theme specifically the
+                          manual sheen had no CSS counterpart to duplicate, so
+                          it just added an out-of-place glossy highlight none
+                          of this theme's other flat embedded buttons have —
+                          exactly the "mixed-in modern styling" this button
+                          shouldn't have. Dropping it makes all three themes
+                          consistent with how every other overlay-icon-surface
+                          button in the app is styled: pure CSS-class-driven,
+                          no bespoke JSX decoration layered on top. */}
                       <span
                         className="relative grid place-items-center"
                         style={{ transform: 'translate(-0.5px, -0.5px)' }}
                       >
-                        <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} />
+                        {/* ChevronsDown (double chevron), not ChevronDown —
+                            this file already uses a single ChevronDown for an
+                            unrelated expand/collapse accordion affordance
+                            (~line 8397), so reusing it here for "jump to
+                            latest" would collide with that established
+                            meaning. Double-down-chevron is also the
+                            conventional icon for "skip to the newest content"
+                            in chat UIs (Discord's own jump-to-present button
+                            uses the same glyph), reading more clearly as
+                            "skip to end" than a single chevron, which more
+                            commonly signals "expand/more options". */}
+                        <ChevronsDown className="h-3.5 w-3.5" strokeWidth={2} />
                       </span>
                     </motion.button>
                   )}
