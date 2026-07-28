@@ -1878,7 +1878,14 @@ export class IntelligenceEngine extends EventEmitter {
             // PI v3 (W5): modeContextPromise is the parallel-prefetched mode-context retrieval
             // (overlaps intent classification + profile grounding). Both args coexist —
             // generateStream's signature is (…activeSkill, domContext, candidateProfile, answerPlan, preFetchedModeContext).
-            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined, answerPlan, modeContextPromise, requestSnapshot);
+            // SPEC 14 (sim-only): after Requirements gate closes, soft-nudge WTA not to
+            // restate FR/NFR drafts. No-op unless options.sdProblemKey is pinned.
+            const { appendSimPostRequirementsNudge } = require('./llm/sdRequirementsLive') as typeof import('./llm/sdRequirementsLive');
+            const wtaPromptInstruction = appendSimPostRequirementsNudge(options?.promptInstruction, {
+                sdProblemKey: options?.sdProblemKey,
+                sdPhase: (answerPlan as any).sdPhase || null,
+            });
+            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, wtaPromptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined, answerPlan, modeContextPromise, requestSnapshot);
             let streamAborted = false;
             let emittedStreamingToken = false;
             let streamingTokenBuffer = '';

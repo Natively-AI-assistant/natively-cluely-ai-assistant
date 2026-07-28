@@ -470,3 +470,46 @@ describe('WhatToAnswerLLM gate activates when live prepare stamps sdPhase', () =
     assert.doesNotMatch(spoken, /Deep Dives?/i);
   });
 });
+
+describe('appendSimPostRequirementsNudge (SPEC 14)', () => {
+  test('appends strong nudge when sdProblemKey pinned and post_requirements', () => {
+    const out = live.appendSimPostRequirementsNudge('Be casual.', {
+      sdProblemKey: 'Design Bitly',
+      sdPhase: 'post_requirements',
+    });
+    assert.match(out, /Be casual/);
+    assert.match(out, /already locked/i);
+    assert.match(out, /do NOT restart Requirements/i);
+  });
+
+  test('identity when sdProblemKey unset (product path)', () => {
+    assert.equal(
+      live.appendSimPostRequirementsNudge('Be casual.', {
+        sdPhase: 'post_requirements',
+      }),
+      'Be casual.',
+    );
+  });
+
+  test('identity while still in requirements phase', () => {
+    assert.equal(
+      live.appendSimPostRequirementsNudge('Be casual.', {
+        sdProblemKey: 'Design Bitly',
+        sdPhase: 'requirements',
+      }),
+      'Be casual.',
+    );
+  });
+
+  test('idempotent when nudge already present', () => {
+    const once = live.appendSimPostRequirementsNudge('x', {
+      sdProblemKey: 'p',
+      sdPhase: 'post_requirements',
+    });
+    const twice = live.appendSimPostRequirementsNudge(once, {
+      sdProblemKey: 'p',
+      sdPhase: 'post_requirements',
+    });
+    assert.equal(twice, once);
+  });
+});
