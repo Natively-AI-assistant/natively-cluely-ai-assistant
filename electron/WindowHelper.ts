@@ -47,6 +47,10 @@ export class WindowHelper {
   private contentProtection: boolean = false;
   private opacityTimeout: NodeJS.Timeout | null = null;
   private lastLauncherShowInactive: boolean | null = null;
+  // Tracks whether the launcher window's native vibrancy/background/shadow
+  // are currently in their "preview" (transparent) state — see
+  // setLauncherOpacityPreview().
+  private launcherOpacityPreviewActive: boolean = false;
 
   // Constants
   // FIXED OVERLAY WINDOW WIDTH — the OS window is BORN at this width, SHOWN at
@@ -644,6 +648,17 @@ export class WindowHelper {
 
       wc.on('did-finish-load', () => {
         console.log(`[Renderer:${tag}] did-finish-load (bundle evaluated)`);
+        // The Interface Opacity live-preview (see setLauncherOpacityPreview)
+        // toggles the launcher window's native vibrancy/background/shadow
+        // outside of React — those native properties survive a same-window
+        // reload (e.g. the render-process-gone auto-recovery path in
+        // main.ts), but the fresh renderer always boots with its preview
+        // React state at rest (not mid-drag). Force the native state back to
+        // "not previewing" on every load so a crash/reload mid-drag can never
+        // leave the window stuck transparent/shadowless.
+        if (tag === 'launcher') {
+          this.setLauncherOpacityPreview(false);
+        }
       });
 
       wc.on('dom-ready', () => {
@@ -792,6 +807,9 @@ export class WindowHelper {
       this.appState.recordNativeOomTrace('launcher-window-closed', { window: 'launcher' });
       this.appState.stopNativeOomContentTrace('launcher-window-closed');
       this.launcherWindow = null;
+      // Reset so a later launcher recreation doesn't inherit a stale "preview
+      // active" flag with no corresponding transparent/vibrancy-off window.
+      this.launcherOpacityPreviewActive = false;
       // If launcher closes, we should probably quit app or close overlay
       if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
         this.overlayWindow.close();
@@ -986,6 +1004,60 @@ export class WindowHelper {
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
       this.overlayWindow.hide();
     }
+  }
+
+  // Settings > Interface Opacity: while the user holds the slider, the
+  // renderer already hides every settings/launcher DOM layer (see
+  // startPreviewingOpacity() in SettingsOverlay.tsx) so only the opacity
+  // slider card and the mockup preview remain painted. That is not enough on
+  // its own — the launcher BrowserWindow's macOS `vibrancy: 'under-window'`
+  // paints an NSVisualEffectView material independent of any DOM content, so
+  // the "empty" areas behind the hidden DOM still rendered as an opaque-ish
+  // dark surface instead of the real desktop, defeating the point of a live
+  // preview. `transparent` itself is a creation-time-only BrowserWindow
+  // option (Electron cannot toggle it after construction), but vibrancy and
+  // backgroundColor ARE mutable at runtime, so this flips only those two for
+  // the duration of the hold.
+  //
+  // macOS-only: on Windows/Linux the launcher window is created with
+  // `transparent: false` (see createWindow()), so there is no runtime call
+  // that makes it see-through — the preview there stays boxed in the
+  // window's opaque backgroundColor. Fixing that would require creating the
+  // launcher as an always-transparent window, which the product wants only
+  // for the in-meeting overlay, not the main dashboard.
+  public setLauncherOpacityPreview(active: boolean): void {
+    if (process.platform !== 'darwin') return;
+    if (!this.launcherWindow || this.launcherWindow.isDestroyed()) return;
+    // Only short-circuit the "start previewing" case when already previewing
+    // — that branch is the one worth deduping (60fps drag ticks etc. never
+    // call this, but a defensive dedupe costs nothing). The "stop
+    // previewing" branch must NOT be gated the same way: its values are
+    // exactly this window's construction defaults, so re-applying them is
+    // always idempotent, and it's the only path that can resync a window
+    // whose state disagrees with the flag (e.g. after the did-finish-load
+    // resync below runs while the flag was stuck at `true` from a crash
+    // mid-drag — see that handler's comment).
+    if (active && this.launcherOpacityPreviewActive) return;
+
+    if (active) {
+      this.launcherWindow.setVibrancy(null);
+      this.launcherWindow.setBackgroundColor('#00000000');
+      // macOS renders a native drop shadow from the transparent window's own
+      // painted alpha. With vibrancy off, the mockup preview's rgba surfaces
+      // are exactly that painted alpha — so as the slider pushes opacity up,
+      // the OS draws a soft shadow around the mockup that stacks on top of
+      // the mockup's own CSS shadows/border. The real overlay window
+      // (createWindow()'s overlaySettings) is `hasShadow: false` for this
+      // same reason; the launcher only needs it off for the duration of
+      // this preview, since normal launcher UI still wants its window shadow.
+      this.launcherWindow.setHasShadow(false);
+    } else {
+      // Must match the values createWindow() applies at construction.
+      this.launcherWindow.setVibrancy('under-window');
+      this.launcherWindow.setBackgroundColor('#000000');
+      this.launcherWindow.setHasShadow(true);
+    }
+    this.launcherOpacityPreviewActive = active;
   }
 
   public showMainWindow(inactive?: boolean): void {

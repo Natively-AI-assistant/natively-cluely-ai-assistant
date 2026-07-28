@@ -9776,6 +9776,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     return;
   });
 
+  // Interface Opacity "hold to preview" (Settings > General): the renderer
+  // hides the settings/launcher DOM while previewing (see
+  // startPreviewingOpacity() in SettingsOverlay.tsx). This pair additionally
+  // strips the launcher window's own native vibrancy/background so what's
+  // left behind the hidden DOM is the real desktop, not an opaque material —
+  // see WindowHelper.setLauncherOpacityPreview() for why that's needed.
+  safeHandle('set-launcher-opacity-preview', async (_, active: boolean) => {
+    appState.getWindowHelper().setLauncherOpacityPreview(!!active);
+  });
+
   // ── Permissions ──────────────────────────────────────────────
   safeHandle('permissions:check', async () => {
     if (process.platform === 'darwin') {

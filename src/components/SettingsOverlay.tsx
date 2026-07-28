@@ -55,10 +55,14 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
 
     return (
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none bg-transparent">
-                {/* NativelyInterface Widget — opacity controlled by the slider */}
+                {/* NativelyInterface Widget — opacity controlled by the slider.
+                    Shifted up enough to clear the opacity-slider-card, which
+                    stays visible (and in its normal in-flow position) during
+                    the preview — see #opacity-slider-card's z-index override
+                    in startPreviewingOpacity(). */}
                 <div
                     id="mockup-natively-interface"
-                    className="flex flex-col items-center pointer-events-none -mt-56"
+                    className="flex flex-col items-center pointer-events-none -mt-96"
                 >
                     {/* TopPill Replica */}
                     <div className="flex justify-center mb-2 select-none z-50">
@@ -586,42 +590,74 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Only macOS can actually make the launcher window see-through during
+    // the preview (setLauncherOpacityPreview is a no-op elsewhere — see its
+    // doc comment in WindowHelper.ts: Windows/Linux launcher windows are
+    // created with `transparent: false`). On those platforms, hiding the
+    // Settings backdrop/panel/banners gains nothing — there's no real
+    // desktop showing through regardless — and instead leaves the mockup
+    // floating over a flat opaque background with no context, which reads as
+    // more broken than just leaving the normal (non-transparent) Settings
+    // backdrop visible behind it. So the DOM hide/restore below is itself
+    // macOS-only; non-macOS keeps its backdrop and only toggles the mockup.
+    const canPreviewTransparency = document.documentElement.getAttribute('data-platform') === 'darwin';
+
     const startPreviewingOpacity = () => {
         // Bug fix #5: guard against rapid repeated calls (double pointerDown / touch events)
         if (isPreviewingOpacity) return;
 
-        // Direct DOM mutation for sub-millisecond instant hide (bypassing slow React tree diffs)
-        document.body.classList.add('disable-transitions');
+        if (canPreviewTransparency) {
+            // Direct DOM mutation for sub-millisecond instant hide (bypassing slow React tree diffs)
+            document.body.classList.add('disable-transitions');
 
-        const backdrop = document.getElementById('settings-backdrop');
-        const wrapper = document.getElementById('settings-panel-wrapper');
-        const panel = document.getElementById('settings-panel');
-        const card = document.getElementById('opacity-slider-card');
+            const backdrop = document.getElementById('settings-backdrop');
+            const wrapper = document.getElementById('settings-panel-wrapper');
+            const panel = document.getElementById('settings-panel');
+            const card = document.getElementById('opacity-slider-card');
+            const launcher = document.getElementById('launcher-container');
+            // Global banners/toasts/modals (update, quota, trial, onboarding,
+            // ad promos) — mounted as siblings of #launcher-container in
+            // App.tsx, not inside it, so they need their own hide pass or
+            // whichever one happens to be visible stays opaque on top of the
+            // "transparent" preview. See the data-opacity-preview-surface
+            // wrapper comment in App.tsx.
+            const globalSurfaces = document.querySelectorAll('[data-opacity-preview-surface]');
+
+            if (backdrop) {
+                backdrop.style.backgroundColor = 'transparent';
+                backdrop.style.backdropFilter = 'none';
+                backdrop.style.transition = 'none';
+            }
+            if (wrapper) {
+                wrapper.style.backgroundColor = 'transparent';
+                wrapper.style.border = 'none';
+                wrapper.style.boxShadow = 'none';
+            }
+            if (panel) {
+                panel.style.visibility = 'hidden';
+            }
+            if (launcher) {
+                launcher.style.visibility = 'hidden';
+            }
+            globalSurfaces.forEach((el) => {
+                (el as HTMLElement).style.visibility = 'hidden';
+            });
+
+            if (card) {
+                card.style.visibility = 'visible';
+                card.style.position = 'relative';
+                card.style.zIndex = '9999';
+            }
+
+            // Strip the launcher window's own vibrancy/background (macOS) so
+            // the areas behind the DOM we just hid show the real desktop
+            // instead of an opaque NSVisualEffectView material. See
+            // WindowHelper.setLauncherOpacityPreview() for why this can't be
+            // done with CSS alone.
+            window.electronAPI?.setLauncherOpacityPreview?.(true);
+        }
+
         const mockup = document.getElementById('settings-mockup-wrapper');
-        const launcher = document.getElementById('launcher-container');
-
-        if (backdrop) {
-            backdrop.style.backgroundColor = 'transparent';
-            backdrop.style.backdropFilter = 'none';
-            backdrop.style.transition = 'none';
-        }
-        if (wrapper) {
-            wrapper.style.backgroundColor = 'transparent';
-            wrapper.style.border = 'none';
-            wrapper.style.boxShadow = 'none';
-        }
-        if (panel) {
-            panel.style.visibility = 'hidden';
-        }
-        if (launcher) {
-            launcher.style.visibility = 'hidden';
-        }
-
-        if (card) {
-            card.style.visibility = 'visible';
-            card.style.position = 'relative';
-            card.style.zIndex = '9999';
-        }
         if (mockup) {
             mockup.style.opacity = '1';
         }
@@ -631,37 +667,50 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     };
 
     const stopPreviewingOpacity = () => {
-        // Direct DOM restoration
-        document.body.classList.remove('disable-transitions');
-        const backdrop = document.getElementById('settings-backdrop');
-        const wrapper = document.getElementById('settings-panel-wrapper');
-        const panel = document.getElementById('settings-panel');
-        const card = document.getElementById('opacity-slider-card');
+        if (canPreviewTransparency) {
+            // Direct DOM restoration
+            document.body.classList.remove('disable-transitions');
+            const backdrop = document.getElementById('settings-backdrop');
+            const wrapper = document.getElementById('settings-panel-wrapper');
+            const panel = document.getElementById('settings-panel');
+            const card = document.getElementById('opacity-slider-card');
+            const launcher = document.getElementById('launcher-container');
+            const globalSurfaces = document.querySelectorAll('[data-opacity-preview-surface]');
+
+            if (backdrop) {
+                backdrop.style.backgroundColor = '';
+                backdrop.style.backdropFilter = '';
+                backdrop.style.transition = '';
+            }
+            if (wrapper) {
+                wrapper.style.backgroundColor = '';
+                wrapper.style.border = '';
+                wrapper.style.boxShadow = '';
+            }
+            if (panel) {
+                panel.style.visibility = '';
+            }
+            if (launcher) {
+                launcher.style.visibility = '';
+            }
+            globalSurfaces.forEach((el) => {
+                (el as HTMLElement).style.visibility = '';
+            });
+
+            if (card) {
+                card.style.visibility = '';
+                card.style.position = '';
+                card.style.zIndex = '';
+            }
+
+            // Restore launcher vibrancy/background — must run on every exit
+            // path (drag release, Settings closing mid-drag, pointer-up
+            // outside the window), all of which funnel through this one
+            // function.
+            window.electronAPI?.setLauncherOpacityPreview?.(false);
+        }
+
         const mockup = document.getElementById('settings-mockup-wrapper');
-        const launcher = document.getElementById('launcher-container');
-
-        if (backdrop) {
-            backdrop.style.backgroundColor = '';
-            backdrop.style.backdropFilter = '';
-            backdrop.style.transition = '';
-        }
-        if (wrapper) {
-            wrapper.style.backgroundColor = '';
-            wrapper.style.border = '';
-            wrapper.style.boxShadow = '';
-        }
-        if (panel) {
-            panel.style.visibility = '';
-        }
-        if (launcher) {
-            launcher.style.visibility = '';
-        }
-
-        if (card) {
-            card.style.visibility = '';
-            card.style.position = '';
-            card.style.zIndex = '';
-        }
         if (mockup) {
             // Bug fix #4: restore mockup to hidden (opacity 0) rather than leaving it visible
             mockup.style.opacity = '0';

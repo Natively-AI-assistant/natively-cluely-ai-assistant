@@ -575,6 +575,7 @@ export interface ElectronAPI {
   // Overlay Opacity (Stealth Mode)
   setOverlayOpacity: (opacity: number) => Promise<void>;
   onOverlayOpacityChanged: (callback: (opacity: number) => void) => () => void;
+  setLauncherOpacityPreview: (active: boolean) => Promise<void>;
 
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
