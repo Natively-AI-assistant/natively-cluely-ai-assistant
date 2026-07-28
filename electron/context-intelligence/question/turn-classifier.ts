@@ -1,0 +1,186 @@
+// electron/context-intelligence/question/turn-classifier.ts
+//
+// Decides WHAT a turn is asking and WHETHER retrieval should run at all.
+//
+// WHY THIS LIVES ABOVE RETRIEVAL
+// Phase 2 measured that every retrieval configuration returns a ranked pool for
+// EVERY question — including "What is idempotency?". The retriever has no notion
+// of "should I run"; it always produces output. So the fast/grounded decision
+// cannot live inside retrieval and must be made here, before it.
+//
+// DETERMINISTIC BY DESIGN
+// §32.7 forbids using an LLM for deterministic policy decisions without evidence
+// that it improves quality, and §22.6 forbids an expensive multi-agent router on
+// every uncertain question. This classifier is pure, synchronous and testable —
+// which also means a misclassification is reproducible rather than stochastic.
+//
+// See docs/context-intelligence-v3/04_TARGET_ARCHITECTURE.md
+
+import type { QuestionType, ClaimType, RetrievalPath, SourceType } from '../contracts/types';
+import type { ModePolicy } from '../policies/mode-policy-registry';
+
+export interface ClassificationInput {
+  resolvedQuestion: string;
+  policy: ModePolicy;
+  isFollowUp: boolean;
+  /** True when the surface supplied screen content for this turn. */
+  hasScreenContext?: boolean;
+}
+
+export interface Classification {
+  questionTypes: QuestionType[];
+  claimTypes: ClaimType[];
+  path: RetrievalPath;
+  shouldRetrieve: boolean;
+  requiredSourceTypes: SourceType[];
+  /** Human-readable justification, recorded in the trace so a bad decision is
+   *  attributable to a rule rather than to "the model felt like it". */
+  reason: string;
+}
+
+const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+
+// ── signals ─────────────────────────────────────────────────────────────────
+// Second person addressed to the candidate ("your project"), or explicit
+// self-reference. These are the questions that REQUIRE private evidence.
+const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|walk me through your|my)\b/;
+const PROJECT_RE = /\b(project|built|shipped|implemented|designed|architect(ed|ure) of your)\b/;
+const SKILL_RE = /\b(experience with|familiar with|worked with|proficient|know how to|skills?)\b/;
+const EDUCATION_RE = /\b(degree|graduat|university|college|studied|major(ed)?)\b/;
+const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|job title|tenure)\b/;
+
+const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit|required skills?|preferred skills?|compensation|salary band|the team you)\b/;
+
+const MEETING_RE = /\b(we (decided|agreed|discussed)|did we|are we|action item|owns?|owner|the meeting|last (call|meeting)|this (call|meeting)|standup|sync)\b/;
+
+const DOCUMENT_RE = /\b(the (document|paper|thesis|slide|deck|file|report|policy|spec)|according to|does the (document|paper|file)|in the (document|paper|file)|section|figure|table|chapter)\b/;
+
+const SCREEN_RE = /\b(this (code|function|error|screen|stack ?trace)|on (my|the) screen|highlighted|selected code|what does this)\b/;
+
+// General technical/CS concepts. Deliberately conservative: matching a general
+// pattern makes us SKIP retrieval, so a false positive is the expensive
+// direction and the list stays narrow.
+const GENERAL_TECH_RE = /\b(what is|what are|explain|define|difference between|how does .* work|pros and cons|when (should|would) (you|i) use)\b/;
+
+const CODING_TASK_RE = /\b(reverse a|implement (a|an)|write (a|the) (code|function|program|query)|solve|algorithm for|time complexity|leetcode|binary search|linked list|sort(ing)? algorithm|dynamic programming)\b/;
+
+const SYSTEM_DESIGN_RE = /\b(design a|scale (a|the|to)|system design|architecture for|how would you (build|design)|throughput|sharding|load balanc)\b/;
+
+// A bare follow-up carries no subject of its own ("Why?", "Would that scale?").
+// It must NOT match a self-contained general question that merely starts with the
+// same word — "How does TCP congestion control work?" begins with "how" but is a
+// complete question, and treating it as a follow-up would deny it the fast path.
+// Hence the word-count bound: a real follow-up is short because its subject is
+// elsewhere.
+const FOLLOW_UP_RE = /^(why|how|and|but|what about|would (it|that|this)|can you|could you|explain that|more detail|go on|really)\b/;
+const FOLLOW_UP_MAX_WORDS = 5;
+
+const isBareFollowUp = (q: string): boolean =>
+  FOLLOW_UP_RE.test(q) && q.split(/\s+/).filter(Boolean).length <= FOLLOW_UP_MAX_WORDS;
+
+/**
+ * Classify per CLAUSE, then union.
+ *
+ * A single question can carry a personal claim and a general one at once —
+ * "tell me about your WebRTC project AND explain how WebRTC connects". Testing
+ * the whole string at once forces a single verdict and loses the split, which
+ * is exactly what §3.7 claim-level grounding needs to preserve. Splitting on
+ * coordinating conjunctions lets "your … project" and "explain how WebRTC …"
+ * be recognised independently.
+ */
+const splitClauses = (q: string): string[] =>
+  q.split(/\band\b|\balso\b|[;.]/).map((c) => c.trim()).filter(Boolean);
+
+function detectTypes(q: string, input: ClassificationInput): { types: QuestionType[]; claims: ClaimType[] } {
+  const types = new Set<QuestionType>();
+  const claims = new Set<ClaimType>();
+
+  for (const clause of splitClauses(q)) {
+    const personal = PERSONAL_RE.test(clause);
+
+    if (personal && PROJECT_RE.test(clause)) { types.add('PERSONAL_PROJECT'); claims.add('USER_PROJECT'); }
+    if (personal && SKILL_RE.test(clause)) { types.add('PERSONAL_SKILL'); claims.add('USER_SKILL'); }
+    if (personal && EDUCATION_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); claims.add('USER_EDUCATION'); }
+    if (personal && EMPLOYMENT_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); claims.add('USER_EMPLOYMENT'); }
+
+    if (JOB_RE.test(clause)) { types.add('JOB_REQUIREMENT'); claims.add('JOB_REQUIRED_SKILL'); }
+    if (MEETING_RE.test(clause)) { types.add('MEETING_FACT'); claims.add('MEETING_STATEMENT'); }
+    if (DOCUMENT_RE.test(clause)) { types.add('DOCUMENT_FACT'); claims.add('DOCUMENT_FACT'); }
+    if (SCREEN_RE.test(clause)) { types.add('SCREEN_SPECIFIC'); claims.add('SCREEN_FACT'); }
+
+    if (CODING_TASK_RE.test(clause)) { types.add('CODING_TASK'); claims.add('GENERAL_TECHNICAL'); }
+    if (SYSTEM_DESIGN_RE.test(clause)) { types.add('SYSTEM_DESIGN'); claims.add('GENERAL_TECHNICAL'); }
+    // Per-clause, so the general half of a mixed question is still recognised.
+    if (GENERAL_TECH_RE.test(clause) && !personal) { types.add('GENERAL_TECHNICAL'); claims.add('GENERAL_TECHNICAL'); }
+  }
+
+  if (input.hasScreenContext) { types.add('SCREEN_SPECIFIC'); claims.add('SCREEN_FACT'); }
+  if (input.isFollowUp || isBareFollowUp(q)) types.add('FOLLOW_UP');
+
+  const privateTypes: QuestionType[] = ['PERSONAL_PROJECT', 'PERSONAL_SKILL', 'PERSONAL_EXPERIENCE',
+    'JOB_REQUIREMENT', 'DOCUMENT_FACT', 'MEETING_FACT', 'SCREEN_SPECIFIC'];
+  const hasPrivate = privateTypes.some((t) => types.has(t));
+  const hasGeneral = types.has('GENERAL_TECHNICAL') || types.has('CODING_TASK') || types.has('SYSTEM_DESIGN');
+  if (hasPrivate && hasGeneral) types.add('MIXED');
+
+  if (types.size === 0) types.add('AMBIGUOUS');
+  return { types: [...types], claims: [...claims] };
+}
+
+const CLAIM_TO_SOURCE: Partial<Record<ClaimType, SourceType[]>> = {
+  USER_PROJECT: ['RESUME', 'PROJECT_FILE', 'PROFILE_FACT'],
+  USER_SKILL: ['RESUME', 'PROFILE_FACT'],
+  USER_EDUCATION: ['RESUME', 'PROFILE_FACT'],
+  USER_EMPLOYMENT: ['RESUME', 'PROFILE_FACT'],
+  JOB_REQUIRED_SKILL: ['JOB_DESCRIPTION'],
+  DOCUMENT_FACT: ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'],
+  MEETING_STATEMENT: ['MEETING_TRANSCRIPT'],
+  SCREEN_FACT: ['SCREEN_CONTEXT'],
+};
+
+export function classifyTurn(input: ClassificationInput): Classification {
+  const q = norm(input.resolvedQuestion);
+  const { types, claims } = detectTypes(q, input);
+
+  // Required sources = union of what the detected claims need, INTERSECTED with
+  // what the mode authorizes. A mode never has sources forced into it.
+  const wanted = new Set<SourceType>();
+  for (const c of claims) for (const s of (CLAIM_TO_SOURCE[c] ?? [])) wanted.add(s);
+  const requiredSourceTypes = [...wanted].filter((s) => input.policy.allowedSourceTypes.includes(s));
+
+  const isPurelyGeneral =
+    requiredSourceTypes.length === 0 &&
+    !types.includes('MIXED') &&
+    !types.includes('AMBIGUOUS');
+
+  // A follow-up may reference grounded content by pronoun alone, so it never
+  // takes the fast path even when its own text looks general.
+  const followUp = types.includes('FOLLOW_UP');
+
+  const strict = input.policy.groundingPolicy === 'STRICT_SOURCE_ONLY';
+
+  let path: RetrievalPath;
+  let shouldRetrieve: boolean;
+  let reason: string;
+
+  if (strict) {
+    path = 'VERIFICATION'; shouldRetrieve = true;
+    reason = 'strict-source-only mode always verifies';
+  } else if (isPurelyGeneral && !followUp) {
+    path = 'FAST'; shouldRetrieve = false;
+    reason = `no authorized source is required for ${types.join('+')} — general knowledge suffices`;
+  } else if (types.includes('AMBIGUOUS') || followUp) {
+    path = 'GROUNDED'; shouldRetrieve = requiredSourceTypes.length > 0 || followUp;
+    reason = followUp ? 'follow-up may reference grounded content by pronoun' : 'ambiguous question — retrieve conservatively';
+  } else {
+    path = 'GROUNDED'; shouldRetrieve = true;
+    reason = `requires ${requiredSourceTypes.join(',') || 'authorized sources'}`;
+  }
+
+  if (!input.policy.retrievalPolicy.enabled) {
+    shouldRetrieve = false; path = 'FAST';
+    reason = 'mode disables retrieval';
+  }
+
+  return { questionTypes: types, claimTypes: claims, path, shouldRetrieve, requiredSourceTypes, reason };
+}

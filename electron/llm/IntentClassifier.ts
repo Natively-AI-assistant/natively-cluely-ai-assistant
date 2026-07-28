@@ -196,6 +196,27 @@ class ZeroShotClassifier {
                     this.latchNonRecoverableLoadError(`Worker exited with code ${code} before model loaded`);
                 }
             });
+
+            // Do not let this worker hold the Node event loop open.
+            //
+            // MUST be called AFTER every listener above is attached: attaching a
+            // 'message' listener implicitly re-references the underlying
+            // MessagePort, so an unref() placed next to `new Worker()` is undone
+            // by the very next line. (Verified: process._getActiveHandles() showed
+            // a lone surviving MessagePort in exactly that arrangement.)
+            //
+            // In the Electron main process the loop is anchored by `app` and the
+            // open windows, so this cannot cause a premature exit — the worker
+            // still receives and answers every message exactly as before.
+            //
+            // Under `node --test` (--test-isolation=process) there is no such
+            // anchor, and a referenced worker meant each test file importing this
+            // module passed all of its assertions and then never exited, so the
+            // suite could not terminate and no acceptance gate was measurable.
+            // See docs/context-intelligence-v3/01_INVESTIGATION_REPORT.md F21.
+            // Optional call: test doubles substitute a mock Worker that does not
+            // implement unref(). A hard call throws there and disables the model.
+            this.worker.unref?.();
         }
         return this.worker;
     }
