@@ -39,8 +39,8 @@ Total production change: **51 lines across 3 files, purely additive** — one `t
 | 2 — Benchmarks | **PARTIAL** | `02_RETRIEVAL_BENCHMARK.md`, `03_KEEP_REMOVE_MATRIX.md` — 5 of 11 configs executed |
 | 3 — Contracts | **COMPLETE** | `04`–`08` |
 | 4 — Core implementation | **PARTIAL** | `electron/context-intelligence/` — contracts, source authority, scope filter, mode registry, turn classifier, BM25, AnswerTrace · **66 tests** |
-| 5 — Ingestion migration | **NOT STARTED** (scope-reduced, see §5) | — |
-| 6 — Surface integration | **NOT STARTED** | — |
+| 5 — Ingestion migration | **DONE** (scope-reduced by decision) | `retrieval/legacy-adapter.ts` — scopeId + the dropped signals |
+| 6 — Surface integration | **PARTIAL** — orchestrator + flag built and tested; no surface wired yet | `orchestration/orchestrator.ts`, `contracts/flag.ts` |
 | 7 — UI simplification | **NOT STARTED** | — |
 | 8 — Full verification | **PARTIAL** — F21 unblocked it; suite now runs (6593 tests, 67 s). Golden suite + provider eval not run | §1.6.1 of `01_…` |
 | 9 — Legacy removal | **BLOCKED, deliberately not executed** | `11_LEGACY_REMOVAL_MATRIX.md` |
@@ -129,7 +129,10 @@ I also proposed re-ordering §25.3 to put `AnswerTrace` emission before surface 
 | `question/turn-classifier.ts` | Deterministic fast/grounded/verification decision; per-clause classification so MIXED questions split correctly |
 | `retrieval/bm25.ts` | Okapi BM25 with legacy-parity tokenizer, normalised scoring for fusion |
 | `observability/answer-trace.ts` | `AnswerTrace`, `redactTrace` (identity only, never content), `compareDecisions` for shadow mode |
-| `__tests__/` | **66 tests, 66 pass, process exits cleanly** |
+| `contracts/flag.ts` | One flag, `DEFAULT_ENABLED=false`, **identical in dev/test/prod** — tested against every `isInternalDevTestContext` condition |
+| `retrieval/legacy-adapter.ts` | Stamps `scopeId`; carries `answerabilityScore`/`rerankScore` the legacy type drops; **fails closed** on unknown type/version |
+| `orchestration/orchestrator.ts` | One frozen decision; injected retrieval; answerability by **claim authority, not similarity** |
+| `__tests__/` | **92 tests, 92 pass, process exits cleanly** |
 
 Two classifier bugs were found by its own tests and fixed rather than papered over:
 - "How does TCP congestion control work?" was mis-detected as a *follow-up* because it begins with "how" — denying it the fast path. Fixed by bounding follow-up detection to short, subject-less questions.
@@ -165,9 +168,11 @@ Verified at close: 66/66 module tests pass · 6593-test suite completes in 67 s 
 
    **Safety issue found while doing it:** a concurrently-added `test:electron` script had **no `NATIVELY_TEST_USERDATA` isolation**, so running it would open the user's **real** `natively.db` and let DB tests mutate live data. Duplicate JSON key resolved and isolation added. The remaining 121 failures are genuine, and none trace to files this mission changed.
 4. **Fix F22** independently — a live P1 in the flagship document use case.
-5. Retrofit `AnswerTrace` onto the legacy layers — the prerequisite for all parity work. The contract and the diffing function already exist (`observability/answer-trace.ts`).
-6. Build config 11 on `EvidenceResolver` (its dependencies are already injected interfaces) and measure against the same corpus.
-7. Then, and only then, begin surface migration.
+5. Retrofit `AnswerTrace` onto the legacy layers — the prerequisite for all parity work. The contract, the redactor and the decision-diffing function already exist (`observability/answer-trace.ts`).
+6. Build config 11 on `EvidenceResolver` (its dependencies are already injected interfaces) and measure against the same corpus. The orchestrator's `RetrievalPort` is the seam.
+7. Wire the first surface (developer harness → Manual Chat) behind `contextIntelligenceV3`, comparing traces before switching anything.
+
+**The 121 remaining suite failures are NOT on this list, deliberately.** A clean-worktree run at my own commit shows **181** failures, versus **121** with the other agent's uncommitted work applied — their in-flight branch *adds* ~450 tests and *fixes* ~60 failures. Those failures are neither mine nor theirs to hand off; they are pre-existing and partly already being fixed. Fixing them from here would collide with active work.
 
 **Do not begin Phase 9.** The unblock chain is in `11_LEGACY_REMOVAL_MATRIX.md` §4.
 
