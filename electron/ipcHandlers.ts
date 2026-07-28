@@ -311,19 +311,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           || null;
       if (!next) {
         // All providers are disabled or no configured credential exists.
-        // Reset the persisted default to a safe sentinel so it does not
-        // point to a stale disabled model. Use 'gemini-3.6-flash' as the
-        // sentinel — it is the constant default and will fall through the
-        // routing chain gracefully (no configured key → "No AI providers
-        // configured") rather than re-activating a disabled provider.
-        // Do NOT use 'natively' here: natively might have been disabled
-        // by the user and was already rejected by modelAvailable() above.
-        const safeSentinel = 'gemini-3.6-flash';
-        console.warn(`[IPC] refreshRuntimeDefaultIfUnavailable: no available model found — resetting to ${safeSentinel}`);
-        cm.setDefaultModel(safeSentinel);
-        llmHelper.setModel(safeSentinel, allProviders);
-        appState.broadcast('model-changed', safeSentinel);
-        return safeSentinel;
+        // Do NOT install any model here — every candidate was already
+        // rejected by modelAvailable() above (including gemini-3.6-flash
+        // and natively). Persisting a rejected model would re-activate a
+        // disabled provider, which is the exact bug Greptile flagged.
+        // Leave the persisted default untouched; the routing chain will
+        // fail at execution time with "No AI providers configured".
+        console.warn('[IPC] refreshRuntimeDefaultIfUnavailable: no available model found — all providers disabled or unconfigured');
+        return null;
       }
       cm.setDefaultModel(next);
       llmHelper.setModel(next, allProviders);
