@@ -118,6 +118,8 @@ function createIntelligenceSessionAdapter(intelligenceManager) {
  *   skipCooldown?: boolean,
  *   forceFresh?: boolean,
  *   estimateUsdPer1kTokens?: number,
+ *   promptInstruction?: string,
+ *   sdProblemKey?: string,
  * }} opts
  */
 function createLiveWhatToAnswerSut(opts = {}) {
@@ -133,6 +135,8 @@ function createLiveWhatToAnswerSut(opts = {}) {
     opts.promptInstruction != null
       ? String(opts.promptInstruction)
       : CASUAL_SD_TONE_INSTRUCTION;
+  const factoryProblemKey =
+    opts.sdProblemKey != null ? String(opts.sdProblemKey).trim() : '';
 
   return async function liveWhatToAnswerSut(ctx) {
     const probe = String(ctx?.interviewerTurn?.text || '');
@@ -140,6 +144,9 @@ function createLiveWhatToAnswerSut(opts = {}) {
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     const started = Date.now();
     const candidateAction = ctx?.candidateAction || 'trigger';
+    const sdProblemKey =
+      factoryProblemKey ||
+      String(ctx?.scenario?.prompt || ctx?.scenario?.id || '').trim();
     try {
       const raw = await Promise.race([
         im.runWhatShouldISay(undefined, 1, undefined, {
@@ -147,6 +154,7 @@ function createLiveWhatToAnswerSut(opts = {}) {
           forceFresh,
           promptInstruction,
           sdRequirementsUiAdvance: candidateAction === 'advance',
+          ...(sdProblemKey ? { sdProblemKey } : {}),
         }),
         new Promise((_, reject) => {
           ctl.signal.addEventListener('abort', () => {
@@ -184,6 +192,7 @@ function createLiveWhatToAnswerSut(opts = {}) {
           promptInstruction,
           candidateAction,
           sdRequirementsUiAdvance: candidateAction === 'advance',
+          sdProblemKey: sdProblemKey || null,
         },
       };
     } finally {

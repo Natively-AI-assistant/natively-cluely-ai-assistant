@@ -679,7 +679,7 @@ export class IntelligenceEngine extends EventEmitter {
      * Manual trigger - uses clean transcript pipeline for question inference
      * NEVER returns null - always provides a usable response
      */
-    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean; sdRequirementsUiAdvance?: boolean }): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean; sdRequirementsUiAdvance?: boolean; /** Sim-only: pin SD problemKey so clarifiers don't reset designSheet/recentSdAnswers. */ sdProblemKey?: string }): Promise<string | null> {
         const now = Date.now();
         // Intelligence OS observe-only trace (Phase 1). Zero-cost NO-OP unless
         // intelligence_trace_enabled is on. Committed at the primary final-answer emit
@@ -1597,9 +1597,22 @@ export class IntelligenceEngine extends EventEmitter {
             // SD Requirements grilling gate (live path): SessionTracker working
             // copy → derive sdPhase → stamp answerPlan so WhatToAnswerLLM's
             // LESSON allowlist + structural truncate actually run in interviews.
+            // sdProblemKey (sim-only): pin problem identity to the scenario prompt
+            // so clarifier probes don't look like a new SD problem and wipe
+            // designSheet/recentSdAnswers. Answer focus still uses
+            // question || extracted || lastInterviewer (question stays undefined
+            // on the auto WTA / sim path).
+            const sdGateQuestion =
+                (typeof options?.sdProblemKey === 'string' && options.sdProblemKey.trim()
+                    ? options.sdProblemKey.trim()
+                    : '') ||
+                question ||
+                extractedQuestion.latestQuestion ||
+                lastInterviewerTurn ||
+                '';
             const sdPrepared = this.applySdRequirementsGate(
                 answerPlanRaw,
-                question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                sdGateQuestion,
                 options?.screenContext,
                 { uiAdvance: options?.sdRequirementsUiAdvance === true },
             );

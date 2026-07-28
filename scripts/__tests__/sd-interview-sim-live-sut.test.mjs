@@ -69,6 +69,44 @@ describe('sd-interview-sim liveSut helpers', () => {
     assert.ok(out.spend.estimated_usd > 0);
   });
 
+  test('createLiveWhatToAnswerSut pins sdProblemKey from scenario.prompt', async () => {
+    const calls = [];
+    const im = {
+      async runWhatShouldISay(q, _c, _i, options) {
+        calls.push({ q, options });
+        return 'ok';
+      },
+    };
+    const sut = createLiveWhatToAnswerSut({ intelligenceManager: im, timeoutMs: 5000 });
+    const out = await sut({
+      scenario: { prompt: 'Design a URL shortener like Bitly.' },
+      interviewerTurn: { text: 'What about hot keys?' },
+    });
+    assert.equal(calls[0].q, undefined);
+    assert.equal(calls[0].options.sdProblemKey, 'Design a URL shortener like Bitly.');
+    assert.equal(out.meta.sdProblemKey, 'Design a URL shortener like Bitly.');
+  });
+
+  test('factory sdProblemKey wins over scenario when both set', async () => {
+    const calls = [];
+    const im = {
+      async runWhatShouldISay(_q, _c, _i, options) {
+        calls.push(options);
+        return 'ok';
+      },
+    };
+    const sut = createLiveWhatToAnswerSut({
+      intelligenceManager: im,
+      sdProblemKey: 'pinned-factory-key',
+      timeoutMs: 5000,
+    });
+    await sut({
+      scenario: { prompt: 'other prompt' },
+      interviewerTurn: { text: 'clarifier' },
+    });
+    assert.equal(calls[0].sdProblemKey, 'pinned-factory-key');
+  });
+
   test('createLiveWhatToAnswerSut rejects provider soft-failure text', async () => {
     const im = {
       async runWhatShouldISay() {

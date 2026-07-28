@@ -147,7 +147,7 @@ function createEchoStubSut(models) {
 /**
  * Boot AppState + Technical Interview mode; return live SUT + session adapter.
  * @param {{ interviewer?: string, sut?: string }} models
- * @param {{ promptInstruction?: string }} [sutOpts]
+ * @param {{ promptInstruction?: string, sdProblemKey?: string }} [sutOpts]
  */
 async function bootLiveSut(models, sutOpts = {}) {
   if (!fs.existsSync(path.join(distRoot, 'main.js'))) {
@@ -278,6 +278,7 @@ async function bootLiveSut(models, sutOpts = {}) {
     ...(sutOpts.promptInstruction
       ? { promptInstruction: sutOpts.promptInstruction }
       : {}),
+    ...(sutOpts.sdProblemKey ? { sdProblemKey: sutOpts.sdProblemKey } : {}),
   });
 
   return {
@@ -351,6 +352,7 @@ async function main() {
   if (wantLiveSut) {
     liveBoot = await bootLiveSut(models, {
       ...(fullRaw ? { promptInstruction: FULL_RAW_SD_TONE_INSTRUCTION } : {}),
+      sdProblemKey: prompt,
     });
     sut = liveBoot.sut;
     sessionTracker = liveBoot.sessionTracker;
