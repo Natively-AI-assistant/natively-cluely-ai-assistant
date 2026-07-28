@@ -23,6 +23,9 @@
     "start": "npm run app:dev",
     "dist": "npm run app:build",
     "dist:signed": "npm run app:build:signed && node scripts/upload-release.mjs",
+    "app:build:fork": "npm run build && npm run typecheck:electron && npm run build:electron && npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && (electron-builder --mac --arm64 --publish never; code=$?; node scripts/rebuild-native-electron.js; exit $code)",
+    "release:fork": "node scripts/release-fork.mjs",
+    "dist:fork": "npm run app:build:fork && npm run release:fork",
     "build:native": "node scripts/build-native.js",
     "test": "npm run build:electron && node --test 'electron/services/__tests__/**/*.test.mjs' 'electron/llm/__tests__/**/*.test.mjs' 'electron/llm/codeVerification/__tests__/**/*.test.mjs' 'electron/audio/__tests__/**/*.test.mjs' 'electron/rag/__tests__/**/*.test.mjs' 'electron/utils/__tests__/**/*.test.mjs' 'electron/update/**/*.test.mjs'",
     "test:intelligence": "npm run build:electron && node --test 'electron/intelligence/__tests__/**/*.test.mjs'",
@@ -223,7 +226,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "Natively-AI-assistant",
+        "owner": "bhargavap21",
         "repo": "natively-cluely-ai-assistant",
         "releaseType": "release"
       }
