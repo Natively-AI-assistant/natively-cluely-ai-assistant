@@ -337,12 +337,16 @@ describe('SessionTracker SD Requirements working copy', () => {
     assert.equal(session.getSdRequirementsArtifact(), null);
   });
 
-  test('mode clearSessionContext does not clear Requirements artifact', () => {
+  test('mode clearSessionContext freezes Requirements artifact (leave-TI does not clear)', () => {
     const session = new SessionTracker();
     const a = gate.createEmptyRequirementsArtifact('p');
+    a.slots.scale_qps.filled = true;
+    a.slots.scale_qps.value = '10k';
     session.setSdRequirementsArtifact(a);
     session.clearSessionContext();
-    assert.equal(session.getSdRequirementsArtifact()?.problemKey, 'p');
+    const frozen = session.getSdRequirementsArtifact();
+    assert.equal(frozen?.problemKey, 'p');
+    assert.equal(frozen?.slots.scale_qps.filled, true);
   });
 
   test('bindSdRequirementsMeeting hydrates same meeting only', () => {

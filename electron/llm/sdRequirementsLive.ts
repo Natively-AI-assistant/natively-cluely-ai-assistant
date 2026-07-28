@@ -4,7 +4,8 @@
 // Pure helpers: problem-key normalize, interviewer transcript → slot fill,
 // problem-class escalate, advance/soft-refuse, and stamp answerPlan.sdPhase
 // from the SessionTracker working-copy artifact. IntelligenceEngine calls
-// prepareSdRequirementsForAnswerPlan after planAnswer on system_design turns.
+// prepareSdRequirementsForAnswerPlan after planAnswer when SD-typed or when
+// SdSessionAuthority arms the gate for clarifier/GM turns.
 
 import type { AnswerPlan } from './AnswerPlanner';
 import {
@@ -25,6 +26,7 @@ import {
   markSlotAsked,
   stripPostRequirementsRewind,
 } from './sdRequirementsGate';
+import { deriveSdSessionAuthority } from './sdSessionAuthority';
 
 /** Slot extractors: interviewer-attributed text → checklist fills (consume-only). */
 export const SLOT_EXTRACTORS: Array<{ id: SlotId; re: RegExp; alt?: RegExp }> = [
@@ -149,11 +151,19 @@ export interface PrepareSdRequirementsInput {
    * accept via the `ui` channel without requiring an advance phrase.
    */
   uiAdvance?: boolean;
+  /**
+   * Active mode templateType id (e.g. 'technical-interview'). Used by
+   * SdSessionAuthority so clarifier/GM turns can arm prepare under an open session.
+   */
+  modeId?: string | null;
 }
 
 export interface PrepareSdRequirementsResult {
   answerPlan: AnswerPlan;
-  /** Updated working copy when answerType is system_design_answer; else prior artifact. */
+  /**
+   * Updated working copy when prepare runs (SD-typed establish or authority-armed);
+   * else prior artifact.
+   */
   artifact: RequirementsArtifact | null;
   softRefuseSpoken: string | null;
   sdPhase: SdPhase | undefined;
@@ -164,12 +174,21 @@ export interface PrepareSdRequirementsResult {
  * Live prepare step after planAnswer: reset on new SD problem, fill from
  * interviewer transcript, handle advance/soft-refuse, stamp sdPhase so
  * WhatToAnswerLLM's Requirements gate is active in production interviews.
+ *
+ * Entry: system_design_answer (establishes sticky problemKey) OR
+ * SdSessionAuthority.shouldArmGate (TI + open artifact) for clarifier/GM turns.
+ * Clarifiers never open a session or re-key the sticky problem.
  */
 export function prepareSdRequirementsForAnswerPlan(
   input: PrepareSdRequirementsInput,
 ): PrepareSdRequirementsResult {
   const { answerPlan } = input;
-  if (answerPlan.answerType !== 'system_design_answer') {
+  const isSdAnswer = answerPlan.answerType === 'system_design_answer';
+  const authority = deriveSdSessionAuthority({
+    artifact: input.artifact,
+    modeId: input.modeId,
+  });
+  if (!isSdAnswer && !authority.shouldArmGate) {
     return {
       answerPlan,
       artifact: input.artifact,
@@ -179,11 +198,15 @@ export function prepareSdRequirementsForAnswerPlan(
     };
   }
 
-  const problemKey = normalizeSdProblemKey(input.problemQuestion);
+  // SD-typed turns may establish / reset sticky identity from problemQuestion.
+  // Authority-armed clarifiers keep the durable artifact key (never re-key).
+  const problemKey = isSdAnswer
+    ? normalizeSdProblemKey(input.problemQuestion)
+    : (authority.problemKey || '');
   let artifact =
     input.artifact ?? createEmptyRequirementsArtifact(problemKey || null, 'crud_product');
 
-  if (problemKey) {
+  if (isSdAnswer && problemKey) {
     artifact = resetArtifactForNewSdProblem(artifact, problemKey);
   }
 
@@ -303,22 +326,34 @@ export function appendSimPostRequirementsNudge(
 }
 
 /**
- * Sim-only (SPEC 15/16/17): strip late Requirements Draft restatements from the
- * completed WTA answer when T2 pins sdProblemKey and Requirements are done —
- * either gateClosed (post_requirements) OR checklist complete (advance may not
- * have fired yet). Independent of answerType.
+ * Product + sim (SPEC 15/16/17 + SdSessionAuthority ticket 03): strip late
+ * Requirements Draft restatements from the completed WTA answer when an SD
+ * session is armed and Requirements are done — either gateClosed
+ * (post_requirements) OR checklist complete (advance may not have fired yet).
+ * Independent of answerType (covers GM clarifier turns).
+ *
+ * Arms when `shouldArmGate` (TI + sticky artifact.problemKey) OR optional
+ * `sdProblemKey` pin as a sim/test seed. Soft nudge remains pin-only separately.
+ * Leave-TI freezes the artifact but does not strip outside TI (authority inert).
  */
 export function applySimPostRequirementsAnswerStrip(
   text: string,
   opts: {
     sdProblemKey?: string | null;
     artifact?: RequirementsArtifact | null;
+    /** Active mode templateType; required for product shouldArmGate path. */
+    modeId?: string | null;
   } = {},
 ): string {
+  const artifact = opts.artifact ?? null;
   const pinned =
     typeof opts.sdProblemKey === 'string' && opts.sdProblemKey.trim().length > 0;
-  if (!pinned) return String(text || '');
-  const artifact = opts.artifact ?? null;
+  const authority = deriveSdSessionAuthority({
+    artifact,
+    modeId: opts.modeId,
+  });
+  // Product: TI + sticky key. Sim: pin may seed early identity before stickiness.
+  if (!authority.shouldArmGate && !pinned) return String(text || '');
   const requirementsDone =
     deriveSdPhase(artifact) === 'post_requirements' ||
     (artifact != null && isChecklistComplete(artifact));

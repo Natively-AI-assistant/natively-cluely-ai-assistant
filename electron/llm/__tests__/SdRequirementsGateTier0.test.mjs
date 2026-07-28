@@ -424,7 +424,9 @@ describe('WhatToAnswerLLM Requirements gate wiring', () => {
     assert.match(out, /Deep Dives/);
   });
 
-  test('non-system_design answerType ignores gate (no lesson filter contract)', async () => {
+  test('non-system_design + stamped requirements: phase contract on, LESSON off', async () => {
+    // SdSessionAuthority ticket 02: stamped sdPhase arms phase/structural on GM;
+    // LESSON stay system_design_answer-only (see SdSessionAuthorityWtaPhaseStructuralTier0).
     const llm = new WhatToAnswerLLM(makeStubHelper(MIXED_LESSON_CHUNKS), stubModes);
     const out = await collect(llm.generateStream(
       '[INTERVIEWER]: What is a binary search tree?',
@@ -432,7 +434,7 @@ describe('WhatToAnswerLLM Requirements gate wiring', () => {
       withPhase(GENERAL_ANSWER_PLAN, 'requirements'),
     ));
     assert.doesNotMatch(out, /<reference_file name="hellointerview-system-design\.md">/);
-    assert.doesNotMatch(out, /requirements_phase_contract/);
+    assert.match(out, /requirements_phase_contract/);
   });
 });
 

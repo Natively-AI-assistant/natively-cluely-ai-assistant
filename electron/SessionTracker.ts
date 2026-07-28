@@ -310,7 +310,11 @@ export class SessionTracker {
         this.assistantResponseHistory = [];
         this.lastInterimInterviewer = null;
         // Requirements gate is meeting-scoped, not mode-scoped — do NOT clear
-        // the artifact on mode switch (ticket 09: ModesManager excluded).
+        // the artifact on mode switch (SPEC 09 / ModesManager excluded).
+        // Leave TI freezes the working copy so SdSessionAuthority goes inert
+        // (shouldArmGate false) while sticky problemKey survives re-enter TI.
+        // Clear only on meeting end (clearMeetingMetadata) or explicit
+        // clearSdRequirementsLive / reset — not here.
         console.log('[SessionTracker] Mode-specific session context cleared');
     }
 

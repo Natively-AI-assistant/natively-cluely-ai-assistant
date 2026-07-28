@@ -427,17 +427,20 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // Retrieval is SCOPED to doc_type='lesson' so this content can never
             // reach a profile/behavioral answer. Bounded like hybrid retrieval.
             //
-            // Requirements grilling (Tier 0 / ticket 12): while sdPhase=requirements,
-            // filter inject to Understanding/FR/NFR allowlist and append the phase
-            // prompt contract (ad-hoc LESSON <reference_file> — unchanged).
+            // Requirements grilling (Tier 0 / ticket 12 + SdSessionAuthority 02):
+            // while sdPhase=requirements (stamped by prepare under authority or
+            // on system_design_answer), append the phase prompt contract and
+            // enforce structural DF hard-block — including general_meeting_answer
+            // clarifiers. LESSON allowlist inject + deep-dive pack/merge stay
+            // system_design_answer-only.
             // Post-gate (SPECs 02/06): score-gate ~0.5, prefer Deep Dive/NFR, then
             // assemble bounded context pack (sheet + utterance + LESSON + recent)
             // into modeContextBlock — replaces ad-hoc LESSON-only inject.
             const sdPhase = answerPlan?.sdPhase;
-            const requirementsGated =
-                answerPlan?.answerType === 'system_design_answer' && sdPhase === 'requirements';
-            const deepDivePostGate =
-                answerPlan?.answerType === 'system_design_answer' && sdPhase !== 'requirements';
+            const isSystemDesignAnswer = answerPlan?.answerType === 'system_design_answer';
+            // Phase/structural arm from stamped phase (authority stamps GM; SD stamps itself).
+            const requirementsGated = sdPhase === 'requirements';
+            const deepDivePostGate = isSystemDesignAnswer && sdPhase !== 'requirements';
             // SPEC 15: buffer+strip late Requirements Draft restatements (sim pin only).
             const simPostRequirementsStrip =
                 deepDivePostGate &&
@@ -450,7 +453,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 lessonChunkTexts: [],
                 recentAnswerTexts: [],
             };
-            if (answerPlan?.answerType === 'system_design_answer') {
+            if (isSystemDesignAnswer || requirementsGated) {
                 try {
                     const {
                         filterLessonChunksForPhase,
@@ -462,25 +465,28 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     } = require('./sdLessonScoreGate') as typeof import('./sdLessonScoreGate');
                     type LessonChunk = { text: string; similarity: number };
                     let chunksForInject: LessonChunk[] = [];
-                    const orchestrator = this.llmHelper.getKnowledgeOrchestrator?.();
-                    if (orchestrator?.queryRelevantChunks) {
-                        const { DocType } = require('../knowledge/types') as typeof import('../knowledge/types');
-                        const lessonQuery = answerPlan?.question?.trim() || cleanedTranscript;
-                        const { value: lessonChunks } = await raceWithBudget(
-                            orchestrator.queryRelevantChunks(lessonQuery, DocType.LESSON, 5) as Promise<LessonChunk[]>,
-                            HYBRID_RETRIEVAL_BUDGET_MS,
-                            [] as LessonChunk[],
-                        );
-                        const scored = Array.isArray(lessonChunks) ? lessonChunks : [];
-                        chunksForInject = preferDeepDiveSections(
-                            filterLessonChunksForPhase(applyScoreGate(scored, sdPhase), sdPhase),
-                            sdPhase,
-                        );
+                    // LESSON retrieval stays answerType-gated (no LESSON on GM clarifiers).
+                    if (isSystemDesignAnswer) {
+                        const orchestrator = this.llmHelper.getKnowledgeOrchestrator?.();
+                        if (orchestrator?.queryRelevantChunks) {
+                            const { DocType } = require('../knowledge/types') as typeof import('../knowledge/types');
+                            const lessonQuery = answerPlan?.question?.trim() || cleanedTranscript;
+                            const { value: lessonChunks } = await raceWithBudget(
+                                orchestrator.queryRelevantChunks(lessonQuery, DocType.LESSON, 5) as Promise<LessonChunk[]>,
+                                HYBRID_RETRIEVAL_BUDGET_MS,
+                                [] as LessonChunk[],
+                            );
+                            const scored = Array.isArray(lessonChunks) ? lessonChunks : [];
+                            chunksForInject = preferDeepDiveSections(
+                                filterLessonChunksForPhase(applyScoreGate(scored, sdPhase), sdPhase),
+                                sdPhase,
+                            );
+                        }
                     }
 
                     if (requirementsGated) {
-                        // Requirements identity: keep ad-hoc LESSON + phase contract.
-                        if (chunksForInject.length > 0) {
+                        // Requirements: LESSON inject only on SD; phase contract on any stamped phase.
+                        if (isSystemDesignAnswer && chunksForInject.length > 0) {
                             const lessonBlock = `<reference_file name="hellointerview-system-design.md">\n${chunksForInject.map((c) => c.text).join('\n\n')}\n</reference_file>`;
                             modeContextBlock = modeContextBlock ? `${modeContextBlock}\n\n${lessonBlock}` : lessonBlock;
                         }

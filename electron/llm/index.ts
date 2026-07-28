@@ -135,6 +135,14 @@ export type {
     PrepareSdRequirementsResult,
 } from "./sdRequirementsLive";
 export {
+    deriveSdSessionAuthority,
+    projectGateStatusUnderAuthority,
+} from "./sdSessionAuthority";
+export type {
+    SdSessionAuthority,
+    DeriveSdSessionAuthorityInput,
+} from "./sdSessionAuthority";
+export {
     buildSdDeepDivePackSnapshot,
     buildDeepDiveCheckContext,
     applyCompletedSdAnswerToArtifact,

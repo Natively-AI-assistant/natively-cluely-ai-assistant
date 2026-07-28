@@ -22,6 +22,8 @@ import {
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE,
     buildProfileJitPrompt, decideSessionWritePolicy,
     prepareSdRequirementsForAnswerPlan,
+    deriveSdSessionAuthority,
+    projectGateStatusUnderAuthority,
     detectAdvanceSignal,
 } from './llm';
 import {
@@ -1960,24 +1962,24 @@ export class IntelligenceEngine extends EventEmitter {
             }
             trace.mark('response_completed', { chars: fullAnswer.length, coding: isCoding });
 
-            // SPEC 15 live miss: clarifier turns often plan as general_meeting_answer,
-            // so WTA never arms the stream strip. When T2 pins sdProblemKey and the
-            // session artifact is already post_requirements, strip drafts here —
-            // independent of answerType. Product path (no pin) is identity.
-            if (typeof options?.sdProblemKey === 'string' && options.sdProblemKey.trim()) {
-                try {
-                    const { applySimPostRequirementsAnswerStrip } =
-                        require('./llm/sdRequirementsLive') as typeof import('./llm/sdRequirementsLive');
-                    fullAnswer = applySimPostRequirementsAnswerStrip(fullAnswer, {
-                        sdProblemKey: options.sdProblemKey,
-                        artifact: this.session.getSdRequirementsArtifact?.() ?? null,
-                    });
-                } catch (stripErr: any) {
-                    console.warn(
-                        '[IntelligenceEngine] sim post_requirements answer strip skipped:',
-                        stripErr?.message || stripErr,
-                    );
-                }
+            // SPEC 15 live miss / SdSessionAuthority ticket 03: clarifier turns often
+            // plan as general_meeting_answer, so WTA never arms the stream strip.
+            // Strip late Requirements drafts when session is open (sticky artifact
+            // problemKey) and Requirements are done — independent of answerType.
+            // sdProblemKey pin remains an optional sim seed; soft nudge stays pin-only.
+            try {
+                const { applySimPostRequirementsAnswerStrip } =
+                    require('./llm/sdRequirementsLive') as typeof import('./llm/sdRequirementsLive');
+                fullAnswer = applySimPostRequirementsAnswerStrip(fullAnswer, {
+                    sdProblemKey: options?.sdProblemKey,
+                    artifact: this.session.getSdRequirementsArtifact?.() ?? null,
+                    modeId: this.getActiveModeId(),
+                });
+            } catch (stripErr: any) {
+                console.warn(
+                    '[IntelligenceEngine] post_requirements answer strip skipped:',
+                    stripErr?.message || stripErr,
+                );
             }
 
             // LIVE LATENCY FALLBACK: the deadline fired before any useful token.
@@ -3363,7 +3365,11 @@ export class IntelligenceEngine extends EventEmitter {
         screenContext?: ScreenContext | null,
         gateOpts?: { uiAdvance?: boolean; sdProblemKeyPinned?: boolean },
     ): { answerPlan: import('./llm/AnswerPlanner').AnswerPlan; softRefuseSpoken: string | null } {
-        if (answerPlan.answerType !== 'system_design_answer') {
+        const modeId = this.getActiveModeId();
+        const priorArtifact = this.session.getSdRequirementsArtifact?.() ?? null;
+        const authority = deriveSdSessionAuthority({ artifact: priorArtifact, modeId });
+        const isSdAnswer = answerPlan.answerType === 'system_design_answer';
+        if (!isSdAnswer && !authority.shouldArmGate) {
             this.publishSdRequirementsGateStatus(false);
             return { answerPlan, softRefuseSpoken: null };
         }
@@ -3391,7 +3397,6 @@ export class IntelligenceEngine extends EventEmitter {
             // Only treat the current question as advance when it itself matches
             // an advance phrase (manual "let's move on") — never re-scan the
             // whole window as a sticky soft-refuse.
-            const priorArtifact = this.session.getSdRequirementsArtifact?.() ?? null;
             const prepared = prepareSdRequirementsForAnswerPlan({
                 answerPlan,
                 artifact: priorArtifact,
@@ -3404,6 +3409,7 @@ export class IntelligenceEngine extends EventEmitter {
                     ? [problemQuestion]
                     : undefined,
                 uiAdvance: gateOpts?.uiAdvance === true,
+                modeId,
             });
 
             if (prepared.artifact) {
@@ -3449,14 +3455,11 @@ export class IntelligenceEngine extends EventEmitter {
     getSdRequirementsGateStatus(
         softRefused: boolean = false,
     ): import('./llm/sdRequirementsGate').GateStatusViewModel {
-        const { projectGateStatusViewModel } = require('./llm/sdRequirementsGate') as typeof import('./llm/sdRequirementsGate');
+        // Ticket 04: publish/hide from shouldArmGate (TI + session open), not answerType.
         const artifact = this.session.getSdRequirementsArtifact?.() ?? null;
-        const vm = projectGateStatusViewModel(artifact, { softRefused });
-        // SPEC 17: strip only while Technical Interview + requirements gate.
-        if (vm.visible && this.getActiveModeId() !== 'technical-interview') {
-            return projectGateStatusViewModel(null);
-        }
-        return vm;
+        return projectGateStatusUnderAuthority(artifact, this.getActiveModeId(), {
+            softRefused,
+        });
     }
 
     /** Persist Requirements artifact for same-meeting crash restore (ticket 09). */
