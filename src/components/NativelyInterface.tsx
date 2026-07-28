@@ -240,6 +240,7 @@ import {
   shouldDedupeOverlayAction,
 } from '../lib/overlayActionDedup.mjs';
 import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
+import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
 import {
   applyWhatToAnswerNullFeedbackMessages,
@@ -997,11 +998,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const stored = localStorage.getItem('natively_interviewer_transcript');
     return stored !== 'false';
   });
-  const [autoScroll, setAutoScroll] = useState(() => {
-    const stored = localStorage.getItem('natively_auto_scroll');
-    return stored !== 'false';
-  });
-
   // Analytics State
   const requestStartTimeRef = useRef<number | null>(null);
 
@@ -1214,16 +1210,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
-  // Sync auto-scroll setting
-  useEffect(() => {
-    const handleStorage = () => {
-      const stored = localStorage.getItem('natively_auto_scroll');
-      setAutoScroll(stored !== 'false');
-    };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, []);
-
   // Interrupt-aware auto-scroll (see the streaming effect below + the
   // rAF-coalesced scroll listener further down). Every write to
   // scrollContainerRef's scrollTop — ours or the user's native scroll —
@@ -1283,9 +1269,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return suppressedId !== null && (streamingId === null || streamingId === suppressedId);
   }, []);
 
-  // Auto-scroll to bottom on every messages update when toggle is enabled.
-  // A direct scrollTop write (matching pinScrollBottomIfNeeded's style, see
-  // line ~2376) instead of scrollIntoView({ behavior: 'auto' }): the
+  // Auto-scroll to bottom on every messages update, unless a scroll-up
+  // interrupt is currently active for this message (see isAutoScrollSuppressed
+  // above). A direct scrollTop write (matching pinScrollBottomIfNeeded's
+  // style, declared further below) instead of scrollIntoView({ behavior:
+  // 'auto' }): the
   // interrupt-detection scroll handler needs to know the EXACT value we just
   // wrote so it can tell our own programmatic scroll apart from a user
   // scroll on the very next frame, and scrollIntoView doesn't hand that back
@@ -1302,7 +1290,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // genuinely NEW message carries a different (non-null) streaming id, so
   // suppression naturally lifts without any explicit "new message" handling.
   useEffect(() => {
-    if (!autoScroll) return;
     if (messages.length === 0) return;
     if (isAutoScrollSuppressed()) return;
     // Not (or no longer) suppressed — clear any stale suppression/pill state
@@ -1320,7 +1307,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       c.scrollTop = c.scrollHeight - c.clientHeight;
       lastScrollTopRef.current = c.scrollTop;
     }
-  }, [messages, autoScroll, setJumpToLatestVisible, isAutoScrollSuppressed]);
+  }, [messages, setJumpToLatestVisible, isAutoScrollSuppressed]);
 
   const hasActiveSystemAnswer = useMemo(
     () =>
@@ -2841,30 +2828,31 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   //      reach this handler. By the time this handler runs, lastScrollTopRef
   //      already reflects the corrected position, so the native clamp's own
   //      delta reads as ~0, not negative.
+  // The arm/re-arm decision itself is a pure function (decideScrollInterrupt,
+  // src/lib/scrollInterruptDecision.mjs, table-tested) — this handler stays
+  // responsible only for gathering its inputs from the DOM/refs and applying
+  // the resulting side effects. That split exists because this exact
+  // branching was wrong three separate times across three separate commits
+  // (dead-zone ordering, then a wheel-nudge self-disarm), each caught only by
+  // live manual repro — see the pure function's own comments and its test
+  // file for the two regressions this now guards against.
   const handleScrollInterrupt = useCallback(() => {
-    if (!autoScroll) return;
     const container = scrollContainerRef.current;
     if (!container) return;
     const distanceFromBottom =
       container.scrollHeight - (container.scrollTop + container.clientHeight);
     const delta = container.scrollTop - lastScrollTopRef.current;
     lastScrollTopRef.current = container.scrollTop;
+    const transitionInFlight = Date.now() < heightReportSuppressedUntilRef.current;
 
-    // Only arm on a FRESH interrupt (not already suppressed for this stream).
-    // Without this guard, once reserveScrollHeadroomIfNeeded's spacer growth
-    // lags a frame behind an active clientHeight increase, the browser's own
-    // clamp nudges scrollTop down by a pixel or two — an entirely
-    // self-inflicted, native side effect, not user input — which this same
-    // delta<0 check would otherwise misread as a brand new interrupt and
-    // re-snapshot clientHeightAtInterruptRef to the (already-grown) CURRENT
-    // clientHeight every single frame. That perpetually resets the headroom
-    // baseline forward in lockstep with the growth it's supposed to be
-    // measuring against, so computed growth reads ~0 forever and the spacer
-    // never gets a chance to reserve anything — confirmed live via the
-    // wheel-only repro during this fix (clientHeightAtInterruptRef tracked
-    // current clientHeight frame-for-frame instead of staying pinned to the
-    // value at the moment of the real interrupt).
-    if (delta < 0 && !isAutoScrollSuppressed()) {
+    const decision = decideScrollInterrupt({
+      delta,
+      distanceFromBottom,
+      alreadySuppressed: isAutoScrollSuppressed(),
+      transitionInFlight,
+    });
+
+    if (decision === 'arm') {
       // User-initiated upward scroll (our own auto-scroll writes only ever
       // increase/hold scrollTop, see the streaming effect + pinScrollBottomIfNeeded).
       autoScrollSuppressedForMsgIdRef.current = streamingMsgIdRef.current;
@@ -2880,42 +2868,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       return;
     }
 
-    // Re-arm check — runs only when the arm branch above didn't fire this
-    // frame. Still gated OFF while a width/height transition is actively in
-    // flight (heightReportSuppressedUntilRef, the existing "spring is
-    // running" signal set in startTransition): a transition growing
-    // clientHeight shrinks the max scrollable position, and if the user's
-    // post-interrupt scrollTop falls within that shrinking margin, the
-    // BROWSER forces it back toward the bottom on its own — no user input
-    // involved. Read purely by geometry, that native clamp is
-    // indistinguishable from "the user scrolled back down" and would
-    // silently clear a real interrupt within the same transition that
-    // triggered it — verified live via the code-block-transition repro
-    // during the original version of this fix. A deliberate user wheel-down
-    // tick still re-arms immediately regardless of an in-flight transition
-    // (see onWheel's deltaY>0 branch above, unambiguous since it can only
-    // originate from real input).
-    //
-    // Requires delta > 0 (net downward motion since the last sample) so a
-    // small upward nudge can't re-arm itself: onWheel arms suppression
-    // synchronously on deltaY<0, then the browser's resulting native scroll
-    // event reaches this handler — without a direction check here, that
-    // event's distanceFromBottom (still <=28 after a small nudge) cleared
-    // the suppression this same gesture just set, one frame later. Verified
-    // live: a tiny wheel-up nudge armed and then immediately disarmed itself
-    // every time before this guard was added.
-    const transitionInFlight = Date.now() < heightReportSuppressedUntilRef.current;
-    if (delta > 0 && distanceFromBottom <= 28 && !transitionInFlight) {
-      // Looser tolerance than the 8px used for the sticky-bottom transition
-      // pin (wasAtBottomRef) — this is a manual re-arm, not a pixel-perfect
-      // "still at bottom" check. Lets a user who scrolled up, read, then
-      // scrolled back down themselves resume live-following without waiting
-      // for the next message.
+    if (decision === 're-arm') {
+      // Lets a user who scrolled up, read, then scrolled back down
+      // themselves resume live-following without waiting for the next
+      // message.
       autoScrollSuppressedForMsgIdRef.current = null;
       setJumpToLatestVisible(false);
       clearScrollHeadroom();
     }
-  }, [autoScroll, setJumpToLatestVisible, clearScrollHeadroom, isAutoScrollSuppressed]);
+  }, [setJumpToLatestVisible, clearScrollHeadroom, isAutoScrollSuppressed]);
 
   // "Jump to latest" pill click handler — the ONE place `behavior: 'smooth'`
   // is used for this scroll container. The per-frame streaming chase (step 4)
@@ -2956,6 +2917,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
+    // Reseed from the real DOM on every (re)mount — this effect reruns
+    // whenever scrollContainerMounted flips (container unmounts on an empty
+    // chat, remounts on the next message), and a stale value left over from
+    // a prior mount could otherwise read as a spurious delta on the first
+    // handleScrollInterrupt call after remount.
+    lastScrollTopRef.current = container.scrollTop;
     let rafId: number | null = null;
     const onScroll = () => {
       if (rafId !== null) return;
@@ -2982,7 +2949,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // remains a secondary signal for input that doesn't fire wheel events
     // (e.g. dragging the scrollbar thumb directly).
     const onWheel = (e: WheelEvent) => {
-      if (!autoScroll) return;
       if (e.deltaY < 0) {
         // Upward tick — interrupt, no threshold. Mirrors handleScrollInterrupt's
         // direction check but reads raw input directly (see the effect-level
@@ -3036,7 +3002,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     scrollContainerMounted,
     checkCodeVisibility,
     handleScrollInterrupt,
-    autoScroll,
     setJumpToLatestVisible,
     clearScrollHeadroom,
     isAutoScrollSuppressed,
@@ -7945,20 +7910,21 @@ Provide only the answer, nothing else.`;
                     height, no scroll-content dependency and no magic pixel
                     offsets.
 
-                    Styled to match ResizeToggle (src/components/ui/ResizeToggle.tsx)
-                    at the user's request: same 28px jelly-pill material
-                    (.overlay-resize-toggle-surface + appearance.shellStyle,
-                    the same "floating chrome outside the content, reads as
-                    the panel's own material" recipe), same gloss-sheen
-                    overlay, same mount-pop/hover/tap motion curve. Unlike
-                    ResizeToggle this pill does NOT default to a dimmed 0.72
-                    opacity — that dimming exists there because window-chrome
-                    controls should recede until interacted with, but this
-                    pill only ever appears when there's actually something to
-                    jump to, so staying fully visible is the right call for
-                    what is effectively a lightweight notification affordance. */}
+                    Sized and positioned to match ResizeToggle
+                    (src/components/ui/ResizeToggle.tsx) at the user's
+                    request, but NOT the same material or motion — see the
+                    style/transition comments on the element below for the
+                    current surface (overlay-icon-surface) and animation
+                    (asymmetric spring-in / ease-out-exit) actually in use.
+                    Unlike ResizeToggle this pill does NOT default to a
+                    dimmed 0.72 opacity — that dimming exists there because
+                    window-chrome controls should recede until interacted
+                    with, but this pill only ever appears when there's
+                    actually something to jump to, so staying fully visible
+                    is the right call for what is effectively a lightweight
+                    notification affordance. */}
                 <AnimatePresence>
-                  {autoScroll && showJumpToLatest && (
+                  {showJumpToLatest && (
                     <motion.button
                       key="jump-to-latest"
                       type="button"

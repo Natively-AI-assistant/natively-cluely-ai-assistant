@@ -540,11 +540,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         return stored !== 'false';
     });
 
-    const [autoScroll, setAutoScroll] = useState(() => {
-        const stored = localStorage.getItem('natively_auto_scroll');
-        return stored !== 'false';
-    });
-
     // Recognition Language
     const [recognitionLanguage, setRecognitionLanguage] = useState('');
     const [selectedSttGroup, setSelectedSttGroup] = useState('');
@@ -875,16 +870,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         const handleStorage = () => {
             const stored = localStorage.getItem('natively_interviewer_transcript');
             setShowTranscript(stored !== 'false');
-        };
-        window.addEventListener('storage', handleStorage);
-        return () => window.removeEventListener('storage', handleStorage);
-    }, []);
-
-    // Sync auto-scroll setting
-    useEffect(() => {
-        const handleStorage = () => {
-            const stored = localStorage.getItem('natively_auto_scroll');
-            setAutoScroll(stored !== 'false');
         };
         window.addEventListener('storage', handleStorage);
         return () => window.removeEventListener('storage', handleStorage);
@@ -2147,30 +2132,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             className={`w-11 h-6 rounded-full relative transition-colors ${showTranscript ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                         >
                                                             <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${showTranscript ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Auto Scroll */}
-                                                    <div className="flex items-center justify-between px-4 py-3">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                                <ArrowDown size={20} />
-                                                            </div>
-                                                            <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Auto Scroll')}</h3>
-                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Automatically scroll to the latest message as new responses arrive')}</p>
-                                                            </div>
-                                                        </div>
-                                                        <div
-                                                            onClick={() => {
-                                                                const newState = !autoScroll;
-                                                                setAutoScroll(newState);
-                                                                localStorage.setItem('natively_auto_scroll', String(newState));
-                                                                window.dispatchEvent(new Event('storage'));
-                                                            }}
-                                                            className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${autoScroll ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                        >
-                                                            <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${autoScroll ? 'translate-x-5' : 'translate-x-0'}`} />
                                                         </div>
                                                     </div>
                                                 </div>
