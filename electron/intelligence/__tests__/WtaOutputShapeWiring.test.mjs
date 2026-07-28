@@ -23,6 +23,14 @@
 // inspection (finalWtaAnswer initialized to fullAnswer; only reassigned inside the
 // flag-gated if). The renderer REPLACE-not-append behavior is pinned by
 // overlayMessagePersistence / streamingTokenQueue tests (finalize assigns row.text).
+//
+// UPDATE (answer-pipeline-rebuild Phase 5, 2026-07-28): the engine now calls
+// applyAnswerContract (not normalizeOutputShape directly), passing a per-engine-instance
+// AnswerDiversityGuard so repeated WTA answers get the same diversity-repair manual chat
+// already has. applyAnswerContract's first step IS normalizeOutputShape, so every cleanup/
+// compression assertion below still describes real engine behavior unchanged. The added
+// diversity-guard behavior is covered separately in
+// WtaAnswerDiversityGuardWiring2026_07_28.test.mjs.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';

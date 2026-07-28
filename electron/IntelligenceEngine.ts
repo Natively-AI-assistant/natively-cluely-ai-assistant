@@ -21,7 +21,7 @@ import {
     isProviderTransportError, isLeakedInternalTagBlock, isLeakedAnswerArtifact,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE, BOLD_PSEUDO_HEADER_RE,
     buildProfileJitPrompt, decideSessionWritePolicy,
-    checkAnswerRelevance
+    checkAnswerRelevance, AnswerDiversityGuard
 } from './llm';
 import {
     validateDocumentGroundedAnswer,
@@ -46,7 +46,7 @@ import { buildPreparedTranscriptContext as assemblePreparedTranscriptContext } f
 import { PiLatencyTrace } from './services/telemetry/PiLatencyTracer';
 import { beginTrace, commitTrace } from './intelligence/IntelligenceTrace';
 import { isDurableMemoryWindowEnabled, isIntelligenceFlagEnabled } from './intelligence/intelligenceFlags';
-import { normalizeOutputShape } from './intelligence/OutputShapeNormalizer';
+import { applyAnswerContract } from './intelligence/OutputShapeNormalizer';
 import { LiveTranscriptBrain } from './intelligence/LiveTranscriptBrain';
 import { recordAttribution } from './intelligence/IntelligenceAttribution';
 
@@ -183,6 +183,17 @@ export class IntelligenceEngine extends EventEmitter {
 
     // Reference to SessionTracker for context
     private session: SessionTracker;
+
+    // Answer-pipeline-rebuild Phase 5 (2026-07-28): the WTA (live-meeting) answer path
+    // had no repetition protection at all — normalizeOutputShape (below) only cleans
+    // artifacts/humanizes, it never checks or records against a diversity guard, unlike
+    // manual chat's always-on _manualDiversityGuard (ipcHandlers.ts). One instance is
+    // correct here (not a per-sessionId map like ConversationMemoryService): IntelligenceEngine
+    // itself is a single app-lifetime instance (one live meeting/session at a time — see
+    // main.ts's single `new IntelligenceManager(...)`), so this mirrors that same scope.
+    // Cleared via clearWtaDiversityHistory() (NOT reset() — see that method's comment)
+    // so a new meeting/session doesn't inherit the previous one's history.
+    private readonly wtaDiversityGuard = new AnswerDiversityGuard(20);
 
     // Timestamps for tracking
     private lastTranscriptTime: number = 0;
@@ -3634,12 +3645,15 @@ export class IntelligenceEngine extends EventEmitter {
             // coding-repair pipeline (validateAnswerStructure/repairCodingMarkdown)
             // mutate fullAnswer first, so the exact-match checks silently missed
             // the mutated text for coding-type answers.)
-            // OUTPUT SHAPE NORMALIZER (Phase 4 wiring, behind answer_diversity_guard_enabled):
-            // the WTA path applies NO answer polish today (unlike the manual path), so empty
-            // "*" bullets and visible scaffold labels in a default-style answer reach the UI
-            // uncleaned. normalizeOutputShape strips those (code blocks preserved; coding
-            // answers skipped). Computed BEFORE addAssistantMessage/pushUsage so session
-            // history and the final emit all use the same normalized text (no double-add).
+            // OUTPUT SHAPE NORMALIZER (behind answer_diversity_guard_enabled): the WTA path
+            // applies NO answer polish by default, so empty "*" bullets and visible scaffold
+            // labels in a default-style answer reach the UI uncleaned. applyAnswerContract
+            // strips those (code blocks preserved; coding answers skipped) AND — as of
+            // answer-pipeline-rebuild Phase 5 — checks/repairs/records against
+            // this.wtaDiversityGuard, closing a gap where flag-ON only ever cleaned text and
+            // never protected against repeating an answer across different questions in the
+            // same meeting. Computed BEFORE addAssistantMessage/pushUsage so session history
+            // and the final emit all use the same normalized text (no double-add).
             // The renderer's onIntelligenceSuggestedAnswer finalizes with the final `answer`,
             // so the normalized final cleanly replaces the streamed text. Flag OFF →
             // finalWtaAnswer === fullAnswer (current behavior, byte-for-byte).
@@ -3691,17 +3705,35 @@ export class IntelligenceEngine extends EventEmitter {
             try {
                 // Output-shape contract: artifact cleanup + scaffold compression + the
                 // humanizer final pass + the speakability budget (spoken-answer-quality
-                // sprint 2026-06-15). All gate internally on answer type, so a coding /
-                // lecture / technical answer is a no-op. Flag-OFF → byte-for-byte unchanged.
+                // sprint 2026-06-15) + the diversity/repetition guard (answer-pipeline-rebuild
+                // Phase 5, 2026-07-28 — previously wired to normalizeOutputShape, which never
+                // checks/records against a guard at all, so this path had zero repetition
+                // protection regardless of this flag; applyAnswerContract is the same facade's
+                // full version, matching what manual chat's always-on guard already does).
+                // All gate internally on answer type, so a coding/lecture/technical answer is
+                // a no-op. Flag-OFF → byte-for-byte unchanged.
                 if (isIntelligenceFlagEnabled('answerDiversityGuard')) {
-                    const shaped = normalizeOutputShape({
+                    const shaped = applyAnswerContract({
                         answer: finalWtaAnswer,
                         answerStyle: answerPlan.answerStyle as string,
                         isCoding,
                         answerType: answerPlan.answerType,
                         question: question || '',
+                        guard: this.wtaDiversityGuard,
                     });
                     if (shaped.changed && shaped.text.trim().length >= 10) finalWtaAnswer = shaped.text;
+                    // Code-review finding (2026-07-28): without this, a live repetition-guard
+                    // bug (detected-but-not-repaired) ran silently for as long as the flag
+                    // was on, with zero signal in traces. Emit regardless of whether a repair
+                    // was applied, so "guard fired but did nothing" is distinguishable from
+                    // "guard never fired" in a live trace.
+                    if (shaped.repetition) {
+                        trace.mark('wta_diversity_guard_checked', {
+                            repeated: shaped.repetition.repeated,
+                            reason: shaped.repetition.reason,
+                            repaired: shaped.applied.includes('diversity_repair'),
+                        });
+                    }
                 }
             } catch { /* normalizer never blocks the answer */ }
 
@@ -4587,5 +4619,18 @@ export class IntelligenceEngine extends EventEmitter {
         }
         this.speculativeText = null;
         this.speculativeTextExpiry = Infinity;
+    }
+
+    /**
+     * Clears wtaDiversityGuard's cross-turn history. Deliberately NOT called from reset()
+     * above: reset() is also invoked by IntelligenceManager.resetEngine() (API-key/provider
+     * swap mid-meeting), whose own doc comment promises to cancel in-flight streams
+     * "WITHOUT touching session state" — the guard's history is exactly that kind of
+     * session state, so wiping it there would silently defeat this fix for the rest of a
+     * meeting every time a user swaps a key after a rate limit. Call only from genuine
+     * session teardown (IntelligenceManager.reset()).
+     */
+    clearWtaDiversityHistory(): void {
+        this.wtaDiversityGuard.reset();
     }
 }

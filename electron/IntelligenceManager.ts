@@ -305,5 +305,6 @@ export class IntelligenceManager extends EventEmitter {
     reset(): void {
         this.session.reset();
         this.engine.reset();
+        this.engine.clearWtaDiversityHistory();
     }
 }

@@ -51,7 +51,11 @@ export type PiMilestone =
   | 'code_correction_used'
   | 'code_correction_error'
   | 'code_correction_reverified'
-  | 'code_verify_error';
+  | 'code_verify_error'
+  // Answer-diversity guard (answer-pipeline-rebuild Phase 5): emitted whenever the
+  // guard is CHECKED, whether or not it fired, so "guard never fired" is
+  // distinguishable from "guard fired but the repair was a no-op" in a live trace.
+  | 'wta_diversity_guard_checked';
 
 function monotonicNow(): number {
   try {
