@@ -8983,6 +8983,29 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Store active query abort controllers for cancellation
   const activeRAGQueries = new Map<string, AbortController>();
 
+  // Phase 6 (answer-pipeline-rebuild) concurrency fix: a NEW query of the same
+  // class (same meetingId, or live, or global) starting while a PRIOR one of
+  // that class is still streaming previously had no backend-side supersession
+  // at all — only the renderer finalized its own stale message bubble
+  // (forceFinalizeStaleRagStream in NativelyInterface.tsx), while the old
+  // backend generator kept running and kept emitting rag:stream-chunk events.
+  // Those late chunks then got appended into whatever text buffer was current
+  // by the time they arrived — corrupting the NEW answer with leftover tokens
+  // from the abandoned one. rag:cancel-query exists but is never invoked by
+  // any renderer call site, and (by its own pre-existing comment) can't even
+  // reach `live-` keys. Fixed at the source: abort any still-active query
+  // matching this class BEFORE minting a new one, mirroring the same
+  // "abort the old, start the new" pattern ipcHandlers.ts's manual-chat
+  // stream supersession (_chatStreamsBySender) already uses.
+  function abortPriorRAGQueriesOfClass(matchesClass: (key: string) => boolean): void {
+    for (const [key, controller] of activeRAGQueries) {
+      if (matchesClass(key)) {
+        try { controller.abort(); } catch { /* noop */ }
+        activeRAGQueries.delete(key);
+      }
+    }
+  }
+
   // Query meeting with RAG (meeting-scoped)
   safeHandle(
     'rag:query-meeting',
@@ -9007,6 +9030,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { fallback: true };
       }
 
+      abortPriorRAGQueriesOfClass((key) => key.startsWith(`meeting-${meetingId}-`));
       const abortController = new AbortController();
       const queryKey = `meeting-${meetingId}-${crypto.randomUUID()}`;
       activeRAGQueries.set(queryKey, abortController);
@@ -9019,7 +9043,18 @@ export function initializeIpcHandlers(appState: AppState): void {
           event.sender.send('rag:stream-chunk', { meetingId, chunk });
         }
 
-        event.sender.send('rag:stream-complete', { meetingId });
+        // Code-review finding (2026-07-28): RAGManager's generator `break`s
+        // (returns normally) rather than throwing when aborted, so this line
+        // was previously reached unconditionally even for a query that was
+        // just superseded by abortPriorRAGQueriesOfClass above. The renderer
+        // has no per-query correlation for rag:stream-complete (it acts on
+        // "whatever is currently the last streaming message"), so a stale
+        // complete event for the OLD query could finalize the NEW,
+        // still-empty placeholder as done — silently swallowing the new
+        // answer. Gate on the same abort check the chunk loop already uses.
+        if (!abortController.signal.aborted) {
+          event.sender.send('rag:stream-complete', { meetingId });
+        }
         return { success: true };
       } catch (error: any) {
         if (error.name !== 'AbortError') {
@@ -9057,14 +9092,21 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { fallback: true };
     }
 
+    // Auto-supersede any still-active LIVE query before starting this one —
+    // see abortPriorRAGQueriesOfClass's doc comment. rag:cancel-query can't
+    // reach `live-` keys (its own comment below), so this is the ONLY
+    // supersession path for this class; without it a rapid-fire follow-up
+    // question mid-stream would leave the old generator running forever,
+    // its late chunks bleeding into whatever answer is on screen by then.
+    abortPriorRAGQueriesOfClass((key) => key.startsWith('live-'));
     const abortController = new AbortController();
     // Date.now() alone collides when two queries fire in the same ms — the
     // second `set` would overwrite the first AbortController, the first
     // stream would become un-cancellable, and the `finally` `delete` would
     // evict the wrong entry. UUID guarantees uniqueness.
     // (Note: rag:cancel-query only matches `meeting-` and `global` prefixes,
-    // so `live-` keys aren't cancellable through that path — pre-existing
-    // behaviour, not regressed by this change.)
+    // so `live-` keys aren't cancellable through THAT path — mitigated above
+    // by auto-superseding on the next live query instead.)
     const queryKey = `live-${crypto.randomUUID()}`;
     activeRAGQueries.set(queryKey, abortController);
 
@@ -9076,7 +9118,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         event.sender.send('rag:stream-chunk', { live: true, chunk });
       }
 
-      event.sender.send('rag:stream-complete', { live: true });
+      // See the meeting-scoped handler's identical comment above — a stale
+      // complete event for a superseded live query would otherwise finalize
+      // the NEW placeholder as done before its first real chunk arrives.
+      if (!abortController.signal.aborted) {
+        event.sender.send('rag:stream-complete', { live: true });
+      }
       return { success: true };
     } catch (error: any) {
       if (error.name !== 'AbortError') {
@@ -9103,6 +9150,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { fallback: true };
     }
 
+    abortPriorRAGQueriesOfClass((key) => key.startsWith('global-'));
     const abortController = new AbortController();
     // See live-${...} comment above for why Date.now() alone is unsafe.
     const queryKey = `global-${crypto.randomUUID()}`;
@@ -9116,7 +9164,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         event.sender.send('rag:stream-chunk', { global: true, chunk });
       }
 
-      event.sender.send('rag:stream-complete', { global: true });
+      // See the meeting-scoped handler's identical comment above.
+      if (!abortController.signal.aborted) {
+        event.sender.send('rag:stream-complete', { global: true });
+      }
       return { success: true };
     } catch (error: any) {
       if (error.name !== 'AbortError') {
