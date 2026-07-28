@@ -1310,7 +1310,7 @@ export class AppState {
         if (CredentialsManager.getInstance().getSttProvider() === 'local-whisper') {
           const { isModelCached, MODEL_CATALOG_IDS } = require('./audio/whisper/modelManager');
           const { modelPreloader } = require('./audio/whisper/modelPreloader');
-          const { resolveInferenceConfig } = require('./audio/whisper/inferenceConfig');
+          const { resolveInferenceConfig, resolveModelDtype } = require('./audio/whisper/inferenceConfig');
           // Startup validation gate: if the persisted modelId isn't in the
           // catalog (corrupted settings, model retired, fork diverged), reset
           // to the safest fallback BEFORE preload — otherwise the worker
@@ -1367,7 +1367,14 @@ export class AppState {
               }
             }
           }
-          const { dtype } = resolveInferenceConfig();
+          // Per-model guarded dtype (NOT the bare platform dtype): a model
+          // whose fp32 encoder is over the PartitionAlloc ceiling caches a q8
+          // encoder, so readiness must be judged against the files the worker
+          // actually downloads. Best-effort — a lookup failure degrades to the
+          // platform dtype rather than blocking preload / download.
+          const dtypeFor = (id: string): string | Record<string, string> => {
+            try { return resolveModelDtype(id); } catch { return resolveInferenceConfig().dtype; }
+          };
 
           // Collect every model ID the user has selected (global + per-channel)
           // so we can auto-repair each one that's missing or corrupt.
@@ -1389,11 +1396,11 @@ export class AppState {
             micOverride && MODEL_CATALOG_IDS.has(micOverride) ? micOverride : '',
             modelId,
           ].filter(Boolean);
-          const primaryPreloadId = preloadPriority.find(id => isModelCached(id, dtype)) ?? '';
+          const primaryPreloadId = preloadPriority.find(id => isModelCached(id, dtypeFor(id))) ?? '';
 
           const { LocalModelDownloadService } = require('./services/LocalModelDownloadService');
           for (const id of modelIds) {
-            if (isModelCached(id, dtype)) {
+            if (isModelCached(id, dtypeFor(id))) {
               if (id === primaryPreloadId) {
                 console.log(`[AppState] Preloading local Whisper model: ${id}`);
                 modelPreloader.preload(id);

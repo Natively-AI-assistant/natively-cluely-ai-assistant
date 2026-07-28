@@ -619,10 +619,14 @@ export function createWhisperDownloadProvider(): LocalModelDownloadProvider {
     name: 'whisper',
     isModelCached(modelId: string): boolean {
       const { isModelCached } = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
-      const { resolveInferenceConfig: rIC } = require('../audio/whisper/inferenceConfig') as typeof import('../audio/whisper/inferenceConfig');
+      const { resolveModelDtype } = require('../audio/whisper/inferenceConfig') as typeof import('../audio/whisper/inferenceConfig');
       try {
-        const { dtype } = rIC();
-        return isModelCached(modelId as any, dtype);
+        // GUARDED per-model dtype, not the bare platform one: download
+        // verification has to look for the artifacts the worker actually
+        // fetched. A ceiling-guarded model (Whisper Large v3 Turbo) downloads
+        // encoder_model_quantized.onnx, so checking for the fp32 encoder here
+        // would report a complete download as incomplete, forever.
+        return isModelCached(modelId as any, resolveModelDtype(modelId));
       } catch {
         return isModelCached(modelId as any);
       }

@@ -67,10 +67,18 @@ const {
   guardEncoderDtype,
   preflightAllocation,
 } = await import(pathToFileURL(guardPath).href);
-const { getModelEncoderFp32Bytes, getAvailableModels } = await import(
+const downloadSvcPath = path.resolve(
+  __dirname,
+  '../../../dist-electron/electron/services/LocalModelDownloadService.js',
+);
+
+const { getModelEncoderFp32Bytes, getAvailableModels, isModelCached } = await import(
   pathToFileURL(modelMgrPath).href
 );
-const { buildWorkerInitMessage } = await import(pathToFileURL(inferenceCfgPath).href);
+const { buildWorkerInitMessage, resolveModelDtype, resolveInferenceConfig } = await import(
+  pathToFileURL(inferenceCfgPath).href
+);
+const { createWhisperDownloadProvider } = await import(pathToFileURL(downloadSvcPath).href);
 
 const TURBO = 'onnx-community/whisper-large-v3-turbo-ONNX';
 const TINY_EN = 'Xenova/whisper-tiny.en';
@@ -211,6 +219,87 @@ test('model status is computed for the dtype turbo will actually load', () => {
   fs.writeFileSync(path.join(onnxDir, 'encoder_model_quantized.onnx'), Buffer.alloc(4096, 1));
   const after = getAvailableModels().find(m => m.id === TURBO);
   assert.equal(after.status, 'available');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// resolveModelDtype — the SINGLE SOURCE OF TRUTH shared by the worker init
+// message, the model list, download verification and startup preload.
+//
+// THE BUG THIS PINS (PR #403 review): the guard was applied only inside
+// buildWorkerInitMessage and getAvailableModels. Every other cache consumer
+// (main.ts preload readiness, the local-whisper-preload IPC, the
+// LocalModelDownloadService whisper provider) asked resolveInferenceConfig()
+// for the bare PLATFORM dtype, so they looked for `encoder_model.onnx` while
+// the worker had actually downloaded `encoder_model_quantized.onnx`. Result:
+// a complete turbo download reported incomplete forever, and a stale fp32
+// cache reported ready.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const turboOnnxDir = path.join(userData, 'whisper-models', TURBO, 'onnx');
+
+/** Wipe the turbo cache and lay down exactly `files`, each non-empty. */
+function stageTurboCache(files) {
+  fs.rmSync(path.join(userData, 'whisper-models', TURBO), { recursive: true, force: true });
+  fs.mkdirSync(turboOnnxDir, { recursive: true });
+  for (const f of files) fs.writeFileSync(path.join(turboOnnxDir, f), Buffer.alloc(4096, 1));
+}
+
+const encoderOf = dt => (typeof dt === 'string' ? dt : dt.encoder_model);
+
+test('resolveModelDtype applies the ceiling guard per MODEL, not per platform', () => {
+  // Turbo: guarded away from fp32 — this is the whole point.
+  assert.equal(encoderOf(resolveModelDtype(TURBO)), ENCODER_FALLBACK_DTYPE);
+  // And it differs from the unguarded platform answer, otherwise this test
+  // would pass even with the guard removed.
+  assert.equal(encoderOf(resolveInferenceConfig().dtype), 'fp32');
+
+  // Everything else keeps the platform dtype untouched — encoder accuracy is
+  // preserved for every model that can actually be allocated.
+  assert.deepEqual(resolveModelDtype(TINY_EN), resolveInferenceConfig().dtype);
+  // Unknown ids must never throw and never change behaviour.
+  assert.deepEqual(resolveModelDtype('does/not-exist'), resolveInferenceConfig().dtype);
+});
+
+test('resolveModelDtype agrees with the dtype the worker is actually sent', () => {
+  // If these two ever diverge, download verification and the worker are again
+  // looking at different files — the exact class of bug this fix removes.
+  assert.deepEqual(buildWorkerInitMessage(TURBO).dtype, resolveModelDtype(TURBO));
+  assert.deepEqual(buildWorkerInitMessage(TINY_EN).dtype, resolveModelDtype(TINY_EN));
+});
+
+test('a q8-encoder turbo cache is READY under the guarded dtype', () => {
+  // Exactly what a successful turbo download leaves on disk: the quantized
+  // encoder the worker fetched, plus the q8 merged decoder. No fp32 encoder
+  // and no .onnx_data companion — the guard means neither is ever requested.
+  stageTurboCache(['encoder_model_quantized.onnx', 'decoder_model_merged_quantized.onnx']);
+
+  assert.equal(isModelCached(TURBO, resolveModelDtype(TURBO)), true);
+  // The whisper download provider verifies the SAME artifacts, so a completed
+  // download is reported complete instead of retrying forever.
+  assert.equal(createWhisperDownloadProvider().isModelCached(TURBO), true);
+  assert.equal(getAvailableModels().find(m => m.id === TURBO).status, 'available');
+});
+
+test('a stale fp32-encoder turbo cache is NOT ready — those files are never loaded', () => {
+  // A pre-guard download (fp32 encoder + its external-data companion). The
+  // worker will now fetch the q8 encoder, so this cache is incomplete no
+  // matter how complete it looks.
+  stageTurboCache([
+    'encoder_model.onnx',
+    'encoder_model.onnx_data',
+    'decoder_model_merged_quantized.onnx',
+  ]);
+
+  assert.equal(isModelCached(TURBO, resolveModelDtype(TURBO)), false);
+  assert.equal(createWhisperDownloadProvider().isModelCached(TURBO), false);
+  assert.equal(getAvailableModels().find(m => m.id === TURBO).status, 'missing');
+});
+
+test('isModelCached with no dtype still falls through to the legacy directory check', () => {
+  // Legacy callers must keep their old contract: any non-empty model dir counts.
+  stageTurboCache(['encoder_model.onnx']);
+  assert.equal(isModelCached(TURBO, undefined), true);
+  assert.equal(isModelCached('does/not-exist', undefined), false);
 });
 
 test.after(() => {

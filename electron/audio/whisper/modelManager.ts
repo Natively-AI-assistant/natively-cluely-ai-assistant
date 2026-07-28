@@ -1,8 +1,6 @@
 import path from 'path';
 import fs from 'fs';
 import type { WhisperModelId, WhisperModelInfo } from './types';
-// Pure module (no electron / fs / transformers) — safe to import statically.
-import { guardEncoderDtype } from './allocationGuard';
 
 // env is configured lazily via configureTransformersCache()
 // We import the type only here; the actual require() happens at runtime.
@@ -282,30 +280,23 @@ export function getAvailableModels(): WhisperModelInfo[] {
   // Resolve the active dtype lazily — avoids importing inferenceConfig at
   // module top (which would break the modelPreloader → modelManager require
   // chain on platforms where process info isn't yet available).
-  let dtype: string | Record<string, string> | undefined;
+  //
+  // Per-model, not global: resolveModelDtype downgrades the encoder to q8 for
+  // checkpoints whose fp32 encoder is over the single-allocation ceiling
+  // (allocationGuard.ts), so those models load — and therefore cache — a
+  // different encoder file than the platform default. Checking the unguarded
+  // dtype here would report "available" for a model whose encoder still has to
+  // be downloaded.
+  let resolveModelDtype: ((id: string) => string | Record<string, string>) | undefined;
   try {
-    const { resolveInferenceConfig } = require('./inferenceConfig');
-    dtype = resolveInferenceConfig().dtype;
+    ({ resolveModelDtype } = require('./inferenceConfig'));
   } catch {
-    dtype = undefined; // fall back to legacy directory-non-empty check
+    resolveModelDtype = undefined; // fall back to legacy directory-non-empty check
   }
   return MODEL_CATALOG.map(m => ({
     ...m,
-    // Per-model, not global: buildWorkerInitMessage downgrades the encoder to
-    // q8 for checkpoints whose fp32 encoder is over the single-allocation
-    // ceiling (allocationGuard.ts), so those models load — and therefore cache
-    // — a different encoder file than the platform default. Checking the
-    // unguarded dtype here would report "available" for a model whose encoder
-    // still has to be downloaded.
     // undefined dtype keeps the legacy directory-non-empty check untouched.
-    status: isModelCached(
-      m.id,
-      dtype === undefined
-        ? undefined
-        : guardEncoderDtype(dtype, getModelEncoderFp32Bytes(m.id)).dtype,
-    )
-      ? 'available'
-      : 'missing',
+    status: isModelCached(m.id, resolveModelDtype?.(m.id)) ? 'available' : 'missing',
   }));
 }
 

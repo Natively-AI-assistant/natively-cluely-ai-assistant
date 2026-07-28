@@ -82,6 +82,57 @@ function dtypeSizeFactor(dtype: string | Record<string, string>): number {
 }
 
 /**
+ * The dtype a SPECIFIC model actually loads — and therefore the dtype whose
+ * ONNX filenames its cache must contain.
+ *
+ * SINGLE SOURCE OF TRUTH. `resolveInferenceConfig()` answers "what does this
+ * platform prefer", which is NOT the same question: a model whose fp32 encoder
+ * weights are at or above Chromium's 2 GiB - 2 MiB PartitionAlloc ceiling
+ * (Whisper Large v3 Turbo) gets its encoder downgraded to q8, because asking
+ * ORT for that single allocation traps the process (SIGTRAP — see
+ * allocationGuard.ts). Such a model downloads `encoder_model_quantized.onnx`,
+ * never `encoder_model.onnx`.
+ *
+ * Every consumer that maps a model to on-disk artifacts MUST go through here —
+ * the worker init message, the model-list status, download verification, and
+ * startup preload readiness. Using the unguarded platform dtype anywhere in
+ * that set desynchronises them: a complete turbo download gets reported as
+ * incomplete (verification looks for the fp32 encoder the worker never
+ * fetched), and a stale fp32 cache gets classified as ready.
+ *
+ * Best-effort by contract: an unknown id, or any failure in the catalog
+ * lookup, returns the platform dtype untouched. This function must never
+ * throw and never block a load or a download.
+ */
+export function resolveModelDtype(modelId: string): string | Record<string, string> {
+    return resolveGuardedDtype(modelId).dtype;
+}
+
+interface GuardedDtype {
+    dtype: string | Record<string, string>;
+    /** Catalog fp32 encoder size, forwarded to the worker's own preflight. */
+    encoderFp32Bytes: number | undefined;
+    executionProviders: string[];
+}
+
+function resolveGuardedDtype(modelId: string, warn = false): GuardedDtype {
+    const { executionProviders, dtype: resolvedDtype } = resolveInferenceConfig();
+    try {
+        // Late require — modelManager imports electron, which isn't available
+        // when this module is first loaded in some contexts (test harnesses).
+        const { getModelEncoderFp32Bytes } = require('./modelManager');
+        const encoderFp32Bytes = getModelEncoderFp32Bytes(modelId);
+        const guard = guardEncoderDtype(resolvedDtype, encoderFp32Bytes);
+        if (guard.downgraded && warn) {
+            console.warn(`[inferenceConfig] ${modelId}: ${guard.reason}`);
+        }
+        return { dtype: guard.dtype, encoderFp32Bytes, executionProviders };
+    } catch {
+        return { dtype: resolvedDtype, encoderFp32Bytes: undefined, executionProviders };
+    }
+}
+
+/**
  * Construct the worker `init` message for a given model. Single source of
  * truth — three callers (LocalWhisperSTT.spawnWorker, modelPreloader.preload,
  * local-whisper-start-download IPC) all use this so the message shape stays
@@ -95,29 +146,9 @@ export function buildWorkerInitMessage(modelId: string): WorkerInitMessage {
         getModelsDir,
         getModelSizeBytes,
         getModelExternalDataFormat,
-        getModelEncoderFp32Bytes,
     } = require('./modelManager');
-    const { executionProviders, dtype: resolvedDtype } = resolveInferenceConfig();
-    // SINGLE-ALLOCATION CEILING (Whisper Large v3 Turbo SIGTRAP): a model whose
-    // fp32 encoder weights are at or above 2 GiB - 2 MiB cannot be loaded at
-    // fp32 inside Electron at all — ONNX Runtime asks for those initializers in
-    // one block and Chromium's PartitionAlloc traps the process instead of
-    // returning NULL. Downgrade just the encoder to q8 for those checkpoints.
-    // Best-effort, like the lookups below: an unknown id or a throwing lookup
-    // leaves the resolved dtype untouched and must NEVER block worker startup.
-    let dtype: string | Record<string, string> = resolvedDtype;
-    let encoderFp32Bytes: number | undefined;
-    try {
-        encoderFp32Bytes = getModelEncoderFp32Bytes(modelId);
-        const guard = guardEncoderDtype(resolvedDtype, encoderFp32Bytes);
-        dtype = guard.dtype;
-        if (guard.downgraded) {
-            console.warn(`[inferenceConfig] ${modelId}: ${guard.reason}`);
-        }
-    } catch {
-        dtype = resolvedDtype;
-        encoderFp32Bytes = undefined;
-    }
+    // Guarded, per-model dtype — the same value every cache consumer sees.
+    const { executionProviders, dtype, encoderFp32Bytes } = resolveGuardedDtype(modelId, true);
     // Catalog download size — progress-bar denominator from byte zero. The
     // lookup is best-effort: if it's missing (unknown id) or the call fails
     // for any reason, we send 0 and the worker falls back to summing the

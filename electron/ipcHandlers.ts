@@ -7287,18 +7287,21 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { modelPreloader } = require('./audio/whisper/modelPreloader');
       const { isModelCached } = require('./audio/whisper/modelManager');
-      const { resolveInferenceConfig } = require('./audio/whisper/inferenceConfig');
+      const { resolveInferenceConfig, resolveModelDtype } = require('./audio/whisper/inferenceConfig');
       const { SettingsManager } = require('./services/SettingsManager');
       const id =
         modelId ||
         SettingsManager.getInstance().get('localWhisperModel') ||
         'Xenova/whisper-tiny.en';
-      // Pass active dtype so the cache check verifies the SPECIFIC ONNX
-      // files (e.g. encoder_model.onnx for fp32) are present — not just
+      // Pass the GUARDED per-model dtype so the cache check verifies the
+      // SPECIFIC ONNX files the worker will actually load — not just
       // "directory non-empty". Otherwise a v2-cached _quantized.onnx-only
       // directory would be reported "available" but trigger a 142MB
-      // background fetch on first start().
-      const { dtype } = resolveInferenceConfig();
+      // background fetch on first start(); and conversely a ceiling-guarded
+      // model (q8 encoder) would be judged against the fp32 encoder it never
+      // downloads. Best-effort: fall back to the platform dtype on failure.
+      let dtype: string | Record<string, string>;
+      try { dtype = resolveModelDtype(id); } catch { dtype = resolveInferenceConfig().dtype; }
       if (!isModelCached(id, dtype)) {
         return { success: false, reason: 'model-not-cached' };
       }
