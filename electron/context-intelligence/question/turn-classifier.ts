@@ -45,7 +45,14 @@ const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 // self-reference. These are the questions that REQUIRE private evidence.
 const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|walk me through your|my)\b/;
 const PROJECT_RE = /\b(project|built|shipped|implemented|designed|architect(ed|ure) of your)\b/;
-const SKILL_RE = /\b(experience with|familiar with|worked with|proficient|know how to|skills?)\b/;
+// Matches BOTH orderings, because interviewers use both interchangeably:
+//   "experience WITH Kubernetes"   (preposition-led)
+//   "your Kubernetes EXPERIENCE"   (noun-final)
+// An earlier version required the preposition and silently classified
+// "Tell me about your Kubernetes experience" as AMBIGUOUS with no claims —
+// which meant no source was required and a fabricated answer would have been
+// permitted. Gated on `personal`, so the bare nouns cannot over-trigger.
+const SKILL_RE = /\b(experience|expertise|background|proficien\w*|familiar with|worked with|know how to|skills?|leadership|hands-on)\b/;
 const EDUCATION_RE = /\b(degree|graduat|university|college|studied|major(ed)?)\b/;
 const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|job title|tenure)\b/;
 
