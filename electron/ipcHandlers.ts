@@ -312,14 +312,18 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!next) {
         // All providers are disabled or no configured credential exists.
         // Reset the persisted default to a safe sentinel so it does not
-        // point to a stale disabled model. LLMHelper will use the fallback
-        // chain at routing time (which will try providers in order and fail
-        // gracefully with "No AI providers configured").
-        console.warn('[IPC] refreshRuntimeDefaultIfUnavailable: no available model found — resetting to natively');
-        cm.setDefaultModel('natively');
-        llmHelper.setModel('natively', allProviders);
-        appState.broadcast('model-changed', 'natively');
-        return 'natively';
+        // point to a stale disabled model. Use 'gemini-3.6-flash' as the
+        // sentinel — it is the constant default and will fall through the
+        // routing chain gracefully (no configured key → "No AI providers
+        // configured") rather than re-activating a disabled provider.
+        // Do NOT use 'natively' here: natively might have been disabled
+        // by the user and was already rejected by modelAvailable() above.
+        const safeSentinel = 'gemini-3.6-flash';
+        console.warn(`[IPC] refreshRuntimeDefaultIfUnavailable: no available model found — resetting to ${safeSentinel}`);
+        cm.setDefaultModel(safeSentinel);
+        llmHelper.setModel(safeSentinel, allProviders);
+        appState.broadcast('model-changed', safeSentinel);
+        return safeSentinel;
       }
       cm.setDefaultModel(next);
       llmHelper.setModel(next, allProviders);
