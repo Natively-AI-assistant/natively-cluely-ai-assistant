@@ -31,6 +31,25 @@ Post-merge fix: product strip now requires `shouldArmGate` (TI + sticky key) or 
 
 ## Optional T2 FULL_RAW smoke
 
-**Not run** in this ticket (optional per PRD; overnight FULL_RAW deferred unless explicitly requested). Strip no longer depends on pin alone — product path is covered at Tier 0 above.
+**Ran:** 2026-07-28 (post-merge verify)
 
-When a smoke is run later, record digest / artifact paths here or under `.scratch/sd-interview-sim/debug/`.
+```bash
+RUN_SD_INTERVIEW_SIM_T2=1 \
+SD_INTERVIEW_SIM_T2_FULL_RAW=1 \
+SD_INTERVIEW_SIM_T2_INGEST_LESSONS=0 \
+SD_INTERVIEW_SIM_T2_MAX_INTERVIEWS=1 \
+SD_INTERVIEW_SIM_T2_MAX_USD=4 \
+SD_INTERVIEW_SIM_T2_MAX_TURNS=32 \
+SD_INTERVIEW_SIM_T2_PROMPT='Design a URL shortener like Bitly.' \
+npm run sd-interview-sim:t2
+```
+
+| Field | Value |
+|-------|--------|
+| run_id | `04a5ef62-b276-41ff-8dc8-f34a1b7e6b88` |
+| digest | `traces/sd-interview-sim/t2-04a5ef62-….digest.md` |
+| end_reason | `max_turns` (32) / ≈$0.034 |
+| tags | `candidate_rewind`, `full_raw` |
+| Verdict | **FAIL** — late turns still contain Requirements Draft / FR lists |
+
+Notes: LESSON ingest opted out (72-file ingest hung first attempt). Offline, strip clears drafts once artifact is requirements-done; this run never reached checklist-complete/gate-close. Also pushed `fix(sd): no-op draft strip when pin has no artifact yet`. Re-run with ingest on + `MAX_TURNS=0` toward `coverage_complete` for a fairer comparison to `t2-b7612f0a…`.
