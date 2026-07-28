@@ -3,6 +3,7 @@ import { useT } from '../../i18n';
 import { Trash2, AlertCircle, CheckCircle, ExternalLink, Loader2, ChevronDown, Check, RefreshCw, SlidersHorizontal, Filter, Eye, Brain, FileText, Zap, DollarSign } from 'lucide-react';
 import { STANDARD_CLOUD_MODELS } from '../../utils/modelUtils';
 import { Dialog, DialogContent } from '../ui/dialog';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface FetchedModel {
     id: string;
@@ -39,6 +40,92 @@ interface ProviderCardProps {
     fastModeEnabled?: boolean;
     onToggleFastMode?: (enabled: boolean) => void;
     id?: string;
+}
+
+function StyledSelect<T extends string>({
+    value,
+    options,
+    onChange,
+    icon,
+    label,
+}: {
+    value: T;
+    options: { id: T; name: string }[];
+    onChange: (val: T) => void;
+    icon?: React.ReactNode;
+    label?: string;
+}) {
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const selectedOption = options.find(o => o.id === value) || options[0];
+
+    return (
+        <div ref={containerRef} className="relative z-20 space-y-1">
+            {label && (
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-text-secondary">
+                    {icon}
+                    <span>{label}</span>
+                </div>
+            )}
+            <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className={`w-full bg-bg-input hover:bg-bg-elevated border border-border-subtle dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-text-primary flex items-center justify-between transition-colors cursor-pointer outline-none ${
+                    isOpen ? 'border-accent-primary dark:border-accent-primary ring-1 ring-accent-primary/30' : ''
+                }`}
+            >
+                <span className="truncate font-medium">{selectedOption?.name}</span>
+                <ChevronDown size={13} className={`text-text-tertiary transition-transform duration-200 shrink-0 ml-1.5 ${isOpen ? 'rotate-180 text-accent-primary' : ''}`} />
+            </button>
+
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                        transition={{ duration: 0.15, ease: 'easeOut' }}
+                        className="absolute top-full left-0 w-full mt-1 bg-bg-elevated border border-border-subtle dark:border-zinc-800 rounded-lg shadow-2xl z-50 overflow-hidden custom-scrollbar"
+                    >
+                        <div className="max-h-[200px] overflow-y-auto p-1 space-y-0.5 custom-scrollbar">
+                            {options.map((opt) => {
+                                const isSelected = opt.id === value;
+                                return (
+                                    <button
+                                        key={opt.id}
+                                        type="button"
+                                        onClick={() => {
+                                            onChange(opt.id);
+                                            setIsOpen(false);
+                                        }}
+                                        className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                                            isSelected
+                                                ? 'bg-accent-primary/15 text-accent-primary font-semibold'
+                                                : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'
+                                        }`}
+                                    >
+                                        <span className="truncate">{opt.name}</span>
+                                        {isSelected && <Check size={12} className="text-accent-primary shrink-0 ml-1.5" strokeWidth={2.5} />}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
 }
 
 export const ProviderCard: React.FC<ProviderCardProps> = ({
@@ -437,9 +524,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
                     {/* OpenRouter Token Budget / Credit Info & Advanced Controls */}
                     {providerId === 'openrouter' && hasStoredKey && (
-                        <div className="mt-4 pt-3.5 border-t border-border-subtle/60 space-y-3">
+                        <div className="mt-4 pt-3.5 border-t border-border-subtle dark:border-zinc-800/80 space-y-3">
                             {/* Credit Info Badge */}
-                            <div className="flex items-center justify-between bg-bg-input/60 rounded-lg p-2.5 border border-border-subtle/50 text-xs">
+                            <div className="flex items-center justify-between bg-bg-input/60 rounded-lg p-2.5 border border-border-subtle dark:border-zinc-800/80 text-xs">
                                 <div className="flex items-center gap-2">
                                     <DollarSign size={14} className="text-emerald-500" />
                                     <span className="font-semibold text-text-primary">{t('OpenRouter Account Budget')}</span>
@@ -471,39 +558,35 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                             {/* OpenRouter Advanced Tuning Controls */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {/* Reasoning / Thinking Control */}
-                                <div className="bg-bg-input/40 p-2.5 rounded-lg border border-border-subtle/40 space-y-1">
-                                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-text-secondary">
-                                        <Brain size={12} className="text-purple-400" />
-                                        <span>{t('Reasoning / Thinking Effort')}</span>
-                                    </div>
-                                    <select
+                                <div className="bg-bg-input/40 p-2.5 rounded-lg border border-border-subtle dark:border-zinc-800/80">
+                                    <StyledSelect
+                                        label={t('Reasoning / Thinking Effort')}
+                                        icon={<Brain size={12} className="text-purple-400" />}
                                         value={openrouterPrefs.reasoningEffort || 'medium'}
-                                        onChange={(e) => handleUpdateOpenrouterPrefs({ reasoningEffort: e.target.value as any })}
-                                        className="w-full bg-bg-input border border-border-subtle rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-primary"
-                                    >
-                                        <option value="none">{t('Disabled (No Thinking Tokens)')}</option>
-                                        <option value="low">{t('Low Effort')}</option>
-                                        <option value="medium">{t('Medium Effort (Default)')}</option>
-                                        <option value="high">{t('High Effort')}</option>
-                                        <option value="max">{t('Max Effort')}</option>
-                                    </select>
+                                        options={[
+                                            { id: 'none', name: t('Disabled (No Thinking Tokens)') },
+                                            { id: 'low', name: t('Low Effort') },
+                                            { id: 'medium', name: t('Medium Effort (Default)') },
+                                            { id: 'high', name: t('High Effort') },
+                                            { id: 'max', name: t('Max Effort') },
+                                        ]}
+                                        onChange={(val) => handleUpdateOpenrouterPrefs({ reasoningEffort: val })}
+                                    />
                                 </div>
 
                                 {/* Provider Routing Strategy */}
-                                <div className="bg-bg-input/40 p-2.5 rounded-lg border border-border-subtle/40 space-y-1">
-                                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-text-secondary">
-                                        <Zap size={12} className="text-amber-400" />
-                                        <span>{t('Upstream Routing Strategy')}</span>
-                                    </div>
-                                    <select
+                                <div className="bg-bg-input/40 p-2.5 rounded-lg border border-border-subtle dark:border-zinc-800/80">
+                                    <StyledSelect
+                                        label={t('Upstream Routing Strategy')}
+                                        icon={<Zap size={12} className="text-amber-400" />}
                                         value={openrouterPrefs.providerSort || 'latency'}
-                                        onChange={(e) => handleUpdateOpenrouterPrefs({ providerSort: e.target.value as any })}
-                                        className="w-full bg-bg-input border border-border-subtle rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-primary"
-                                    >
-                                        <option value="latency">{t('Lowest Latency (Fastest Response)')}</option>
-                                        <option value="price">{t('Lowest Price (Cheapest Provider)')}</option>
-                                        <option value="throughput">{t('Highest Throughput')}</option>
-                                    </select>
+                                        options={[
+                                            { id: 'latency', name: t('Lowest Latency (Fastest Response)') },
+                                            { id: 'price', name: t('Lowest Price (Cheapest Provider)') },
+                                            { id: 'throughput', name: t('Highest Throughput') },
+                                        ]}
+                                        onChange={(val) => handleUpdateOpenrouterPrefs({ providerSort: val })}
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -519,8 +602,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
             {/* MANAGE SELECTABLE MODELS MODAL FOR THIS PROVIDER */}
             <Dialog open={isManageModalOpen} onOpenChange={setIsManageModalOpen}>
-                <DialogContent className="w-[540px] max-w-[92vw] bg-bg-elevated border border-border-subtle p-6 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] animated fadeIn text-xs text-text-primary opacity-100 ring-1 ring-border-subtle/50">
-                    <div className="flex items-center justify-between mb-4 border-b border-border-subtle pb-3">
+                <DialogContent className="w-[540px] max-w-[92vw] bg-bg-elevated border border-border-subtle dark:border-zinc-800 p-6 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] animated fadeIn text-xs text-text-primary opacity-100">
+                    <div className="flex items-center justify-between mb-4 border-b border-border-subtle dark:border-zinc-800/60 pb-3">
                         <div>
                             <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
                                 {t('Manage Selectable')} {providerName} {t('Models')}
@@ -546,7 +629,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                             placeholder={t('Search models...')}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary font-mono"
+                            className="flex-1 bg-bg-input border border-border-subtle dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary font-mono"
                         />
                         <button
                             type="button"
@@ -566,14 +649,14 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                             <button
                                 type="button"
                                 onClick={handleEnableAll}
-                                className="px-2.5 py-1 bg-bg-input hover:bg-bg-item-surface border border-border-subtle rounded-md text-[11px] font-medium text-text-primary transition-colors cursor-pointer"
+                                className="px-2.5 py-1 bg-bg-input hover:bg-bg-item-surface border border-border-subtle dark:border-zinc-800 rounded-md text-[11px] font-medium text-text-primary transition-colors cursor-pointer"
                             >
                                 {t('Enable All')}
                             </button>
                             <button
                                 type="button"
                                 onClick={handleDisableAll}
-                                className="px-2.5 py-1 bg-bg-input hover:bg-bg-item-surface border border-border-subtle rounded-md text-[11px] font-medium text-text-primary transition-colors cursor-pointer"
+                                className="px-2.5 py-1 bg-bg-input hover:bg-bg-item-surface border border-border-subtle dark:border-zinc-800 rounded-md text-[11px] font-medium text-text-primary transition-colors cursor-pointer"
                             >
                                 {t('Disable All')}
                             </button>
@@ -581,7 +664,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
                         {/* Modality Filters — Only rendered for OpenRouter provider */}
                         {providerId === 'openrouter' && (
-                            <div className="flex items-center gap-1 bg-bg-input p-0.5 rounded-lg border border-border-subtle">
+                            <div className="flex items-center gap-1 bg-bg-input p-0.5 rounded-lg border border-border-subtle dark:border-zinc-800">
                                 <button
                                     type="button"
                                     onClick={() => setModalityFilter('all')}
@@ -614,7 +697,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                             className={`px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer border ${
                                 showSelectedOnly
                                     ? 'bg-accent-primary/20 border-accent-primary/50 text-accent-primary font-bold'
-                                    : 'bg-bg-input hover:bg-bg-item-surface border-border-subtle text-text-secondary hover:text-text-primary'
+                                    : 'bg-bg-input hover:bg-bg-item-surface border-border-subtle dark:border-zinc-800 text-text-secondary hover:text-text-primary'
                             }`}
                         >
                             <Filter size={11} />
@@ -623,7 +706,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                     </div>
 
                     {/* Scrollable Model List */}
-                    <div className="flex-1 overflow-y-auto min-h-[220px] max-h-[360px] border border-border-subtle rounded-xl bg-bg-input p-2 space-y-1.5">
+                    <div className="flex-1 overflow-y-auto min-h-[220px] max-h-[360px] border border-border-subtle dark:border-zinc-800/80 rounded-xl bg-bg-input p-2 space-y-1.5 custom-scrollbar">
                         {filteredModels.map((model) => {
                             const isModelEnabled = (!enabledModels || enabledModels.length === 0) || (enabledModels.includes(model.id) && !enabledModels.includes('_none_'));
 
@@ -633,15 +716,15 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                                     onClick={() => handleToggleModel(model.id)}
                                     className={`flex items-center justify-between p-2.5 rounded-lg border transition-colors duration-150 cursor-pointer ${
                                         isModelEnabled
-                                            ? 'bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/30 text-emerald-900 dark:text-emerald-300'
-                                            : 'bg-bg-item-surface dark:bg-zinc-900/60 border-zinc-200 dark:border-transparent hover:border-zinc-300 dark:hover:border-zinc-700/60 dark:hover:bg-zinc-800/80'
+                                            ? 'bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                                            : 'bg-bg-input hover:bg-bg-elevated border-border-subtle dark:border-zinc-800/60 hover:border-border-muted dark:hover:border-zinc-700'
                                     }`}
                                 >
                                     <div className="flex items-center gap-3 min-w-0 flex-1">
                                         <div className={`w-4 h-4 rounded border transition-colors flex items-center justify-center shrink-0 ${
                                             isModelEnabled
                                                 ? 'bg-emerald-500 border-emerald-400 text-white'
-                                                : 'bg-bg-input border-zinc-400 dark:border-zinc-500 text-transparent hover:border-zinc-500 dark:hover:border-zinc-400'
+                                                : 'bg-bg-input border-zinc-500 dark:border-zinc-600 text-transparent hover:border-zinc-400'
                                         }`}>
                                             <Check size={11} strokeWidth={3} />
                                         </div>
