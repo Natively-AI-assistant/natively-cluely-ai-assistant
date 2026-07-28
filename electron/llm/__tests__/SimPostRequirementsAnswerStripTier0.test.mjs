@@ -85,12 +85,34 @@ describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss)', () => {
     assert.equal(out, draftText);
   });
 
-  test('identity while gate still open', () => {
+  test('identity while gate still open and checklist incomplete', () => {
     const open = gate.createEmptyRequirementsArtifact('Design a URL shortener like Bitly.');
     const out = live.applySimPostRequirementsAnswerStrip(draftText, {
       sdProblemKey: 'Design a URL shortener like Bitly.',
       artifact: open,
     });
     assert.equal(out, draftText);
+  });
+
+  test('SPEC 17: strips when pinned + checklist complete even if gate not closed', () => {
+    let a = gate.createEmptyRequirementsArtifact('Design a URL shortener like Bitly.');
+    for (const id of [
+      'functional_requirements',
+      'scale_qps',
+      'latency',
+      'consistency_availability',
+    ]) {
+      a = gate.fillSlotFromInterviewer(a, id, 'filled');
+    }
+    assert.equal(gate.isChecklistComplete(a), true);
+    assert.equal(gate.deriveSdPhase(a), 'requirements');
+    assert.equal(a.gateClosed, false);
+
+    const out = live.applySimPostRequirementsAnswerStrip(draftText, {
+      sdProblemKey: 'Design a URL shortener like Bitly.',
+      artifact: a,
+    });
+    assert.doesNotMatch(out, DRAFT_RE);
+    assert.match(out, /aligned on the scope of the analytics/i);
   });
 });
