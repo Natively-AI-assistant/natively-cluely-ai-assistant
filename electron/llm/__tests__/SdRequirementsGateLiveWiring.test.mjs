@@ -104,6 +104,59 @@ describe('prepareSdRequirementsForAnswerPlan (live stamp)', () => {
     assert.equal(out.artifact.gateClosed, false);
   });
 
+  test('candidateFillTexts fills remaining slots after empty interviewer (SPEC 13)', () => {
+    const plan = {
+      ...planAnswer({
+        question: 'Design a URL shortener like Bitly.',
+        source: 'what_to_answer',
+        speakerPerspective: 'interviewer',
+      }),
+      answerType: 'system_design_answer',
+    };
+    const out = live.prepareSdRequirementsForAnswerPlan({
+      answerPlan: plan,
+      artifact: null,
+      problemQuestion: 'Design a URL shortener like Bitly.',
+      interviewerTexts: ['Where would you like to start?'],
+      candidateFillTexts: [
+        'Functional requirements: create short links and redirect',
+        'Scale about 100k QPS with latency under 100ms p99',
+        'prefer availability over consistency',
+      ],
+    });
+    assert.equal(out.sdPhase, 'requirements');
+    assert.ok(out.artifact);
+    assert.equal(out.artifact.slots.functional_requirements.filled, true);
+    assert.equal(out.artifact.slots.scale_qps.filled, true);
+    assert.equal(out.artifact.slots.latency.filled, true);
+    assert.equal(out.artifact.slots.consistency_availability.filled, true);
+    assert.equal(gate.isChecklistComplete(out.artifact), true);
+  });
+
+  test('without candidateFillTexts, candidate speech alone does not fill slots', () => {
+    const plan = {
+      ...planAnswer({
+        question: 'Design a URL shortener like Bitly.',
+        source: 'what_to_answer',
+        speakerPerspective: 'interviewer',
+      }),
+      answerType: 'system_design_answer',
+    };
+    const out = live.prepareSdRequirementsForAnswerPlan({
+      answerPlan: plan,
+      artifact: null,
+      problemQuestion: 'Design a URL shortener like Bitly.',
+      interviewerTexts: ['Where would you like to start?'],
+      // Spoken as candidate mic only — not opted into fill.
+      candidateTexts: [
+        'Functional requirements: create short links and redirect. Scale 100k QPS, latency under 100ms p99, prefer availability.',
+      ],
+    });
+    assert.ok(out.artifact);
+    assert.equal(out.artifact.slots.scale_qps.filled, false);
+    assert.equal(gate.isChecklistComplete(out.artifact), false);
+  });
+
   test('checklist complete + candidate advance closes gate → post_requirements', () => {
     const plan = { answerType: 'system_design_answer', forbiddenContextLayers: [] };
     let artifact = gate.createEmptyRequirementsArtifact('url shortener');

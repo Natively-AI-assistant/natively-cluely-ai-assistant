@@ -135,6 +135,11 @@ export interface PrepareSdRequirementsInput {
   screenTexts?: string[];
   /** Recent candidate (mic) utterances for advance detection. */
   candidateTexts?: string[];
+  /**
+   * Sim-only (SPEC 13): SUT / assistant speech used to fill remaining checklist
+   * slots after interviewer + screen. Product path leaves this unset.
+   */
+  candidateFillTexts?: string[];
   /** Optional Natively (assistant) spoken advance channel. */
   assistantAdvanceTexts?: string[];
   /**
@@ -199,6 +204,16 @@ export function prepareSdRequirementsForAnswerPlan(
     const filledScreen = fillArtifactFromInterviewerText(artifact, screenBlob);
     artifact = filledScreen.artifact;
     for (const f of filledScreen.fills) {
+      fills.push({ ...f });
+    }
+  }
+  // Sim-gated candidate fill (SPEC 13): after interviewer/screen, fill remaining
+  // slots from recent SUT answers when the caller opts in.
+  const candidateFillBlob = (input.candidateFillTexts || []).filter(Boolean).join('\n');
+  if (candidateFillBlob.trim()) {
+    const filledCandidate = fillArtifactFromInterviewerText(artifact, candidateFillBlob);
+    artifact = filledCandidate.artifact;
+    for (const f of filledCandidate.fills) {
       fills.push({ ...f });
     }
   }
