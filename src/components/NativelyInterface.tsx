@@ -2895,8 +2895,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // tick still re-arms immediately regardless of an in-flight transition
     // (see onWheel's deltaY>0 branch above, unambiguous since it can only
     // originate from real input).
+    //
+    // Requires delta > 0 (net downward motion since the last sample) so a
+    // small upward nudge can't re-arm itself: onWheel arms suppression
+    // synchronously on deltaY<0, then the browser's resulting native scroll
+    // event reaches this handler — without a direction check here, that
+    // event's distanceFromBottom (still <=28 after a small nudge) cleared
+    // the suppression this same gesture just set, one frame later. Verified
+    // live: a tiny wheel-up nudge armed and then immediately disarmed itself
+    // every time before this guard was added.
     const transitionInFlight = Date.now() < heightReportSuppressedUntilRef.current;
-    if (distanceFromBottom <= 28 && !transitionInFlight) {
+    if (delta > 0 && distanceFromBottom <= 28 && !transitionInFlight) {
       // Looser tolerance than the 8px used for the sticky-bottom transition
       // pin (wasAtBottomRef) — this is a manual re-arm, not a pixel-perfect
       // "still at bottom" check. Lets a user who scrolled up, read, then
