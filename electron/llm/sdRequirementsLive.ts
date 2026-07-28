@@ -20,6 +20,7 @@ import {
   softRefuseIfPrematureAdvance,
   deriveSdPhase,
   isChecklistComplete,
+  isCoreRequirementsComplete,
   isDataFlowRequired,
   nextEligibleSlots,
   clarifierBudgetFor,
@@ -33,19 +34,20 @@ export const SLOT_EXTRACTORS: Array<{ id: SlotId; re: RegExp; alt?: RegExp }> = 
   {
     id: 'functional_requirements',
     re: /\b(?:functional(?:\s*requirements?)?\s*[:\-–]?\s*)((?:create|shorten|ingest|produce|redirect)[^.]{0,120})/i,
-    alt: /\b((?:create\s+short\s+links?\s+and\s+redirect|ingest\s+clicks?\s+and\s+produce\s+dashboards?)[^.]*)/i,
+    // FULL_RAW drafts: **Functional Requirements:** then **URL Shortening:** / **Shorten:** / bare bullets
+    alt: /\b((?:create\s+short\s+links?\s+and\s+redirect|ingest\s+clicks?\s+and\s+produce\s+dashboards?)[^.]*)|\*\*?Functional Requirements:?\*\*?\s*[\r\n]+([\s\S]{20,600}?)(?=\n\s*\*\*?Non-?Functional|\n\s*#{1,3}\s*Non-?Functional|\n\s*\*\*?Requirements Draft:|$)/i,
   },
   {
     id: 'scale_qps',
     re: /\b(?:scale|qps|throughput|events?\/sec)[^.\d]{0,40}(\d[\d,]*(?:\s*[kKmM])?(?:\s*(?:QPS|qps|events?\/sec))?)/i,
-    // Whiteboard / screen: bare "100k QPS"
-    alt: /\b(\d[\d,]*(?:\s*[kKmM])?\s*(?:QPS|qps|events?\/sec))\b/,
+    // Whiteboard / screen: bare "100k QPS"; spoken: "10,000 requests per second" / "millions of requests per day"
+    alt: /\b(\d[\d,]*(?:\s*[kKmM])?\s*(?:QPS|qps|RPS|rps|events?\/sec)|(?:\d[\d,]*(?:\s*[kKmM])?\s*requests?\s*per\s*sec(?:ond)?s?)|(?:millions?\s+of\s+requests?\s*per\s*day))\b/i,
   },
   {
     id: 'latency',
-    re: /\b(?:latency|p99)[^.\d]{0,40}((?:under\s+)?\d[\d.]*(?:\s*ms|\s*s(?:ec(?:onds?)?)?)?(?:\s*p99)?)/i,
-    // Whiteboard / screen: "p99 < 200ms"
-    alt: /\bp99\s*[<≤]\s*(\d[\d.]*(?:\s*ms)?)/i,
+    re: /\b(?:latency|p99)[^.\d]{0,80}((?:under\s+|ideally\s+under\s+)?\d[\d.]*(?:\s*ms|\s*s(?:ec(?:onds?)?)?)?(?:\s*p99)?)/i,
+    // Whiteboard / screen: "p99 < 200ms"; FULL_RAW NFR: "ideally under 100ms"
+    alt: /\bp99\s*[<≤]\s*(\d[\d.]*(?:\s*ms)?)|\b(?:ideally\s+)?under\s+(\d+\s*ms)\b/i,
   },
   {
     id: 'consistency_availability',
@@ -82,7 +84,8 @@ export function screenEvidenceText(screen: {
 }
 
 const PIPELINE_SIGNAL_RE =
-  /\b(?:data\s+pipeline|stream(?:ing)?\s+analytics|event\s+stream|kafka|flink|spark\s+streaming|clickstream|ingest\s+(?:and\s+)?(?:aggregate|process)|real[-\s]?time\s+analytics|etl\s+pipeline)\b/i;
+  /\b(?:data\s+pipeline|event\s+stream|kafka|flink|spark\s+streaming|clickstream|ingest\s+(?:and\s+)?(?:aggregate|process)|etl\s+pipeline)\b/i;
+
 
 export function normalizeSdProblemKey(question: string): string {
   return String(question || '')
@@ -116,8 +119,9 @@ export function fillArtifactFromInterviewerText(
     if (ex.id === 'data_flow_stages' && !isDataFlowRequired(next)) continue;
     let m = ex.re.exec(blob);
     if (!m && ex.alt) m = ex.alt.exec(blob);
-    if (m && m[1] && String(m[1]).trim()) {
-      const value = String(m[1]).trim();
+    const captured = m ? String(m[1] ?? m[2] ?? '').trim() : '';
+    if (captured) {
+      const value = captured;
       next = fillSlotFromInterviewer(next, ex.id, value);
       fills.push({ id: ex.id, value });
     }
@@ -156,6 +160,37 @@ export interface PrepareSdRequirementsInput {
    * SdSessionAuthority so clarifier/GM turns can arm prepare under an open session.
    */
   modeId?: string | null;
+  /**
+   * Sim-only (SPEC 12 / T2): when set in Technical Interview and the artifact
+   * has no sticky problemKey yet, seed an empty artifact keyed to this pin so
+   * shouldArmGate can open without waiting for a system_design_answer turn.
+   * Product path never sets this — clarifiers alone still cannot open a session.
+   */
+  sdProblemKeyPin?: string | null;
+}
+
+/**
+ * Sim-only: seed sticky problemKey from T2 pin when artifact has none.
+ * No-op for product (no pin) and non-TI modes.
+ */
+export function seedSdRequirementsArtifactFromSimPin(
+  artifact: RequirementsArtifact | null | undefined,
+  opts: {
+    sdProblemKeyPin?: string | null;
+    modeId?: string | null;
+  },
+): RequirementsArtifact | null {
+  const existing = artifact ?? null;
+  if (opts.modeId !== 'technical-interview') return existing;
+  const rawPin =
+    typeof opts.sdProblemKeyPin === 'string' ? opts.sdProblemKeyPin.trim() : '';
+  if (!rawPin) return existing;
+  if (existing?.problemKey != null && String(existing.problemKey).trim()) {
+    return existing;
+  }
+  const key = normalizeSdProblemKey(rawPin);
+  if (!key) return existing;
+  return createEmptyRequirementsArtifact(key, 'crud_product');
 }
 
 export interface PrepareSdRequirementsResult {
@@ -178,14 +213,19 @@ export interface PrepareSdRequirementsResult {
  * Entry: system_design_answer (establishes sticky problemKey) OR
  * SdSessionAuthority.shouldArmGate (TI + open artifact) for clarifier/GM turns.
  * Clarifiers never open a session or re-key the sticky problem.
+ * Sim pin may seed sticky identity early (sdProblemKeyPin) without SD typing.
  */
 export function prepareSdRequirementsForAnswerPlan(
   input: PrepareSdRequirementsInput,
 ): PrepareSdRequirementsResult {
   const { answerPlan } = input;
   const isSdAnswer = answerPlan.answerType === 'system_design_answer';
+  const artifactIn = seedSdRequirementsArtifactFromSimPin(input.artifact, {
+    sdProblemKeyPin: input.sdProblemKeyPin,
+    modeId: input.modeId,
+  });
   const authority = deriveSdSessionAuthority({
-    artifact: input.artifact,
+    artifact: artifactIn,
     modeId: input.modeId,
   });
   if (!isSdAnswer && !authority.shouldArmGate) {
@@ -204,7 +244,7 @@ export function prepareSdRequirementsForAnswerPlan(
     ? normalizeSdProblemKey(input.problemQuestion)
     : (authority.problemKey || '');
   let artifact =
-    input.artifact ?? createEmptyRequirementsArtifact(problemKey || null, 'crud_product');
+    artifactIn ?? createEmptyRequirementsArtifact(problemKey || null, 'crud_product');
 
   if (isSdAnswer && problemKey) {
     artifact = resetArtifactForNewSdProblem(artifact, problemKey);
@@ -357,7 +397,7 @@ export function applySimPostRequirementsAnswerStrip(
   if (artifact == null) return String(text || '');
   const requirementsDone =
     deriveSdPhase(artifact) === 'post_requirements' ||
-    isChecklistComplete(artifact);
+    isCoreRequirementsComplete(artifact);
   if (!requirementsDone) return String(text || '');
   return stripPostRequirementsRewind(text);
 }

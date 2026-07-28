@@ -164,6 +164,46 @@ describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss / ticket 03)', 
     assert.match(out, /aligned on the scope of the analytics/i);
   });
 
+  test('strips on core FR/NFR complete even when pipeline class awaits data_flow', () => {
+    let a = gate.createEmptyRequirementsArtifact('Design a URL shortener like Bitly.');
+    a = gate.setProblemClass(a, 'data_pipeline_streaming_analytics');
+    for (const id of [
+      'functional_requirements',
+      'scale_qps',
+      'latency',
+      'consistency_availability',
+    ]) {
+      a = gate.fillSlotFromInterviewer(a, id, 'filled');
+    }
+    assert.equal(gate.isCoreRequirementsComplete(a), true);
+    assert.equal(gate.isChecklistComplete(a), false);
+    const out = live.applySimPostRequirementsAnswerStrip(draftText, {
+      artifact: a,
+      modeId: 'technical-interview',
+      sdProblemKey: 'Design a URL shortener like Bitly.',
+    });
+    assert.doesNotMatch(out, DRAFT_RE);
+  });
+
+  test('FULL_RAW Shorten draft fills FR + latency + scale for core complete', () => {
+    const blob = `I'll outline the core requirements.
+
+**Functional Requirements:**
+*   **Shorten:** Users provide a long URL and get a unique, short alias.
+*   **Redirect:** Accessing the short alias redirects to the original long URL.
+
+**Non-Functional Requirements:**
+*   **Low Latency:** Redirection needs to be extremely fast, ideally under 100ms.
+*   **Scale:** We should support a high read-to-write ratio, likely millions of requests per day.
+`;
+    let a = gate.createEmptyRequirementsArtifact('Design a URL shortener like Bitly.');
+    a = gate.fillSlotFromInterviewer(a, 'consistency_availability', 'availability');
+    const { artifact, fills } = live.fillArtifactFromInterviewerText(a, blob);
+    const ids = fills.map((f) => f.id).sort();
+    assert.deepEqual(ids, ['functional_requirements', 'latency', 'scale_qps'].sort());
+    assert.equal(gate.isCoreRequirementsComplete(artifact), true);
+  });
+
   test('SPEC 17 pin seed: strips when pinned + checklist complete even if gate not closed', () => {
     let a = gate.createEmptyRequirementsArtifact('Design a URL shortener like Bitly.');
     for (const id of [

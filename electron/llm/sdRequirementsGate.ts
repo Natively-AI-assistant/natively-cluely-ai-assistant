@@ -311,15 +311,27 @@ export function isDataFlowRequired(artifact: RequirementsArtifact): boolean {
   return artifact.problemClass === 'data_pipeline_streaming_analytics';
 }
 
-export function isChecklistComplete(artifact: RequirementsArtifact): boolean {
+/**
+ * Core FR/NFR mandatories for post-requirements draft strip.
+ * Ignores class-escalated slots like data_flow_stages so a Bitly interview that
+ * mentions Kafka mid-flight can still strip late Requirements Draft restatements
+ * once FR/scale/latency/CAP are filled (SPEC 15/17 intent).
+ */
+export function isCoreRequirementsComplete(artifact: RequirementsArtifact): boolean {
   for (const id of MANDATORY_SLOTS) {
     if (!artifact.slots[id]?.filled) return false;
   }
+  return true;
+}
+
+export function isChecklistComplete(artifact: RequirementsArtifact): boolean {
+  if (!isCoreRequirementsComplete(artifact)) return false;
   if (isDataFlowRequired(artifact) && !artifact.slots.data_flow_stages?.filled) {
     return false;
   }
   return true;
 }
+
 
 export function listMissingRequiredSlots(artifact: RequirementsArtifact): MissingSlot[] {
   const missing: MissingSlot[] = [];

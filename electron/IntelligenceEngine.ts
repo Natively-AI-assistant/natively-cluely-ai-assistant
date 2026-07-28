@@ -3366,7 +3366,19 @@ export class IntelligenceEngine extends EventEmitter {
         gateOpts?: { uiAdvance?: boolean; sdProblemKeyPinned?: boolean },
     ): { answerPlan: import('./llm/AnswerPlanner').AnswerPlan; softRefuseSpoken: string | null } {
         const modeId = this.getActiveModeId();
-        const priorArtifact = this.session.getSdRequirementsArtifact?.() ?? null;
+        let priorArtifact = this.session.getSdRequirementsArtifact?.() ?? null;
+        const pinned =
+            gateOpts?.sdProblemKeyPinned === true &&
+            typeof problemQuestion === 'string' &&
+            problemQuestion.trim().length > 0;
+        if (pinned) {
+            const { seedSdRequirementsArtifactFromSimPin } =
+                require('./llm/sdRequirementsLive') as typeof import('./llm/sdRequirementsLive');
+            priorArtifact = seedSdRequirementsArtifactFromSimPin(priorArtifact, {
+                sdProblemKeyPin: problemQuestion,
+                modeId,
+            });
+        }
         const authority = deriveSdSessionAuthority({ artifact: priorArtifact, modeId });
         const isSdAnswer = answerPlan.answerType === 'system_design_answer';
         if (!isSdAnswer && !authority.shouldArmGate) {
@@ -3410,6 +3422,7 @@ export class IntelligenceEngine extends EventEmitter {
                     : undefined,
                 uiAdvance: gateOpts?.uiAdvance === true,
                 modeId,
+                ...(pinned ? { sdProblemKeyPin: problemQuestion } : {}),
             });
 
             if (prepared.artifact) {

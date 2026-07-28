@@ -31,7 +31,7 @@ Post-merge fix: product strip now requires `shouldArmGate` (TI + sticky key) or 
 
 ## Optional T2 FULL_RAW smoke
 
-**Ran:** 2026-07-28 (post-merge verify)
+### FAIL (pre-fix) — 2026-07-28
 
 ```bash
 RUN_SD_INTERVIEW_SIM_T2=1 \
@@ -52,4 +52,30 @@ npm run sd-interview-sim:t2
 | tags | `candidate_rewind`, `full_raw` |
 | Verdict | **FAIL** — late turns still contain Requirements Draft / FR lists |
 
-Notes: LESSON ingest opted out (72-file ingest hung first attempt). Offline, strip clears drafts once artifact is requirements-done; this run never reached checklist-complete/gate-close. Also pushed `fix(sd): no-op draft strip when pin has no artifact yet`. Re-run with ingest on + `MAX_TURNS=0` toward `coverage_complete` for a fairer comparison to `t2-b7612f0a…`.
+### Root cause (diagnosing-bugs)
+
+Tight loop: `npm run build:electron && node .scratch/sd-session-authority/debug/repro-candidate-rewind-loop.mjs`
+(default corpus: latest FAIL run; override with `CORPUS=…`)
+
+1. Sim pin never seeded sticky `problemKey` → prepare/strip stayed inert on GM turns.
+2. Markdown FR extractor required `**URL Shortening:**` — FULL_RAW often uses `**Shorten:**` / block-after-heading → FR never filled.
+3. Latency/scale extractors missed `ideally under 100ms` / `millions of requests per day`.
+4. Kafka mid-flight escalated `problemClass` → `isChecklistComplete` waited on `data_flow_stages` → strip never armed despite FR/NFR filled.
+
+**Fix:** pin seed on prepare; broader FR/latency/scale extractors; strip arms on `isCoreRequirementsComplete` (FR/scale/latency/CAP).
+
+Offline corpus replay (04a5ef62 + 1506ae32): **PASS** (no `candidate_rewind`).
+
+### Re-verify smoke — PASS (2026-07-28)
+
+Same knobs as FAIL run (INGEST_LESSONS=0, MAX_TURNS=32).
+
+| Field | Value |
+|-------|--------|
+| run_id | `7b83f0be-6eae-421c-8b2e-e584d8eb6fa2` |
+| digest | `traces/sd-interview-sim/t2-7b83f0be-….digest.md` |
+| end_reason | `max_turns` (32) / ≈$0.033 |
+| tags | `ascii_hld_present`, `full_raw` |
+| Verdict | **PASS** — no `candidate_rewind` |
+
+Interim FAIL while iterating extractors: `1506ae32-…` (still `candidate_rewind`; used as tighter default corpus for the offline loop).

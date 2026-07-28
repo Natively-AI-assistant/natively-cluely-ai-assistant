@@ -68,6 +68,7 @@ export {
     deriveSdPhase,
     resetArtifactForNewSdProblem,
     isChecklistComplete,
+    isCoreRequirementsComplete,
     listMissingRequiredSlots,
     markSlotAsked,
     fillSlotFromInterviewer,
@@ -129,6 +130,7 @@ export {
     appendSimPostRequirementsNudge,
     SD_SIM_POST_REQUIREMENTS_NUDGE,
     applySimPostRequirementsAnswerStrip,
+    seedSdRequirementsArtifactFromSimPin,
 } from "./sdRequirementsLive";
 export type {
     PrepareSdRequirementsInput,

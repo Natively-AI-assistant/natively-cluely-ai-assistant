@@ -187,6 +187,61 @@ describe('prepareSdRequirementsForAnswerPlan under authority', () => {
     assert.equal(auth.sessionOpen, false);
   });
 
+  test('sim pin seeds sticky key so GM prepare arms without system_design_answer', () => {
+    const planned = gmPlan();
+    const prepared = live.prepareSdRequirementsForAnswerPlan({
+      answerPlan: planned,
+      artifact: null,
+      problemQuestion: PROBLEM,
+      interviewerTexts: [
+        'Functional requirements: create short links and redirect',
+        'Scale about 100k QPS',
+        'latency under 100ms p99',
+        'prefer availability over consistency',
+      ],
+      modeId: TI,
+      sdProblemKeyPin: PROBLEM,
+    });
+    assert.ok(prepared.artifact?.problemKey);
+    assert.equal(prepared.sdPhase, 'requirements');
+    assert.equal(prepared.artifact.slots.scale_qps.filled, true);
+    assert.equal(gate.isChecklistComplete(prepared.artifact), true);
+  });
+
+  test('sim pin + candidate fill + advance strips late Requirements Draft', () => {
+    const draft =
+      'Aligned on analytics scope.\n\n**Requirements Draft:**\n* **Functional Requirements:**\n    * URL Shortening\n';
+    let art = live.prepareSdRequirementsForAnswerPlan({
+      answerPlan: { answerType: 'general_meeting_answer', forbiddenContextLayers: [] },
+      artifact: null,
+      problemQuestion: PROBLEM,
+      interviewerTexts: [],
+      candidateFillTexts: [
+        'Functional requirements: create short links and redirect. Scale 100k QPS, latency under 100ms p99, prefer availability.',
+      ],
+      modeId: TI,
+      sdProblemKeyPin: PROBLEM,
+    }).artifact;
+    assert.ok(art);
+    assert.equal(gate.isChecklistComplete(art), true);
+    art = live.prepareSdRequirementsForAnswerPlan({
+      answerPlan: { answerType: 'general_meeting_answer', forbiddenContextLayers: [] },
+      artifact: art,
+      problemQuestion: PROBLEM,
+      interviewerTexts: [],
+      candidateTexts: ["let's move on to design"],
+      modeId: TI,
+      sdProblemKeyPin: PROBLEM,
+    }).artifact;
+    const stripped = live.applySimPostRequirementsAnswerStrip(draft, {
+      sdProblemKey: PROBLEM,
+      artifact: art,
+      modeId: TI,
+    });
+    assert.doesNotMatch(stripped, /Requirements Draft:/i);
+    assert.match(stripped, /Aligned on analytics scope/i);
+  });
+
   test('system_design_answer still establishes sticky key', () => {
     const plan = {
       answerType: 'system_design_answer',
