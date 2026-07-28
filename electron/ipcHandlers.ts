@@ -299,16 +299,20 @@ export function initializeIpcHandlers(appState: AppState): void {
         } catch { /* LiteLLM fallback discovery best-effort */ }
       }
 
-      const next = has(cm.getNativelyApiKey()) ? 'natively'
-        : has(cm.getGeminiApiKey()) ? 'gemini-3.6-flash'
-        : has(cm.getOpenaiApiKey()) ? 'gpt-5.4'
-        : has(cm.getClaudeApiKey()) ? 'claude-sonnet-4-6'
-        : has(cm.getGroqApiKey()) ? 'llama-3.3-70b-versatile'
-        : has(cm.getDeepseekApiKey()) ? 'deepseek-v4-flash'
-        : (codexConfig.enabled === true && codexSignedIn) ? 'codex-cli'
-        : litellmFallbackModel
-          || allProviders[0]?.id
-          || 'natively';
+      const next = modelAvailable('natively') ? 'natively'
+        : modelAvailable('gemini-3.6-flash') ? 'gemini-3.6-flash'
+        : modelAvailable('gpt-5.4') ? 'gpt-5.4'
+        : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
+        : modelAvailable('llama-3.3-70b-versatile') ? 'llama-3.3-70b-versatile'
+        : modelAvailable('deepseek-v4-flash') ? 'deepseek-v4-flash'
+        : (codexConfig.enabled === true && codexSignedIn && modelAvailable('codex-cli')) ? 'codex-cli'
+        : litellmFallbackModel && modelAvailable(litellmFallbackModel) ? litellmFallbackModel
+        : allProviders.find((p: any) => modelAvailable(p?.id))?.id
+          || (modelAvailable('natively') ? 'natively' : null);
+      if (!next) {
+        console.warn('[IPC] refreshRuntimeDefaultIfUnavailable: no available model found across all providers');
+        return null;
+      }
       cm.setDefaultModel(next);
       llmHelper.setModel(next, allProviders);
       appState.broadcast('model-changed', next);
@@ -5600,6 +5604,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setLitellmEnabledModels(models);
+      // If the active model was removed from the enabled list, reset the live
+      // LLMHelper so it doesn't keep routing to a model the user de-selected.
+      await refreshRuntimeDefaultIfUnavailable();
       broadcastCredentialsChanged();
       return { success: true };
     } catch (error: any) {
