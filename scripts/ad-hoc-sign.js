@@ -211,6 +211,12 @@ exports.default = async function (context) {
     // applies entitlements to the top-level item). We re-sign them here AFTER --deep
     // so the entitlements (JIT / library-validation) are preserved on the native
     // module binary. (Screen/system-audio access is pure TCC — no entitlement.)
+    //
+    // CRITICAL: modifying a nested signed file after the outer --deep seal INVALIDATES
+    // the app signature ("a sealed resource is missing or invalid" / "can't be opened").
+    // Step 2c re-seals the outer bundle without --deep so nested entitlement signatures
+    // are left intact.
+    let resignedNestedNode = false;
     const unpackedNativeDir = path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked', 'native-module');
     if (fs.existsSync(unpackedNativeDir)) {
         const files = fs.readdirSync(unpackedNativeDir);
@@ -220,10 +226,34 @@ exports.default = async function (context) {
                 console.log(`[Ad-Hoc Signing] Re-signing ${file} with entitlements (post --deep)...`);
                 try {
                     execSync(`codesign --force ${hardenedOpt}--entitlements "${entitlementsPath}" --sign - "${nodePath}"`, { stdio: 'inherit' });
+                    resignedNestedNode = true;
                 } catch (error) {
                     console.error(`[Ad-Hoc Signing] Failed to sign ${file}:`, error);
                 }
             }
         }
+    }
+
+    // ── Step 2c: Re-seal the outer app after nested .node entitlement re-sign ──
+    if (resignedNestedNode) {
+        console.log('[Ad-Hoc Signing] Re-sealing outer app (no --deep) after nested .node re-sign...');
+        try {
+            execSync(
+                `codesign --force ${hardenedOpt}--entitlements "${entitlementsPath}" --sign - "${appPath}"`,
+                { stdio: 'inherit' },
+            );
+        } catch (error) {
+            console.error('[Ad-Hoc Signing] Failed to re-seal outer app:', error);
+            throw error;
+        }
+    }
+
+    // ── Step 2d: Fail the build if the sealed app would not open on another Mac ──
+    try {
+        execSync(`codesign --verify --deep --strict --verbose=2 "${appPath}"`, { stdio: 'inherit' });
+        console.log('[Ad-Hoc Signing] codesign --verify --deep --strict OK');
+    } catch (error) {
+        console.error('[Ad-Hoc Signing] Signature verification FAILED — refusing to ship a broken app.');
+        throw error;
     }
 };
