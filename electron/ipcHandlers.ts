@@ -308,10 +308,18 @@ export function initializeIpcHandlers(appState: AppState): void {
         : (codexConfig.enabled === true && codexSignedIn && modelAvailable('codex-cli')) ? 'codex-cli'
         : litellmFallbackModel && modelAvailable(litellmFallbackModel) ? litellmFallbackModel
         : allProviders.find((p: any) => modelAvailable(p?.id))?.id
-          || (modelAvailable('natively') ? 'natively' : null);
+          || null;
       if (!next) {
-        console.warn('[IPC] refreshRuntimeDefaultIfUnavailable: no available model found across all providers');
-        return null;
+        // All providers are disabled or no configured credential exists.
+        // Reset the persisted default to a safe sentinel so it does not
+        // point to a stale disabled model. LLMHelper will use the fallback
+        // chain at routing time (which will try providers in order and fail
+        // gracefully with "No AI providers configured").
+        console.warn('[IPC] refreshRuntimeDefaultIfUnavailable: no available model found — resetting to natively');
+        cm.setDefaultModel('natively');
+        llmHelper.setModel('natively', allProviders);
+        appState.broadcast('model-changed', 'natively');
+        return 'natively';
       }
       cm.setDefaultModel(next);
       llmHelper.setModel(next, allProviders);
