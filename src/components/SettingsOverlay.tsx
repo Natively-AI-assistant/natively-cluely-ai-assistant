@@ -28,6 +28,7 @@ import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import {
     clampOverlayOpacity,
     getOverlayAppearance,
+    getGlassOverlayAppearance,
     OVERLAY_OPACITY_DEFAULT,
     OVERLAY_OPACITY_MIN,
     getDefaultOverlayOpacity,
@@ -36,6 +37,7 @@ import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfa
 import { KeyRecorder } from './ui/KeyRecorder';
 import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
 import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
+import GlassEffectLayer from './ui/GlassEffectLayer';
 import icon from './icon.png';
 
 // ---------------------------------------------------------------------------
@@ -43,18 +45,34 @@ import icon from './icon.png';
 
 
 // ---------------------------------------------------------------------------
-// MockupNativelyInterface — fake in-meeting widget for the opacity preview
+// MockupNativelyInterface — fake in-meeting widget for the opacity preview.
+// Mirrors NativelyInterface.tsx's own theme resolution (isGlassTheme /
+// isModernTheme / data-interface-theme / GlassEffectLayer) so the preview
+// actually reflects whichever "Meeting Interface Style" the user has picked,
+// instead of always rendering the default theme's appearance.
 // ---------------------------------------------------------------------------
-const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
+const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: MeetingInterfaceTheme }) => {
     const t = useT();
     const resolvedTheme = useResolvedTheme();
+    const isGlassTheme = theme === 'liquid-glass';
+    const isModernTheme = theme === 'modern';
+    const shellRef = React.useRef<HTMLDivElement>(null);
     const appearance = useMemo(
-        () => getOverlayAppearance(opacity, resolvedTheme),
-        [opacity, resolvedTheme]
+        () => (isGlassTheme ? getGlassOverlayAppearance() : getOverlayAppearance(opacity, resolvedTheme)),
+        [opacity, resolvedTheme, isGlassTheme]
     );
 
     return (
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none bg-transparent">
+        <div
+            className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none bg-transparent"
+            // The "modern" theme's CSS (index.css [data-interface-theme="modern"]
+            // .overlay-shell-surface etc.) reads --overlay-opacity directly via
+            // calc(), same as the real overlay window (see App.tsx's
+            // '--overlay-opacity' inline style) — it does NOT go through
+            // appearance.shellStyle. Without setting it here too, the modern
+            // theme's preview would silently ignore the slider entirely.
+            style={{ ['--overlay-opacity' as '--overlay-opacity']: String(opacity) } as React.CSSProperties}
+        >
                 {/* NativelyInterface Widget — opacity controlled by the slider.
                     Shifted up enough to clear the opacity-slider-card, which
                     stays visible (and in its normal in-flow position) during
@@ -62,6 +80,7 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                     in startPreviewingOpacity(). */}
                 <div
                     id="mockup-natively-interface"
+                    data-interface-theme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default'}
                     className="flex flex-col items-center pointer-events-none -mt-96"
                 >
                     {/* TopPill Replica */}
@@ -86,7 +105,8 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                     </div>
 
                     {/* Main Interface Window Replica */}
-                    <div className="relative w-[600px] max-w-full overlay-shell-surface overlay-text-primary backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col pt-2 pb-3" style={appearance.shellStyle}>
+                    <div ref={shellRef} className="relative w-[600px] max-w-full overlay-shell-surface overlay-text-primary backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col pt-2 pb-3" style={appearance.shellStyle}>
+                        {isGlassTheme && <GlassEffectLayer parentRef={shellRef} cornerRadius={24} />}
 
                         {/* Rolling Transcript Bar */}
                         <div className="w-full flex justify-center py-2 px-4 border-b mb-1 overlay-transcript-surface" style={appearance.transcriptStyle}>
@@ -3276,7 +3296,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 className="fixed inset-0 z-[49] pointer-events-none transition-opacity duration-150"
                 style={{ opacity: isPreviewingOpacity ? 1 : 0 }}
             >
-                <MockupNativelyInterface opacity={previewOverlayOpacity} />
+                <MockupNativelyInterface opacity={previewOverlayOpacity} theme={meetingInterfaceTheme} />
             </div>
         </AnimatePresence >
     );
