@@ -358,3 +358,52 @@ describe('KnowledgeOrchestrator — degenerate resume → heuristic fallback', (
         assert.notEqual(orchestrator.activeResume?.structured_data?._extraction_mode, 'heuristic');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Bug fix 2026-07-28 (code review): a JD extraction response with a STRING
+// where an array field belongs (e.g. `requirements: "React, Node"`) used to
+// silently corrupt data. `for (const req of jd.requirements)` in
+// DocumentChunker iterates a STRING character-by-character, so this would
+// persist one fake "requirement" context_node PER CHARACTER instead of
+// throwing or being caught by the (falsy-only) `|| []` defaults in
+// StructuredExtractor. normalizeStructuredJD now runs unconditionally after
+// extraction (KnowledgeOrchestrator.ingestDocument step 3), closing this.
+// ---------------------------------------------------------------------------
+describe('KnowledgeOrchestrator — JD array-field normalization', () => {
+    let db, orchestrator, tmpJdFile;
+
+    const STRING_REQUIREMENTS_JD_GENERATE_CONTENT = async () => JSON.stringify({
+        title: 'Senior Backend Engineer', company: 'Anthropic', location: 'San Francisco, CA',
+        description_summary: 'Building reliable AI systems.', level: 'senior', employment_type: 'full_time',
+        min_years_experience: 5, compensation_hint: '',
+        requirements: 'React, Node', // the bug: a string, not an array
+        nice_to_haves: [], responsibilities: [], technologies: ['Python', 'Go'], keywords: ['AI'],
+    });
+
+    beforeEach(() => {
+        db = new KnowledgeDatabaseManager(new Database(':memory:'));
+        db.initializeSchema();
+        orchestrator = new KnowledgeOrchestrator(db);
+        orchestrator.setGenerateContentFn(STRING_REQUIREMENTS_JD_GENERATE_CONTENT);
+        orchestrator.setEmbedFn(MOCK_EMBED_FN);
+        tmpJdFile = makeTempFile(JD_FIXTURE, '.txt');
+    });
+
+    afterEach(() => {
+        try { fs.unlinkSync(tmpJdFile); } catch {}
+        try { db.close?.(); } catch {}
+    });
+
+    test('a string requirements field is coerced to an array, never persisted as per-character nodes', async () => {
+        const result = await orchestrator.ingestDocument(tmpJdFile, DocType.JD);
+        assert.equal(result.success, true, `Ingest failed: ${result.error}`);
+
+        const jd = orchestrator.activeJD?.structured_data;
+        assert.ok(Array.isArray(jd.requirements), 'requirements must be coerced to a real array, not left as a string');
+
+        const jdNodes = db.getAllNodes().filter(n => n.source_type === DocType.JD);
+        const requirementNodes = jdNodes.filter(n => n.category === 'requirement');
+        assert.equal(requirementNodes.length, 0, 'a stray string must be discarded to [], never split into per-character "requirement" nodes');
+        assert.ok(!jdNodes.some(n => n.text_content.length === 1), 'no JD node should ever be a single character');
+    });
+});

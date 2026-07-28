@@ -42,9 +42,11 @@ describe('FIX-009: shared document upload hardening', () => {
     assert.match(EXTRACTOR_SOURCE, /fs\.promises\.lstat\(filePath\)/);
     assert.match(EXTRACTOR_SOURCE, /stats\.isFile\(\)/);
     assert.match(EXTRACTOR_SOURCE, /stats\.size > SAFE_DOCUMENT_MAX_BYTES/);
-    assert.match(EXTRACTOR_SOURCE, /PARSE_TIMEOUT_MS = 30_000/);
-    assert.match(EXTRACTOR_SOURCE, /withTimeout<any>\(parser\.getText\(\), 'PDF parse'\)/);
-    assert.match(EXTRACTOR_SOURCE, /withTimeout<any>\(mammoth\.extractRawText\(\{ path: filePath \}\), 'DOCX parse'\)/);
+    assert.match(EXTRACTOR_SOURCE, /MIN_PARSE_TIMEOUT_MS = 30_000/);
+    // Parse timeout scales by file size (2026-07-28 fix) rather than a flat
+    // 30s for every file, so both branches now pass a computed timeoutMs.
+    assert.match(EXTRACTOR_SOURCE, /withTimeout<any>\(\s*parser\.getText\(\),\s*'PDF parse',\s*parseTimeoutMs,/);
+    assert.match(EXTRACTOR_SOURCE, /withTimeout<any>\(\s*mammoth\.extractRawText\(\{ path: filePath \}\),\s*'DOCX parse',\s*parseTimeoutMs,/);
     assert.match(EXTRACTOR_SOURCE, /file parsed to empty text/);
   });
 
@@ -86,6 +88,24 @@ describe('FIX-009: shared document upload hardening', () => {
       assert.match(handler, docError);
       assert.match(handler, resultMapping);
     }
+  });
+
+  // Bug fix 2026-07-28 (code review): this handler's .doc branch checked
+  // `error?.path`, but the Error thrown by SafeDocumentTextExtractor's
+  // extension whitelist never sets a `.path` property, so `ext` was always
+  // '' and the friendly message could never fire — dead code masquerading
+  // as a working error path. Fixed by capturing the known selected path
+  // before the try block, the same pattern profile:upload-resume already
+  // used correctly (see the test above).
+  test('Modes reference-file handler derives .doc detection from the known selected path, not error.path', () => {
+    const modesHandler = IPC_SOURCE.slice(
+      IPC_SOURCE.indexOf("safeHandle('modes:upload-reference-file'"),
+      IPC_SOURCE.indexOf("safeHandle('modes:delete-reference-file'"),
+    );
+    assert.match(modesHandler, /let selectedPath: string \| undefined;/);
+    assert.match(modesHandler, /selectedPath = result\.filePaths\[0\];/);
+    assert.match(modesHandler, /path\.extname\(String\(selectedPath \|\| ''\)\)\.toLowerCase\(\)/);
+    assert.doesNotMatch(modesHandler, /error\?\.path/, 'must not derive the extension from the thrown error, which never has a .path property');
   });
 
   test('build externalizes document parsers so the pdfjs worker pin works packaged', () => {

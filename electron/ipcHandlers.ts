@@ -5771,7 +5771,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('get-natively-usage', async () => {
+  safeHandle('get-natively-usage', async (_event, opts?: { force?: boolean }) => {
     // Hoisted out of try so the catch block's stale-cache lookup can reach it.
     let key: string | undefined;
     try {
@@ -5779,9 +5779,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       key = CredentialsManager.getInstance().getNativelyApiKey();
       if (!key) return { ok: false, error: 'no_key' };
 
-      // Return cached value if it's still fresh
+      // Return cached value if it's still fresh — skipped when the caller
+      // explicitly asks for a fresh fetch (the Refresh button). Without this,
+      // a manual refresh within the 60s TTL silently re-serves the same
+      // stale numbers, which reads as "the button doesn't work."
       const cached = _usageCache.get(key);
-      if (cached && Date.now() - cached.ts < USAGE_CACHE_TTL_MS) {
+      if (!opts?.force && cached && Date.now() - cached.ts < USAGE_CACHE_TTL_MS) {
         return cached.data;
       }
 
@@ -10239,6 +10242,13 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('modes:upload-reference-file', async (_, modeId: string) => {
+    // Bug fix 2026-07-28 (code review): the .doc friendly-message check
+    // below used to read the thrown error's own path field, but the Error
+    // thrown by SafeDocumentTextExtractor's extension whitelist never sets
+    // one, so `ext` was always '' and this branch could never fire.
+    // Capture the known selected path up front instead — same pattern
+    // profile:upload-resume already uses correctly.
+    let selectedPath: string | undefined;
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       const result: any = await dialog.showOpenDialog({
@@ -10249,14 +10259,15 @@ export function initializeIpcHandlers(appState: AppState): void {
         ],
       });
       if (result.canceled || !result.filePaths?.[0]) return { success: false, cancelled: true };
+      selectedPath = result.filePaths[0];
       const { ingestModeReferenceFile } = require('./services/ModeReferenceFileIngestion') as typeof import('./services/ModeReferenceFileIngestion');
       const file = await ingestModeReferenceFile({
         modeId,
-        filePath: result.filePaths[0],
+        filePath: selectedPath,
       });
       return { success: true, file };
     } catch (error: any) {
-      const ext = path.extname(String(error?.path || '')).toLowerCase();
+      const ext = path.extname(String(selectedPath || '')).toLowerCase();
       if (ext === '.doc') {
         return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
       }
