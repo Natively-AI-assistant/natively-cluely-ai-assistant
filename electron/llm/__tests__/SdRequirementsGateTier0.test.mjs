@@ -173,6 +173,76 @@ describe('Structural Delivery Framework heading gate', () => {
   });
 });
 
+describe('Post-requirements rewind strip (SPEC 15)', () => {
+  test('strips Requirements Draft after clarifier, keeps clarifier prose', () => {
+    const spoken = [
+      'That makes sense. Are we tracking total clicks only, or geo as well?',
+      '',
+      '**Requirements Draft:**',
+      '',
+      '*   **Functional:**',
+      '    *   Shorten URLs',
+      '*   **Non-Functional:**',
+      '    *   Low latency',
+    ].join('\n');
+    const out = gate.stripPostRequirementsRewind(spoken);
+    assert.match(out, /total clicks/i);
+    assert.doesNotMatch(out, /Requirements Draft/i);
+    assert.doesNotMatch(out, /\*\*Functional:\*\*/);
+  });
+
+  test('keeps later framework section after a draft block', () => {
+    const spoken = [
+      'Quick clarifier answer: geo + device.',
+      '',
+      'Here is the current draft of our requirements:',
+      '',
+      '**Functional Requirements:**',
+      '* Shorten + redirect',
+      '',
+      '## Core Entities',
+      'URL mapping, User',
+    ].join('\n');
+    const out = gate.stripPostRequirementsRewind(spoken);
+    assert.match(out, /geo \+ device/i);
+    assert.match(out, /Core Entities/);
+    assert.doesNotMatch(out, /current draft of our requirements/i);
+    assert.doesNotMatch(out, /Functional Requirements/i);
+  });
+
+  test('enforce is identity without sdSimPinned', () => {
+    const spoken = 'x\n\n**Requirements Draft:**\n* FR\n';
+    assert.equal(
+      gate.enforcePostRequirementsRewindStrip(spoken, {
+        sdPhase: 'post_requirements',
+        sdSimPinned: false,
+      }),
+      spoken,
+    );
+  });
+
+  test('enforce strips when sim-pinned post_requirements', () => {
+    const spoken = 'Answer the clarifier.\n\nRequirements Draft:\n* FR\n';
+    const out = gate.enforcePostRequirementsRewindStrip(spoken, {
+      sdPhase: 'post_requirements',
+      sdSimPinned: true,
+    });
+    assert.match(out, /Answer the clarifier/);
+    assert.doesNotMatch(out, /Requirements Draft/i);
+  });
+
+  test('enforce identity while still requirements phase', () => {
+    const spoken = 'Requirements Draft:\n* FR\n';
+    assert.equal(
+      gate.enforcePostRequirementsRewindStrip(spoken, {
+        sdPhase: 'requirements',
+        sdSimPinned: true,
+      }),
+      spoken,
+    );
+  });
+});
+
 // ── Pure: soft-refuse ────────────────────────────────────────────────────────
 
 describe('Soft-refuse premature advance', () => {

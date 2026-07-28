@@ -438,6 +438,11 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 answerPlan?.answerType === 'system_design_answer' && sdPhase === 'requirements';
             const deepDivePostGate =
                 answerPlan?.answerType === 'system_design_answer' && sdPhase !== 'requirements';
+            // SPEC 15: buffer+strip late Requirements Draft restatements (sim pin only).
+            const simPostRequirementsStrip =
+                deepDivePostGate &&
+                answerPlan?.sdSimPinned === true &&
+                sdPhase === 'post_requirements';
             let sdRetrievedModeBudget: number | undefined;
             let deepDiveCheckContext: import('./sdDeepDiveSoftChecks').DeepDiveCheckContext = {
                 lessonInjected: false,
@@ -793,9 +798,9 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 tokenCount++;
                 streamedBuffer.push(token);
                 // Requirements gate still buffers (structural truncate needs full text).
-                // Post-gate deep-dive soft checks stream live for TTFT, then finalize
-                // the authoritative buffer + optional annotation trailer (SPEC 07 gap fix).
-                if (!requirementsGated) {
+                // Sim post_requirements strip also buffers so draft restatements never
+                // reach SessionTracker / T2 corpus. Other post-gate turns stream live.
+                if (!requirementsGated && !simPostRequirementsStrip) {
                     yield token;
                 }
             }
@@ -822,14 +827,28 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         enforceDeepDiveChecks,
                         buildSoftCheckTrailer,
                     } = require('./sdDeepDiveSoftChecks') as typeof import('./sdDeepDiveSoftChecks');
+                    const {
+                        enforcePostRequirementsRewindStrip,
+                    } = require('./sdRequirementsGate') as typeof import('./sdRequirementsGate');
                     const raw = streamedBuffer.join('');
-                    const checked = enforceDeepDiveChecks(raw, sdPhase, deepDiveCheckContext);
+                    let checked = enforceDeepDiveChecks(raw, sdPhase, deepDiveCheckContext);
+                    checked = enforcePostRequirementsRewindStrip(checked, {
+                        sdPhase,
+                        sdSimPinned: answerPlan?.sdSimPinned === true,
+                    });
                     streamedBuffer.length = 0;
                     streamedBuffer.push(checked);
-                    const trailer = buildSoftCheckTrailer(raw, checked);
-                    if (trailer) yield trailer;
+                    if (simPostRequirementsStrip) {
+                        yield checked;
+                    } else {
+                        const trailer = buildSoftCheckTrailer(raw, checked);
+                        if (trailer) yield trailer;
+                    }
                 } catch (checkErr: any) {
                     console.warn('[WhatToAnswerLLM] deep-dive soft checks threw:', checkErr?.message);
+                    if (simPostRequirementsStrip) {
+                        yield streamedBuffer.join('');
+                    }
                 }
             }
 

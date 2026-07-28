@@ -3403,7 +3403,11 @@ export class IntelligenceEngine extends EventEmitter {
             this.publishSdRequirementsGateStatus(Boolean(prepared.softRefuseSpoken));
 
             return {
-                answerPlan: prepared.answerPlan,
+                answerPlan: {
+                    ...prepared.answerPlan,
+                    // SPEC 15: sim-only flag for post_requirements draft strip in WTA.
+                    ...(gateOpts?.sdProblemKeyPinned ? { sdSimPinned: true } : {}),
+                },
                 softRefuseSpoken: prepared.softRefuseSpoken,
             };
         } catch (err: any) {
