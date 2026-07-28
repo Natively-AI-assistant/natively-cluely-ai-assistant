@@ -50,6 +50,13 @@ export interface WhisperModelInfo {
   // upstream `transformers.js_config` convention: `true` for all chunked files,
   // or a map keyed by ONNX basename (e.g. `{ 'encoder_model.onnx': true }`).
   externalDataFormat?: boolean | Record<string, boolean>;
+  // Size of the fp32 encoder weights on disk, in MB. Recorded ONLY for
+  // checkpoints whose fp32 encoder is large enough to matter for the
+  // single-allocation ceiling (see allocationGuard.ts): ONNX Runtime allocates
+  // those initializers in one block, and Chromium's PartitionAlloc traps the
+  // whole process on any request >= 2 GiB - 2 MiB. When this is at or above the
+  // cap the encoder is resolved to q8 instead of fp32.
+  encoderFp32Mb?: number;
 }
 
 export interface WorkerInitMessage {
@@ -68,6 +75,13 @@ export interface WorkerInitMessage {
   // sibling `*.onnx_data` weight files of external-data checkpoints get fetched.
   // See WhisperModelInfo.externalDataFormat for the full rationale.
   useExternalDataFormat?: boolean | Record<string, boolean>;
+  // Size of this model's fp32 encoder weights in bytes, when the catalog
+  // records one (see WhisperModelInfo.encoderFp32Mb). Forwarded so the worker
+  // can run its own preflight before calling pipeline(): a single allocation of
+  // 2 GiB - 2 MiB or more traps the process inside Chromium's PartitionAlloc
+  // (SIGTRAP, no catchable error), so the load must be refused BEFORE
+  // CreateSession. undefined = unknown → treated as safe.
+  encoderFp32Bytes?: number;
 }
 export interface WorkerTranscribeMessage {
   type: 'transcribe';

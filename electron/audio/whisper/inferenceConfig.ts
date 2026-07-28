@@ -1,4 +1,6 @@
 import type { WorkerInitMessage } from './types';
+// Pure module (no electron / fs / transformers) — safe to import statically.
+import { guardEncoderDtype } from './allocationGuard';
 
 /**
  * Resolves the optimal ONNX Runtime execution providers and per-module
@@ -89,14 +91,42 @@ function dtypeSizeFactor(dtype: string | Record<string, string>): number {
 export function buildWorkerInitMessage(modelId: string): WorkerInitMessage {
     // Late require — modelManager imports electron, which isn't available
     // when this module is first loaded in some contexts (test harnesses).
-    const { getModelsDir, getModelSizeBytes, getModelExternalDataFormat } = require('./modelManager');
-    const { executionProviders, dtype } = resolveInferenceConfig();
+    const {
+        getModelsDir,
+        getModelSizeBytes,
+        getModelExternalDataFormat,
+        getModelEncoderFp32Bytes,
+    } = require('./modelManager');
+    const { executionProviders, dtype: resolvedDtype } = resolveInferenceConfig();
+    // SINGLE-ALLOCATION CEILING (Whisper Large v3 Turbo SIGTRAP): a model whose
+    // fp32 encoder weights are at or above 2 GiB - 2 MiB cannot be loaded at
+    // fp32 inside Electron at all — ONNX Runtime asks for those initializers in
+    // one block and Chromium's PartitionAlloc traps the process instead of
+    // returning NULL. Downgrade just the encoder to q8 for those checkpoints.
+    // Best-effort, like the lookups below: an unknown id or a throwing lookup
+    // leaves the resolved dtype untouched and must NEVER block worker startup.
+    let dtype: string | Record<string, string> = resolvedDtype;
+    let encoderFp32Bytes: number | undefined;
+    try {
+        encoderFp32Bytes = getModelEncoderFp32Bytes(modelId);
+        const guard = guardEncoderDtype(resolvedDtype, encoderFp32Bytes);
+        dtype = guard.dtype;
+        if (guard.downgraded) {
+            console.warn(`[inferenceConfig] ${modelId}: ${guard.reason}`);
+        }
+    } catch {
+        dtype = resolvedDtype;
+        encoderFp32Bytes = undefined;
+    }
     // Catalog download size — progress-bar denominator from byte zero. The
     // lookup is best-effort: if it's missing (unknown id) or the call fails
     // for any reason, we send 0 and the worker falls back to summing the
     // per-file byte totals it observes during the download. The size is a
     // UX nicety for the progress bar, never required for the download itself,
     // so a failure here must NEVER prevent the worker from starting.
+    // Scaled by the GUARDED dtype on purpose: a downgraded encoder downloads a
+    // smaller quantized file, so the map's 1.0 factor stays a lower bound —
+    // the only safe direction for the bar denominator (see dtypeSizeFactor).
     let expectedBytes = 0;
     try {
         const n = Number(getModelSizeBytes(modelId)) * dtypeSizeFactor(dtype);
@@ -123,6 +153,10 @@ export function buildWorkerInitMessage(modelId: string): WorkerInitMessage {
         dtype,
         expectedBytes,
         useExternalDataFormat,
+        // Forwarded so the worker can re-run the ceiling check itself — defence
+        // in depth for any caller that builds an init message without this
+        // helper. See whisperWorker's preflightAllocation call.
+        encoderFp32Bytes,
     };
 }
 

@@ -17,6 +17,7 @@
 import { parentPort } from 'worker_threads';
 import { WhisperProgressAggregator } from './whisperProgressAggregator';
 import { getBoundedOnnxSessionOptions } from '../../utils/onnxThreadConfig';
+import { preflightAllocation } from './allocationGuard';
 
 const LANG_MAP: Record<string, string | null> = {
   'auto': null,
@@ -216,6 +217,21 @@ parentPort.on('message', async (msg: any) => {
       // "filesystem error: in file_size: ... encoder_model.onnx_data".
       const useExternalDataFormat: boolean | Record<string, boolean> | undefined =
         msg.useExternalDataFormat;
+
+      // LAST LINE OF DEFENCE before CreateSession. buildWorkerInitMessage
+      // already downgrades an oversized fp32 encoder to q8, but any caller that
+      // hand-builds an init message would bypass that. If the resolved config
+      // still implies a single allocation of 2 GiB - 2 MiB or more, ONNX Runtime
+      // would hand it to posix_memalign → Chromium's PartitionAlloc → `brk 0`,
+      // killing the whole app with EXC_BREAKPOINT and nothing catchable. Fail
+      // loudly here instead; past this point there is no recoverable error.
+      const preflightError = preflightAllocation(msg.modelId, dtype, msg.encoderFp32Bytes);
+      if (preflightError) {
+        console.error(`[WhisperWorker] ${preflightError}`);
+        parentPort!.postMessage({ type: 'error', message: preflightError });
+        return;
+      }
+
       pipe = await pipeline('automatic-speech-recognition', msg.modelId, {
         dtype,
         session_options: sessionOptions,

@@ -1,6 +1,8 @@
 import path from 'path';
 import fs from 'fs';
 import type { WhisperModelId, WhisperModelInfo } from './types';
+// Pure module (no electron / fs / transformers) — safe to import statically.
+import { guardEncoderDtype } from './allocationGuard';
 
 // env is configured lazily via configureTransformersCache()
 // We import the type only here; the actual require() happens at runtime.
@@ -33,7 +35,13 @@ const MODEL_CATALOG: WhisperModelInfo[] = [
   //    file_size encoder_model.onnx_data). The encoder is fp32 on every
   //    platform (uniform-fp32 on Apple; encoder_model:'fp32' in the per-module
   //    map elsewhere), so this key is platform-robust.
-  { id: 'onnx-community/whisper-large-v3-turbo-ONNX', name: 'Whisper Large v3 Turbo', sizeMb: 1031, speed: 'medium', accuracy: 'very-high', multilingual: true, status: 'missing', externalDataFormat: { 'encoder_model.onnx': true } },
+  //    encoderFp32Mb: that companion is ~2.4 GB of fp32 initializers, which ORT
+  //    allocates as ONE block — above Chromium's 2 GiB - 2 MiB PartitionAlloc
+  //    ceiling, so loading the fp32 encoder inside Electron traps the process
+  //    (SIGTRAP, not a catchable error). Recording the size lets
+  //    buildWorkerInitMessage resolve the encoder to q8 instead. See
+  //    allocationGuard.ts.
+  { id: 'onnx-community/whisper-large-v3-turbo-ONNX', name: 'Whisper Large v3 Turbo', sizeMb: 1031, speed: 'medium', accuracy: 'very-high', multilingual: true, status: 'missing', externalDataFormat: { 'encoder_model.onnx': true }, encoderFp32Mb: 2400 },
 
   // ── Standard Whisper
   { id: 'Xenova/whisper-tiny.en',    name: 'Tiny English',    sizeMb: 39,   speed: 'very-fast', accuracy: 'decent',   multilingual: false, status: 'missing' },
@@ -283,7 +291,21 @@ export function getAvailableModels(): WhisperModelInfo[] {
   }
   return MODEL_CATALOG.map(m => ({
     ...m,
-    status: isModelCached(m.id, dtype) ? 'available' : 'missing',
+    // Per-model, not global: buildWorkerInitMessage downgrades the encoder to
+    // q8 for checkpoints whose fp32 encoder is over the single-allocation
+    // ceiling (allocationGuard.ts), so those models load — and therefore cache
+    // — a different encoder file than the platform default. Checking the
+    // unguarded dtype here would report "available" for a model whose encoder
+    // still has to be downloaded.
+    // undefined dtype keeps the legacy directory-non-empty check untouched.
+    status: isModelCached(
+      m.id,
+      dtype === undefined
+        ? undefined
+        : guardEncoderDtype(dtype, getModelEncoderFp32Bytes(m.id)).dtype,
+    )
+      ? 'available'
+      : 'missing',
   }));
 }
 
@@ -310,6 +332,22 @@ export function getModelExternalDataFormat(
 ): boolean | Record<string, boolean> | undefined {
   const m = MODEL_CATALOG.find(x => x.id === modelId);
   return m?.externalDataFormat;
+}
+
+/**
+ * Size of the model's fp32 encoder weights in BYTES, or undefined when the
+ * catalog doesn't record one (i.e. the encoder is comfortably small).
+ *
+ * Only consumed by the single-allocation guard (allocationGuard.ts): ONNX
+ * Runtime materialises those initializers in one block, and Chromium's
+ * PartitionAlloc traps the whole process on any single request of 2 GiB - 2 MiB
+ * or more. undefined means "unknown / not big enough to matter" and is treated
+ * as safe, so an unlisted model behaves exactly as it does today.
+ */
+export function getModelEncoderFp32Bytes(modelId: string): number | undefined {
+  const m = MODEL_CATALOG.find(x => x.id === modelId);
+  if (!m || typeof m.encoderFp32Mb !== 'number') return undefined;
+  return Math.round(m.encoderFp32Mb * 1024 * 1024);
 }
 
 /**
