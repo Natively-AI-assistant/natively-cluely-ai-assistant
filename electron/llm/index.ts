@@ -128,6 +128,7 @@ export {
     SLOT_EXTRACTORS,
     appendSimPostRequirementsNudge,
     SD_SIM_POST_REQUIREMENTS_NUDGE,
+    applySimPostRequirementsAnswerStrip,
 } from "./sdRequirementsLive";
 export type {
     PrepareSdRequirementsInput,
