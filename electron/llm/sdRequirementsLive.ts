@@ -22,6 +22,7 @@ import {
   nextEligibleSlots,
   clarifierBudgetFor,
   markSlotAsked,
+  stripPostRequirementsRewind,
 } from './sdRequirementsGate';
 
 /** Slot extractors: interviewer-attributed text → checklist fills (consume-only). */
@@ -298,4 +299,27 @@ export function appendSimPostRequirementsNudge(
     return base || undefined;
   }
   return base ? `${base}\n${SD_SIM_POST_REQUIREMENTS_NUDGE}` : SD_SIM_POST_REQUIREMENTS_NUDGE;
+}
+
+/**
+ * Sim-only (SPEC 15 live miss): strip late Requirements Draft restatements from
+ * the completed WTA answer when T2 pins sdProblemKey and the session artifact is
+ * already post_requirements.
+ *
+ * Independent of answerType — clarifier turns often plan as general_meeting_answer,
+ * which early-returns from prepareSdRequirementsForAnswerPlan and never arms the
+ * WTA stream strip.
+ */
+export function applySimPostRequirementsAnswerStrip(
+  text: string,
+  opts: {
+    sdProblemKey?: string | null;
+    artifact?: RequirementsArtifact | null;
+  } = {},
+): string {
+  const pinned =
+    typeof opts.sdProblemKey === 'string' && opts.sdProblemKey.trim().length > 0;
+  if (!pinned) return String(text || '');
+  if (deriveSdPhase(opts.artifact) !== 'post_requirements') return String(text || '');
+  return stripPostRequirementsRewind(text);
 }
