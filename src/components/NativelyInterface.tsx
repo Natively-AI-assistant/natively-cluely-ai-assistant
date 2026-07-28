@@ -7541,8 +7541,8 @@ Provide only the answer, nothing else.`;
 
               {/* System Audio / Screen Recording Warning Banner */}
               {systemAudioWarning && (
-                <div className="flex items-center justify-between mx-4 mt-3 mb-1 px-3.5 py-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded-[12px] shadow-sm relative no-drag group/warning">
-                  <div className="flex flex-col gap-1 pr-3">
+                <div className="flex flex-wrap items-start gap-x-2 gap-y-2 mx-4 mt-3 mb-1 px-3.5 py-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded-[12px] shadow-sm relative no-drag group/warning">
+                  <div className="flex flex-col gap-1 pr-8 min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-[12.5px] text-yellow-600 dark:text-yellow-400/90 font-medium leading-tight">
                       <div className="shrink-0 p-1 bg-yellow-500/20 rounded-full">
                         <svg
@@ -7565,11 +7565,11 @@ Provide only the answer, nothing else.`;
                           : t('Audio Capture Issue')}
                       </span>
                     </div>
-                    <p className="text-[11px] text-yellow-600/70 dark:text-yellow-400/60 leading-snug pl-[26px]">
+                    <p className="text-[11px] text-yellow-600/70 dark:text-yellow-400/60 leading-snug pl-[26px] break-words">
                       {systemAudioWarning.message}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 ml-auto">
                     {/*
                       UX3: deep-link to the correct macOS System Settings pane
                       based on the failure channel. Pre-fix the mic-zero-fill /
@@ -7605,7 +7605,7 @@ Provide only the answer, nothing else.`;
                                 window.electronAPI?.toggleSettingsWindow?.();
                               }
                             }}
-                            className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
+                            className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold whitespace-nowrap transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
                             title={
                               deepLinkUrl
                                 ? wantsMicrophonePane
@@ -7654,7 +7654,7 @@ Provide only the answer, nothing else.`;
                                 }
                               }}
                               disabled={tccRepairing}
-                              className="px-3 py-1.5 rounded-lg bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-700 dark:text-yellow-500 text-[11px] font-medium transition-all active:scale-95 border border-yellow-500/15 disabled:opacity-60 disabled:cursor-not-allowed"
+                              className="px-3 py-1.5 rounded-lg bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-700 dark:text-yellow-500 text-[11px] font-medium whitespace-nowrap transition-all active:scale-95 border border-yellow-500/15 disabled:opacity-60 disabled:cursor-not-allowed"
                               title={t("Reset macOS permission entries for Natively (you will need to grant them again after relaunch)")}
                             >
                               {tccRepairing ? t('Resetting…') : t('Repair Permissions')}
@@ -7673,7 +7673,7 @@ Provide only the answer, nothing else.`;
                                 }
                               }}
                               disabled={appRestarting}
-                              className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                              className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold whitespace-nowrap transition-all active:scale-95 border border-yellow-500/20 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
                               title={t('macOS often needs a full app restart before a fresh Screen Recording grant takes effect — restart now instead of manually quitting and reopening')}
                             >
                               {appRestarting ? t('Restarting…') : t('Restart Now')}
