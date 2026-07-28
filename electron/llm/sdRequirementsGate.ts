@@ -569,6 +569,69 @@ export function enforceStructuralGate(text: string, sdPhase: SdPhase | undefined
   return softTruncateToRequirements(text);
 }
 
+/**
+ * Markers that start a late Requirements restatement (digest `candidate_rewind`).
+ * Matched case-insensitively; first hit wins as cut start.
+ */
+export const POST_REQUIREMENTS_REWIND_START_PATTERNS: RegExp[] = [
+  /Here is the current draft of our requirements/i,
+  /\*\*Requirements Draft:\*\*/i,
+  /Requirements Draft:/i,
+  /Clarify Requirements:/i,
+  /Let's step back and formalize the \*\*Requirements\*\*/i,
+  /(?:^|\n)\s*\*\*Functional Requirements:?\*\*\s*(?:\n|$)/i,
+  /(?:^|\n)\s*\*\*Non-Functional Requirements:?\*\*\s*(?:\n|$)/i,
+  /(?:^|\n)\s*#{1,3}\s*Functional Requirements\b/im,
+  /(?:^|\n)\s*#{1,3}\s*Non-Functional Requirements\b/im,
+];
+
+const POST_REQUIREMENTS_REWIND_FALLBACK =
+  'Requirements are already locked — answering the latest clarifier without restating the draft.';
+
+/**
+ * Strip a late Requirements Draft / FR/NFR list block from spoken text.
+ * Keeps prose before the rewind marker and any later-framework section after it.
+ */
+export function stripPostRequirementsRewind(text: string): string {
+  const t = String(text || '');
+  let cutStart = -1;
+  for (const re of POST_REQUIREMENTS_REWIND_START_PATTERNS) {
+    // Fresh lastIndex — patterns may be /g or sticky in future.
+    re.lastIndex = 0;
+    const m = re.exec(t);
+    if (m && (cutStart < 0 || m.index < cutStart)) cutStart = m.index;
+  }
+  if (cutStart < 0) return t;
+
+  let cutEnd = t.length;
+  const after = t.slice(cutStart);
+  for (const re of LATER_FRAMEWORK_HEADING_PATTERNS) {
+    re.lastIndex = 0;
+    const m = re.exec(after);
+    if (m && m.index > 0) {
+      const abs = cutStart + m.index;
+      if (abs < cutEnd) cutEnd = abs;
+    }
+  }
+
+  const kept = `${t.slice(0, cutStart)}${t.slice(cutEnd)}`.replace(/\n{3,}/g, '\n\n').trim();
+  return kept.length > 0 ? kept : POST_REQUIREMENTS_REWIND_FALLBACK;
+}
+
+/**
+ * Sim-gated inverse of enforceStructuralGate: after the Requirements gate closes,
+ * drop FR/NFR draft restatements. Identity unless sdSimPinned && post_requirements.
+ */
+export function enforcePostRequirementsRewindStrip(
+  text: string,
+  opts: { sdPhase?: SdPhase | string | null; sdSimPinned?: boolean } = {},
+): string {
+  if (opts.sdSimPinned !== true || opts.sdPhase !== 'post_requirements') {
+    return String(text || '');
+  }
+  return stripPostRequirementsRewind(text);
+}
+
 function normalizeHeading(h: string): string {
   return h.replace(/^#+\s*/, '').trim().toLowerCase();
 }

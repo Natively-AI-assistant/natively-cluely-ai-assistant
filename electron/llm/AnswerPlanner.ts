@@ -170,6 +170,11 @@ export interface AnswerPlan {
     >;
     clarifierBudget: number;
   };
+  /**
+   * Sim-only (SPEC 12+): true when T2 pinned `options.sdProblemKey`.
+   * Enables post_requirements Requirements-draft strip (SPEC 15). Product path omits.
+   */
+  sdSimPinned?: boolean;
 }
 
 export interface PlanAnswerInput {
