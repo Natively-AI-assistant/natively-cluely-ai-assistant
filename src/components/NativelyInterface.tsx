@@ -1,8 +1,8 @@
 import { animate, AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion';
 import {
   ArrowRight,
+  ArrowDown,
   ChevronDown,
-  ChevronsDown,
   Code,
   Copy,
   Check,
@@ -8028,12 +8028,58 @@ Provide only the answer, nothing else.`;
                       // the surgical fix — no change to the shared class used
                       // by every other embedded icon button in the app.
                       style={{ ...appearance.iconStyle, position: 'absolute' }}
-                      initial={prefersReducedMotionRef.current ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={prefersReducedMotionRef.current ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
-                      whileHover={prefersReducedMotionRef.current ? undefined : { scale: 1.06 }}
-                      whileTap={prefersReducedMotionRef.current ? undefined : { scale: 0.92 }}
-                      transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                      // Asymmetric enter/exit, not the same curve reversed.
+                      // Enter: this pill is a notification-style affordance
+                      // (see the block comment above) that appears because
+                      // the user just made a deliberate scroll-up gesture —
+                      // it should feel like it rises up to meet them, so it
+                      // slides up a few px (y: 6 -> 0) while it fades/scales
+                      // in, using a spring (not the file's usual tween) for
+                      // the same "alive" quality ResizeToggle's icon-swap
+                      // reserves for its own state changes. Exit: the user
+                      // scrolled back to the bottom themselves (or clicked
+                      // it) — there's nothing left to communicate, so it
+                      // should get out of the way fast. It settles down
+                      // slightly (y: 0 -> 4, the mirror-opposite direction of
+                      // the entrance) on the file's established strong
+                      // ease-out curve at a shorter duration than the
+                      // entrance, rather than reusing the entrance transition
+                      // in reverse.
+                      initial={
+                        prefersReducedMotionRef.current
+                          ? { opacity: 0 }
+                          : { opacity: 0, scale: 0.9, y: 6 }
+                      }
+                      animate={
+                        prefersReducedMotionRef.current
+                          ? { opacity: 1, transition: { duration: 0.15, ease: [0.23, 1, 0.32, 1] } }
+                          : {
+                              opacity: 1,
+                              scale: 1,
+                              y: 0,
+                              transition: { type: 'spring', duration: 0.4, bounce: 0.22 },
+                            }
+                      }
+                      exit={
+                        prefersReducedMotionRef.current
+                          ? { opacity: 0, transition: { duration: 0.12, ease: [0.23, 1, 0.32, 1] } }
+                          : {
+                              opacity: 0,
+                              scale: 0.95,
+                              y: 4,
+                              transition: { duration: 0.15, ease: [0.23, 1, 0.32, 1] },
+                            }
+                      }
+                      whileHover={
+                        prefersReducedMotionRef.current
+                          ? undefined
+                          : { scale: 1.06, transition: { duration: 0.15, ease: [0.23, 1, 0.32, 1] } }
+                      }
+                      whileTap={
+                        prefersReducedMotionRef.current
+                          ? undefined
+                          : { scale: 0.92, transition: { duration: 0.1, ease: [0.23, 1, 0.32, 1] } }
+                      }
                     >
                       {/* No manual gloss-sheen span here (an earlier version
                           copied ResizeToggle's jelly-gloss <span> wholesale).
@@ -8058,18 +8104,19 @@ Provide only the answer, nothing else.`;
                         className="relative grid place-items-center"
                         style={{ transform: 'translate(-0.5px, -0.5px)' }}
                       >
-                        {/* ChevronsDown (double chevron), not ChevronDown —
-                            this file already uses a single ChevronDown for an
-                            unrelated expand/collapse accordion affordance
-                            (~line 8397), so reusing it here for "jump to
-                            latest" would collide with that established
-                            meaning. Double-down-chevron is also the
-                            conventional icon for "skip to the newest content"
-                            in chat UIs (Discord's own jump-to-present button
-                            uses the same glyph), reading more clearly as
-                            "skip to end" than a single chevron, which more
-                            commonly signals "expand/more options". */}
-                        <ChevronsDown className="h-3.5 w-3.5" strokeWidth={2} />
+                        {/* ArrowDown, not ChevronDown — this file already
+                            uses a plain ChevronDown for an unrelated
+                            expand/collapse accordion affordance (~line 8397),
+                            so reusing it here for "jump to latest" would
+                            collide with that established meaning. A caret
+                            reads as "expand/more options"; a stemmed arrow
+                            reads unambiguously as "scroll/jump to end" even
+                            at this button's small (14px) render size, where
+                            the previously-used double-chevron (ChevronsDown)
+                            visually compressed into what looked like a single
+                            plain arrow anyway — confirmed live via
+                            screenshot. */}
+                        <ArrowDown className="h-3.5 w-3.5" strokeWidth={2} />
                       </span>
                     </motion.button>
                   )}
