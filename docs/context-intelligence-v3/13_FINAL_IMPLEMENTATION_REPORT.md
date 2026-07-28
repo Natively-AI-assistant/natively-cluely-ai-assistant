@@ -154,7 +154,16 @@ Verified at close: 66/66 module tests pass · 6593-test suite completes in 67 s 
 
 1. ~~Fix F21~~ **DONE.** Suite terminates; gates are measurable.
 2. ~~Fill the §7.1 numeric baseline~~ **DONE** — 6593 / 6258 pass / 278 fail / 67 s.
-3. **Fix the native-ABI split.** ~41 DB-touching tests are permanently red because `npm test` runs under system node while `postinstall` builds native modules for Electron. Run the suite under `ELECTRON_RUN_AS_NODE=1 electron` (as the Phase 2 harness does) or hoist the `node:sqlite` shim into shared test setup. Until then the 278 is dominated by environment, not defect.
+3. ~~Fix the native-ABI split~~ **DONE, and it was worth more than expected.**
+
+   | Runtime | pass | fail |
+   |---------|------|------|
+   | system node (`npm test`) | 6258 | **278** |
+   | `ELECTRON_RUN_AS_NODE=1 electron` | **6427** | **121** |
+
+   **+169 tests recovered; ABI failures went to zero.** `postinstall` builds native modules for Electron (NODE_MODULE_VERSION 148) while `npm test` runs under system node (141), so every DB-touching test failed on `ERR_DLOPEN_FAILED` alone — no test-code edit could ever have fixed them. Added as `npm run test:electron`.
+
+   **Safety issue found while doing it:** a concurrently-added `test:electron` script had **no `NATIVELY_TEST_USERDATA` isolation**, so running it would open the user's **real** `natively.db` and let DB tests mutate live data. Duplicate JSON key resolved and isolation added. The remaining 121 failures are genuine, and none trace to files this mission changed.
 4. **Fix F22** independently — a live P1 in the flagship document use case.
 5. Retrofit `AnswerTrace` onto the legacy layers — the prerequisite for all parity work. The contract and the diffing function already exist (`observability/answer-trace.ts`).
 6. Build config 11 on `EvidenceResolver` (its dependencies are already injected interfaces) and measure against the same corpus.
