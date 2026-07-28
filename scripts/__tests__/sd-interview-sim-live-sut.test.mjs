@@ -125,4 +125,15 @@ describe('sd-interview-sim liveSut helpers', () => {
     assert.equal(snap.gateStatus.sdPhase, 'post_requirements');
     assert.equal(snap.recentContextPreview.length, 4000);
   });
+
+  test('tone instructions include soft anti-Requirements-rewind (SPEC 14)', () => {
+    const {
+      CASUAL_SD_TONE_INSTRUCTION,
+      FULL_RAW_SD_TONE_INSTRUCTION,
+      NO_REQUIREMENTS_REWIND_SOFT,
+    } = require('../lib/sd-interview-sim/liveSut.js');
+    assert.match(NO_REQUIREMENTS_REWIND_SOFT, /do not restart/i);
+    assert.match(CASUAL_SD_TONE_INSTRUCTION, /Requirements Draft/i);
+    assert.match(FULL_RAW_SD_TONE_INSTRUCTION, /Requirements Draft/i);
+  });
 });

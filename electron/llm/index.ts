@@ -123,6 +123,8 @@ export {
     fillArtifactFromInterviewerText,
     screenEvidenceText,
     SLOT_EXTRACTORS,
+    appendSimPostRequirementsNudge,
+    SD_SIM_POST_REQUIREMENTS_NUDGE,
 } from "./sdRequirementsLive";
 export type {
     PrepareSdRequirementsInput,

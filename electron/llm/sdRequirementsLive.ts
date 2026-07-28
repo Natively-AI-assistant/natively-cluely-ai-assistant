@@ -271,3 +271,31 @@ export function prepareSdRequirementsForAnswerPlan(
     fills,
   };
 }
+
+/**
+ * Sim-only (SPEC 14): when T2 pins sdProblemKey and the gate is closed, append a
+ * soft instruction so WTA does not restate Requirements mid deep-dive.
+ * Product path (no sdProblemKey) is identity.
+ */
+export const SD_SIM_POST_REQUIREMENTS_NUDGE = [
+  'Requirements for this problem are already locked.',
+  'Answer the latest interviewer clarifier only; do NOT restart Requirements,',
+  'paste a Requirements Draft, or re-list Functional/Non-Functional Requirements.',
+  'Continue forward through Core Entities → API → HLD → Deep Dives.',
+].join(' ');
+
+export function appendSimPostRequirementsNudge(
+  promptInstruction: string | undefined | null,
+  opts: { sdProblemKey?: string | null; sdPhase?: SdPhase | string | null },
+): string | undefined {
+  const pinned =
+    typeof opts.sdProblemKey === 'string' && opts.sdProblemKey.trim().length > 0;
+  if (!pinned || opts.sdPhase !== 'post_requirements') {
+    return promptInstruction == null ? undefined : String(promptInstruction);
+  }
+  const base = String(promptInstruction || '').trim();
+  if (base.includes('Requirements for this problem are already locked')) {
+    return base || undefined;
+  }
+  return base ? `${base}\n${SD_SIM_POST_REQUIREMENTS_NUDGE}` : SD_SIM_POST_REQUIREMENTS_NUDGE;
+}

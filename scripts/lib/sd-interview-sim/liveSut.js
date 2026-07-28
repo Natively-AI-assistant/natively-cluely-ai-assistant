@@ -18,6 +18,16 @@ const CANDIDATE_ASCII_HLD_INSTRUCTION = [
 ].join(' ');
 
 /**
+ * Soft always-on anti-rewind line (SPEC 14). Stronger post-gate nudge is appended
+ * by IntelligenceEngine when sdProblemKey is pinned and sdPhase=post_requirements.
+ */
+const NO_REQUIREMENTS_REWIND_SOFT = [
+  'Once Requirements are already covered in this interview, do not restart that section',
+  'or paste a fresh Requirements Draft / Functional Requirements list.',
+  'Answer the latest clarifier, then continue forward (Entities → API → HLD → Deep Dives).',
+].join(' ');
+
+/**
  * Casual + candidate-led showcase contract for live SUT (SPEC 08 + SPEC 09).
  * Attitude only — not the GitHub /sondo-pr-voice pipeline. T2 sim only.
  */
@@ -28,6 +38,7 @@ const CASUAL_SD_TONE_INSTRUCTION = [
   'to tell you which section is next.',
   'If the interviewer asks a clarifier: answer it briefly, then resume the showcase',
   'at the next unfinished phase.',
+  NO_REQUIREMENTS_REWIND_SOFT,
   'Spoken tone: casual, collaborative, short. Prefer "we". Hedge lightly when uncertain.',
   'No stiff corporate filler. No long monologue that ignores a live clarifier.',
   CANDIDATE_ASCII_HLD_INSTRUCTION,
@@ -46,6 +57,7 @@ const FULL_RAW_SD_TONE_INSTRUCTION = [
   'Prefer "we". Hedge lightly when uncertain.',
   'If the interviewer asks a clarifier: answer it thoroughly first, then resume the showcase',
   'at the next unfinished phase. Include scale numbers and failure modes when they help.',
+  NO_REQUIREMENTS_REWIND_SOFT,
   'No stiff corporate filler.',
   CANDIDATE_ASCII_HLD_INSTRUCTION,
 ].join('\n');
@@ -218,6 +230,7 @@ module.exports = {
   CASUAL_SD_TONE_INSTRUCTION,
   FULL_RAW_SD_TONE_INSTRUCTION,
   CANDIDATE_ASCII_HLD_INSTRUCTION,
+  NO_REQUIREMENTS_REWIND_SOFT,
   collectAnswer,
   estimateSpendFromText,
   createIntelligenceSessionAdapter,
