@@ -185,6 +185,14 @@ describe('applySimPostRequirementsAnswerStrip (SPEC 15 live miss / ticket 03)', 
     assert.match(out, /aligned on the scope of the analytics/i);
   });
 
+  test('pin without sticky artifact is identity (seed before prepare)', () => {
+    const out = live.applySimPostRequirementsAnswerStrip(draftText, {
+      sdProblemKey: 'Design a URL shortener like Bitly.',
+      artifact: null,
+    });
+    assert.equal(out, draftText);
+  });
+
   test('soft nudge remains pin-gated (product path identity)', () => {
     const nudged = live.appendSimPostRequirementsNudge('Continue deep dive.', {
       sdPhase: 'post_requirements',

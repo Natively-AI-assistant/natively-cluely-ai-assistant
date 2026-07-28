@@ -354,9 +354,10 @@ export function applySimPostRequirementsAnswerStrip(
   });
   // Product: TI + sticky key. Sim: pin may seed early identity before stickiness.
   if (!authority.shouldArmGate && !pinned) return String(text || '');
+  if (artifact == null) return String(text || '');
   const requirementsDone =
     deriveSdPhase(artifact) === 'post_requirements' ||
-    (artifact != null && isChecklistComplete(artifact));
+    isChecklistComplete(artifact);
   if (!requirementsDone) return String(text || '');
   return stripPostRequirementsRewind(text);
 }
