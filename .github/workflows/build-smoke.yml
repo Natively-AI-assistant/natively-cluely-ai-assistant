@@ -9,6 +9,10 @@ on:
 jobs:
   electron-entry-smoke:
     runs-on: macos-latest
+    # npm test historically hung forever on open ONNX worker / STT timer handles
+    # after the suite finished (--test-force-exit in package.json). Cap the job
+    # so a regressing hang cannot burn a macos runner for hours.
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
