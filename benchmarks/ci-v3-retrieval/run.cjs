@@ -32,13 +32,11 @@ const CORPUS = [
   { path: 'tests/fixtures/modes/technical-interview/tech_error_log.txt', label: 'REFERENCE_FILE' },
   { path: 'tests/fixtures/modes/lecture/lecture_pde_syllabus.md', label: 'REFERENCE_FILE' },
   { path: 'tests/fixtures/modes/team-meet/team_meet_risk_register.json', label: 'REFERENCE_FILE' },
-  // NOTE — institutional_thesis.pdf (66 pp, 128 184 chars) is EXCLUDED.
-  // It reproducibly crashes the local ONNX embedding worker with SIGTRAP during
-  // indexReferenceFile. Isolated: extraction succeeds (128 184 chars returned),
-  // and bert_1810.04805.pdf (64 701 chars) indexes fine — so the failure is in
-  // embedding a document of this size, not in parsing.
-  // Tracked as finding F22; see 02_RETRIEVAL_BENCHMARK.md §6.1.
-  // { path: 'test-fixtures/modes-corpus/thesis/institutional_thesis.pdf', label: 'REFERENCE_FILE' },
+  // F22 FIXED (provider-aware embedding batch): the 66-page / 128 184-char
+  // thesis now indexes cleanly instead of aborting the process with SIGTRAP, so
+  // it is back in the corpus and §8.1's "large reference file" is genuinely
+  // covered rather than excluded.
+  { path: 'test-fixtures/modes-corpus/thesis/institutional_thesis.pdf', label: 'REFERENCE_FILE' },
   { path: 'test-fixtures/modes-corpus/papers/attention_is_all_you_need_1706.03762.pdf', label: 'REFERENCE_FILE' },
   { path: 'test-fixtures/modes-corpus/papers/bert_1810.04805.pdf', label: 'REFERENCE_FILE' },
 ];

@@ -115,9 +115,48 @@ Q: "How many retailers did PriceX cover?"
 | topScore | 0 | **0.330** |
 | usedFallback | true | **false** |
 
-**Impact.** Any user without a cloud embedding key — i.e. anyone relying on the bundled local model — gets **no retrieval at all** on short-document manual questions. This is a **legacy defect, independent of this mission**, and it is severe: it makes uploaded references silently inert.
+**Impact.** Any user without a cloud embedding key — i.e. anyone relying on the bundled local model — got **no retrieval at all** on short-document manual questions: uploaded references were silently inert.
 
-Both live runners now set the flag explicitly, with the reason inline, because otherwise the measurement would have been void and V3 would have looked like the cause.
+### 4.1 F23 — FIXED, and not by flipping the flag
+
+The escape-hatch flag would have "fixed" it by disabling a crash mitigation. Reading the code showed that mitigation is legitimate: a 2026-07-09 hotfix routes local-provider manual turns to lexical because running local MiniLM query embeddings on every typed turn stacks ONNX arena pressure with STT, intent classification and LLM streaming.
+
+The actual defect is narrower and entirely separate:
+
+```
+combinedScore = FTS_WEIGHT * fts + (1 - FTS_WEIGHT) * vector
+performLexicalRetrieval filtered:  ftsScore >= MIN_COMBINED_SCORE
+```
+
+**A combined-scale threshold applied to a bare lexical score.** The lexical arm was required to clear a bar calibrated for lexical *and* vector together — to do 100% of the work while contributing at most `FTS_WEIGHT` of the scale. With `fts = 0.109` against a `0.15` floor, every genuine match was discarded.
+
+Fixed by deriving a lexical-scale floor (`MIN_COMBINED_SCORE * FTS_WEIGHT`) and converting at both call sites. **The crash mitigation is untouched** — the turn still goes lexical; it just no longer throws away real matches.
+
+Verified at defaults, with no env override: `chunks 0 → 1`, `clearedCount 0 → 1`. Pinned by `LexicalFloorScaleF23.test.mjs`, including a negative case proving noise is still rejected.
+
+### 4.2 F22 — FIXED, provider-aware embedding batch
+
+`MODE_INDEX_EMBED_BATCH = 100` is one HTTP request for a cloud embedder and correct there. The local provider instead runs all 100 forward passes inside a single worker message, so the ONNX arena grows across every one without the worker yielding. It is a **native** abort, so the fault-tolerant `try/catch` around each sub-batch cannot catch it — the process simply dies and the file is never indexed.
+
+Bisected on the 66-page thesis (128 184 chars):
+
+| batch | result |
+|-------|--------|
+| 100 | **SIGTRAP**, process dead, file unindexed |
+| 16 | **indexes cleanly** |
+
+Fixed with a provider-aware batch: 16 for `local`, unchanged at 100 for cloud — this is an arena-pressure problem specific to in-process inference, not a batching problem in general.
+
+**The thesis is now back in the corpus**, so §8.1's "large reference file" case is genuinely exercised rather than excluded:
+
+| | before | after |
+|---|---|---|
+| corpus files | 12 | **13** |
+| chunks | 214 | **414** |
+| all four safety gates | 42/42 | **42/42** |
+| retrieval latency p50 | 2 ms | 11 ms |
+
+Gates hold at double the corpus size.
 
 ---
 
@@ -130,11 +169,12 @@ Both live runners now set the flag explicitly, with the reason inline, because o
 - **Answer quality beyond grounding** — naturalness, length discipline and read-aloud suitability are unmeasured.
 - **Any surface in real use.** The flag has never been on for a user; this drives the pipeline directly.
 - **One model, one temperature.** No failover, no second provider, no variance across models.
+- **Naturalness and length discipline** are still unmeasured — grounding and safety are not the same as a good spoken answer.
 
 ---
 
 ## 6. Ordered follow-ups
 
-1. **Fix F23** — a keyless user currently gets no retrieval. Highest user-visible impact of anything found in this mission, and unrelated to the rebuild.
-2. **Fix F22** — the 128k-char thesis still aborts the embedding worker and is excluded from every corpus here.
+1. ~~Fix F23~~ **DONE** (§4.1) — and by correcting the mis-scaled threshold, not by disabling the crash mitigation.
+2. ~~Fix F22~~ **DONE** (§4.2) — thesis restored to the corpus; gates hold at 414 chunks.
 3. Expand the corpus toward §26.3's 200 questions; 42 is thin for a judged metric with run-to-run variance.

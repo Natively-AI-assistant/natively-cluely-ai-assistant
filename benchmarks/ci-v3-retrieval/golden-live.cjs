@@ -41,9 +41,9 @@ process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL =
 
 const d = (rel) => require(path.join(DIST, rel));
 
-// Same corpus the bake-off used, minus the thesis (F22: 128k-char PDF aborts the
-// embedding worker with SIGTRAP — a real P1, excluded here so it does not mask
-// the gate result).
+// Same corpus the bake-off used. The 66-page thesis is INCLUDED: F22 (the
+// provider-aware embedding batch) fixed the SIGTRAP that previously forced its
+// exclusion, so the large-document case is now actually exercised.
 const CORPUS = [
   { path: 'tests/fixtures/modes/looking-for-work/lfw_resume.txt', label: 'RESUME' },
   { path: 'tests/fixtures/modes/looking-for-work/lfw_jd.md', label: 'JOB_DESCRIPTION' },
@@ -55,6 +55,7 @@ const CORPUS = [
   { path: 'tests/fixtures/modes/technical-interview/tech_error_log.txt', label: 'REFERENCE_FILE' },
   { path: 'tests/fixtures/modes/lecture/lecture_pde_syllabus.md', label: 'REFERENCE_FILE' },
   { path: 'tests/fixtures/modes/team-meet/team_meet_risk_register.json', label: 'REFERENCE_FILE' },
+  { path: 'test-fixtures/modes-corpus/thesis/institutional_thesis.pdf', label: 'REFERENCE_FILE' },
   { path: 'test-fixtures/modes-corpus/papers/attention_is_all_you_need_1706.03762.pdf', label: 'REFERENCE_FILE' },
   { path: 'test-fixtures/modes-corpus/papers/bert_1810.04805.pdf', label: 'REFERENCE_FILE' },
 ];

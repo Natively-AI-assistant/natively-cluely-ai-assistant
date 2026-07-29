@@ -1,11 +1,11 @@
 {
-  "runAt": "2026-07-29T19:47:35.473Z",
+  "runAt": "2026-07-29T22:19:22.320Z",
   "mode": "LIVE retrieval stack",
   "validity": {
-    "chunkCount": 214,
+    "chunkCount": 414,
     "spaceKey": "local:xenova/all-minilm-l6-v2:384"
   },
-  "corpusFiles": 12,
+  "corpusFiles": 13,
   "questions": 42,
   "fullyPassing": 41,
   "perCheck": {
@@ -16,11 +16,11 @@
     "retrievalPath": 41
   },
   "latencyMs": {
-    "p50": 2,
-    "p95": 3,
-    "p99": 12
+    "p50": 11,
+    "p95": 14,
+    "p99": 28
   },
-  "totalMs": 101,
+  "totalMs": 434,
   "rows": [
     {
       "id": "A-01",
@@ -29,7 +29,7 @@
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
-      "retrievedRaw": 1,
+      "retrievedRaw": 2,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -45,9 +45,9 @@
       "category": "A",
       "modeId": "looking-for-work",
       "path": "GROUNDED",
-      "answerability": "NONE",
-      "evidence": 0,
-      "retrievedRaw": 0,
+      "answerability": "FULL",
+      "evidence": 1,
+      "retrievedRaw": 2,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -64,8 +64,8 @@
       "modeId": "looking-for-work",
       "path": "GROUNDED",
       "answerability": "NONE",
-      "evidence": 0,
-      "retrievedRaw": 0,
+      "evidence": 1,
+      "retrievedRaw": 2,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -82,8 +82,8 @@
       "modeId": "looking-for-work",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 1,
-      "retrievedRaw": 4,
+      "evidence": 2,
+      "retrievedRaw": 5,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -101,7 +101,7 @@
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
-      "retrievedRaw": 4,
+      "retrievedRaw": 7,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -118,8 +118,8 @@
       "modeId": "looking-for-work",
       "path": "GROUNDED",
       "answerability": "NONE",
-      "evidence": 0,
-      "retrievedRaw": 2,
+      "evidence": 1,
+      "retrievedRaw": 6,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -136,8 +136,8 @@
       "modeId": "seminar",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 2,
-      "retrievedRaw": 2,
+      "evidence": 3,
+      "retrievedRaw": 5,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -154,8 +154,8 @@
       "modeId": "seminar",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 1,
-      "retrievedRaw": 1,
+      "evidence": 2,
+      "retrievedRaw": 4,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -172,8 +172,8 @@
       "modeId": "seminar",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 2,
-      "retrievedRaw": 2,
+      "evidence": 3,
+      "retrievedRaw": 3,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -190,8 +190,8 @@
       "modeId": "seminar",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 1,
-      "retrievedRaw": 1,
+      "evidence": 4,
+      "retrievedRaw": 4,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -208,8 +208,8 @@
       "modeId": "seminar",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 2,
-      "retrievedRaw": 2,
+      "evidence": 3,
+      "retrievedRaw": 5,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -226,8 +226,8 @@
       "modeId": "seminar",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 1,
-      "retrievedRaw": 1,
+      "evidence": 3,
+      "retrievedRaw": 6,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -297,9 +297,9 @@
       "category": "C",
       "modeId": "looking-for-work",
       "path": "GROUNDED",
-      "answerability": "NONE",
+      "answerability": "FULL",
       "evidence": 1,
-      "retrievedRaw": 1,
+      "retrievedRaw": 7,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -316,8 +316,8 @@
       "modeId": "looking-for-work",
       "path": "GROUNDED",
       "answerability": "NONE",
-      "evidence": 1,
-      "retrievedRaw": 1,
+      "evidence": 2,
+      "retrievedRaw": 5,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -335,7 +335,7 @@
       "path": "GROUNDED",
       "answerability": "NONE",
       "evidence": 0,
-      "retrievedRaw": 0,
+      "retrievedRaw": 1,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -351,9 +351,9 @@
       "category": "D",
       "modeId": "looking-for-work",
       "path": "GROUNDED",
-      "answerability": "NONE",
-      "evidence": 0,
-      "retrievedRaw": 0,
+      "answerability": "FULL",
+      "evidence": 1,
+      "retrievedRaw": 3,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -370,8 +370,8 @@
       "modeId": "looking-for-work",
       "path": "GROUNDED",
       "answerability": "NONE",
-      "evidence": 0,
-      "retrievedRaw": 0,
+      "evidence": 1,
+      "retrievedRaw": 2,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -388,8 +388,8 @@
       "modeId": "looking-for-work",
       "path": "GROUNDED",
       "answerability": "NONE",
-      "evidence": 0,
-      "retrievedRaw": 0,
+      "evidence": 2,
+      "retrievedRaw": 7,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -427,7 +427,7 @@
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
-      "retrievedRaw": 3,
+      "retrievedRaw": 2,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -445,7 +445,7 @@
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 2,
-      "retrievedRaw": 2,
+      "retrievedRaw": 4,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -463,7 +463,7 @@
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
-      "retrievedRaw": 2,
+      "retrievedRaw": 8,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -480,8 +480,8 @@
       "modeId": "team-meet",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 3,
-      "retrievedRaw": 4,
+      "evidence": 4,
+      "retrievedRaw": 6,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -499,7 +499,7 @@
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
-      "retrievedRaw": 1,
+      "retrievedRaw": 5,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -517,7 +517,7 @@
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
-      "retrievedRaw": 3,
+      "retrievedRaw": 6,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -533,9 +533,9 @@
       "category": "F",
       "modeId": "team-meet",
       "path": "GROUNDED",
-      "answerability": "NONE",
-      "evidence": 0,
-      "retrievedRaw": 0,
+      "answerability": "FULL",
+      "evidence": 1,
+      "retrievedRaw": 2,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -551,9 +551,9 @@
       "category": "I",
       "modeId": "seminar",
       "path": "GROUNDED",
-      "answerability": "NONE",
-      "evidence": 0,
-      "retrievedRaw": 0,
+      "answerability": "FULL",
+      "evidence": 3,
+      "retrievedRaw": 4,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -570,8 +570,8 @@
       "modeId": "seminar",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 2,
-      "retrievedRaw": 2,
+      "evidence": 5,
+      "retrievedRaw": 7,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -588,8 +588,8 @@
       "modeId": "seminar",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 2,
-      "retrievedRaw": 2,
+      "evidence": 4,
+      "retrievedRaw": 6,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -606,8 +606,8 @@
       "modeId": "seminar",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 1,
-      "retrievedRaw": 1,
+      "evidence": 4,
+      "retrievedRaw": 5,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -642,8 +642,8 @@
       "modeId": "seminar",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 4,
-      "retrievedRaw": 4,
+      "evidence": 2,
+      "retrievedRaw": 2,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -656,24 +656,6 @@
     },
     {
       "id": "F-08",
-      "category": "F",
-      "modeId": "seminar",
-      "path": "GROUNDED",
-      "answerability": "FULL",
-      "evidence": 1,
-      "retrievedRaw": 1,
-      "rejectedByScope": 0,
-      "checks": {
-        "noProhibitedSourceInEvidence": true,
-        "evidenceCarriesProvenance": true,
-        "promptLabelsEvidenceUntrusted": true,
-        "noStaleVersionAccepted": true,
-        "retrievalPath": true
-      },
-      "failed": []
-    },
-    {
-      "id": "F-09",
       "category": "F",
       "modeId": "seminar",
       "path": "GROUNDED",
@@ -691,13 +673,31 @@
       "failed": []
     },
     {
+      "id": "F-09",
+      "category": "F",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 4,
+      "retrievedRaw": 4,
+      "rejectedByScope": 0,
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true
+      },
+      "failed": []
+    },
+    {
       "id": "A-13",
       "category": "A",
       "modeId": "seminar",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 1,
-      "retrievedRaw": 1,
+      "evidence": 4,
+      "retrievedRaw": 4,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -733,7 +733,7 @@
       "path": "GROUNDED",
       "answerability": "NONE",
       "evidence": 0,
-      "retrievedRaw": 0,
+      "retrievedRaw": 3,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -750,8 +750,8 @@
       "modeId": "general",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 1,
-      "retrievedRaw": 1,
+      "evidence": 6,
+      "retrievedRaw": 11,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -768,8 +768,8 @@
       "modeId": "general",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 3,
-      "retrievedRaw": 3,
+      "evidence": 5,
+      "retrievedRaw": 5,
       "rejectedByScope": 0,
       "checks": {
         "noProhibitedSourceInEvidence": true,

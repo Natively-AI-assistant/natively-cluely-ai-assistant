@@ -94,8 +94,55 @@ const CHUNK_OVERLAP = 30;
 // per-call embed timeout and lose all progress. 100 aligns with the Gemini
 // batchEmbedContents request cap.
 const MODE_INDEX_EMBED_BATCH = Number(process.env.NATIVELY_MODE_INDEX_EMBED_BATCH) || 100;
+
+/**
+ * F22 — the LOCAL ONNX embedder needs a much smaller indexing batch.
+ *
+ * A cloud batch of 100 is one HTTP request and is the efficient choice there.
+ * The local provider instead runs all 100 forward passes inside a single worker
+ * message, so the ONNX arena grows across every one of them without the worker
+ * returning to its event loop. On a large document that reliably aborts the
+ * process with SIGTRAP — the same BFCArena::Extend -> posix_memalign trap class
+ * as the 2026-07-06 crash, and it is a NATIVE abort, so the fault-tolerant
+ * try/catch around each sub-batch below cannot catch it.
+ *
+ * Measured on test-fixtures/modes-corpus/thesis/institutional_thesis.pdf
+ * (66 pages, 128 184 chars):
+ *     batch 100 -> SIGTRAP, process dead, file unindexed
+ *     batch  16 -> indexes cleanly
+ *
+ * Cloud batching is deliberately left at 100: this is an arena-pressure problem
+ * specific to in-process inference, not a batching problem in general.
+ */
+const MODE_INDEX_EMBED_BATCH_LOCAL =
+  Number(process.env.NATIVELY_MODE_INDEX_EMBED_BATCH_LOCAL) || 16;
 const MIN_COMBINED_SCORE = 0.15;
+
 const FTS_WEIGHT = 0.4;  // alpha for combined score: alpha * fts + (1-alpha) * vector
+
+/**
+ * F23 — the lexical fallback must NOT reuse the combined-score floor.
+ *
+ * `combinedScore = FTS_WEIGHT * fts + (1 - FTS_WEIGHT) * vector`, so a bare
+ * `ftsScore` and a combined score are on different scales. Filtering
+ * `ftsScore >= MIN_COMBINED_SCORE` requires the lexical arm alone to clear a bar
+ * that was calibrated for lexical AND vector together — i.e. to do 100% of the
+ * work while contributing at most FTS_WEIGHT of the scale.
+ *
+ * Measured consequence on a resume question whose answer IS in the corpus
+ * ("How many retailers did PriceX cover?"): fts = 0.109, vector = 0.478,
+ * combined = 0.330 — comfortably above the 0.15 combined floor — yet the lexical
+ * path returned ZERO chunks because 0.109 < 0.15. Retrieval reported
+ * `topScore: 0, reasons: ["no_candidates","lexical_degraded"]`, so uploaded
+ * references were silently inert for any keyless install.
+ *
+ * Scaling the floor by the lexical arm's own weight keeps the same intent
+ * (reject noise) on the correct scale.
+ */
+const MIN_LEXICAL_SCORE = MIN_COMBINED_SCORE * FTS_WEIGHT;
+
+/** Convert a combined-scale threshold to the lexical scale. */
+const toLexicalThreshold = (combinedThreshold: number): number => combinedThreshold * FTS_WEIGHT;
 
 // ── Phase 0 confidence-gate thresholds (OBSERVE ONLY) ───────────────────────
 // Tunable starting points for the low-confidence gate. These are deliberately
@@ -386,7 +433,12 @@ export class ModeHybridRetriever {
             // in ONE call: the pipeline wraps a single getEmbeddingsWithFallback in a
             // 30s timeout, so a big corpus times out all-or-nothing. Embed + persist in
             // bounded sub-batches so each has its own budget.
-            const INDEX_BATCH = MODE_INDEX_EMBED_BATCH;
+            // F22: provider-aware batch. The local ONNX path must stay small or a
+            // large document takes the whole process down with a native SIGTRAP.
+            const activeProvider = this.embeddingPipeline.getActiveProviderName?.();
+            const INDEX_BATCH = activeProvider === 'local'
+                ? MODE_INDEX_EMBED_BATCH_LOCAL
+                : MODE_INDEX_EMBED_BATCH;
             if (chunks.length <= INDEX_BATCH) {
                 const result = await this.embeddingPipeline.getEmbeddingsWithFallback(chunks);
                 const embeddings = result.embeddings;
@@ -1057,7 +1109,7 @@ export class ModeHybridRetriever {
                     modeId: params.modeId,
                     errorClass: error instanceof Error ? error.constructor.name : typeof error,
                 });
-                candidates = this.performLexicalRetrieval(allCandidates, queryWords, adaptiveThreshold);
+                candidates = this.performLexicalRetrieval(allCandidates, queryWords, toLexicalThreshold(adaptiveThreshold));
             }
         } else {
             if (usingLexicalForLocalManualQuery) {
@@ -1071,7 +1123,7 @@ export class ModeHybridRetriever {
                 queryTokenCount: queryWords.size,
                 modeId: params.modeId,
             });
-            candidates = this.performLexicalRetrieval(allCandidates, queryWords, adaptiveThreshold);
+            candidates = this.performLexicalRetrieval(allCandidates, queryWords, toLexicalThreshold(adaptiveThreshold));
         }
 
         markH4HybridStage('ranking_complete', { candidateCount: candidates.length });
@@ -1587,7 +1639,8 @@ export class ModeHybridRetriever {
     private performLexicalRetrieval(
         candidates: ChunkCandidate[],
         queryWords: Set<string>,
-        minScore: number = MIN_COMBINED_SCORE
+        // Lexical SCALE, not combined scale. See MIN_LEXICAL_SCORE (F23).
+        minScore: number = MIN_LEXICAL_SCORE
     ): ChunkCandidate[] {
         return candidates
             .map(c => ({
