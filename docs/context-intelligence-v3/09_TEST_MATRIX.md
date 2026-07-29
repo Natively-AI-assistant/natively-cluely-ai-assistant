@@ -24,12 +24,11 @@ Runner: `benchmarks/ci-v3-retrieval/golden-run.cjs` · corpus: 42 labelled quest
 | **Provenance complete** (`sourceId`+`versionId`+`scopeId`+direct/inferred) | 100% | **42/42** | **PASS** |
 | **Untrusted framing** (retrieved text always labelled data) | 100% | **42/42** | **PASS** |
 | Resolved question preserved verbatim | 100% | **42/42** | **PASS** |
-| Retrieval-path accuracy | ≥97% | 92.9% | **BELOW** |
-| Question-level general-knowledge permission | — | 78.6% | partial |
+| Retrieval-path accuracy | ≥97% | **97.6%** | **PASS** |
+| Question-level general-knowledge permission | — | **97.6%** | **PASS** |
+| **Full pass, all checks** | — | **41/42 — 97.6%** | |
 
-**The four zero-tolerance gates pass.** Those are the ones §27.1 states as absolutes, and they are the ones that matter for safety: a prohibited source never reaches evidence or the prompt, every accepted item carries provenance, and retrieved text is always framed as untrusted.
-
-The two below target are **accuracy** measures, not safety ones, and their residual failures are documented in §4.
+**Every §27 gate now passes**, including the two that were below target. Shadow-run path agreement across 4 modes rose in step: **95.8%** (from 65.5% at first measurement).
 
 ---
 
@@ -138,3 +137,38 @@ Both cases are now pinned:
 |------|--------|
 | project claim evidenced, skill claim not | `PARTIAL` + `PARTIAL_SUPPORT` |
 | "Do you have Kubernetes experience?" + a WebRTC resume chunk | **`NONE`** |
+
+
+---
+
+## 8. Closing the two below-target gates — six more fixes
+
+Retrieval-path accuracy went **92.9% → 97.6%** and the question-level general-knowledge check **78.6% → 97.6%**. Each fix came from reading the specific failures rather than tuning toward the number.
+
+1. **Alphanumeric identifiers are entity signals.** `p99`, `R-7`, `L4`, `110M` — a token mixing letters and digits is an identifier, not a concept. Model knowledge cannot supply the value of a named metric or record id, so these now count as entity-specific even in lower case.
+
+2. **A mode's primary source can claim a factual question — in any mode, not only document-centric ones.** *"What caused the checkout latency regression?"* names nothing and matches no meeting cue, but in Team Meet it is plainly about the meeting. The guard is what keeps the fast path intact: a question matching general-concept grammar **and** naming no specific entity is not claimed.
+
+3. **Document-centric modes have no "general concept" escape.** Seminar exists to answer from its files, so *"What is the list price per seat?"* is a document lookup there despite sharing grammar with *"What is a mutex?"*. A genuinely general question still gets answered — it retrieves, finds nothing, and is answered general-labeled, which is Seminar's stated contract.
+
+4. **Personal-claim vocabulary widened** to cover `manage/managed/led/team of/headcount` and `salary expectations` — *"How many engineers does the candidate manage?"* previously produced no claim at all.
+
+5. **Document vocabulary widened** to `reference material` / `the material`.
+
+6. **A bare follow-up cannot be answered from general knowledge.** *"Why?"* carries no subject; the decision expresses that by routing it FOLLOW_UP/GROUNDED rather than by emitting a claim, and the gate check now recognises that.
+
+### 8.1 A regression I caused and caught
+
+Fix (3) initially treated **`general`** as document-centric, because reference files rank first in that mode. But `general` is the universal `OPEN_KNOWLEDGE` mode, and the result was that *"What is idempotency in an HTTP API?"* became a document lookup — precisely the false-positive retrieval §13.1 forbids.
+
+Document-centric now means the mode is **strict about its documents**, not merely that reference files rank first: `primary === REFERENCE_FILE && groundingPolicy !== 'OPEN_KNOWLEDGE'`.
+
+### 8.2 The one remaining failure, and why it stays
+
+**G-03 — "What is the peak transaction volume of the payments API?"**
+
+No pronoun, no proper noun, no identifier, no document cue. `payments` is lower case and `API` is ordinary technical vocabulary. Every signal available to a deterministic classifier is absent.
+
+It stays unfixed on purpose. The only remaining lever is the definite article (`the X`), which fires on nearly every sentence and would convert the fast path into a retrieval on almost every turn — trading one documented gap for an undocumented latency regression across the whole product. Resolving it properly needs conversation state ("what were we just discussing?") or a mode-aware default, both of which are architectural.
+
+The failure direction remains the safe one: it answers from general knowledge **without fabricating a source-attributed figure**.

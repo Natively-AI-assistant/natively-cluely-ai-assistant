@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-07-29T10:36:56.932Z",
+  "runAt": "2026-07-29T19:33:06.861Z",
   "questions": 42,
   "modes": 4,
   "comparisons": 168,
@@ -18,13 +18,13 @@
     "team-meet": 1
   },
   "v3_path_distribution": {
-    "GROUNDED": 144,
-    "FAST": 24
+    "GROUNDED": 151,
+    "FAST": 17
   },
   "v3_path_vs_labelled_expectation": {
-    "agreed": 156,
+    "agreed": 161,
     "of": 168,
-    "rate": 0.9285714285714286
+    "rate": 0.9583333333333334
   },
   "rows": [
     {
@@ -65,8 +65,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -86,8 +89,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -107,8 +113,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -198,8 +207,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -219,8 +231,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -241,7 +256,10 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -261,8 +279,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -282,8 +303,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -412,8 +436,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -457,8 +484,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -478,8 +507,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -610,8 +641,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -630,9 +664,12 @@
         "projects"
       ],
       "legacyCAuthority": "legacy_none",
-      "v3Path": "FAST",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Path": "GROUNDED",
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -652,8 +689,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -673,8 +713,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -694,8 +737,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "PROJECT_FILE",
+        "CODING_SAMPLE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -716,7 +762,10 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -780,8 +829,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -801,8 +853,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -823,7 +878,10 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -844,7 +902,10 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "RESUME",
+        "PROJECT_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -887,8 +948,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -974,8 +1037,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -995,8 +1061,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1016,8 +1085,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1106,8 +1178,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1127,8 +1202,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1149,7 +1227,10 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1169,8 +1250,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1190,8 +1274,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1322,8 +1409,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1367,8 +1457,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1388,8 +1481,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1518,8 +1614,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1538,9 +1637,12 @@
         "projects"
       ],
       "legacyCAuthority": "legacy_none",
-      "v3Path": "FAST",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Path": "GROUNDED",
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1560,8 +1662,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1581,8 +1686,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1602,8 +1710,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1624,7 +1734,10 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1688,8 +1801,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1709,8 +1825,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1731,7 +1850,10 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1752,7 +1874,10 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1795,8 +1920,11 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "RESUME",
+        "PROFILE_FACT"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1877,8 +2005,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1897,8 +2027,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1917,8 +2049,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -1999,8 +2133,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2019,8 +2155,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2040,7 +2178,9 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2059,8 +2199,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2079,8 +2221,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2098,9 +2242,11 @@
         "reference_files"
       ],
       "legacyCAuthority": "legacy_none",
-      "v3Path": "FAST",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Path": "GROUNDED",
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2199,8 +2345,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2278,9 +2426,11 @@
         "reference_files"
       ],
       "legacyCAuthority": "legacy_none",
-      "v3Path": "FAST",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Path": "GROUNDED",
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2389,8 +2539,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2408,9 +2560,11 @@
         "reference_files"
       ],
       "legacyCAuthority": "legacy_none",
-      "v3Path": "FAST",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Path": "GROUNDED",
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2429,8 +2583,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2449,8 +2605,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2469,8 +2627,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2490,7 +2650,9 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2508,9 +2670,11 @@
         "reference_files"
       ],
       "legacyCAuthority": "legacy_none",
-      "v3Path": "FAST",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Path": "GROUNDED",
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2549,8 +2713,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2569,8 +2735,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2590,7 +2758,9 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2610,7 +2780,9 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "SOURCE_FIRST",
       "bcDivergences": [
         "groundingPolicy"
@@ -2729,8 +2901,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -2749,8 +2923,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -2769,8 +2945,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -2851,8 +3029,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -2871,8 +3051,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -2892,7 +3074,9 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -2911,8 +3095,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -2931,8 +3117,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -3051,8 +3239,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -3241,8 +3431,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -3260,9 +3452,11 @@
         "reference_files"
       ],
       "legacyCAuthority": "legacy_none",
-      "v3Path": "FAST",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Path": "GROUNDED",
+      "v3Retrieve": true,
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -3281,8 +3475,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -3301,8 +3497,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -3321,8 +3519,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "REFERENCE_FILE"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -3342,7 +3542,9 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -3401,8 +3603,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -3421,8 +3625,10 @@
       ],
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
-      "v3Retrieve": false,
-      "v3Required": [],
+      "v3Retrieve": true,
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -3442,7 +3648,9 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"
@@ -3462,7 +3670,9 @@
       "legacyCAuthority": "legacy_none",
       "v3Path": "GROUNDED",
       "v3Retrieve": true,
-      "v3Required": [],
+      "v3Required": [
+        "MEETING_TRANSCRIPT"
+      ],
       "v3Grounding": "OPEN_KNOWLEDGE",
       "bcDivergences": [
         "groundingPolicy"

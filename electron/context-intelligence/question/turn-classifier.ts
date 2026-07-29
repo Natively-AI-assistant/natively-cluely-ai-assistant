@@ -78,13 +78,13 @@ const PROJECT_RE = /\b(project|built|shipped|implemented|designed|architect(ed|u
 // permitted. Gated on `personal`, so the bare nouns cannot over-trigger.
 const SKILL_RE = /\b(experience|expertise|background|proficien\w*|familiar with|worked with|know how to|skills?|leadership|hands-on)\b/;
 const EDUCATION_RE = /\b(degrees?|graduat\w*|universit\w*|college|studied|majors?|majored|alma mater)\b/;
-const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|job title|tenure)\b/;
+const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|job title|tenure|manage[srd]?|managing|led|leads?|reports?|team of|headcount|salary expectation\w*|compensation expectation\w*)\b/;
 
 const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit\w*|required skills?|preferred skills?|compensation|salary band|the team you)\b/;
 
 const MEETING_RE = /\b(we (decided|agreed|discussed)|did we|are we|action item|owns?|owner|the meeting|last (call|meeting)|this (call|meeting)|standup|sync)\b/;
 
-const DOCUMENT_RE = /\b(the (document|paper|thesis|slide|deck|file|report|policy|spec)|according to|does the (document|paper|file)|in the (document|paper|file)|section|figure|table|chapter)\b/;
+const DOCUMENT_RE = /\b(reference material|the material|the (document|paper|thesis|slide|deck|file|report|policy|spec)|according to|does the (document|paper|file)|in the (document|paper|file)|section|figure|table|chapter)\b/;
 
 const SCREEN_RE = /\b(this (code|function|error|screen|stack ?trace)|on (my|the) screen|highlighted|selected code|what does this)\b/;
 
@@ -135,6 +135,18 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // knowledge cannot supply the answer.
   const namesSpecificEntity = hasNonGenericProperNoun(input.resolvedQuestion);
 
+  // The mode's highest-priority source is the source it exists to answer from.
+  const primarySrc = [...input.policy.allowedSourceTypes]
+    .sort((a, b) => (input.policy.sourcePriorities[a] ?? 99) - (input.policy.sourcePriorities[b] ?? 99))[0];
+  // Document-centric means the mode is STRICT about its documents, not merely
+  // that reference files rank first. `general` also ranks them first but is the
+  // universal OPEN_KNOWLEDGE mode — treating it as document-centric made
+  // "What is idempotency in an HTTP API?" a document lookup, which is exactly
+  // the false-positive retrieval §13.1 forbids.
+  const documentCentricMode = primarySrc === 'REFERENCE_FILE'
+    && input.policy.groundingPolicy !== 'OPEN_KNOWLEDGE';
+  const looksFactualQ = /\b(what|which|how many|how much|when|who|where|summari[sz]e|list)\b/.test(q);
+
   for (const clause of splitClauses(q)) {
     const personal = PERSONAL_RE.test(clause);
 
@@ -155,7 +167,13 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     // GENERAL_KNOWLEDGE_ALLOWED claim, which then satisfies answerability with
     // no evidence at all — the question is answered from model knowledge and
     // reported as fine.
-    if (GENERAL_TECH_RE.test(clause) && !personal && !namesSpecificEntity) {
+    // Also suppressed in a DOCUMENT-CENTRIC mode: Seminar exists to answer from
+    // its files, so "what is the list price per seat?" is a document lookup
+    // there even though the grammar matches "what is a mutex?". A genuinely
+    // general question still gets answered — it retrieves, finds nothing, and
+    // is answered general-labeled, which is Seminar's stated contract.
+    if (GENERAL_TECH_RE.test(clause) && !personal && !namesSpecificEntity
+        && !(documentCentricMode && looksFactualQ)) {
       types.add('GENERAL_TECHNICAL'); noteClaim('GENERAL_TECHNICAL', clause);
     }
   }
@@ -176,17 +194,27 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // NOTE: `q` here is the NORMALISED (lower-cased) question, so it can never
   // match a capitalised proper noun. The raw text is required.
   const namesEntity = namesSpecificEntity;
+  const primarySource = primarySrc;
 
-  // A document-centric mode exists to answer from its files, so a factual
-  // question with no general-knowledge signal is a document claim even without a
-  // proper noun — "What success rate did the proposed system achieve?" names
-  // nothing, but in Seminar it is plainly a question about the paper.
-  const primarySource = [...input.policy.allowedSourceTypes]
-    .sort((a, b) => (input.policy.sourcePriorities[a] ?? 99) - (input.policy.sourcePriorities[b] ?? 99))[0];
-  const documentCentric = primarySource === 'REFERENCE_FILE';
-  const looksFactual = /\b(what|which|how many|how much|when|who|where)\b/.test(q);
+  // A mode's primary source is the source it EXISTS to answer from, so a factual
+  // question that is not a general-concept question is a claim about that
+  // source — in any mode, not only document-centric ones. "What caused the
+  // checkout latency regression?" names nothing and matches no meeting cue, but
+  // in Team Meet it is plainly a question about the meeting.
+  //
+  // The guard is what keeps the fast path intact: a question matching the
+  // general-concept grammar ("what is a mutex?") and naming no specific entity
+  // is NOT claimed by the primary source. Without that guard this rule would
+  // ground every general question in every mode.
+  // In a document-centric mode there is no "general concept" escape: the mode
+  // exists to answer from its files, so a factual question is a document claim.
+  // Leaving this inconsistent with the GENERAL_TECHNICAL suppression above meant
+  // "What is the list price per seat?" was neither general NOR claimed — it fell
+  // through to no claim at all, which permits answering it from model knowledge.
+  const isGeneralConcept = !documentCentricMode && GENERAL_TECH_RE.test(q) && !namesEntity;
+  const primaryClaimsIt = looksFactualQ && !isGeneralConcept;
 
-  if (!claims.size && (namesEntity || (documentCentric && looksFactual))) {
+  if (!claims.size && (namesEntity || primaryClaimsIt)) {
     const primary = primarySource;
     const claimForSource: Partial<Record<SourceType, ClaimType>> = {
       RESUME: 'USER_PROJECT',
@@ -248,6 +276,10 @@ function hasNonGenericProperNoun(text: string): boolean {
     if (GENERIC_TECH_CAPS.has(token.toLowerCase())) continue;
     return true;
   }
+  // A token mixing letters and digits is an IDENTIFIER, not a concept — p99,
+  // R-7, L4, 110M. Model knowledge cannot supply the value of a named metric or
+  // record id, so these are entity-specific even in lower case.
+  if (/\b([a-z]+-?\d+|\d+[a-z]+)\b/i.test(String(text))) return true;
   // A bare numeric/currency lookup is also entity-specific.
   return /\$\s?\d|\b\d{2,}\b/.test(String(text));
 }

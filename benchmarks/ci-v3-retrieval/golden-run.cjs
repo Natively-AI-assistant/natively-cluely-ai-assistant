@@ -130,8 +130,12 @@ const CHECKS = [
     // The question-level truth is carried by claimRequirements: a question that
     // cannot be answered generally is one that has at least one claim requiring
     // private evidence. That is what is asserted.
+    // A bare follow-up ("Why?") carries no subject of its own, so it cannot be
+    // answered from general knowledge either — the decision expresses that by
+    // routing it FOLLOW_UP/GROUNDED rather than by emitting a claim.
     const requiresPrivate = result.decision.claimRequirements
-      .some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED');
+      .some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED')
+      || (result.decision.isFollowUp && result.decision.retrievalPlan.path !== 'FAST');
     checks.generalKnowledgeAllowed = typeof q.generalKnowledgeAllowed !== 'boolean'
       ? true
       : q.generalKnowledgeAllowed === false
