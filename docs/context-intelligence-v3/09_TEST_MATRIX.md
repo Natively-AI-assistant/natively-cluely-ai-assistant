@@ -254,7 +254,7 @@ Discriminating check: superseded-rejection turns fell **25 → 6** after the spl
 | `noProhibitedSourceInEvidence` | 42/42 | |
 | `evidenceCarriesProvenance` | 42/42 | still vacuous (F25a) |
 | `promptLabelsEvidenceUntrusted` | 42/42 | |
-| `noStaleVersionAccepted` | 42/42 | **now exercised** — 6 turns reject a superseded chunk |
+| `noStaleVersionAccepted` | 42/42 | **now exercised** — a superseded chunk is retrieved and rejected on **6 of the 7** versioned questions. The exception is G-03, which retrieves nothing at all (`raw=0`), the same defect as its `retrievalPath` failure. |
 | `retrievalPath` | 41/42 | G-03, known |
 | `answerabilityMatchesExpected` | **33/42** | newly measured; 29/42 before the two fixes in §10.4.1 |
 
