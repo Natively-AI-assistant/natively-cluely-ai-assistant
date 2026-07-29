@@ -319,7 +319,7 @@ import { getModifierSymbol, isMac } from '../utils/platformUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import ResizeToggle from './ui/ResizeToggle';
-import RollingTranscript from './ui/RollingTranscript';
+import RollingTranscript, { type RollingTranscriptHandle } from './ui/RollingTranscript';
 import TopPill from './ui/TopPill';
 
 // PERF: hoisted plugin arrays. ReactMarkdown receives `remarkPlugins` and
@@ -1405,6 +1405,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const resizeToggleRef = useRef<HTMLButtonElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const rollingTranscriptRef = useRef<RollingTranscriptHandle>(null);
+  const showAnswerPanelRef = useRef(false);
   const rafDimUpdateRef = useRef<number | null>(null);
   const codeExpandedRef = useRef(false);
   // Set when token streaming has proven the current row is code before React has
@@ -6436,6 +6438,15 @@ Provide only the answer, nothing else.`;
     handleBrainstorm,
   };
 
+  const scrollRollingTranscript = useCallback((direction: -1 | 1) => {
+    return rollingTranscriptRef.current?.scrollByLines(direction) ?? false;
+  }, []);
+
+  const tryScrollRollingTranscript = useCallback((direction: -1 | 1) => {
+    if (showAnswerPanelRef.current) return false;
+    return scrollRollingTranscript(direction);
+  }, [scrollRollingTranscript]);
+
   useEffect(() => {
     // ── Continuous, frame-rate-independent scroll with momentum ──
     // Velocity is integrated against real elapsed time so 60Hz, 120Hz, and
@@ -6566,13 +6577,21 @@ Provide only the answer, nothing else.`;
       } else if (isShortcutPressed(e, 'brainstorm')) {
         e.preventDefault();
         handleBrainstorm();
+      } else if (isShortcutPressed(e, 'transcriptScrollUp')) {
+        e.preventDefault();
+        scrollRollingTranscript(-1);
+      } else if (isShortcutPressed(e, 'transcriptScrollDown')) {
+        e.preventDefault();
+        scrollRollingTranscript(1);
       } else if (isShortcutPressed(e, 'scrollUp')) {
         e.preventDefault();
+        if (tryScrollRollingTranscript(-1)) return;
         upHeld = true;
         recomputeDirection();
         startScrollLoop();
       } else if (isShortcutPressed(e, 'scrollDown')) {
         e.preventDefault();
+        if (tryScrollRollingTranscript(1)) return;
         downHeld = true;
         recomputeDirection();
         startScrollLoop();
@@ -6608,7 +6627,7 @@ Provide only the answer, nothing else.`;
       window.removeEventListener('blur', handleBlur);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [isShortcutPressed]);
+  }, [isShortcutPressed, scrollRollingTranscript, tryScrollRollingTranscript]);
 
   // General Global Shortcuts (Rebindable)
   // We listen here to handle them when the window is focused (renderer side)
@@ -6919,8 +6938,12 @@ Provide only the answer, nothing else.`;
       else if (action === 'clarify') handlers.handleClarify();
       else if (action === 'codeHint') handlers.handleCodeHint();
       else if (action === 'brainstorm') handlers.handleBrainstorm();
-      else if (action === 'scrollUp') inertialScrollRef.current?.kick('vert', -1);
-      else if (action === 'scrollDown') inertialScrollRef.current?.kick('vert', 1);
+      else if (action === 'scrollUp') {
+        if (!tryScrollRollingTranscript(-1)) inertialScrollRef.current?.kick('vert', -1);
+      } else if (action === 'scrollDown') {
+        if (!tryScrollRollingTranscript(1)) inertialScrollRef.current?.kick('vert', 1);
+      } else if (action === 'transcriptScrollUp') scrollRollingTranscript(-1);
+      else if (action === 'transcriptScrollDown') scrollRollingTranscript(1);
       else if (action === 'scrollLeft') inertialScrollRef.current?.kick('horiz', -1);
       else if (action === 'scrollRight') inertialScrollRef.current?.kick('horiz', 1);
       else if (action === 'focusInput') {
@@ -7236,6 +7259,7 @@ Provide only the answer, nothing else.`;
   );
   const showAnswerPanel =
     messages.length > 0 || isManualRecording || isProcessing || answerPanelPinned;
+  showAnswerPanelRef.current = showAnswerPanel;
   // Only surface the STT pill for genuine problems (config error, failed, or a
   // dropped-then-reconnecting channel). The neutral 'awaiting-audio' state
   // ("Listening for audio…") is intentionally suppressed — it added a pill on
@@ -7753,6 +7777,7 @@ Provide only the answer, nothing else.`;
                   also avoids an empty bar / duplicated status text). */}
               {showTranscript && rollingTranscript ? (
                 <RollingTranscript
+                  ref={rollingTranscriptRef}
                   text={rollingTranscript}
                   isActive={isInterviewerSpeaking}
                   surfaceStyle={appearance.transcriptStyle}

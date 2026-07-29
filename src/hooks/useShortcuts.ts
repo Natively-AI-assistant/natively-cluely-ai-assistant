@@ -16,6 +16,8 @@ export interface ShortcutConfig {
     recap: string[];
     scrollUp: string[];
     scrollDown: string[];
+    transcriptScrollUp: string[];
+    transcriptScrollDown: string[];
     scrollLeft: string[];
     scrollRight: string[];
     focusInput: string[];
@@ -51,6 +53,8 @@ function buildDefaultShortcuts(): ShortcutConfig {
         recap: [],
         scrollUp: [mod, '↑'],
         scrollDown: [mod, '↓'],
+        transcriptScrollUp: [mod, isMac ? '⌥' : 'Alt', '↑'],
+        transcriptScrollDown: [mod, isMac ? '⌥' : 'Alt', '↓'],
         scrollLeft: [mod, isMac ? '⌥' : 'Alt', '←'],
         scrollRight: [mod, isMac ? '⌥' : 'Alt', '→'],
         focusInput: [mod, shift, 'Space'],
@@ -109,6 +113,8 @@ export const useShortcuts = () => {
                 else if (kb.id === 'chat:recap') newShortcuts.recap = keys;
                 else if (kb.id === 'chat:scrollUp') newShortcuts.scrollUp = keys;
                 else if (kb.id === 'chat:scrollDown') newShortcuts.scrollDown = keys;
+                else if (kb.id === 'chat:transcriptScrollUp') newShortcuts.transcriptScrollUp = keys;
+                else if (kb.id === 'chat:transcriptScrollDown') newShortcuts.transcriptScrollDown = keys;
                 else if (kb.id === 'chat:scrollLeft') newShortcuts.scrollLeft = keys;
                 else if (kb.id === 'chat:scrollRight') newShortcuts.scrollRight = keys;
                 else if (kb.id === 'chat:focusInput') newShortcuts.focusInput = keys;
@@ -176,6 +182,8 @@ export const useShortcuts = () => {
             case 'recap': backendId = 'chat:recap'; break;
             case 'scrollUp': backendId = 'chat:scrollUp'; break;
             case 'scrollDown': backendId = 'chat:scrollDown'; break;
+            case 'transcriptScrollUp': backendId = 'chat:transcriptScrollUp'; break;
+            case 'transcriptScrollDown': backendId = 'chat:transcriptScrollDown'; break;
             case 'scrollLeft': backendId = 'chat:scrollLeft'; break;
             case 'scrollRight': backendId = 'chat:scrollRight'; break;
             case 'focusInput': backendId = 'chat:focusInput'; break;

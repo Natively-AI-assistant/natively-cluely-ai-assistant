@@ -45,6 +45,8 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     // every text input system-wide while Natively is running.
     { id: 'chat:scrollUp', label: 'Scroll Up', accelerator: 'CommandOrControl+Up', isGlobal: true, defaultAccelerator: 'CommandOrControl+Up' },
     { id: 'chat:scrollDown', label: 'Scroll Down', accelerator: 'CommandOrControl+Down', isGlobal: true, defaultAccelerator: 'CommandOrControl+Down' },
+    { id: 'chat:transcriptScrollUp', label: 'Transcript Scroll Up', accelerator: 'CommandOrControl+Alt+Up', isGlobal: true, defaultAccelerator: 'CommandOrControl+Alt+Up' },
+    { id: 'chat:transcriptScrollDown', label: 'Transcript Scroll Down', accelerator: 'CommandOrControl+Alt+Down', isGlobal: true, defaultAccelerator: 'CommandOrControl+Alt+Down' },
     { id: 'chat:scrollLeft', label: 'Scroll Left (code block)', accelerator: 'CommandOrControl+Alt+Left', isGlobal: true, defaultAccelerator: 'CommandOrControl+Alt+Left' },
     { id: 'chat:scrollRight', label: 'Scroll Right (code block)', accelerator: 'CommandOrControl+Alt+Right', isGlobal: true, defaultAccelerator: 'CommandOrControl+Alt+Right' },
     // CommandOrControl+Shift+Space because bare Cmd+Space is Spotlight on macOS
