@@ -21,6 +21,10 @@ const path = require('path');
 const fs = require('fs');
 const { boot, assertVectorRunValid, REPO_ROOT, DIST } = require('./bootstrap.cjs');
 const { ingestCorpus } = require('./ingest.cjs');
+// ONE corpus, shared with golden-live.cjs. These two lists had drifted to 10
+// files versus 13 — the thesis and both superseded revisions were missing here,
+// so §26.5 was measured on a smaller corpus than the gates it is reported beside.
+const { CORPUS, MODE_FOR_SOURCE, buildRegistry } = require('./corpus.cjs');
 
 process.env.NATIVELY_CONTEXT_INTELLIGENCE_V3 = '1';
 // F23 — MUST be set, or this measurement is void.
@@ -43,19 +47,39 @@ const d = (rel) => require(path.join(DIST, rel));
 const MODEL = process.env.CI_V3_EVAL_MODEL || 'gemini-3.1-flash-lite';
 const MAX_QUESTIONS = Number(process.env.CI_V3_EVAL_MAX || 42);
 
-/** Read the key without ever surfacing it. */
-function loadKey() {
-  if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
+/**
+ * Read every available key without ever surfacing one.
+ *
+ * The repo already keeps a rotation pool (GEMINI_API_KEY, _1.._5) because a
+ * single key hits per-minute limits. This runner exhausted one key across
+ * repeated full runs and reported 39/42 as `provider 429` — numbers that had to
+ * be discarded. Rotating plus backing off makes a full run survivable.
+ */
+function loadKeys() {
+  const keys = [];
+  const push = (v) => { const t = (v || '').trim().replace(/^['"]|['"]$/g, ''); if (t && !keys.includes(t)) keys.push(t); };
+  push(process.env.GEMINI_API_KEY);
   const p = path.join(REPO_ROOT, '.env');
-  if (!fs.existsSync(p)) return null;
-  for (const line of fs.readFileSync(p, 'utf8').split('\n')) {
-    const m = line.trim().match(/^(GEMINI_API_KEY|GEMINI_API_KEY_1)=(.*)$/);
-    if (m) return m[2].replace(/^['"]|['"]$/g, '');
+  if (fs.existsSync(p)) {
+    for (const line of fs.readFileSync(p, 'utf8').split('\n')) {
+      const m = line.trim().match(/^(GEMINI_API_KEY(?:_\d+)?)=(.*)$/);
+      if (m) push(m[2]);
+    }
   }
-  return null;
+  return keys;
 }
 
-async function generate(key, system, user) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Generate with key rotation and exponential backoff.
+ *
+ * A 429 is a quota condition, not a system defect — treating it as an error row
+ * silently corrupts every rate downstream (a run reporting 0% boilerplate on
+ * n=3 looks like a pass).
+ */
+async function generate(keys, system, user, attempt = 0) {
+  const key = keys[attempt % keys.length];
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${key}`,
     {
@@ -64,12 +88,17 @@ async function generate(key, system, user) {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: system }] },
         contents: [{ role: 'user', parts: [{ text: user }] }],
-        // Deterministic where the provider allows it (§26.5).
         generationConfig: { temperature: 0, maxOutputTokens: 400 },
       }),
       signal: AbortSignal.timeout(60_000),
     },
   );
+  if (res.status === 429 && attempt < keys.length * 3) {
+    // Rotate first (a sibling key may have headroom), then back off.
+    const waitMs = attempt < keys.length ? 250 : 2000 * Math.pow(2, attempt - keys.length);
+    await sleep(waitMs);
+    return generate(keys, system, user, attempt + 1);
+  }
   if (!res.ok) throw new Error(`provider ${res.status}`);
   const j = await res.json();
   return (j?.candidates?.[0]?.content?.parts ?? []).map((p) => p.text || '').join('').trim();
@@ -99,17 +128,18 @@ const norm = (s) => String(s)
  * The judge sees the gold fact and the answer ONLY — never the evidence — so it
  * cannot be talked into accepting an unsupported claim by a persuasive prompt.
  */
-async function judgeGrounded(key, question, goldFacts, answer) {
+async function judgeGrounded(keys, question, goldFacts, answer) {
   if (!goldFacts.length || !answer) return null;
   const sys = 'You grade whether an answer states a required fact. Reply with exactly one word: YES or NO. '
     + 'YES if the answer conveys the required fact, allowing different wording, units or formatting '
     + '(for example "$175,000 to $200,000" conveys "175-200k"). NO otherwise.';
   const user = `REQUIRED FACT: ${goldFacts.join(' | ')}\n\nANSWER: ${answer}\n\nDoes the answer convey the required fact? YES or NO.`;
   try {
-    const v = await generate(key, sys, user);
+    const v = await generate(keys, sys, user);
     return /^\s*yes/i.test(v);
   } catch { return null; }
 }
+
 
 // Phrases that mean "I am telling you this is not covered" — the shape §20
 // requires for an unsupported claim.
@@ -134,26 +164,49 @@ const DISCLOSURE_RE = new RegExp([
   '(material|document|resume|transcript|reference)s? do(es)? not',
 ].join('|'), 'i');
 
-const CORPUS = [
-  { path: 'tests/fixtures/modes/looking-for-work/lfw_resume.txt', label: 'RESUME' },
-  { path: 'tests/fixtures/modes/looking-for-work/lfw_jd.md', label: 'JOB_DESCRIPTION' },
-  { path: 'test-fixtures/ci-v3-corpus/additions/meeting_transcript_current.txt', label: 'MEETING_TRANSCRIPT' },
-  { path: 'tests/fixtures/modes/sales/sales_pricing_policy.json', label: 'REFERENCE_FILE' },
-  { path: 'tests/fixtures/modes/sales/sales_competitor_battlecard.md', label: 'REFERENCE_FILE' },
-  { path: 'tests/fixtures/modes/recruiting/recruiting_compensation_policy.txt', label: 'REFERENCE_FILE' },
-  { path: 'tests/fixtures/modes/technical-interview/tech_error_log.txt', label: 'REFERENCE_FILE' },
-  { path: 'tests/fixtures/modes/lecture/lecture_pde_syllabus.md', label: 'REFERENCE_FILE' },
-  { path: 'tests/fixtures/modes/team-meet/team_meet_risk_register.json', label: 'REFERENCE_FILE' },
-  { path: 'test-fixtures/modes-corpus/papers/bert_1810.04805.pdf', label: 'REFERENCE_FILE' },
-];
-const MODE_FOR_SOURCE = {
-  RESUME: 'looking-for-work', JOB_DESCRIPTION: 'looking-for-work',
-  REFERENCE_FILE: 'seminar', MEETING_TRANSCRIPT: 'team-meet', PROFILE_FACT: 'looking-for-work',
-};
+
+// ── §20 read-aloud quality ───────────────────────────────────────────────────
+//
+// Grounding and safety are not the same as a good spoken answer. §20 is explicit
+// that the answer must sound like something the user can say immediately, and
+// that attribution boilerplate and blanket disclaimers are failures even when
+// the facts are right.
+
+/** The phrasings §20 names as the thing to avoid. */
+const BOILERPLATE_RE = /\b(according to the (uploaded |provided )?(document|material|file|reference)|based on the provided (context|document|material)|the reference file states|as (stated|mentioned) in the (document|material)|per the (document|provided) )/i;
+
+/** A spoken answer is a few sentences, not an essay. §11 budgets 15-30s. */
+const SPOKEN_WORD_CEILING = 120;
+
+function spokenQuality(answer, answerability) {
+  const words = String(answer).trim().split(/\s+/).filter(Boolean).length;
+  return {
+    words,
+    // Attribution boilerplate: forbidden regardless of correctness.
+    boilerplate: BOILERPLATE_RE.test(answer),
+    // Length discipline for a read-aloud answer.
+    overLong: words > SPOKEN_WORD_CEILING,
+    // A disclosure on a turn the DECISION called FULL.
+    //
+    // Named carefully, because inspection showed this is usually NOT the model
+    // hedging unnecessarily — it is the model correctly reporting that the
+    // retrieved evidence does not contain the fact, on a turn where
+    // evidenceSupportsClaim() wrongly counted a chunk as support. Salient-term
+    // overlap is too lenient: a BERT-paper chunk shared enough vocabulary with
+    // "what success rate did the proposed system achieve?" to satisfy a claim
+    // about the thesis.
+    //
+    // So this metric measures DECISION PRECISION, not answer style, and the
+    // model is the more accurate of the two.
+    disclosureOnFullTurn: answerability === 'FULL' && DISCLOSURE_RE.test(answer),
+  };
+}
+
 
 (async () => {
-  const key = loadKey();
-  if (!key) { console.error('NO API KEY AVAILABLE — provider evaluation cannot run.'); process.exit(2); }
+  const keys = loadKeys();
+  if (!keys.length) { console.error('NO API KEY AVAILABLE — provider evaluation cannot run.'); process.exit(2); }
+  console.log(`[eval] ${keys.length} key(s) in rotation`);
 
   const b = await boot({ verbose: false });
   const { orchestrate } = d('electron/context-intelligence/orchestration/orchestrator.js');
@@ -166,13 +219,14 @@ const MODE_FOR_SOURCE = {
   const indexed = ingested.filter((i) => i.file);
   assertVectorRunValid({ db: b.db, spaceKey: b.spaceKey, fileIds: indexed.map((i) => i.file.id) });
 
-  const sourceTypes = new Map(); const activeVersions = new Map();
-  for (const i of indexed) { sourceTypes.set(i.file.id, i.label); activeVersions.set(i.file.id, 'legacy'); }
+  // Real version identity, so the superseded résumé and the previous meeting
+  // transcript are rejected rather than competing on similarity.
+  const registry = buildRegistry(indexed);
   const mm = ModesManager.getInstance();
   const files = mm.getReferenceFiles(mode.id);
 
   const port = createLegacyRetrievalPort({
-    registry: { sourceTypes, activeVersions },
+    registry,
     retrieve: async (query, opts) => {
       const res = await mm.retrieveHybridRaw(mode, files, { query, topK: opts.topK, tokenBudget: 3600, allowRerank: false });
       return (res?.chunks ?? []).map((c) => ({
@@ -200,7 +254,8 @@ const MODE_FOR_SOURCE = {
       }, port);
       composed = composePrompt({ decision: result.decision, policy, evidence: result.evidence });
       const t = Date.now();
-      answer = await generate(key, composed.system, composed.user);
+      answer = await generate(keys, composed.system, composed.user);
+      await sleep(400);   // pace the run so a full pass does not self-throttle
       lat.push(Date.now() - t);
     } catch (e) { error = e.message; }
 
@@ -223,6 +278,7 @@ const MODE_FOR_SOURCE = {
       evidence: result?.evidence.length ?? 0,
       answerChars: answer.length,
       exactStringHit: groundedHit, forbiddenHit, disclosed, refusedGeneral,
+      ...spokenQuality(answer, result?.answerability ?? null),
       answer,          // synthetic fixtures only — no user data in this corpus
       goldFacts: q.goldFacts || [],
     });
@@ -234,7 +290,8 @@ const MODE_FOR_SOURCE = {
   process.stdout.write('\njudging');
   for (const r of rows) {
     if (r.error || !r.goldFacts.length) { r.judgeGrounded = null; continue; }
-    r.judgeGrounded = await judgeGrounded(key, null, r.goldFacts, r.answer);
+    r.judgeGrounded = await judgeGrounded(keys, null, r.goldFacts, r.answer);
+    await sleep(300);
     process.stdout.write(r.judgeGrounded === null ? '?' : (r.judgeGrounded ? '.' : 'x'));
   }
   console.log('');
@@ -258,12 +315,24 @@ const MODE_FOR_SOURCE = {
     unsupportedDisclosureRate: catC.length ? catC.filter((r) => r.disclosed).length / catC.length : null,
     overRefusalRate: catB.length ? catB.filter((r) => r.refusedGeneral).length / catB.length : null,
     ttlMs: { p50: p(lat, 0.5), p95: p(lat, 0.95) },
+    boilerplateRate: ok.length ? ok.filter((r) => r.boilerplate).length / ok.length : null,
+    overLongRate: ok.length ? ok.filter((r) => r.overLong).length / ok.length : null,
+    disclosureOnFullTurnRate: (() => {
+      const full = ok.filter((r) => r.answerability === 'FULL');
+      return full.length ? full.filter((r) => r.disclosureOnFullTurn).length / full.length : null;
+    })(),
+    words: { p50: p(ok.map((r) => r.words), 0.5), p95: p(ok.map((r) => r.words), 0.95) },
     rows,
   };
   const outDir = path.join(REPO_ROOT, 'benchmarks/ci-v3-retrieval/results');
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(path.join(outDir, 'provider-eval-latest.json'), JSON.stringify(summary, null, 2));
 
+  const errRate = (rows.length - ok.length) / Math.max(1, rows.length);
+  if (errRate > 0.1) {
+    console.log(`\n*** RUN VOID — ${rows.length - ok.length}/${rows.length} requests failed `
+      + `(${(errRate * 100).toFixed(0)}%). Rates below are NOT reportable. ***`);
+  }
   const pc = (v) => (v === null ? 'n/a' : `${(v * 100).toFixed(1)}%`);
   console.log('\n=== PROVIDER-BACKED EVALUATION ===');
   console.log(`model                          ${MODEL} @ temperature 0`);
@@ -274,6 +343,11 @@ const MODE_FOR_SOURCE = {
   console.log(`unsupported-claim disclosure   ${pc(summary.unsupportedDisclosureRate)}  (category C)`);
   console.log(`over-refusal on general Qs     ${pc(summary.overRefusalRate)}   (target 0%)`);
   console.log(`generation latency             p50 ${summary.ttlMs.p50}ms · p95 ${summary.ttlMs.p95}ms`);
+  console.log('\n--- §20 READ-ALOUD QUALITY ---');
+  console.log(`  attribution boilerplate      ${pc(summary.boilerplateRate)}   (target 0%)`);
+  console.log(`  over-long for spoken use     ${pc(summary.overLongRate)}   (>${SPOKEN_WORD_CEILING} words)`);
+  console.log(`  disclosure on a FULL turn    ${pc(summary.disclosureOnFullTurnRate)}   <- decision precision, not style`);
+  console.log(`  answer length                p50 ${summary.words.p50} words · p95 ${summary.words.p95}`);
   console.log(`\nwrote ${path.join(outDir, 'provider-eval-latest.json')}`);
   process.exit(0);
 })().catch((e) => { console.error('PROVIDER EVAL FAILED:', e.message); process.exit(1); });

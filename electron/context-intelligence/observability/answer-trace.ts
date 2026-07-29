@@ -53,6 +53,16 @@ export interface RetrievalAttemptTrace {
   candidateCount: number;
   admittedAfterScopeFilter: number;
   rejectedByScopeFilter: number;
+  /**
+   * WHAT was rejected and why, not merely how many.
+   *
+   * The count alone cannot distinguish "the superseded résumé was retrieved and
+   * correctly rejected" from "nothing was rejected because the stale document
+   * was never in the corpus". A gate written against the count reported a clean
+   * pass in the second case for the entire mission. Reasons make the difference
+   * observable — in this trace and in production telemetry.
+   */
+  rejections?: Array<{ sourceId: string; reason: string }>;
   durationMs: number;
   failed?: string;
 }

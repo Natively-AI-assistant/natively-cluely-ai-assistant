@@ -53,11 +53,29 @@ export interface AdaptOptions {
   activeVersions: Map<string, string>;
   /** sourceId -> versionId the chunk actually came from, when the store knows. */
   chunkVersions?: Map<string, string>;
+  /**
+   * Admit a chunk whose own version is UNKNOWN, treating it as current.
+   *
+   * This must be opted into. The legacy mode-reference store has no version
+   * concept at all, so the wired production surface genuinely needs it
+   * (ipcHandlers.ts stamps one synthetic version for every file) — but it is a
+   * fail-OPEN decision and this module's contract is fail-closed, so it may not
+   * be the silent default.
+   *
+   * It was: `chunkVersions?.get(id) ?? active` admitted anything unregistered as
+   * current. A harness that simply forgot to pass `chunkVersions` therefore
+   * measured version filtering as a clean pass while the filter was inert.
+   * Defaulting to false makes that mistake fail loudly instead.
+   */
+  assumeCurrentWhenVersionUnknown?: boolean;
 }
 
 export interface AdaptResult {
   evidence: EvidenceItem[];
-  rejected: Array<{ sourceId: string; reason: 'UNKNOWN_SOURCE_TYPE' | 'SUPERSEDED_VERSION' | 'NO_ACTIVE_VERSION' }>;
+  rejected: Array<{
+    sourceId: string;
+    reason: 'UNKNOWN_SOURCE_TYPE' | 'SUPERSEDED_VERSION' | 'NO_ACTIVE_VERSION' | 'UNKNOWN_CHUNK_VERSION';
+  }>;
 }
 
 /**
@@ -80,7 +98,12 @@ export function adaptLegacyChunks(chunks: LegacyChunk[], opts: AdaptOptions): Ad
     const active = opts.activeVersions.get(c.sourceId);
     if (!active) { rejected.push({ sourceId: c.sourceId, reason: 'NO_ACTIVE_VERSION' }); continue; }
 
-    const chunkVersion = opts.chunkVersions?.get(c.sourceId) ?? active;
+    const known = opts.chunkVersions?.get(c.sourceId);
+    if (known === undefined && !opts.assumeCurrentWhenVersionUnknown) {
+      rejected.push({ sourceId: c.sourceId, reason: 'UNKNOWN_CHUNK_VERSION' });
+      continue;
+    }
+    const chunkVersion = known ?? active;
     if (chunkVersion !== active) {
       rejected.push({ sourceId: c.sourceId, reason: 'SUPERSEDED_VERSION' });
       continue;
@@ -93,6 +116,7 @@ export function adaptLegacyChunks(chunks: LegacyChunk[], opts: AdaptOptions): Ad
       sourceType,
       sourceId: c.sourceId,
       versionId: active,
+      retrievedVersionId: chunkVersion,
       scopeId: sid,
       documentTitle: c.fileName,
       section: c.section,

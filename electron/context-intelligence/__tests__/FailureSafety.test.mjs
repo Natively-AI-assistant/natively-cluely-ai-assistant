@@ -69,6 +69,7 @@ describe('§22.4 — a malformed source is isolated, not allowed to poison the s
   const registry = {
     sourceTypes: new Map([['good', 'REFERENCE_FILE'], ['bad', 'REFERENCE_FILE']]),
     activeVersions: new Map([['good', 'v1'], ['bad', 'v1']]),
+    chunkVersions: new Map([['good', 'v1'], ['bad', 'v1']]),
   };
 
   test('one unusable chunk does not discard the usable ones', () => {
@@ -130,6 +131,7 @@ describe('§22.8 — partial evidence answers the supported part only', () => {
       registry: {
         sourceTypes: new Map([['resume-1', 'RESUME']]),
         activeVersions: new Map([['resume-1', 'v1']]),
+        chunkVersions: new Map([['resume-1', 'v1']]),
       },
       retrieve: async () => [{ sourceId: 'resume-1', text: 'Built a WebRTC pipeline', chunkIndex: 0, score: 0.9 }],
     });
@@ -151,6 +153,7 @@ describe('§22.8 — partial evidence answers the supported part only', () => {
       registry: {
         sourceTypes: new Map([['resume-1', 'RESUME']]),
         activeVersions: new Map([['resume-1', 'v1']]),
+        chunkVersions: new Map([['resume-1', 'v1']]),
       },
       retrieve: async () => [{ sourceId: 'resume-1', text: 'Built a WebRTC pipeline', chunkIndex: 0, score: 0.9 }],
     });

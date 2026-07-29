@@ -109,6 +109,17 @@ export interface RetrievalCandidate {
   sourceType: SourceType;
   sourceId: string;
   versionId: string;
+  /**
+   * The version this chunk ACTUALLY came from, as distinct from `versionId`,
+   * which records the source's active version.
+   *
+   * They are normally equal — the filter rejects mismatches. Recording the
+   * retrieved version separately is what makes the mismatch check meaningful:
+   * while every admitted item was stamped with the ACTIVE version, a
+   * version-collision assertion could not fire even in principle, because two
+   * items from one source were guaranteed to carry identical values.
+   */
+  retrievedVersionId?: string;
   scopeId: string;
 
   documentTitle?: string;

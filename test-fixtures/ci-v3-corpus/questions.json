@@ -315,14 +315,16 @@
       "prohibitedSources": [],
       "goldDoc": null,
       "goldFacts": [],
-      "expectedAnswerability": "NONE",
+      "expectedAnswerability": "FULL",
       "expectedFallback": "GENERAL_KNOWLEDGE",
       "generalKnowledgeAllowed": true,
       "inferenceAllowed": true,
       "expectedPath": "FAST",
       "category": "B",
       "scoring": "judge",
-      "notes": "MUST NOT retrieve. A grounded path here is a false-positive retrieval (§13.1)."
+      "notes": "MUST NOT retrieve. A grounded path here is a false-positive retrieval (§13.1).",
+      "priorExpectedAnswerability": "NONE",
+      "labelRationale": "NONE encoded over-refusal as correct. These are OPEN_KNOWLEDGE turns that require no private evidence, so they are fully answerable; §26.5 targets 0% over-refusal on exactly this class. Grounding is asserted separately by noProhibitedSourceInEvidence, which stays at 42/42."
     },
     {
       "id": "B-02",
@@ -339,14 +341,16 @@
       ],
       "goldDoc": null,
       "goldFacts": [],
-      "expectedAnswerability": "NONE",
+      "expectedAnswerability": "FULL",
       "expectedFallback": "GENERAL_KNOWLEDGE",
       "generalKnowledgeAllowed": true,
       "inferenceAllowed": true,
       "expectedPath": "FAST",
       "category": "B",
       "scoring": "judge",
-      "notes": "§11.2 explicitly: no profile retrieval. Any RESUME chunk retrieved counts as contamination."
+      "notes": "§11.2 explicitly: no profile retrieval. Any RESUME chunk retrieved counts as contamination.",
+      "priorExpectedAnswerability": "NONE",
+      "labelRationale": "NONE encoded over-refusal as correct. These are OPEN_KNOWLEDGE turns that require no private evidence, so they are fully answerable; §26.5 targets 0% over-refusal on exactly this class. Grounding is asserted separately by noProhibitedSourceInEvidence, which stays at 42/42."
     },
     {
       "id": "B-03",
@@ -359,13 +363,15 @@
       "prohibitedSources": [],
       "goldDoc": null,
       "goldFacts": [],
-      "expectedAnswerability": "NONE",
+      "expectedAnswerability": "FULL",
       "expectedFallback": "GENERAL_KNOWLEDGE",
       "generalKnowledgeAllowed": true,
       "inferenceAllowed": true,
       "expectedPath": "FAST",
       "category": "B",
-      "scoring": "judge"
+      "scoring": "judge",
+      "priorExpectedAnswerability": "NONE",
+      "labelRationale": "NONE encoded over-refusal as correct. These are OPEN_KNOWLEDGE turns that require no private evidence, so they are fully answerable; §26.5 targets 0% over-refusal on exactly this class. Grounding is asserted separately by noProhibitedSourceInEvidence, which stays at 42/42."
     },
     {
       "id": "C-01",
@@ -478,14 +484,16 @@
       "goldFacts": [
         "Graduated **2017**"
       ],
-      "expectedAnswerability": "CONFLICTING",
+      "expectedAnswerability": "FULL",
       "expectedFallback": "CONFLICT",
       "generalKnowledgeAllowed": false,
       "inferenceAllowed": false,
       "expectedPath": "GROUNDED",
       "category": "G",
       "scoring": "deterministic",
-      "notes": "v1 says 2019, v2 says 2017. With both indexed this is CONFLICTING; with only v2 active it is FULL. Retrieving v1 when v2 is the active version is a stale-version failure (§15.6). | expectedPath corrected GROUNDED: VERIFICATION is a post-retrieval escalation, captured by expectedAnswerability."
+      "notes": "v1 says 2019, v2 says 2017. With both indexed this is CONFLICTING; with only v2 active it is FULL. Retrieving v1 when v2 is the active version is a stale-version failure (§15.6). | expectedPath corrected GROUNDED: VERIFICATION is a post-retrieval escalation, captured by expectedAnswerability.",
+      "priorExpectedAnswerability": "CONFLICTING",
+      "labelRationale": "CONFLICTING was unreachable and spec-incorrect. 06_SOURCE_AUTHORITY_SPEC §3.2 makes the superseded revision non-retrievable, so the turn is answered from the ACTIVE revision alone and is FULL. §5 conflict resolution applies only to current-version sources that disagree, which a version pair cannot be. See F24."
     },
     {
       "id": "G-02",
@@ -502,14 +510,16 @@
       "goldFacts": [
         "team of 11 engineers"
       ],
-      "expectedAnswerability": "CONFLICTING",
+      "expectedAnswerability": "FULL",
       "expectedFallback": "CONFLICT",
       "generalKnowledgeAllowed": false,
       "inferenceAllowed": false,
       "expectedPath": "GROUNDED",
       "category": "G",
       "scoring": "deterministic",
-      "notes": "v1: 'team of 4 engineers'. v2: 'team of 11 engineers'. | expectedPath corrected GROUNDED: VERIFICATION is a post-retrieval escalation, captured by expectedAnswerability."
+      "notes": "v1: 'team of 4 engineers'. v2: 'team of 11 engineers'. | expectedPath corrected GROUNDED: VERIFICATION is a post-retrieval escalation, captured by expectedAnswerability.",
+      "priorExpectedAnswerability": "CONFLICTING",
+      "labelRationale": "CONFLICTING was unreachable and spec-incorrect. 06_SOURCE_AUTHORITY_SPEC §3.2 makes the superseded revision non-retrievable, so the turn is answered from the ACTIVE revision alone and is FULL. §5 conflict resolution applies only to current-version sources that disagree, which a version pair cannot be. See F24."
     },
     {
       "id": "G-03",
@@ -526,14 +536,16 @@
       "goldFacts": [
         "5.1 million transactions per day"
       ],
-      "expectedAnswerability": "CONFLICTING",
+      "expectedAnswerability": "FULL",
       "expectedFallback": "CONFLICT",
       "generalKnowledgeAllowed": false,
       "inferenceAllowed": false,
       "expectedPath": "GROUNDED",
       "category": "G",
       "scoring": "deterministic",
-      "notes": "v1: 2.3 million. Newer version must win under §16.1 priority. | expectedPath corrected GROUNDED: VERIFICATION is a post-retrieval escalation, captured by expectedAnswerability."
+      "notes": "v1: 2.3 million. Newer version must win under §16.1 priority. | expectedPath corrected GROUNDED: VERIFICATION is a post-retrieval escalation, captured by expectedAnswerability.",
+      "priorExpectedAnswerability": "CONFLICTING",
+      "labelRationale": "CONFLICTING was unreachable and spec-incorrect. 06_SOURCE_AUTHORITY_SPEC §3.2 makes the superseded revision non-retrievable, so the turn is answered from the ACTIVE revision alone and is FULL. §5 conflict resolution applies only to current-version sources that disagree, which a version pair cannot be. See F24."
     },
     {
       "id": "H-01",
@@ -935,14 +947,16 @@
       "prohibitedSources": [],
       "goldDoc": null,
       "goldFacts": [],
-      "expectedAnswerability": "CONFLICTING",
+      "expectedAnswerability": null,
       "expectedFallback": "CLARIFICATION",
       "generalKnowledgeAllowed": false,
       "inferenceAllowed": false,
       "expectedPath": "GROUNDED",
       "category": "H",
       "scoring": "judge",
-      "notes": "CROSS-MODE AMBIGUITY probe. Three different documents answer this: lfw_jd.md (175-200k), recruiting_compensation_policy.txt (L3/L4/L5 bands), sales_pricing_policy.json (seat pricing). Correct behaviour depends on the ACTIVE MODE's authorized sources — answering from the wrong mode's corpus is the contamination this benchmark exists to measure. | expectedPath corrected GROUNDED: VERIFICATION is a post-retrieval escalation, captured by expectedAnswerability."
+      "notes": "CROSS-MODE AMBIGUITY probe. Three different documents answer this: lfw_jd.md (175-200k), recruiting_compensation_policy.txt (L3/L4/L5 bands), sales_pricing_policy.json (seat pricing). Correct behaviour depends on the ACTIVE MODE's authorized sources — answering from the wrong mode's corpus is the contamination this benchmark exists to measure. | expectedPath corrected GROUNDED: VERIFICATION is a post-retrieval escalation, captured by expectedAnswerability.",
+      "priorExpectedAnswerability": "CONFLICTING",
+      "labelRationale": "Deliberately UNASSERTED. This is a cross-source ambiguity (three current documents answer it differently), which is 06 §5 territory — value-level conflict detection that V3 does not implement (F24). Asserting any other label here would hide the gap instead of recording it."
     },
     {
       "id": "C-04",

@@ -37,6 +37,13 @@ export interface LegacyPortDeps {
   retrieve: LegacyRetrieveFn;
   registry: SourceRegistry;
   now?: () => number;
+  /**
+   * Admit chunks whose own version is unknown (see AdaptOptions). Required by
+   * the wired manual-chat surface, because the legacy mode-reference store has
+   * no version concept; deliberately NOT defaulted on, so a harness that omits
+   * `chunkVersions` fails closed instead of measuring an inert filter as a pass.
+   */
+  assumeCurrentWhenVersionUnknown?: boolean;
 }
 
 export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
@@ -72,6 +79,7 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
         sourceTypes: deps.registry.sourceTypes,
         activeVersions: deps.registry.activeVersions,
         chunkVersions: deps.registry.chunkVersions,
+        assumeCurrentWhenVersionUnknown: deps.assumeCurrentWhenVersionUnknown,
       });
 
       // Only source types the MODE authorized for this turn.
@@ -101,6 +109,9 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
         candidateCount: raw.length,
         admittedAfterScopeFilter: adapted.evidence.length,
         rejectedByScopeFilter: adapted.rejected.length,
+        // The adapter already knows the reason for every rejection; dropping it
+        // here is what made "0 rejected" and "nothing to reject" look identical.
+        rejections: adapted.rejected.map((r) => ({ sourceId: r.sourceId, reason: r.reason })),
         durationMs: now() - t0,
         ...(failed ? { failed } : {}),
       });

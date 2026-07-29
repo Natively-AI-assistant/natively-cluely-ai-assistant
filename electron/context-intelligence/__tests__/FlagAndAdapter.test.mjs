@@ -61,10 +61,11 @@ describe('legacy adapter — scope and version', () => {
   const scope = { userId: 'u1', meetingId: 'm1' };
   const sourceTypes = new Map([['resume-1', 'RESUME'], ['jd-1', 'JOB_DESCRIPTION']]);
   const activeVersions = new Map([['resume-1', 'v2'], ['jd-1', 'v1']]);
+  const chunkVersions = new Map([['resume-1', 'v2'], ['jd-1', 'v1']]);
   const chunk = (over = {}) => ({ sourceId: 'resume-1', text: 'Built a WebRTC pipeline', chunkIndex: 0, score: 0.8, ...over });
 
   test('admits an active-version chunk and stamps scopeId', () => {
-    const r = adaptLegacyChunks([chunk()], { scope, sourceTypes, activeVersions });
+    const r = adaptLegacyChunks([chunk()], { scope, sourceTypes, activeVersions, chunkVersions });
     assert.equal(r.evidence.length, 1);
     assert.equal(r.evidence[0].scopeId, 'u:u1|m:m1');
     assert.equal(r.evidence[0].versionId, 'v2');
@@ -80,7 +81,7 @@ describe('legacy adapter — scope and version', () => {
   });
 
   test('fails CLOSED on an unknown source type — never guesses', () => {
-    const r = adaptLegacyChunks([chunk({ sourceId: 'mystery' })], { scope, sourceTypes, activeVersions });
+    const r = adaptLegacyChunks([chunk({ sourceId: 'mystery' })], { scope, sourceTypes, activeVersions, chunkVersions });
     assert.equal(r.evidence.length, 0);
     assert.equal(r.rejected[0].reason, 'UNKNOWN_SOURCE_TYPE');
   });
@@ -91,6 +92,39 @@ describe('legacy adapter — scope and version', () => {
     });
     assert.equal(r.rejected[0].reason, 'NO_ACTIVE_VERSION');
   });
+
+  // The version check used to read `chunkVersions?.get(id) ?? active`, so a
+  // caller that supplied no chunk versions had every chunk treated as current
+  // and the filter was inert while reporting success. A benchmark harness did
+  // exactly that and scored version isolation 42/42 against a corpus that
+  // contained no superseded document at all.
+  test('fails CLOSED when the chunk version is UNKNOWN — the fail-open default is gone', () => {
+    const r = adaptLegacyChunks([chunk()], { scope, sourceTypes, activeVersions });
+    assert.equal(r.evidence.length, 0,
+      'an unregistered chunk version must not be assumed current');
+    assert.equal(r.rejected[0].reason, 'UNKNOWN_CHUNK_VERSION');
+  });
+
+  test('the fail-open path still exists, but only when explicitly requested', () => {
+    // The wired manual-chat surface needs this: the legacy mode-reference store
+    // has no version column, so there is no chunkVersions map to supply.
+    const r = adaptLegacyChunks([chunk()], {
+      scope, sourceTypes, activeVersions, assumeCurrentWhenVersionUnknown: true,
+    });
+    assert.equal(r.evidence.length, 1);
+    assert.equal(r.evidence[0].retrievedVersionId, 'v2', 'assumed to be the active version');
+  });
+
+  test('retrievedVersionId records the chunk’s OWN version, not the active one', () => {
+    // This is what makes the orchestrator's version-collision check able to
+    // fire. While every admitted item was stamped with the ACTIVE version, two
+    // items from one source could not differ, so CONFLICTING was unreachable.
+    const r = adaptLegacyChunks([chunk()], {
+      scope, sourceTypes, activeVersions, chunkVersions,
+    });
+    assert.equal(r.evidence[0].versionId, 'v2');
+    assert.equal(r.evidence[0].retrievedVersionId, 'v2');
+  });
 });
 
 describe('legacy adapter — carries the dropped signals through', () => {
@@ -98,6 +132,7 @@ describe('legacy adapter — carries the dropped signals through', () => {
     scope: { userId: 'u1' },
     sourceTypes: new Map([['resume-1', 'RESUME']]),
     activeVersions: new Map([['resume-1', 'v2']]),
+    chunkVersions: new Map([['resume-1', 'v2']]),
   };
 
   test('preserves answerabilityScore and rerankScore that the legacy type discards', () => {
@@ -125,6 +160,7 @@ describe('claim-level authority filtering', () => {
     scope: { userId: 'u1' },
     sourceTypes: new Map([['resume-1', 'RESUME'], ['jd-1', 'JOB_DESCRIPTION']]),
     activeVersions: new Map([['resume-1', 'v2'], ['jd-1', 'v1']]),
+    chunkVersions: new Map([['resume-1', 'v2'], ['jd-1', 'v1']]),
   };
 
   test('a JD is never returned for a USER_SKILL claim — the canonical contamination', () => {

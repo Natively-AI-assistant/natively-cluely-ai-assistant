@@ -15,6 +15,7 @@ const { decide, orchestrate } = await import(pathToFileURL(path.join(base, 'orch
 const registry = () => ({
   sourceTypes: new Map([['resume-1', 'RESUME'], ['jd-1', 'JOB_DESCRIPTION']]),
   activeVersions: new Map([['resume-1', 'v2'], ['jd-1', 'v1']]),
+  chunkVersions: new Map([['resume-1', 'v2'], ['jd-1', 'v1']]),
 });
 
 const req = (q, over = {}) => ({

@@ -911,7 +911,14 @@ export function initializeIpcHandlers(appState: AppState): void {
             for (const f of files) { sourceTypes.set(f.id, 'REFERENCE_FILE'); activeVersions.set(f.id, 'legacy'); }
 
             const port = createLegacyRetrievalPort({
+              // assumeCurrentWhenVersionUnknown is REQUIRED here and nowhere
+              // else: with no per-file version in the legacy store there is no
+              // chunkVersions map to supply, and without the opt-in the adapter
+              // now fails closed and would reject every chunk. Stated explicitly
+              // so the fail-open is a declared property of this surface rather
+              // than a silent default shared by the test harnesses.
               registry: { sourceTypes, activeVersions },
+              assumeCurrentWhenVersionUnknown: true,
               retrieve: async (query: string, opts: { topK: number }) => {
                 if (!modeInfo || !files.length) return [];
                 const res = await mm.retrieveHybridRaw?.(modeInfo, files, {

@@ -24,8 +24,9 @@ const chain = async (question, { modeId = 'technical-interview', chunks = [], fi
   const policy = resolveMode(modeId);
   const sourceTypes = new Map(files.map((f) => [f, 'REFERENCE_FILE']));
   const activeVersions = new Map(files.map((f) => [f, 'legacy']));
+  const chunkVersions = new Map(files.map((f) => [f, 'legacy']));
   const port = createLegacyRetrievalPort({
-    registry: { sourceTypes, activeVersions },
+    registry: { sourceTypes, activeVersions, chunkVersions },
     retrieve: async () => chunks,
   });
   const result = await orchestrate({
@@ -111,7 +112,7 @@ describe('stale evidence never reaches the prompt', () => {
       registry: {
         sourceTypes: new Map([['f1', 'REFERENCE_FILE']]),
         activeVersions: new Map([['f1', 'v2']]),
-        chunkVersions: new Map([['f1', 'v1']]),
+        chunkVersions: new Map([['f1', 'v1']]),   // stale: active is v2
       },
       retrieve: async () => [{ sourceId: 'f1', text: 'superseded value', chunkIndex: 0, score: 0.99 }],
     });

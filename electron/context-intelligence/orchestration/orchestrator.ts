@@ -225,15 +225,27 @@ export function evaluateAnswerability(
   // Scope/version filtering should already make that unreachable, so this is an
   // assertion surface: if it ever fires, the filter has a hole.
   //
+  // This compares `retrievedVersionId` — the version each chunk actually came
+  // from — NOT `versionId`, which is the source's ACTIVE version. Comparing the
+  // latter made the check dead code: the adapter stamps every admitted item with
+  // the active version, so two items from one source could not differ, and the
+  // "assertion surface" above could never fire no matter how broken the filter
+  // was. The one hole that does exist — an unknown chunk version being assumed
+  // current — is now an opt-in (`assumeCurrentWhenVersionUnknown`), and it is
+  // exactly the configuration in which this check earns its place.
+  //
   // NOT IMPLEMENTED: content-level contradiction ("v1 says 4 engineers, v2 says
-  // 11"). That needs value extraction and comparison per claim. Reporting a
-  // conflict we cannot actually detect would be worse than reporting none —
-  // §16.1 requires identifying the conflicting VALUES, not merely asserting one
-  // exists.
+  // 11") between two CURRENT sources. That needs value extraction and comparison
+  // per claim. Reporting a conflict we cannot actually detect would be worse than
+  // reporting none — §16.1 requires identifying the conflicting VALUES, not
+  // merely asserting one exists. So version conflicts are resolved by the filter
+  // (06_SOURCE_AUTHORITY_SPEC §3.2, newer wins) and CONFLICTING is reserved for a
+  // filter hole. Corpus questions G-01..G-03 are therefore §3.2 cases expecting
+  // FULL from the active revision, not §5 cases expecting CONFLICTING.
   const versionsBySource = new Map<string, Set<string>>();
   for (const e of evidence) {
     if (!versionsBySource.has(e.sourceId)) versionsBySource.set(e.sourceId, new Set());
-    versionsBySource.get(e.sourceId)!.add(e.versionId);
+    versionsBySource.get(e.sourceId)!.add(e.retrievedVersionId ?? e.versionId);
   }
   for (const versions of versionsBySource.values()) if (versions.size > 1) return 'CONFLICTING';
 

@@ -57,6 +57,14 @@ const PERMANENT_RULES = [
   'Distinguish direct evidence, inference, and general knowledge.',
   'Do not expose internal retrieval reasoning to the user.',
   'Produce one natural, speakable answer.',
+  // §20, measured: 7.1% of answers opened with attribution boilerplate
+  // ("According to the provided documentation...") and 14.3% ran past 120 words,
+  // which is unusable when the point is to say it out loud mid-conversation.
+  'Do not preface the answer with attribution ("according to the document", '
+    + '"based on the provided context", "the reference file states"). State the fact directly; '
+    + 'name a source only when the source itself is the point.',
+  'Keep it short enough to say out loud: aim for two to four sentences unless the question '
+    + 'genuinely requires a list or code.',
 ].join('\n- ');
 
 function authorityRules(d: Readonly<TurnDecision>): string {
