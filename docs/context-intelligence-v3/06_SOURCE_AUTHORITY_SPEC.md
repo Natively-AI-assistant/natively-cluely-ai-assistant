@@ -119,7 +119,24 @@ When authorized, in-scope, current-version sources still disagree:
 5. If unresolvable, surface it:
    > "The two versions list different values. The newer document states X, the older Y."
 
-Corpus questions G-01…G-03 assert exactly this shape.
+### 5.1 CORRECTION (2026-07-30) — this section did not describe G-01…G-03, and is not implemented
+
+This section previously closed with *"Corpus questions G-01…G-03 assert exactly this shape."* **That was wrong, and it contradicted §3.2 one page earlier.**
+
+G-01…G-03 are a **version pair** — the 2023 and 2026 revisions of one résumé disagreeing on graduation year, team size and peak volume. §3.2 makes the superseded revision **not retrievable at all**. So a version pair can never satisfy this section's own precondition of *"current-version sources"*: the older revision is filtered out before conflict resolution is ever reached.
+
+The two sections were describing different mechanisms and one of them claimed the other's fixtures.
+
+**Consequences, both now fixed:**
+
+| | |
+|---|---|
+| `expectedAnswerability: CONFLICTING` on G-01…G-03 | Relabelled **FULL** — answered from the active revision per §3.2. `priorExpectedAnswerability` retained in `questions.json`. |
+| The value-conflict path itself | **NOT IMPLEMENTED** and now recorded as such (F24), not implied by a spec cross-reference. |
+
+**What is implemented:** version conflict, resolved by the filter (§3.2). Newer wins; the older revision never reaches the model.
+
+**What is not:** value-level contradiction between two *current*, authorized, in-scope sources — the case this section actually describes. It needs per-claim value extraction, because §16.1 requires identifying the conflicting **values** rather than asserting a conflict exists. There is currently **no corpus fixture** for it either: H-05 is cross-source *ambiguity* (three current documents answering "what is the compensation range?" about different things), not contradiction, and its expected answerability is deliberately left unasserted rather than given a convenient label.
 
 ---
 

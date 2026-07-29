@@ -898,3 +898,46 @@ Three findings jointly argue for changing the plan in §33, and the argument is 
 A corollary worth stating plainly: **the dev-vs-production flag split (F5) is the mechanism that allowed this to happen.** Components could be built, pass their tests under dev defaults, and be considered "done" while never running for a user. Any V3 rollout that reproduces that split will reproduce the outcome.
 
 ---
+
+## Findings added 2026-07-30 — the thesis reproduced inside the rebuild
+
+F24 and F25 were not found in the legacy code. They were found **in the V3 module**, by hardening the harness that was supposed to be validating it. Both are the same failure the mission was written about — architecture that exists, passes its tests, and does nothing — so they are recorded here beside the legacy findings rather than in a separate section.
+
+### F24 — `CONFLICTING` was structurally unreachable, and four questions expected it
+
+`evaluateAnswerability` detected a conflict as *"the same source appearing at two different versions"*, comparing `EvidenceItem.versionId` across items sharing a `sourceId`.
+
+`adaptLegacyChunks` stamps **every admitted item with the source's ACTIVE version**:
+
+```ts
+versionId: active,          // legacy-adapter.ts — not the chunk's own version
+```
+
+A chunk whose own version differed was rejected before this point. So two items from one source were *guaranteed* to carry identical `versionId` values, `versions.size > 1` could not evaluate true, and the branch was dead code. The comment describing it as *"an assertion surface: if it ever fires, the filter has a hole"* was wrong — it could not fire regardless of how broken the filter was.
+
+Nothing detected this because **`expectedAnswerability` was recorded by all three harnesses and asserted by none.** Four questions (G-01…G-03, H-05) carried an expectation the system could not produce, and every run reported them as passing.
+
+**Fixed:** evidence carries `retrievedVersionId` — the version the chunk actually came from — and the check compares that. The assertion can now fire. Value-level conflict between two *current* sources remains unimplemented and is now recorded as such (see 06 §5.1) rather than implied.
+
+### F25 — the version filter failed OPEN, and scope filtering has no call sites
+
+Two related instances of the same shape.
+
+**(a) `filterByScopeAndVersion` has zero callers outside its own tests.**
+
+```
+electron/context-intelligence/__tests__/SourceAuthorityAndScope.test.mjs   6 hits
+everywhere else                                                            0
+```
+
+It is fully implemented, tested, and unreachable — F1/F9/F10's exact pattern, in the module built to replace them. The wired path instead uses `adaptLegacyChunks`, which stamps `scopeId` from the turn's own scope and **never compares it against a per-source scope**. Scope isolation therefore filters nothing on the wired surface. `evidenceCarriesProvenance`'s `e.scopeId &&` check is a truthiness test on a value that is non-empty by construction — vacuous in the same way the stale-version gate was.
+
+**(b) The version check defaulted to fail-open while documenting itself as fail-closed.**
+
+```ts
+const chunkVersion = opts.chunkVersions?.get(c.sourceId) ?? active;
+```
+
+A caller supplying no `chunkVersions` map had every chunk treated as current. `golden-live.cjs` did exactly that — and additionally stamped the literal `'legacy'` as every file's active version — so version filtering was inert for the entire mission while the module's docblock read *"Fails CLOSED."*
+
+**Fixed:** an unknown chunk version now rejects as `UNKNOWN_CHUNK_VERSION`. The fail-open survives only as an explicit `assumeCurrentWhenVersionUnknown` opt-in, set by the wired manual-chat surface alone because the legacy mode-reference store genuinely has no version column. (a) is **not** fixed — recorded as open.

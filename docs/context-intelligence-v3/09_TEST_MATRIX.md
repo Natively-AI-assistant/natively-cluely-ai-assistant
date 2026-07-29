@@ -217,3 +217,76 @@ Effect: `CONFLICTING` 8 → **0**, `FULL` 20 → **28**.
 - **No provider-backed evaluation.** Answer quality, naturalness and over-disclosure are unmeasured. Every number here is a *decision* measurement.
 - **The flag has never been on for a real user.** The surface is wired and inert.
 - **F22 remains open** — the 128k-char thesis still aborts the embedding worker, and it is excluded from this corpus rather than fixed.
+
+---
+
+## 10. Gate hardening (2026-07-30) — four gates were passing vacuously
+
+Every number in §9 was produced by a harness with four gates that could not fail. Read §9 as superseded where it conflicts with this section.
+
+> **Framing, so this is not misread.** `answerabilityMatchesExpected 29/42` is **newly measured**, not a regression from 42/42. It had never been asserted. Likewise the stale-version gate: the old 42/42 was vacuous and the new 42/42 is exercised. The two are not comparable numbers.
+
+### 10.1 What was wrong
+
+| Gate | How it passed without working |
+|---|---|
+| `noStaleVersionAccepted` | `!/resume_v1/.test(documentTitle)` — against a corpus that **never contained `resume_v1`**. Nothing to reject, so 42/42. |
+| version filtering generally | `golden-live` stamped `'legacy'` as every file's active version and passed **no `chunkVersions`**, so the filter compared a value with itself (F25b). |
+| `answerabilityMatchesExpected` | Did not exist. `expectedAnswerability` was recorded by all three harnesses and asserted by none — which is how F24 survived. |
+| `evidenceCarriesProvenance` | `e.scopeId &&` is a truthiness test on a field the adapter always populates from the turn's own scope. Still vacuous — see F25a. |
+
+Two fixtures central to 8 questions — `resume_v1_2023.md` and `meeting_transcript_previous.txt` — were **ingested by no harness at all**, while the two harness corpora had drifted to 13 files versus 10.
+
+### 10.2 The corpus was also contaminated once the fixtures were added
+
+Adding them naively made things worse in a way worth recording: `lfw_resume.txt` is **Evin J**, `resume_v1/v2` are **Priya Raghunathan**, and both are labelled `RESUME`. Indexed together, "the candidate" became two people, and Priya's résumé — which lists Kubernetes and PostgreSQL — answered the probes asserting those terms appear **nowhere** in the résumé.
+
+That includes **C-02, the canonical JD-as-experience result quoted in `10_BENCHMARK_RESULTS.md` §3.** It was passing, contaminated.
+
+**Fixed** by splitting retrieval into `base` and `versioned` groups, each ingested into its own mode, with a question answered only against its own group. Deliberately *not* done with `scopeId`, which filters nothing here (F25a).
+
+Discriminating check: superseded-rejection turns fell **25 → 6** after the split, confirming Priya's stale résumé had been a candidate on every résumé question. C-01 and C-02 now measure `NONE` on the base group.
+
+### 10.3 Results on the corrected harness
+
+| Gate | Result | |
+|---|---|---|
+| `noProhibitedSourceInEvidence` | 42/42 | |
+| `evidenceCarriesProvenance` | 42/42 | still vacuous (F25a) |
+| `promptLabelsEvidenceUntrusted` | 42/42 | |
+| `noStaleVersionAccepted` | 42/42 | **now exercised** — 6 turns reject a superseded chunk |
+| `retrievalPath` | 41/42 | G-03, known |
+| `answerabilityMatchesExpected` | **29/42** | newly measured |
+
+`base` 12 files / 406 chunks · `versioned` 4 files / 20 chunks · retrieval p50 12 ms · p95 14 ms.
+
+### 10.4 The 14 real failures — one function, both directions
+
+Relabelling accounted for 6 of the mismatches (§10.5). The remaining 14 are defects, and they concentrate almost entirely in `evidenceSupportsClaim`:
+
+| Direction | n | IDs | Shape |
+|---|---|---|---|
+| **Too strict** | 8 | A-03, A-06, A-12, C-03, G-01, G-02, H-02, H-04 | evidence retrieved, claim reported unsupported |
+| **Too lenient** | 5 | D-01, E-01, E-02, F-06, I-01 | claims support it does not have |
+| path only | 1 | G-03 | classification, previously known |
+
+The single-shared-salient-term rule is too coarse in both directions at once. Worked examples:
+
+- **A-03** *"How fast did Natively reach ten thousand users?"* — the résumé says *"scaled Natively to 10k users in the first 90 days"*. One candidate retrieved, zero accepted, `NONE`.
+- **I-01** *"What does the empty reference file say about pricing?"* — `FULL` on 3 chunks drawn from **other** files.
+- **E-01** *"Why?"* with no antecedent — `FULL` on 6 evidence items.
+- **G-01/G-02** — the superseded revision is correctly rejected, then the *active* revision fails to support the claim, so a version pair that should now answer cleanly returns `NONE`.
+
+This is the same defect as the §4.1 disclosure case in `10_BENCHMARK_RESULTS.md`, seen from the other side. **Not fixed. Recorded, with the mechanism identified.**
+
+### 10.5 Relabelling discipline
+
+Labels were changed only where the **spec** decides the answer, never to match observed output. `priorExpectedAnswerability` and a `labelRationale` are retained in `questions.json` for each.
+
+| IDs | Change | Authority |
+|---|---|---|
+| G-01…G-03 | `CONFLICTING` → `FULL` | 06 §3.2 — a superseded revision is not retrievable, so §5 conflict cannot apply to a version pair (F24) |
+| B-01…B-03 | `NONE` → `FULL` | §26.5 targets **0% over-refusal**; `NONE` encoded that defect as the expectation. These need no private evidence. |
+| H-05 | `CONFLICTING` → **unasserted** | Cross-source ambiguity, i.e. 06 §5 — genuinely unimplemented. Left unasserted rather than given a convenient label. |
+
+Critically, **relabelling G-01/G-02 did not make them pass** — they still fail as too-strict claim support. Had the labels been changed to match output rather than to match the spec, two real defects would have been buried.

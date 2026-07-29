@@ -24,7 +24,7 @@ const { ingestCorpus } = require('./ingest.cjs');
 // ONE corpus, shared with golden-live.cjs. These two lists had drifted to 10
 // files versus 13 — the thesis and both superseded revisions were missing here,
 // so §26.5 was measured on a smaller corpus than the gates it is reported beside.
-const { CORPUS, MODE_FOR_SOURCE, buildRegistry } = require('./corpus.cjs');
+const { MODE_FOR_SOURCE, docsForGroup, groupForQuestion, buildRegistry } = require('./corpus.cjs');
 
 process.env.NATIVELY_CONTEXT_INTELLIGENCE_V3 = '1';
 // F23 — MUST be set, or this measurement is void.
@@ -93,13 +93,29 @@ async function generate(keys, system, user, attempt = 0) {
       signal: AbortSignal.timeout(60_000),
     },
   );
-  if (res.status === 429 && attempt < keys.length * 3) {
-    // Rotate first (a sibling key may have headroom), then back off.
-    const waitMs = attempt < keys.length ? 250 : 2000 * Math.pow(2, attempt - keys.length);
-    await sleep(waitMs);
-    return generate(keys, system, user, attempt + 1);
+  if (!res.ok) {
+    // A 429 is not always transient. Both keys once returned
+    // "prepayment credits are depleted", which no amount of backoff clears —
+    // reported as a bare `provider 429` it looked like throttling and cost an
+    // hour of waiting for a limit that was never going to lift. So the reason is
+    // read out of the body and a non-retryable exhaustion fails FAST.
+    let reason = '';
+    try {
+      const body = await res.json();
+      reason = String(body?.error?.message ?? '').slice(0, 200);
+    } catch { /* body already consumed or not JSON */ }
+
+    const depleted = /credit|billing|depleted|exceeded your current quota/i.test(reason);
+    if (res.status === 429 && !depleted && attempt < keys.length * 3) {
+      // Rotate first (a sibling key may have per-minute headroom), then back off.
+      const waitMs = attempt < keys.length ? 250 : 2000 * Math.pow(2, attempt - keys.length);
+      await sleep(waitMs);
+      return generate(keys, system, user, attempt + 1);
+    }
+    const err = new Error(`provider ${res.status}${reason ? `: ${reason}` : ''}`);
+    err.nonRetryable = depleted;
+    throw err;
   }
-  if (!res.ok) throw new Error(`provider ${res.status}`);
   const j = await res.json();
   return (j?.candidates?.[0]?.content?.parts ?? []).map((p) => p.text || '').join('').trim();
 }
@@ -215,26 +231,35 @@ function spokenQuality(answer, answerability) {
   const { createLegacyRetrievalPort } = d('electron/context-intelligence/retrieval/legacy-retrieval-port.js');
   const { ModesManager } = d('electron/services/ModesManager.js');
 
-  const { mode, ingested } = await ingestCorpus(b, CORPUS);
-  const indexed = ingested.filter((i) => i.file);
-  assertVectorRunValid({ db: b.db, spaceKey: b.spaceKey, fileIds: indexed.map((i) => i.file.id) });
-
-  // Real version identity, so the superseded résumé and the previous meeting
-  // transcript are rejected rather than competing on similarity.
-  const registry = buildRegistry(indexed);
+  // Per-GROUP ingestion, matching golden-live. A merged corpus put two different
+  // people's résumés under one RESUME label and contaminated the C-* fabrication
+  // probes — including C-02, the canonical JD-as-experience case.
   const mm = ModesManager.getInstance();
-  const files = mm.getReferenceFiles(mode.id);
-
-  const port = createLegacyRetrievalPort({
-    registry,
-    retrieve: async (query, opts) => {
-      const res = await mm.retrieveHybridRaw(mode, files, { query, topK: opts.topK, tokenBudget: 3600, allowRerank: false });
-      return (res?.chunks ?? []).map((c) => ({
-        sourceId: c.sourceId, fileName: c.fileName, text: c.text,
-        chunkIndex: c.chunkIndex, score: c.score, ftsScore: c.ftsScore, vectorScore: c.vectorScore,
-      }));
-    },
-  });
+  const groups = {};
+  for (const group of ['base', 'versioned']) {
+    const { mode, ingested } = await ingestCorpus(b, docsForGroup(group), {
+      modeName: `CIv3 Eval ${group}`,
+    });
+    const indexed = ingested.filter((i) => i.file);
+    assertVectorRunValid({ db: b.db, spaceKey: b.spaceKey, fileIds: indexed.map((i) => i.file.id) });
+    const registry = buildRegistry(indexed);
+    const files = mm.getReferenceFiles(mode.id);
+    groups[group] = {
+      port: createLegacyRetrievalPort({
+        registry,
+        retrieve: async (query, opts) => {
+          const res = await mm.retrieveHybridRaw(mode, files, {
+            query, topK: opts.topK, tokenBudget: 3600, allowRerank: false,
+          });
+          return (res?.chunks ?? []).map((c) => ({
+            sourceId: c.sourceId, fileName: c.fileName, text: c.text,
+            chunkIndex: c.chunkIndex, score: c.score, ftsScore: c.ftsScore, vectorScore: c.vectorScore,
+          }));
+        },
+      }),
+    };
+    console.log(`[eval] group ${group}: ${indexed.length} files`);
+  }
 
   const bank = JSON.parse(fs.readFileSync(
     path.join(REPO_ROOT, 'test-fixtures/ci-v3-corpus/questions.json'), 'utf8')).questions.slice(0, MAX_QUESTIONS);
@@ -244,6 +269,9 @@ function spokenQuality(answer, answerability) {
     const raw = MODE_FOR_SOURCE[(q.requiredSources || [])[0]] || 'general';
     const modeId = isModeId(raw) ? raw : 'general';
     const policy = resolveModePolicy(modeId);
+    // Retrieval group (which documents exist) and policy mode (which source
+    // types may be read) are different axes.
+    const { port } = groups[groupForQuestion(q.id)];
 
     let answer = ''; let error = null;
     let result; let composed;
@@ -257,7 +285,19 @@ function spokenQuality(answer, answerability) {
       answer = await generate(keys, composed.system, composed.user);
       await sleep(400);   // pace the run so a full pass does not self-throttle
       lat.push(Date.now() - t);
-    } catch (e) { error = e.message; }
+    } catch (e) {
+      error = e.message;
+      // Credit exhaustion will not resolve within the run. Stopping immediately
+      // beats emitting 42 identical failure rows and a results file whose rates
+      // are all computed over an empty numerator.
+      if (e.nonRetryable) {
+        console.error(`\n*** ABORTING — the provider is not billable, so §26.5 cannot be measured.\n`
+          + `    ${e.message}\n`
+          + `    This is NOT a rate limit; waiting will not clear it. Top up the key's billing,\n`
+          + `    then re-run. No result file is written, so no stale numbers can be quoted.`);
+        process.exit(3);
+      }
+    }
 
     const a = norm(answer);
     const gold = (q.goldFacts || []).map(norm);

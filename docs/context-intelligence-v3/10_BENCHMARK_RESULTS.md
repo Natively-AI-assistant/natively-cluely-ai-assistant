@@ -8,11 +8,15 @@
 
 Every prior number in this mission measured a *decision*. This is the first run that looks at what the model actually **says** when handed a V3-composed prompt.
 
-**Secret handling:** the API key is read from `.env` in-process and never printed, never placed on a command line, and never written to the results file.
+**Secret handling:** API keys are read from `.env` in-process and never printed, never placed on a command line, and never written to the results file. Keys are rotated across the available pool with exponential backoff, because a single key's per-minute limit voided an earlier run at 39/42 `provider 429`; the runner now refuses to publish rates when more than 10% of requests fail.
+
+> **CORPUS PROVENANCE (added 2026-07-30).** Every measurement below must be read with its harness and corpus attached. When this document was first written, `provider-eval.cjs` used a **10-file** corpus while the gates quoted alongside came from `golden-live.cjs` on **13 files**, and neither ingested the two superseded fixtures. §1 and §3 were measured on the merged, uncorrected corpus and are re-measured in §6.
 
 ---
 
 ## 1. Results
+
+> **SUPERSEDED IN PART — see §6.** These rates were measured on a corpus in which two different people's résumés shared the `RESUME` label, and they depend on `evidenceSupportsClaim`, since measured wrong in both directions. Re-measurement is blocked on provider billing, not on engineering.
 
 | §26.5 measure | Result | Target | |
 |---------------|--------|--------|---|
@@ -53,6 +57,8 @@ Two honesty notes:
 ---
 
 ## 3. Category C — the fabrication probes, verbatim
+
+> **C-02 below was passing for a corrupt reason.** Its premise — *"`Postgres required` appears in the JD and nowhere in the resume"* — was false in this corpus: the second résumé indexed under the same label lists PostgreSQL twice. On the corrected `base` group C-02 now measures `NONE`, which is the intended verdict, but the quoted model answer has **not** been re-generated (§6). Treat the quotation as illustrative, not as evidence.
 
 This is the class the whole mission exists to fix, so the answers are quoted rather than summarised.
 
@@ -147,16 +153,16 @@ Bisected on the 66-page thesis (128 184 chars):
 
 Fixed with a provider-aware batch: 16 for `local`, unchanged at 100 for cloud — this is an arena-pressure problem specific to in-process inference, not a batching problem in general.
 
-**The thesis is now back in the corpus**, so §8.1's "large reference file" case is genuinely exercised rather than excluded:
+**The thesis is now back in the corpus** — but note the harness. The figures immediately below come from **`golden-live.cjs`**, not from this document's own runner, and at the time they were recorded `provider-eval.cjs` carried a **separate 10-file corpus that did not include the thesis at all**. The claim was true of one harness and asserted in the report of the other. Both now share `corpus.cjs` (see `09_TEST_MATRIX.md` §10) and the drift is closed.
 
-| | before | after |
-|---|---|---|
-| corpus files | 12 | **13** |
-| chunks | 214 | **414** |
-| all four safety gates | 42/42 | **42/42** |
-| retrieval latency p50 | 2 ms | 11 ms |
+| | before | after | harness |
+|---|---|---|---|
+| corpus files | 12 | **13** | golden-live |
+| chunks | 214 | **414** | golden-live |
+| all four safety gates | 42/42 | **42/42** | golden-live |
+| retrieval latency p50 | 2 ms | 11 ms | golden-live |
 
-Gates hold at double the corpus size.
+Gates hold at double the corpus size. **The 42/42 in this table is now known to have been partly vacuous** — two of those gates could not fail. Superseded by `09_TEST_MATRIX.md` §10.
 
 ---
 
@@ -173,8 +179,39 @@ Gates hold at double the corpus size.
 
 ---
 
-## 6. Ordered follow-ups
+## 6. Re-measurement on the corrected corpus — BLOCKED (2026-07-30)
+
+§1 and §3 were measured on the **uncorrected** corpus, and two problems make them non-final:
+
+1. **Corpus contamination.** `provider-eval.cjs` ran a 10-file list in which two different people's résumés were both labelled `RESUME`. Priya Raghunathan's résumé lists Kubernetes and PostgreSQL — the exact terms C-01 and C-02 assert are absent from the candidate's résumé. **C-02, the canonical JD-as-experience result quoted in §3, was passing while contaminated.**
+2. **A decision-layer defect discovered since.** The `disclosureOnFullTurn` metric (§4) traced to `evidenceSupportsClaim`, now measured as wrong in **both** directions — 8 too-strict and 5 too-lenient across 42 questions (`09_TEST_MATRIX.md` §10.4). Every grounding and disclosure rate in §1 rides on it.
+
+The harness is fixed and ready: it shares `corpus.cjs` with `golden-live`, ingests per group, rotates keys, backs off, and refuses to publish rates when more than 10% of requests fail.
+
+**What blocks the run is billing, not engineering.** Both API keys return:
+
+```
+429 RESOURCE_EXHAUSTED
+Your prepayment credits are depleted.
+```
+
+This is **not** a rate limit and will not clear by waiting — an earlier attempt spent an hour retrying a bare `provider 429` on that assumption. The runner now reads the error body, distinguishes credit exhaustion from throttling, aborts immediately, and **writes no results file**, so no partial run can be mistaken for a measurement.
+
+**To unblock:** top up the Gemini key's billing at `ai.studio/projects`, then re-run
+
+```
+NATIVELY_TEST_USERDATA=<scratch> NATIVELY_INTERNAL=1 ELECTRON_RUN_AS_NODE=1   ./node_modules/.bin/electron benchmarks/ci-v3-retrieval/provider-eval.cjs
+```
+
+Until then, §1 and §3 stand as **measured on a contaminated corpus** and the §20 read-aloud style metrics remain **unmeasured** — the only run that exercised them was voided at n=3.
+
+---
+
+## 7. Ordered follow-ups
 
 1. ~~Fix F23~~ **DONE** (§4.1) — and by correcting the mis-scaled threshold, not by disabling the crash mitigation.
 2. ~~Fix F22~~ **DONE** (§4.2) — thesis restored to the corpus; gates hold at 414 chunks.
-3. Expand the corpus toward §26.3's 200 questions; 42 is thin for a judged metric with run-to-run variance.
+3. **Re-run §26.5 on the corrected corpus** once billing is restored (§6). Blocking for any answer-quality claim.
+4. **Fix `evidenceSupportsClaim`** — 14 measured failures, 8 too-strict and 5 too-lenient (`09_TEST_MATRIX.md` §10.4). Blocking for Phase 9.
+5. Wire scope filtering, or stop claiming it: `filterByScopeAndVersion` has zero callers outside its own tests (F25a).
+6. Expand the corpus toward §26.3's 200 questions; 42 is thin for a judged metric with run-to-run variance.
