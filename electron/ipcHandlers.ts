@@ -1161,6 +1161,29 @@ export function initializeIpcHandlers(appState: AppState): void {
                 },
               })
             : null;
+
+          // CONTEXT INTELLIGENCE V3 — legacy trace emission (Layer B: manual chat).
+          //
+          // This surface builds its OWN source decision here, independently of
+          // the canonical turn that the What-to-Answer path constructs. Emitting
+          // both lets shadow mode show whether the two layers agree on the same
+          // question — the comparison that F2 says has never been possible.
+          // Observability only: env-gated, never throws, identity not content.
+          try {
+            const { recordLegacyTurn } = require('./context-intelligence/observability/legacy-trace');
+            recordLegacyTurn({
+              requestId: `manual-chat-${Date.now()}`,
+              surface: 'manual-chat',
+              scope: { userId: 'local' },
+              originalQuestion: String(message || ''),
+              resolvedQuestion: String(message || ''),
+              modeId: manualActiveMode?.id ?? undefined,
+              groundingPolicy: (_activeSourceContract?.sourceAuthority ?? undefined) as never,
+              retrievalPath: 'GROUNDED',
+              legacyPath: 'ipcHandlers.gemini-chat-stream resolveTurnSourceDecision',
+            });
+          } catch { /* observability must never break an answer */ }
+
           manualSourceContract = buildCustomModeExecutionContract({
             question: String(message || ''),
             streamRoute: 'manual_chat_stream',

@@ -1955,6 +1955,33 @@ export class IntelligenceEngine extends EventEmitter {
                 included: false,
                 reason: canonicalTurn.turnSourceDecision?.reasonCode ?? 'legacy_source_contract_absent',
             });
+            // CONTEXT INTELLIGENCE V3 — legacy trace emission (Layer A: WTA).
+            //
+            // Observability only: gated on NATIVELY_CI_V3_TRACE (default off),
+            // never throws, and carries evidence IDENTITY only — no source text.
+            // This is the prerequisite for shadow-mode parity: until the legacy
+            // layers emit a comparable decision object, there is nothing for the
+            // V3 path to be proven equivalent against.
+            try {
+                const { recordLegacyTurn } = require('./context-intelligence/observability/legacy-trace');
+                // Accessors are read defensively (`any` + optional chaining): this
+                // is observability on a live answer path, and a shape change in a
+                // legacy type must degrade the trace, never the answer.
+                const _s = this.session as any;
+                const _q = String(question || extractedQuestion?.latestQuestion || '');
+                recordLegacyTurn({
+                    requestId: String((canonicalTurn as any).turnId ?? `wta-${Date.now()}`),
+                    surface: 'what-to-answer',
+                    scope: { userId: 'local', meetingId: _s?.getMeetingMetadata?.()?.id ?? undefined },
+                    originalQuestion: _q,
+                    resolvedQuestion: _q,
+                    modeId: (this.getActiveModeInfo() as any)?.templateType ?? undefined,
+                    groundingPolicy: (canonicalTurn.sourceAuthority ?? undefined) as never,
+                    retrievalPath: 'GROUNDED',
+                    legacyPath: 'IntelligenceEngine.resolveCanonicalTurn',
+                });
+            } catch { /* observability must never break an answer */ }
+
             wtaTrace.setRouting({
                 source: 'what_to_answer',
                 answerType: answerPlan.answerType,
@@ -4348,6 +4375,31 @@ export class IntelligenceEngine extends EventEmitter {
                 speakerPerspective: 'user',
                 activeMode: activeModeInfo,
             });
+
+            // CONTEXT INTELLIGENCE V3 — legacy trace emission (Layer C).
+            //
+            // This path constructs NO source authority: no canonical turn, no
+            // turn contract, no evidence pack. It passes a raw formatted-context
+            // blob straight to the model. The trace therefore records
+            // groundingPolicy/modePolicyVersion as absent rather than
+            // substituting a plausible default — that absence IS the finding
+            // (investigation report F2), and a default would hide it.
+            try {
+                const { recordLegacyTurn } = require('./context-intelligence/observability/legacy-trace');
+                recordLegacyTurn({
+                    requestId: `manual-answer-${Date.now()}`,
+                    surface: 'manual-chat',
+                    scope: { userId: 'local', meetingId: (this.session as any)?.getMeetingMetadata?.()?.id ?? undefined },
+                    originalQuestion: question,
+                    resolvedQuestion: question,
+                    modeId: (activeModeInfo as any)?.templateType ?? undefined,
+                    // groundingPolicy deliberately omitted — there is none.
+                    authorizedSources: [],
+                    retrievalPath: 'GROUNDED',
+                    answerability: 'NONE',
+                    legacyPath: 'IntelligenceEngine.runManualAnswer (no source authority)',
+                });
+            } catch { /* observability must never break an answer */ }
             const context = activeModeInfo?.documentGroundedCustomModeActive === true || isCodingAnswerType(answerPlan.answerType)
                 ? undefined
                 : this.session.getFormattedContext(120);
