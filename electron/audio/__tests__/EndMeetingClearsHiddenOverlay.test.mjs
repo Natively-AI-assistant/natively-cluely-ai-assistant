@@ -57,16 +57,20 @@ function extractMethodBody(methodName) {
 
 const endMeetingBody = extractMethodBody('endMeeting');
 
+/** Prefer sendToWindow helper; accept legacy direct webContents.send. */
+const OVERLAY_SESSION_RESET_RE =
+  /(?:sendToWindow\s*\(\s*(?:this\.)?getWindowHelper\(\)\s*\.\s*getOverlayWindow\(\)\s*,\s*['"]session-reset['"]\s*\)|getOverlayWindow\(\)\s*\?\.\s*webContents\.send\(\s*['"]session-reset['"]\s*\))/;
+
 test('endMeeting sends session-reset to the overlay so its hidden tree is cleared before the next meeting', () => {
   assert.ok(
-    /getOverlayWindow\(\)\?\.\s*webContents\.send\(\s*['"]session-reset['"]\s*\)/.test(endMeetingBody),
+    OVERLAY_SESSION_RESET_RE.test(endMeetingBody),
     'BUG: endMeeting() must send `session-reset` to the overlay window. The overlay is persistent (never destroyed) and only hidden/shown, so without clearing it on stop the previous meeting\'s messages + expanded width survive into the next meeting\'s first visible frame.',
   );
 });
 
 test('endMeeting clears the overlay AFTER hiding it (setWindowMode(launcher)), so the clear is off-screen', () => {
   const hideIdx = endMeetingBody.search(/setWindowMode\(\s*['"]launcher['"]\s*\)/);
-  const resetIdx = endMeetingBody.search(/getOverlayWindow\(\)\?\.\s*webContents\.send\(\s*['"]session-reset['"]\s*\)/);
+  const resetIdx = endMeetingBody.search(OVERLAY_SESSION_RESET_RE);
 
   assert.ok(hideIdx >= 0, 'sanity: endMeeting() must switch to launcher (hides the overlay).');
   assert.ok(resetIdx >= 0, 'sanity: endMeeting() must send session-reset to the overlay.');
