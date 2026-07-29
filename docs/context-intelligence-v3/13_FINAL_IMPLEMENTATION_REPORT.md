@@ -194,3 +194,42 @@ Verified at close: 66/66 module tests pass · 6593-test suite completes in 67 s 
 - **Plain `grep` is unsafe in this repo.** Four files are misdetected as binary and silently produce false negatives, which has already caused false DEAD verdicts in prior audits. Use `/usr/bin/grep -ra`.
 - **Type errors do not fail the build** — esbuild is transpile-only. `typecheck:electron` must be a separate gate.
 - **Never default `contextIntelligenceV3` to `isInternalDevTestContext`.** That split is the disease this whole mission is treating.
+
+---
+
+## 12. Phase 7 — the user-facing control, and what is deliberately left undone
+
+### 12.1 The selector collapses to two options
+
+§6 requires removing the Knowledge Source selector (Resume / JD / reference files / Profile Intelligence / Combined / Automatic) and replacing it with an understandable answer-policy control.
+
+The shadow run explains why that selector existed at all: **the legacy source decision is a pure function of the mode and never looks at the question** (§8.1 of `02_…`). Something had to be user-steerable, because the system could not decide for itself.
+
+With mode policy authorizing sources, classification determining required ones, and retrieval selecting relevant evidence, the only thing genuinely left to a user is **fallback** — what happens when the references do not cover the question. That is a real product decision. *Which retriever ran* is not.
+
+```
+Answer policy
+○ Use references when relevant      → SOURCE_FIRST
+○ Only answer from references       → STRICT_SOURCE_ONLY
+```
+
+`policies/answer-policy.ts`, 13 tests. Enforced properties:
+
+- **Exactly two options.** `OPEN_KNOWLEDGE` and `ASK_BEFORE_FALLBACK` are unreachable from the control — the first is a mode default, the second is unsuitable for a live meeting, and exposing either puts architecture back in front of the user.
+- **The control cannot widen authorization.** Asserted across all eight modes: choosing a policy never changes which sources a mode allows.
+- **No internal vocabulary can leak into a label** — `retriev*`, `embedding`, `vector`, `rag`, `chunk`, `bm25`, `rerank`, `knowledge source`, `okf`, `index` are all asserted absent, so the rule is enforced rather than merely documented.
+- **The control is only offered where it binds to something** — a mode with no reference files gets no "only answer from references" toggle, since it could only make the answer worse. Asserted against the registry so the two cannot drift, which is how the old selector came to offer sources a mode never allowed.
+- **Any developer diagnostic override is passed per call and never read from settings**, satisfying §6's requirement that it never become persisted production state.
+
+### 12.2 The UI edit itself is NOT done, and the reason is not caution
+
+The two surfaces that render the old control are:
+
+| Surface | Location | Status |
+|---------|----------|--------|
+| Per-mode source-owner dots | `premium/src/ModesSettings.tsx` | **not edited** |
+| "Profile Mode" toggle | `src/components/SettingsPopup.tsx` | **not edited** |
+
+`premium` is a **git submodule on a different branch** (`fix/jd-lookup-order-2026-07-27`) with `src/ModesSettings.tsx` **already modified** by concurrent work. Editing it would mean committing into someone else's in-flight branch in a separate repository — a merge conflict in a place neither agent can see the other.
+
+The architecture is the part that was actually missing, and it is done. The UI swap is a thin presentation change that should land in the submodule, on its own branch, when that work settles. Recorded here so Phase 7 is not read as complete.
