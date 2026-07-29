@@ -172,3 +172,48 @@ No pronoun, no proper noun, no identifier, no document cue. `payments` is lower 
 It stays unfixed on purpose. The only remaining lever is the definite article (`the X`), which fires on nearly every sentence and would convert the fast path into a retrieval on almost every turn — trading one documented gap for an undocumented latency regression across the whole product. Resolving it properly needs conversation state ("what were we just discussing?") or a mode-aware default, both of which are architectural.
 
 The failure direction remains the safe one: it answers from general knowledge **without fabricating a source-attributed figure**.
+
+---
+
+## 9. Gates re-measured against the LIVE retrieval stack
+
+A gate passed against a **stub** retrieval port cannot authorise deleting legacy code — the stub is precisely the part being replaced. So the suite was re-run end to end on the real thing: real SQLite, real sqlite-vec, real local MiniLM embeddings, real `ModeHybridRetriever` over a real ingested corpus, driven through the same orchestrator and adapter the wired manual-chat surface uses.
+
+Runner: `benchmarks/ci-v3-retrieval/golden-live.cjs`
+
+| | Stub port | **Live stack** |
+|---|---|---|
+| Corpus | fixtures | **12 files · 214 real chunks** |
+| No prohibited source in evidence | 42/42 | **42/42** |
+| Provenance complete | 42/42 | **42/42** |
+| Untrusted framing | 42/42 | **42/42** |
+| **No stale version accepted** | — | **42/42** |
+| Retrieval-path accuracy | 97.6% | **97.6%** |
+| Fully passing | 41/42 | **41/42 — 97.6%** |
+| Retrieval latency | — | **p50 2 ms · p95 3 ms · p99 12 ms** |
+
+**The evidence was real, not empty** — 54 raw candidates retrieved, 28 questions reaching `FULL` on genuinely retrieved evidence. A 100% contamination-free result would be meaningless if nothing had been returned, so that was checked explicitly.
+
+### 9.1 The live run found a false positive the stub could not
+
+**`CONFLICTING` fired on 8 of 42 questions.**
+
+The cause: conflict was detected as *"two different documents of the same source type were accepted"*. That is not a conflict — it is **ordinary multi-document retrieval**. In a corpus with more than one reference file it fires constantly, and shipped it would have told users their references disagreed every time an answer drew on two files.
+
+A stub port returning one fixture per source could never surface this. It took a real multi-file corpus.
+
+**Fixed:** a conflict is now the **same source at two different versions**. Scope/version filtering should already make that unreachable, so it stands as an assertion surface — if it fires, the filter has a hole.
+
+**Deliberately not implemented:** content-level contradiction ("v1 says 4 engineers, v2 says 11"). That needs per-claim value extraction and comparison. §16.1 requires identifying the conflicting *values*, not merely asserting a conflict exists — and reporting a conflict we cannot actually characterise is worse than reporting none. Recorded as a real gap rather than faked.
+
+Effect: `CONFLICTING` 8 → **0**, `FULL` 20 → **28**.
+
+### 9.2 What this does and does not authorise
+
+**Does:** the decision layer, adapter, scope/version filter, packer and composer all behave correctly against real retrieval at 2 ms p50.
+
+**Does not:** authorise Phase 9. Still missing —
+
+- **No provider-backed evaluation.** Answer quality, naturalness and over-disclosure are unmeasured. Every number here is a *decision* measurement.
+- **The flag has never been on for a real user.** The surface is wired and inert.
+- **F22 remains open** — the 128k-char thesis still aborts the embedding worker, and it is excluded from this corpus rather than fixed.

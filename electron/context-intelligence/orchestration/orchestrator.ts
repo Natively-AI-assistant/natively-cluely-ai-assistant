@@ -213,15 +213,29 @@ export function evaluateAnswerability(
   if (supported === 0) return 'NONE';
   if (supported < required.length) return 'PARTIAL';
 
-  // Conflict: two ACTIVE-version items from the same source type disagreeing is
-  // surfaced, never silently merged (§16.1).
-  const bySource = new Map<string, Set<string>>();
+  // Conflict detection (§16.1).
+  //
+  // An earlier version returned CONFLICTING whenever two DIFFERENT documents of
+  // the same source type were accepted. That is not a conflict — it is ordinary
+  // multi-document retrieval, and the live run showed it firing on 8 of 42
+  // questions, which would have told users their references disagreed every time
+  // an answer drew on two files.
+  //
+  // A real conflict is the SAME source appearing at two different versions.
+  // Scope/version filtering should already make that unreachable, so this is an
+  // assertion surface: if it ever fires, the filter has a hole.
+  //
+  // NOT IMPLEMENTED: content-level contradiction ("v1 says 4 engineers, v2 says
+  // 11"). That needs value extraction and comparison per claim. Reporting a
+  // conflict we cannot actually detect would be worse than reporting none —
+  // §16.1 requires identifying the conflicting VALUES, not merely asserting one
+  // exists.
+  const versionsBySource = new Map<string, Set<string>>();
   for (const e of evidence) {
-    const k = e.sourceType;
-    if (!bySource.has(k)) bySource.set(k, new Set());
-    bySource.get(k)!.add(e.sourceId);
+    if (!versionsBySource.has(e.sourceId)) versionsBySource.set(e.sourceId, new Set());
+    versionsBySource.get(e.sourceId)!.add(e.versionId);
   }
-  for (const ids of bySource.values()) if (ids.size > 1) return 'CONFLICTING';
+  for (const versions of versionsBySource.values()) if (versions.size > 1) return 'CONFLICTING';
 
   return 'FULL';
 }

@@ -190,3 +190,35 @@ describe('an unknown mode can never yield a policy-free turn', () => {
     assert.throws(() => decide(req(GROUNDED_Q, 'nonexistent')), /Unknown modeId/);
   });
 });
+
+describe('§16.1 — conflict is a version disagreement, not document multiplicity', () => {
+  const ev = (sourceId, versionId, content) => ({
+    evidenceId: `${sourceId}-${versionId}`, sourceType: 'REFERENCE_FILE',
+    sourceId, versionId, scopeId: 'u:u1', content,
+    finalScore: 0.9, authorityFor: ['DOCUMENT_FACT'], acceptedFor: ['DOCUMENT_FACT'],
+    isDirectFact: true, isInferred: false, metadata: {}, trustLevel: 'untrusted_reference',
+  });
+
+  test('TWO DIFFERENT documents of the same type is NOT a conflict', async () => {
+    // The live run showed the earlier heuristic firing on 8 of 42 questions —
+    // it would have told users their references disagreed every time an answer
+    // drew on two files.
+    const r = await orchestrate(req('According to the document, what is the discount floor?', 'seminar'), {
+      async retrieve() {
+        return { evidence: [ev('ref-1', 'v1', 'discount floor is 17 percent'), ev('ref-2', 'v1', 'discount policy overview')], attempts: [] };
+      },
+    });
+    assert.notEqual(r.answerability, 'CONFLICTING',
+      'ordinary multi-document retrieval must not be reported as a conflict');
+  });
+
+  test('the SAME source at two versions IS a conflict', async () => {
+    const r = await orchestrate(req('According to the document, what is the discount floor?', 'seminar'), {
+      async retrieve() {
+        return { evidence: [ev('ref-1', 'v1', 'discount floor is 12 percent'), ev('ref-1', 'v2', 'discount floor is 17 percent')], attempts: [] };
+      },
+    });
+    assert.equal(r.answerability, 'CONFLICTING');
+    assert.equal(r.trace.fallbackUsed, 'CONFLICT');
+  });
+});
