@@ -5,7 +5,7 @@ import {
     X, Mic, Speaker, Monitor, Keyboard, User, LifeBuoy, LogOut, Upload,
     ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
-    ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
+    ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2, Volume2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
     Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones
 } from 'lucide-react';
@@ -415,6 +415,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     }, [isOpen, initialTab]);
 
     const { shortcuts, updateShortcut, resetShortcuts } = useShortcuts();
+    const [keybindsSubTab, setKeybindsSubTab] = useState<'general' | 'chat' | 'window'>('general');
     const [isUndetectable, setIsUndetectable] = useState(false);
     const [isMousePassthrough, setIsMousePassthrough] = useState(false);
     const [disguiseMode, setDisguiseMode] = useState<'terminal' | 'settings' | 'activity' | 'none'>('none');
@@ -1344,20 +1345,22 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     setInputDevices(formatDevices(inputs));
                     setOutputDevices(formatDevices(outputs));
 
-                    // Load saved preferences
+                    // Load saved preferences - fallback to 'default' for system default audio
                     const savedInput = localStorage.getItem('preferredInputDeviceId');
                     const savedOutput = localStorage.getItem('preferredOutputDeviceId');
 
                     if (savedInput && inputs.find((d: any) => d.id === savedInput)) {
                         setSelectedInput(savedInput);
-                    } else if (inputs.length > 0 && !selectedInput) {
-                        setSelectedInput(inputs[0].id);
+                    } else {
+                        localStorage.removeItem('preferredInputDeviceId');
+                        setSelectedInput('default');
                     }
 
                     if (savedOutput && outputs.find((d: any) => d.id === savedOutput)) {
                         setSelectedOutput(savedOutput);
-                    } else if (outputs.length > 0 && !selectedOutput) {
-                        setSelectedOutput(outputs[0].id);
+                    } else {
+                        localStorage.removeItem('preferredOutputDeviceId');
+                        setSelectedOutput('default');
                     }
                 } catch (e) {
                     console.error("Error loading native devices:", e);
@@ -2202,17 +2205,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                     </div>
 
-                                    {/* Process Disguise */}
-                                    {/* Process Disguise */}
+                                    {/* Process & System Tray Disguise */}
                                     <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle`}>
                                         <div className="flex flex-col gap-1 mb-3">
                                             <div className="flex items-center gap-2">
-                                                <h3 className="text-lg font-bold text-text-primary">{t('Process Disguise')}</h3>
+                                                <h3 className="text-lg font-bold text-text-primary">{t('Process & System Tray Disguise')}</h3>
                                             </div>
                                             <p className="text-xs text-text-secondary">
-                                                {t('Disguise Natively as another application to prevent detection during screen sharing.')}
+                                                {t('Disguise Natively\'s process name, taskbar title, and system tray icon to prevent detection during screen sharing.')}
                                                 <span className="block mt-1 text-text-tertiary">
-                                                    {t('Select a disguise to be automatically applied when Undetectable mode is on.')}
+                                                    {t('Select a disguise to automatically apply to taskbar and tray.')}
                                                 </span>
                                             </p>
                                         </div>
@@ -2238,7 +2240,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         setDisguiseMode(option.id);
                                                         // @ts-ignore
                                                         window.electronAPI?.setDisguise(option.id);
-                                                        // Analytics
                                                         analytics.trackModeSelected(`disguise_${option.id}`);
                                                     }}
                                                     className={`p-3 rounded-lg border text-left flex items-center gap-3 transition-all ${disguiseMode === option.id
@@ -2282,7 +2283,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 <NativelyProSettings initialIsPremium={initialIsPremium} />
                             )}
                             {activeTab === 'keybinds' && (
-                                <div className="space-y-5 animated fadeIn select-text pb-4">
+                                <div className="space-y-4 animated fadeIn select-text pb-4">
                                     <div className="flex items-start justify-between">
                                         <div>
                                             <h3 className="text-lg font-bold text-text-primary mb-1">{t('Keyboard shortcuts')}</h3>
@@ -2297,10 +2298,48 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         </button>
                                     </div>
 
-                                    <div className="grid gap-6">
+                                    {/* Sticky Tabs Bar */}
+                                    <div className="sticky top-0 z-20 bg-bg-surface/95 backdrop-blur-md py-2 border-b border-border-subtle flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-1.5 bg-bg-input p-1 rounded-xl border border-border-subtle">
+                                            <button
+                                                type="button"
+                                                onClick={() => setKeybindsSubTab('general')}
+                                                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                                    keybindsSubTab === 'general'
+                                                        ? 'bg-bg-elevated text-text-primary shadow-sm'
+                                                        : 'text-text-tertiary hover:text-text-secondary'
+                                                }`}
+                                            >
+                                                {t('General')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setKeybindsSubTab('chat')}
+                                                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                                    keybindsSubTab === 'chat'
+                                                        ? 'bg-bg-elevated text-text-primary shadow-sm'
+                                                        : 'text-text-tertiary hover:text-text-secondary'
+                                                }`}
+                                            >
+                                                {t('Chat')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setKeybindsSubTab('window')}
+                                                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                                    keybindsSubTab === 'window'
+                                                        ? 'bg-bg-elevated text-text-primary shadow-sm'
+                                                        : 'text-text-tertiary hover:text-text-secondary'
+                                                }`}
+                                            >
+                                                {t('Window')}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-2">
                                         {/* General Category */}
-                                        <div>
-                                            <h4 className="text-sm font-bold text-text-primary mb-3">{t('General')}</h4>
+                                        {keybindsSubTab === 'general' && (
                                             <div className="space-y-1">
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
@@ -2383,13 +2422,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     />
                                                 </div>
                                             </div>
-                                        </div>
+                                        )}
 
                                         {/* Chat Category */}
-                                        <div>
-                                            <div className="mb-3">
-                                                <h4 className="text-sm font-bold text-text-primary">{t('Chat')}</h4>
-                                            </div>
+                                        {keybindsSubTab === 'chat' && (
                                             <div className="space-y-1">
                                                 {[
                                                     { id: 'whatToAnswer', label: 'What to Answer', icon: <Sparkles size={14} /> },
@@ -2417,11 +2453,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     </div>
                                                 ))}
                                             </div>
-                                        </div>
+                                        )}
 
                                         {/* Window Category */}
-                                        <div>
-                                            <h4 className="text-sm font-bold text-text-primary mb-3">{t('Window')}</h4>
+                                        {keybindsSubTab === 'window' && (
                                             <div className="space-y-1">
                                                 {[
                                                     { id: 'moveWindowUp', label: 'Move Window Up', icon: <ArrowUp size={14} /> },
@@ -2441,7 +2476,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     </div>
                                                 ))}
                                             </div>
-                                        </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -2739,25 +2774,24 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 <LocalWhisperModelPanel />
                                             )}
 
-                                            {/* Recognition Language Family */}
-                                            <CustomSelect
-                                                label={t("Language")}
-                                                icon={<Globe size={14} />}
-                                                value={selectedSttGroup}
-                                                options={languageGroups.map(g => ({
-                                                    deviceId: g,
-                                                    label: g,
-                                                    kind: 'audioinput' as MediaDeviceKind,
-                                                    groupId: '',
-                                                    toJSON: () => ({})
-                                                }))}
-                                                onChange={handleGroupChange}
-                                                placeholder={t("Select Language")}
-                                            />
+                                            {/* Recognition Language & Variant/Accent Row (2 columns) */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                <CustomSelect
+                                                    label={t("Language")}
+                                                    icon={<Globe size={14} />}
+                                                    value={selectedSttGroup}
+                                                    options={languageGroups.map(g => ({
+                                                        deviceId: g,
+                                                        label: g,
+                                                        kind: 'audioinput' as MediaDeviceKind,
+                                                        groupId: '',
+                                                        toJSON: () => ({})
+                                                    }))}
+                                                    onChange={handleGroupChange}
+                                                    placeholder={t("Select Language")}
+                                                />
 
-                                            {/* Variant/Accent Selector (Conditional) */}
-                                            {currentGroupVariants.length > 1 && (
-                                                <div className="mt-3 animated fadeIn">
+                                                {currentGroupVariants.length > 1 && (
                                                     <CustomSelect
                                                         label={t("Accent / Region")}
                                                         icon={<MapPin size={14} />}
@@ -2766,8 +2800,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         onChange={handleLanguageChange}
                                                         placeholder={t("Select Region")}
                                                     />
-                                                </div>
-                                            )}
+                                                )}
+                                            </div>
 
                                             <div className="flex gap-2 items-center mt-2 px-1">
                                                 <Info size={14} className="text-text-secondary shrink-0" />

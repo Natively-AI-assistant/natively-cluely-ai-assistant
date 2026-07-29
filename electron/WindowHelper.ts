@@ -294,7 +294,7 @@ export class WindowHelper {
         scrollBounce: true,
         webSecurity: !isDev, // DEBUG: Disable web security only in dev
       },
-      show: false, // DEBUG: Force show -> Fixed white screen, now relies on ready-to-show
+      skipTaskbar: false,
       // Platform-specific frame settings
       ...(isMac
         ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 14 } }
@@ -948,23 +948,15 @@ export class WindowHelper {
   public syncOverlayInteractionPolicy(): void {
     if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
 
+    this.overlayWindow.setSkipTaskbar(this.appState.getUndetectable());
+
     const passthrough = this.appState.getOverlayMousePassthrough();
 
     if (passthrough) {
-      // forward: true — pointer events are still delivered to the OS layer beneath.
-      // NOTE: We intentionally do NOT call setFocusable(false) here.
-      //
-      // Rationale: setIgnoreMouseEvents() alone is sufficient for transparent
-      // mouse behaviour.  Setting focusable=false when the overlay is the only
-      // visible window makes macOS treat the app as having NO active windows.
-      // In that state, macOS may stop delivering Carbon/IOKit global hotkey
-      // events to the process — silently breaking every globalShortcut binding.
-      // Keeping the window focusable costs nothing.
       this.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
       console.log(`[WindowHelper] Overlay click-through ON (stealth passthrough=${passthrough})`);
     } else {
       this.overlayWindow.setIgnoreMouseEvents(false);
-      // Restore full interactivity when capturing clicks.
       this.overlayWindow.setFocusable(true);
       console.log('[WindowHelper] Overlay click-through OFF (interactive)');
     }
@@ -975,8 +967,8 @@ export class WindowHelper {
   public showOverlay(): void {
     if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
 
-    // Restore opacity in case it was zeroed by hideMainWindow() before a screenshot.
     this.overlayWindow.setOpacity(1);
+    this.overlayWindow.setSkipTaskbar(this.appState.getUndetectable());
 
     // Re-assert z-order on Windows before showing — same DWM demotion risk as
     // switchToOverlay(). Must come before show()/showInactive() so the window
@@ -1144,6 +1136,8 @@ export class WindowHelper {
       this.overlayBounds = this.overlayWindow.getBounds();
       this.appState.recordNativeOomOutboundIpc(this.overlayWindow.webContents.id, 'ensure-expanded', []);
       this.overlayWindow.webContents.send('ensure-expanded');
+
+      this.overlayWindow.setSkipTaskbar(this.appState.getUndetectable());
 
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).
       if (process.platform === 'win32' && this.contentProtection) {

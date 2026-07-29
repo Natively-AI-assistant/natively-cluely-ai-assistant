@@ -1174,7 +1174,7 @@ export class AppState {
   private updateDownloadState: 'idle' | 'available' | 'downloading' | 'downloaded' = 'idle'
   private updateDownloadPromise: Promise<unknown> | null = null
   private downloadedUpdateInfo: any = null
-  private disguiseMode: 'terminal' | 'settings' | 'activity' | 'none' = 'none'
+  private disguiseMode: DisguiseMode = 'none'
 
   // View management
   private view: "queue" | "solutions" = "queue"
@@ -2936,23 +2936,29 @@ export class AppState {
         errorMessage = `${httpStatus} ${axiosErr.response.statusText}`;
       }
 
-      // Immediately fatal: auth/account problems — no amount of retrying helps
+      // Immediately fatal: auth/account problems or low RAM guard refusal — no amount of retrying helps
       const isAuthError = httpStatus === 401
         || err.message.toLowerCase().includes('auth_timeout')
         || err.message.toLowerCase().includes('invalid_key')
         || err.message.toLowerCase().includes('invalid api')
         || err.message.toLowerCase().includes('authentication');
 
+      const isMemoryError = err.message.toLowerCase().includes('insufficient available memory')
+        || err.message.toLowerCase().includes('whisper init refused')
+        || err.message.toLowerCase().includes('low memory');
+
       const isQuotaError = err.message.toLowerCase().includes('transcription_quota_exceeded')
         || err.message.toLowerCase().includes('quota');
 
-      if (isAuthError) {
+      if (isAuthError || isMemoryError) {
         _consecutiveErrors = 0;
         _lastState = 'failed';
         this.sendSttStatus( {
           state: 'failed',
           provider: sttProvider,
-          error: errorMessage,
+          error: isMemoryError
+            ? 'Low system RAM (<4GB free). Free up RAM or disable Memory Safety Guard in Audio Settings.'
+            : errorMessage,
           channel: speaker,
         } as SttStatusPayload);
         return;
@@ -6191,48 +6197,56 @@ export class AppState {
   public showTray(): void {
     if (this.tray) return;
 
-    // Try to find a template image first for macOS
     const resourcesPath = app.isPackaged ? process.resourcesPath : app.getAppPath();
+    const isWin = process.platform === 'win32';
+    const isMac = process.platform === 'darwin';
 
-    // Potential paths for tray icon
-    const templatePath = path.join(resourcesPath, 'assets', 'iconTemplate.png');
-    const defaultIconPath = app.isPackaged
-      ? path.join(resourcesPath, 'src/components/icon.png')
-      : path.join(app.getAppPath(), 'src/components/icon.png');
+    let iconToUse = "";
+    if (this.disguiseMode !== 'none') {
+      const mode = this.disguiseMode;
+      let iconName = 'settings.png';
+      if (mode === 'terminal') iconName = 'terminal.png';
+      if (mode === 'activity') iconName = 'activity.png';
+      const platformDir = isWin ? 'win' : 'mac';
+      iconToUse = app.isPackaged
+        ? path.join(process.resourcesPath, `assets/fakeicon/${platformDir}/${iconName}`)
+        : path.join(app.getAppPath(), `assets/fakeicon/${platformDir}/${iconName}`);
+    }
 
-    let iconToUse = defaultIconPath;
+    if (!iconToUse || !fs.existsSync(iconToUse)) {
+      const templatePath = path.join(resourcesPath, 'assets', 'iconTemplate.png');
+      const defaultIconPath = app.isPackaged
+        ? path.join(resourcesPath, 'src/components/icon.png')
+        : path.join(app.getAppPath(), 'src/components/icon.png');
 
-    // Check if template exists (sync check is fine for startup/rare toggle)
-    try {
-      if (require('fs').existsSync(templatePath)) {
-        iconToUse = templatePath;
-        console.log('[Tray] Using template icon:', templatePath);
-      } else {
-        // Also check src/components for dev
-        const devTemplatePath = path.join(app.getAppPath(), 'src/components/iconTemplate.png');
-        if (require('fs').existsSync(devTemplatePath)) {
-          iconToUse = devTemplatePath;
-          console.log('[Tray] Using dev template icon:', devTemplatePath);
+      iconToUse = defaultIconPath;
+
+      try {
+        if (fs.existsSync(templatePath)) {
+          iconToUse = templatePath;
         } else {
-          console.log('[Tray] Template icon not found, using default:', defaultIconPath);
+          const devTemplatePath = path.join(app.getAppPath(), 'src/components/iconTemplate.png');
+          if (fs.existsSync(devTemplatePath)) {
+            iconToUse = devTemplatePath;
+          }
         }
+      } catch (e) {
+        console.error('[Tray] Error checking for icon:', e);
       }
-    } catch (e) {
-      console.error('[Tray] Error checking for icon:', e);
     }
 
     const trayIcon = nativeImage.createFromPath(iconToUse).resize({ width: 16, height: 16 });
-    // IMPORTANT: specific template settings for macOS if needed, but 'Template' in name usually suffices
     trayIcon.setTemplateImage(iconToUse.endsWith('Template.png'));
 
-    this.tray = new Tray(trayIcon)
-    this.tray.setToolTip('Natively') // This tooltip might also need update if we change global shortcut, but global shortcut is removed.
+    const appName = this.disguiseMode === 'none' ? 'Natively' : process.title || 'Natively';
+
+    this.tray = new Tray(trayIcon);
+    this.tray.setToolTip(appName.trim());
     this.updateTrayMenu();
 
-    // Double-click to show window
     this.tray.on('double-click', () => {
-      this.centerAndShowWindow()
-    })
+      this.centerAndShowWindow();
+    });
   }
 
   public updateTrayMenu() {
@@ -6243,8 +6257,8 @@ export class AppState {
 
     console.log('[Main] updateTrayMenu called. Screenshot Accelerator:', screenshotAccel);
 
-    // Update tooltip for verification
-    this.tray.setToolTip('Natively');
+    const appName = this.disguiseMode === 'none' ? 'Natively' : process.title || 'Natively';
+    this.tray.setToolTip(appName.trim());
 
     // Helper to format accelerator for display (e.g. CommandOrControl+H -> Cmd+H)
     const formatAccel = (accel: string) => {
@@ -6348,8 +6362,17 @@ export class AppState {
     this.modelSelectorWindowHelper.setContentProtection(state)
     this.cropperWindowHelper.setContentProtection(state)
 
+    this.windowHelper.syncOverlayInteractionPolicy();
+    const launcherWin = this.windowHelper.getLauncherWindow();
+    if (launcherWin && !launcherWin.isDestroyed()) {
+      launcherWin.setSkipTaskbar(false);
+    }
+    const settingsWin = this.settingsWindowHelper.getSettingsWindow();
+    if (settingsWin && !settingsWin.isDestroyed()) {
+      settingsWin.setSkipTaskbar(true);
+    }
+
     if (process.platform === 'win32') {
-      this.windowHelper.syncOverlayInteractionPolicy();
       this.settingsWindowHelper.syncActivationPolicy();
       this.modelSelectorWindowHelper.syncActivationPolicy();
     }
@@ -6467,9 +6490,10 @@ export class AppState {
           !targetFocusWindow.isDestroyed() &&
           targetFocusWindow.isFocused();
 
-        console.log(`[Stealth] app.dock.hide() (enforce attempt ${attempt})`);
-        app.dock.hide();
-        this.hideTray();
+        if (process.platform === 'darwin') {
+          app.dock.hide();
+          this.hideTray();
+        }
 
         // Re-assert content protection: the activation-policy flip can reset
         // the windows' sharingType, silently undoing screen-capture stealth.
@@ -6637,32 +6661,10 @@ export class AppState {
     console.log(`[AppState] ambientChatEnabled set to ${enabled}`);
   }
 
-  public setDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
+  public setDisguise(mode: DisguiseMode): void {
     mode = normalizeDisguiseMode(mode);
     this.disguiseMode = mode;
     SettingsManager.getInstance().set('disguiseMode', mode);
-
-    // NO runtime activation-policy churn here — and this is deliberate.
-    //
-    // The dual-dock-icon bug is a STARTUP phenomenon: the app is born, paints a
-    // tile, THEN renames via app.setName()+CFBundleName, and the LaunchServices
-    // re-registration races into a second tile. That path is fully handled at
-    // startup by LSUIElement (the bundle is born tile-less) plus the one-shot
-    // accessory→regular promotion after createWindow() — see the whenReady block.
-    //
-    // At RUNTIME the app already owns a single stable 'regular' dock tile, and
-    // app.setName() updates that tile's label in place rather than spawning a
-    // duplicate. The old code still bracketed this rename in accessory→regular
-    // "to be safe", but that round-trip deactivates the whole application for a
-    // tick — the always-on-top overlay/launcher windows leave the foreground
-    // layer and snap back, producing a visible disappear/reappear flicker on
-    // every disguise switch. Trading a guaranteed flicker for a hypothetical
-    // duplicate tile is the wrong deal, so the bracket is gone. With no policy
-    // change the app never deactivates, so there is also nothing to re-focus.
-    //
-    // Stealth is unaffected: _applyDisguise() already skips app.setName() and
-    // app.dock.setIcon() when isUndetectable (the dock stays hidden), and we
-    // never promote activation policy here.
     this._applyDisguise(mode);
   }
 
@@ -6670,7 +6672,7 @@ export class AppState {
     this._applyDisguise(this.disguiseMode);
   }
 
-  private _applyDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
+  private _applyDisguise(mode: DisguiseMode): void {
     let appName = "Natively";
     let iconPath = "";
 
@@ -6714,6 +6716,7 @@ export class AppState {
             : path.join(app.getAppPath(), "assets/fakeicon/mac/activity.png");
         }
         break;
+
       case 'none':
       default:
         appName = "Natively";
@@ -6739,8 +6742,6 @@ export class AppState {
     process.title = appName;
 
     // 2. Update app name (affects macOS Menu / Dock)
-    // Skip when undetectable — app.setName() causes macOS to re-register
-    // the app and re-show the dock icon even after dock.hide()
     if (!this.isUndetectable) {
       app.setName(appName);
     }
@@ -6751,7 +6752,6 @@ export class AppState {
 
     // 3. Update App User Model ID (Windows Taskbar grouping)
     if (isWin) {
-      // Use unique AUMID per disguise to avoid grouping with the real app
       app.setAppUserModelId(`com.natively.assistant.${mode}`);
     }
 
@@ -6760,15 +6760,20 @@ export class AppState {
       const image = nativeImage.createFromPath(iconPath);
 
       if (isMac) {
-        // Skip dock icon update when dock is hidden to avoid potential flicker
         if (!this.isUndetectable) {
           app.dock.setIcon(image);
         }
       } else {
-        // Windows/Linux: Update all window icons
         this.windowHelper.getLauncherWindow()?.setIcon(image);
         this.windowHelper.getOverlayWindow()?.setIcon(image);
         this.settingsWindowHelper.getSettingsWindow()?.setIcon(image);
+      }
+
+      // Update System Tray Icon & Tooltip if tray is initialized
+      if (this.tray && !this.tray.isDestroyed()) {
+        const trayImg = image.resize({ width: 16, height: 16 });
+        this.tray.setImage(trayImg);
+        this.tray.setToolTip(appName.trim());
       }
     } else {
       console.warn(`[AppState] Disguise icon not found: ${iconPath}`);
@@ -7303,17 +7308,11 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   // Apply initial stealth state based on isUndetectable setting.
-  if (!appState.getUndetectable()) {
-    // Normal mode: show tray (dock is already showing — no need to call dock.show() again)
+  if (process.platform === 'win32' || !appState.getUndetectable()) {
     appState.showTray();
-  } else {
-    // Persisted undetectable: the pre-emptive app.dock.hide() above is NOT
-    // sufficient — createWindow() + the launcher's first show re-registers the
-    // app and re-shows the dock. Converge through the same self-verifying
-    // enforcement the runtime toggle uses, so the app comes up actually
-    // undetectable without the user having to toggle off/on. The enforcement
-    // loop re-checks app.dock.isVisible() across several retries, which also
-    // catches the dock re-show that lands at the launcher's ready-to-show.
+  }
+  
+  if (appState.getUndetectable()) {
     appState.applyInitialUndetectableState();
   }
   // Register global shortcuts using KeybindManager
