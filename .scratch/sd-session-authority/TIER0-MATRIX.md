@@ -66,14 +66,15 @@ Tight loop: `npm run build:electron && node .scratch/sd-session-authority/debug/
 
 Offline corpus replay (04a5ef62 + 1506ae32): **PASS** (no `candidate_rewind`).
 
-### Re-verify smoke — PASS (2026-07-28)
+### Re-verify smoke — PASS (2026-07-28) — ticket 06 acceptance
 
-Same knobs as FAIL run (INGEST_LESSONS=0, MAX_TURNS=32).
+Same knobs as FAIL run (INGEST_LESSONS=0, MAX_TURNS=32). Fix landed in `ff3a30c` / [PR #16](https://github.com/sondo-appfolio/natively-cluely-ai-assistant/pull/16).
 
 | Field | Value |
 |-------|--------|
 | run_id | `7b83f0be-6eae-421c-8b2e-e584d8eb6fa2` |
-| digest | `traces/sd-interview-sim/t2-7b83f0be-….digest.md` |
+| corpus | `traces/sd-interview-sim/t2-7b83f0be-6eae-421c-8b2e-e584d8eb6fa2.json` |
+| digest | `traces/sd-interview-sim/t2-7b83f0be-6eae-421c-8b2e-e584d8eb6fa2.digest.md` |
 | end_reason | `max_turns` (32) / ≈$0.033 |
 | tags | `ascii_hld_present`, `full_raw` |
 | Verdict | **PASS** — no `candidate_rewind` |

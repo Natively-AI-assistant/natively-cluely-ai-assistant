@@ -17,5 +17,5 @@
 - [x] Tier 0: product strip under session open without pin when post-requirements or checklist-complete
 - [x] Tier 0: overlay shown under authority on GM; hidden when inert
 - [x] Prior SD-typed prepare/gate Tier 0 suites still pass
-- [x] Optional: one T2 FULL_RAW smoke with digest free of `candidate_rewind` (pin may seed, strip must not depend on pin alone) — **deferred** (optional; see matrix note)
+- [x] Optional: one T2 FULL_RAW smoke with digest free of `candidate_rewind` (pin may seed, strip must not depend on pin alone) — **done** (`7b83f0be-6eae-421c-8b2e-e584d8eb6fa2`; see matrix)
 - [x] Brief note in issue comments or scratch where smoke artifact paths live if run — see `TIER0-MATRIX.md`
