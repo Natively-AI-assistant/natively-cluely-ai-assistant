@@ -1,0 +1,110 @@
+// electron/context-intelligence/orchestration/engine-bridge.ts
+//
+// One adoption point for the IntelligenceEngine surfaces.
+//
+// WHY A SHARED BRIDGE
+// Five engine surfaces — assist, clarify, brainstorm, code-hint and manual
+// answer — construct NO source authority whatsoever today. Each passes a raw
+// `session.getFormattedContext(N)` blob straight to the model. Wiring them one
+// at a time would recreate the very thing F2 describes: several near-identical
+// decision sites drifting apart. There is exactly one here.
+//
+// Returns null whenever the flag is off or anything goes wrong, so a caller's
+// integration is a two-line change and the failure mode is "legacy behaviour",
+// never "no answer".
+
+import { isContextIntelligenceV3Enabled } from '../contracts/flag';
+import { orchestrate, type AnswerRequest, type RetrievalPort } from './orchestrator';
+import { composePrompt } from '../generation/prompt-composer';
+import { resolveModePolicy, isModeId, type ModeId } from '../policies/mode-policy-registry';
+import { recordLegacyTurn } from '../observability/legacy-trace';
+import type { AnswerSurface, EvidenceScope } from '../contracts/types';
+
+export interface BridgeInput {
+  surface: AnswerSurface;
+  question: string;
+  /** Raw templateType from ModesManager; unknown ids fall back rather than throw. */
+  modeTemplateType?: string | null;
+  scope?: Partial<EvidenceScope>;
+  requestId?: string;
+  requestSequence?: number;
+  isFollowUp?: boolean;
+  hasScreenContext?: boolean;
+  /** Tone/length only — cannot widen authorization (§19.2). */
+  realtimeInstruction?: string;
+  conversationSummary?: string;
+  retrieval?: RetrievalPort;
+}
+
+export interface BridgeResult {
+  system: string;
+  user: string;
+  answerability: string;
+  fallbackUsed: string;
+  evidenceCount: number;
+  /** True when the mode authorizes no source for this question — the caller
+   *  should NOT quietly answer from model knowledge. */
+  unsupportedInMode: boolean;
+  modeId: ModeId;
+}
+
+/**
+ * Build a V3 prompt for an engine surface, or null to keep legacy behaviour.
+ *
+ * Never throws. A defect in the new path must degrade to legacy, never break a
+ * live answer — the same contract the wired manual-chat surface uses.
+ */
+export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | null> {
+  try {
+    if (!isContextIntelligenceV3Enabled()) return null;
+    const question = String(input.question || '').trim();
+    if (!question) return null;
+
+    const raw = input.modeTemplateType ?? 'general';
+    const modeId: ModeId = isModeId(raw) ? raw : 'general';
+    const policy = resolveModePolicy(modeId);
+
+    const req: AnswerRequest = {
+      requestId: input.requestId ?? `v3-${input.surface}-${Date.now()}`,
+      requestSequence: input.requestSequence ?? 0,
+      surface: input.surface,
+      modeId,
+      scope: { userId: 'local', ...input.scope },
+      sessionId: input.scope?.sessionId ?? 'engine',
+      manualQuestion: question,
+      isFollowUp: input.isFollowUp,
+      hasScreenContext: input.hasScreenContext,
+    };
+
+    const result = await orchestrate(req, input.retrieval);
+    const composed = composePrompt({
+      decision: result.decision,
+      policy,
+      evidence: result.evidence,
+      realtimeInstruction: input.realtimeInstruction,
+      conversationSummary: input.conversationSummary,
+    });
+
+    try {
+      recordLegacyTurn({
+        ...(result.trace as unknown as Record<string, unknown>),
+        legacyPath: `v3-${input.surface}`,
+      } as never);
+    } catch { /* observability must never break an answer */ }
+
+    return {
+      system: composed.system,
+      user: composed.user,
+      answerability: result.answerability,
+      fallbackUsed: result.trace.fallbackUsed,
+      evidenceCount: result.evidence.length,
+      // GROUNDED with nothing to retrieve means the mode authorizes no source
+      // for this question. Distinct from FAST, where none was needed.
+      unsupportedInMode: result.decision.retrievalPlan.path !== 'FAST'
+        && result.decision.retrievalPlan.shouldRetrieve === false,
+      modeId,
+    };
+  } catch {
+    return null;
+  }
+}

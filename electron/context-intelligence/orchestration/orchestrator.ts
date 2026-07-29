@@ -190,9 +190,26 @@ export async function orchestrate(
   let attempts: RetrievalAttemptTrace[] = [];
 
   if (decision.retrievalPlan.shouldRetrieve && retrieval) {
-    const r = await retrieval.retrieve({ decision });
-    evidence = r.evidence;
-    attempts = r.attempts;
+    try {
+      const r = await retrieval.retrieve({ decision });
+      evidence = r.evidence;
+      attempts = r.attempts;
+    } catch (e) {
+      // §22.1: a retrieval dependency failure is RECORDED and the turn
+      // continues with no evidence — it must NOT abort the turn back to a
+      // legacy path that would inject a raw context blob instead. Answerability
+      // then correctly reports NONE rather than a confident ungrounded answer.
+      attempts = [{
+        attempt: 1,
+        strategy: 'retrieval_port',
+        queries: decision.retrievalPlan.queries,
+        candidateCount: 0,
+        admittedAfterScopeFilter: 0,
+        rejectedByScopeFilter: 0,
+        durationMs: 0,
+        failed: e instanceof Error ? e.message : String(e),
+      }];
+    }
   }
 
   const answerability = evaluateAnswerability(decision, evidence);

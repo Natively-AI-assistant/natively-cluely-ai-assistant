@@ -4400,10 +4400,36 @@ export class IntelligenceEngine extends EventEmitter {
                     legacyPath: 'IntelligenceEngine.runManualAnswer (no source authority)',
                 });
             } catch { /* observability must never break an answer */ }
-            const context = activeModeInfo?.documentGroundedCustomModeActive === true || isCodingAnswerType(answerPlan.answerType)
-                ? undefined
-                : this.session.getFormattedContext(120);
-            let answer = await this.answerLLM.generate(question, context, answerPlan);
+
+            // CONTEXT INTELLIGENCE V3 — adoption point for this surface.
+            //
+            // Returns null when the flag is off or anything fails, so the legacy
+            // line below runs unchanged. When it returns a prompt, the raw
+            // getFormattedContext(120) blob is NOT used at all — that blob is the
+            // §32.16 anti-pattern this surface exists to demonstrate.
+            let answer: string;
+            const _v3 = await (async () => {
+                try {
+                    const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
+                    return await buildV3Prompt({
+                        surface: 'manual-chat',
+                        question,
+                        modeTemplateType: (activeModeInfo as any)?.templateType ?? null,
+                        scope: { meetingId: (this.session as any)?.getMeetingMetadata?.()?.id ?? undefined },
+                    });
+                } catch { return null; }
+            })();
+
+            if (_v3) {
+                // V3 owns the system prompt entirely; the legacy universal prompt
+                // and the raw context blob are both bypassed.
+                answer = await this.answerLLM.generate(_v3.user, undefined, answerPlan, _v3.system);
+            } else {
+                const context = activeModeInfo?.documentGroundedCustomModeActive === true || isCodingAnswerType(answerPlan.answerType)
+                    ? undefined
+                    : this.session.getFormattedContext(120);
+                answer = await this.answerLLM.generate(question, context, answerPlan);
+            }
             const structureValidation = validateAnswerStructure(answerPlan.answerType, answer);
             if (!structureValidation.ok && structureValidation.repaired) {
                 console.warn('[IntelligenceEngine] Repaired manual answer structure', {
