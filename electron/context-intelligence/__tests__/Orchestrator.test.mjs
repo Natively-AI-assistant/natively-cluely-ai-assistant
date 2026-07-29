@@ -140,3 +140,89 @@ describe('answerability is not a similarity threshold', () => {
     assert.equal(evaluateAnswerability(d, []), 'FULL');
   });
 });
+
+// ── Regressions from the 2026-07-30 golden-live measurement ──────────────────
+//
+// Both were found only after `answerabilityMatchesExpected` started being
+// asserted. It had been recorded by three harnesses and checked by none.
+
+describe('answerability is judged per SUBJECT, not per claim requirement', () => {
+  const claim = (claimType, subject) => ({
+    claimId: `c-${claimType}`, claimType, subject,
+    authority: 'PRIVATE_SOURCE_REQUIRED', description: claimType,
+  });
+  const decision = (claimRequirements) => ({
+    resolvedQuestion: 'who owns the events table migration?',
+    claimRequirements,
+    retrievalPlan: { shouldRetrieve: true, path: 'GROUNDED', queries: [], sourceTypes: [] },
+  });
+  const ev = (over = {}) => ({
+    sourceId: 's1', versionId: 'v1', retrievedVersionId: 'v1',
+    acceptedFor: ['MEETING_STATEMENT'],
+    content: 'Meera owns the events table migration rollout plan.',
+    ...over,
+  });
+
+  // One clause, several claim types because the MODE authorizes several source
+  // types that could answer it. Requiring ALL of them made PARTIAL unavoidable
+  // for the whole class: measured on H-02 and H-04, where a fully-answered
+  // question reported PARTIAL because no reference document existed to satisfy
+  // the DOCUMENT_FACT alternative.
+  test('alternative routes to ONE clause do not force PARTIAL', () => {
+    const subject = 'who owns the events table migration?';
+    const d = decision([claim('MEETING_STATEMENT', subject), claim('DOCUMENT_FACT', subject)]);
+    assert.equal(evaluateAnswerability(d, [ev()]), 'FULL',
+      'a transcript answering the clause is enough; DOCUMENT_FACT is an alternative, not an additional requirement');
+  });
+
+  // The strictness that matters is preserved: genuinely multi-part questions.
+  test('two DISTINCT clauses still require both', () => {
+    const d = decision([
+      claim('USER_PROJECT', 'tell me about your pricex project'),
+      claim('GENERAL_TECHNICAL', 'explain how webrtc establishes a connection'),
+    ]);
+    const supported = ev({ acceptedFor: ['USER_PROJECT'], content: 'Built PriceX, a price-comparison website.' });
+    assert.equal(evaluateAnswerability(d, [supported]), 'PARTIAL',
+      'one clause supported out of two must stay PARTIAL — this is the §22.8 case');
+  });
+
+  test('no clause supported is still NONE', () => {
+    const subject = 'who owns the events table migration?';
+    const d = decision([claim('MEETING_STATEMENT', subject)]);
+    const unrelated = ev({ content: 'We ship the async fraud-scoring change in September.' });
+    assert.equal(evaluateAnswerability(d, [unrelated]), 'NONE');
+  });
+});
+
+describe('term matching folds inflections', () => {
+  const d = {
+    resolvedQuestion: 'what year did the candidate graduate?',
+    claimRequirements: [{
+      claimId: 'c1', claimType: 'USER_EDUCATION', authority: 'PRIVATE_SOURCE_REQUIRED',
+      subject: 'what year did the candidate graduate?', description: 'education',
+    }],
+    retrievalPlan: { shouldRetrieve: true, path: 'GROUNDED', queries: [], sourceTypes: [] },
+  };
+
+  // G-01. The correct chunk was retrieved and the superseded revision had
+  // already been rejected; exact token comparison then treated "graduate" and
+  // "graduated" as unrelated terms and reported the turn unanswerable.
+  test('"graduate" matches "Graduated" — the G-01 failure', () => {
+    const evidence = [{
+      sourceId: 's1', versionId: '2026', retrievedVersionId: '2026',
+      acceptedFor: ['USER_EDUCATION'],
+      content: '## Education **B.Tech, Computer Science — NIT Surathkal** Graduated **2017**. CGPA 8.7/10.',
+    }];
+    assert.equal(evaluateAnswerability(d, evidence), 'FULL');
+  });
+
+  // Stemming must not become a licence to match anything.
+  test('an unrelated section still fails — stemming is not a wildcard', () => {
+    const evidence = [{
+      sourceId: 's1', versionId: '2026', retrievedVersionId: '2026',
+      acceptedFor: ['USER_EDUCATION'],
+      content: 'Built the webhook delivery service in Go with exponential backoff.',
+    }];
+    assert.equal(evaluateAnswerability(d, evidence), 'NONE');
+  });
+});

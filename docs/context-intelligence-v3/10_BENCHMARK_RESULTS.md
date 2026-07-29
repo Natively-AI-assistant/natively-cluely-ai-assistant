@@ -212,6 +212,6 @@ Until then, §1 and §3 stand as **measured on a contaminated corpus** and the �
 1. ~~Fix F23~~ **DONE** (§4.1) — and by correcting the mis-scaled threshold, not by disabling the crash mitigation.
 2. ~~Fix F22~~ **DONE** (§4.2) — thesis restored to the corpus; gates hold at 414 chunks.
 3. **Re-run §26.5 on the corrected corpus** once billing is restored (§6). Blocking for any answer-quality claim.
-4. **Fix `evidenceSupportsClaim`** — 14 measured failures, 8 too-strict and 5 too-lenient (`09_TEST_MATRIX.md` §10.4). Blocking for Phase 9.
+4. **Six remaining answerability failures**, now diagnosed per stage rather than attributed to one function (`09_TEST_MATRIX.md` §10.4): two retrieval misses (A-03, G-02-class), two claim-type misclassifications (A-06, A-12-class), leniency (D-01, F-06), and G-03's path. Two causes were fixed and measured — 29/42 → 33/42. Blocking for Phase 9.
 5. Wire scope filtering, or stop claiming it: `filterByScopeAndVersion` has zero callers outside its own tests (F25a).
 6. Expand the corpus toward §26.3's 200 questions; 42 is thin for a judged metric with run-to-run variance.

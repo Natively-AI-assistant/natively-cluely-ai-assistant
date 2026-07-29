@@ -256,28 +256,39 @@ Discriminating check: superseded-rejection turns fell **25 → 6** after the spl
 | `promptLabelsEvidenceUntrusted` | 42/42 | |
 | `noStaleVersionAccepted` | 42/42 | **now exercised** — 6 turns reject a superseded chunk |
 | `retrievalPath` | 41/42 | G-03, known |
-| `answerabilityMatchesExpected` | **29/42** | newly measured |
+| `answerabilityMatchesExpected` | **33/42** | newly measured; 29/42 before the two fixes in §10.4.1 |
 
 `base` 12 files / 406 chunks · `versioned` 4 files / 20 chunks · retrieval p50 12 ms · p95 14 ms.
 
-### 10.4 The 14 real failures — one function, both directions
+### 10.4 The real failures — FIVE causes, not one
 
-Relabelling accounted for 6 of the mismatches (§10.5). The remaining 14 are defects, and they concentrate almost entirely in `evidenceSupportsClaim`:
+**Correction.** An earlier version of this section said the 14 failures *"concentrate almost entirely in `evidenceSupportsClaim`"*. **That was wrong**, and it was wrong because it was inferred from the summary table (expected-vs-actual and an evidence count) rather than measured. A per-stage trace (`benchmarks/ci-v3-retrieval/diagnose.cjs`) shows five distinct causes, of which claim support is one.
 
-| Direction | n | IDs | Shape |
-|---|---|---|---|
-| **Too strict** | 8 | A-03, A-06, A-12, C-03, G-01, G-02, H-02, H-04 | evidence retrieved, claim reported unsupported |
-| **Too lenient** | 5 | D-01, E-01, E-02, F-06, I-01 | claims support it does not have |
-| path only | 1 | G-03 | classification, previously known |
+The lesson repeats the section above: a turn with zero evidence looks identical from outside whether it retrieved nothing, retrieved something the mode forbids, retrieved something whose source type is not authoritative for the claim, or passed all three and then failed term matching.
 
-The single-shared-salient-term rule is too coarse in both directions at once. Worked examples:
+| Cause | IDs | Diagnosis |
+|---|---|---|
+| **Retrieval miss** | A-03, G-02 | The correct chunk is never a candidate. A-03 asks *"reach ten thousand users"*; the résumé says *"10k users in the first 90 days"*, and the only chunk retrieved was a **BERT PDF section**. G-02 retrieved résumé_v2's *header* rather than the bullet reading *"Managed a team of 11 engineers"*. |
+| **Claim-type misclassification** | A-06, A-12 | A-06 (*"Which company is hiring… and where is it based?"*) is classified `JOB_REQUIRED_SKILL` — it is an employer-identity question, and the JD chunk literally contains *"Helio Labs, hybrid"*. A-12 asks a **reference-file** lookup but is classified `JOB_REQUIRED_SKILL`, and `seminar` does not authorize JD sources, so `sourceTypes` resolved **empty** and `shouldRetrieve` was false. |
+| **Over-decomposition** | H-02, H-04 | One clause emitted `MEETING_STATEMENT` **and** `DOCUMENT_FACT` because the mode authorizes both source types. Requiring both made `PARTIAL` structurally unavoidable. **FIXED.** |
+| **Inflection mismatch** | G-01 | The right chunk, correctly retrieved, with the superseded revision already rejected — then `graduate` ≠ `graduated` under exact token comparison. **FIXED.** |
+| **Too lenient** | D-01, F-06 | Claims support they do not have. Same root as the §4.1 disclosure case in `10_BENCHMARK_RESULTS.md`. **Open.** |
 
-- **A-03** *"How fast did Natively reach ten thousand users?"* — the résumé says *"scaled Natively to 10k users in the first 90 days"*. One candidate retrieved, zero accepted, `NONE`.
-- **I-01** *"What does the empty reference file say about pricing?"* — `FULL` on 3 chunks drawn from **other** files.
-- **E-01** *"Why?"* with no antecedent — `FULL` on 6 evidence items.
-- **G-01/G-02** — the superseded revision is correctly rejected, then the *active* revision fails to support the claim, so a version pair that should now answer cleanly returns `NONE`.
+### 10.4.1 The two decision-layer fixes
 
-This is the same defect as the §4.1 disclosure case in `10_BENCHMARK_RESULTS.md`, seen from the other side. **Not fixed. Recorded, with the mechanism identified.**
+**Subject-level satisfaction.** Answerability is now judged per *subject* (clause) rather than per claim requirement. Several claim types for one clause are **alternatives** — either a transcript or a reference document answers *"who owns the events table migration?"* — not a conjunction. Genuine multi-part questions stay strict: *"tell me about PriceX and explain how WebRTC works"* is two subjects and still requires both, which is the §22.8 case.
+
+**Light stemming.** Suffix-only folding (`-ed`, `-ing`, `-s`, `-ation`, trailing silent `e`), applied to words longer than four characters. Deliberately crude: a full stemmer would also conflate words this check exists to keep apart. Pinned by a negative test proving an unrelated résumé section still fails.
+
+**Measured effect** (`answerabilityMatchesExpected`, same corpus, no relabelling):
+
+| | questions | fully passing |
+|---|---|---|
+| gates newly asserted | 29/42 · 69.0% | 28 |
+| + subject-level satisfaction | 32/42 · 76.2% | 31 |
+| + stemming | **33/42 · 78.6%** | **32** |
+
+Six failures remain: A-03, A-06, C-03, D-01, F-06 and G-03 (`retrievalPath`). Two are retrieval quality, two are classification, one is leniency, and C-03 is a label that predates a design decision — `USER_MOTIVATION` is deliberately not authoritative from a résumé (`10_BENCHMARK_RESULTS.md` §3.1), so `NONE` plus disclosure is the designed behaviour and the `PARTIAL` label was written before it. Left failing rather than quietly relabelled.
 
 ### 10.5 Relabelling discipline
 

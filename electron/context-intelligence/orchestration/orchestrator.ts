@@ -154,9 +154,30 @@ const STOPWORDS = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 
   'could', 'would', 'should', 'they', 'them', 'been', 'into', 'more', 'than', 'then', 'tell', 'give',
   'explain', 'describe', 'candidate', 'applicant', 'experience', 'project', 'projects', 'skills']);
 
+/**
+ * Fold a word to a light stem so inflections match.
+ *
+ * Exact token comparison made "graduate" and "graduated" different terms, so
+ * "What year did the candidate graduate?" found no support in a résumé section
+ * reading "Graduated **2017**" — the correct chunk, correctly retrieved, and the
+ * version filter had already done its job. Measured on G-01.
+ *
+ * Deliberately crude and suffix-only. A real stemmer would also conflate words
+ * this must keep apart, and the whole point of this check is to stop a chunk
+ * about one topic evidencing a claim about another.
+ */
+const stem = (w: string): string => w
+  .replace(/(?:ations|ation|ings|ing|edly|ed|es|s)$/, '')
+  // Drop a trailing silent 'e' AFTER suffix stripping, or the two halves of the
+  // same word still disagree: "graduated" strips to "graduat" while "graduate"
+  // strips to nothing, and the pair that motivated this fix would still miss.
+  .replace(/e$/, '')
+  .replace(/i$/, 'y');
+
 const salientTerms = (text: string): Set<string> => new Set(
   String(text).toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/)
-    .filter((w) => w.length > 2 && !STOPWORDS.has(w)),
+    .filter((w) => w.length > 2 && !STOPWORDS.has(w))
+    .map((w) => (w.length > 4 ? stem(w) : w)),
 );
 
 /**
@@ -203,15 +224,36 @@ export function evaluateAnswerability(
   const required = decision.claimRequirements.filter((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED');
   if (required.length === 0) return 'FULL';           // general question — nothing to ground
 
-  let supported = 0;
+  // Satisfaction is judged per SUBJECT, not per claim requirement.
+  //
+  // A subject is one thing the user asked about — a clause. The classifier often
+  // emits several claim types for a single clause because the MODE authorizes
+  // several source types that could answer it: "Who owns the events table
+  // migration?" in team-meet mode yields both MEETING_STATEMENT and
+  // DOCUMENT_FACT. Those are ALTERNATIVES (either a transcript or a reference
+  // document answers it), not a conjunction.
+  //
+  // Counting them as a conjunction made PARTIAL structurally unavoidable for that
+  // whole class: the transcript supported MEETING_STATEMENT, no reference document
+  // supported DOCUMENT_FACT, and a fully-answered question reported PARTIAL
+  // (measured on H-02 and H-04). Grouping by subject keeps genuine multi-part
+  // questions strict — "tell me about PriceX AND explain how WebRTC works" is two
+  // distinct subjects and still requires both — while letting one clause be
+  // satisfied by any authoritative route to it.
+  const bySubject = new Map<string, typeof required>();
   for (const req of required) {
-    // Match against the CLAIM'S OWN subject when known; fall back to the
-    // whole question only when the classifier could not attribute a clause.
     const subject = req.subject ?? decision.resolvedQuestion;
-    if (evidence.some((e) => evidenceSupportsClaim(e, req.claimType, subject))) supported++;
+    if (!bySubject.has(subject)) bySubject.set(subject, []);
+    bySubject.get(subject)!.push(req);
+  }
+
+  let supported = 0;
+  for (const [subject, reqs] of bySubject) {
+    const ok = reqs.some((req) => evidence.some((e) => evidenceSupportsClaim(e, req.claimType, subject)));
+    if (ok) supported++;
   }
   if (supported === 0) return 'NONE';
-  if (supported < required.length) return 'PARTIAL';
+  if (supported < bySubject.size) return 'PARTIAL';
 
   // Conflict detection (§16.1).
   //
