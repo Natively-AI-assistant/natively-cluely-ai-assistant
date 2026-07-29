@@ -160,6 +160,9 @@ export interface ClaimRequirement {
   authoritativeSources: SourceType[];
   prohibitedSources?: SourceType[];
   fallback: 'OMIT' | 'DISCLOSE_UNSUPPORTED' | 'GENERALIZE' | 'LABEL_AS_INFERENCE' | 'ASK_CLARIFICATION';
+  /** The clause this claim came from. Evidence is matched against THIS, not the
+   *  whole question — otherwise one clause's subject satisfies another's claim. */
+  subject?: string;
 }
 
 export interface PlannedClaim {

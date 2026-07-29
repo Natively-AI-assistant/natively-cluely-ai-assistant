@@ -52,7 +52,8 @@ The two below target are **accuracy** measures, not safety ones, and their resid
 | Question resolver | 16 |
 | Wired-surface chain | 7 |
 | Answer policy | 13 |
-| **Total** | **194 — all passing, process exits cleanly** |
+| Failure safety (§22, category I) | 15 |
+| **Total** | **209 — all passing, process exits cleanly** |
 
 Full suite: **6721 tests**, 121 pre-existing failures unchanged, **zero in `context-intelligence`**.
 
@@ -103,3 +104,37 @@ The failure direction is at least the safe one: these take the fast path and ans
 | E2E through the real UI | **NOT RUN** |
 
 No estimated figures appear anywhere in this document. Every number was produced by an executed run.
+
+
+---
+
+## 7. A vacuous test, and the real bug it was hiding
+
+Worth recording as a method note, because the test PASSED on first run and was worthless.
+
+The §22.8 partial-support test originally asserted:
+
+```js
+assert.ok(['PARTIAL', 'FULL', 'NONE'].includes(r.answerability));
+```
+
+That is **always true**. It exercised the code and verified nothing.
+
+Pinning the exact expected value instead exposed a genuine correctness flaw:
+
+> A question with **two** `PRIVATE_SOURCE_REQUIRED` claims (project + skill), given evidence for **one**, returned **`FULL`**.
+
+The cause: `EvidenceItem.acceptedFor` is **source-type level**. A resume is authoritative for user skills, so a resume chunk about WebRTC "supported" a Kubernetes skill claim. `PARTIAL` was unreachable, and a single chunk could satisfy every user claim at once — meaning *"Do you have Kubernetes experience?"* plus any resume chunk produced a confident answer with no supporting evidence.
+
+That is §16's "high similarity = complete answer" error in different clothing: authorisation was being read as support.
+
+**Fix — claim-level subjects.** `ClaimRequirement` now carries the **clause it came from**, and evidence is matched against that clause rather than the whole question. Matching against the whole question was not enough: in *"tell me about your WebRTC project **and** your Kubernetes experience"*, the term "WebRTC" would otherwise satisfy the Kubernetes claim too.
+
+Relevance is approximated by shared salient terms. A paraphrase with no shared term scores as unsupported — a **false negative that discloses a gap**, which is the safe direction; the false positive fabricates.
+
+Both cases are now pinned:
+
+| Case | Result |
+|------|--------|
+| project claim evidenced, skill claim not | `PARTIAL` + `PARTIAL_SUPPORT` |
+| "Do you have Kubernetes experience?" + a WebRTC resume chunk | **`NONE`** |

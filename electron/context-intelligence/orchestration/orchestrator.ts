@@ -59,7 +59,11 @@ function resolveQuestion(req: AnswerRequest): { resolved: string; source: 'manua
   return { resolved: t, source: 'transcript', confidence: t ? 0.7 : 0 };
 }
 
-function buildClaimRequirements(policy: ModePolicy, claimTypes: string[]): ClaimRequirement[] {
+function buildClaimRequirements(
+  policy: ModePolicy,
+  claimTypes: string[],
+  clauses: Partial<Record<string, string>> = {},
+): ClaimRequirement[] {
   return claimTypes.map((ct) => {
     const authority = CLAIM_AUTHORITY[ct as keyof typeof CLAIM_AUTHORITY];
     const isPrivate = authority.authoritative.length > 0;
@@ -73,6 +77,7 @@ function buildClaimRequirements(policy: ModePolicy, claimTypes: string[]): Claim
       fallback: isPrivate
         ? (policy.capabilityPolicy.unsupportedPersonalClaims === 'REFUSE' ? 'OMIT' : 'DISCLOSE_UNSUPPORTED')
         : 'GENERALIZE',
+      subject: clauses[ct],
     };
   });
 }
@@ -125,7 +130,7 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     isFollowUp: Boolean(req.isFollowUp) || cls.questionTypes.includes('FOLLOW_UP'),
 
     questionTypes: cls.questionTypes,
-    claimRequirements: buildClaimRequirements(policy, cls.claimTypes),
+    claimRequirements: buildClaimRequirements(policy, cls.claimTypes, cls.claimClauses),
 
     scope: req.scope,
     authorizedSources: [],            // populated by source authorization at retrieval time
@@ -142,6 +147,45 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     retrievalPlan,
     createdAt: 0,   // stamped by the caller; kept deterministic for tests
   });
+}
+
+const STOPWORDS = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'have', 'has', 'was',
+  'were', 'you', 'your', 'our', 'their', 'about', 'what', 'how', 'why', 'when', 'did', 'does', 'can',
+  'could', 'would', 'should', 'they', 'them', 'been', 'into', 'more', 'than', 'then', 'tell', 'give',
+  'explain', 'describe', 'candidate', 'applicant', 'experience', 'project', 'projects', 'skills']);
+
+const salientTerms = (text: string): Set<string> => new Set(
+  String(text).toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/)
+    .filter((w) => w.length > 2 && !STOPWORDS.has(w)),
+);
+
+/**
+ * Does this item actually support THIS claim?
+ *
+ * `acceptedFor` answers a different question: whether the SOURCE TYPE is
+ * authoritative for the claim. A resume is authoritative for user skills — but a
+ * resume chunk about WebRTC does not evidence a Kubernetes skill claim.
+ *
+ * Conflating the two made PARTIAL unreachable and let a single chunk satisfy
+ * every user claim at once: "Do you have Kubernetes experience?" plus any resume
+ * chunk returned FULL, i.e. a confident answer with no supporting evidence. That
+ * is §16's "high similarity = complete answer" error wearing different clothes.
+ *
+ * Relevance is approximated by shared salient terms. A paraphrase with no shared
+ * term is scored as unsupported — a FALSE NEGATIVE that discloses a gap, which
+ * is the safe direction. The alternative false positive fabricates.
+ */
+export function evidenceSupportsClaim(
+  evidence: { acceptedFor: string[]; content: string },
+  claimType: string,
+  question: string,
+): boolean {
+  if (!evidence.acceptedFor.includes(claimType)) return false;
+  const qTerms = salientTerms(question);
+  if (qTerms.size === 0) return true;          // nothing to match on — do not block
+  const eTerms = salientTerms(evidence.content);
+  for (const t of qTerms) if (eTerms.has(t)) return true;
+  return false;
 }
 
 /**
@@ -161,7 +205,10 @@ export function evaluateAnswerability(
 
   let supported = 0;
   for (const req of required) {
-    if (evidence.some((e) => e.acceptedFor.includes(req.claimType))) supported++;
+    // Match against the CLAIM'S OWN subject when known; fall back to the
+    // whole question only when the classifier could not attribute a clause.
+    const subject = req.subject ?? decision.resolvedQuestion;
+    if (evidence.some((e) => evidenceSupportsClaim(e, req.claimType, subject))) supported++;
   }
   if (supported === 0) return 'NONE';
   if (supported < required.length) return 'PARTIAL';

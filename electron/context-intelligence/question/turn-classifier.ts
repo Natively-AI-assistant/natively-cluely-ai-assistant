@@ -30,6 +30,11 @@ export interface ClassificationInput {
 export interface Classification {
   questionTypes: QuestionType[];
   claimTypes: ClaimType[];
+  /** The clause each claim came from. Claim-level grounding needs a claim-level
+   *  SUBJECT: matching evidence against the whole question lets "WebRTC" satisfy
+   *  a Kubernetes claim in "tell me about your WebRTC project and your
+   *  Kubernetes experience". */
+  claimClauses: Partial<Record<ClaimType, string>>;
   path: RetrievalPath;
   shouldRetrieve: boolean;
   requiredSourceTypes: SourceType[];
@@ -117,9 +122,11 @@ const isBareFollowUp = (q: string): boolean =>
 const splitClauses = (q: string): string[] =>
   q.split(/\band\b|\balso\b|[;.]/).map((c) => c.trim()).filter(Boolean);
 
-function detectTypes(q: string, input: ClassificationInput): { types: QuestionType[]; claims: ClaimType[] } {
+function detectTypes(q: string, input: ClassificationInput): { types: QuestionType[]; claims: ClaimType[]; clauses: Partial<Record<ClaimType, string>> } {
   const types = new Set<QuestionType>();
   const claims = new Set<ClaimType>();
+  const clauses: Partial<Record<ClaimType, string>> = {};
+  const noteClaim = (c: ClaimType, clause: string) => { claims.add(c); if (!clauses[c]) clauses[c] = clause; };
 
   // Computed from the RAW question (q is lower-cased, so it can never match a
   // capitalised proper noun). Used to suppress the general-knowledge claim
@@ -131,25 +138,25 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   for (const clause of splitClauses(q)) {
     const personal = PERSONAL_RE.test(clause);
 
-    if (personal && PROJECT_RE.test(clause)) { types.add('PERSONAL_PROJECT'); claims.add('USER_PROJECT'); }
-    if (personal && SKILL_RE.test(clause)) { types.add('PERSONAL_SKILL'); claims.add('USER_SKILL'); }
-    if (personal && EDUCATION_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); claims.add('USER_EDUCATION'); }
-    if (personal && EMPLOYMENT_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); claims.add('USER_EMPLOYMENT'); }
+    if (personal && PROJECT_RE.test(clause)) { types.add('PERSONAL_PROJECT'); noteClaim('USER_PROJECT', clause); }
+    if (personal && SKILL_RE.test(clause)) { types.add('PERSONAL_SKILL'); noteClaim('USER_SKILL', clause); }
+    if (personal && EDUCATION_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EDUCATION', clause); }
+    if (personal && EMPLOYMENT_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause); }
 
-    if (JOB_RE.test(clause)) { types.add('JOB_REQUIREMENT'); claims.add('JOB_REQUIRED_SKILL'); }
-    if (MEETING_RE.test(clause)) { types.add('MEETING_FACT'); claims.add('MEETING_STATEMENT'); }
-    if (DOCUMENT_RE.test(clause)) { types.add('DOCUMENT_FACT'); claims.add('DOCUMENT_FACT'); }
-    if (SCREEN_RE.test(clause)) { types.add('SCREEN_SPECIFIC'); claims.add('SCREEN_FACT'); }
+    if (JOB_RE.test(clause)) { types.add('JOB_REQUIREMENT'); noteClaim('JOB_REQUIRED_SKILL', clause); }
+    if (MEETING_RE.test(clause)) { types.add('MEETING_FACT'); noteClaim('MEETING_STATEMENT', clause); }
+    if (DOCUMENT_RE.test(clause)) { types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause); }
+    if (SCREEN_RE.test(clause)) { types.add('SCREEN_SPECIFIC'); noteClaim('SCREEN_FACT', clause); }
 
-    if (CODING_TASK_RE.test(clause)) { types.add('CODING_TASK'); claims.add('GENERAL_TECHNICAL'); }
-    if (SYSTEM_DESIGN_RE.test(clause)) { types.add('SYSTEM_DESIGN'); claims.add('GENERAL_TECHNICAL'); }
+    if (CODING_TASK_RE.test(clause)) { types.add('CODING_TASK'); noteClaim('GENERAL_TECHNICAL', clause); }
+    if (SYSTEM_DESIGN_RE.test(clause)) { types.add('SYSTEM_DESIGN'); noteClaim('GENERAL_TECHNICAL', clause); }
     // Per-clause, so the general half of a mixed question is still recognised.
     // Gated on namesSpecificEntity: without it, an entity lookup acquires a
     // GENERAL_KNOWLEDGE_ALLOWED claim, which then satisfies answerability with
     // no evidence at all — the question is answered from model knowledge and
     // reported as fine.
     if (GENERAL_TECH_RE.test(clause) && !personal && !namesSpecificEntity) {
-      types.add('GENERAL_TECHNICAL'); claims.add('GENERAL_TECHNICAL');
+      types.add('GENERAL_TECHNICAL'); noteClaim('GENERAL_TECHNICAL', clause);
     }
   }
 
@@ -208,7 +215,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   if (hasPrivate && hasGeneral) types.add('MIXED');
 
   if (types.size === 0) types.add('AMBIGUOUS');
-  return { types: [...types], claims: [...claims] };
+  return { types: [...types], claims: [...claims], clauses };
 }
 
 /** Capitalised tokens that are ordinary technical vocabulary, not references to
@@ -258,7 +265,7 @@ const CLAIM_TO_SOURCE: Partial<Record<ClaimType, SourceType[]>> = {
 
 export function classifyTurn(input: ClassificationInput): Classification {
   const q = norm(input.resolvedQuestion);
-  const { types, claims } = detectTypes(q, input);
+  const { types, claims, clauses } = detectTypes(q, input);
 
   // Required sources = union of what the detected claims need, INTERSECTED with
   // what the mode authorizes. A mode never has sources forced into it.
@@ -320,5 +327,5 @@ export function classifyTurn(input: ClassificationInput): Classification {
     reason = 'mode disables retrieval';
   }
 
-  return { questionTypes: types, claimTypes: claims, path, shouldRetrieve, requiredSourceTypes, unsupportedInMode, reason };
+  return { questionTypes: types, claimTypes: claims, claimClauses: clauses, path, shouldRetrieve, requiredSourceTypes, unsupportedInMode, reason };
 }
