@@ -871,6 +871,101 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
         myController = new AbortController();
         _chatStreamsBySender.set(senderId, { streamId: myStreamId, controller: myController });
+
+        // ── CONTEXT INTELLIGENCE V3 — wired manual-chat surface ──────────────
+        //
+        // Deliberately a SHORT-CIRCUIT, not an interleave. The legacy assembly
+        // below is ~3,700 lines carrying five independent source decisions; the
+        // rebuild's whole premise is that those are the defect. Threading V3
+        // through them would inherit exactly what it replaces.
+        //
+        // Off by default (DEFAULT_ENABLED = false, identical in dev and prod), so
+        // rollback is a flag flip. When on, this path owns the turn end to end:
+        // one frozen decision, scope/version-filtered evidence, one composed
+        // prompt, and stream events that ALWAYS carry streamId (F4: every legacy
+        // early-return emits untagged events that no renderer can supersede).
+        try {
+          const { isContextIntelligenceV3Enabled } = require('./context-intelligence/contracts/flag');
+          if (isContextIntelligenceV3Enabled()) {
+            const { orchestrate } = require('./context-intelligence/orchestration/orchestrator');
+            const { composePrompt } = require('./context-intelligence/generation/prompt-composer');
+            const { resolveModePolicy, isModeId } = require('./context-intelligence/policies/mode-policy-registry');
+            const { createLegacyRetrievalPort } = require('./context-intelligence/retrieval/legacy-retrieval-port');
+            const { ModesManager } = require('./services/ModesManager');
+
+            const mm = ModesManager.getInstance();
+            const modeInfo = mm.getActiveModeInfo?.() ?? null;
+            const rawMode = (modeInfo as any)?.templateType ?? 'general';
+            // Unknown ids fail closed in the registry; fall back to the seeded
+            // mode rather than throwing inside a live answer path.
+            const modeId = isModeId(rawMode) ? rawMode : 'general';
+            const policy = resolveModePolicy(modeId);
+
+            const files = modeInfo?.id ? (mm.getReferenceFiles?.(modeInfo.id) ?? []) : [];
+            // The legacy store has no version concept for mode reference files,
+            // so every file is stamped a single synthetic active version. That is
+            // honest — it means version isolation is a no-op HERE until ingestion
+            // carries real versions — rather than silently pretending otherwise.
+            const sourceTypes = new Map<string, any>();
+            const activeVersions = new Map<string, string>();
+            for (const f of files) { sourceTypes.set(f.id, 'REFERENCE_FILE'); activeVersions.set(f.id, 'legacy'); }
+
+            const port = createLegacyRetrievalPort({
+              registry: { sourceTypes, activeVersions },
+              retrieve: async (query: string, opts: { topK: number }) => {
+                if (!modeInfo || !files.length) return [];
+                const res = await mm.retrieveHybridRaw?.(modeInfo, files, {
+                  query, topK: opts.topK, tokenBudget: policy.contextBudget.evidenceTokens, allowRerank: false,
+                });
+                return (res?.chunks ?? []).map((c: any) => ({
+                  sourceId: c.sourceId, fileName: c.fileName, text: c.text,
+                  chunkIndex: c.chunkIndex, score: c.score,
+                  ftsScore: c.ftsScore, vectorScore: c.vectorScore,
+                }));
+              },
+            });
+
+            const result = await orchestrate({
+              requestId: `v3-${myStreamId}`, requestSequence: myStreamId,
+              surface: 'manual-chat', modeId, scope: { userId: 'local' },
+              sessionId: String(senderId), manualQuestion: String(message || ''),
+            }, port);
+
+            const composed = composePrompt({
+              decision: result.decision, policy, evidence: result.evidence,
+            });
+
+            let finalText = '';
+            const v3Stream = llmHelper.streamChat(
+              composed.user,
+              imagePaths,
+              undefined,
+              composed.system,
+              true,   // ignoreKnowledgeMode — V3 owns evidence; legacy injection must not re-enter
+              true,   // skipModeInjection — same reason
+              [],
+              myController.signal,
+            ) as AsyncGenerator<string>;
+
+            for await (const tok of v3Stream) {
+              if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
+              finalText += tok;
+              event.sender.send('gemini-stream-token', tok, { streamId: myStreamId });
+            }
+            if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
+            event.sender.send('gemini-stream-done', { finalText, streamId: myStreamId });
+
+            try {
+              const { recordLegacyTurn } = require('./context-intelligence/observability/legacy-trace');
+              recordLegacyTurn({ ...result.trace, legacyPath: 'v3-manual-chat' } as any);
+            } catch { /* observability must never break an answer */ }
+            return null;
+          }
+        } catch (v3Err: any) {
+          // A defect in the new path must not take the surface down: fall through
+          // to legacy rather than failing the answer.
+          console.error('[ContextIntelligenceV3] manual-chat path failed, falling back to legacy:', v3Err?.message || v3Err);
+        }
         // Renderer-submit mint point for manual chat (Phase 6 Slice 1, context-rebuild):
         // this turn's stable identity, threaded into SourceAuthorityKernel.build below
         // (via buildTurnContractIfEnabled's turnId param) instead of letting the kernel
