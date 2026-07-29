@@ -125,12 +125,22 @@ export class SettingsWindowHelper {
     }
 
     public reposition(mainBounds: Electron.Rectangle): void {
-        if (!this.settingsWindow || !this.settingsWindow.isVisible() || this.settingsWindow.isDestroyed()) return;
-
-        const newX = mainBounds.x + this.offsetX;
-        const newY = mainBounds.y + mainBounds.height + this.offsetY;
-
-        this.settingsWindow.setPosition(Math.round(newX), Math.round(newY));
+        // IMPORTANT: check isDestroyed() BEFORE isVisible()/setPosition().
+        // Electron throws TypeError "Object has been destroyed" if you call
+        // isVisible() (or most other methods) on a destroyed BrowserWindow.
+        // Spotlight / second-instance focus moves the launcher while settings
+        // is mid-teardown → move→reposition storm → main-thread exception
+        // flood → renderer UNRESPONSIVE ("hang when opening Electron").
+        const win = this.settingsWindow;
+        if (!win || win.isDestroyed()) return;
+        try {
+            if (!win.isVisible()) return;
+            const newX = mainBounds.x + this.offsetX;
+            const newY = mainBounds.y + mainBounds.height + this.offsetY;
+            win.setPosition(Math.round(newX), Math.round(newY));
+        } catch {
+            // Window destroyed between the isDestroyed check and setPosition.
+        }
     }
 
     public closeWindow(): void {
