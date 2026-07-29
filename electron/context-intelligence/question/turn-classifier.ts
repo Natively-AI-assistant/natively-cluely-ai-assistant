@@ -72,10 +72,10 @@ const PROJECT_RE = /\b(project|built|shipped|implemented|designed|architect(ed|u
 // which meant no source was required and a fabricated answer would have been
 // permitted. Gated on `personal`, so the bare nouns cannot over-trigger.
 const SKILL_RE = /\b(experience|expertise|background|proficien\w*|familiar with|worked with|know how to|skills?|leadership|hands-on)\b/;
-const EDUCATION_RE = /\b(degree|graduat|university|college|studied|major(ed)?)\b/;
+const EDUCATION_RE = /\b(degrees?|graduat\w*|universit\w*|college|studied|majors?|majored|alma mater)\b/;
 const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|job title|tenure)\b/;
 
-const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit|required skills?|preferred skills?|compensation|salary band|the team you)\b/;
+const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit\w*|required skills?|preferred skills?|compensation|salary band|the team you)\b/;
 
 const MEETING_RE = /\b(we (decided|agreed|discussed)|did we|are we|action item|owns?|owner|the meeting|last (call|meeting)|this (call|meeting)|standup|sync)\b/;
 
@@ -121,6 +121,13 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   const types = new Set<QuestionType>();
   const claims = new Set<ClaimType>();
 
+  // Computed from the RAW question (q is lower-cased, so it can never match a
+  // capitalised proper noun). Used to suppress the general-knowledge claim
+  // below: "What is the discount floor for Acme?" matches the same "what is"
+  // pattern as "What is a mutex?", but naming a specific entity means model
+  // knowledge cannot supply the answer.
+  const namesSpecificEntity = hasNonGenericProperNoun(input.resolvedQuestion);
+
   for (const clause of splitClauses(q)) {
     const personal = PERSONAL_RE.test(clause);
 
@@ -137,10 +144,61 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     if (CODING_TASK_RE.test(clause)) { types.add('CODING_TASK'); claims.add('GENERAL_TECHNICAL'); }
     if (SYSTEM_DESIGN_RE.test(clause)) { types.add('SYSTEM_DESIGN'); claims.add('GENERAL_TECHNICAL'); }
     // Per-clause, so the general half of a mixed question is still recognised.
-    if (GENERAL_TECH_RE.test(clause) && !personal) { types.add('GENERAL_TECHNICAL'); claims.add('GENERAL_TECHNICAL'); }
+    // Gated on namesSpecificEntity: without it, an entity lookup acquires a
+    // GENERAL_KNOWLEDGE_ALLOWED claim, which then satisfies answerability with
+    // no evidence at all — the question is answered from model knowledge and
+    // reported as fine.
+    if (GENERAL_TECH_RE.test(clause) && !personal && !namesSpecificEntity) {
+      types.add('GENERAL_TECHNICAL'); claims.add('GENERAL_TECHNICAL');
+    }
   }
 
   if (input.hasScreenContext) { types.add('SCREEN_SPECIFIC'); claims.add('SCREEN_FACT'); }
+
+  // A question naming a SPECIFIC entity, in a mode whose primary source could
+  // hold it, is a claim about that source even when phrased impersonally.
+  //
+  // "How many retailers did PriceX cover?" is a question about the user's own
+  // project, but carries no pronoun and no document cue — so clause detection
+  // above emits no claim, the turn requires no evidence, and general knowledge
+  // is permitted to answer it. That is the fabrication route.
+  //
+  // The mode's own highest-priority source decides WHICH claim: it is the source
+  // the mode exists to answer from. This never widens authorization — it only
+  // names a claim within what the mode already allows.
+  // NOTE: `q` here is the NORMALISED (lower-cased) question, so it can never
+  // match a capitalised proper noun. The raw text is required.
+  const namesEntity = namesSpecificEntity;
+
+  // A document-centric mode exists to answer from its files, so a factual
+  // question with no general-knowledge signal is a document claim even without a
+  // proper noun — "What success rate did the proposed system achieve?" names
+  // nothing, but in Seminar it is plainly a question about the paper.
+  const primarySource = [...input.policy.allowedSourceTypes]
+    .sort((a, b) => (input.policy.sourcePriorities[a] ?? 99) - (input.policy.sourcePriorities[b] ?? 99))[0];
+  const documentCentric = primarySource === 'REFERENCE_FILE';
+  const looksFactual = /\b(what|which|how many|how much|when|who|where)\b/.test(q);
+
+  if (!claims.size && (namesEntity || (documentCentric && looksFactual))) {
+    const primary = primarySource;
+    const claimForSource: Partial<Record<SourceType, ClaimType>> = {
+      RESUME: 'USER_PROJECT',
+      PROFILE_FACT: 'USER_PROJECT',
+      JOB_DESCRIPTION: 'JOB_REQUIRED_SKILL',
+      REFERENCE_FILE: 'DOCUMENT_FACT',
+      PROJECT_FILE: 'DOCUMENT_FACT',
+      CODING_SAMPLE: 'DOCUMENT_FACT',
+      CANDIDATE_FILE: 'USER_PROJECT',
+      MEETING_TRANSCRIPT: 'MEETING_STATEMENT',
+    };
+    const inferred = primary ? claimForSource[primary] : undefined;
+    if (inferred) {
+      claims.add(inferred);
+      types.add(inferred === 'DOCUMENT_FACT' ? 'DOCUMENT_FACT'
+        : inferred === 'MEETING_STATEMENT' ? 'MEETING_FACT'
+          : inferred === 'JOB_REQUIRED_SKILL' ? 'JOB_REQUIREMENT' : 'PERSONAL_PROJECT');
+    }
+  }
   if (input.isFollowUp || isBareFollowUp(q)) types.add('FOLLOW_UP');
 
   const privateTypes: QuestionType[] = ['PERSONAL_PROJECT', 'PERSONAL_SKILL', 'PERSONAL_EXPERIENCE',

@@ -1,0 +1,105 @@
+# Phase 8 — Test Matrix and Gate Status
+
+**Status:** PARTIAL — decision-layer gates measured; provider-backed evaluation NOT run.
+**Date:** 2026-07-29
+
+---
+
+## 1. What is asserted, and what deliberately is not
+
+§26.4 is explicit: *"Do not test only final answer text."* Every assertion below is on the **decision**, and every one is deterministic and provider-free.
+
+That is not a convenience. Answer text is the weakest signal available — it is stochastic, it drifts with the model, and **hedged prose can hide a contaminated retrieval**. A JD chunk reaching the prompt is a failure whether or not the model happened to phrase around it. The benchmark scores the retrieval decision, not the wording.
+
+Runner: `benchmarks/ci-v3-retrieval/golden-run.cjs` · corpus: 42 labelled questions.
+
+---
+
+## 2. Gate status
+
+| §27 gate | Target | Measured | Status |
+|----------|--------|----------|--------|
+| **Contamination = zero** (no prohibited source in evidence) | 100% | **42/42** | **PASS** |
+| **Contamination = zero** (no prohibited text in prompt) | 100% | **42/42** | **PASS** |
+| **Provenance complete** (`sourceId`+`versionId`+`scopeId`+direct/inferred) | 100% | **42/42** | **PASS** |
+| **Untrusted framing** (retrieved text always labelled data) | 100% | **42/42** | **PASS** |
+| Resolved question preserved verbatim | 100% | **42/42** | **PASS** |
+| Retrieval-path accuracy | ≥97% | 92.9% | **BELOW** |
+| Question-level general-knowledge permission | — | 78.6% | partial |
+
+**The four zero-tolerance gates pass.** Those are the ones §27.1 states as absolutes, and they are the ones that matter for safety: a prohibited source never reaches evidence or the prompt, every accepted item carries provenance, and retrieved text is always framed as untrusted.
+
+The two below target are **accuracy** measures, not safety ones, and their residual failures are documented in §4.
+
+---
+
+## 3. Unit and integration coverage
+
+| Area | Tests |
+|------|-------|
+| Source authority + scope/version filter | 12 |
+| Mode policy registry | 15 |
+| BM25 | 10 |
+| Turn classifier | 25 |
+| AnswerTrace + redaction + shadow diff | 13 |
+| Legacy trace emission | 13 |
+| Flag + legacy adapter | 13 |
+| Orchestrator | 13 |
+| Prompt composition + packing | 16 |
+| Conversation state | 12 |
+| Legacy retrieval port | 10 |
+| Engine bridge | 9 |
+| Question resolver | 16 |
+| Wired-surface chain | 7 |
+| Answer policy | 13 |
+| **Total** | **194 — all passing, process exits cleanly** |
+
+Full suite: **6721 tests**, 121 pre-existing failures unchanged, **zero in `context-intelligence`**.
+
+---
+
+## 4. Six bugs this phase found — all in code written hours earlier
+
+The golden runner earned its cost by breaking things, not by confirming them. Every one of these fails **silently** in production.
+
+1. **A category error in my own check.** `TurnDecision.generalKnowledgeAllowed` is a *mode-level* capability; the corpus label is *question-level*. Comparing them directly is meaningless — `looking-for-work` permits general knowledge as a mode, while "what is the name of the price-comparison website?" plainly cannot be answered from it. The question-level truth lives in `claimRequirements`.
+
+2. **`detectTypes` received the lower-cased question**, so the proper-noun check could never match. Every entity-based inference was dead on arrival.
+
+3. **The general-knowledge claim swallowed entity lookups.** "What is the discount floor for Acme?" matched the same `what is` pattern as "What is a mutex?", acquired a `GENERAL_KNOWLEDGE_ALLOWED` claim, and thereby satisfied answerability **with no evidence at all** — answered from model knowledge and reported as fine.
+
+4. **Impersonal phrasing produced no claim.** "How many retailers did PriceX cover?" is a question about the user's own project but carries no pronoun. No claim ⇒ no evidence required ⇒ fabrication permitted. Now a specific entity in a mode whose primary source could hold it yields a claim about that source.
+
+5. **`\bgraduat\b` cannot match "graduate".** There is no word boundary between `t` and `e`. Same defect in `responsibilit`. Two education/job patterns were silently dead.
+
+6. **Document modes had no default claim.** "What success rate did the proposed system achieve?" names nothing, but in Seminar it is plainly about the paper. A document-centric mode now treats a factual question as a document claim.
+
+Effect on full-pass rate: **47.6% → 66.7% → 76.2% → 78.6%.**
+
+---
+
+## 5. What remains, stated plainly
+
+**Nine questions still fail the question-level general-knowledge check**, and three fail retrieval-path. They share one cause, already recorded in `02_…` §8.6:
+
+> An **impersonal question about a private fact with no lexical signal at all** — no pronoun, no proper noun, no document cue.
+
+Examples: *"What caused the checkout latency regression?"* (a meeting fact), *"What is the p99 now?"*, *"What is the list price per seat?"*.
+
+I deliberately did **not** broaden the inference further to catch these. The obvious next signal is a definite article (`the X`), and that fires on almost every sentence — it would convert the fast path into a retrieval on nearly every turn, trading a documented gap for an undocumented latency regression. Resolving these properly needs conversation state or mode-aware defaults, which are architectural.
+
+The failure direction is at least the safe one: these take the fast path and answer from general knowledge **without fabricating a source-attributed figure**.
+
+---
+
+## 6. Not run
+
+| §26 requirement | Status |
+|-----------------|--------|
+| 200+ question golden suite | **42** — the runner scales, the corpus does not yet |
+| Provider-backed evaluation (§26.5) | **NOT RUN** — no answer-quality, naturalness or over-disclosure numbers exist |
+| Latency gates (§27.4) | **NOT RUN** — needs a live app |
+| Failure-injection (§26.3 category I) | partial — retrieval failure covered by unit test; embedding/reranker/provider failure not |
+| E2E through the real UI | **NOT RUN** |
+
+No estimated figures appear anywhere in this document. Every number was produced by an executed run.

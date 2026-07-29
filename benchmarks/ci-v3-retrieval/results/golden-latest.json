@@ -1,0 +1,841 @@
+{
+  "runAt": "2026-07-29T16:40:11.896Z",
+  "questions": 42,
+  "fullyPassing": 33,
+  "perCheck": {
+    "resolvedQuestion": 42,
+    "retrievalPath": 39,
+    "generalKnowledgeAllowed": 33,
+    "noProhibitedSourceInEvidence": 42,
+    "noProhibitedContentInPrompt": 42,
+    "evidenceCarriesProvenance": 42,
+    "promptLabelsEvidenceUntrusted": 42
+  },
+  "gates": {
+    "contaminationZero": true,
+    "provenanceComplete": true,
+    "untrustedFramingComplete": true,
+    "pathAccuracy": 0.9285714285714286
+  },
+  "rows": [
+    {
+      "id": "A-01",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-02",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-03",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-04",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-05",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-06",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-07",
+      "category": "A",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-08",
+      "category": "A",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-01",
+      "category": "F",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-02",
+      "category": "F",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-03",
+      "category": "F",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-04",
+      "category": "F",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "B-01",
+      "category": "B",
+      "modeId": "general",
+      "path": "FAST",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "B-02",
+      "category": "B",
+      "modeId": "general",
+      "path": "FAST",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "B-03",
+      "category": "B",
+      "modeId": "general",
+      "path": "FAST",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "C-01",
+      "category": "C",
+      "modeId": "looking-for-work",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "C-02",
+      "category": "C",
+      "modeId": "looking-for-work",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "C-03",
+      "category": "C",
+      "modeId": "looking-for-work",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "D-01",
+      "category": "D",
+      "modeId": "looking-for-work",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "G-01",
+      "category": "G",
+      "modeId": "looking-for-work",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "G-02",
+      "category": "G",
+      "modeId": "looking-for-work",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": false,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": [
+        "generalKnowledgeAllowed"
+      ]
+    },
+    {
+      "id": "G-03",
+      "category": "G",
+      "modeId": "looking-for-work",
+      "path": "FAST",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": false,
+        "generalKnowledgeAllowed": false,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": [
+        "retrievalPath",
+        "generalKnowledgeAllowed"
+      ]
+    },
+    {
+      "id": "H-01",
+      "category": "H",
+      "modeId": "team-meet",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "H-02",
+      "category": "H",
+      "modeId": "team-meet",
+      "path": "GROUNDED",
+      "answerability": "PARTIAL",
+      "fallback": "PARTIAL_SUPPORT",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "H-03",
+      "category": "H",
+      "modeId": "team-meet",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "H-04",
+      "category": "H",
+      "modeId": "team-meet",
+      "path": "GROUNDED",
+      "answerability": "PARTIAL",
+      "fallback": "PARTIAL_SUPPORT",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-09",
+      "category": "A",
+      "modeId": "team-meet",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": false,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": [
+        "generalKnowledgeAllowed"
+      ]
+    },
+    {
+      "id": "F-05",
+      "category": "F",
+      "modeId": "team-meet",
+      "path": "FAST",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": false,
+        "generalKnowledgeAllowed": false,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": [
+        "retrievalPath",
+        "generalKnowledgeAllowed"
+      ]
+    },
+    {
+      "id": "F-06",
+      "category": "F",
+      "modeId": "team-meet",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": false,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": [
+        "generalKnowledgeAllowed"
+      ]
+    },
+    {
+      "id": "I-01",
+      "category": "I",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "J-01",
+      "category": "J",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": false,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": [
+        "generalKnowledgeAllowed"
+      ]
+    },
+    {
+      "id": "A-10",
+      "category": "A",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-11",
+      "category": "A",
+      "modeId": "seminar",
+      "path": "FAST",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": false,
+        "generalKnowledgeAllowed": false,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": [
+        "retrievalPath",
+        "generalKnowledgeAllowed"
+      ]
+    },
+    {
+      "id": "A-12",
+      "category": "A",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "NONE",
+      "fallback": "STRICT_NOT_FOUND",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-07",
+      "category": "F",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-08",
+      "category": "F",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-09",
+      "category": "F",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-13",
+      "category": "A",
+      "modeId": "seminar",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 1,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "H-05",
+      "category": "H",
+      "modeId": "general",
+      "path": "GROUNDED",
+      "answerability": "NONE",
+      "fallback": "STRICT_NOT_FOUND",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    },
+    {
+      "id": "C-04",
+      "category": "C",
+      "modeId": "looking-for-work",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": false,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": [
+        "generalKnowledgeAllowed"
+      ]
+    },
+    {
+      "id": "E-01",
+      "category": "E",
+      "modeId": "general",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": false,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": [
+        "generalKnowledgeAllowed"
+      ]
+    },
+    {
+      "id": "E-02",
+      "category": "E",
+      "modeId": "general",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "fallback": "NONE",
+      "evidence": 0,
+      "checks": {
+        "resolvedQuestion": true,
+        "retrievalPath": true,
+        "generalKnowledgeAllowed": true,
+        "noProhibitedSourceInEvidence": true,
+        "noProhibitedContentInPrompt": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true
+      },
+      "failed": []
+    }
+  ]
+}
