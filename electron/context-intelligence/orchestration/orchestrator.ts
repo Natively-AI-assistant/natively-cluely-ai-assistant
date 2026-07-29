@@ -197,11 +197,20 @@ export async function orchestrate(
 
   const answerability = evaluateAnswerability(decision, evidence);
 
+  // A question whose required source the MODE forbids is not answerable from
+  // model knowledge — that would answer a meeting question out of thin air. It
+  // is disclosed as an unsupported gap regardless of generalKnowledgeAllowed.
+  const unsupportedInMode = (decision.retrievalPlan.shouldRetrieve === false
+    && decision.retrievalPlan.path === 'GROUNDED'
+    && decision.requiredSourceTypes.length === 0
+    && decision.claimRequirements.some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED'));
+
   const fallbackUsed =
     answerability === 'FULL' ? 'NONE'
       : answerability === 'CONFLICTING' ? 'CONFLICT'
         : answerability === 'PARTIAL' ? 'PARTIAL_SUPPORT'
-          : decision.generalKnowledgeAllowed ? 'GENERAL_KNOWLEDGE' : 'STRICT_NOT_FOUND';
+          : unsupportedInMode ? 'STRICT_NOT_FOUND'
+            : decision.generalKnowledgeAllowed ? 'GENERAL_KNOWLEDGE' : 'STRICT_NOT_FOUND';
 
   const trace: AnswerTrace = {
     requestId: decision.requestId,

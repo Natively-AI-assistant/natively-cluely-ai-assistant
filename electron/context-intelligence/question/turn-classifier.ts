@@ -33,6 +33,20 @@ export interface Classification {
   path: RetrievalPath;
   shouldRetrieve: boolean;
   requiredSourceTypes: SourceType[];
+  /**
+   * The question needs a source the ACTIVE MODE does not authorize.
+   *
+   * Distinct from "no source needed". Asking "how many backend roles are we
+   * opening?" in technical-interview needs MEETING_TRANSCRIPT, which that mode
+   * does not allow — so `requiredSourceTypes` comes back empty for a reason that
+   * has nothing to do with the question being general.
+   *
+   * Without this flag the two collapse and the turn silently takes the FAST path,
+   * answering a meeting question from model knowledge. The shadow run caught
+   * exactly that on H-03 and F-05. Modelled as a SIGNAL rather than a fourth
+   * RetrievalPath so the §10.7 contract stays three-valued.
+   */
+  unsupportedInMode: SourceType[];
   /** Human-readable justification, recorded in the trace so a bad decision is
    *  attributable to a rule rather than to "the model felt like it". */
   reason: string;
@@ -193,6 +207,10 @@ export function classifyTurn(input: ClassificationInput): Classification {
   const wanted = new Set<SourceType>();
   for (const c of claims) for (const s of (CLAIM_TO_SOURCE[c] ?? [])) wanted.add(s);
   const requiredSourceTypes = [...wanted].filter((s) => input.policy.allowedSourceTypes.includes(s));
+  // What the question needed but the mode refuses to authorize. Kept separate so
+  // "no source required" and "source required but forbidden here" cannot be
+  // confused — they demand opposite behaviour.
+  const unsupportedInMode = [...wanted].filter((s) => !input.policy.allowedSourceTypes.includes(s));
 
   // A "what is X" phrasing is only genuinely general when X is a CONCEPT. Asking
   // for the value of a specific named thing — "the discount floor for Acme", the
@@ -204,6 +222,7 @@ export function classifyTurn(input: ClassificationInput): Classification {
 
   const isPurelyGeneral =
     requiredSourceTypes.length === 0 &&
+    unsupportedInMode.length === 0 &&      // needed a source; the mode just forbids it
     !types.includes('MIXED') &&
     !types.includes('AMBIGUOUS') &&
     !specificEntity;
@@ -224,6 +243,12 @@ export function classifyTurn(input: ClassificationInput): Classification {
   } else if (isPurelyGeneral && !followUp) {
     path = 'FAST'; shouldRetrieve = false;
     reason = `no authorized source is required for ${types.join('+')} — general knowledge suffices`;
+  } else if (unsupportedInMode.length > 0 && requiredSourceTypes.length === 0) {
+    // The honest outcome: stay GROUNDED so the turn is not answered from model
+    // knowledge, retrieve nothing (there is nothing authorized to retrieve), and
+    // let the answer disclose that this mode cannot source it.
+    path = 'GROUNDED'; shouldRetrieve = false;
+    reason = `question requires ${unsupportedInMode.join(',')}, which mode "${input.policy.id}" does not authorize`;
   } else if (types.includes('AMBIGUOUS') || followUp) {
     path = 'GROUNDED'; shouldRetrieve = requiredSourceTypes.length > 0 || followUp;
     reason = followUp ? 'follow-up may reference grounded content by pronoun' : 'ambiguous question — retrieve conservatively';
@@ -237,5 +262,5 @@ export function classifyTurn(input: ClassificationInput): Classification {
     reason = 'mode disables retrieval';
   }
 
-  return { questionTypes: types, claimTypes: claims, path, shouldRetrieve, requiredSourceTypes, reason };
+  return { questionTypes: types, claimTypes: claims, path, shouldRetrieve, requiredSourceTypes, unsupportedInMode, reason };
 }

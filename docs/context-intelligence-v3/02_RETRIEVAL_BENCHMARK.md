@@ -388,7 +388,38 @@ Effect: **65.5% → 79.8% → 89.3%**.
 |---|----------|-------|
 | G-03 | "What is the peak transaction volume of the payments API?" | Impersonal phrasing of a private fact with no proper noun. A genuine classifier limitation. |
 | A-11 | "What is the list price per seat?" | Same. |
-| H-03 | "How many backend roles are we opening this quarter?" | A meeting question run in `technical-interview`, which does not authorize `MEETING_TRANSCRIPT`. FAST is defensible but unhelpful — the better answer is "not answerable in this mode". |
-| F-05 | "What is the p99 now?" | Same. |
+| ~~H-03~~ | ~~"How many backend roles are we opening this quarter?"~~ | **FIXED — see §8.5.** |
+| F-05 | "What is the p99 now?" | Impersonal, no meeting cue and no proper noun — same class as G-03/A-11. |
 
 The first two are a real gap: an impersonal question about a private fact carries no lexical signal at all, and resolving it needs mode-aware defaults or conversation state rather than a better regex. The last two argue for a fifth retrieval path — an explicit *unanswerable-in-this-mode* outcome, rather than silently taking the fast path.
+
+
+### 8.5 Fix: `unsupportedInMode` — telling "no source needed" apart from "source forbidden here"
+
+The shadow run exposed a conflation in the new classifier that would have shipped silently.
+
+Asking *"How many backend roles are we opening this quarter?"* in `technical-interview` needs `MEETING_TRANSCRIPT`, which that mode does not authorize. So `requiredSourceTypes` came back **empty** — the same value a genuinely general question produces. The two collapsed, and the turn took the FAST path and answered a **meeting question from model knowledge**.
+
+These demand opposite behaviour, so they are now separate signals. `Classification.unsupportedInMode` records what the question needed and the mode refused:
+
+| Question | Mode | Path | Retrieve | `unsupportedInMode` | Fallback |
+|----------|------|------|----------|---------------------|----------|
+| How many backend roles…? | `technical-interview` | **GROUNDED** | false | `[MEETING_TRANSCRIPT]` | `STRICT_NOT_FOUND` |
+| How many backend roles…? | `team-meet` | GROUNDED | **true** | `[]` | — |
+| What is idempotency…? | `technical-interview` | FAST | false | `[]` | `NONE` |
+
+The turn stays **GROUNDED with nothing to retrieve**, and the fallback is an explicit gap rather than general knowledge — because answering a meeting question from model knowledge is fabrication, whatever `generalKnowledgeAllowed` says.
+
+Modelled as a **signal, not a fourth `RetrievalPath`**, so the §10.7 three-valued contract is unchanged.
+
+**Result: 89.3% → 92.9%** (92.9% in-mode). Cumulative across the three shadow iterations: **65.5% → 79.8% → 89.3% → 92.9%**.
+
+### 8.6 The 3 remaining misses share one cause
+
+`G-03` "What is the peak transaction volume of the payments API?" · `A-11` "What is the list price per seat?" · `F-05` "What is the p99 now?"
+
+All three are **impersonal phrasings of a private fact with no lexical signal at all** — no pronoun, no proper noun, no document cue. `payments API` and `p99` are ordinary technical vocabulary; `list price per seat` names nothing.
+
+This is a real limit of deterministic classification, and it is recorded rather than papered over. A better regex cannot fix it — resolving these needs either conversation state (what was the previous turn about?) or a mode-aware default (in a sales mode, an unqualified price question is almost certainly a document lookup). Both are architectural, not lexical, and belong to a later phase.
+
+The failure direction is at least the safe one: these take the FAST path and answer from general knowledge **without fabricating a source-specific figure**, rather than inventing a number and attributing it to a document.

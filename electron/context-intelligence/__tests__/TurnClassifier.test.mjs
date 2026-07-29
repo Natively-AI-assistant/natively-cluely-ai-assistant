@@ -136,3 +136,47 @@ describe('determinism and traceability', () => {
     assert.notEqual(r.path, 'FAST');
   });
 });
+
+describe('unsupported-in-mode is distinct from "no source needed"', () => {
+  test('a meeting question in technical-interview does NOT take the fast path', () => {
+    // technical-interview does not authorize MEETING_TRANSCRIPT, so
+    // requiredSourceTypes comes back empty — but for a reason that has nothing
+    // to do with the question being general. Before this signal existed the two
+    // collapsed and the turn was answered from model knowledge.
+    const r = classify('How many backend roles are we opening this quarter?', 'technical-interview');
+    assert.notEqual(r.path, 'FAST', 'must not answer a meeting question from model knowledge');
+    assert.deepEqual(r.unsupportedInMode, ['MEETING_TRANSCRIPT']);
+    assert.equal(r.shouldRetrieve, false, 'there is nothing authorized to retrieve');
+    assert.match(r.reason, /does not authorize/);
+  });
+
+  test('the same question in team-meet IS supported and retrieves', () => {
+    const r = classify('How many backend roles are we opening this quarter?', 'team-meet');
+    assert.deepEqual(r.unsupportedInMode, []);
+    assert.ok(r.requiredSourceTypes.includes('MEETING_TRANSCRIPT'));
+    assert.equal(r.shouldRetrieve, true);
+  });
+
+  test('a genuinely general question reports NO unsupported sources', () => {
+    const r = classify('What is idempotency in an HTTP API?', 'technical-interview');
+    assert.equal(r.path, 'FAST');
+    assert.deepEqual(r.unsupportedInMode, []);
+  });
+
+  test('third-person phrasing requires a source (shadow-run regression)', () => {
+    const r = classify('What is the name of the price-comparison website the candidate built?');
+    assert.notEqual(r.path, 'FAST', 'third-person phrasing must not bypass grounding');
+    assert.ok(r.requiredSourceTypes.includes('RESUME'));
+  });
+
+  test('a named-entity lookup is not mistaken for a general concept question', () => {
+    const r = classify('What is the discount floor for Acme?', 'seminar');
+    assert.notEqual(r.path, 'FAST', '"what is X" about a specific entity is a document lookup');
+  });
+
+  test('common tech acronyms do NOT trigger the entity signal', () => {
+    for (const q of ['What is idempotency in an HTTP API?', 'Explain the difference between TCP and UDP.']) {
+      assert.equal(classify(q).path, 'FAST', q);
+    }
+  });
+});
