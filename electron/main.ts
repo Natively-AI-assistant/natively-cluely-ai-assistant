@@ -1810,6 +1810,10 @@ export class AppState {
         } else if (actionId === 'general:toggle-mouse-passthrough') {
           // Adapted from public PR #113.
           this.toggleOverlayMousePassthrough();
+        } else if (actionId === 'general:toggle-shortcuts') {
+          // Mid-session Keyboard Shortcuts cheat-sheet — renderer owns open
+          // state + temporary passthrough clear; main only dispatches.
+          this.sendToMeetingSurfaces('global-shortcut', { action: 'toggleShortcuts' });
         } else if (actionId === 'general:take-screenshot') {
           // Route to renderer via global-shortcut so the renderer handles the
           // screenshot through the IPC invoke path (request/response guarantee).

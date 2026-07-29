@@ -2532,6 +2532,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
+                                                        <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Keyboard size={14} /></span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Toggle Keyboard Shortcuts')}</span>
+                                                    </div>
+                                                    <KeyRecorder
+                                                        currentKeys={shortcuts.toggleShortcuts}
+                                                        onSave={(keys) => updateShortcut('toggleShortcuts', keys)}
+                                                    />
+                                                </div>
+                                                <div className="flex items-center justify-between py-1.5 group">
+                                                    <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><PointerOff size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Toggle Mouse Passthrough')}</span>
                                                     </div>

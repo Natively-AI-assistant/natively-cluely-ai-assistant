@@ -17,9 +17,16 @@ import {
   PointerOff,
   RefreshCw,
   SlidersHorizontal,
+  Keyboard,
   X,
   Zap,
 } from 'lucide-react';
+import { KeyboardShortcutsSheet } from './KeyboardShortcutsSheet';
+import {
+  decideSheetClosePassthrough,
+  decideSheetOpenPassthrough,
+  decideSheetVisibilityToggle,
+} from '../../electron/services/shortcutsSheet';
 import {
   mergeRollingTranscriptFinal,
   mergeRollingTranscriptPartial,
@@ -991,7 +998,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [availableSkills, setAvailableSkills] = useState<SkillSummary[]>([]);
   const [skillPickerIndex, setSkillPickerIndex] = useState(0);
-  const { shortcuts, isShortcutPressed } = useShortcuts();
+  const { shortcuts, keybinds, isShortcutPressed } = useShortcuts();
   const [messages, setMessages] = useState<Message[]>([]);
   // Keep chat history visible once an answer lands until explicit clear / session reset.
   const [answerPanelPinned, setAnswerPanelPinned] = useState(false);
@@ -1013,6 +1020,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [sttInterviewerProvider, setSttInterviewerProvider] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isShortcutsSheetOpen, setIsShortcutsSheetOpen] = useState(false);
+  const shortcutsSheetPassthroughRef = useRef<boolean | null>(null);
   const [conversationContext, setConversationContext] = useState<string>('');
   const [isManualRecording, setIsManualRecording] = useState(false);
   const isRecordingRef = useRef(false); // Ref to track recording state (avoids stale closure)
@@ -2051,6 +2060,52 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     );
     return () => unsub?.();
   }, []);
+
+  const isShortcutsSheetOpenRef = useRef(false);
+  useEffect(() => {
+    isShortcutsSheetOpenRef.current = isShortcutsSheetOpen;
+  }, [isShortcutsSheetOpen]);
+
+  const closeShortcutsSheet = useCallback(async () => {
+    setIsShortcutsSheetOpen(false);
+    const remembered = shortcutsSheetPassthroughRef.current;
+    shortcutsSheetPassthroughRef.current = null;
+    if (remembered === null) return;
+    const { passthroughToRestore } = decideSheetClosePassthrough(remembered);
+    setIsMousePassthrough(passthroughToRestore);
+    try {
+      await window.electronAPI?.setOverlayMousePassthrough?.(passthroughToRestore);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const openShortcutsSheet = useCallback(async () => {
+    let current = false;
+    try {
+      current = (await window.electronAPI?.getOverlayMousePassthrough?.()) ?? false;
+    } catch {
+      current = false;
+    }
+    const decision = decideSheetOpenPassthrough(!!current);
+    shortcutsSheetPassthroughRef.current = decision.rememberedUserPassthrough;
+    if (current) {
+      setIsMousePassthrough(false);
+      try {
+        await window.electronAPI?.setOverlayMousePassthrough?.(false);
+      } catch {
+        /* ignore */
+      }
+    }
+    setIsExpanded(true);
+    setIsShortcutsSheetOpen(true);
+  }, []);
+
+  const toggleShortcutsSheet = useCallback(async () => {
+    const { nextOpen } = decideSheetVisibilityToggle(isShortcutsSheetOpenRef.current);
+    if (nextOpen) await openShortcutsSheet();
+    else await closeShortcutsSheet();
+  }, [openShortcutsSheet, closeShortcutsSheet]);
 
   // Audio capture / screen-recording warning banner. Two distinct IPC
   // events feed the same banner surface but require different title and
@@ -6832,6 +6887,9 @@ Provide only the answer, nothing else.`;
       setIsMousePassthrough(newState);
       window.electronAPI?.setOverlayMousePassthrough?.(newState);
     },
+    toggleShortcuts: () => {
+      void toggleShortcutsSheet();
+    },
     takeScreenshot: async () => {
       try {
         const data = await window.electronAPI.takeScreenshot();
@@ -6872,6 +6930,9 @@ Provide only the answer, nothing else.`;
       const newState = !isMousePassthrough;
       setIsMousePassthrough(newState);
       window.electronAPI?.setOverlayMousePassthrough?.(newState);
+    },
+    toggleShortcuts: () => {
+      void toggleShortcutsSheet();
     },
     takeScreenshot: async () => {
       try {
@@ -6930,6 +6991,8 @@ Provide only the answer, nothing else.`;
         e.preventDefault();
         handlers.toggleMousePassthrough();
       }
+      // toggleShortcuts: handled only via KeybindManager global → IPC
+      // (onGlobalShortcut). Local keydown would race and immediately re-close.
     };
 
     window.addEventListener('keydown', handleGeneralKeyDown);
@@ -7132,10 +7195,11 @@ Provide only the answer, nothing else.`;
         requestAnimationFrame(() => {
           requestAnimationFrame(() => textInputRef.current?.focus());
         });
-      } else if (action === 'processScreenshots') generalHandlers.processScreenshots();
+      }       else if (action === 'processScreenshots') generalHandlers.processScreenshots();
       else if (action === 'resetCancel') generalHandlers.resetCancel();
       else if (action === 'takeScreenshot') generalHandlers.takeScreenshot();
       else if (action === 'selectiveScreenshot') generalHandlers.selectiveScreenshot();
+      else if (action === 'toggleShortcuts') generalHandlers.toggleShortcuts();
 
       // Safety reset if it didn't trigger an expansion
       setTimeout(() => {
@@ -8809,11 +8873,40 @@ Provide only the answer, nothing else.`;
                       </button>
                     </div>
 
+                    {/* Keyboard Shortcuts cheat-sheet */}
+                    <div className="relative">
+                      <button
+                        onClick={() => {
+                          void toggleShortcutsSheet();
+                        }}
+                        title={t('Keyboard Shortcuts')}
+                        className={`
+                                                    w-7 h-7 flex items-center justify-center rounded-lg
+                                                    interaction-base interaction-press
+                                                    ${
+                                                      isShortcutsSheetOpen
+                                                        ? 'overlay-icon-surface overlay-icon-surface-hover overlay-text-primary'
+                                                        : 'overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive'
+                                                    }
+                                                `}
+                        style={appearance.iconStyle}
+                        data-stealth-ignore="true"
+                      >
+                        <Keyboard className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
                     {/* Mouse Passthrough Toggle */}
                     <div className="relative">
                       <button
                         onClick={() => {
                           const newState = !isMousePassthrough;
+                          // While the cheat-sheet is open we stay interactive;
+                          // only update the preference restored on dismiss.
+                          if (isShortcutsSheetOpenRef.current) {
+                            shortcutsSheetPassthroughRef.current = newState;
+                            return;
+                          }
                           setIsMousePassthrough(newState);
                           window.electronAPI?.setOverlayMousePassthrough?.(newState);
                         }}
@@ -8855,6 +8948,17 @@ Provide only the answer, nothing else.`;
           </motion.div>
       {/* end always-mounted shell */}
     </div>
+    <KeyboardShortcutsSheet
+      isOpen={isShortcutsSheetOpen}
+      onDismiss={() => {
+        void closeShortcutsSheet();
+      }}
+      keybinds={keybinds}
+      onOpenHotkeysSettings={() => {
+        void closeShortcutsSheet();
+        window.electronAPI?.openSettingsTab?.('keybinds');
+      }}
+    />
     </>
   );
 };
