@@ -325,3 +325,70 @@ Extraction succeeds, so this is not a parser fault — it is the local ONNX embe
 ### Known blocker carried from Phase 1
 
 **F21 — `npm test` cannot terminate**, because `IntentClassifier` spawns a worker thread that is never `unref()`d. The bake-off harness loads compiled production modules in-process and will inherit the same defect the moment any configuration touches intent classification. The harness must either dispose the worker explicitly or exit deliberately; the underlying fix belongs in Phase 4 and is still recommended as its first change.
+
+---
+
+## 8. SHADOW RUN — the legacy layers diffed against each other and against V3
+
+Executed: `benchmarks/ci-v3-retrieval/shadow-run.cjs` · 42 questions × 4 modes = **168 comparisons**.
+Decisions only — no LLM, no provider spend, fully deterministic.
+Raw: `benchmarks/ci-v3-retrieval/results/shadow-latest.json`.
+
+### 8.1 The headline finding: the legacy source decision ignores the question
+
+| Metric | Result |
+|--------|--------|
+| Layer B vs Layer C diverged | **168/168 — 100%** |
+| Layer C had no policy at all | **168/168 — 100%** |
+| **Layer B distinct decisions across all 42 questions, per mode** | **1** |
+
+That last row is the important one, and it is not a rounding artefact. For every mode, the legacy manual-chat layer produced **exactly one decision for all 42 questions**. Verbatim, in `technical-interview`:
+
+| Question | Legacy decision |
+|----------|-----------------|
+| "What is idempotency in the context of an HTTP API?" | `authority=profile_only owner=profile required=[profile_resume,projects]` |
+| "What is the name of the price-comparison website…?" | `authority=profile_only owner=profile required=[profile_resume,projects]` |
+| "What is the compensation range for the role?" | `authority=profile_only owner=profile required=[profile_resume,projects]` |
+| "Are we migrating the ledger to Cassandra?" | `authority=profile_only owner=profile required=[profile_resume,projects]` |
+
+**The legacy source decision is a pure function of the MODE. The question is not an input.**
+
+This single measurement explains a cluster of previously separate symptoms:
+
+- **Why retrieval always runs** — §6.4 measured a 100% false-retrieval rate. It is not that the gate is mis-tuned; there is no gate. The decision cannot depend on the question.
+- **Why general questions get contaminated with profile data** — "What is idempotency?" *demands* `profile_resume` evidence.
+- **Why a JD question pulls the resume** — "What is the compensation range for the role?" also demands `profile_resume`, never the JD.
+- **Why claim-level grounding (§3.7) was unreachable** — a decision that cannot see the question cannot distinguish the claims inside it.
+
+No amount of prompt tuning reaches this. It is the architecture the rebuild replaces.
+
+### 8.2 V3 on the same 168 comparisons
+
+| Metric | Result |
+|--------|--------|
+| Path distribution | `GROUNDED` 138 · `FAST` 30 |
+| Agreement with labelled expectation (all modes) | **150/168 — 89.3%** |
+| Agreement in `technical-interview` (the mode the labels assume) | **38/42 — 90.5%** |
+
+Where the legacy layer yields 1 distinct decision, V3 yields a question-dependent one — which is the entire point of the rebuild.
+
+### 8.3 What the shadow run found in MY code — three fixes
+
+The run was worth as much for the defects it exposed in the new classifier as for those it confirmed in the old one.
+
+1. **Third-person phrasing required no source.** `PERSONAL_RE` matched only second person, so *"What is the name of the price-comparison website **the candidate** built?"* classified as needing **no source at all** — fabrication permitted. Interview-prep and recruiting surfaces routinely phrase questions in the third person.
+2. **"What is X" over-matched.** *"What is the discount floor for Acme?"* took the fast path and would have been answered from model knowledge. A capitalised proper noun that is not ordinary technical vocabulary is now a private-source signal (with an allowlist so `HTTP`/`API` do not trigger it).
+3. **My own corpus labels were wrong.** Five questions labelled `expectedPath: VERIFICATION` were conflict cases — but VERIFICATION is a **post-retrieval escalation** (§13.3: "sources conflict"), and a classifier cannot know a conflict exists before retrieving. The label conflated a pre-retrieval decision with a post-retrieval state. Corrected to `GROUNDED`; the conflict is already captured by `expectedAnswerability: CONFLICTING`.
+
+Effect: **65.5% → 79.8% → 89.3%**.
+
+### 8.4 The 4 remaining misses, stated plainly
+
+| # | Question | Cause |
+|---|----------|-------|
+| G-03 | "What is the peak transaction volume of the payments API?" | Impersonal phrasing of a private fact with no proper noun. A genuine classifier limitation. |
+| A-11 | "What is the list price per seat?" | Same. |
+| H-03 | "How many backend roles are we opening this quarter?" | A meeting question run in `technical-interview`, which does not authorize `MEETING_TRANSCRIPT`. FAST is defensible but unhelpful — the better answer is "not answerable in this mode". |
+| F-05 | "What is the p99 now?" | Same. |
+
+The first two are a real gap: an impersonal question about a private fact carries no lexical signal at all, and resolving it needs mode-aware defaults or conversation state rather than a better regex. The last two argue for a fifth retrieval path — an explicit *unanswerable-in-this-mode* outcome, rather than silently taking the fast path.

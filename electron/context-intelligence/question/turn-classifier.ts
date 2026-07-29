@@ -43,7 +43,12 @@ const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 // ── signals ─────────────────────────────────────────────────────────────────
 // Second person addressed to the candidate ("your project"), or explicit
 // self-reference. These are the questions that REQUIRE private evidence.
-const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|walk me through your|my)\b/;
+// Covers SECOND person ("your project") and THIRD person ("the candidate's
+// project"). Interview-prep and recruiting surfaces routinely phrase questions
+// in the third person, and a second-person-only pattern silently classified
+// "What is the name of the price-comparison website the candidate built?" as
+// requiring no source at all.
+const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|walk me through your|my|the candidate|candidate'?s?|the applicant|applicant'?s?)\b/;
 const PROJECT_RE = /\b(project|built|shipped|implemented|designed|architect(ed|ure) of your)\b/;
 // Matches BOTH orderings, because interviewers use both interchangeably:
 //   "experience WITH Kubernetes"   (preposition-led)
@@ -134,6 +139,40 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   return { types: [...types], claims: [...claims] };
 }
 
+/** Capitalised tokens that are ordinary technical vocabulary, not references to
+ *  a private document. Without this, "What is idempotency in an HTTP API?" would
+ *  read as a document lookup because of "HTTP" and "API". */
+const GENERIC_TECH_CAPS = new Set([
+  'http', 'https', 'api', 'apis', 'rest', 'grpc', 'graphql', 'json', 'xml', 'yaml',
+  'sql', 'nosql', 'tcp', 'udp', 'ip', 'dns', 'tls', 'ssl', 'url', 'uri', 'html', 'css',
+  'js', 'ts', 'cpu', 'gpu', 'ram', 'os', 'io', 'ui', 'ux', 'crud', 'acid', 'orm',
+  'jwt', 'oauth', 'saml', 'cors', 'csrf', 'xss', 'dsa', 'lru', 'fifo', 'lifo',
+  'aws', 'gcp', 'azure', 'ci', 'cd', 'sdk', 'cli', 'ide', 'llm', 'ml', 'ai',
+  'webrtc', 'websocket', 'websockets', 'grpcweb', 'ssr', 'csr', 'spa', 'pwa',
+  'i', 'a', 'the', 'what', 'how', 'why', 'when', 'where', 'who', 'which', 'is', 'do',
+  'does', 'can', 'could', 'would', 'should', 'explain', 'tell', 'describe', 'give',
+]);
+
+/**
+ * Does the question name a specific entity that model knowledge cannot supply?
+ *
+ * Deliberately errs toward GROUNDED: a false positive costs one unnecessary
+ * retrieval, whereas a false negative answers a document question from model
+ * knowledge — which is the failure this whole system exists to prevent.
+ */
+function hasNonGenericProperNoun(text: string): boolean {
+  for (const m of String(text).matchAll(/\b([A-Z][A-Za-z0-9-]{1,})\b/g)) {
+    const token = m[1];
+    const idx = m.index ?? 0;
+    // ignore the sentence-initial capital
+    if (/(^|[.!?]\s*)$/.test(String(text).slice(0, idx))) continue;
+    if (GENERIC_TECH_CAPS.has(token.toLowerCase())) continue;
+    return true;
+  }
+  // A bare numeric/currency lookup is also entity-specific.
+  return /\$\s?\d|\b\d{2,}\b/.test(String(text));
+}
+
 const CLAIM_TO_SOURCE: Partial<Record<ClaimType, SourceType[]>> = {
   USER_PROJECT: ['RESUME', 'PROJECT_FILE', 'PROFILE_FACT'],
   USER_SKILL: ['RESUME', 'PROFILE_FACT'],
@@ -155,10 +194,19 @@ export function classifyTurn(input: ClassificationInput): Classification {
   for (const c of claims) for (const s of (CLAIM_TO_SOURCE[c] ?? [])) wanted.add(s);
   const requiredSourceTypes = [...wanted].filter((s) => input.policy.allowedSourceTypes.includes(s));
 
+  // A "what is X" phrasing is only genuinely general when X is a CONCEPT. Asking
+  // for the value of a specific named thing — "the discount floor for Acme", the
+  // "BERT-base parameter counts" — is a document lookup wearing the same
+  // grammar, and the corpus showed it taking the fast path and answering from
+  // model knowledge. A proper noun that is not a common technical term is
+  // therefore treated as a private-source signal.
+  const specificEntity = hasNonGenericProperNoun(input.resolvedQuestion);
+
   const isPurelyGeneral =
     requiredSourceTypes.length === 0 &&
     !types.includes('MIXED') &&
-    !types.includes('AMBIGUOUS');
+    !types.includes('AMBIGUOUS') &&
+    !specificEntity;
 
   // A follow-up may reference grounded content by pronoun alone, so it never
   // takes the fast path even when its own text looks general.
