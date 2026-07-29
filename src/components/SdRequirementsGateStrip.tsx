@@ -4,6 +4,12 @@
 // Lives in the overlay status-pill band: compact progress + optional expand
 // for gate-relevant slot statuses, plus an Advance button that reuses the
 // prepare + answer path with sdRequirementsUiAdvance.
+//
+// Playwright hooks for e2e:sd-overlay-interview (presentation-only):
+//   data-testid="sd-requirements-gate-strip"   — strip root (visible while gated)
+//   data-testid="sd-requirements-gate-advance" — Advance button
+//   data-testid="sd-overlay-answer-panel"      — chat answer chrome in NativelyInterface
+// See .scratch/sd-overlay-interview-e2e/README.md
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp, ListChecks } from 'lucide-react';
@@ -80,7 +86,10 @@ export const SdRequirementsGateStrip: React.FC<SdRequirementsGateStripProps> = (
   const nextLine = vm.nextSlotLabel ? `next: ${vm.nextSlotLabel}` : 'ready to advance';
 
   return (
-    <div className="flex flex-col items-stretch gap-1 max-w-[min(420px,92vw)]">
+    <div
+      className="flex flex-col items-stretch gap-1 max-w-[min(420px,92vw)]"
+      data-testid="sd-requirements-gate-strip"
+    >
       <div
         className={`${statusPillBaseClass} ${getStatusToneClass(vm.checklistComplete ? 'ok' : 'warn')} pr-1.5`}
         title="Requirements grilling gate — checklist status"
@@ -103,6 +112,7 @@ export const SdRequirementsGateStrip: React.FC<SdRequirementsGateStripProps> = (
           disabled={advancing}
           onClick={() => { void onAdvance(); }}
           aria-label="Advance past Requirements"
+          data-testid="sd-requirements-gate-advance"
         >
           Advance
         </button>

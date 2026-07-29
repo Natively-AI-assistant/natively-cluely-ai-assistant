@@ -11196,5 +11196,106 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: e.message };
       }
     });
+
+    /**
+     * Arm SD Requirements gate chrome for overlay UI e2e without mic TCC:
+     * 1) open overlay meeting session (no audio pipeline)
+     * 2) inject interviewer turns into SessionTracker
+     * 3) seed sticky problemKey artifact via production prepare (system_design_answer)
+     * 4) publish gate-status strip viewModel
+     *
+     * Soft-refuse / Advance clicks still go through the real strip button →
+     * generate-what-to-say (sdRequirementsUiAdvance). Do NOT use __e2e__:ask mid-scenario
+     * (it calls im.reset()).
+     */
+    safeHandle(
+      '__e2e__:arm-sd-overlay-gate',
+      async (
+        _,
+        params?: {
+          problemKey?: string;
+          problemClass?: string;
+          turns?: Array<{ role?: string; speaker?: string; text?: string }>;
+          title?: string;
+        },
+      ) => {
+        try {
+          const opened = appState.startOverlaySessionWithoutAudioForE2e({
+            doNotPersist: true,
+            title: params?.title || 'sd-overlay-interview-e2e',
+          });
+
+          const im = appState.getIntelligenceManager();
+          const turns = Array.isArray(params?.turns) ? params!.turns! : [];
+          for (const turn of turns) {
+            const role = String(turn.role || '');
+            const speakerRaw = String(turn.speaker || '');
+            let speaker = 'interviewer';
+            if (role === 'user' || speakerRaw === 'user') speaker = 'user';
+            else if (role === 'assistant' || speakerRaw === 'assistant') speaker = 'assistant';
+            else if (speakerRaw === 'interviewer' || speakerRaw === 'system' || role === 'interviewer') {
+              speaker = 'interviewer';
+            }
+            const text = String(turn.text || '').trim();
+            if (!text) continue;
+            im.handleTranscript({
+              speaker,
+              text,
+              timestamp: Date.now(),
+              final: true,
+              confidence: 0.95,
+            } as any);
+          }
+
+          const gate = require('./llm/sdRequirementsGate') as typeof import('./llm/sdRequirementsGate');
+          const live = require('./llm/sdRequirementsLive') as typeof import('./llm/sdRequirementsLive');
+          const interviewerTexts = turns
+            .filter((t) => {
+              const role = String(t.role || '');
+              const speaker = String(t.speaker || '');
+              if (role === 'user' || speaker === 'user') return false;
+              if (role === 'assistant' || speaker === 'assistant') return false;
+              return Boolean(String(t.text || '').trim());
+            })
+            .map((t) => String(t.text || ''));
+
+          const problemKey = String(params?.problemKey || 'url-shortener-early').trim();
+          const prepared = live.prepareSdRequirementsForAnswerPlan({
+            answerPlan: {
+              answerType: 'system_design_answer',
+              forbiddenContextLayers: [],
+            } as any,
+            artifact: null,
+            problemQuestion: problemKey,
+            interviewerTexts,
+            modeId: 'technical-interview',
+          });
+
+          const session = (im as any).session;
+          if (prepared.artifact && session?.setSdRequirementsArtifact) {
+            let artifact = prepared.artifact;
+            if (params?.problemClass === 'data_pipeline_streaming_analytics') {
+              artifact = gate.setProblemClass(artifact, 'data_pipeline_streaming_analytics');
+            }
+            session.setSdRequirementsArtifact(artifact);
+          }
+
+          im.publishSdRequirementsGateStatus(false);
+          const viewModel = im.getSdRequirementsGateStatus();
+          return {
+            success: true,
+            meetingId: opened.meetingId,
+            via: opened.via,
+            problemKey,
+            fills: (prepared.fills || []).map((f: any) => f.id),
+            sdPhase: prepared.sdPhase,
+            viewModel,
+          };
+        } catch (e: any) {
+          console.error('[E2E] arm-sd-overlay-gate error:', e);
+          return { success: false, error: e?.message || String(e) };
+        }
+      },
+    );
   }
 }

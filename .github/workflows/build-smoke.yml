@@ -4,7 +4,7 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    - cron: '0 9 * * 1'  # Monday 09:00 UTC: api-smoke + sd-quality + sd-requirements-gate-* + sd-interview-sim-e2e + sd-interview-sim-t2
+    - cron: '0 9 * * 1'  # Monday 09:00 UTC: api-smoke + sd-quality + sd-requirements-gate-* + sd-interview-sim-e2e + sd-interview-sim-t2 + sd-overlay-interview-e2e
 
 jobs:
   electron-entry-smoke:
@@ -184,6 +184,55 @@ jobs:
 
       - name: Run SD interview-sim Electron fixture matrix (T1)
         run: npm run e2e:sd-interview-sim
+
+  # SD Overlay Interview UI e2e (additive Playwright `_electron` core matrix).
+  # schedule / workflow_dispatch only — NEVER pull_request.
+  # Live product LLM (GEMINI_API_KEY); exit 0 skip when key missing.
+  # NOT a T2/dual-agent CI oracle — asserts overlay chrome (strip / soft-refuse /
+  # Advance hide / post-gate answer), not dual-agent free-form corpus quality.
+  # Does not replace gate e2e, sim T1, Profile interview-simulator, or T2.
+  sd-overlay-interview-e2e:
+    name: SD Overlay Interview UI E2E (weekly)
+    runs-on: macos-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Renderer build required so `data-testid` hooks ship in dist/ for Playwright.
+      - name: Build renderer
+        run: npm run build
+
+      - name: Build Electron (test prerequisite)
+        run: npm run build:electron
+
+      - name: Run SD overlay interview UI e2e (live LLM; skip without key)
+        run: npm run e2e:sd-overlay-interview
+        env:
+          RUN_SD_OVERLAY_INTERVIEW: '1'
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NATIVELY_API_KEY: ${{ secrets.NATIVELY_API_KEY }}
+          SD_OVERLAY_INTERVIEW_MAX_TURNS: '12'
+          SD_OVERLAY_INTERVIEW_MAX_MS: '180000'
+          # Optional: set SD_OVERLAY_INTERVIEW_MAX_USD in the job env to cap spend.
+
+      - name: Upload overlay interview artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-overlay-interview-artifacts
+          path: debug-artifacts/sd-overlay-interview/
+          if-no-files-found: ignore
 
   # T2 dual-agent overnight corpus (ticket 05). Headless; opt-in spend caps.
   # workflow_dispatch / schedule only — NEVER pull_request. Exit 0 skip without

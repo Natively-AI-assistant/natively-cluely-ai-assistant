@@ -4988,6 +4988,76 @@ export class AppState {
     }
   }
 
+  /**
+   * E2E-only: open overlay + meeting session WITHOUT mic TCC / audio pipeline.
+   * Used by `e2e:sd-overlay-interview` so gate chrome can arm on schedule CI
+   * without hanging on macOS permission dialogs. No-op / throw outside NATIVELY_E2E.
+   */
+  public startOverlaySessionWithoutAudioForE2e(metadata?: any): {
+    success: boolean;
+    meetingId: string;
+    via: 'e2e-no-audio';
+  } {
+    if (process.env.NATIVELY_E2E !== '1') {
+      throw new Error('startOverlaySessionWithoutAudioForE2e is NATIVELY_E2E-only');
+    }
+    console.log('[Main] E2E overlay session (no audio / no mic TCC)...', metadata);
+
+    if (this._pendingTeardown) {
+      // Best-effort: do not await mic teardown forever in e2e; clear handle.
+      this._pendingTeardown = null;
+    }
+
+    this._systemAudioRecoveryInProgress = false;
+    this._systemAudioRecoveryAttempts = 0;
+    this._systemAudioConsecutiveFailures = 0;
+    this._micRecoveryAttempts = 0;
+    if (this._systemAudioRecoveryTimer) {
+      clearTimeout(this._systemAudioRecoveryTimer);
+      this._systemAudioRecoveryTimer = null;
+    }
+
+    this.windowHelper.resetOverlayPosition();
+    this.windowHelper.setWindowMode('overlay');
+
+    ++this._meetingGeneration;
+    this.isMeetingActive = true;
+    this.broadcastMeetingState();
+
+    const meetingMeta = metadata && typeof metadata === 'object' ? { ...metadata } : {};
+    meetingMeta.doNotPersist = true;
+    if (!meetingMeta.id && !meetingMeta.meetingId) {
+      meetingMeta.id = crypto.randomUUID();
+    } else if (!meetingMeta.id && meetingMeta.meetingId) {
+      meetingMeta.id = meetingMeta.meetingId;
+    }
+    this.intelligenceManager.setMeetingMetadata(meetingMeta);
+
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      const activeMode = ModesManager.getInstance().getActiveMode();
+      if (activeMode) {
+        this.intelligenceManager.setDynamicActionContext({
+          sessionId: `session_${crypto.randomUUID()}`,
+          modeId: activeMode.id,
+          modeTemplateType: activeMode.templateType,
+        });
+      }
+    } catch {
+      /* non-fatal */
+    }
+
+    this.sendToWindow(this.getWindowHelper().getOverlayWindow(), 'session-reset');
+    this.sendToWindow(this.getWindowHelper().getLauncherWindow(), 'session-reset');
+
+    // Deliberately skip ensureMacMicrophoneAccess + audio init — inject path only.
+    return {
+      success: true,
+      meetingId: String(meetingMeta.id),
+      via: 'e2e-no-audio',
+    };
+  }
+
   public async startMeeting(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
 
