@@ -77,6 +77,7 @@ const PROJECT_RE = /\b(project|built|shipped|implemented|designed|architect(ed|u
 // which meant no source was required and a fabricated answer would have been
 // permitted. Gated on `personal`, so the bare nouns cannot over-trigger.
 const SKILL_RE = /\b(experience|expertise|background|proficien\w*|familiar with|worked with|know how to|skills?|leadership|hands-on)\b/;
+const MOTIVATION_RE = /\b(why|reason|motivat\w*|what (led|made)|decided? to|chose to|choose to)\b/;
 const EDUCATION_RE = /\b(degrees?|graduat\w*|universit\w*|college|studied|majors?|majored|alma mater)\b/;
 const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|job title|tenure|manage[srd]?|managing|led|leads?|reports?|team of|headcount|salary expectation\w*|compensation expectation\w*)\b/;
 
@@ -151,6 +152,11 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     const personal = PERSONAL_RE.test(clause);
 
     if (personal && PROJECT_RE.test(clause)) { types.add('PERSONAL_PROJECT'); noteClaim('USER_PROJECT', clause); }
+    // "why did you choose/build X" asks for a REASON. Motivation is authoritative
+    // only from explicit user context, so it must be claimed separately: a
+    // USER_PROJECT claim is satisfied by evidence that the project exists, which
+    // says nothing about why it was built (measured failure C-03).
+    if (personal && MOTIVATION_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_MOTIVATION', clause); }
     if (personal && SKILL_RE.test(clause)) { types.add('PERSONAL_SKILL'); noteClaim('USER_SKILL', clause); }
     if (personal && EDUCATION_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EDUCATION', clause); }
     if (personal && EMPLOYMENT_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause); }

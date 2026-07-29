@@ -1,0 +1,755 @@
+{
+  "runAt": "2026-07-29T20:34:29.854Z",
+  "model": "gemini-3.1-flash-lite",
+  "temperature": 0,
+  "questions": 42,
+  "errors": 0,
+  "exactStringGrounding": 0.3333333333333333,
+  "judgedGrounding": 0.6666666666666666,
+  "factualGroundingN": 30,
+  "forbiddenClaimRate": 0,
+  "unsupportedDisclosureRate": 1,
+  "overRefusalRate": 0,
+  "ttlMs": {
+    "p50": 828,
+    "p95": 2195
+  },
+  "rows": [
+    {
+      "id": "A-01",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 53,
+      "exactStringHit": true,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "The price-comparison website I built is named PriceX.",
+      "goldFacts": [
+        "PriceX"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "A-02",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 28,
+      "exactStringHit": true,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "PriceX covered 14 retailers.",
+      "goldFacts": [
+        "14 retailers"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "A-03",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "error": null,
+      "answerability": "NONE",
+      "evidence": 0,
+      "answerChars": 115,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The provided material does not contain information regarding how long it took Natively to reach ten thousand users.",
+      "goldFacts": [
+        "10k users in the first 90 days"
+      ],
+      "judgeGrounded": false
+    },
+    {
+      "id": "A-04",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 119,
+      "exactStringHit": true,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "Between 2018 and 2022, I worked as a senior engineer at Wilson & Kinsman, where I owned the order-management subsystem.",
+      "goldFacts": [
+        "Wilson & Kinsman"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "A-05",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 130,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "The compensation range for the AI Product Engineer role at Helio Labs is $175,000 to $200,000 base salary, plus meaningful equity.",
+      "goldFacts": [
+        "175–200k base"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "A-06",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "error": null,
+      "answerability": "NONE",
+      "evidence": 1,
+      "answerChars": 103,
+      "exactStringHit": true,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "The position is with Helio Labs, and the role is based in San Francisco with a hybrid work arrangement.",
+      "goldFacts": [
+        "Helio Labs",
+        "hybrid SF"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "A-07",
+      "category": "A",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "NONE",
+      "evidence": 1,
+      "answerChars": 235,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The provided document does not contain information regarding the name of a proposed system or the robot it is deployed on. The text focuses exclusively on the SQuAD v2.0 task and the methodology for extending a BERT model to handle it.",
+      "goldFacts": [
+        "AgenticVLA",
+        "Mercury X1"
+      ],
+      "judgeGrounded": false
+    },
+    {
+      "id": "A-08",
+      "category": "A",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 215,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The provided document does not state a specific success rate percentage for the proposed system. It reports that the system achieved a +5.1 F1 improvement over the previous best system on the SQuAD v2.0 leaderboard.",
+      "goldFacts": [
+        "44%"
+      ],
+      "judgeGrounded": false
+    },
+    {
+      "id": "F-01",
+      "category": "F",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 304,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "Based on the provided document, the text does not specify the number of layers for the BERT models discussed. It only notes that the largest Transformer explored in Vaswani et al. (2017) has 6 layers (L=6) and the largest Transformer found in the literature by Al-Rfou et al. (2018) has 64 layers (L=64).",
+      "goldFacts": [
+        "N = 6",
+        "N=6"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "F-02",
+      "category": "F",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 2,
+      "answerChars": 229,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The provided documents do not contain information regarding the parameter counts for BERT-base. \n\nAs a matter of general technical knowledge, BERT-base is widely cited in literature as having approximately 110 million parameters.",
+      "goldFacts": [
+        "110M"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "F-03",
+      "category": "F",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 109,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The provided document does not contain information regarding the `warmup_steps` value used for the optimizer.",
+      "goldFacts": [
+        "4000"
+      ],
+      "judgeGrounded": false
+    },
+    {
+      "id": "F-04",
+      "category": "F",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 160,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The provided document does not contain information regarding the BLEU score achieved on WMT 2014 EN-DE. The evidence provided focuses on GLUE benchmark results.",
+      "goldFacts": [
+        "28.4"
+      ],
+      "judgeGrounded": false
+    },
+    {
+      "id": "B-01",
+      "category": "B",
+      "modeId": "general",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 0,
+      "answerChars": 1896,
+      "exactStringHit": null,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "In the context of an HTTP API, idempotency means that making multiple identical requests to a specific endpoint has the same effect on the server's state as making a single request.\n\nIf an operation is idempotent, the outcome—the state of the resource—remains the same regardless of whether the server receives the request once or multiple times. This is particularly important for handling network errors; if a client sends a request but doesn't receive a response due to a timeout, it can safely retry the request without worrying about creating duplicate records or unintended side effects.\n\nHere is how it generally applies to standard HTTP methods:\n\n*   **GET, HEAD, OPTIONS, and TRACE:** These are inherently idempotent because they are \"read-only\" operations. They retrieve data without modifying the server state.\n*   **PUT:** This is idempotent. A `PUT` request typically replaces a resource entirely. Whether you send the request once or ten times, the resource ends up in the exact same state defined by the payload.\n*   **DELETE:** This is idempotent. Once a resource is deleted, subsequent requests to delete that same resource will still result in the resource being gone (often returning a 204 No Content or 404 Not Found status).\n*   **POST:** This is **not** idempotent by default. A `POST` request is typically used to create a new resource. If you send the same `POST` request multiple times, you will likely end up with multiple duplicate resources on the server.\n\nTo make a non-idempotent operation like `POST` behave idempotently, developers often implement \"idempotency keys.\" The client includes a unique identifier (like a UUID) in the request header. The server stores this key and checks it before processing; if a request arrives with a key that has already been processed, the server returns the cached result of the original operation instead of performing it again.",
+      "goldFacts": [],
+      "judgeGrounded": null
+    },
+    {
+      "id": "B-02",
+      "category": "B",
+      "modeId": "general",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 0,
+      "answerChars": 1465,
+      "exactStringHit": null,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "To reverse a singly linked list in place, you need to iterate through the list while changing the `next` pointer of each node to point to its predecessor.\n\nHere is the standard iterative approach in Python:\n\n```python\ndef reverse_list(head):\n    prev = None\n    current = head\n    \n    while current is not None:\n        next_node = current.next  # Temporarily store the next node\n        current.next = prev       # Reverse the current node's pointer\n        prev = current            # Move prev one step forward\n        current = next_node       # Move current one step forward\n        \n    return prev  # prev will be the new head of the reversed list\n```\n\n### How it works:\n1. **`prev`**: Keeps track of the node that will become the \"next\" node for the current one. It starts as `None` because the original head will become the new tail.\n2. **`next_node`**: You must store the reference to the rest of the list before overwriting `current.next`, otherwise you would lose the connection to the remaining nodes.\n3. **Pointer Reversal**: `current.next = prev` is the core operation that flips the direction of the link.\n4. **Traversal**: You shift `prev` and `current` forward by one position until you reach the end of the list.\n\n**Complexity:**\n*   **Time Complexity:** $O(n)$, where $n$ is the number of nodes in the list, as you visit each node exactly once.\n*   **Space Complexity:** $O(1)$, as you are only using a few pointers regardless of the list size.",
+      "goldFacts": [],
+      "judgeGrounded": null
+    },
+    {
+      "id": "B-03",
+      "category": "B",
+      "modeId": "general",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 0,
+      "answerChars": 1995,
+      "exactStringHit": null,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "Optimistic and pessimistic locking are two strategies used in database management to handle concurrent access to data, ensuring that multiple users or processes do not conflict when trying to update the same record.\n\n### Pessimistic Locking\nPessimistic locking assumes that conflicts are likely to happen. It prevents conflicts by locking the record the moment it is read, ensuring that no other process can modify or sometimes even read the data until the lock is released.\n\n*   **How it works:** When a user retrieves a record, the system places a lock on it. If another user tries to access that same record, they must wait until the first user completes their transaction and releases the lock.\n*   **Pros:** It provides high data integrity in environments with high contention, as it prevents \"lost updates\" by design.\n*   **Cons:** It can significantly reduce performance and scalability. Because users are forced to wait for locks to be released, it can lead to bottlenecks, deadlocks, and a poor user experience in high-traffic systems.\n\n### Optimistic Locking\nOptimistic locking assumes that conflicts are rare. Instead of locking the record during the entire transaction, it allows multiple users to read and modify the data simultaneously. It only checks for conflicts at the moment the data is actually saved back to the database.\n\n*   **How it works:** Each record typically includes a version number or a timestamp. When a user reads a record, they also retrieve its version. When they attempt to save their changes, the system checks if the version in the database still matches the version the user originally read. If the versions match, the update proceeds and the version number is incremented. If the versions do not match (meaning someone else updated the record in the meantime), the transaction is rejected, and the user is usually prompted to refresh their data and try again.\n*   **Pros:** It is much more scalable and performant because it does not hold database locks,",
+      "goldFacts": [],
+      "judgeGrounded": null
+    },
+    {
+      "id": "C-01",
+      "category": "C",
+      "modeId": "looking-for-work",
+      "error": null,
+      "answerability": "NONE",
+      "evidence": 0,
+      "answerChars": 278,
+      "exactStringHit": null,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The provided materials do not contain information regarding the candidate's experience with Kubernetes. If you would like to discuss this topic, I can certainly answer general questions about Kubernetes or help you prepare to speak about your own experience with the technology.",
+      "goldFacts": [],
+      "judgeGrounded": null
+    },
+    {
+      "id": "C-02",
+      "category": "C",
+      "modeId": "looking-for-work",
+      "error": null,
+      "answerability": "NONE",
+      "evidence": 1,
+      "answerChars": 62,
+      "exactStringHit": null,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The provided resume does not mention experience with Postgres.",
+      "goldFacts": [],
+      "judgeGrounded": null
+    },
+    {
+      "id": "C-03",
+      "category": "C",
+      "modeId": "looking-for-work",
+      "error": null,
+      "answerability": "NONE",
+      "evidence": 0,
+      "answerChars": 357,
+      "exactStringHit": null,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The provided materials do not state the reason why the candidate chose to build PriceX.\n\nAs a general rationale, it is common for developers to build tools like PriceX to solve a specific problem they encountered, such as the need for more efficient price tracking, to experiment with new technologies, or to address a gap in existing market analysis tools.",
+      "goldFacts": [],
+      "judgeGrounded": null
+    },
+    {
+      "id": "D-01",
+      "category": "D",
+      "modeId": "looking-for-work",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 1835,
+      "exactStringHit": true,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "PriceX was a price-comparison website I founded and operated from 2022 to 2024. The platform tracked pricing data across 14 different retailers, and I successfully grew the project until it was sold to a strategic acquirer.\n\nRegarding how price-comparison crawlers typically avoid being blocked, they generally employ several technical strategies to mimic human behavior and distribute their traffic:\n\n*   **Rotating Proxies:** Crawlers often use a pool of residential or data-center proxy IP addresses. By rotating these IPs, the crawler avoids sending too many requests from a single source, which is a common trigger for rate-limiting or IP bans.\n*   **User-Agent Rotation:** By cycling through different User-Agent strings, crawlers can make their requests appear as though they are coming from various browsers and devices rather than a single automated script.\n*   **Request Throttling and Randomization:** Instead of hitting a server at a fixed, high-frequency interval, crawlers often introduce random delays between requests. This \"jitter\" helps the traffic pattern look more like organic human browsing.\n*   **Handling Cookies and Sessions:** Advanced crawlers manage cookies and session data to maintain a consistent state, which can help bypass basic bot detection that looks for stateless or suspicious connection patterns.\n*   **Headless Browser Automation:** Tools like Playwright or Puppeteer are often used to render JavaScript. This allows the crawler to execute client-side code, which is necessary for sites that load content dynamically and helps bypass security challenges that require a full browser environment to solve.\n\nWhile these are standard industry practices, the specific implementation depends heavily on the security measures—such as CAPTCHAs or behavioral analysis—that a target website has in place.",
+      "goldFacts": [
+        "PriceX"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "G-01",
+      "category": "G",
+      "modeId": "looking-for-work",
+      "error": null,
+      "answerability": "NONE",
+      "evidence": 0,
+      "answerChars": 81,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The provided materials do not contain information regarding the year I graduated.",
+      "goldFacts": [
+        "Graduated **2017**"
+      ],
+      "judgeGrounded": false
+    },
+    {
+      "id": "G-02",
+      "category": "G",
+      "modeId": "looking-for-work",
+      "error": null,
+      "answerability": "NONE",
+      "evidence": 1,
+      "answerChars": 203,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The provided resume does not state that I manage any engineers. My experience is focused on individual contributor roles, such as Senior Engineer, and founder positions where I built and scaled products.",
+      "goldFacts": [
+        "team of 11 engineers"
+      ],
+      "judgeGrounded": false
+    },
+    {
+      "id": "G-03",
+      "category": "G",
+      "modeId": "looking-for-work",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 0,
+      "answerChars": 483,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "I do not have access to specific performance metrics or internal documentation regarding the peak transaction volume of the payments API. \n\nIf you are reviewing technical documentation or a system architecture overview, that information is typically found in the \"Performance,\" \"Scalability,\" or \"Service Level Agreement (SLA)\" sections of the API's technical specifications. If you have access to those documents, I would be happy to help you interpret the data once you provide it.",
+      "goldFacts": [
+        "5.1 million transactions per day"
+      ],
+      "judgeGrounded": false
+    },
+    {
+      "id": "H-01",
+      "category": "H",
+      "modeId": "team-meet",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 228,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "No, we are not migrating the ledger to Cassandra. According to the meeting transcript, it was explicitly decided that the ledger will remain on PostgreSQL, while the migration to Cassandra will proceed only for the events table.",
+      "goldFacts": [
+        "explicitly NOT migrating the ledger"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "H-02",
+      "category": "H",
+      "modeId": "team-meet",
+      "error": null,
+      "answerability": "PARTIAL",
+      "evidence": 1,
+      "answerChars": 59,
+      "exactStringHit": true,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "Meera owns the rollout plan for the events table migration.",
+      "goldFacts": [
+        "Meera owns the rollout plan"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "H-03",
+      "category": "H",
+      "modeId": "team-meet",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 98,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "We are not opening any backend roles this quarter; the two planned roles have been deferred to Q4.",
+      "goldFacts": [
+        "not opening the two backend roles this quarter"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "H-04",
+      "category": "H",
+      "modeId": "team-meet",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 2,
+      "answerChars": 49,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "We decided to move the events table to Cassandra.",
+      "goldFacts": [
+        "proceed with the Cassandra migration"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "A-09",
+      "category": "A",
+      "modeId": "team-meet",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 256,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "The checkout latency regression was caused by the new fraud-scoring call being implemented as a synchronous process. This change, which followed the release on September 4th, resulted in the p99 latency increasing from 180 milliseconds to 940 milliseconds.",
+      "goldFacts": [
+        "fraud-scoring call being synchronous"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "F-05",
+      "category": "F",
+      "modeId": "team-meet",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 162,
+      "exactStringHit": true,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "According to the meeting transcript from September 12th, the p99 latency is currently 940 milliseconds, up from 180 milliseconds following the release on the 4th.",
+      "goldFacts": [
+        "940 milliseconds"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "F-06",
+      "category": "F",
+      "modeId": "team-meet",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 217,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The meeting transcript does not contain the details of the October 2nd outage post-mortem. It only notes that the document is currently open and that Devansh is responsible for circulating the draft by September 15th.",
+      "goldFacts": [
+        "post-mortem is still open"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "I-01",
+      "category": "I",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 1,
+      "answerChars": 256,
+      "exactStringHit": null,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The provided reference file does not contain any information regarding pricing. It describes the technical limitations of the Cluely system, specifically noting its lack of per-mode reference files, long-session memory, and structured profile intelligence.",
+      "goldFacts": [],
+      "judgeGrounded": null
+    },
+    {
+      "id": "J-01",
+      "category": "J",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 3,
+      "answerChars": 748,
+      "exactStringHit": null,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "The provided reference material covers three distinct topics:\n\n*   **Cluely:** This system operates without per-mode reference files, relying on a single global prompt for all conversations. It lacks long-session memory beyond the current transcript and does not utilize structured profile intelligence.\n*   **BERT Pre-training:** The pre-training process utilizes the BooksCorpus (800 million words) and English Wikipedia (2.5 billion words). The methodology emphasizes the use of a document-level corpus to capture long contiguous sequences, specifically excluding lists, tables, and headers from Wikipedia.\n*   **Academic Coursework:** The material includes a reference to a semester 6 syllabus for a Partial Differential Equations (PDE) course.",
+      "goldFacts": [],
+      "judgeGrounded": null
+    },
+    {
+      "id": "A-10",
+      "category": "A",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 3,
+      "answerChars": 145,
+      "exactStringHit": true,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "The discount floor for Acme is 17 percent. According to the documentation, you must obtain VP sign-off if you intend to go below this percentage.",
+      "goldFacts": [
+        "17 percent",
+        "\"discount_floor_pct\": 17"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "A-11",
+      "category": "A",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 3,
+      "answerChars": 41,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "The list price is $49 per seat per month.",
+      "goldFacts": [
+        "\"list_price_usd_per_seat_month\": 49"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "A-12",
+      "category": "A",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "NONE",
+      "evidence": 0,
+      "answerChars": 163,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The available material does not contain information regarding the base salary band for a backend L4, so this question cannot be answered from the provided sources.",
+      "goldFacts": [
+        "Backend L4 base 165-185k USD"
+      ],
+      "judgeGrounded": false
+    },
+    {
+      "id": "F-07",
+      "category": "F",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 2,
+      "answerChars": 48,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "The error occurred in `handlers.ts` at line 114.",
+      "goldFacts": [
+        "MeetingPersistence.ts:212"
+      ],
+      "judgeGrounded": false
+    },
+    {
+      "id": "F-08",
+      "category": "F",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 2,
+      "answerChars": 269,
+      "exactStringHit": false,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "Based on the provided documents, Green's function is identified as a likely 12-mark exam topic, with a frequency of 4 out of 5 in the last five years. The provided evidence regarding BERT and (question, sentence) pairs does not mention exam marks or question weighting.",
+      "goldFacts": [
+        "Green's function is a likely 12-mark exam topic"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "F-09",
+      "category": "F",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 2,
+      "answerChars": 122,
+      "exactStringHit": true,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "According to the provided documentation, the mitigation for risk R-7 (third-party STT outage) is a local Whisper fallback.",
+      "goldFacts": [
+        "local Whisper fallback"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "A-13",
+      "category": "A",
+      "modeId": "seminar",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 2,
+      "answerChars": 206,
+      "exactStringHit": true,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "According to the provided documentation, Cluely's main weakness regarding reference files is that it lacks per-mode reference files, meaning every conversation is restricted to using a single global prompt.",
+      "goldFacts": [
+        "lacks per-mode reference files"
+      ],
+      "judgeGrounded": true
+    },
+    {
+      "id": "H-05",
+      "category": "H",
+      "modeId": "general",
+      "error": null,
+      "answerability": "NONE",
+      "evidence": 0,
+      "answerChars": 123,
+      "exactStringHit": null,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "I cannot answer this question because the available material does not contain information regarding the compensation range.",
+      "goldFacts": [],
+      "judgeGrounded": null
+    },
+    {
+      "id": "C-04",
+      "category": "C",
+      "modeId": "looking-for-work",
+      "error": null,
+      "answerability": "NONE",
+      "evidence": 0,
+      "answerChars": 100,
+      "exactStringHit": null,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The provided materials do not contain any information regarding the candidate's salary expectations.",
+      "goldFacts": [],
+      "judgeGrounded": null
+    },
+    {
+      "id": "E-01",
+      "category": "E",
+      "modeId": "general",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 6,
+      "answerChars": 307,
+      "exactStringHit": null,
+      "forbiddenHit": false,
+      "disclosed": true,
+      "refusedGeneral": false,
+      "answer": "The provided materials do not state the reason why you committed to sending the October 2nd outage post-mortem draft by Friday. \n\nA likely rationale is that you were responding to the interviewer's request to circulate the draft by September 15th, and you were confirming your ability to meet that deadline.",
+      "goldFacts": [],
+      "judgeGrounded": null
+    },
+    {
+      "id": "E-02",
+      "category": "E",
+      "modeId": "general",
+      "error": null,
+      "answerability": "FULL",
+      "evidence": 3,
+      "answerChars": 768,
+      "exactStringHit": null,
+      "forbiddenHit": false,
+      "disclosed": false,
+      "refusedGeneral": false,
+      "answer": "Whether that will scale depends on what you are referring to:\n\n*   **If you are referring to the model size discussed in the document:** Yes, the evidence indicates that increasing model size leads to continual improvements on large-scale tasks and, provided the model is sufficiently pre-trained, also leads to improvements on small-scale tasks.\n*   **If you are referring to the rollout plan mentioned in the meeting:** The interviewer stated that you should assume the current team size for that plan.\n*   **If you are referring to the Otter tool:** The provided documentation notes that its strengths include meeting transcription and summary, but it lacks live coaching capabilities.\n\nIf you meant something else, please clarify which aspect you are asking about.",
+      "goldFacts": [],
+      "judgeGrounded": null
+    }
+  ]
+}

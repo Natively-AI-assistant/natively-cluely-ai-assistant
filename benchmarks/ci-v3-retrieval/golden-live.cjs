@@ -24,6 +24,21 @@ const { boot, assertVectorRunValid, REPO_ROOT, DIST } = require('./bootstrap.cjs
 const { ingestCorpus } = require('./ingest.cjs');
 
 process.env.NATIVELY_CONTEXT_INTELLIGENCE_V3 = '1';
+// F23 — MUST be set, or this measurement is void.
+//
+// With the bundled LOCAL embedder and no live transcript, the legacy retriever's
+// `shouldUseLexicalForLocalManualQuery` gate skips the vector path, and
+// `keylessManualRetrievalUsesLexical` DEFAULTS TRUE. The lexical floor then
+// rejects real matches: measured on a resume question whose answer is in the
+// corpus, production returned 0 chunks with topScore 0 while the unfiltered pool
+// held a chunk scoring 0.330. Setting this to 0 restores the vector path
+// (0 chunks -> 1, topScore 0 -> 0.330).
+//
+// This is a LEGACY defect, not a V3 one, but it would silently zero out every
+// grounded answer in this evaluation and make V3 look like the cause.
+process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL =
+  process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL ?? '0';
+
 const d = (rel) => require(path.join(DIST, rel));
 
 // Same corpus the bake-off used, minus the thesis (F22: 128k-char PDF aborts the
