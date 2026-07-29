@@ -10905,7 +10905,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const { DocType } = require('./knowledge/types');
         const fsp = require('node:fs/promises');
         const nodePath = require('node:path');
-        const stat = await fsp.stat(params.filePath).catch(() => null);
+        const stat = await fsp.stat(params.filePath).catch((): null => null);
         if (!stat) return { success: false, error: `path not found: ${params.filePath}` };
         if (stat.isDirectory()) {
           const walk = async (dir: string): Promise<string[]> => {
