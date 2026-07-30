@@ -44,7 +44,23 @@ process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL =
 
 const d = (rel) => require(path.join(DIST, rel));
 
-const MODEL = process.env.CI_V3_EVAL_MODEL || 'gemini-3.1-flash-lite';
+/**
+ * PROVIDER SELECTION.
+ *
+ * `gemini` is the intended provider for §26.5. It is currently UNUSABLE: both
+ * keys — and they are the same two keys the backend uses — return
+ * "prepayment credits are depleted", which is not a rate limit.
+ *
+ * `minimax` runs MiniMax-M3, which this repo already designates as the
+ * "Gemini is rate-limited / out of credits / unusable" safety net in the standard
+ * AI chain (natively-api/lib/minimaxProvider.js). Using it keeps §26.5's
+ * behavioural gates measurable, but it is a DIFFERENT MODEL and every result
+ * records which one produced it — the numbers are not interchangeable with the
+ * earlier gemini run.
+ */
+const PROVIDER = process.env.CI_V3_EVAL_PROVIDER || 'gemini';
+const MODEL = process.env.CI_V3_EVAL_MODEL
+  || (PROVIDER === 'minimax' ? 'MiniMax-M3' : 'gemini-3.1-flash-lite');
 const MAX_QUESTIONS = Number(process.env.CI_V3_EVAL_MAX || 42);
 
 /**
@@ -58,18 +74,43 @@ const MAX_QUESTIONS = Number(process.env.CI_V3_EVAL_MAX || 42);
 function loadKeys() {
   const keys = [];
   const push = (v) => { const t = (v || '').trim().replace(/^['"]|['"]$/g, ''); if (t && !keys.includes(t)) keys.push(t); };
-  push(process.env.GEMINI_API_KEY);
-  const p = path.join(REPO_ROOT, '.env');
-  if (fs.existsSync(p)) {
+  const prefix = PROVIDER === 'minimax' ? 'MINIMAX_API_KEY' : 'GEMINI_API_KEY';
+  push(process.env[prefix]);
+  const re = new RegExp(`^(${prefix}(?:_\\d+)?)=(.*)$`);
+  // The backend keeps its own pool; for MiniMax only one of the keys has credit,
+  // so both files are read and duplicates collapsed by value.
+  for (const rel of ['.env', 'natively-api/.env']) {
+    const p = path.join(REPO_ROOT, rel);
+    if (!fs.existsSync(p)) continue;
     for (const line of fs.readFileSync(p, 'utf8').split('\n')) {
-      const m = line.trim().match(/^(GEMINI_API_KEY(?:_\d+)?)=(.*)$/);
+      const m = line.trim().match(re);
       if (m) push(m[2]);
     }
   }
   return keys;
 }
 
+// MiniMax-M3 emits a leading <think> block even with reasoning disabled. Left in,
+// it would wreck every metric here: the word-count ceiling, the boilerplate
+// detector and the disclosure detector would all be reading chain-of-thought
+// rather than the answer. Reuses the provider's OWN stripper rather than a second
+// implementation that could drift from it.
+const stripLeadingThink = PROVIDER === 'minimax'
+  ? require(path.join(REPO_ROOT, 'natively-api/lib/minimaxProvider.js')).stripLeadingThink
+  : (t) => t;
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Keys whose credit is exhausted, by index.
+ *
+ * Exhaustion is a property of ONE key, not of the provider. Treating it as
+ * provider-wide aborted the run on the first dead key while a sibling key with
+ * credit sat unused — which is exactly what happened on the MiniMax pool, where
+ * key #1 is over its token plan and key #2 works. The run may only give up once
+ * EVERY key is dead.
+ */
+const deadKeys = new Set();
 
 /**
  * Generate with key rotation and exponential backoff.
@@ -79,20 +120,40 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * n=3 looks like a pass).
  */
 async function generate(keys, system, user, attempt = 0) {
-  const key = keys[attempt % keys.length];
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${key}`,
-    {
+  const live = keys.map((k, i) => i).filter((i) => !deadKeys.has(i));
+  if (!live.length) {
+    const err = new Error(`all ${keys.length} ${PROVIDER} key(s) exhausted`);
+    err.allKeysDead = true;
+    throw err;
+  }
+  const keyIndex = live[attempt % live.length];
+  const key = keys[keyIndex];
+
+  const res = PROVIDER === 'minimax'
+    ? await fetch('https://api.minimax.io/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: user }] }],
-        generationConfig: { temperature: 0, maxOutputTokens: 400 },
+        model: MODEL,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        temperature: 0, max_tokens: 600, stream: false,
       }),
-      signal: AbortSignal.timeout(60_000),
-    },
-  );
+      signal: AbortSignal.timeout(90_000),
+    })
+    : await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts: [{ text: user }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 400 },
+        }),
+        signal: AbortSignal.timeout(60_000),
+      },
+    );
+
   if (!res.ok) {
     // A 429 is not always transient. Both keys once returned
     // "prepayment credits are depleted", which no amount of backoff clears —
@@ -105,18 +166,34 @@ async function generate(keys, system, user, attempt = 0) {
       reason = String(body?.error?.message ?? '').slice(0, 200);
     } catch { /* body already consumed or not JSON */ }
 
-    const depleted = /credit|billing|depleted|exceeded your current quota/i.test(reason);
-    if (res.status === 429 && !depleted && attempt < keys.length * 3) {
-      // Rotate first (a sibling key may have per-minute headroom), then back off.
-      const waitMs = attempt < keys.length ? 250 : 2000 * Math.pow(2, attempt - keys.length);
+    const depleted = /credit|billing|depleted|token plan|usage limit|exceeded your current quota/i.test(reason);
+    if (depleted) {
+      // Retire THIS key and immediately try a sibling. Only when the whole pool is
+      // dead does the run stop.
+      deadKeys.add(keyIndex);
+      if (deadKeys.size < keys.length) return generate(keys, system, user, attempt + 1);
+      const err = new Error(`all ${keys.length} ${PROVIDER} key(s) exhausted — last: ${reason}`);
+      err.allKeysDead = true;
+      throw err;
+    }
+    if (res.status === 429 && attempt < keys.length * 3) {
+      // Transient throttling: rotate first, then back off.
+      const waitMs = attempt < live.length ? 250 : 2000 * Math.pow(2, attempt - live.length);
       await sleep(waitMs);
       return generate(keys, system, user, attempt + 1);
     }
-    const err = new Error(`provider ${res.status}${reason ? `: ${reason}` : ''}`);
-    err.nonRetryable = depleted;
-    throw err;
+    throw new Error(`provider ${res.status}${reason ? `: ${reason}` : ''}`);
   }
   const j = await res.json();
+  if (PROVIDER === 'minimax') {
+    // MiniMax returns HTTP 200 with an in-body failure code, so base_resp must be
+    // checked or a failed call is scored as an empty answer.
+    const code = j?.base_resp?.status_code;
+    if (code !== undefined && code !== 0) {
+      throw new Error(`minimax base_resp ${code}: ${String(j?.base_resp?.status_msg ?? '').slice(0, 120)}`);
+    }
+    return stripLeadingThink(String(j?.choices?.[0]?.message?.content ?? '')).trim();
+  }
   return (j?.candidates?.[0]?.content?.parts ?? []).map((p) => p.text || '').join('').trim();
 }
 
@@ -222,7 +299,7 @@ function spokenQuality(answer, answerability) {
 (async () => {
   const keys = loadKeys();
   if (!keys.length) { console.error('NO API KEY AVAILABLE — provider evaluation cannot run.'); process.exit(2); }
-  console.log(`[eval] ${keys.length} key(s) in rotation`);
+  console.log(`[eval] provider=${PROVIDER} model=${MODEL} · ${keys.length} key(s) in rotation`);
 
   const b = await boot({ verbose: false });
   const { orchestrate } = d('electron/context-intelligence/orchestration/orchestrator.js');
@@ -290,8 +367,8 @@ function spokenQuality(answer, answerability) {
       // Credit exhaustion will not resolve within the run. Stopping immediately
       // beats emitting 42 identical failure rows and a results file whose rates
       // are all computed over an empty numerator.
-      if (e.nonRetryable) {
-        console.error(`\n*** ABORTING — the provider is not billable, so §26.5 cannot be measured.\n`
+      if (e.allKeysDead) {
+        console.error(`\n*** ABORTING — every ${PROVIDER} key is out of credit, so §26.5 cannot be measured.\n`
           + `    ${e.message}\n`
           + `    This is NOT a rate limit; waiting will not clear it. Top up the key's billing,\n`
           + `    then re-run. No result file is written, so no stale numbers can be quoted.`);
@@ -343,7 +420,7 @@ function spokenQuality(answer, answerability) {
   const p = (arr, x) => { const s = [...arr].sort((m, n) => m - n); return s[Math.floor(s.length * x)] ?? 0; };
 
   const summary = {
-    runAt: new Date().toISOString(), model: MODEL, temperature: 0,
+    runAt: new Date().toISOString(), provider: PROVIDER, model: MODEL, temperature: 0,
     questions: rows.length, errors: rows.length - ok.length,
     exactStringGrounding: withGold.length ? withGold.filter((r) => r.exactStringHit).length / withGold.length : null,
     judgedGrounding: (() => {
