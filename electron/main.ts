@@ -5241,6 +5241,15 @@ export class AppState {
         // stay whatever they already were (null on a clean boot or after a
         // prior meeting's teardown), so the start() calls below are already
         // safe no-ops via `?.` — no other code path needs to know about this.
+        if (this._ambientChatEnabled) {
+          // Loud, unambiguous marker. On 2026-07-30 this flag flipped on and
+          // every meeting for the next five hours persisted with an empty
+          // transcript and a skeleton summary — 15 meetings of silent data
+          // loss that read as "meeting notes are broken". If capture is
+          // intentionally off, the log should say so at the exact moment a
+          // meeting starts without it.
+          console.warn('[Main] Meeting starting WITHOUT audio capture — Ambient AI Chat is ON (Settings > General). Transcript, summary and usage will be empty for this meeting.');
+        }
         if (!this._ambientChatEnabled) {
           // Check for audio configuration preference
           if (metadata?.audio) {

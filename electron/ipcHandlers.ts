@@ -1108,6 +1108,13 @@ export function initializeIpcHandlers(appState: AppState): void {
                 const im = appState.getIntelligenceManager();
                 im?.addTranscript?.({ text: String(message || ''), speaker: 'user', timestamp: Date.now(), final: true }, true);
                 im?.addAssistantMessage?.(finalText);
+                // Usage too: ai_interactions ("usage" in Meeting Notes) is
+                // populated solely from SessionTracker's usage log at
+                // saveMeeting time. Every legacy exit logs it; without this,
+                // a V3-answered chat during a meeting left the meeting's
+                // usage panel empty (confirmed in the live DB: V3 meetings
+                // had transcript rows but zero usage rows).
+                im?.logUsage?.('chat', String(message || ''), finalText);
               } catch { /* session transcript only */ }
               try {
                 PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), String(message || ''));
