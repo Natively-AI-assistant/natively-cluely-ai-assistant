@@ -42,7 +42,7 @@ Total production change: **51 lines across 3 files, purely additive** — one `t
 | 3 — Contracts | **COMPLETE** | `04`–`08` |
 | 4 — Core implementation | **SUBSTANTIALLY COMPLETE** | contracts · source authority + scope filter · mode registry · turn classifier · BM25 · AnswerTrace · **context packer · prompt composer · conversation state** · **120 tests** |
 | 5 — Ingestion migration | **DONE** (scope-reduced by decision) | `retrieval/legacy-adapter.ts` — scopeId + the dropped signals |
-| 6 — Surface integration | **PARTIAL** — manual-chat wired as a flag-gated short-circuit (`ipcHandlers.ts`); WTA, recap/follow-up and the proactive surfaces not wired | `orchestration/orchestrator.ts` · §13 |
+| 6 — Surface integration | **PARTIAL** — manual-chat (short-circuit) AND WTA (prompt substitution into the frozen request snapshot) wired flag-gated; refinement surfaces governed by inheritance, proactive surfaces deferred — see §13.7 | `orchestration/orchestrator.ts` · §13.7 |
 | 7 — UI simplification | **NOT STARTED** | — |
 | 8 — Full verification | **PARTIAL** — suite runs (6593 tests, 67 s); golden suite run against the LIVE stack; provider-backed §26.5 run on MiniMax-M3 with all three behavioural gates passing | `09_TEST_MATRIX.md` §10 · `10_BENCHMARK_RESULTS.md` §8 |
 | 9 — Legacy removal | **BLOCKED, deliberately not executed** | `11_LEGACY_REMOVAL_MATRIX.md` |
@@ -324,3 +324,16 @@ Recorded because it is the through-line of the whole continuation.
 | **Phase 9 legacy removal** | Correctly still blocked: the flag has never been on for a real user |
 
 **The honest summary:** the decision layer's safety properties are measured against a real corpus on **two** real models and they hold — forbidden-claim 0%, over-refusal 0%, disclosure 100% on both. Its *precision* is measured for the first time and is 33/42. Nothing here authorises Phase 9: **the flag has never been on for a real user.** That single fact, not any measurement, is what gates legacy removal.
+
+
+## 13.7 Phase 6 disposition — which surfaces move, and which deliberately do not (2026-07-30)
+
+"Move every answer surface to the orchestrator" is executed by surface **class**, because the classes differ in what a decision layer can decide:
+
+| Class | Surfaces | Disposition |
+|---|---|---|
+| **Question-answering** | manual chat · **WTA** | **WIRED**, flag-gated. Manual chat short-circuits in `ipcHandlers`; WTA substitutes the composed prompt into the frozen `WhatToAnswerRequestSnapshot` and keeps the hardened streaming transport (deadlines, supersession, the 134s-hang fix) byte-for-byte. `runManualAnswer`'s existing adoption was live but **blind** — no retrieval port, every grounded turn composed a no-evidence disclosure — now fed by the same factory as the other two call sites (`mode-retrieval-port.ts`). |
+| **Refinement** | follow-up ("make it shorter") · recap · follow-up-questions | **NOT wired through the classifier, deliberately.** Their subject is the *prior answer or the transcript itself*, not a new question — a turn classifier would read "make it shorter" as a question and decide sources for it. The invariant that matters (a refinement must never WIDEN sources beyond the answer it refines) is already enforced by the Context OS Phase 11 contract inheritance on these exact surfaces. Re-deciding sources per refinement would be the duplicate-decision-site disease (F2) in new clothes. |
+| **Proactive** | assist · clarify · brainstorm | **DEFERRED with a named prerequisite.** They receive no question; the bridge exists for them, but honest adoption requires `question-resolver.ts` extracting the live interviewer question from the transcript window — the resolver is built, tested, and currently has no production caller (the F1 pattern, §13.2). Wiring the resolver is its own arc; bolting the bridge on without it would degrade proactive value into no-evidence disclosures. |
+
+**Stated limitation on WTA:** the retrieval port covers mode reference files only. A `MEETING_STATEMENT` question on the live surface with the flag on composes an honest no-evidence disclosure rather than fabricating; meeting evidence requires the meeting-RAG port (`meetingChunksToEvidenceItems` — zero production callers). That is the next port, not a papered-over gap.
