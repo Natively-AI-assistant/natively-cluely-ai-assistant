@@ -12,6 +12,7 @@ const base = path.resolve(process.cwd(), 'dist-electron/electron/context-intelli
 const { decide, orchestrate, evaluateAnswerability } =
   await import(pathToFileURL(path.join(base, 'orchestration/orchestrator.js')).href);
 const { adaptLegacyChunks } = await import(pathToFileURL(path.join(base, 'retrieval/legacy-adapter.js')).href);
+const { clearConversationState } = await import(pathToFileURL(path.join(base, 'question/conversation-state-store.js')).href);
 
 const req = (over = {}) => ({
   requestId: 'r1', requestSequence: 1, surface: 'manual-chat',
@@ -237,6 +238,7 @@ describe('a bare follow-up with no antecedent is not FULL', () => {
     // Six unrelated evidence items used to carry this to FULL: the subject had
     // no salient terms, so everything "supported" it, and the model was licensed
     // to answer a context-free "Why?" confidently.
+    clearConversationState('s1');
     const r = await orchestrate(req({ manualQuestion: 'Why?' }), port(
       [{ sourceId: 'resume-1', text: 'Built a WebRTC pipeline', chunkIndex: 0, score: 0.9 }],
     ));
@@ -246,9 +248,32 @@ describe('a bare follow-up with no antecedent is not FULL', () => {
   });
 
   test('"Would that scale?" is PARTIAL — the scaling judgement is general knowledge', async () => {
+    // Conversation state is REAL now (process-global store, advanced by every
+    // orchestrate call in this file). This test models a turn with no
+    // antecedent, so it must start from a clean session.
+    clearConversationState('s1');
     const r = await orchestrate(req({ manualQuestion: 'Would that scale?' }), port());
     assert.equal(r.answerability, 'PARTIAL');
     assert.equal(r.trace.fallbackUsed, 'PARTIAL_SUPPORT');
+  });
+
+  test('a bare follow-up WITH conversation state resolves and answers (the zero-caller gap)', async () => {
+    // conversation-state.ts shipped with zero production callers; "Why not?"
+    // and "Can you explain it generally instead?" failed live in four modes.
+    // With the store wired into orchestrate, the prior turn's topic becomes
+    // the referent and the bare-follow-up CLARIFICATION cap self-disables.
+    clearConversationState('s1');
+    await orchestrate(req({ manualQuestion: 'Tell me about the Kubernetes migration' }), port(
+      [{ sourceId: 'resume-1', text: 'Led the Kubernetes migration for the pipeline', chunkIndex: 0, score: 0.9 }],
+    ));
+    const r = await orchestrate(req({ manualQuestion: 'Would that scale?' }), port(
+      [{ sourceId: 'resume-1', text: 'Led the Kubernetes migration for the pipeline', chunkIndex: 0, score: 0.9 }],
+    ));
+    assert.ok(r.decision.resolvedQuestion.includes('referring to'),
+      `expected a resolved referent, got: ${r.decision.resolvedQuestion}`);
+    assert.notEqual(r.trace.fallbackUsed, 'CLARIFICATION',
+      'with a resolvable referent the clarification cap must self-disable');
+    clearConversationState('s1');
   });
 
   test('the cap self-disables once resolution produces a real question', async () => {

@@ -269,6 +269,18 @@ export class IntelligenceManager extends EventEmitter {
         this.session.clearSessionContext();
     }
 
+    /**
+     * Supersede every in-flight live answer (2026-07-31). Called by
+     * modes:set-active: WTA supersession was generation-relative only, so a
+     * slow generation planned under mode A stayed "current" through the switch
+     * and streamed A's answer into a UI showing mode B. engine.reset() bumps
+     * currentGenerationId (breaking every active stream's guard) and aborts
+     * the WTA cancellation token.
+     */
+    supersedeLiveAnswers(): void {
+        this.engine.reset();
+    }
+
     // ============================================
     // Phase 3 — Dynamic Actions facade
     // ============================================

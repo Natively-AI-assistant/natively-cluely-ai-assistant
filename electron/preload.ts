@@ -627,7 +627,7 @@ interface ElectronAPI {
   ) => Promise<void>;
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => () => void;
   onGeminiStreamDone: (callback: (data?: { finalText?: string; streamId?: number }) => void) => () => void;
-  onGeminiStreamError: (callback: (error: string) => void) => () => void;
+  onGeminiStreamError: (callback: (error: string, meta?: { streamId?: number | null; source?: string }) => void) => () => void;
 
   onUndetectableChanged: (callback: (state: boolean) => void) => () => void;
   onGroqFastTextChanged: (callback: (enabled: boolean) => void) => () => void;
@@ -1670,7 +1670,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
-  onModeChanged: (callback: (data: { id: string | null; name: string | null }) => void) => {
+  onModeChanged: (callback: (data: { id: string | null; name: string | null; fileCount?: number; indexedCount?: number }) => void) => {
     const subscription = (_: any, data: { id: string | null; name: string | null }) =>
       callback(data);
     ipcRenderer.on('mode-changed', subscription);
@@ -1935,8 +1935,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
-  onGeminiStreamError: (callback: (error: string) => void) => {
-    const subscription = (_: any, error: string) => callback(error);
+  onGeminiStreamError: (callback: (error: string, meta?: { streamId?: number | null; source?: string }) => void) => {
+    const subscription = (_: any, error: string, meta?: { streamId?: number | null; source?: string }) => callback(error, meta);
     ipcRenderer.on('gemini-stream-error', subscription);
     return () => {
       ipcRenderer.removeListener('gemini-stream-error', subscription);

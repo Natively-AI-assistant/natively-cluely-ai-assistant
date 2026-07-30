@@ -4514,7 +4514,15 @@ const isMultimodal = !!(imagePaths?.length);
     const contextOsGovernedDocumentTurn = Boolean(
       (routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined)?.govern,
     );
-    if (documentGroundedCustomModeActive && !contextOsGovernedDocumentTurn) {
+    // Context Intelligence V3 (2026-07-31): a V3-owned turn arrives with prompts
+    // composed end-to-end by the decision layer — scope/version/claim-authority
+    // filtered evidence, frozen decision. Every injection or reshape below this
+    // point would ride UNFILTERED content in around that evidence (this block's
+    // fresh retrieval; shapeDocumentGroundedSystemPrompt; the doc-grounded
+    // userContent wrapping; the Context OS govern substitution, which replaces
+    // V3's user prompt wholesale). LLMHelper is transport for these turns.
+    const v3OwnedTurn = routeOptions?.v3Owned === true;
+    if (documentGroundedCustomModeActive && !contextOsGovernedDocumentTurn && !v3OwnedTurn) {
       try {
         const { ModesManager } = require('./services/ModesManager');
         const mm = ModesManager.getInstance();
@@ -4678,7 +4686,12 @@ const isMultimodal = !!(imagePaths?.length);
       activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.(_pinnedModeId);
     } catch { /* non-fatal: preserve legacy skip behavior if modes cannot load */ }
     const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
-    const forceDocumentGrounding = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
+    // `!v3OwnedTurn`: a V3-owned turn must not enter ANY of the doc-grounded
+    // machinery this local gates (system-prompt reshape at ~5030, the govern
+    // block, the userContent wrapping at ~5260) — see the v3OwnedTurn comment
+    // above. Legacy callers are unaffected (v3OwnedTurn is false without the
+    // route option).
+    const forceDocumentGrounding = !v3OwnedTurn && activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
     // Hoisted to function scope (round-6) so the document-grounded userContent
     // shaping below can read the actual retrieval output as `retrievedBlock`.
     // It is assigned inside the mode-injection block; '' when retrieval didn't
@@ -5196,7 +5209,12 @@ const isMultimodal = !!(imagePaths?.length);
       // EvidenceResolver above, unaffected) and only ADDS rendering for a
       // pre-resolved, non-doc-grounded governed pack.
       const callerPreResolvedPack = Boolean(_cog?.evidencePack);
-      if (_cog && _cog.govern && (forceDocumentGrounding || callerPreResolvedPack) && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
+      // `!v3OwnedTurn`: WTA passes BOTH contextOsGeneration and a V3-composed
+      // prompt. Without this term the pack replaced V3's user prompt wholesale
+      // (userContent overwritten below), splicing two governance layers into
+      // one turn — the model received V3's system prompt and Context OS's user
+      // pack while V3's composed user prompt was silently discarded.
+      if (_cog && _cog.govern && !v3OwnedTurn && (forceDocumentGrounding || callerPreResolvedPack) && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
         const { renderGoverningFactualBlock } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
         const pack = _cog.evidencePack;
         if (!pack) throw new Error('governed turn missing canonical EvidencePack');

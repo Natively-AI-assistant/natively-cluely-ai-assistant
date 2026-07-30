@@ -5717,7 +5717,12 @@ export class AppState {
       // (fallback paths, code-hint, brainstorm) that don't compute it.
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      this.sendToWindow(win, 'intelligence-suggested-answer', { answer, question, confidence, generationId, sourceLabel: sourceLabel ?? 'General knowledge' })
+      // emittedAt (2026-07-31): WTA supersession is generation-relative only —
+      // a slow generation stays "current" through any number of manual turns
+      // and mode switches, so a minutes-old answer appeared with no marker of
+      // what it answered (the live "late CGPA answer" report). The renderer
+      // uses this stamp to drop or visibly label stale finals.
+      this.sendToWindow(win, 'intelligence-suggested-answer', { answer, question, confidence, generationId, sourceLabel: sourceLabel ?? 'General knowledge', emittedAt: Date.now() })
 
     })
 

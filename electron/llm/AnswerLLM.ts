@@ -29,17 +29,26 @@ export class AnswerLLM {
                 ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_ANSWER_PROMPT : UNIVERSAL_ANSWER_PROMPT);
             const answerContract = answerPlan ? `\n\n${formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled())}` : '';
             const fittedContext = context ? this.llmHelper.fitContextForCurrentModel(`${context}${answerContract}`) : answerContract.trim() || context;
+            // A V3-composed turn (systemPromptOverride supplied) owns its prompt
+            // end-to-end: the knowledge intercept, mode injection, and the
+            // doc-grounded reshaping in LLMHelper must all stand down, exactly
+            // as on the wired manual-chat surface. Legacy calls (no override)
+            // keep their original flags.
+            const isV3Owned = Boolean(systemPromptOverride);
             const stream = this.llmHelper.streamChat(
                 question,
                 undefined,
                 fittedContext,
                 promptOverride,
-                false,
-                false,
+                isV3Owned,   // ignoreKnowledgeMode
+                isV3Owned,   // skipModeInjection
                 [],
                 undefined,
                 undefined,
-                answerPlan ? { answerType: answerPlan.answerType, forbiddenContextLayers: answerPlan.forbiddenContextLayers } : undefined,
+                {
+                    ...(answerPlan ? { answerType: answerPlan.answerType, forbiddenContextLayers: answerPlan.forbiddenContextLayers } : {}),
+                    ...(isV3Owned ? { v3Owned: true } : {}),
+                },
             );
 
             let fullResponse = "";

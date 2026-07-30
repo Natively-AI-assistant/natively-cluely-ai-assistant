@@ -2420,6 +2420,7 @@ export class IntelligenceEngine extends EventEmitter {
                         question: String(wtaTurnQuestion || ''),
                         modeTemplateType: _ctx.raw,
                         modeUniqueId: _ctx.modeUniqueId,
+                        modeName: _ctx.modeName,
                         attachedSourceCount: _ctx.attachedSourceCount,
                         scope: { meetingId: _ctx.meetingId ?? meetingMarker ?? undefined },
                         requestId: trace.requestId,
@@ -2439,7 +2440,13 @@ export class IntelligenceEngine extends EventEmitter {
                         });
                         console.log(`[IntelligenceEngine] WTA V3 prompt in effect: answerability=${_v3.answerability} evidence=${_v3.evidenceCount} fallback=${_v3.fallbackUsed}`);
                     }
-                    return _v3 ? { system: _v3.system, user: _v3.user } : undefined;
+                    return _v3 ? {
+                        system: _v3.system, user: _v3.user,
+                        // Carried for the source badge: when V3 composed the
+                        // prompt, the label must reflect V3's decision, not the
+                        // legacy TurnPlan that did not drive the answer.
+                        evidenceCount: _v3.evidenceCount, answerability: _v3.answerability,
+                    } : undefined;
                 } catch { return undefined; }
             })();
 
@@ -2715,10 +2722,17 @@ export class IntelligenceEngine extends EventEmitter {
                 // payload. Defensive fallback to 'General knowledge' if the
                 // helper throws — the emit boundary must never throw.
                 const { computeEngineSourceLabel } = require('./llm/SourceBadge');
-                const _c3SourceLabel = computeEngineSourceLabel({
-                    turnPlan: _c3TurnPlan,
-                    evidenceFound: true,
-                });
+                // When V3 composed this turn's prompt, the legacy TurnPlan did
+                // not drive the answer — labelling from it said "General
+                // knowledge" over reference-grounded V3 answers. Derive from
+                // the V3 decision instead.
+                const _v3ForLabel = (requestSnapshot as any)?.v3Prompt;
+                const _c3SourceLabel = _v3ForLabel
+                    ? ((_v3ForLabel.evidenceCount ?? 0) > 0 ? 'Reference material' : 'General knowledge')
+                    : computeEngineSourceLabel({
+                        turnPlan: _c3TurnPlan,
+                        evidenceFound: true,
+                    });
                 // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
                 this.emit('suggested_answer', fullAnswer, question || extractedQuestion.latestQuestion || 'inferred', confidence, generationId, _c3SourceLabel);
                 this.setMode('idle');
@@ -4052,7 +4066,7 @@ export class IntelligenceEngine extends EventEmitter {
     // this block; a third copy for the proactive surfaces is where drift starts,
     // so all of them now call this.
     private v3ModeRetrievalContext(): {
-        raw: string; modeUniqueId: string | null; meetingId: string | null;
+        raw: string; modeUniqueId: string | null; modeName: string | null; meetingId: string | null;
         attachedSourceCount: number;
         port: unknown; conversationWindow: (sec: number) => string;
     } | null {
@@ -4098,6 +4112,7 @@ export class IntelligenceEngine extends EventEmitter {
             return {
                 raw,
                 modeUniqueId: (_mi as any)?.id ?? null,
+                modeName: (_mi as any)?.name ?? null,
                 meetingId,
                 attachedSourceCount: _files.length,
                 port,
@@ -4123,7 +4138,7 @@ export class IntelligenceEngine extends EventEmitter {
      * its legacy behaviour — proactivity is the product feature, and degrading it
      * into no-evidence disclosures would be adoption theatre.
      */
-    private async buildV3ForTranscriptSurface(): Promise<{ system: string; user: string } | null> {
+    private async buildV3ForTranscriptSurface(tag: 'assist' | 'clarify' | 'brainstorm' = 'assist'): Promise<{ system: string; user: string } | null> {
         try {
             const { isContextIntelligenceV3Enabled } = require('./context-intelligence/contracts/flag');
             if (!isContextIntelligenceV3Enabled()) return null;
@@ -4131,8 +4146,15 @@ export class IntelligenceEngine extends EventEmitter {
             if (!segs.length) return null;
             const { resolveQuestion } = require('./context-intelligence/question/question-resolver');
             const resolved = resolveQuestion({
+                // getContext() returns ContextItem, whose field is `role`
+                // ('interviewer' | 'user' | 'assistant') — there is no `speaker`
+                // here. The previous mapping read `t.speaker` (always undefined)
+                // and so labelled EVERY segment 'interviewer', including the
+                // assistant's own prior answers — which the resolver then
+                // treated as candidate interviewer questions, defeating its
+                // assistant-echo guard (question-resolver.ts:148).
                 transcript: segs.map((t: any) => ({
-                    role: t.speaker === 'me' ? 'user' : 'interviewer',
+                    role: (t.role === 'user' || t.role === 'assistant') ? t.role : 'interviewer',
                     text: String(t.text ?? ''), timestamp: Number(t.timestamp ?? 0),
                 })),
             });
@@ -4143,10 +4165,15 @@ export class IntelligenceEngine extends EventEmitter {
             const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
             const _v3 = await buildV3Prompt({
                 surface: 'assist',
+                // AnswerSurface has no clarify/brainstorm members; the tag keeps
+                // their traces separable from real assist turns.
+                pathTag: tag,
                 question: resolved.resolvedQuestion,
                 modeTemplateType: ctx.raw,
                 modeUniqueId: ctx.modeUniqueId,
+                modeName: ctx.modeName,
                 attachedSourceCount: ctx.attachedSourceCount,
+                requestSequence: this.currentGenerationId,
                 scope: { meetingId: ctx.meetingId ?? undefined },
                 conversationSummary: ctx.conversationWindow(60),
                 retrieval: ctx.port as any,
@@ -4416,7 +4443,7 @@ export class IntelligenceEngine extends EventEmitter {
 
             const generationId = ++this.currentGenerationId;
             let fullClarification = "";
-            const clarifyV3 = await this.buildV3ForTranscriptSurface();
+            const clarifyV3 = await this.buildV3ForTranscriptSurface('clarify');
             const stream = this.clarifyLLM.generateStream(context, clarifyV3 ?? undefined);
             let streamAborted = false;
 
@@ -4594,10 +4621,16 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!_ctx) return null;
                     return await buildV3Prompt({
                         surface: 'manual-chat',
+                        // Shares 'manual-chat' with the IPC surface; the tag keeps
+                        // the two call sites' traces separable (they previously
+                        // both recorded legacyPath 'v3-manual-chat').
+                        pathTag: 'engine',
                         question,
                         modeTemplateType: _ctx.raw,
                         modeUniqueId: _ctx.modeUniqueId,
+                        modeName: _ctx.modeName,
                         attachedSourceCount: _ctx.attachedSourceCount,
+                        requestSequence: this.currentGenerationId,
                         scope: { meetingId: _ctx.meetingId ?? undefined },
                         retrieval: _ctx.port as any,
                     });
@@ -4775,7 +4808,7 @@ export class IntelligenceEngine extends EventEmitter {
             }
             const generationId = ++this.currentGenerationId;
             let fullResult = "";
-            const brainstormV3 = await this.buildV3ForTranscriptSurface();
+            const brainstormV3 = await this.buildV3ForTranscriptSurface('brainstorm');
             const stream = this.brainstormLLM.generateStream(context, imagePaths, brainstormV3 ?? undefined);
             let streamAborted = false;
 

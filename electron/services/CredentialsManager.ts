@@ -164,10 +164,16 @@ export class CredentialsManager {
     }
 
     public static getInstance(): CredentialsManager {
-        if (!CredentialsManager.instance) {
-            CredentialsManager.instance = new CredentialsManager();
+        // Instance anchored on globalThis (22 dist bundles carry a copy of this
+        // class). The nasty direction is key DELETION: with per-bundle
+        // instances, a revoked key kept being served from a stale copy's
+        // decrypted snapshot until restart. One process, one credential truth.
+        const g = globalThis as unknown as Record<string, CredentialsManager | undefined>;
+        if (!g.__nativelyCredentialsManagerV1__) {
+            g.__nativelyCredentialsManagerV1__ = CredentialsManager.instance ?? new CredentialsManager();
         }
-        return CredentialsManager.instance;
+        CredentialsManager.instance = g.__nativelyCredentialsManagerV1__;
+        return g.__nativelyCredentialsManagerV1__;
     }
 
     /**

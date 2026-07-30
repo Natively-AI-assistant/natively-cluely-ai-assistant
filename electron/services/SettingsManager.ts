@@ -204,10 +204,17 @@ export class SettingsManager {
     }
 
     public static getInstance(): SettingsManager {
-        if (!SettingsManager.instance) {
-            SettingsManager.instance = new SettingsManager();
+        // Instance anchored on globalThis: esbuild inlines this module into 53
+        // dist bundles, and in any process that co-loads two of them (every
+        // test/eval harness) a per-class instance means a settings write in one
+        // bundle is invisible to reads in another — a flag flipped in the UI
+        // never reaches the answering bundle. One process, one settings truth.
+        const g = globalThis as unknown as Record<string, SettingsManager | undefined>;
+        if (!g.__nativelySettingsManagerV1__) {
+            g.__nativelySettingsManagerV1__ = SettingsManager.instance ?? new SettingsManager();
         }
-        return SettingsManager.instance;
+        SettingsManager.instance = g.__nativelySettingsManagerV1__;
+        return g.__nativelySettingsManagerV1__;
     }
 
     public get<K extends keyof AppSettings>(key: K): AppSettings[K] {

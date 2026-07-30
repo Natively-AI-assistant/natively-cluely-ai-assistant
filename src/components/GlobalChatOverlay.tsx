@@ -331,7 +331,20 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
 
                 // Setup fallback listeners (Standard Gemini)
                 streamBuffer.reset();
-                const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string) => {
+                // Stream-id guard (2026-07-31): these fallback listeners used to
+                // ignore the streamId meta entirely, so tokens from an ABANDONED
+                // earlier stream (client timeout below leaves main streaming)
+                // landed in the next request's bubble. Adopt the first tagged id
+                // seen after registration; drop anything older.
+                let adoptedStreamId: number | null = null;
+                const acceptsMeta = (meta?: { streamId?: number }) => {
+                    const id = meta?.streamId;
+                    if (typeof id !== 'number') return true;      // legacy untagged
+                    if (adoptedStreamId === null || id > adoptedStreamId) { adoptedStreamId = id; return true; }
+                    return id === adoptedStreamId;
+                };
+                const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string, meta?: { streamId?: number }) => {
+                    if (!acceptsMeta(meta)) return;
                     setChatState('streaming_response');
                     streamBuffer.appendToken(token, (content) => {
                         setMessages(prev => prev.map(msg =>
@@ -342,7 +355,8 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                     });
                 });
 
-                const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone(() => {
+                const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone((payload?: { streamId?: number }) => {
+                    if (!acceptsMeta(payload)) return;
                     // Same empty-completion guard as the RAG path above.
                     const finalContent = streamBuffer.getBufferedContent().trim()
                         || "I'm not sure how to answer that — try rephrasing your question.";
@@ -358,7 +372,9 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                     oldErrorCleanup?.();
                 });
 
-                const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string) => {
+                const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string, meta?: { streamId?: number | null; source?: string }) => {
+                    if (meta?.source === 'phone-mirror') return;
+                    if (typeof meta?.streamId === 'number' && adoptedStreamId !== null && meta.streamId !== adoptedStreamId) return;
                     console.error('[GlobalChat] Gemini stream error:', error);
                     setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
                     setErrorMessage("Couldn't get a response. Please check your settings.");
@@ -380,6 +396,9 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                         await withTimeout(fallbackCall, RAG_QUERY_CLIENT_TIMEOUT_MS, 'streamGeminiChat');
                     } catch (timeoutErr) {
                         console.error('[GlobalChat] streamGeminiChat client-side timeout:', timeoutErr);
+                        // Abandoning without cancelling left main streaming into
+                        // listeners the NEXT submit registers.
+                        try { (window.electronAPI as any)?.cancelChatStream?.(); } catch { /* best-effort */ }
                         oldTokenCleanup?.();
                         oldDoneCleanup?.();
                         oldErrorCleanup?.();

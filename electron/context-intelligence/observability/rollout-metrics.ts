@@ -61,6 +61,10 @@ export interface RolloutCounters {
 
   /** §4: F4 — stale answers overwriting current ones. */
   supersededTurns: number;
+  /** V3 path threw and the surface silently reverted to the legacy assembly.
+   *  Keyed by surface. A rising count here means "the new system is off and
+   *  nobody knows" — the exact silent-fallback failure §22.1 forbids. */
+  v3FallbackBySurface: Record<string, number>;
 
   /** Milliseconds, for the p95 TTFT abort condition. Bounded ring buffer: an
    *  unbounded latency array in a long meeting is its own leak. */
@@ -81,6 +85,7 @@ function emptyCounters(): RolloutCounters {
     contaminationTurns: 0,
     contaminationCheckableTurns: 0,
     supersededTurns: 0,
+    v3FallbackBySurface: {},
     latencyMs: [],
   };
 }
@@ -271,3 +276,23 @@ export function evaluateAbortConditions(input: {
 
 /** Test seam / session boundary. */
 export function resetRolloutMetrics(): void { store[GLOBAL_KEY] = emptyCounters(); }
+
+/**
+ * Record a V3 -> legacy fallback. The bridge and the wired IPC surface call
+ * this from their catch blocks; a fallback also emits one structured
+ * [V3-FALLBACK] line so a session log shows WHEN the decision layer went dark,
+ * not just that counters drifted.
+ */
+export function recordV3Fallback(surface: string, error?: unknown): void {
+  try {
+    const counters = c0();
+    // Older persisted counter objects (created before this field existed) can
+    // arrive via the globalThis slot without it.
+    if (!counters.v3FallbackBySurface) (counters as RolloutCounters).v3FallbackBySurface = {};
+    counters.v3FallbackBySurface[surface] = (counters.v3FallbackBySurface[surface] ?? 0) + 1;
+    console.error('[V3-FALLBACK]', JSON.stringify({
+      surface,
+      error: error instanceof Error ? error.message : String(error ?? 'unknown'),
+    }));
+  } catch { /* observability only */ }
+}

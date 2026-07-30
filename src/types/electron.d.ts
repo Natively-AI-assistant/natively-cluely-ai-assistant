@@ -287,7 +287,7 @@ export interface ElectronAPI {
   getActionButtonMode: () => Promise<'recap' | 'brainstorm'>
   setActionButtonMode: (mode: 'recap' | 'brainstorm') => Promise<{ success: boolean }>
   onActionButtonModeChanged: (callback: (mode: 'recap' | 'brainstorm') => void) => () => void
-  onModeChanged: (callback: (data: { id: string | null; name: string | null }) => void) => () => void
+  onModeChanged: (callback: (data: { id: string | null; name: string | null; fileCount?: number; indexedCount?: number }) => void) => () => void
 
   // Modes
   modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string; referenceFileCount: number }>>
@@ -353,7 +353,7 @@ export interface ElectronAPI {
   // Intelligence Mode Events
   onIntelligenceAssistUpdate: (callback: (data: { insight: string }) => void) => () => void
   onIntelligenceSuggestedAnswerToken: (callback: (data: { token: string; question: string; confidence: number }) => void) => () => void
-  onIntelligenceSuggestedAnswer: (callback: (data: { answer: string; question: string; confidence: number; generationId?: number }) => void) => () => void
+  onIntelligenceSuggestedAnswer: (callback: (data: { answer: string; question: string; confidence: number; generationId?: number; sourceLabel?: string; emittedAt?: number }) => void) => () => void
   onIntelligenceSuggestedAnswerDiscard: (callback: (data: { reason: string }) => void) => () => void
   // Verified code execution (background): ✓ badge + corrected message.
   onIntelligenceCodeVerified: (callback: (data: { question: string; passed: number; total: number; language: string }) => void) => () => void
@@ -381,7 +381,7 @@ export interface ElectronAPI {
   streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean }) => Promise<void>
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => () => void
   onGeminiStreamDone: (callback: (data?: { finalText?: string; streamId?: number }) => void) => () => void
-  onGeminiStreamError: (callback: (error: string) => void) => () => void;
+  onGeminiStreamError: (callback: (error: string, meta?: { streamId?: number | null; source?: string }) => void) => () => void;
 
   // NOTE: onSkillsChanged broadcast subscription was removed. Skills are
   // toggled only via delete; the picker refreshes on Settings unmount, and

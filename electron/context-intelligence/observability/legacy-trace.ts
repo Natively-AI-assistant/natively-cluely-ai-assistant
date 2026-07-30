@@ -59,9 +59,18 @@ export class MemoryTraceSink implements TraceSink {
   get size(): number { return this.buf.length; }
 }
 
-let sink: TraceSink = new MemoryTraceSink();
-export function setTraceSink(s: TraceSink): void { sink = s; }
-export function getTraceSink(): TraceSink { return sink; }
+// Sink holder on globalThis (12 dist bundles): identical shape to the
+// rollout-counters incident — a harness importing this module read an EMPTY
+// ring while turns were being traced into another bundle's copy, so the F2
+// evidence this module exists to collect silently read as "no traces".
+const SINK_KEY = '__nativelyLegacyTraceSinkV1__';
+function sinkSlot(): { sink: TraceSink } {
+  const g = globalThis as unknown as Record<string, { sink: TraceSink } | undefined>;
+  if (!g[SINK_KEY]) g[SINK_KEY] = { sink: new MemoryTraceSink() };
+  return g[SINK_KEY]!;
+}
+export function setTraceSink(s: TraceSink): void { sinkSlot().sink = s; }
+export function getTraceSink(): TraceSink { return sinkSlot().sink; }
 
 /**
  * What a legacy layer can actually tell us.
@@ -191,7 +200,7 @@ export function recordLegacyTurn(input: LegacyTraceInput): AnswerTrace | null {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       require('./rollout-metrics').recordTurnMetrics(safe);
     } catch { /* observability only */ }
-    sink.write(safe);
+    sinkSlot().sink.write(safe);
     return safe;
   } catch {
     return null;

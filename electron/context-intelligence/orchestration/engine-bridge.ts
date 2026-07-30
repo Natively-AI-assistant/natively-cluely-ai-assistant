@@ -31,6 +31,13 @@ export interface BridgeInput {
   /** How many reference files the active mode has. Lets the composer say "no
    *  document is attached" instead of "the document does not mention it". */
   attachedSourceCount?: number;
+  /** Human-readable mode name for the [V3] observability line. */
+  modeName?: string | null;
+  /** Distinguishes call sites that share an AnswerSurface (AnswerSurface has
+   *  no 'clarify'/'brainstorm' members, and the engine's manual-answer path
+   *  shares 'manual-chat' with the IPC surface). Appended to legacyPath and
+   *  the [V3] line so traces from different call sites stay separable. */
+  pathTag?: string;
   scope?: Partial<EvidenceScope>;
   requestId?: string;
   requestSequence?: number;
@@ -91,13 +98,30 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       hasScreenContext: input.hasScreenContext,
     };
 
+    // Prior-turn continuity: callers that have a live transcript window pass
+    // their own summary; everyone else falls back to the session's V3
+    // conversation state (previous question + capped answer summary, rendered
+    // as a labelled referent — never evidence). Read BEFORE orchestrate(),
+    // which advances the state with THIS turn's question.
+    let convoSummary = input.conversationSummary;
+    if (!convoSummary) {
+      try {
+        const { getConversationState } = require('../question/conversation-state-store');
+        const cs = getConversationState(req.sessionId);
+        if (cs?.previousQuestion) {
+          convoSummary = `Previous question: ${cs.previousQuestion}`
+            + (cs.previousAnswerSummary ? `\nPrevious answer (referent only, NOT evidence): ${cs.previousAnswerSummary}` : '');
+        }
+      } catch { /* continuity must never break a turn */ }
+    }
+
     const result = await orchestrate(req, input.retrieval);
     const composed = composePrompt({
       decision: result.decision,
       policy,
       evidence: result.evidence,
       realtimeInstruction: input.realtimeInstruction,
-      conversationSummary: input.conversationSummary,
+      conversationSummary: convoSummary,
       attachedSourceCount: input.attachedSourceCount,
     });
 
@@ -112,8 +136,10 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       const srcIds = [...new Set(acc.map((e) => e.sourceId))];
       console.log('[V3]', JSON.stringify({
         surface: input.surface,
+        ...(input.pathTag ? { tag: input.pathTag } : {}),
         mode: modeId,
         modeUniqueId: input.modeUniqueId ?? null,
+        modeName: input.modeName ?? null,
         attachedFiles: input.attachedSourceCount ?? null,
         path: result.decision.retrievalPlan.path,
         planned: result.decision.retrievalPlan.sourceTypes,
@@ -127,7 +153,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     try {
       recordLegacyTurn({
         ...(result.trace as unknown as Record<string, unknown>),
-        legacyPath: `v3-${input.surface}`,
+        legacyPath: `v3-${input.surface}${input.pathTag ? `-${input.pathTag}` : ''}`,
       } as never);
     } catch { /* observability must never break an answer */ }
 
@@ -143,7 +169,15 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
         && result.decision.retrievalPlan.shouldRetrieve === false,
       modeId,
     };
-  } catch {
+  } catch (e) {
+    // Flag-off returns null EARLY above; reaching here means the V3 path
+    // FAILED and the caller will silently revert to legacy. That reversion
+    // must be observable (§22.1) — count it and log one structured line.
+    try {
+      require('../observability/rollout-metrics').recordV3Fallback(
+        `${input.surface}${input.pathTag ? `-${input.pathTag}` : ''}`, e,
+      );
+    } catch { /* observability only */ }
     return null;
   }
 }

@@ -24,8 +24,24 @@ import type { AnswerPolicy } from './answer-policy';
 
 const FILE_NAME = 'context-intelligence-answer-policy.json';
 
-let cached: Record<string, AnswerPolicy> | null = null;
-let cachedDir: string | null = null;
+// The cache lives on globalThis, NOT at module scope, for the same reason the
+// ModesManager active-mode snapshot does: esbuild inlines this module into
+// every main-process entry bundle that imports it (12 dist files), and each
+// inlined copy is its own module scope. The running app loads only main.js, so
+// this is latent there — but any harness/eval/test process that co-loads two
+// dist-electron bundles gets a writer copy (the settings IPC) and reader copies
+// (engine-bridge for WTA/assist/manual-answer) whose module-level `cached`
+// never see each other's writes. Both call-site comments promise "read per
+// turn so a Settings change applies to the very next answer"; a process-wide
+// slot is what makes that promise true in every runtime.
+const CACHE_KEY = '__nativelyAnswerPolicyStoreCacheV1__';
+interface PolicyCache { cached: Record<string, AnswerPolicy> | null; cachedDir: string | null }
+function cacheSlot(): PolicyCache {
+  const g = globalThis as unknown as Record<string, unknown>;
+  let slot = g[CACHE_KEY] as PolicyCache | undefined;
+  if (!slot) { slot = { cached: null, cachedDir: null }; g[CACHE_KEY] = slot; }
+  return slot;
+}
 
 function resolveDir(explicitDir?: string): string {
   if (explicitDir) return explicitDir;
@@ -45,20 +61,22 @@ function filePath(dir?: string): string {
 }
 
 function load(dir?: string): Record<string, AnswerPolicy> {
+  const slot = cacheSlot();
   const d = resolveDir(dir);
-  if (cached && cachedDir === d) return cached;
-  cachedDir = d;
+  if (slot.cached && slot.cachedDir === d) return slot.cached;
+  slot.cachedDir = d;
   try {
     const raw = JSON.parse(fs.readFileSync(filePath(dir), 'utf8'));
     // Validate on read: only the two legal values survive. Anything else in the
     // file (hand-edited, older schema) is dropped rather than flowing into
     // groundingFor() as a surprise third state.
-    cached = {};
+    const next: Record<string, AnswerPolicy> = {};
     for (const [k, v] of Object.entries(raw ?? {})) {
-      if (v === 'use_references_when_relevant' || v === 'only_answer_from_references') cached[k] = v;
+      if (v === 'use_references_when_relevant' || v === 'only_answer_from_references') next[k] = v;
     }
-  } catch { cached = {}; }
-  return cached;
+    slot.cached = next;
+  } catch { slot.cached = {}; }
+  return slot.cached;
 }
 
 /** The user's stored choice for a mode, or null when they never made one. */
@@ -78,10 +96,11 @@ export function setStoredAnswerPolicy(modeKey: string, policy: AnswerPolicy | nu
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(tmp, JSON.stringify(map, null, 2));
   fs.renameSync(tmp, target);
-  cached = map;
+  cacheSlot().cached = map;
 }
 
 /** Test seam: drop the cache so a fresh dir is re-read. */
 export function _resetAnswerPolicyStoreForTest(): void {
-  cached = null; cachedDir = null;
+  const slot = cacheSlot();
+  slot.cached = null; slot.cachedDir = null;
 }

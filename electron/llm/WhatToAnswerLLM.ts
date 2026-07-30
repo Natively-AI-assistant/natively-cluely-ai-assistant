@@ -744,7 +744,13 @@ ANSWER SHAPE: ${intentResult.answerShape}
             const _wtaUserMessage = _v3p?.user ?? packet.userMessage;
             const _wtaSystemPrompt = _v3p?.system ?? finalPromptOverride;
             if (_v3p) console.log('[WhatToAnswerLLM] V3 prompt in effect (Phase 6 wiring)');
-            for await (const token of this.llmHelper.streamChat(_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, wtaRouteOptions)) {
+            // v3Owned: when the V3 prompt is in effect, the Context OS govern
+            // block in LLMHelper must NOT substitute its EvidencePack for the
+            // composed user prompt — that spliced two governance layers into one
+            // turn (V3's system prompt + Context OS's user pack, V3's user
+            // prompt discarded). Only set when _v3p actually rides this stream.
+            const _wtaRoute = _v3p ? { ...wtaRouteOptions, v3Owned: true } : wtaRouteOptions;
+            for await (const token of this.llmHelper.streamChat(_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, _wtaRoute)) {
                 if (MEASURE) {
                     const now = performance.now();
                     if (!tFirstToken) tFirstToken = now;

@@ -1200,12 +1200,25 @@ export function ProfileIntelligenceSettings({
     // Section renderers
     // ─────────────────────────────────────────────────────────────────────────
 
+    // Context Intelligence V3: source authority replaces the Persona Engine
+    // global override (§6) — same gate SettingsPopup applies to Profile Mode.
+    // Under V3 this toggle changed nothing on the wired surfaces; a control
+    // that implies control it doesn't have is worse than none.
+    const [ciV3Enabled, setCiV3Enabled] = React.useState(false);
+    React.useEffect(() => {
+        (window.electronAPI as any)?.answerPolicyGet?.({ templateType: 'general' })
+            .then((st: any) => setCiV3Enabled(Boolean(st?.v3Enabled)))
+            .catch(() => setCiV3Enabled(false));
+    }, []);
+
     const renderIdentity = () => {
         const isActive = profileStatus.profileMode && hasProfileAccess;
         const isDisabled = !profileStatus.hasProfile || !hasProfileAccess;
         return (
         <>
-            {/* Persona Engine toggle card */}
+            {/* Persona Engine toggle card — hidden under Context Intelligence
+                V3 (source authority replaces the global override, §6). */}
+            {!ciV3Enabled && (
             <div
                 className="pi-toggle-card"
                 data-on={isActive ? 'true' : 'false'}
@@ -1235,6 +1248,7 @@ export function ProfileIntelligenceSettings({
                     <div className="pi-toggle-thumb" />
                 </div>
             </div>
+            )}
 
             {/* Resume */}
             <h3 className="pi-section-label">Resume</h3>

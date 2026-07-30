@@ -43,10 +43,12 @@ export class AssistLLM {
                 undefined,
                 fittedContext,
                 promptOverride,
-                false,
+                Boolean(v3),   // ignoreKnowledgeMode — a V3-owned prompt must not be re-classified
                 true,
                 [],
                 abortSignal,
+                undefined,
+                v3 ? { v3Owned: true } : undefined,
             )) {
                 if (abortSignal?.aborted) return "";
                 result += chunk;

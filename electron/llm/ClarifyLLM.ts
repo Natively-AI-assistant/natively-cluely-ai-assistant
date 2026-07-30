@@ -29,7 +29,8 @@ export class ClarifyLLM {
             // and the actual clarifying-question task entirely (live bug report
             // 2026-07-04). Same fix applied to RecapLLM/FollowUpLLM/
             // FollowUpQuestionsLLM/BrainstormLLM, which have the identical shape.
-            const stream = this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);
+            const stream = this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true,
+                Boolean(v3), [], undefined, undefined, v3 ? { v3Owned: true } : undefined);
             let fullResponse = "";
             for await (const chunk of stream) fullResponse += chunk;
             return fullResponse.trim();
@@ -49,7 +50,8 @@ export class ClarifyLLM {
             const fittedContext = v3?.user ?? this.llmHelper.fitContextForCurrentModel(context);
             // See generate() above — ignoreKnowledgeMode=true prevents the context
             // blob from being misclassified by the knowledge-mode intent gate.
-            yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);
+            yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true,
+                Boolean(v3), [], undefined, undefined, v3 ? { v3Owned: true } : undefined);
         } catch (error) {
             console.error("[ClarifyLLM] Streaming generation failed:", error);
         }

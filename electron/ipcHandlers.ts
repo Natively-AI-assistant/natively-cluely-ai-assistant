@@ -934,16 +934,25 @@ export function initializeIpcHandlers(appState: AppState): void {
         // rebuild's whole premise is that those are the defect. Threading V3
         // through them would inherit exactly what it replaces.
         //
-        // Off by default (DEFAULT_ENABLED = false, identical in dev and prod), so
-        // rollback is a flag flip. When on, this path owns the turn end to end:
+        // ON by default since 2026-07-30 (DEFAULT_ENABLED = true, identical in
+        // dev and prod — flag.ts is the single source of truth), so rollback is
+        // a flag flip. When on, this path owns the turn end to end:
         // one frozen decision, scope/version-filtered evidence, one composed
         // prompt, and stream events that ALWAYS carry streamId (F4: every legacy
         // early-return emits untagged events that no renderer can supersede).
         try {
           const { isContextIntelligenceV3Enabled } = require('./context-intelligence/contracts/flag');
-          if (isContextIntelligenceV3Enabled()) {
-            const { orchestrate } = require('./context-intelligence/orchestration/orchestrator');
-            const { composePrompt } = require('./context-intelligence/generation/prompt-composer');
+          // CALLER-OWNED PROMPT CONTRACT: `skipSystemPrompt + context` means the
+          // caller composed the full prompt itself (MeetingChatOverlay's
+          // past-meeting recall, the voice-question path). The V3 short-circuit
+          // consumes only `message`, so entering it here DISCARDED that composed
+          // context and answered a past-meeting question from the ACTIVE mode's
+          // evidence plus the CURRENT meeting — a wrong-scope answer that
+          // looked grounded. Those turns stay on the legacy transport until a
+          // dedicated V3 surface owns them.
+          const callerOwnsPrompt = options?.skipSystemPrompt === true && Boolean(context);
+          if (!callerOwnsPrompt && isContextIntelligenceV3Enabled()) {
+            const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
             const { resolveModePolicy, isModeId } = require('./context-intelligence/policies/mode-policy-registry');
             const { ModesManager } = require('./services/ModesManager');
 
@@ -1007,46 +1016,38 @@ export function initializeIpcHandlers(appState: AppState): void {
               ])
               : modePort;
 
-            // Per-mode Answer policy choice (§6) — read per turn so a Settings
-            // change applies to the very next answer. Keyed by the mode's
-            // unique id; built-in singletons fall back to templateType.
-            const { getStoredAnswerPolicy } = require('./context-intelligence/policies/answer-policy-store');
-            const result = await orchestrate({
-              requestId: `v3-${myStreamId}`, requestSequence: myStreamId,
-              surface: 'manual-chat', modeId,
-              // The meeting must be on the TURN scope too: containment admits a
-              // user-level source into a meeting turn, but a meeting-scoped
-              // chunk is only visible from inside that meeting.
-              scope: { userId: V3_USER_ID, ...(v3MeetingId ? { meetingId: v3MeetingId } : {}) },
-              sessionId: String(senderId), manualQuestion: String(message || ''),
-              userAnswerPolicy: getStoredAnswerPolicy(modeInfo?.id ?? modeId),
-            }, port);
-
-            const composed = composePrompt({
-              decision: result.decision, policy, evidence: result.evidence,
+            // ONE construction, shared with every engine surface: the bridge
+            // resolves the per-mode Answer policy, reads conversation state for
+            // prior-turn continuity, orchestrates, composes, emits the [V3]
+            // source line, records the trace, and counts any fallback. This
+            // block previously carried its own copy of all of that — two copies
+            // of a security-relevant construction is how the tokenizer copies
+            // drifted (§2 of the architecture review).
+            const composed = await buildV3Prompt({
+              surface: 'manual-chat',
+              pathTag: 'ipc',
+              question: String(message || ''),
+              modeTemplateType: rawMode,
+              modeUniqueId: modeInfo?.id ?? null,
+              modeName: (modeInfo as any)?.name ?? null,
               attachedSourceCount: files.length,
+              requestId: `v3-${myStreamId}`,
+              requestSequence: myStreamId,
+              // sessionId rides the scope: the bridge keys the AnswerRequest's
+              // sessionId (and therefore conversation state) off scope.sessionId.
+              // Containment only NARROWS: a u:local source is still visible from
+              // a u:local|s:<sender> turn.
+              scope: {
+                userId: V3_USER_ID,
+                sessionId: String(senderId),
+                ...(v3MeetingId ? { meetingId: v3MeetingId } : {}),
+              },
+              retrieval: port,
             });
-
-            // Per-turn source line. Identity only, never content. A cross-mode
-            // contamination report arrived with a terminal log that recorded
-            // nothing about which mode or files any turn used; the defect had to
-            // be reconstructed from answer prose versus SQLite.
-            try {
-              const _acc = result.trace.acceptedEvidence ?? [];
-              console.log('[V3]', JSON.stringify({
-                surface: 'manual-chat',
-                mode: modeId,
-                modeUniqueId: modeInfo?.id ?? null,
-                modeName: (modeInfo as any)?.name ?? null,
-                attachedFiles: files.length,
-                path: result.decision.retrievalPlan.path,
-                planned: result.decision.retrievalPlan.sourceTypes,
-                evidence: _acc.length,
-                sources: [...new Set(_acc.map((e: any) => e.sourceId))],
-                answerability: result.trace.answerability,
-                fallback: result.trace.fallbackUsed,
-              }));
-            } catch { /* observability must never break an answer */ }
+            // Null with the flag on = the bridge caught an error and ALREADY
+            // counted/logged the fallback. Fall through to legacy without
+            // re-throwing (the outer catch would double-count it).
+            if (composed) {
 
             let finalText = '';
             const v3Stream = llmHelper.streamChat(
@@ -1058,6 +1059,12 @@ export function initializeIpcHandlers(appState: AppState): void {
               true,   // skipModeInjection — same reason
               [],
               myController.signal,
+              undefined, // thinkingBudget — keep the interactive default
+              // v3Owned: LLMHelper must TRANSPORT this prompt, not rewrite it.
+              // Without it, a doc-grounded custom mode ran a second, ungoverned
+              // retrieval and injected it around V3's filtered evidence, and
+              // shapeDocumentGroundedSystemPrompt mutated V3's system prompt.
+              { v3Owned: true },
             ) as AsyncGenerator<string>;
 
             for await (const tok of v3Stream) {
@@ -1068,16 +1075,58 @@ export function initializeIpcHandlers(appState: AppState): void {
             if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
             event.sender.send('gemini-stream-done', { finalText, streamId: myStreamId });
 
-            try {
-              const { recordLegacyTurn } = require('./context-intelligence/observability/legacy-trace');
-              recordLegacyTurn({ ...result.trace, legacyPath: 'v3-manual-chat' } as any);
-            } catch { /* observability must never break an answer */ }
+            // ── Record the turn (V3 previously recorded NOTHING) ────────────
+            // The short-circuit skipped every store the legacy path writes, so
+            // after a V3-answered turn the NEXT turn's follow-up had no
+            // antecedent on ANY path — V3's own state, conversation memory,
+            // the session transcript, and the phone mirror were all blank.
+            //
+            // BUG-MODE-BLEEDING guard, same as the legacy path's record call: a
+            // mode switch mid-stream aborts the provider stream, but execution
+            // still reaches here with the OLD mode's partial answer — recording
+            // it would write the old mode's turn into memory modes:set-active
+            // just cleared. Live-vs-captured by .id (templateType collapses for
+            // custom modes).
+            const manualActiveMode = modeInfo;
+            let liveModeIdAtRecord: string | null = null;
+            try { liveModeIdAtRecord = mm.getActiveMode()?.id ?? null; } catch { /* record-guard only */ }
+            if (liveModeIdAtRecord === (manualActiveMode?.id ?? null)) {
+              try {
+                const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
+                recordAnswerSummary(String(senderId), finalText);
+              } catch { /* continuity only */ }
+              try {
+                _manualConversationMemory.record({
+                  sessionId: String(senderId),
+                  userMessage: String(message || ''),
+                  assistantAnswer: finalText,
+                  mode: (modeInfo as any)?.templateType,
+                  timestamp: Date.now(),
+                });
+              } catch { /* memory only */ }
+              try {
+                const im = appState.getIntelligenceManager();
+                im?.addTranscript?.({ text: String(message || ''), speaker: 'user', timestamp: Date.now(), final: true }, true);
+                im?.addAssistantMessage?.(finalText);
+              } catch { /* session transcript only */ }
+              try {
+                PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), String(message || ''));
+                PhoneMirrorService.getInstance().publishAssistantMessage(String(myStreamId), finalText, 'Chat');
+              } catch { /* mirror only */ }
+            }
+
             return null;
+            }
           }
         } catch (v3Err: any) {
           // A defect in the new path must not take the surface down: fall through
-          // to legacy rather than failing the answer.
+          // to legacy rather than failing the answer — but the reversion is
+          // COUNTED and logged, because a silent fallback reverts five source-
+          // decision behaviours with no operator signal (§22.1).
           console.error('[ContextIntelligenceV3] manual-chat path failed, falling back to legacy:', v3Err?.message || v3Err);
+          try {
+            require('./context-intelligence/observability/rollout-metrics').recordV3Fallback('manual-chat-ipc', v3Err);
+          } catch { /* observability only */ }
         }
         // Renderer-submit mint point for manual chat (Phase 6 Slice 1, context-rebuild):
         // this turn's stable identity, threaded into SourceAuthorityKernel.build below
@@ -1102,6 +1151,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             event.sender?.once?.('destroyed', () => {
               _convoCleanupRegistered.delete(senderId);
               try { _manualConversationMemory.clearSession(String(senderId)); } catch { /* noop */ }
+              try { require('./context-intelligence/question/conversation-state-store').clearConversationState(String(senderId)); } catch { /* noop */ }
             });
           }
         } catch { /* noop */ }
@@ -1145,8 +1195,8 @@ export function initializeIpcHandlers(appState: AppState): void {
               );
               return null;
             }
-            event.sender.send('gemini-stream-token', identityHit);
-            event.sender.send('gemini-stream-done');
+            event.sender.send('gemini-stream-token', identityHit, { streamId: myStreamId });
+            event.sender.send('gemini-stream-done', { finalText: identityHit, streamId: myStreamId });
             try {
               PhoneMirrorService.getInstance().publishToken(String(myStreamId), identityHit);
             } catch (_) {
@@ -1255,6 +1305,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 event.sender.send(
                   'gemini-stream-error',
                   `Skill "/${skill.id}" is disabled. Enable it in Settings → Skills.`,
+                  { streamId: myStreamId },
                 );
                 return;
               }
@@ -1270,12 +1321,13 @@ export function initializeIpcHandlers(appState: AppState): void {
               event.sender.send(
                 'gemini-stream-error',
                 `Skill "/${candidateId}" not found. Available: ${available}`,
+                { streamId: myStreamId },
               );
               return;
             }
           } catch (skillErr: any) {
             console.warn('[IPC] Skill lookup failed:', skillErr?.message || skillErr);
-            event.sender.send('gemini-stream-error', `Skill lookup failed: ${skillErr?.message || 'unknown error'}`);
+            event.sender.send('gemini-stream-error', `Skill lookup failed: ${skillErr?.message || 'unknown error'}`, { streamId: myStreamId });
             return;
           }
         }
@@ -1799,8 +1851,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           } catch { /* default manual */ }
           const clarification = buildContextFreeClarification(clarSurface);
           if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
-          event.sender.send('gemini-stream-token', clarification);
-          event.sender.send('gemini-stream-done', { finalText: clarification });
+          event.sender.send('gemini-stream-token', clarification, { streamId: myStreamId });
+          event.sender.send('gemini-stream-done', { finalText: clarification, streamId: myStreamId });
           try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarification); } catch (_) { /* noop */ }
           try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarification); } catch (_) { /* noop */ }
           intelligenceManager.addAssistantMessage(clarification, undefined, 'manual_chat');
@@ -1871,8 +1923,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                 hasLiveTranscript: Boolean(intelligenceManager.getFormattedContext(100)?.trim()),
               });
             if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
-            event.sender.send('gemini-stream-token', clarify);
-            event.sender.send('gemini-stream-done', { finalText: clarify });
+            event.sender.send('gemini-stream-token', clarify, { streamId: myStreamId });
+            event.sender.send('gemini-stream-done', { finalText: clarify, streamId: myStreamId });
             try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarify); } catch (_) { /* noop */ }
             try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
             const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
@@ -2102,8 +2154,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             const { buildSourceSwitchClarification } = require('./llm/sourceOwnership');
             const clarify = buildSourceSwitchClarification(manualOwnership.owner);
             if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
-            event.sender.send('gemini-stream-token', clarify);
-            event.sender.send('gemini-stream-done', { finalText: clarify });
+            event.sender.send('gemini-stream-token', clarify, { streamId: myStreamId });
+            event.sender.send('gemini-stream-done', { finalText: clarify, streamId: myStreamId });
             try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarify); } catch (_) { /* noop */ }
             try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
             const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
@@ -4718,8 +4770,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                 validationOk: false,
                 criticalViolations: ['provider_error_no_answer'],
               });
-              event.sender.send('gemini-stream-token', safe);
-              event.sender.send('gemini-stream-done', { finalText: safe });
+              event.sender.send('gemini-stream-token', safe, { streamId: myStreamId });
+              event.sender.send('gemini-stream-done', { finalText: safe, streamId: myStreamId });
               try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), safe); PhoneMirrorService.getInstance().publishDone(String(myStreamId), safe); } catch (_) { /* noop */ }
               intelligenceManager.addAssistantMessage(safe, sessionWriteDecision, 'manual_chat');
               _emitAttr({ answer_type: answerPlan.answerType, profile_tree_used: false, profile_tree_fast_path_used: false, structured_resume_used: false });
@@ -4730,6 +4782,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             event.sender.send(
               'gemini-stream-error',
               streamError.message || 'Unknown streaming error',
+              { streamId: myStreamId },
             );
             try {
               PhoneMirrorService.getInstance().publishError(
@@ -10431,9 +10484,10 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // ── CONTEXT INTELLIGENCE V3 — the rollout opt-in (§3 Stage 1) ─────────────
   //
-  // Stage 1 is "internal users, opt-in", which requires a switch a user can
-  // actually reach. DEFAULT_ENABLED stays false in every environment — this
-  // persists an explicit choice, and clearing it returns to that default.
+  // Originally the Stage 1 "internal users, opt-in" switch. DEFAULT_ENABLED
+  // flipped to true on 2026-07-30 (flag.ts is the source of truth); this now
+  // persists an explicit OPT-OUT as much as an opt-in — clearing it returns to
+  // whatever flag.ts declares, so this comment can never go stale again.
   safeHandle('context-intelligence:flag-get', async () => {
     try {
       const { isContextIntelligenceV3Enabled, readPersistedSetting, DEFAULT_ENABLED } =
@@ -10558,6 +10612,16 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
       }
       const { ModesManager } = require('./services/ModesManager');
+      // Abort every in-flight chat stream BEFORE the mode flips. A turn planned
+      // under mode A must not keep streaming into a UI whose badge now says
+      // mode B — with no per-message mode marker in the renderer, that answer
+      // is indistinguishable from a B answer carrying A's evidence and policy.
+      // Same bug family as BUG-MODE-BLEEDING below, one layer up: that fix
+      // cleared the CONTEXT the next turn would read; this stops the PREVIOUS
+      // turn's output from outliving the mode it was decided under.
+      for (const [, s] of _chatStreamsBySender) {
+        try { s.controller.abort(); } catch { /* already finished */ }
+      }
       // BUG-MODE-BLEEDING fix: clear mode-specific session context BEFORE switching modes
       // so Interview mode resume/JD context doesn't bleed into the new mode's responses.
       try {
@@ -10578,6 +10642,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // context is cleared here: mode is a global (ModesManager singleton)
       // switch, so stale prior-mode turns must not survive it.
       try { _manualConversationMemory.clearAllSessions(); } catch { /* non-fatal */ }
+      // V3 conversation state carries the previous turns' referents and source
+      // ids; a follow-up in the NEW mode must not resolve against them.
+      try { require('./context-intelligence/question/conversation-state-store').clearConversationState(); } catch { /* non-fatal */ }
       // Code-review finding (2026-07-28): sibling per-session store with the
       // same latent gap (see CodingConversationState.clearAllSessions's own
       // comment) — cleared alongside conversation memory for defense in
@@ -10585,11 +10652,27 @@ export function initializeIpcHandlers(appState: AppState): void {
       try { _manualCodingState.clearAllSessions(); } catch { /* non-fatal */ }
 
       ModesManager.getInstance().setActiveMode(id);
-      // Broadcast mode change to all windows so indicators update immediately
+      // Supersede in-flight LIVE answers too (the abort loop above only covers
+      // manual chat streams): a WTA generation planned under the old mode must
+      // not finalize into a UI now showing the new one.
+      try { appState.getIntelligenceManager()?.supersedeLiveAnswers?.(); } catch { /* non-fatal */ }
+      // Broadcast mode change to all windows so indicators update immediately.
+      // fileCount/indexedCount ride along so the chat surface can show "no
+      // sources" at question time — Settings badges were honest, but the
+      // surface where the user actually ASKS showed only the mode name, and a
+      // mode with zero attached files answered "the résumé doesn't mention it".
       const activeMode = id ? ModesManager.getInstance().getActiveMode() : null;
       const activeName = activeMode?.name ?? null;
+      let fileCount = 0; let indexedCount = 0;
+      try {
+        if (activeMode) {
+          const statuses = ModesManager.getInstance().getReferenceFileIndexStatuses?.(activeMode.id) ?? [];
+          fileCount = statuses.length;
+          indexedCount = statuses.filter((st: any) => st?.status === 'indexed' || (st?.chunkCount ?? 0) > 0).length;
+        }
+      } catch { /* indicator only */ }
       BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('mode-changed', { id, name: activeName });
+        if (!win.isDestroyed()) win.webContents.send('mode-changed', { id, name: activeName, fileCount, indexedCount });
       });
       // Phase 3 — re-bind dynamic action engine so the new mode's trigger pack
       // takes effect immediately. New (sessionId, modeId) pair flushes the per-
@@ -11621,7 +11704,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           try {
             phoneMirror.publishError(String(myStreamId), err?.message || 'stream error');
           } catch (_) {}
-          win?.webContents.send('gemini-stream-error', err?.message || 'stream error');
+          // Tagged so the desktop renderer can tell this is a PHONE stream's
+          // failure: untagged, it defaced whatever desktop bubble happened to
+          // be streaming ("[Error: …]" appended to an unrelated answer).
+          win?.webContents.send('gemini-stream-error', err?.message || 'stream error', { streamId: null, source: 'phone-mirror' });
         }
       }
     } else if (cmd.type === 'screenshot') {

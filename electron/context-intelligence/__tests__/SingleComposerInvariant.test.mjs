@@ -51,13 +51,15 @@ describe('single-composer invariant', () => {
   test('the surviving composer is REACHED — deleting the wrong one would have left dead code', () => {
     // The whole point: a composer with no callers is the defect. These are the
     // adoption sites Phase 6/7 wired.
-    const callers = [
-      'electron/ipcHandlers.ts',
-      'electron/context-intelligence/orchestration/engine-bridge.ts',
-    ];
-    for (const c of callers) {
-      const src = read(c) ?? '';
-      assert.ok(/composePrompt/.test(src), `${c} must still reach the composer`);
-    }
+    // ipcHandlers reaches the composer THROUGH the bridge since the inline
+    // copy was collapsed (2026-07-31) — two copies of orchestrate+compose was
+    // the drift pair the architecture review flagged. The invariant is
+    // unchanged: exactly one composer, and every adoption site reaches it.
+    const bridge = read('electron/context-intelligence/orchestration/engine-bridge.ts') ?? '';
+    assert.ok(/composePrompt/.test(bridge),
+      'engine-bridge must still reach the composer');
+    const ipc = read('electron/ipcHandlers.ts') ?? '';
+    assert.ok(/buildV3Prompt/.test(ipc),
+      'ipcHandlers must reach the composer through the bridge');
   });
 });

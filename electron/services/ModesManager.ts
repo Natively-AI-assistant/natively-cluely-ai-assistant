@@ -422,21 +422,25 @@ export class ModesManager {
     // load-bearing rather than defensive.
     //
     // esbuild inlines this module into every main-process entry bundle that
-    // imports it — 14 of them, including ipcHandlers, IntelligenceEngine and
+    // imports it — 14 dist files, including ipcHandlers, IntelligenceEngine and
     // IntelligenceManager. Each inlined copy is its own module scope with its
     // own `ModesManager.instance`, so `getInstance()` returns a DIFFERENT
-    // object per bundle. `setActiveMode` is only ever reached through the
-    // ipcHandlers copy, so every other copy's cache was filled once and then
-    // never invalidated again for the life of the process.
+    // object per bundle. The RUNNING app loads only main.js (everything inlined
+    // once), but every harness/eval/test process that requires two or more
+    // dist-electron bundles into one heap gets split singletons — and those
+    // runtimes are where this repo's benchmark numbers come from. With the
+    // cache on the instance, a `setActiveMode` through one copy left every
+    // other copy's snapshot stale for the life of the process, and
+    // `getReferenceFiles(modeInfo.id)` keys the whole retrieval set off that
+    // snapshot. Cross-mode source isolation is exactly what this system exists
+    // to guarantee, so the cache lives where every copy can see it: globalThis
+    // is per-PROCESS however many times the module is inlined.
     //
-    // That is not a stale-label bug. `getReferenceFiles(modeInfo.id)` is keyed
-    // off this snapshot, so the whole retrieval set follows it: measured live,
-    // Recruiting and Sales turns retrieved `technical_project_portfolio.md` —
-    // a Technical Interview file — and answered with TalentScope, RedisMart and
-    // Aetherbot content that appears nowhere in their own reference files.
-    // Cross-mode source isolation is exactly what this system exists to
-    // guarantee, so the cache has to live somewhere every copy of the class can
-    // see. globalThis is per-PROCESS however many times the module is inlined.
+    // (The 2026-07-31 LIVE contamination incident had a different, single-
+    // process mechanism — a renderer optimistic-update bug on `pro_required`
+    // rejection, plus a raw db.setActiveMode bypass in the license-loss path;
+    // both fixed the same day. This slot keeps the harness runtimes truthful
+    // and makes the class impossible if multi-bundle loading ever arrives.)
     private static get _cache(): { info: ActiveModeInfo | null; valid: boolean } {
         const g = globalThis as unknown as Record<string, unknown>;
         let store = g[ACTIVE_MODE_CACHE_KEY] as { info: ActiveModeInfo | null; valid: boolean } | undefined;

@@ -1498,8 +1498,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return stored ? stored === 'true' : true;
   });
 
-  // Active mode name (shown as a badge near the Modes button)
+  // Active mode name + source counts (chip above the chat input). The counts
+  // exist because a mode with ZERO attached files previously looked identical
+  // to a fully-indexed one at the surface where the user actually asks — the
+  // only signal was answer prose ("the résumé doesn't mention it") that reads
+  // as a retrieval failure rather than a missing upload.
   const [activeModeLabel, setActiveModeLabel] = useState<string | null>(null);
+  const [activeModeSourceCounts, setActiveModeSourceCounts] = useState<{ files: number; indexed: number } | null>(null);
   const [llmProviderLabel, setLlmProviderLabel] = useState<string>('unknown');
   const [llmPrivacyLabel, setLlmPrivacyLabel] = useState<string | null>(null);
   const [screenContextStatus, setScreenContextStatus] = useState<
@@ -1519,12 +1524,32 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Load initial active mode name
     window.electronAPI
       ?.modesGetActive?.()
-      .then((mode: { name: string } | null) => setActiveModeLabel(mode?.name ?? null))
+      .then(async (mode: { id?: string; name: string } | null) => {
+        setActiveModeLabel(mode?.name ?? null);
+        // Seed the source counts on first load too — otherwise the chip shows
+        // counts only after the first mode SWITCH of the session.
+        if (mode?.id && window.electronAPI?.modesGetReferenceFileStatus) {
+          try {
+            const statuses = await window.electronAPI.modesGetReferenceFileStatus(mode.id);
+            if (Array.isArray(statuses)) {
+              setActiveModeSourceCounts({
+                files: statuses.length,
+                indexed: statuses.filter((st: any) => st?.status === 'indexed' || (st?.chunkCount ?? 0) > 0).length,
+              });
+            }
+          } catch { /* chip only */ }
+        }
+      })
       .catch(() => {});
     // Live-update whenever mode is activated/deactivated
     const unsub = window.electronAPI?.onModeChanged?.(
-      (data: { id: string | null; name: string | null }) => {
+      (data: { id: string | null; name: string | null; fileCount?: number; indexedCount?: number }) => {
         setActiveModeLabel(data.name);
+        setActiveModeSourceCounts(
+          data.id && typeof data.fileCount === 'number'
+            ? { files: data.fileCount, indexed: data.indexedCount ?? 0 }
+            : null,
+        );
       },
     );
     return () => unsub?.();
@@ -4466,9 +4491,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         );
         liveAnswerGenIdRef.current = decision.activeId;
         if (!decision.accept) return;
+        // Staleness bound (2026-07-31): generation supersession is WTA-relative
+        // only, so a slow generation stays "current" through manual turns and
+        // mode switches — a minutes-old answer then appears with nothing saying
+        // which question it answers (the live "late CGPA answer"). Old finals
+        // are labelled with their question instead of dropped: the answer may
+        // still be wanted, but it must not read as a reply to the latest turn.
+        const emittedAt = (data as { emittedAt?: number }).emittedAt;
+        const STALE_ANSWER_MS = 30_000;
+        const isStale = typeof emittedAt === 'number' && Date.now() - emittedAt > STALE_ANSWER_MS;
+        const answerText = isStale && data.question
+          ? `(Late answer to: "${data.question}")\n\n${data.answer}`
+          : data.answer;
         setIsProcessing(false);
         pinAnswerPanel();
-        finalizeStreamingByIntent('what_to_answer', data.answer);
+        finalizeStreamingByIntent('what_to_answer', answerText);
       }),
     );
 
@@ -5330,7 +5367,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     // Stream Error
     cleanups.push(
-      window.electronAPI.onGeminiStreamError((error) => {
+      window.electronAPI.onGeminiStreamError((error, meta?: { streamId?: number | null; source?: string }) => {
+        // Guard (2026-07-31): a tagged error belonging to another stream must
+        // not tear down the one we're rendering. A phone-mirror failure carries
+        // source:'phone-mirror' and no streamId; a desktop failure carries the
+        // originating streamId — drop it unless it matches the adopted stream.
+        // Untagged errors keep the legacy behavior exactly.
+        if (meta?.source === 'phone-mirror') return;
+        if (typeof meta?.streamId === 'number'
+          && chatStreamIdRef.current !== null
+          && meta.streamId !== chatStreamIdRef.current) return;
         flushToken();
         setIsProcessing(false);
         requestStartTimeRef.current = null; // Clear timer on error
@@ -8294,6 +8340,22 @@ Provide only the answer, nothing else.`;
                                     tap and break inputs in Settings/Model
                                     Selector windows. */}
                 <div className="relative group" data-stealth-engage="true">
+                  {activeModeLabel && (
+                    <div
+                      className="flex items-center gap-1.5 px-1 pb-1 text-[10px] overlay-text-muted select-none"
+                      data-testid="active-mode-chip"
+                      title={activeModeSourceCounts
+                        ? `${activeModeSourceCounts.indexed}/${activeModeSourceCounts.files} reference file(s) indexed`
+                        : undefined}
+                    >
+                      <span className="truncate max-w-[140px]">{activeModeLabel}</span>
+                      {activeModeSourceCounts && (
+                        activeModeSourceCounts.files === 0
+                          ? <span className="text-amber-400/90">· no sources attached</span>
+                          : <span>· {activeModeSourceCounts.indexed}/{activeModeSourceCounts.files} sources</span>
+                      )}
+                    </div>
+                  )}
                   <input
                     ref={textInputRef}
                     data-testid="overlay-chat-input"

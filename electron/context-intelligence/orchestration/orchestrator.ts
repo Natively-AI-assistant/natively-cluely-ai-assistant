@@ -386,7 +386,32 @@ export async function orchestrate(
   retrieval?: RetrievalPort,
 ): Promise<OrchestratorResult> {
   const t0 = 0;
-  const decision = decide(req);
+
+  // ── Conversation continuity (§12.3) ───────────────────────────────────────
+  // Resolve a bare follow-up against this session's state BEFORE deciding.
+  // conversation-state.ts existed with zero callers, so "Why not?" reached the
+  // classifier bare, tripped the isBareFollowUp CLARIFICATION cap, and every
+  // live follow-up became a disclosure instead of an answer. Resolution here
+  // rewrites the question to carry its referent ("Why not? (referring to:
+  // Kubernetes)"), which both retrieves against the right subject and
+  // self-disables the bare-follow-up cap — exactly the design note on that cap.
+  // resolveReference is deliberately conservative: no state or no pronoun →
+  // question passes through untouched, and nothing below this line changes.
+  let effectiveReq = req;
+  try {
+    const { resolveAgainstSession } = require('../question/conversation-state-store');
+    const rawQ = (req.manualQuestion ?? req.transcriptQuestion ?? '').trim();
+    if (rawQ) {
+      const ref = resolveAgainstSession(req.sessionId, rawQ);
+      if (ref.usedState && ref.resolved !== rawQ) {
+        effectiveReq = req.manualQuestion
+          ? { ...req, manualQuestion: ref.resolved, isFollowUp: true }
+          : { ...req, transcriptQuestion: ref.resolved, isFollowUp: true };
+      }
+    }
+  } catch { /* continuity must never break a turn */ }
+
+  const decision = decide(effectiveReq);
 
   let evidence: EvidenceItem[] = [];
   let attempts: RetrievalAttemptTrace[] = [];
@@ -497,6 +522,19 @@ export async function orchestrate(
 
   } catch { /* observability only */ }
 
+  // Advance conversation state so the NEXT turn's bare follow-up can resolve.
+  // Question + evidence identity only; the transport appends the answer
+  // summary after the stream completes (recordAnswerSummary).
+  try {
+    const { advanceConversationState } = require('../question/conversation-state-store');
+    advanceConversationState({
+      sessionId: req.sessionId,
+      scope: decision.scope,
+      question: decision.resolvedQuestion,
+      evidenceIds: evidence.map((e) => e.evidenceId),
+      sourceIds: [...new Set(evidence.map((e) => e.sourceId))],
+    });
+  } catch { /* continuity must never break a turn */ }
 
   return { decision, evidence, answerability, trace };
 }

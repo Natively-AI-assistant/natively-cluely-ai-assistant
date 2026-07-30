@@ -23,7 +23,8 @@ export class BrainstormLLM {
             // rationale: `context` here is the problem/transcript blob passed
             // directly as the user message, not a real question being asked of the
             // candidate, so it must not go through the knowledge-mode intent gate.
-            yield* this.llmHelper.streamChat(fittedContext, imagePaths, undefined, promptOverride, true);
+            yield* this.llmHelper.streamChat(fittedContext, imagePaths, undefined, promptOverride, true,
+                Boolean(v3), [], undefined, undefined, v3 ? { v3Owned: true } : undefined);
         } catch (error) {
             console.error("[BrainstormLLM] Stream failed:", error);
             yield "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.";

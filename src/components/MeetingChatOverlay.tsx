@@ -398,7 +398,17 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
 ${contextString}`;
 
                     streamBuffer.reset();
-                    const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string) => {
+                    // Stream-id guard (2026-07-31) — see GlobalChatOverlay: drop
+                    // tokens/done/error belonging to an older abandoned stream.
+                    let adoptedStreamId: number | null = null;
+                    const acceptsMeta = (meta?: { streamId?: number }) => {
+                        const id = meta?.streamId;
+                        if (typeof id !== 'number') return true;
+                        if (adoptedStreamId === null || id > adoptedStreamId) { adoptedStreamId = id; return true; }
+                        return id === adoptedStreamId;
+                    };
+                    const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string, meta?: { streamId?: number }) => {
+                        if (!acceptsMeta(meta)) return;
                         setChatState('streaming_response');
                         streamBuffer.appendToken(token, (content) => {
                             setMessages(prev => prev.map(msg =>
@@ -409,7 +419,8 @@ ${contextString}`;
                         });
                     });
 
-                    const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone(() => {
+                    const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone((payload?: { streamId?: number }) => {
+                        if (!acceptsMeta(payload)) return;
                         const finalContent = streamBuffer.getBufferedContent();
                         setMessages(prev => prev.map(msg =>
                             msg.id === assistantMessageId
@@ -423,7 +434,9 @@ ${contextString}`;
                         oldErrorCleanup?.();
                     });
 
-                    const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string) => {
+                    const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string, meta?: { streamId?: number | null; source?: string }) => {
+                        if (meta?.source === 'phone-mirror') return;
+                        if (typeof meta?.streamId === 'number' && adoptedStreamId !== null && meta.streamId !== adoptedStreamId) return;
                         console.error('[MeetingChat] Gemini stream error (fallback):', error);
                         setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
                         setErrorMessage("Couldn't get a response. Please check your settings.");
@@ -454,7 +467,15 @@ ${contextString}`;
 
                 // Switch to Gemini streaming (RAF-batched)
                 streamBuffer.reset();
-                const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string) => {
+                let adoptedStreamId: number | null = null;
+                const acceptsMeta = (meta?: { streamId?: number }) => {
+                    const id = meta?.streamId;
+                    if (typeof id !== 'number') return true;
+                    if (adoptedStreamId === null || id > adoptedStreamId) { adoptedStreamId = id; return true; }
+                    return id === adoptedStreamId;
+                };
+                const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string, meta?: { streamId?: number }) => {
+                    if (!acceptsMeta(meta)) return;
                     setChatState('streaming_response');
                     streamBuffer.appendToken(token, (content) => {
                         setMessages(prev => prev.map(msg =>
@@ -465,7 +486,8 @@ ${contextString}`;
                     });
                 });
 
-                const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone(() => {
+                const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone((payload?: { streamId?: number }) => {
+                    if (!acceptsMeta(payload)) return;
                     const finalContent = streamBuffer.getBufferedContent();
                     setMessages(prev => prev.map(msg =>
                         msg.id === assistantMessageId
@@ -479,7 +501,9 @@ ${contextString}`;
                     oldErrorCleanup?.();
                 });
 
-                const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string) => {
+                const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string, meta?: { streamId?: number | null; source?: string }) => {
+                    if (meta?.source === 'phone-mirror') return;
+                    if (typeof meta?.streamId === 'number' && adoptedStreamId !== null && meta.streamId !== adoptedStreamId) return;
                     console.error('[MeetingChat] Gemini stream error:', error);
                     setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
                     setErrorMessage("Couldn't get a response. Please check your settings.");
