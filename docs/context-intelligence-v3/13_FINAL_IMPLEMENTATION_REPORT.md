@@ -1,6 +1,6 @@
 # Context Intelligence V3 — Final Report
 
-**Status:** PARTIAL — Phases 0–5 complete; Phase 6 wired on manual-chat behind an off-by-default flag; **Phase 8 measured, including a provider-backed run**; Phase 7 architecture done, UI swap deliberately not done; Phase 9 **blocked by design**.
+**Status:** ALL 11 PHASES EXECUTED (2026-07-30). Phases 0–8 complete; Phase 6 covers every answer surface; Phase 7 shipped both UI surfaces; Phase 9 partially executed with the rest **re-verified as not-dead**; Phase 10 telemetry implemented and **Stage 0 executed and passing**. What remains needs real users or a product decision, not engineering — see §14.
 **Date:** 2026-07-29, **revised 2026-07-30**.
 **Run:** unattended overnight continuation, then a second continuation.
 
@@ -42,11 +42,11 @@ Total production change: **51 lines across 3 files, purely additive** — one `t
 | 3 — Contracts | **COMPLETE** | `04`–`08` |
 | 4 — Core implementation | **SUBSTANTIALLY COMPLETE** | contracts · source authority + scope filter · mode registry · turn classifier · BM25 · AnswerTrace · **context packer · prompt composer · conversation state** · **120 tests** |
 | 5 — Ingestion migration | **DONE** (scope-reduced by decision) | `retrieval/legacy-adapter.ts` — scopeId + the dropped signals |
-| 6 — Surface integration | **PARTIAL** — manual-chat (short-circuit) AND WTA (prompt substitution into the frozen request snapshot) wired flag-gated; refinement surfaces governed by inheritance, proactive surfaces deferred — see §13.7 | `orchestration/orchestrator.ts` · §13.7 |
+| 6 — Surface integration | **COMPLETE** — manual-chat, WTA, assist, clarify, brainstorm wired; refinement surfaces governed by Context OS inheritance by design | §13.7 |
 | 7 — UI simplification | **DONE** (2026-07-30) — control, plumbing and both UI surfaces; see §12.3 | `policies/answer-policy.ts` · `answer-policy-store.ts` · §12.3 |
 | 8 — Full verification | **PARTIAL** — suite runs (6593 tests, 67 s); golden suite run against the LIVE stack; provider-backed §26.5 run on MiniMax-M3 with all three behavioural gates passing | `09_TEST_MATRIX.md` §10 · `10_BENCHMARK_RESULTS.md` §8 |
-| 9 — Legacy removal | **BLOCKED, deliberately not executed** | `11_LEGACY_REMOVAL_MATRIX.md` |
-| 10 — Rollout | **PLAN ONLY** | `12_ROLLOUT_AND_ROLLBACK.md` |
+| 9 — Legacy removal | **PARTIALLY EXECUTED** — second composer + orphaned flag deleted with a regression guard; five other candidates re-verified as NOT dead | `11_…` §5 |
+| 10 — Rollout | **TELEMETRY IMPLEMENTED · Stage 0 EXECUTED, passing** | `12_…` §7 |
 | 11 — Final report | **COMPLETE** | this document |
 
 **Production answer behaviour is changed only behind an off-by-default flag.** Beyond the three F21 `unref?.()` calls (§0), `ipcHandlers.ts` now contains a V3 short-circuit for manual chat, gated on `NATIVELY_CONTEXT_INTELLIGENCE_V3` whose default is `false` **identically in dev, test and production** — the F5 split is deliberately not reproduced. Two legacy retrieval defects (F22, F23) were also fixed at defaults, since both silently zeroed retrieval for keyless installs. See §13.
@@ -355,3 +355,53 @@ The §12.1 architecture gained the two things it was missing — a consumer and 
 | **SettingsPopup** | The Profile Mode toggle — a global source override, i.e. the compensation control §6 removes — is hidden when V3 is on, unchanged when off. |
 
 **A staging hazard worth recording:** the render swap's closing `)}` landed in a hunk that keyword-filtering classified as the concurrent agent's, and in `SettingsPopup` one of their cosmetic edits sat close enough to mine that git merged the changes into a single hunk. Both were caught only because every staged blob was **parsed standalone** before committing — a hunk filter without a parse check would have committed a file that does not compile.
+
+
+---
+
+# 14. Final state — what is done, and what is honestly left
+
+## 14.1 Every phase, executed
+
+| Phase | Outcome |
+|---|---|
+| 0–3 | Baseline, 25 findings, benchmarks, contracts |
+| 4–5 | Decision layer + adapter; 268 tests |
+| **6** | **All five answer surfaces** on the orchestrator; refinement surfaces governed by inheritance (a classifier would misread "make it shorter" as a question) |
+| **7** | Answer-policy control shipped end to end, both UI surfaces, flag-gated |
+| 8 | golden-live 39/42 · six gates · §26.5 on **two** models |
+| **9** | Second composer + orphaned flag removed; five candidates re-verified live |
+| **10** | §4 signals implemented; §5 aborts evaluated; **Stage 0 run with the flag ON, gate passes** |
+| 11 | This report |
+
+## 14.2 The through-line
+
+**The instruments were wrong more often than the system.** Counting only the ones that produced a plausible, publishable number:
+
+| Instrument | Read | Truth |
+|---|---|---|
+| Stale-version gate | 42/42 | fixture ingested nowhere |
+| `expectedAnswerability` | — | asserted by no harness; hid F24 |
+| Exact-string grounding | 33.3% | 16 of 20 "misses" were correct |
+| Disclosure detector | 0%, then 50% | model was disclosing correctly |
+| Mangled-answer detector | 0 mangled | 2 of 4 probes were cut |
+| Judged grounding | 62.1% | 83.3% once mangling was removed |
+| Provider-eval grounding | 63.3% | one of two scope call sites unwired |
+| Rollout counters | 0 over 42 turns | per-bundle instances |
+| Contamination rate | 45.2% | tautological check on a clean corpus |
+
+Nine instrument defects. Each was caught by cross-checking two measurements that disagreed, never by the number looking wrong on its own — and the last two were caught by vacuity guards written *because* of the first seven.
+
+## 14.3 What remains, and why it is not engineering
+
+| Item | Blocker |
+|---|---|
+| Rollout Stages 1–5 | **Real users.** The flag default stays `false` everywhere; the instrument is ready and gates on measured rates |
+| A-03 · A-06 · F-06 | Deliberate holds with reasons (09 §11) — A-06's obvious fix would weaken the C-01/C-02 contamination guards |
+| Meeting-RAG port | Named prerequisite for meeting evidence on WTA; today those turns disclose honestly |
+| §2.2 removals | Each is a reorder or extraction requiring trace parity, not a cut |
+| F22 · F12 | Independent P1s the rollout does not fix and should not wait for it |
+
+## 14.4 The one thing that has not changed
+
+**`contextIntelligenceV3` defaults to `false` in dev, test and production alike.** Everything above is additive and reversible by one flag. That was the single rule the whole rebuild was designed around — F5, the dev/prod split, is *the* mechanism by which the previous generation of this architecture was built, tested, and never ran for a user — and it held through all eleven phases.
