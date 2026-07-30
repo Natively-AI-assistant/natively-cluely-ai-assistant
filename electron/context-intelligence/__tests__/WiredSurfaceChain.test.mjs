@@ -22,12 +22,15 @@ const resolveMode = (raw) => resolveModePolicy(isModeId(raw) ? raw : 'general');
 
 const chain = async (question, { modeId = 'technical-interview', chunks = [], files = ['f1'] } = {}) => {
   const policy = resolveMode(modeId);
+  // Mirrors ipcHandlers exactly: type, version AND scope declared per file, with
+  // NO `assume*` opt-in. If the handler and this test diverge on that, the test
+  // stops proving anything about the wired path — which is its only purpose.
   const sourceTypes = new Map(files.map((f) => [f, 'REFERENCE_FILE']));
   const activeVersions = new Map(files.map((f) => [f, 'legacy']));
   const chunkVersions = new Map(files.map((f) => [f, 'legacy']));
+  const sourceScopes = new Map(files.map((f) => [f, { userId: 'local' }]));
   const port = createLegacyRetrievalPort({
-    registry: { sourceTypes, activeVersions, chunkVersions },
-    assumeInScopeWhenUnknown: true,
+    registry: { sourceTypes, activeVersions, chunkVersions, sourceScopes },
     retrieve: async () => chunks,
   });
   const result = await orchestrate({
@@ -114,8 +117,8 @@ describe('stale evidence never reaches the prompt', () => {
         sourceTypes: new Map([['f1', 'REFERENCE_FILE']]),
         activeVersions: new Map([['f1', 'v2']]),
         chunkVersions: new Map([['f1', 'v1']]),   // stale: active is v2
+        sourceScopes: new Map([['f1', { userId: 'local' }]]),
       },
-      assumeInScopeWhenUnknown: true,
       retrieve: async () => [{ sourceId: 'f1', text: 'superseded value', chunkIndex: 0, score: 0.99 }],
     });
     const result = await orchestrate({
@@ -129,5 +132,23 @@ describe('stale evidence never reaches the prompt', () => {
     // (unknown scope, unknown type) would also reject exactly one chunk and let
     // this test pass while proving nothing about version filtering.
     assert.equal(result.trace.retrievalAttempts[0].rejections[0].reason, 'SUPERSEDED_VERSION');
+  });
+});
+
+
+describe('the wired surface fails CLOSED on an unregistered source', () => {
+  test('a chunk from outside this mode\'s files never reaches the model', async () => {
+    // The handler builds its registry from mm.getReferenceFiles(activeMode). A
+    // chunk carrying some other sourceId — a stale index row, another mode's file
+    // — must be rejected, not admitted. The previous fail-open configuration
+    // (`assume*` opt-ins) would have let it through on scope and version; only the
+    // source-type lookup stood in the way.
+    const { result } = await chain('According to the document, what is the policy?', {
+      modeId: 'seminar', files: ['f1'],
+      chunks: [{ sourceId: 'ROGUE', fileName: 'other.txt', text: 'leaked content', chunkIndex: 0, score: 0.99 }],
+    });
+    assert.equal(result.evidence.length, 0, 'a 0.99-scoring unregistered chunk must be rejected');
+    const reasons = result.trace.retrievalAttempts[0].rejections.map((r) => r.reason);
+    assert.ok(reasons.includes('UNKNOWN_SOURCE_TYPE'), `expected a fail-closed rejection, got ${reasons}`);
   });
 });

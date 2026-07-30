@@ -893,6 +893,10 @@ export function initializeIpcHandlers(appState: AppState): void {
             const { createLegacyRetrievalPort } = require('./context-intelligence/retrieval/legacy-retrieval-port');
             const { ModesManager } = require('./services/ModesManager');
 
+            // The registry and the turn MUST agree on this, or scope containment
+            // rejects every source. One constant rather than two literals.
+            const V3_USER_ID = 'local';
+
             const mm = ModesManager.getInstance();
             const modeInfo = mm.getActiveModeInfo?.() ?? null;
             const rawMode = (modeInfo as any)?.templateType ?? 'general';
@@ -902,13 +906,33 @@ export function initializeIpcHandlers(appState: AppState): void {
             const policy = resolveModePolicy(modeId);
 
             const files = modeInfo?.id ? (mm.getReferenceFiles?.(modeInfo.id) ?? []) : [];
-            // The legacy store has no version concept for mode reference files,
-            // so every file is stamped a single synthetic active version. That is
-            // honest — it means version isolation is a no-op HERE until ingestion
-            // carries real versions — rather than silently pretending otherwise.
+            // The legacy store has no version concept for mode reference files, so
+            // every file is stamped one synthetic version. Version isolation is
+            // therefore a NO-OP here until ingestion carries real versions — but
+            // the filter is DECLARED rather than bypassed.
+            //
+            // That distinction matters. Declaring `chunkVersions` and `sourceScopes`
+            // for exactly this file set means production runs the same comparison
+            // the benchmarks measure, with a registry that happens to be
+            // degenerate, instead of taking the `assume*` fail-open escape hatches.
+            // If ingestion later carries versions or meeting scopes, the filter is
+            // already live rather than switched off. It also fails CLOSED on a chunk
+            // from outside this mode's files, which the fail-open path would admit.
+            //
+            // Scope is real, not synthetic: these files belong to this user, and the
+            // turn below is scoped to the same user. A user-level source is admitted
+            // in any of that user's turns by containment, so no meeting concept is
+            // needed on manual chat.
             const sourceTypes = new Map<string, any>();
             const activeVersions = new Map<string, string>();
-            for (const f of files) { sourceTypes.set(f.id, 'REFERENCE_FILE'); activeVersions.set(f.id, 'legacy'); }
+            const chunkVersions = new Map<string, string>();
+            const sourceScopes = new Map<string, { userId: string }>();
+            for (const f of files) {
+              sourceTypes.set(f.id, 'REFERENCE_FILE');
+              activeVersions.set(f.id, 'legacy');
+              chunkVersions.set(f.id, 'legacy');
+              sourceScopes.set(f.id, { userId: V3_USER_ID });
+            }
 
             const port = createLegacyRetrievalPort({
               registry: { sourceTypes, activeVersions },
@@ -927,7 +951,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
             const result = await orchestrate({
               requestId: `v3-${myStreamId}`, requestSequence: myStreamId,
-              surface: 'manual-chat', modeId, scope: { userId: 'local' },
+              surface: 'manual-chat', modeId, scope: { userId: V3_USER_ID },
               sessionId: String(senderId), manualQuestion: String(message || ''),
             }, port);
 

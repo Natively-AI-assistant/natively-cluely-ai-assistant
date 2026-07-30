@@ -261,6 +261,8 @@ Discriminating check: superseded-rejection turns fell **25 → 6** after the spl
 
 `base` 12 files / 406 chunks · `versioned` 4 files / 20 chunks · retrieval p50 12 ms · p95 14 ms.
 
+**What configuration these gates describe.** They are measured with a per-source type, version *and* scope declared for every document. The wired manual-chat surface now declares all three as well — the `assume*` fail-open opt-ins were removed from it — so the harness and production run the **same comparison**. The difference is the *registry*, not the code path: production's is degenerate (one synthetic version, one user scope, no meeting), so version and cross-meeting isolation cannot reject anything there until ingestion carries real versions and meeting ids. They are declared and live rather than bypassed, which is why a chunk from outside the active mode's files now fails closed on that surface — pinned by a test in `WiredSurfaceChain.test.mjs`.
+
 ### 10.4 The real failures — FIVE causes, not one
 
 **Correction.** An earlier version of this section said the 14 failures *"concentrate almost entirely in `evidenceSupportsClaim`"*. **That was wrong**, and it was wrong because it was inferred from the summary table (expected-vs-actual and an evidence count) rather than measured. A per-stage trace (`benchmarks/ci-v3-retrieval/diagnose.cjs`) shows five distinct causes, of which claim support is one.
