@@ -308,7 +308,9 @@ Critically, **relabelling G-01/G-02 did not make them pass** — they still fail
 
 ---
 
-## 11. The four remaining failures, and why each is left (2026-07-30)
+## 11. The remaining failures, and why each is left (2026-07-30)
+
+> **CORRECTION.** This section originally counted **four** remaining failures. The true count at the time was **seven** — E-01, E-02 and A-12 were also failing, hidden because the failure list was read from a `head`-truncated console dump instead of the results JSON. The same session had already documented this exact instrument mistake twice. §11.5 records the fixes that followed; the count below is now maintained against the JSON.
 
 `answerabilityMatchesExpected` is **35/42**; 34 of 42 questions pass every gate. The seven earlier failures resolved to five distinct causes, three of which are fixed. The rest are recorded with a mechanism rather than a symptom, because a bare list invites the wrong fix.
 
@@ -379,3 +381,19 @@ Note also that `zsh` does not word-split an unquoted `$var` (only command
 substitution), so a first attempt at this comparison silently passed all five paths
 as one filename and reported "no failures" for both sides. Both runs looked clean
 and meant nothing.
+
+
+### 11.5 Second pass (later the same day) — 35/42 → 39/42
+
+Four of the seven were fixed; each with a per-stage diagnosis first:
+
+| ID | Mechanism | Fix |
+|---|---|---|
+| **G-03** | "What is the peak transaction volume of the payments API?" matched concept grammar, took a GENERAL claim, and any existing claim skips the primary-source fallback — self-sealing. FULL with **zero evidence**. | `METRIC_LOOKUP_RE`: a metric noun **plus** a definite complement ("of the …") is a lookup. Both halves required, so "what is p99 latency?" stays a concept and F-05 keeps its meeting route. Now grounded; the superseded résumé scored *highest* and is rejected by the version filter. `retrievalPath` **42/42**. |
+| **A-12** | "Salary band" matched `JOB_RE`; seminar authorizes no JD; `sourceTypes` resolved empty and the turn retrieved nothing while the answer sat in the mode's own compensation file. | JD vocabulary re-routes to `DOCUMENT_FACT` in a document-centric mode **without** a JD. Never converts a claim away from a source the mode actually has. |
+| **J-01** | A regression from §11's own scaffolding stoplist: "Summarise the reference material" kept one salient term — the stem of "summarise" — which no document contains. NONE over five good items. | Summary verbs are scaffolding (they name the operation, not a fact). With zero content terms, the nothing-to-match rule correctly lets any authorized evidence support a summary. |
+| **E-01 / E-02** | "Why?" with no conversation state: no salient terms ⇒ every item "supported" it ⇒ FULL over six unrelated chunks. | A follow-up whose **resolved** question is still bare has an unresolved referent → NONE + `CLARIFICATION`, or PARTIAL when a general-knowledge half exists ("Would that scale?"). The cap keys on *bareness*, so wiring `question-resolver.ts` later disables it naturally. |
+
+The referent cap was **dead on arrival at first**: `FOLLOW_UP_RE` is lowercase-only and the orchestrator passed raw-cased "Why?". Two consecutive runs were identical and the diff was silently empty — caught only because the run was re-measured rather than assumed. `isBareFollowUp` now lower-cases its own input.
+
+**Final state: 39/42 on `answerabilityMatchesExpected`, 39/42 fully passing, and every other gate at 100%.** The three left are §11.1 (A-03, retrieval floor), §11.2 (A-06, vocabulary-vs-safety — still deliberately refused), §11.3's F-06 (named artifact). G-03's entry in §11.3 is superseded by the fix above.
