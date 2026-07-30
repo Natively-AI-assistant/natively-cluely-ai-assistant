@@ -202,7 +202,8 @@ export type IntelligenceFlagKey =
   // clear: a live-Electron trace campaign, not a unit-test pass alone).
   | 'turnIdentityV2'
   // ── PromptComposer (Phase 6 Slice 2, context-rebuild) ────────────────────
-  // electron/llm/promptComposer.ts's composePrompt() — the one assembly
+  // (removed 2026-07-30 with electron/llm/promptComposer.ts — see Phase 9)
+  // Historical: composePrompt() — the one assembly
   // point replacing the ad hoc CONTEXT/USER-QUESTION concatenation
   // scattered across LLMHelper.ts, and the RC1 answerPolicy short-circuit
   // (no provider call for refuse_insufficient_evidence/ask_clarification).
@@ -215,7 +216,6 @@ export type IntelligenceFlagKey =
   // campaign (contextOsEnabled's 2026-07-18 precedent), not a green unit-
   // test suite alone — see 05_MIGRATION_PLAN.md's Slice 2 STATUS note.
   // Pattern 1 (dev/test-only default) exactly like turnIdentityV2 above.
-  | 'promptComposerV2'
   // ── CanonicalTurn on manual chat (Phase 6 Slice 3, context-rebuild) ──────
   // resolveCanonicalTurn (electron/llm/resolveCanonicalTurn.ts) called from
   // ipcHandlers.ts's manual-chat handler for the FIRST TIME — a genuinely
@@ -544,7 +544,6 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // rollout flags intentionally are.
   answerRelevanceGuardLive: { env: 'NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE', setting: 'answerRelevanceGuardLiveEnabled', default: false },
   turnIdentityV2: { env: 'NATIVELY_TURN_IDENTITY_V2', setting: 'turnIdentityV2Enabled', default: isInternalDevTestContext },
-  promptComposerV2: { env: 'NATIVELY_PROMPT_COMPOSER_V2', setting: 'promptComposerV2Enabled', default: isInternalDevTestContext },
   canonicalTurnManualChat: { env: 'NATIVELY_CANONICAL_TURN_MANUAL_CHAT', setting: 'canonicalTurnManualChatEnabled', default: isInternalDevTestContext },
   atomicJdProfilePackGeneration: { env: 'NATIVELY_ATOMIC_JD_PROFILE_PACK', setting: 'atomicJdProfilePackGenerationEnabled', default: isInternalDevTestContext },
   assistantClaimsEnforcement: { env: 'NATIVELY_ASSISTANT_CLAIMS_ENFORCEMENT', setting: 'assistantClaimsEnforcementEnabled', default: isInternalDevTestContext },

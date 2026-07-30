@@ -115,8 +115,6 @@ const EXPECTED_KEYS = [
   'answerRelevanceGuardLive',
   // TurnIdentity (Phase 6 Slice 1, context-rebuild, 2026-07-25) — dev/test-only.
   'turnIdentityV2',
-  // PromptComposer (Phase 6 Slice 2, context-rebuild, 2026-07-25) — dev/test-only.
-  'promptComposerV2',
   // Phase 6 Slice 3 (context-rebuild, 2026-07-25) — dev/test-only.
   'canonicalTurnManualChat',
   // Phase 6 Slice 5 (context-rebuild, 2026-07-25) — dev/test-only.

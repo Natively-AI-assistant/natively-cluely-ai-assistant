@@ -81,8 +81,6 @@ const ALL_FLAG_KEYS = [
   // ragConfidenceGate/okfKnowledgePacks precedent above; resolves to
   // isInternalDevTestContext() = FALSE under this bare node harness.
   'turnIdentityV2',
-  // Phase 6 Slice 2 (context-rebuild, 2026-07-25) — dev/test-only, same pattern.
-  'promptComposerV2',
   // Phase 6 Slice 3 (context-rebuild, 2026-07-25) — dev/test-only, same pattern.
   'canonicalTurnManualChat',
   // Phase 6 Slice 5 (context-rebuild, 2026-07-25) — dev/test-only, same pattern.
