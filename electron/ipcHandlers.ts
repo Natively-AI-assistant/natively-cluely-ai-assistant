@@ -9809,32 +9809,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       const engine = orchestrator.getCompanyResearchEngine();
 
-      // Wire search provider: Tavily (user key) → Natively API (fallback) → none (LLM-only)
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-      const tavilyApiKey = cm.getTavilyApiKey();
-      if (tavilyApiKey) {
-        const {
-          TavilySearchProvider,
-        } = require('../premium/electron/knowledge/TavilySearchProvider');
-        engine.setSearchProvider(new TavilySearchProvider(tavilyApiKey));
-      } else {
-        const nativelyKey = cm.getNativelyApiKey();
-        if (nativelyKey) {
-          const {
-            NativelySearchProvider,
-          } = require('../premium/electron/knowledge/NativelySearchProvider');
-          // Pass the real trial token when key is the __trial__ sentinel so the
-          // server can authenticate via x-trial-token instead of the invalid key.
-          const trialToken = nativelyKey === TRIAL_SENTINEL_KEY ? cm.getTrialToken() : undefined;
-          engine.setSearchProvider(
-            new NativelySearchProvider(nativelyKey, trialToken ?? undefined),
-          );
-          console.log(
-            '[IPC] Company research: using Natively API search (no Tavily key configured)',
-          );
-        }
-      }
+      // Wire search provider: Tavily (user key) → Natively API (fallback) → none (LLM-only).
+      // Shared cascade with the AOT pipeline (see resolveCompanySearchProvider) so the
+      // manual and automatic paths cannot drift. Null clears any stale provider left
+      // from a session where keys were since removed.
+      const {
+        resolveCompanySearchProvider,
+      } = require('./services/resolveCompanySearchProvider');
+      engine.setSearchProvider(resolveCompanySearchProvider());
 
       // Build full JD context so the dossier is tailored to the exact role
       const profileData = orchestrator.getProfileData();

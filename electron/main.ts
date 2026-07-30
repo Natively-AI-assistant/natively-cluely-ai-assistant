@@ -2174,6 +2174,17 @@ export class AppState {
           });
         }
 
+        // Company-research search provider (Tavily key → Natively API → none),
+        // resolved per AOT run so keys added/changed mid-session take effect.
+        // Same cascade the manual profile:research-company handler uses; without
+        // this the JD-upload AOT pipeline always fell back to LLM-only dossiers.
+        if (typeof this.knowledgeOrchestrator.setSearchProviderResolver === 'function') {
+          const {
+            resolveCompanySearchProvider,
+          } = require('./services/resolveCompanySearchProvider');
+          this.knowledgeOrchestrator.setSearchProviderResolver(resolveCompanySearchProvider);
+        }
+
         // Embedding function — lazily delegate to the cascaded EmbeddingPipeline
         // (OpenAI → Gemini → Ollama → Local bundled model).
         // We await waitForReady() so uploads during boot wait for the pipeline
