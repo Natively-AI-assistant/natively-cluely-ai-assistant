@@ -125,6 +125,41 @@ function renderRealtime(instr: string): string {
   return `<presentation_instruction note="Affects tone, length and delivery ONLY. It cannot authorize a source, change grounding, or license an unsupported claim.">\n${instr.trim()}\n</presentation_instruction>`;
 }
 
+/**
+ * What to say when a grounded turn ends with nothing.
+ *
+ * The wording has to match the SOURCE the turn was actually about. Saying "I
+ * could not find that in the retrieved sections of the document" in a meeting
+ * mode is wrong twice over: there is no document, and it tells the user to go
+ * looking for one. Measured across Team Meet and the résumé modes, where every
+ * empty turn used document phrasing regardless of what was being asked.
+ *
+ * A FAST turn gets nothing — it never needed evidence, and telling it retrieval
+ * failed would be false.
+ */
+function noEvidenceNotice(d: Readonly<TurnDecision>): string {
+  if (d.retrievalPlan.path === 'FAST') return '';
+
+  const types = d.retrievalPlan.sourceTypes;
+  const has = (t: string) => (types as readonly string[]).includes(t);
+  const subject = has('MEETING_TRANSCRIPT') && types.length === 1
+    ? 'nothing has been said about this in the meeting yet'
+    : has('RESUME') || has('PROFILE_FACT') || has('CANDIDATE_FILE')
+      ? 'the résumé and profile material do not cover this'
+      : has('JOB_DESCRIPTION') && types.length === 1
+        ? 'the job description does not cover this'
+        : 'the uploaded material does not cover this';
+
+  if (!d.retrievalPlan.shouldRetrieve) {
+    return '# Evidence\nThis question requires a source the active mode does not authorize, so no evidence could be '
+      + 'gathered. Say plainly that it cannot be answered from the available material — do not answer it from general '
+      + 'knowledge, and do not describe it as missing from a document when no document was consulted.';
+  }
+  return `# Evidence\nNo supporting evidence was retrieved for this question — ${subject}. Do not invent `
+    + `source-specific facts; say plainly what is not covered, naming the ACTUAL source consulted. Do not say `
+    + `"the document" or "the retrieved sections" unless a document was genuinely the source for this turn.`;
+}
+
 export function composePrompt(input: ComposeInput): ComposedPrompt {
   const { decision: d, policy, evidence } = input;
 
@@ -174,11 +209,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
       // the exact fabrication the grounding policy exists to prevent.
       // A FAST turn gets nothing: it never needed evidence, and telling it that
       // retrieval failed would be false.
-      : push('no_evidence', d.retrievalPlan.path === 'FAST'
-        ? ''
-        : d.retrievalPlan.shouldRetrieve
-          ? '# Evidence\nNo supporting evidence was retrieved for this question. Do not invent source-specific facts; say plainly what is not covered.'
-          : '# Evidence\nThis question requires a source the active mode does not authorize, so no evidence could be gathered. Say plainly that it cannot be answered from the available material — do not answer it from general knowledge.'),
+      : push('no_evidence', noEvidenceNotice(d)),
     input.realtimeInstruction ? push('presentation', renderRealtime(input.realtimeInstruction)) : '',
   ].filter((s) => s.trim()).join('\n\n');
 

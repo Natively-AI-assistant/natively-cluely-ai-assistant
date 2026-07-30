@@ -135,6 +135,51 @@ const GENERAL_TECH_RE = /\b(what is|what are|explain|define|difference between|h
 //   * The definite complement ("of the …", "for our …") is what marks a
 //     particular artifact rather than the concept in general. F-05's "What is
 //     the p99 now?" carries no such complement and keeps its meeting route.
+// A VALUE lookup names a quantity the DOCUMENT holds; a CONCEPT question asks
+// what something means. Only the first should be forced through retrieval in a
+// document-centric mode.
+//
+// Measured: Lecture answered "Explain what a VLA model is" with "I could not
+// find a direct definition in the retrieved sections". Lecture is SOURCE_FIRST —
+// source first, then general knowledge — but suppressing the GENERAL_TECHNICAL
+// claim entirely removed the second half, turning a definition request into a
+// failed document lookup.
+// "What is X?" / "Explain X" asks what something MEANS. The named thing is the
+// concept being defined, not a private entity to look up — so a capitalised
+// acronym like VLA must not route it to the document the way "Acme" would.
+// Measured: "Explain what a VLA model is" was suppressed because
+// hasNonGenericProperNoun matched VLA, and Lecture answered "I could not find a
+// direct definition in the retrieved sections".
+const DEFINITION_RE = /\b(what (is|are)|explain|define|describe|meaning of|stands for)\b/;
+
+/**
+ * Are the specific entities in this question only ACRONYMS?
+ *
+ * "Explain what a VLA model is" and "What is the discount floor for Acme?" are
+ * both definition-shaped and both name something capitalised — but VLA is a
+ * technical term whose meaning is world knowledge, while Acme is a name whose
+ * discount floor exists only in a private document. Letting a definition
+ * override the entity check for BOTH sent the Acme question to general knowledge,
+ * which is the fabrication route the check exists to close.
+ *
+ * All-caps and short is the discriminator: acronyms are written that way and
+ * organisation names are not.
+ */
+function onlyAcronymEntities(text: string): boolean {
+  const caps = [...String(text).matchAll(/\b([A-Z][A-Za-z0-9-]{1,})\b/g)]
+    .map((m) => m[1])
+    .filter((t, i, arr) => {
+      // Skip the sentence-initial capital, same rule hasNonGenericProperNoun uses.
+      if (i === 0 && new RegExp(`^\\s*${t}\\b`).test(text)) return false;
+      return !GENERIC_TECH_CAPS.has(t.toLowerCase());
+    });
+  if (!caps.length) return true;
+  return caps.every((t) => t.length <= 6 && t === t.toUpperCase());
+}
+
+const VALUE_LOOKUP_RE =
+  /\b(price|pricing|cost|rate|band|salary|limit|threshold|quota|budget|version|deadline|date|count|total|percentage|score|value)\b|\bhow (many|much)\b/;
+
 const METRIC_LOOKUP_RE =
   /\b(volume|throughput|latency|uptime|capacity|bandwidth|qps|tps|rps|p\d{2,3}|rate)\s+(?:of|for)\s+(?:the|our|your|its|this|that)\b/;
 
@@ -151,12 +196,20 @@ const SYSTEM_DESIGN_RE = /\b(design a|scale (a|the|to)|system design|architectur
 const FOLLOW_UP_RE = /^(why|how|and|but|what about|would (it|that|this)|can you|could you|explain that|more detail|go on|really)\b/;
 const FOLLOW_UP_MAX_WORDS = 5;
 
+// Requests to REPHRASE the previous turn. "What should I say?" carries no
+// subject of its own — its referent is the question just asked — but it does not
+// start with a pronoun, so the bare-follow-up test missed it and the turn was
+// treated as a fresh question and answered "not in the uploaded material".
+const RESPONSE_REQUEST_RE =
+  /^(what|how) (should|do|would|can|could) i (say|answer|respond|reply|put|phrase|frame|word)\b|^(help me|how to) (answer|respond|phrase|say)\b|^what do i say\b/i;
+
 // Lower-cases its own input: FOLLOW_UP_RE is lowercase-only, and the classifier
 // happens to pre-lower before calling while the orchestrator passes the raw
 // resolved question. The first external caller silently never matched "Why?" —
 // capital W — so the referent cap it guarded was dead on arrival.
 export const isBareFollowUp = (raw: string): boolean => {
   const q = String(raw).toLowerCase();
+  if (RESPONSE_REQUEST_RE.test(q)) return true;
   return FOLLOW_UP_RE.test(q) && q.split(/\s+/).filter(Boolean).length <= FOLLOW_UP_MAX_WORDS;
 };
 
@@ -245,9 +298,22 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     // A metric lookup wearing concept grammar must not become a general claim:
     // once any claim exists, the primary-source fallback below is skipped, so
     // the misclassification is self-sealing.
-    if (GENERAL_TECH_RE.test(clause) && !personal && !namesSpecificEntity
+    // In a document-centric mode, only a VALUE lookup is forced to the document.
+    // A concept question still emits GENERAL_TECHNICAL so the mode's SOURCE_FIRST
+    // fallback can actually fire — it retrieves first, and answers from general
+    // knowledge only when the document has no definition.
+    // A definition request stays conceptual UNLESS it also asks for a value —
+    // "what is the list price per seat?" is a lookup wearing definition grammar.
+    // Only an ACRONYM-only definition stays conceptual — a named organisation
+    // keeps its document routing.
+    const isDefinition = DEFINITION_RE.test(clause) && !VALUE_LOOKUP_RE.test(clause)
+      && onlyAcronymEntities(input.resolvedQuestion);
+    const docLookupHere = documentCentricMode && looksFactualQ && !isDefinition
+      && (VALUE_LOOKUP_RE.test(clause) || namesSpecificEntity);
+    if (GENERAL_TECH_RE.test(clause) && !personal
+        && (!namesSpecificEntity || isDefinition)
         && !METRIC_LOOKUP_RE.test(clause)
-        && !(documentCentricMode && looksFactualQ)) {
+        && !docLookupHere) {
       types.add('GENERAL_TECHNICAL'); noteClaim('GENERAL_TECHNICAL', clause);
     }
   }

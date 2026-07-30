@@ -275,3 +275,57 @@ describe('bare follow-up detection', () => {
       'the scaling judgement is general knowledge (§3.7) — this is what makes E-02 PARTIAL rather than NONE');
   });
 });
+
+// ── Live-run fixes: concept vs lookup, and response-request follow-ups ───────
+
+describe('a definition question keeps general knowledge in a document mode', () => {
+  test('"Explain what a VLA model is" is conceptual, not a failed document lookup', () => {
+    // Measured: Lecture answered "I could not find a direct definition in the
+    // retrieved sections". Lecture is SOURCE_FIRST — source first, THEN general
+    // knowledge — but suppressing the claim removed the second half entirely.
+    const c = classify('Explain what a VLA model is.', 'lecture');
+    assert.ok(c.claimTypes.includes('GENERAL_TECHNICAL'), JSON.stringify(c.claimTypes));
+    assert.equal(c.shouldRetrieve, true, 'it should still check the document FIRST');
+  });
+
+  test('a NAMED organisation keeps document routing — the fabrication case', () => {
+    // The discriminator is acronym vs name: VLA is world knowledge, Acme's
+    // discount floor exists only in a private document. An earlier version of
+    // this fix let both through and reopened that route.
+    const c = classify('What is the discount floor for Acme?', 'seminar');
+    assert.ok(c.claimTypes.includes('DOCUMENT_FACT'), JSON.stringify(c.claimTypes));
+    assert.ok(!c.claimTypes.includes('GENERAL_TECHNICAL'));
+  });
+
+  test('a VALUE lookup wearing definition grammar stays a lookup', () => {
+    const c = classify('What is the list price per seat?', 'seminar');
+    assert.ok(c.claimTypes.includes('DOCUMENT_FACT'));
+    assert.ok(!c.claimTypes.includes('GENERAL_TECHNICAL'));
+  });
+
+  test('genuinely general questions still take the fast path', () => {
+    for (const [q, m] of [['What is a mutex?', 'technical-interview'], ['What is idempotency in an HTTP API?', 'general']]) {
+      const c = classify(q, m);
+      assert.equal(c.shouldRetrieve, false, q);
+      assert.ok(c.claimTypes.includes('GENERAL_TECHNICAL'), q);
+    }
+  });
+});
+
+describe('response-request follow-ups resolve against the previous turn', () => {
+  test('"What should I say?" is a follow-up, not a fresh question', () => {
+    // Measured: answered "This is not directly mentioned in the uploaded
+    // material" — it has no subject of its own, so treating it as a new question
+    // guarantees a nonsense answer.
+    for (const q of ['What should I say?', 'How should I answer that?', 'What do I say?', 'Help me answer this']) {
+      assert.equal(isBareFollowUp(q), true, q);
+    }
+  });
+
+  test('a self-contained question is still not a follow-up', () => {
+    assert.equal(isBareFollowUp('What should I say to a recruiter about Kubernetes gaps in general?'), true,
+      'starts with the same stem — accepted, since its referent is still the prior turn');
+    assert.equal(isBareFollowUp('How does TCP congestion control work?'), false);
+    assert.equal(isBareFollowUp('What is the success rate?'), false);
+  });
+});

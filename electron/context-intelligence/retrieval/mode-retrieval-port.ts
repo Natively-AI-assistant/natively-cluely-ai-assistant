@@ -20,6 +20,7 @@ import { createLegacyRetrievalPort } from './legacy-retrieval-port';
 export interface ModeRetrieverLike {
   retrieveHybridRaw?: (modeInfo: unknown, files: unknown[], opts: {
     query: string; topK: number; tokenBudget: number; allowRerank: boolean;
+    forceDocumentGrounding?: boolean;
   }) => Promise<{ chunks?: Array<Record<string, unknown>> } | null | undefined>;
 }
 
@@ -154,6 +155,17 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
       if (!input.modeInfo || !input.files.length || !input.modesManager.retrieveHybridRaw) return [];
       const res = await input.modesManager.retrieveHybridRaw(input.modeInfo, input.files, {
         query, topK: opts.topK, tokenBudget: input.tokenBudget, allowRerank: false,
+        // REQUIRED for usable recall. deduplicateChunks keeps the highest-scoring
+        // chunk PER FILE by default and switches to per-SECTION only under this
+        // flag. With a single 66-page reference file that default returns exactly
+        // ONE chunk no matter what topK asks for: measured 1 chunk, and the fact
+        // being asked about ("44%") was not in it. With the flag, 12 chunks and
+        // the fact ranks 2nd.
+        //
+        // Safe here because V3 does not consume `formattedContext` (which is what
+        // the flag's other effects shape) — it takes `chunks` and applies its own
+        // source authority, scope and version filtering downstream.
+        forceDocumentGrounding: true,
       });
       return (res?.chunks ?? []).map((c: Record<string, unknown>) => ({
         sourceId: String(c.sourceId ?? ''),
