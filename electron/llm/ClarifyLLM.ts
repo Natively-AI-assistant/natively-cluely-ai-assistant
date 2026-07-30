@@ -12,11 +12,12 @@ export class ClarifyLLM {
     /**
      * Generate a clarification question
      */
-    async generate(context: string): Promise<string> {
+    async generate(context: string, v3?: { system: string; user: string }): Promise<string> {
         if (!context.trim()) return "";
         try {
-            const promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_CLARIFY_PROMPT : CLARIFY_MODE_PROMPT;
-            const fittedContext = this.llmHelper.fitContextForCurrentModel(context);
+            // V3 substitution — see AssistLLM.
+        const promptOverride = v3?.system ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_CLARIFY_PROMPT : CLARIFY_MODE_PROMPT);
+            const fittedContext = v3?.user ?? this.llmHelper.fitContextForCurrentModel(context);
             // ignoreKnowledgeMode=true: `context` is an internal conversation-context
             // blob (recent manual Q&A / transcript window), NOT a real question being
             // asked of the candidate. Without this, LLMHelper's knowledge-mode
@@ -41,11 +42,11 @@ export class ClarifyLLM {
     /**
      * Generate a clarification question (Streamed)
      */
-    async *generateStream(context: string): AsyncGenerator<string> {
+    async *generateStream(context: string, v3?: { system: string; user: string }): AsyncGenerator<string> {
         if (!context.trim()) return;
         try {
-            const promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_CLARIFY_PROMPT : CLARIFY_MODE_PROMPT;
-            const fittedContext = this.llmHelper.fitContextForCurrentModel(context);
+            const promptOverride = v3?.system ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_CLARIFY_PROMPT : CLARIFY_MODE_PROMPT);
+            const fittedContext = v3?.user ?? this.llmHelper.fitContextForCurrentModel(context);
             // See generate() above — ignoreKnowledgeMode=true prevents the context
             // blob from being misclassified by the knowledge-mode intent gate.
             yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);

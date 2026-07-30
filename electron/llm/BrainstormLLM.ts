@@ -13,11 +13,12 @@ export class BrainstormLLM {
      * Generate a "thinking out loud" spoken script (streamed)
      * Context is passed directly as the user message so the LLM sees the problem.
      */
-    async *generateStream(context: string, imagePaths?: string[]): AsyncGenerator<string> {
+    async *generateStream(context: string, imagePaths?: string[], v3?: { system: string; user: string }): AsyncGenerator<string> {
         if (!context.trim() && !imagePaths?.length) return;
         try {
-            const promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_BRAINSTORM_PROMPT : BRAINSTORM_MODE_PROMPT;
-            const fittedContext = context ? this.llmHelper.fitContextForCurrentModel(context) : context;
+            // V3 substitution — see AssistLLM.
+        const promptOverride = v3?.system ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_BRAINSTORM_PROMPT : BRAINSTORM_MODE_PROMPT);
+            const fittedContext = v3?.user ?? (context ? this.llmHelper.fitContextForCurrentModel(context) : context);
             // ignoreKnowledgeMode=true — see ClarifyLLM.generate() for the full
             // rationale: `context` here is the problem/transcript blob passed
             // directly as the user message, not a real question being asked of the

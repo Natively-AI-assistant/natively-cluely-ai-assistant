@@ -756,7 +756,11 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             const controller = this.assistCancellationToken;
-            const insight = await this.assistLLM.generate(context, controller.signal);
+            // V3 (Phase 6): a confidently-resolved transcript question hands the
+            // turn to the decision layer; no resolvable question keeps legacy
+            // proactive behaviour byte-for-byte.
+            const assistV3 = await this.buildV3ForTranscriptSurface();
+            const insight = await this.assistLLM.generate(context, controller.signal, assistV3 ?? undefined);
 
             if (controller.signal.aborted) {
                 this.setMode('idle');
@@ -2399,26 +2403,22 @@ export class IntelligenceEngine extends EventEmitter {
             const wtaV3Prompt = await (async () => {
                 try {
                     const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
-                    const { createModeRetrievalPort } = require('./context-intelligence/retrieval/mode-retrieval-port');
-                    const { resolveModePolicy, isModeId } = require('./context-intelligence/policies/mode-policy-registry');
-                    const { ModesManager } = require('./services/ModesManager');
-                    const _mm = ModesManager.getInstance();
-                    const _mi = _mm.getActiveModeInfo?.() ?? null;
-                    const _files = _mi?.id ? (_mm.getReferenceFiles?.(_mi.id) ?? []) : [];
-                    const _raw = (_mi as any)?.templateType ?? 'general';
-                    const _policy = resolveModePolicy(isModeId(_raw) ? _raw : 'general');
+                    const _ctx = this.v3ModeRetrievalContext();
+                    if (!_ctx) return undefined;
                     const _v3 = await buildV3Prompt({
                         surface: 'what-to-answer',
                         question: String(wtaTurnQuestion || ''),
-                        modeTemplateType: _raw,
-                        modeUniqueId: (_mi as any)?.id ?? null,
+                        modeTemplateType: _ctx.raw,
+                        modeUniqueId: _ctx.modeUniqueId,
                         scope: { meetingId: meetingMarker ?? undefined },
                         requestId: trace.requestId,
                         requestSequence: generationId,
-                        retrieval: createModeRetrievalPort({
-                            modesManager: _mm, modeInfo: _mi, files: _files,
-                            tokenBudget: _policy.contextBudget.evidenceTokens, userId: 'local',
-                        }),
+                        // The live meeting's own recent words, into the composer's
+                        // labelled untrusted section. Without this, a live meeting
+                        // question under V3 composed a no-evidence disclosure even
+                        // though the answer was said out loud a minute ago.
+                        conversationSummary: _ctx.conversationWindow(90),
+                        retrieval: _ctx.port as any,
                     });
                     if (_v3) {
                         wtaTrace.lifecycle('planned', {
@@ -4029,6 +4029,84 @@ export class IntelligenceEngine extends EventEmitter {
      * MODE 3: Follow-Up (Refinement)
      * Modify the last assistant message
      */
+    // ── CONTEXT INTELLIGENCE V3 — shared adoption plumbing (Phase 6) ─────────
+    //
+    // One place that knows how to stand up the fail-closed retrieval port for
+    // the active mode. WTA and runManualAnswer previously each carried a copy of
+    // this block; a third copy for the proactive surfaces is where drift starts,
+    // so all of them now call this.
+    private v3ModeRetrievalContext(): {
+        raw: string; modeUniqueId: string | null; port: unknown; conversationWindow: (sec: number) => string;
+    } | null {
+        try {
+            const { createModeRetrievalPort } = require('./context-intelligence/retrieval/mode-retrieval-port');
+            const { resolveModePolicy, isModeId } = require('./context-intelligence/policies/mode-policy-registry');
+            const { ModesManager } = require('./services/ModesManager');
+            const _mm = ModesManager.getInstance();
+            const _mi = _mm.getActiveModeInfo?.() ?? null;
+            const _files = _mi?.id ? (_mm.getReferenceFiles?.(_mi.id) ?? []) : [];
+            const raw = (_mi as any)?.templateType ?? 'general';
+            const policy = resolveModePolicy(isModeId(raw) ? raw : 'general');
+            return {
+                raw,
+                modeUniqueId: (_mi as any)?.id ?? null,
+                port: createModeRetrievalPort({
+                    modesManager: _mm, modeInfo: _mi, files: _files,
+                    tokenBudget: policy.contextBudget.evidenceTokens, userId: 'local',
+                }),
+                // Bounded live-transcript window for the composer's labelled
+                // "Conversation so far" section. This is NOT the §32.16 raw-blob
+                // anti-pattern: it enters ONE named, untrusted, size-bounded
+                // section of a composed prompt — it does not substitute for a
+                // source decision, and evidence still comes only from the port.
+                conversationWindow: (sec: number) =>
+                    String((this.session as any)?.getFormattedContext?.(sec) ?? '').slice(-2400),
+            };
+        } catch { return null; }
+    }
+
+    /**
+     * V3 prompt for a TRANSCRIPT-DRIVEN surface (assist / clarify / brainstorm).
+     *
+     * These surfaces receive no question — they receive a rolling speech window.
+     * §12's answer is the question RESOLVER, not the classifier: extract the
+     * latest stable interviewer question from structured turns; only when one
+     * resolves confidently does the decision layer take the turn. No resolvable
+     * question (the genuinely proactive case) returns null and the surface keeps
+     * its legacy behaviour — proactivity is the product feature, and degrading it
+     * into no-evidence disclosures would be adoption theatre.
+     */
+    private async buildV3ForTranscriptSurface(): Promise<{ system: string; user: string } | null> {
+        try {
+            const { isContextIntelligenceV3Enabled } = require('./context-intelligence/contracts/flag');
+            if (!isContextIntelligenceV3Enabled()) return null;
+            const segs: any[] = (this.session as any)?.getContext?.(120) ?? [];
+            if (!segs.length) return null;
+            const { resolveQuestion } = require('./context-intelligence/question/question-resolver');
+            const resolved = resolveQuestion({
+                transcript: segs.map((t: any) => ({
+                    role: t.speaker === 'me' ? 'user' : 'interviewer',
+                    text: String(t.text ?? ''), timestamp: Number(t.timestamp ?? 0),
+                })),
+            });
+            if (!resolved.resolvedQuestion || resolved.requiresClarification || resolved.confidence < 0.6) return null;
+
+            const ctx = this.v3ModeRetrievalContext();
+            if (!ctx) return null;
+            const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
+            const _v3 = await buildV3Prompt({
+                surface: 'assist',
+                question: resolved.resolvedQuestion,
+                modeTemplateType: ctx.raw,
+                modeUniqueId: ctx.modeUniqueId,
+                scope: { meetingId: (this.session as any)?.getMeetingMetadata?.()?.id ?? undefined },
+                conversationSummary: ctx.conversationWindow(60),
+                retrieval: ctx.port as any,
+            });
+            return _v3 ? { system: _v3.system, user: _v3.user } : null;
+        } catch { return null; }
+    }
+
     async runFollowUp(intent: string, userRequest?: string): Promise<string | null> {
         console.log(`[IntelligenceEngine] runFollowUp called with intent: ${intent}`);
         const lastMsg = this.session.getLastAssistantMessage();
@@ -4290,7 +4368,8 @@ export class IntelligenceEngine extends EventEmitter {
 
             const generationId = ++this.currentGenerationId;
             let fullClarification = "";
-            const stream = this.clarifyLLM.generateStream(context);
+            const clarifyV3 = await this.buildV3ForTranscriptSurface();
+            const stream = this.clarifyLLM.generateStream(context, clarifyV3 ?? undefined);
             let streamAborted = false;
 
             for await (const token of stream) {
@@ -4461,28 +4540,17 @@ export class IntelligenceEngine extends EventEmitter {
             const _v3 = await (async () => {
                 try {
                     const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
-                    // Phase 6: this adoption originally passed NO retrieval port,
-                    // so every grounded turn composed a no-evidence disclosure —
-                    // the decision layer was live but blind. Same shared
-                    // fail-closed factory as the other two call sites.
-                    const { createModeRetrievalPort } = require('./context-intelligence/retrieval/mode-retrieval-port');
-                    const { resolveModePolicy, isModeId } = require('./context-intelligence/policies/mode-policy-registry');
-                    const { ModesManager } = require('./services/ModesManager');
-                    const _mm = ModesManager.getInstance();
-                    const _mi = _mm.getActiveModeInfo?.() ?? null;
-                    const _files = _mi?.id ? (_mm.getReferenceFiles?.(_mi.id) ?? []) : [];
-                    const _raw = (activeModeInfo as any)?.templateType ?? 'general';
-                    const _policy = resolveModePolicy(isModeId(_raw) ? _raw : 'general');
+                    // Phase 6: this adoption originally passed NO retrieval port —
+                    // the decision layer was live but BLIND. Shared plumbing now.
+                    const _ctx = this.v3ModeRetrievalContext();
+                    if (!_ctx) return null;
                     return await buildV3Prompt({
                         surface: 'manual-chat',
                         question,
-                        modeTemplateType: _raw,
-                        modeUniqueId: (_mi as any)?.id ?? null,
+                        modeTemplateType: _ctx.raw,
+                        modeUniqueId: _ctx.modeUniqueId,
                         scope: { meetingId: (this.session as any)?.getMeetingMetadata?.()?.id ?? undefined },
-                        retrieval: createModeRetrievalPort({
-                            modesManager: _mm, modeInfo: _mi, files: _files,
-                            tokenBudget: _policy.contextBudget.evidenceTokens, userId: 'local',
-                        }),
+                        retrieval: _ctx.port as any,
                     });
                 } catch { return null; }
             })();
@@ -4658,7 +4726,8 @@ export class IntelligenceEngine extends EventEmitter {
             }
             const generationId = ++this.currentGenerationId;
             let fullResult = "";
-            const stream = this.brainstormLLM.generateStream(context, imagePaths);
+            const brainstormV3 = await this.buildV3ForTranscriptSurface();
+            const stream = this.brainstormLLM.generateStream(context, imagePaths, brainstormV3 ?? undefined);
             let streamAborted = false;
 
             for await (const token of stream) {
