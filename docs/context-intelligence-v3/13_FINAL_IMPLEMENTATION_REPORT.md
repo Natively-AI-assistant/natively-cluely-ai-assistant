@@ -285,15 +285,19 @@ Fixed by splitting retrieval into `base` and `versioned` groups, each ingested i
 
 `answerabilityMatchesExpected` moved 29 → 32 → 33 as two decision-layer defects were fixed: **subject-level satisfaction** (several claim types for one clause are alternatives, not a conjunction — requiring all made `PARTIAL` unavoidable) and **light stemming** (`graduate` ≠ `graduated` under exact token comparison).
 
-**Provider-backed §26.5** (`10_BENCHMARK_RESULTS.md` §8) — on **MiniMax-M3**, because `gemini-3.1-flash-lite` is unreachable:
+**Provider-backed §26.5 — run on BOTH models** (`10_BENCHMARK_RESULTS.md` §8 and §9):
 
-| Gate | Result | Target |
-|---|---|---|
-| Forbidden-claim rate | **0.0%** | 0% ✅ |
-| Over-refusal on general questions | **0.0%** | 0% ✅ |
-| Unsupported-claim disclosure | **100%** (4/4) | ✅ |
-| Judged factual grounding | 80–83% | — |
-| §20 boilerplate · over-long · length | **0.0%** · 2.4% · p50 34 / p95 80 words | — |
+| Gate | `gemini-3.1-flash-lite` | MiniMax-M3 | Target |
+|---|---|---|---|
+| Forbidden-claim rate | **0.0%** | **0.0%** | 0% ✅ |
+| Over-refusal on general questions | **0.0%** | **0.0%** | 0% ✅ |
+| Unsupported-claim disclosure | **100%** (4/4) | **100%** (4/4) | ✅ |
+| Judged factual grounding | **83.3%** | 80–83% | — |
+| §20 boilerplate · over-long · length p95 | **0.0%** · **0.0%** · **66 w** | 0.0% · 2.4% · 80 w | — |
+
+The gates passing on **two independent models** is the first evidence that they are a property of the pipeline rather than of one model's disposition.
+
+**The §20 style rules are validated on a same-model comparison** (§9.1): answer length p95 fell **235 → 66 words** and attribution boilerplate **7.1% → 0.0%** on `gemini-3.1-flash-lite`.
 
 ## 13.5 The instruments were wrong more often than the system
 
@@ -312,9 +316,9 @@ Recorded because it is the through-line of the whole continuation.
 |---|---|
 | **F25a — scope filtering unwired** | Open. `filterByScopeAndVersion` has no callers; `evidenceCarriesProvenance` is vacuous until it does |
 | **Six answerability failures** | Diagnosed per stage, not guessed: 2 retrieval misses (A-03, G-02), 2 claim-type misclassifications (A-06, A-12), 2 leniency (D-01, F-06), plus G-03's path |
-| **§26.5 on `gemini-3.1-flash-lite`** | Blocked on billing, not engineering. Every available Gemini key reports depleted prepayment credits, including a key added on 2026-07-30 — this is a **project billing** condition, so a new key on the same project cannot clear it |
+| ~~**§26.5 on `gemini-3.1-flash-lite`**~~ | **DONE** (§9). The block was the AI Studio **project's billing**, not the credential — the *same key*, fingerprint unchanged, began working once credit was added, which is why rotating in a new key had not helped |
 | **Value-level conflict detection** | Not implemented (06 §5.1). No corpus fixture exists for it either |
 | **Phase 7 UI swap** | Architecture done; the two rendering surfaces deliberately untouched (§12.2) |
 | **Phase 9 legacy removal** | Correctly still blocked: the flag has never been on for a real user |
 
-**The honest summary:** the decision layer's safety properties are now measured against a real corpus on a real model and they hold. Its *precision* is measured for the first time and is 33/42. Nothing here authorises Phase 9.
+**The honest summary:** the decision layer's safety properties are measured against a real corpus on **two** real models and they hold — forbidden-claim 0%, over-refusal 0%, disclosure 100% on both. Its *precision* is measured for the first time and is 33/42. Nothing here authorises Phase 9: the flag has never been on for a real user, and F25a is open.
