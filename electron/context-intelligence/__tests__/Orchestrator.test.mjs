@@ -227,3 +227,38 @@ describe('term matching folds inflections', () => {
     assert.equal(evaluateAnswerability(d, evidence), 'NONE');
   });
 });
+
+// ── E-01/E-02: an unresolved referent cannot be answered confidently ──────────
+
+describe('a bare follow-up with no antecedent is not FULL', () => {
+  const port = (chunks = []) => portFrom(chunks, ADAPT);
+
+  test('"Why?" with no conversation state is NONE and asks for clarification', async () => {
+    // Six unrelated evidence items used to carry this to FULL: the subject had
+    // no salient terms, so everything "supported" it, and the model was licensed
+    // to answer a context-free "Why?" confidently.
+    const r = await orchestrate(req({ manualQuestion: 'Why?' }), port(
+      [{ sourceId: 'resume-1', text: 'Built a WebRTC pipeline', chunkIndex: 0, score: 0.9 }],
+    ));
+    assert.equal(r.answerability, 'NONE');
+    assert.equal(r.trace.fallbackUsed, 'CLARIFICATION',
+      'an unresolved referent is a clarification case, not a knowledge gap — general knowledge cannot answer "Why?" either');
+  });
+
+  test('"Would that scale?" is PARTIAL — the scaling judgement is general knowledge', async () => {
+    const r = await orchestrate(req({ manualQuestion: 'Would that scale?' }), port());
+    assert.equal(r.answerability, 'PARTIAL');
+    assert.equal(r.trace.fallbackUsed, 'PARTIAL_SUPPORT');
+  });
+
+  test('the cap self-disables once resolution produces a real question', async () => {
+    // A resolver that expands the follow-up against conversation state yields a
+    // non-bare resolvedQuestion, and the cap must not fire. isFollowUp stays
+    // true — it is the BARENESS that signals failure, not follow-up-ness.
+    const r = await orchestrate(req({
+      manualQuestion: 'Why did you choose WebRTC for the pipeline project?', isFollowUp: true,
+    }), port([{ sourceId: 'resume-1', text: 'Built a WebRTC pipeline', chunkIndex: 0, score: 0.9 }]));
+    assert.notEqual(r.answerability, 'NONE');
+    assert.notEqual(r.trace.fallbackUsed, 'CLARIFICATION');
+  });
+});

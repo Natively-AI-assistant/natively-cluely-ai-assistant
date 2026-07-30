@@ -11,7 +11,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const base = path.resolve(process.cwd(), 'dist-electron/electron/context-intelligence');
-const { classifyTurn } = await import(pathToFileURL(path.join(base, 'question/turn-classifier.js')).href);
+const { classifyTurn, isBareFollowUp } = await import(pathToFileURL(path.join(base, 'question/turn-classifier.js')).href);
 const { MODE_POLICIES } = await import(pathToFileURL(path.join(base, 'policies/mode-policy-registry.js')).href);
 
 const classify = (q, modeId = 'technical-interview', over = {}) =>
@@ -178,5 +178,100 @@ describe('unsupported-in-mode is distinct from "no source needed"', () => {
     for (const q of ['What is idempotency in an HTTP API?', 'Explain the difference between TCP and UDP.']) {
       assert.equal(classify(q).path, 'FAST', q);
     }
+  });
+});
+
+// ── G-03 regression: a metric of a definite subject is a lookup, not a concept ─
+//
+// "What is the peak transaction volume of the payments API?" matched the same
+// "what is" grammar as "what is a mutex?", acquired a GENERAL_TECHNICAL claim,
+// and — because any existing claim skips the primary-source fallback — the
+// misclassification was self-sealing. The turn skipped retrieval and reported
+// FULL with ZERO evidence: the one shape that licenses fabricating a number.
+
+describe('metric-of-a-definite-subject is grounded, not general', () => {
+  test('the G-03 question retrieves and claims the primary source', () => {
+    const c = classify('What is the peak transaction volume of the payments API?', 'looking-for-work');
+    assert.equal(c.shouldRetrieve, true, 'must retrieve — model knowledge cannot hold this value');
+    assert.notEqual(c.path, 'FAST');
+    assert.ok(c.claimTypes.includes('USER_PROJECT'),
+      `the mode's primary source must claim it, got ${JSON.stringify(c.claimTypes)}`);
+    assert.ok(!c.claimTypes.includes('GENERAL_TECHNICAL'),
+      'a general claim here would satisfy answerability with no evidence at all');
+  });
+
+  test('the bare concept form keeps the fast path — both halves of the pattern required', () => {
+    // Metric noun alone is a genuine concept question.
+    for (const q of ['What is latency?', 'Explain throughput vs bandwidth']) {
+      const c = classify(q, 'looking-for-work');
+      assert.equal(c.shouldRetrieve, false, `"${q}" must stay general`);
+      assert.ok(c.claimTypes.includes('GENERAL_TECHNICAL'), q);
+    }
+    // NOT in the list above: "What is p99 latency?". The identifier rule in
+    // hasNonGenericProperNoun deliberately treats a letters+digits token as
+    // entity-specific — it PREDATES the metric-lookup carve-out and is what lets
+    // F-05 ("What is the p99 now?") ground. In a SOURCE_FIRST mode that question
+    // retrieves, finds nothing, and answers general-labeled, which is the mode's
+    // stated contract. Asserted here so the two rules' division of labour is
+    // pinned rather than rediscovered.
+    const p99 = classify('What is p99 latency?', 'looking-for-work');
+    assert.equal(p99.shouldRetrieve, true, 'identifier rule grounds it (pre-existing, required by F-05)');
+  });
+
+  test('the definite complement is what flips it', () => {
+    const concept = classify('What is transaction volume?', 'looking-for-work');
+    const lookup = classify('What is the transaction volume of our payments API?', 'looking-for-work');
+    assert.equal(concept.shouldRetrieve, false);
+    assert.equal(lookup.shouldRetrieve, true);
+  });
+
+  test('B-01 stays fast — no metric noun, "of an HTTP API" is not a lookup', () => {
+    const c = classify('What is idempotency in the context of an HTTP API?', 'general');
+    assert.equal(c.shouldRetrieve, false);
+    assert.equal(c.path, 'FAST');
+  });
+});
+
+// ── A-12 regression: JD vocabulary in a document-centric mode without a JD ────
+
+describe('JD vocabulary re-routes to the document in a doc-centric mode', () => {
+  test('salary-band lookup in seminar is a DOCUMENT_FACT claim', () => {
+    // "salary band" matches JOB_RE, but seminar holds no job description — left
+    // as a JOB claim the mode authorizes no source, sourceTypes resolves empty,
+    // and the turn retrieves nothing while the answer sits in the mode's own
+    // compensation-policy reference file.
+    const c = classify('What is the base salary band for a backend L4?', 'seminar');
+    assert.ok(c.claimTypes.includes('DOCUMENT_FACT'), JSON.stringify(c.claimTypes));
+    assert.ok(!c.claimTypes.includes('JOB_REQUIRED_SKILL'));
+    assert.equal(c.shouldRetrieve, true);
+  });
+
+  test('a mode WITH a job description keeps the JOB claim', () => {
+    const c = classify('What are the required skills for this role?', 'looking-for-work');
+    assert.ok(c.claimTypes.includes('JOB_REQUIRED_SKILL'),
+      'the re-route must never convert a claim away from a source the mode actually has');
+  });
+});
+
+// ── E-family: bare follow-ups, and the case bug that killed the referent cap ──
+
+describe('bare follow-up detection', () => {
+  test('is case-insensitive — the orchestrator passes raw-cased text', () => {
+    // FOLLOW_UP_RE is lowercase-only and the classifier pre-lowers its input,
+    // so the first external caller (the referent cap in evaluateAnswerability)
+    // silently never matched "Why?" and the cap was dead on arrival.
+    for (const q of ['Why?', 'why?', 'Would that scale?', 'WOULD THAT SCALE?']) {
+      assert.equal(isBareFollowUp(q), true, q);
+    }
+  });
+
+  test('a self-contained question is not a follow-up regardless of its first word', () => {
+    assert.equal(isBareFollowUp('How does TCP congestion control work?'), false);
+  });
+
+  test('"would that scale" carries a general-knowledge half', () => {
+    const c = classify('Would that scale?', 'general');
+    assert.ok(c.claimTypes.includes('GENERAL_TECHNICAL'),
+      'the scaling judgement is general knowledge (§3.7) — this is what makes E-02 PARTIAL rather than NONE');
   });
 });

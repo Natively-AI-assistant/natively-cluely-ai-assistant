@@ -94,9 +94,27 @@ const SCREEN_RE = /\b(this (code|function|error|screen|stack ?trace)|on (my|the)
 // direction and the list stays narrow.
 const GENERAL_TECH_RE = /\b(what is|what are|explain|define|difference between|how does .* work|pros and cons|when (should|would) (you|i) use)\b/;
 
+// A measured quantity OF A DEFINITE SUBJECT is never a concept question.
+//
+// "What is the peak transaction volume of the payments API?" matches the same
+// "what is" grammar as "what is a mutex?", but model knowledge cannot hold an
+// instance-specific metric — there is no world fact for it, only the user's own
+// material. Classified general, the turn skipped retrieval and reported FULL
+// with ZERO evidence: the one answerability shape that licenses the model to
+// fabricate a number (measured failure G-03).
+//
+// Both halves of the pattern are required.
+//   * The metric noun alone is not enough: "what is latency?" and "what is p99
+//     latency?" are genuine concept questions and must keep the fast path.
+//   * The definite complement ("of the …", "for our …") is what marks a
+//     particular artifact rather than the concept in general. F-05's "What is
+//     the p99 now?" carries no such complement and keeps its meeting route.
+const METRIC_LOOKUP_RE =
+  /\b(volume|throughput|latency|uptime|capacity|bandwidth|qps|tps|rps|p\d{2,3}|rate)\s+(?:of|for)\s+(?:the|our|your|its|this|that)\b/;
+
 const CODING_TASK_RE = /\b(reverse a|implement (a|an)|write (a|the) (code|function|program|query)|solve|algorithm for|time complexity|leetcode|binary search|linked list|sort(ing)? algorithm|dynamic programming)\b/;
 
-const SYSTEM_DESIGN_RE = /\b(design a|scale (a|the|to)|system design|architecture for|how would you (build|design)|throughput|sharding|load balanc)\b/;
+const SYSTEM_DESIGN_RE = /\b(design a|scale (a|the|to)|system design|architecture for|how would you (build|design)|throughput|sharding|load balanc|(would|will|can|does) (it|that|this) scale)\b/;
 
 // A bare follow-up carries no subject of its own ("Why?", "Would that scale?").
 // It must NOT match a self-contained general question that merely starts with the
@@ -107,8 +125,14 @@ const SYSTEM_DESIGN_RE = /\b(design a|scale (a|the|to)|system design|architectur
 const FOLLOW_UP_RE = /^(why|how|and|but|what about|would (it|that|this)|can you|could you|explain that|more detail|go on|really)\b/;
 const FOLLOW_UP_MAX_WORDS = 5;
 
-const isBareFollowUp = (q: string): boolean =>
-  FOLLOW_UP_RE.test(q) && q.split(/\s+/).filter(Boolean).length <= FOLLOW_UP_MAX_WORDS;
+// Lower-cases its own input: FOLLOW_UP_RE is lowercase-only, and the classifier
+// happens to pre-lower before calling while the orchestrator passes the raw
+// resolved question. The first external caller silently never matched "Why?" —
+// capital W — so the referent cap it guarded was dead on arrival.
+export const isBareFollowUp = (raw: string): boolean => {
+  const q = String(raw).toLowerCase();
+  return FOLLOW_UP_RE.test(q) && q.split(/\s+/).filter(Boolean).length <= FOLLOW_UP_MAX_WORDS;
+};
 
 /**
  * Classify per CLAUSE, then union.
@@ -161,7 +185,21 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     if (personal && EDUCATION_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EDUCATION', clause); }
     if (personal && EMPLOYMENT_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause); }
 
-    if (JOB_RE.test(clause)) { types.add('JOB_REQUIREMENT'); noteClaim('JOB_REQUIRED_SKILL', clause); }
+    if (JOB_RE.test(clause)) {
+      // In a document-centric mode WITHOUT a job description, JD vocabulary is
+      // document vocabulary: "What is the base salary band for a backend L4?"
+      // in Seminar is a lookup in the compensation-policy reference file. Left
+      // as a JOB claim, the mode authorizes no source for it, sourceTypes
+      // resolves empty, and the turn retrieves nothing at all (measured A-12).
+      // Modes that DO allow a JD keep the JOB claim — this never converts a
+      // claim away from a source the mode actually has.
+      const jdAllowed = input.policy.allowedSourceTypes.includes('JOB_DESCRIPTION');
+      if (!jdAllowed && documentCentricMode) {
+        types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
+      } else {
+        types.add('JOB_REQUIREMENT'); noteClaim('JOB_REQUIRED_SKILL', clause);
+      }
+    }
     if (MEETING_RE.test(clause)) { types.add('MEETING_FACT'); noteClaim('MEETING_STATEMENT', clause); }
     if (DOCUMENT_RE.test(clause)) { types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause); }
     if (SCREEN_RE.test(clause)) { types.add('SCREEN_SPECIFIC'); noteClaim('SCREEN_FACT', clause); }
@@ -178,7 +216,11 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     // there even though the grammar matches "what is a mutex?". A genuinely
     // general question still gets answered — it retrieves, finds nothing, and
     // is answered general-labeled, which is Seminar's stated contract.
+    // A metric lookup wearing concept grammar must not become a general claim:
+    // once any claim exists, the primary-source fallback below is skipped, so
+    // the misclassification is self-sealing.
     if (GENERAL_TECH_RE.test(clause) && !personal && !namesSpecificEntity
+        && !METRIC_LOOKUP_RE.test(clause)
         && !(documentCentricMode && looksFactualQ)) {
       types.add('GENERAL_TECHNICAL'); noteClaim('GENERAL_TECHNICAL', clause);
     }
@@ -217,7 +259,8 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // Leaving this inconsistent with the GENERAL_TECHNICAL suppression above meant
   // "What is the list price per seat?" was neither general NOR claimed — it fell
   // through to no claim at all, which permits answering it from model knowledge.
-  const isGeneralConcept = !documentCentricMode && GENERAL_TECH_RE.test(q) && !namesEntity;
+  const isGeneralConcept = !documentCentricMode && GENERAL_TECH_RE.test(q) && !namesEntity
+    && !METRIC_LOOKUP_RE.test(q);
   const primaryClaimsIt = looksFactualQ && !isGeneralConcept;
 
   if (!claims.size && (namesEntity || primaryClaimsIt)) {

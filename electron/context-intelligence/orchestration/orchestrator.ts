@@ -20,7 +20,7 @@ import type {
 import { freezeTurnDecision } from '../contracts/types';
 import { resolveModePolicy, generalKnowledgeAllowed, type ModePolicy } from '../policies/mode-policy-registry';
 import { CLAIM_AUTHORITY } from '../policies/source-authority-policy';
-import { classifyTurn } from '../question/turn-classifier';
+import { classifyTurn, isBareFollowUp } from '../question/turn-classifier';
 import type { AnswerTrace, RetrievalAttemptTrace } from '../observability/answer-trace';
 
 export interface AnswerRequest {
@@ -171,7 +171,16 @@ const STOPWORDS = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 
   'material', 'materials', 'provided', 'according', 'information', 'detail', 'details',
   'say', 'says', 'said', 'state', 'states', 'stated', 'mention', 'mentions', 'mentioned',
   'contain', 'contains', 'note', 'notes', 'text', 'page', 'pages', 'attached', 'upload',
-  'uploaded', 'source', 'sources', 'anything', 'something', 'know', 'knows']);
+  'uploaded', 'source', 'sources', 'anything', 'something', 'know', 'knows',
+  // Summary/recap verbs describe the OPERATION requested, not a fact to find.
+  // "Summarise the reference material" carried exactly one salient term after
+  // scaffolding removal — the stem of "summarise" — which no document contains,
+  // so a summary request over five perfectly good evidence items reported NONE
+  // (measured regression J-01, introduced by the scaffolding stoplist itself).
+  // With these removed the subject has NO content terms, which is correct: a
+  // summary names no fact, so any authorized in-scope evidence supports it and
+  // the existing "nothing to match on — do not block" rule carries the turn.
+  'summarise', 'summarize', 'summary', 'summaries', 'overview', 'recap']);
 
 /**
  * Fold a word to a light stem so inflections match.
@@ -253,8 +262,30 @@ export function evaluateAnswerability(
   decision: Readonly<TurnDecision>,
   evidence: EvidenceItem[],
 ): Answerability {
+  // A follow-up whose RESOLVED question is still bare has an unresolved
+  // referent: nothing upstream expanded "Why?" or "Would that scale?" into a
+  // question about something. Its subject cannot be supported by any evidence,
+  // because there is no subject. Answering FULL here is what licensed a
+  // confident, context-free answer to "Why?" over six unrelated evidence items
+  // (measured on E-01/E-02, which ship no conversation state).
+  //
+  // The cap SELF-DISABLES once resolution is wired: a resolver that expands the
+  // follow-up against conversation state produces a non-bare resolvedQuestion,
+  // and this branch never fires. It deliberately does not try to answer from
+  // the raw token — §12 says resolve or clarify, never guess.
+  const referentUnresolved = decision.isFollowUp && isBareFollowUp(decision.resolvedQuestion);
+
   const required = decision.claimRequirements.filter((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED');
-  if (required.length === 0) return 'FULL';           // general question — nothing to ground
+  if (required.length === 0) {
+    if (referentUnresolved) {
+      // "Would that scale?" keeps a general-knowledge half — the scaling
+      // judgement — so it is PARTIAL, not NONE. "Why?" has nothing but the
+      // referent.
+      return decision.claimRequirements.length ? 'PARTIAL' : 'NONE';
+    }
+    return 'FULL';           // general question — nothing to ground
+  }
+  if (referentUnresolved) return 'PARTIAL';
 
   // Satisfaction is judged per SUBJECT, not per claim requirement.
   //
@@ -369,12 +400,17 @@ export async function orchestrate(
     && decision.requiredSourceTypes.length === 0
     && decision.claimRequirements.some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED'));
 
+  // An unresolved referent is a CLARIFICATION case, not a knowledge gap:
+  // "Why?" with no antecedent cannot be answered from general knowledge either.
+  const referentUnresolved = decision.isFollowUp && isBareFollowUp(decision.resolvedQuestion);
+
   const fallbackUsed =
     answerability === 'FULL' ? 'NONE'
       : answerability === 'CONFLICTING' ? 'CONFLICT'
-        : answerability === 'PARTIAL' ? 'PARTIAL_SUPPORT'
-          : unsupportedInMode ? 'STRICT_NOT_FOUND'
-            : decision.generalKnowledgeAllowed ? 'GENERAL_KNOWLEDGE' : 'STRICT_NOT_FOUND';
+        : referentUnresolved ? (answerability === 'PARTIAL' ? 'PARTIAL_SUPPORT' : 'CLARIFICATION')
+          : answerability === 'PARTIAL' ? 'PARTIAL_SUPPORT'
+            : unsupportedInMode ? 'STRICT_NOT_FOUND'
+              : decision.generalKnowledgeAllowed ? 'GENERAL_KNOWLEDGE' : 'STRICT_NOT_FOUND';
 
   const trace: AnswerTrace = {
     requestId: decision.requestId,
