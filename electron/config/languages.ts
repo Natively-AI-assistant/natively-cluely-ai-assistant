@@ -132,6 +132,30 @@ export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
     'finnish': { label: 'Finnish', code: 'finnish', bcp47: 'fi-FI', iso639: 'fi', group: 'Finnish' },
 };
 
+/**
+ * Google STT v1 caps alternativeLanguageCodes at 3, so a true auto-detect over
+ * the full AUTO_DETECT_ALTERNATES list is impossible there. Instead, pick the
+ * candidates THIS user is most likely to speak — their OS preferred languages
+ * (e.g. macOS Language & Region order) — and fill any remaining slots with the
+ * historical fr/es/de defaults. English is skipped because en-US is always the
+ * primary recognition language in auto mode.
+ */
+export function googleAutoDetectAlternates(preferredLocales: string[]): string[] {
+    const out: string[] = [];
+    for (const locale of preferredLocales) {
+        const iso = locale.toLowerCase().split('-')[0];
+        if (iso === 'en') continue;
+        const match = Object.values(RECOGNITION_LANGUAGES).find(l => l.iso639 === iso);
+        if (match && !out.includes(match.bcp47)) out.push(match.bcp47);
+        if (out.length === 3) return out;
+    }
+    for (const fallback of ['fr-FR', 'es-ES', 'de-DE']) {
+        if (out.length === 3) break;
+        if (!out.includes(fallback)) out.push(fallback);
+    }
+    return out;
+}
+
 export const AI_RESPONSE_LANGUAGES = [
     { label: 'Auto (Detect)', code: 'auto' },
     { label: 'English', code: 'English' },

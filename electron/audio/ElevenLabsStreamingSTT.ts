@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
+import { DEFAULT_TECH_PHRASE_HINTS } from '../config/sttPhraseHints';
 import { streamingStttWsOptions } from './dnsHelpers';
 
 const ELEVENLABS_WS_URL = 'wss://api.elevenlabs.io/v1/speech-to-text/realtime';
@@ -27,7 +28,15 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
     private isConnecting = false;
     private isSessionReady = false;
     private languageCode = 'en'; // Default to English
-    
+
+    // Keyterm biasing: English tech terms embedded in non-English speech
+    // ("Stateless Widget" inside a Russian sentence) get phonetically mangled
+    // without a bias hint. Scribe v2 realtime caps keyterms at 50 entries of
+    // ≤20 chars, and NOTE: using keyterms adds ~20% to transcription cost.
+    private keyterms: string[] = DEFAULT_TECH_PHRASE_HINTS
+        .filter(t => t.length <= 20)
+        .slice(0, 50);
+
     private debugWriteStream: fs.WriteStream | null = null;
     
     // Chunk buffering properties (250ms @ 16k = 4000 samples)
@@ -236,7 +245,12 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
             url += `&language_code=${this.languageCode}`;
         }
         url += `&include_language_detection=true`;
-        
+
+        // Bias the model toward embedded tech terms (see keyterms field docs).
+        for (const term of this.keyterms) {
+            url += `&keyterms=${encodeURIComponent(term)}`;
+        }
+
         console.log(`[ElevenLabsStreaming] Connecting with URL: ${url.replace(this.apiKey, '***')}`);
 
         // streamingStttWsOptions: IPv4-only DNS + 15s handshake cap (dnsHelpers.ts).

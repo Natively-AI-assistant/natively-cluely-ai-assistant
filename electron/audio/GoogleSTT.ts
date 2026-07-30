@@ -3,7 +3,8 @@ import { EventEmitter } from 'events';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { RECOGNITION_LANGUAGES, EnglishVariant } from '../config/languages';
+import { RECOGNITION_LANGUAGES, EnglishVariant, googleAutoDetectAlternates } from '../config/languages';
+import { DEFAULT_TECH_PHRASE_HINTS } from '../config/sttPhraseHints';
 
 /**
  * GoogleSTT
@@ -44,6 +45,29 @@ export class GoogleSTT extends EventEmitter {
     private audioChannelCount = 1; // Default to Mono
     private languageCode = 'en-US';
     private alternativeLanguageCodes: string[] = ['en-IN', 'en-GB']; // Default fallbacks
+
+    // Auto-detect mode: Google identifies the language per utterance, but
+    // primary-language recognition is faster and more accurate than the
+    // alternativeLanguageCodes path. Track the per-result languageCode and
+    // re-pin the primary once the speaker has clearly switched languages.
+    private autoMode = false;
+    private languageMismatchStreak = 0;
+    // The streak is PER-LANGUAGE: adjacent finals in two DIFFERENT alternate
+    // languages (uk-UA then ru-RU) must not pool into one streak, or the
+    // stream re-pins to the second language after a single final in it
+    // (greptile review on PR #401). Tracks which language the current streak
+    // belongs to; a different detection restarts the streak at 1.
+    private mismatchLanguage: string | null = null;
+    private static readonly LANGUAGE_REPIN_FINALS = 2;
+
+    // Speech adaptation: bias recognition toward these exact tokens so English
+    // tech terms embedded in non-English speech ("Stateless Widget" inside a
+    // Russian sentence) come out verbatim instead of phonetically mangled by
+    // the primary language's model. Google v1 caps: 500 phrases, 100 chars.
+    // Boost 10 is deliberately moderate — higher values start hallucinating
+    // these terms in ordinary speech.
+    private phraseHints: string[] = DEFAULT_TECH_PHRASE_HINTS;
+    private static readonly PHRASE_HINT_BOOST = 10;
 
     constructor(label?: string) {
         super();
@@ -114,10 +138,18 @@ export class GoogleSTT extends EventEmitter {
         this.pendingLanguageChange = setTimeout(() => {
             if (key === 'auto') {
                 // Google STT v1 supports up to 3 alternativeLanguageCodes.
-                // Use en-US as primary with the most common languages as alternates.
+                // Use en-US as primary with the user's OS preferred languages
+                // as alternates (fr/es/de only as fill when none match).
+                let preferred: string[] = [];
+                try {
+                    preferred = require('electron').app.getPreferredSystemLanguages();
+                } catch { /* unavailable in tests / before app ready */ }
                 this.languageCode = 'en-US';
-                this.alternativeLanguageCodes = ['fr-FR', 'es-ES', 'de-DE'];
-                console.log(`[GoogleSTT/${this.label}] Language set to auto-detect (en-US + fr/es/de alternates)`);
+                this.alternativeLanguageCodes = googleAutoDetectAlternates(preferred);
+                this.autoMode = true;
+                this.languageMismatchStreak = 0;
+                this.mismatchLanguage = null;
+                console.log(`[GoogleSTT/${this.label}] Language set to auto-detect (en-US + ${this.alternativeLanguageCodes.join('/')} alternates)`);
             } else {
                 const config = RECOGNITION_LANGUAGES[key];
                 if (!config) {
@@ -127,6 +159,9 @@ export class GoogleSTT extends EventEmitter {
 
                 console.log(`[GoogleSTT/${this.label}] Updating recognition language to: ${key} (${config.bcp47})`);
                 this.languageCode = config.bcp47;
+                this.autoMode = false;
+                this.languageMismatchStreak = 0;
+                this.mismatchLanguage = null;
 
                 if ('alternates' in config) {
                     this.alternativeLanguageCodes = (config as EnglishVariant).alternates;
@@ -140,11 +175,12 @@ export class GoogleSTT extends EventEmitter {
                 }
             }
 
-            // Restart if active
-            if (this.isStreaming || this.isActive) {
-                console.log(`[GoogleSTT/${this.label}] Language changed while active. Restarting stream...`);
-                this.stop();
-                this.start();
+            // Restart if active. swapStream (not stop()+start()) so the old
+            // stream flushes the final of whatever was being said when the
+            // language changed instead of destroying it mid-flight.
+            if (this.isActive) {
+                console.log(`[GoogleSTT/${this.label}] Language changed while active. Swapping stream...`);
+                this.swapStream();
             }
 
             this.pendingLanguageChange = undefined;
@@ -208,6 +244,11 @@ export class GoogleSTT extends EventEmitter {
             clearTimeout(this.pendingLanguageChange);
             this.pendingLanguageChange = undefined;
         }
+
+        // Release every open swap-drain generation: flush held transcripts in
+        // order (the renderer's post-stop drain grace still accepts them) and
+        // clear the deadline timers so they can't fire into a dead session.
+        this.flushAllGenerations();
 
         if (this.stream) {
             this.stream.end();
@@ -349,6 +390,141 @@ export class GoogleSTT extends EventEmitter {
         }
     }
 
+    /**
+     * Auto mode: when consecutive FINAL results come back in a non-primary
+     * language, the speaker has switched — re-pin the stream so the detected
+     * language becomes primary (the old primary joins the alternates).
+     * Alternates are kept so a later switch back re-pins again.
+     */
+    private maybeRepinLanguage(rawDetected?: string): void {
+        if (!this.autoMode || !rawDetected) return;
+        // Google returns lowercase codes (e.g. 'ru-ru') — canonicalize against
+        // our language table; anything unknown is ignored.
+        const detected = Object.values(RECOGNITION_LANGUAGES)
+            .find(l => l.bcp47.toLowerCase() === rawDetected.toLowerCase())?.bcp47;
+        if (!detected) return;
+
+        if (detected === this.languageCode) {
+            this.languageMismatchStreak = 0;
+            this.mismatchLanguage = null;
+            return;
+        }
+        // A different mismatch language restarts the streak — only CONSECUTIVE
+        // finals in the SAME language may accumulate toward a re-pin.
+        if (detected !== this.mismatchLanguage) {
+            this.mismatchLanguage = detected;
+            this.languageMismatchStreak = 1;
+            if (this.languageMismatchStreak < GoogleSTT.LANGUAGE_REPIN_FINALS) return;
+        } else if (++this.languageMismatchStreak < GoogleSTT.LANGUAGE_REPIN_FINALS) {
+            return;
+        }
+        this.languageMismatchStreak = 0;
+        this.mismatchLanguage = null;
+
+        const alternates = [this.languageCode, ...this.alternativeLanguageCodes]
+            .filter(l => l !== detected)
+            .slice(0, 3);
+        console.log(`[GoogleSTT/${this.label}] Auto mode: re-pinning primary language ${this.languageCode} → ${detected} (alternates: ${alternates.join('/')})`);
+        this.languageCode = detected;
+        this.alternativeLanguageCodes = alternates;
+        this.swapStream();
+    }
+
+    // Swap-drain ordering (greptile review on PR #401, two rounds): after a
+    // swap, the OLD stream may flush its pending final AFTER newer streams
+    // already produced results. Emitting in raw callback order would store
+    // pre-swap speech after newer speech. And a single one-slot drain window
+    // is not enough — a SECOND swap before the first drain finishes must not
+    // release the newer stream's transcripts past the oldest stream's tail.
+    //
+    // So streams are tracked as an ordered queue of GENERATIONS (oldest →
+    // newest; the last entry is the current stream). Only the FRONT (oldest
+    // unfinished) generation emits live; every younger generation holds its
+    // transcripts until all older generations finish draining (end/close/
+    // error, or the per-generation deadline — Google flushes finals well
+    // under a second after end()).
+    private streamGenerations: Array<{
+        s: any;
+        pending: { text: string; isFinal: boolean; confidence: number }[];
+        closed: boolean;
+        deadline: NodeJS.Timeout | null;
+    }> = [];
+    private static readonly SWAP_DRAIN_DEADLINE_MS = 1000;
+
+    /** Mark a generation as finished draining and advance the queue front. */
+    private markGenerationClosed(s: any): void {
+        const gen = this.streamGenerations.find(g => g.s === s);
+        if (gen && !gen.closed) {
+            gen.closed = true;
+            if (gen.deadline) {
+                clearTimeout(gen.deadline);
+                gen.deadline = null;
+            }
+        }
+        this.advanceDrain();
+    }
+
+    /**
+     * Drop closed generations from the front of the queue. Each time a new
+     * generation becomes the front, flush the transcripts it accumulated
+     * while older generations were still draining.
+     */
+    private advanceDrain(): void {
+        while (this.streamGenerations.length && this.streamGenerations[0].closed) {
+            const gone = this.streamGenerations.shift()!;
+            if (gone.deadline) clearTimeout(gone.deadline);
+            const next = this.streamGenerations[0];
+            if (next) {
+                const held = next.pending;
+                next.pending = [];
+                for (const t of held) this.emit('transcript', t);
+            }
+        }
+    }
+
+    /** Flush every generation's held transcripts in order (session teardown). */
+    private flushAllGenerations(): void {
+        const gens = this.streamGenerations;
+        this.streamGenerations = [];
+        for (const g of gens) {
+            if (g.deadline) clearTimeout(g.deadline);
+            for (const t of g.pending) this.emit('transcript', t);
+        }
+    }
+
+    /**
+     * Replace the live gRPC stream without dropping the tail: end() the old
+     * stream (no destroy) so Google flushes its pending finals — the stale
+     * guards in the event handlers keep those late events from clobbering the
+     * new stream's state — and start the new stream immediately; audio that
+     * arrives during the swap is buffered and flushed by startStream().
+     */
+    private swapStream(): void {
+        const old = this.stream;
+        this.stream = null;
+        this.isStreaming = false;
+        if (old) {
+            const gen = this.streamGenerations.find(g => g.s === old);
+            if (gen && !gen.closed) {
+                // Deadline so a stream that never closes can't hold every
+                // younger generation's transcripts hostage. It must DESTROY
+                // the straggler, not merely advance past it: with the old
+                // data listener still live, a final flushed after the
+                // deadline would bypass the queue and land after newer
+                // speech (greptile PR #401 round 3). destroy() makes the
+                // late final impossible; whatever Google had not flushed
+                // within the budget is sacrificed — that is the deadline's
+                // contract, and real flushes complete in well under 1s.
+                gen.deadline = setTimeout(() => {
+                    try { old.destroy(); } catch { /* already dead */ }
+                    this.markGenerationClosed(old);
+                }, GoogleSTT.SWAP_DRAIN_DEADLINE_MS);
+            }
+            try { old.end(); } catch { /* flush-only — old stream is abandoned either way */ }
+        }
+        if (this.isActive) this.startStream();
+    }
+
     private startStream(): void {
         this.lastConnectAttempt = Date.now();
         this.isStreaming = true;
@@ -356,7 +532,13 @@ export class GoogleSTT extends EventEmitter {
 
         console.log(`[GoogleSTT/${this.label}] Creating gRPC stream (rate=${this.sampleRateHertz}Hz, ch=${this.audioChannelCount}, lang=${this.languageCode})...`);
 
-        this.stream = this.client
+        // Captured so each handler can tell whether it belongs to the CURRENT
+        // stream. Without this guard, the old stream's async 'close'/'end'
+        // events fire AFTER a restart has already created the new stream and
+        // null out this.stream — audio then buffers until the lazy reconnect
+        // in write() (throttled to 1/s) fires, losing 1s+ of transcription on
+        // every language change and every 4:30 proactive restart.
+        const s = this.client
             .streamingRecognize({
                 config: {
                     encoding: this.encoding,
@@ -367,10 +549,22 @@ export class GoogleSTT extends EventEmitter {
                     model: 'latest_long',
                     useEnhanced: true,
                     alternativeLanguageCodes: this.alternativeLanguageCodes,
+                    speechContexts: this.phraseHints.length
+                        ? [{ phrases: this.phraseHints, boost: GoogleSTT.PHRASE_HINT_BOOST }]
+                        : [],
                 },
                 interimResults: true,
             })
             .on('error', (err: Error) => {
+                // Whatever else this error means, this stream's generation is
+                // done draining — no more tail finals are coming.
+                this.markGenerationClosed(s);
+                if (this.stream !== s) {
+                    // Stale event from a stream already replaced by swapStream()/
+                    // restart — the abandoned stream erroring out (e.g. CANCELLED)
+                    // must not clobber the new stream's state or alarm main.ts.
+                    return;
+                }
                 this.isConnecting = false;
                 this.isStreaming = false;
                 this.stream = null;
@@ -414,12 +608,16 @@ export class GoogleSTT extends EventEmitter {
                 this.emit('error', err);
             })
             .on('end', () => {
+                this.markGenerationClosed(s);
+                if (this.stream !== s) return; // stale — a newer stream owns the state
                 console.log(`[GoogleSTT/${this.label}] Stream ended server-side (idle timeout)`);
                 this.isConnecting = false;
                 this.isStreaming = false;
                 this.stream = null;
             })
             .on('close', () => {
+                this.markGenerationClosed(s);
+                if (this.stream !== s) return; // stale — a newer stream owns the state
                 console.log(`[GoogleSTT/${this.label}] Stream closed server-side`);
                 this.isConnecting = false;
                 this.isStreaming = false;
@@ -434,14 +632,34 @@ export class GoogleSTT extends EventEmitter {
 
                     if (transcript) {
                         console.log(`[GoogleSTT/${this.label}] Transcript received`, { final: isFinal, length: transcript.length });
-                        this.emit('transcript', {
-                            text: transcript,
-                            isFinal,
-                            confidence: alt.confidence
-                        });
+                        const payload = { text: transcript, isFinal, confidence: alt.confidence };
+                        // Generation-ordered emission (greptile PR #401): only
+                        // the OLDEST unfinished generation emits live; younger
+                        // generations hold their results until every older
+                        // stream has drained its pre-swap tail. A stream not
+                        // in the queue can only be an event already in flight
+                        // when its deadline destroy()ed it — forward as-is
+                        // rather than drop real speech.
+                        const gen = this.streamGenerations.find(g => g.s === s);
+                        if (gen && gen !== this.streamGenerations[0]) {
+                            gen.pending.push(payload);
+                        } else {
+                            this.emit('transcript', payload);
+                        }
+                    }
+
+                    // Only the CURRENT stream may trigger a language re-pin —
+                    // a stale stream's finals describe pre-swap speech.
+                    if (isFinal && this.stream === s) {
+                        this.maybeRepinLanguage(result.languageCode);
                     }
                 }
             });
+
+        this.stream = s;
+        // Register this stream as the newest generation in the drain queue —
+        // it emits live only once every older generation has drained.
+        this.streamGenerations.push({ s, pending: [], closed: false, deadline: null });
 
         // gRPC streams are writable immediately — no handshake needed.
         const bufferedCount = this.buffer.length;
@@ -458,13 +676,10 @@ export class GoogleSTT extends EventEmitter {
             this.proactiveRestartTimer = null;
             if (!this.isActive) return;
             console.log(`[GoogleSTT/${this.label}] Proactive stream restart at 4:30 to preempt Google's 305s limit`);
-            if (this.stream) {
-                this.stream.end();
-                this.stream.destroy();
-                this.stream = null;
-            }
-            this.isStreaming = false;
-            this.startStream();
+            // swapStream (end without destroy) lets the old stream flush its
+            // pending finals instead of killing them mid-flight; the stale
+            // guards keep its late events away from the new stream's state.
+            this.swapStream();
         }, GoogleSTT.PROACTIVE_RESTART_MS);
     }
 }

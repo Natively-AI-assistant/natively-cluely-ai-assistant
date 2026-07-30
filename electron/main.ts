@@ -15,6 +15,7 @@ import fs from "fs"
 import os from "os"
 import dns from "dns"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
+import { fixMangledTechTerms } from "./llm/transcriptTermFix"
 import { autoUpdater } from "electron-updater"
 
 // Override global dns.lookup to resolve macOS system resolver issues with api.natively.software
@@ -2848,10 +2849,16 @@ export class AppState {
         return;
       }
 
+      // Finals only: restore English tech terms that the primary-language
+      // model spelled phonetically ("стейтлес виджет" → "Stateless Widget").
+      // Applied here, before ANY consumer, so intelligence, RAG, the renderer,
+      // and the knowledge tracker all see the same corrected text.
+      const text = segment.isFinal ? fixMangledTechTerms(segment.text) : segment.text;
+
       this.intelligenceManager.handleTranscript({
         speaker: speaker,
         ...(segment.speakerId ? { speakerId: segment.speakerId } : {}),
-        text: segment.text,
+        text,
         timestamp: Date.now(),
         final: segment.isFinal,
         confidence: segment.confidence
@@ -2861,7 +2868,7 @@ export class AppState {
       if (segment.isFinal && this.ragManager) {
         this.ragManager.feedLiveTranscript([{
           speaker: speaker,
-          text: segment.text,
+          text,
           timestamp: Date.now()
         }]);
       }
@@ -2869,7 +2876,7 @@ export class AppState {
       const payload = {
         speaker: speaker,
         ...(segment.speakerId ? { speakerId: segment.speakerId } : {}),
-        text: segment.text,
+        text,
         timestamp: Date.now(),
         final: segment.isFinal,
         confidence: segment.confidence
@@ -2894,7 +2901,7 @@ export class AppState {
           // fail open — preserve existing behaviour for modes that need the tracker
         }
         if (trackerFeedAllowed) {
-          this.knowledgeOrchestrator?.feedInterviewerUtterance?.(segment.text);
+          this.knowledgeOrchestrator?.feedInterviewerUtterance?.(text);
         }
       }
     });
@@ -5826,13 +5833,13 @@ export class AppState {
     const { CredentialsManager } = require('./services/CredentialsManager');
     CredentialsManager.getInstance().setSttLanguage(key);
 
-    // 'auto' is only meaningful for NativelyProSTT — other providers fall back to en-US.
-    const sttProvider = CredentialsManager.getInstance().getSttProvider();
-    const effectiveKey = (key === 'auto' && sttProvider !== 'natively') ? 'english-us' : key;
-
-    this.googleSTT?.setRecognitionLanguage(effectiveKey);
-    this.googleSTT_User?.setRecognitionLanguage(effectiveKey);
-    this.processingHelper.getLLMHelper().setSttLanguage(effectiveKey);
+    // Every provider handles 'auto' natively (Google: locale-aware alternates,
+    // Deepgram: 'multi', Soniox/ElevenLabs: omit hint, NativelyPro: server-side
+    // detection), and the createSTTProvider path already passes the raw key —
+    // so no substitution here either.
+    this.googleSTT?.setRecognitionLanguage(key);
+    this.googleSTT_User?.setRecognitionLanguage(key);
+    this.processingHelper.getLLMHelper().setSttLanguage(key);
   }
 
   public static getInstance(): AppState {
