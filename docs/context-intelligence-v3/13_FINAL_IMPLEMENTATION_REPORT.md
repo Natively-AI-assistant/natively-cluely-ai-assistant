@@ -1,10 +1,12 @@
 # Context Intelligence V3 — Final Report
 
-**Status:** PARTIAL — Phases 0–3 complete; Phase 4 substantially landed and tested; **F21 fixed, unblocking the acceptance gates**; Phases 6–8 not started; Phase 9 **blocked by design**.
-**Date:** 2026-07-29
-**Run:** unattended overnight continuation.
+**Status:** PARTIAL — Phases 0–5 complete; Phase 6 wired on manual-chat behind an off-by-default flag; **Phase 8 measured, including a provider-backed run**; Phase 7 architecture done, UI swap deliberately not done; Phase 9 **blocked by design**.
+**Date:** 2026-07-29, **revised 2026-07-30**.
+**Run:** unattended overnight continuation, then a second continuation.
 
 This report is accurate about where the work stopped. Nothing below is estimated, and no result appears that was not produced by an executed run.
+
+> **READ §13 FIRST.** Sections 0–9 were written on 2026-07-29 and several of their claims are **superseded**: a surface *is* wired, the golden suite and a provider-backed evaluation *have* run, and the finding count is 25 rather than 22. §13 records the 2026-07-30 continuation and takes precedence wherever it conflicts with an earlier section.
 
 ---
 
@@ -35,19 +37,19 @@ Total production change: **51 lines across 3 files, purely additive** — one `t
 | Phase | Status | Deliverable |
 |-------|--------|-------------|
 | 0 — Baseline | **COMPLETE** | §1 of `01_INVESTIGATION_REPORT.md` |
-| 1 — Investigation | **COMPLETE** | `01_INVESTIGATION_REPORT.md` — 22 findings + reproduction |
+| 1 — Investigation | **COMPLETE** | `01_INVESTIGATION_REPORT.md` — **25** findings + reproduction (F24, F25 added 2026-07-30) |
 | 2 — Benchmarks | **PARTIAL** | `02_RETRIEVAL_BENCHMARK.md`, `03_KEEP_REMOVE_MATRIX.md` — 5 of 11 configs executed |
 | 3 — Contracts | **COMPLETE** | `04`–`08` |
 | 4 — Core implementation | **SUBSTANTIALLY COMPLETE** | contracts · source authority + scope filter · mode registry · turn classifier · BM25 · AnswerTrace · **context packer · prompt composer · conversation state** · **120 tests** |
 | 5 — Ingestion migration | **DONE** (scope-reduced by decision) | `retrieval/legacy-adapter.ts` — scopeId + the dropped signals |
-| 6 — Surface integration | **PARTIAL** — orchestrator, flag, composer and packer built and tested end-to-end; **no surface wired yet** | `orchestration/orchestrator.ts` |
+| 6 — Surface integration | **PARTIAL** — manual-chat wired as a flag-gated short-circuit (`ipcHandlers.ts`); WTA, recap/follow-up and the proactive surfaces not wired | `orchestration/orchestrator.ts` · §13 |
 | 7 — UI simplification | **NOT STARTED** | — |
-| 8 — Full verification | **PARTIAL** — F21 unblocked it; suite now runs (6593 tests, 67 s). Golden suite + provider eval not run | §1.6.1 of `01_…` |
+| 8 — Full verification | **PARTIAL** — suite runs (6593 tests, 67 s); golden suite run against the LIVE stack; provider-backed §26.5 run on MiniMax-M3 with all three behavioural gates passing | `09_TEST_MATRIX.md` §10 · `10_BENCHMARK_RESULTS.md` §8 |
 | 9 — Legacy removal | **BLOCKED, deliberately not executed** | `11_LEGACY_REMOVAL_MATRIX.md` |
 | 10 — Rollout | **PLAN ONLY** | `12_ROLLOUT_AND_ROLLBACK.md` |
 | 11 — Final report | **COMPLETE** | this document |
 
-**No production ANSWER behaviour was changed.** The only production edits are the three F21 `unref?.()` calls (§0) — process-lifetime only, additive, and inert inside Electron. The new `context-intelligence/` module is not wired to any surface.
+**Production answer behaviour is changed only behind an off-by-default flag.** Beyond the three F21 `unref?.()` calls (§0), `ipcHandlers.ts` now contains a V3 short-circuit for manual chat, gated on `NATIVELY_CONTEXT_INTELLIGENCE_V3` whose default is `false` **identically in dev, test and production** — the F5 split is deliberately not reproduced. Two legacy retrieval defects (F22, F23) were also fixed at defaults, since both silently zeroed retrieval for keyless installs. See §13.
 
 ---
 
@@ -233,3 +235,86 @@ The two surfaces that render the old control are:
 `premium` is a **git submodule on a different branch** (`fix/jd-lookup-order-2026-07-27`) with `src/ModesSettings.tsx` **already modified** by concurrent work. Editing it would mean committing into someone else's in-flight branch in a separate repository — a merge conflict in a place neither agent can see the other.
 
 The architecture is the part that was actually missing, and it is done. The UI swap is a thin presentation change that should land in the submodule, on its own branch, when that work settles. Recorded here so Phase 7 is not read as complete.
+
+---
+
+# 13. Continuation — 2026-07-30
+
+Commits `a4b0dd24`, `fa35408b`, `fdcf9312`, `97b7277c`, `cdd3e88b`, `94b16c88`, `0b82ca93`.
+
+## 13.1 Headline: the harness was measuring almost nothing
+
+Four acceptance gates could not fail. Each reported a clean pass, and the pass was an artifact.
+
+| Gate | Why it could not fail |
+|---|---|
+| `noStaleVersionAccepted` | Tested `!/resume_v1/.test(documentTitle)` against a corpus that **never ingested `resume_v1`** |
+| version filtering generally | `golden-live` stamped the literal `'legacy'` as every file's active version and passed **no `chunkVersions`**, so the filter compared a value with itself |
+| `answerabilityMatchesExpected` | **Did not exist.** `expectedAnswerability` was recorded by all three harnesses and asserted by none |
+| `evidenceCarriesProvenance` | `e.scopeId &&` is a truthiness test on a field the adapter always populates from the turn's own scope. **Still vacuous** — F25a |
+
+Two fixtures underpinning 8 questions — `resume_v1_2023.md` and `meeting_transcript_previous.txt` — were **ingested by no harness at all**, and the two harness corpora had drifted to 13 files versus 10.
+
+## 13.2 Two findings, both inside the rebuild
+
+**F24 — `CONFLICTING` was unreachable.** `adaptLegacyChunks` stamps every admitted item with the source's *active* version, so two items from one source could not differ and the branch was dead code. Four questions expected that state. Evidence now carries `retrievedVersionId` so the check can fire.
+
+**F25 — scope filtering has no callers, and version filtering failed open.** `filterByScopeAndVersion` is fully implemented, tested, and has **zero call sites** outside its own tests; the wired path never compares `scopeId` against a per-source scope. Separately, `chunkVersions?.get(id) ?? active` admitted any unregistered chunk as current while the docblock read *"Fails CLOSED"*. The fail-open is now an explicit opt-in that only the wired surface sets. **F25a remains open.**
+
+Both are the mission's own central thesis — built, tested, unreachable — reproducing in the module written to replace it. That is the single most important thing in this report.
+
+## 13.3 The corpus was contaminated, and it broke the headline result
+
+`lfw_resume.txt` is **Evin J**; `resume_v1/v2` are **Priya Raghunathan**. Both are `RESUME`. Merged, "the candidate" became two people and Priya's résumé — which lists Kubernetes and PostgreSQL — answered the probes asserting those terms appear **nowhere** in the résumé.
+
+That includes **C-02, the canonical JD-as-experience result**, which was passing *contaminated*.
+
+Fixed by splitting retrieval into `base` and `versioned` groups, each ingested into its own mode. Deliberately **not** done with `scopeId`, which filters nothing here (F25a). Discriminating check: superseded-rejection turns fell **25 → 6**, confirming the stale résumé had been a candidate on every résumé question.
+
+## 13.4 Measured
+
+**Golden suite, live stack** (`09_TEST_MATRIX.md` §10):
+
+| Gate | Result |
+|---|---|
+| `noProhibitedSourceInEvidence` | 42/42 |
+| `promptLabelsEvidenceUntrusted` | 42/42 |
+| `noStaleVersionAccepted` | 42/42 — **now exercised**, on 6 of the 7 versioned questions |
+| `retrievalPath` | 41/42 |
+| `answerabilityMatchesExpected` | **33/42** — newly measured, never previously asserted |
+
+`answerabilityMatchesExpected` moved 29 → 32 → 33 as two decision-layer defects were fixed: **subject-level satisfaction** (several claim types for one clause are alternatives, not a conjunction — requiring all made `PARTIAL` unavoidable) and **light stemming** (`graduate` ≠ `graduated` under exact token comparison).
+
+**Provider-backed §26.5** (`10_BENCHMARK_RESULTS.md` §8) — on **MiniMax-M3**, because `gemini-3.1-flash-lite` is unreachable:
+
+| Gate | Result | Target |
+|---|---|---|
+| Forbidden-claim rate | **0.0%** | 0% ✅ |
+| Over-refusal on general questions | **0.0%** | 0% ✅ |
+| Unsupported-claim disclosure | **100%** (4/4) | ✅ |
+| Judged factual grounding | 80–83% | — |
+| §20 boilerplate · over-long · length | **0.0%** · 2.4% · p50 34 / p95 80 words | — |
+
+## 13.5 The instruments were wrong more often than the system
+
+Recorded because it is the through-line of the whole continuation.
+
+- Exact-string grounding read 33.3% while 16 of 20 "misses" were correct answers in different formatting.
+- The disclosure detector read 0%, then 50%, while the model disclosed correctly — `doesn't cover` and `don't tell` both missed because the negation branches had drifted apart.
+- The mangling detector read **0 mangled** while two of four fabrication probes were cut mid-sentence.
+- Judged grounding read 62.1% because MiniMax-M3 splits its answer across the closing think tag; eliminating that artifact moved it to 83.3% on the same corpus and prompt.
+
+**A metric that under-reports good behaviour is as dangerous as one that over-reports it.** Four separate instances, and each produced a plausible number that would have been published.
+
+## 13.6 What is still open
+
+| Item | State |
+|---|---|
+| **F25a — scope filtering unwired** | Open. `filterByScopeAndVersion` has no callers; `evidenceCarriesProvenance` is vacuous until it does |
+| **Six answerability failures** | Diagnosed per stage, not guessed: 2 retrieval misses (A-03, G-02), 2 claim-type misclassifications (A-06, A-12), 2 leniency (D-01, F-06), plus G-03's path |
+| **§26.5 on `gemini-3.1-flash-lite`** | Blocked on billing, not engineering. Every available Gemini key reports depleted prepayment credits, including a key added on 2026-07-30 — this is a **project billing** condition, so a new key on the same project cannot clear it |
+| **Value-level conflict detection** | Not implemented (06 §5.1). No corpus fixture exists for it either |
+| **Phase 7 UI swap** | Architecture done; the two rendering surfaces deliberately untouched (§12.2) |
+| **Phase 9 legacy removal** | Correctly still blocked: the flag has never been on for a real user |
+
+**The honest summary:** the decision layer's safety properties are now measured against a real corpus on a real model and they hold. Its *precision* is measured for the first time and is 33/42. Nothing here authorises Phase 9.
