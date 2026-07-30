@@ -184,6 +184,13 @@ export function recordLegacyTurn(input: LegacyTraceInput): AnswerTrace | null {
     // written by someone who did not read this file.
     const safe = redactTrace(trace as unknown as Record<string, unknown>) as unknown as AnswerTrace;
     if (input.legacyPath) (safe as unknown as Record<string, unknown>).legacyPath = input.legacyPath;
+    // Phase 10 §4: the same counters see BOTH engines, which is what makes the
+    // §3 stage exits comparable — "within baseline" needs the baseline measured
+    // by the same instrument, not a different one.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      require('./rollout-metrics').recordTurnMetrics(safe);
+    } catch { /* observability only */ }
     sink.write(safe);
     return safe;
   } catch {

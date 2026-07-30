@@ -10228,6 +10228,23 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // ── CONTEXT INTELLIGENCE V3 — rollout telemetry (§4/§5, Phase 10) ─────────
+  //
+  // Read-only. Counters, enum tallies, ids and durations — never evidence text
+  // (the trace is redacted at construction and this module only counts).
+  // Exposed so a rollout stage can be gated on measured rates instead of a
+  // description of rates, and so §5's abort conditions are evaluated rather
+  // than remembered.
+  safeHandle('context-intelligence:rollout-metrics', async (_, input?: { baselineContamination?: number | null; baselineP95Ms?: number | null; minTurns?: number }) => {
+    try {
+      const { getRolloutMetrics, evaluateAbortConditions } = require('./context-intelligence/observability/rollout-metrics');
+      return { ok: true, metrics: getRolloutMetrics(), abort: evaluateAbortConditions(input ?? {}) };
+    } catch (e: any) {
+      console.error('[IPC] context-intelligence:rollout-metrics error:', e);
+      return { ok: false, error: e.message };
+    }
+  });
+
   // ── CONTEXT INTELLIGENCE V3 — the Answer policy control (§6, Phase 7) ─────
   //
   // One GET carrying every decision the renderer needs — whether V3 is on,

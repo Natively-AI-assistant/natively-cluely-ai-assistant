@@ -482,5 +482,20 @@ export async function orchestrate(
     engine: 'v3',
   };
 
+  // Phase 10 §4: count the decision-layer signals. Derived from the trace
+
+  // that already exists — no new instrumentation on the answer path, and
+
+  // never throwing, so a metrics defect cannot degrade an answer.
+
+  try {
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+
+    require('../observability/rollout-metrics').recordTurnMetrics(trace);
+
+  } catch { /* observability only */ }
+
+
   return { decision, evidence, answerability, trace };
 }

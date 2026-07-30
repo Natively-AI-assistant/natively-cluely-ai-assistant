@@ -1,0 +1,236 @@
+// electron/context-intelligence/observability/rollout-metrics.ts
+//
+// Phase 10 §4 — the decision-layer signals, which did not exist.
+//
+// §4 lists the signals "that would have caught the failures this mission
+// investigated, and none of them exist today". A rollout plan whose monitoring
+// section is unimplemented cannot gate a rollout: every stage exit criterion in
+// §3 and every abort condition in §5 is stated in terms of these rates, so
+// without them "5% production, watch the contamination rate" is not a plan.
+//
+// Derived ENTIRELY from the AnswerTrace + decision that already exist — this
+// module adds no new instrumentation to the answer path, it only counts what the
+// trace already records. That matters for the abort conditions: a monitoring
+// layer that itself touches the answer path can cause the regression it watches
+// for.
+//
+// PRIVACY, and it is structural rather than a rule to remember: this file only
+// ever reads counts, enum values, ids and durations. It has no code path that
+// can hold evidence text, so §4's "telemetry must not carry private evidence
+// text" cannot be violated by a future edit here without adding a field that
+// obviously does not belong. The trace it reads is already redacted at
+// construction (redactTrace).
+
+import type { AnswerTrace } from './answer-trace';
+
+/** Counters only — no identifiers of people, no content, no free text. */
+export interface RolloutCounters {
+  turns: number;
+  engine: { legacy: number; v3: number };
+
+  /** §4: fast/grounded/verification split. A collapse toward grounded means the
+   *  fast path is broken and latency follows. */
+  path: Record<string, number>;
+  /** §4: answerability distribution, the shape of what the layer decided. */
+  answerability: Record<string, number>;
+  /** §4: strict-refusal and general-fallback rates live here. */
+  fallback: Record<string, number>;
+
+  /** §4 TOP RISK: a superseded version reaching retrieval at all. */
+  retrieval: {
+    turnsWithRetrieval: number;
+    /** Turns where the filter REJECTED at least one superseded revision. */
+    staleVersionRejectedTurns: number;
+    /** Turns where a foreign scope (other meeting / other user) was rejected. */
+    outOfScopeRejectedTurns: number;
+    /** §4: distinguishes "not found" from "retrieval failed" — indistinguishable
+     *  in the legacy path, where both became {fallback:true}. */
+    groundedWithNoEvidenceTurns: number;
+    dependencyFailureTurns: number;
+  };
+
+  /** §4/§5: prohibited source type present in ACCEPTED evidence. Should be
+   *  structurally impossible — the port filters on authorized types — so a
+   *  non-zero value here means the filter was bypassed, which is an abort
+   *  condition, not a metric to trend. */
+  contaminationTurns: number;
+
+  /** §4: F4 — stale answers overwriting current ones. */
+  supersededTurns: number;
+
+  /** Milliseconds, for the p95 TTFT abort condition. Bounded ring buffer: an
+   *  unbounded latency array in a long meeting is its own leak. */
+  latencyMs: number[];
+}
+
+const MAX_LATENCY_SAMPLES = 512;
+
+function emptyCounters(): RolloutCounters {
+  return {
+    turns: 0,
+    engine: { legacy: 0, v3: 0 },
+    path: {}, answerability: {}, fallback: {},
+    retrieval: {
+      turnsWithRetrieval: 0, staleVersionRejectedTurns: 0, outOfScopeRejectedTurns: 0,
+      groundedWithNoEvidenceTurns: 0, dependencyFailureTurns: 0,
+    },
+    contaminationTurns: 0,
+    supersededTurns: 0,
+    latencyMs: [],
+  };
+}
+
+let counters = emptyCounters();
+
+const bump = (m: Record<string, number>, k: string | undefined) => {
+  if (!k) return;
+  m[k] = (m[k] ?? 0) + 1;
+};
+
+/**
+ * Record one completed turn.
+ *
+ * Never throws: this is observability on a live answer path, and the whole
+ * mission's evidence is that a monitoring defect must degrade the metric, never
+ * the answer. Callers are not expected to wrap it.
+ */
+export function recordTurnMetrics(trace: AnswerTrace | null | undefined): void {
+  try {
+    if (!trace) return;
+    const t = trace as unknown as Record<string, any>;
+    counters.turns += 1;
+    if (t.engine === 'v3') counters.engine.v3 += 1;
+    else counters.engine.legacy += 1;
+
+    bump(counters.path, t.retrievalPath ?? t.decision?.retrievalPlan?.path);
+    bump(counters.answerability, t.answerability);
+    bump(counters.fallback, t.fallbackUsed);
+
+    if (t.status === 'SUPERSEDED') counters.supersededTurns += 1;
+
+    const attempts: any[] = Array.isArray(t.retrievalAttempts) ? t.retrievalAttempts : [];
+    if (attempts.length) {
+      counters.retrieval.turnsWithRetrieval += 1;
+      const reasons = attempts.flatMap((a) => (a?.rejections ?? []).map((r: any) => r?.reason));
+      if (reasons.includes('SUPERSEDED_VERSION')) counters.retrieval.staleVersionRejectedTurns += 1;
+      if (reasons.includes('OUT_OF_SCOPE')) counters.retrieval.outOfScopeRejectedTurns += 1;
+      if (attempts.some((a) => a?.failed)) counters.retrieval.dependencyFailureTurns += 1;
+
+      const accepted = Array.isArray(t.acceptedEvidence) ? t.acceptedEvidence.length : 0;
+      const path = t.retrievalPath ?? t.decision?.retrievalPlan?.path;
+      if (path && path !== 'FAST' && accepted === 0) {
+        counters.retrieval.groundedWithNoEvidenceTurns += 1;
+      }
+    }
+
+    // Contamination: an accepted item whose source type the turn never
+    // authorized. Structurally impossible via the port — so this counts filter
+    // BYPASS, which §5 treats as an immediate rollback trigger.
+    const authorized: string[] = t.authorizedSources ?? t.decision?.retrievalPlan?.sourceTypes ?? [];
+    if (Array.isArray(authorized) && authorized.length && Array.isArray(t.acceptedEvidence)) {
+      const bad = t.acceptedEvidence.some((e: any) => e?.sourceType && !authorized.includes(e.sourceType));
+      if (bad) counters.contaminationTurns += 1;
+    }
+
+    const ttft = Number(t.timings?.providerTtfbMs ?? t.timings?.totalMs ?? NaN);
+    if (Number.isFinite(ttft) && ttft >= 0) {
+      counters.latencyMs.push(ttft);
+      if (counters.latencyMs.length > MAX_LATENCY_SAMPLES) counters.latencyMs.shift();
+    }
+  } catch { /* a metrics defect must never affect an answer */ }
+}
+
+const pct = (n: number, d: number) => (d > 0 ? n / d : null);
+
+function quantile(values: number[], q: number): number | null {
+  if (!values.length) return null;
+  const s = [...values].sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.floor(s.length * q))];
+}
+
+/**
+ * The §4 signals as RATES, plus the raw counters.
+ *
+ * Rates are null rather than 0 when the denominator is zero. A rollout gate that
+ * reads 0% contamination from zero turns and calls the stage green is the
+ * vacuous-gate failure this mission spent its whole investigation removing.
+ */
+export function getRolloutMetrics(): {
+  counters: RolloutCounters;
+  rates: Record<string, number | null>;
+  latency: { p50: number | null; p95: number | null; samples: number };
+} {
+  const c = counters;
+  const withRetrieval = c.retrieval.turnsWithRetrieval;
+  return {
+    counters: { ...c, latencyMs: [...c.latencyMs] },
+    rates: {
+      staleVersionRejected: pct(c.retrieval.staleVersionRejectedTurns, withRetrieval),
+      outOfScopeRejected: pct(c.retrieval.outOfScopeRejectedTurns, withRetrieval),
+      groundedWithNoEvidence: pct(c.retrieval.groundedWithNoEvidenceTurns, withRetrieval),
+      retrievalDependencyFailure: pct(c.retrieval.dependencyFailureTurns, withRetrieval),
+      contamination: pct(c.contaminationTurns, c.turns),
+      superseded: pct(c.supersededTurns, c.turns),
+      strictRefusal: pct(c.fallback.STRICT_NOT_FOUND ?? 0, c.turns),
+      generalFallback: pct(c.fallback.GENERAL_KNOWLEDGE ?? 0, c.turns),
+      clarification: pct(c.fallback.CLARIFICATION ?? 0, c.turns),
+      fastPath: pct(c.path.FAST ?? 0, c.turns),
+      v3Share: pct(c.engine.v3, c.turns),
+    },
+    latency: {
+      p50: quantile(c.latencyMs, 0.5),
+      p95: quantile(c.latencyMs, 0.95),
+      samples: c.latencyMs.length,
+    },
+  };
+}
+
+/**
+ * Abort conditions from §5, evaluated rather than described.
+ *
+ * Returns the triggered conditions. `minTurns` exists because every one of these
+ * is a RATE: firing an abort off two turns would make the rollout unshippable for
+ * noise reasons, and reporting "no aborts" from zero turns would be the vacuous
+ * pass. Below the threshold this returns `insufficientData` and nothing else.
+ */
+export function evaluateAbortConditions(input: {
+  minTurns?: number;
+  /** Legacy contamination rate to compare against, when one has been measured. */
+  baselineContamination?: number | null;
+  /** Legacy p95 TTFT in ms, when one has been measured. */
+  baselineP95Ms?: number | null;
+} = {}): { insufficientData: boolean; triggered: string[]; detail: Record<string, unknown> } {
+  const minTurns = input.minTurns ?? 50;
+  const m = getRolloutMetrics();
+  if (m.counters.turns < minTurns) {
+    return { insufficientData: true, triggered: [], detail: { turns: m.counters.turns, minTurns } };
+  }
+
+  const triggered: string[] = [];
+
+  // "any stale-version or cross-meeting leak observed in production" — a LEAK is
+  // an accepted stale/foreign item, which is what contaminationTurns counts.
+  // Rejections are the filter WORKING and are deliberately not an abort.
+  if (m.counters.contaminationTurns > 0) triggered.push('contamination_any');
+
+  if (input.baselineContamination != null && m.rates.contamination != null
+      && m.rates.contamination > input.baselineContamination) {
+    triggered.push('contamination_above_baseline');
+  }
+
+  if (input.baselineP95Ms != null && m.latency.p95 != null
+      && m.latency.p95 > input.baselineP95Ms * 1.2) {
+    triggered.push('p95_regression_over_20pct');
+  }
+
+  // Over-refusal: strict refusals rising while general fallback is flat/low.
+  // §27.2 forbids hiding failures behind refusal.
+  if ((m.rates.strictRefusal ?? 0) > 0.25 && (m.rates.generalFallback ?? 0) < 0.05) {
+    triggered.push('over_refusal_suspected');
+  }
+
+  return { insufficientData: false, triggered, detail: { rates: m.rates, latency: m.latency } };
+}
+
+/** Test seam / session boundary. */
+export function resetRolloutMetrics(): void { counters = emptyCounters(); }
