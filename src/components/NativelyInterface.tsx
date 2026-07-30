@@ -8340,20 +8340,19 @@ Provide only the answer, nothing else.`;
                                     tap and break inputs in Settings/Model
                                     Selector windows. */}
                 <div className="relative group" data-stealth-engage="true">
-                  {activeModeLabel && (
+                  {/* Deliberately renders ONLY in the zero-sources state. The
+                      always-on "Mode · 2/2 sources" variant was rejected as
+                      overlay noise (2026-07-31); the amber warning stays
+                      because a mode with no attached files otherwise fails
+                      silently — the Stage-1 Looking-for-Work report was
+                      exactly this, misread as broken retrieval. */}
+                  {activeModeLabel && activeModeSourceCounts?.files === 0 && (
                     <div
                       className="flex items-center gap-1.5 px-1 pb-1 text-[10px] overlay-text-muted select-none"
                       data-testid="active-mode-chip"
-                      title={activeModeSourceCounts
-                        ? `${activeModeSourceCounts.indexed}/${activeModeSourceCounts.files} reference file(s) indexed`
-                        : undefined}
                     >
                       <span className="truncate max-w-[140px]">{activeModeLabel}</span>
-                      {activeModeSourceCounts && (
-                        activeModeSourceCounts.files === 0
-                          ? <span className="text-amber-400/90">· no sources attached</span>
-                          : <span>· {activeModeSourceCounts.indexed}/{activeModeSourceCounts.files} sources</span>
-                      )}
+                      <span className="text-amber-400/90">· no sources attached</span>
                     </div>
                   )}
                   <input
