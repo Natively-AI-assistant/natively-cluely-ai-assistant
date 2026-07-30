@@ -5068,43 +5068,51 @@ export class AppState {
       this._systemAudioRecoveryTimer = null;
     }
 
-    if (!(await ensureMacMicrophoneAccess('meeting start'))) {
-      const message = formatPermissionMessage('mic-denied');
-      this.broadcast('meeting-audio-error', message);
-      // Tag the thrown error so the renderer's start-meeting caller (still on
-      // the launcher — the overlay/meeting surface hasn't been shown yet, so
-      // the in-overlay audio banner would not be visible) can recognise this
-      // as a recoverable mic-permission denial and re-open the permissions
-      // card instead of failing silently with only a console.error. Pre-fix,
-      // a denied/revoked mic grant made "Start Natively" do nothing on screen.
-      const err = new Error(message) as Error & { code?: string; channel?: string };
-      err.code = 'mic-permission-denied';
-      err.channel = 'mic';
-      throw err;
-    }
-
-    // Check Screen Recording permission required for system audio capture
-    // (CoreAudio Global Process Tap + ScreenCaptureKit both need this).
-    // NOTE: The 'not-determined' TCC dialog is triggered once at app startup
-    // (in initializeApp) so it never pops up mid-meeting here. We only act on
-    // explicit 'denied' — in that case warn the user but let the meeting continue
-    // with microphone-only transcription.
-    if (process.platform === 'darwin') {
-      const screenCapability = await resolveMacScreenCaptureCapability('meeting start');
-      console.log(`[Main] macOS screen recording permission status: ${screenCapability.status}; capturable=${screenCapability.capturable}; sources=${screenCapability.sourceCount}`);
-      if (screenCapability.effectiveDenied) {
-        // Permission was explicitly denied — warn the user via the UI but do NOT
-        // auto-open System Settings. Forcing that window open every meeting start
-        // is extremely disruptive, especially when mic transcription is still working.
-        // The UI will show a non-blocking banner; the user can fix it deliberately.
-        const message = screenCapability.message ?? formatPermissionMessage('screen-recording-denied');
-        console.warn('[Main]', message);
-        this.sendSystemAudioPermissionDenied( message);
-        // NOTE: Do NOT call shell.openExternal() here — it hijacks focus on every meeting
-        // start. The UI banner (system-audio-permission-denied IPC event) handles this.
+    // Ambient AI Chat (Settings > General) skips mic/system audio capture
+    // entirely for the whole meeting (see the `!this._ambientChatEnabled`
+    // gate around setupSystemAudioPipeline() below) — so neither permission
+    // is ever touched in that mode. Checking/warning about them here anyway
+    // used to throw on a denied mic grant (blocking "Start Natively" outright)
+    // and always surface the "Interviewer audio will not be captured" banner,
+    // even though no audio was ever going to be captured by design.
+    if (!this._ambientChatEnabled) {
+      if (!(await ensureMacMicrophoneAccess('meeting start'))) {
+        const message = formatPermissionMessage('mic-denied');
+        // Tag the thrown error so the renderer's start-meeting caller (still on
+        // the launcher — the overlay/meeting surface hasn't been shown yet, so
+        // the in-overlay audio banner would not be visible) can recognise this
+        // as a recoverable mic-permission denial and re-open the permissions
+        // card instead of failing silently with only a console.error. Pre-fix,
+        // a denied/revoked mic grant made "Start Natively" do nothing on screen.
+        const err = new Error(message) as Error & { code?: string; channel?: string };
+        err.code = 'mic-permission-denied';
+        err.channel = 'mic';
+        throw err;
       }
-      // 'not-determined': Handled at startup. SCK/CoreAudio will trigger the TCC
-      // dialog itself when it first attempts to access screen content.
+
+      // Check Screen Recording permission required for system audio capture
+      // (CoreAudio Global Process Tap + ScreenCaptureKit both need this).
+      // NOTE: The 'not-determined' TCC dialog is triggered once at app startup
+      // (in initializeApp) so it never pops up mid-meeting here. We only act on
+      // explicit 'denied' — in that case warn the user but let the meeting continue
+      // with microphone-only transcription.
+      if (process.platform === 'darwin') {
+        const screenCapability = await resolveMacScreenCaptureCapability('meeting start');
+        console.log(`[Main] macOS screen recording permission status: ${screenCapability.status}; capturable=${screenCapability.capturable}; sources=${screenCapability.sourceCount}`);
+        if (screenCapability.effectiveDenied) {
+          // Permission was explicitly denied — warn the user via the UI but do NOT
+          // auto-open System Settings. Forcing that window open every meeting start
+          // is extremely disruptive, especially when mic transcription is still working.
+          // The UI will show a non-blocking banner; the user can fix it deliberately.
+          const message = screenCapability.message ?? formatPermissionMessage('screen-recording-denied');
+          console.warn('[Main]', message);
+          this.sendSystemAudioPermissionDenied( message);
+          // NOTE: Do NOT call shell.openExternal() here — it hijacks focus on every meeting
+          // start. The UI banner (system-audio-permission-denied IPC event) handles this.
+        }
+        // 'not-determined': Handled at startup. SCK/CoreAudio will trigger the TCC
+        // dialog itself when it first attempts to access screen content.
+      }
     }
 
     // Reset overlay position BEFORE the switch so the new meeting starts in
@@ -7436,7 +7444,11 @@ if (process.env.THINKING_MATRIX === '1') {
           // NOTE: Do NOT read afterStatus here — TCC response is async (dialog still open).
           // startMeeting() reads the status when the user actually tries to use audio.
 
-        } else if (screenStatus === 'denied') {
+        } else if (screenStatus === 'denied' && !appState.getAmbientChatEnabled()) {
+          // Ambient AI Chat (Settings > General) means meetings never capture
+          // system audio at all, so a denied Screen Recording grant is moot —
+          // skip the banner rather than warning about a capability the app
+          // isn't going to use.
           const screenCapability = await resolveMacScreenCaptureCapability('startup permission check');
           if (screenCapability.effectiveDenied) {
             // Returning user who previously denied — show the banner immediately at startup
@@ -7457,7 +7469,11 @@ if (process.env.THINKING_MATRIX === '1') {
         try {
           const micStatus = systemPreferences.getMediaAccessStatus('microphone');
           console.log(`[Init] Microphone permission status at startup: ${micStatus}`);
-          if (micStatus === 'denied') {
+          // Ambient AI Chat never touches the mic either — see the
+          // screen-recording branch above for why these banners are skipped.
+          if (appState.getAmbientChatEnabled()) {
+            // skip — no banner
+          } else if (micStatus === 'denied') {
             console.warn('[Init] Microphone was previously denied — notifying UI banner.');
             appState.sendAudioCaptureFailed({
               channel: 'mic',

@@ -99,6 +99,11 @@ interface ElectronAPI {
   setDeepseekApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => Promise<{ success: boolean; error?: string }>;
   getAvailableLiteLLMModels: () => Promise<string[]>;
+  refreshLiteLLMModels: () => Promise<string[]>;
+  getCloudFetchedModels: () => Promise<{ models: Record<string, { id: string; label: string }[]>; fetchedAt: Record<string, number> }>;
+  getDisabledProviders: () => Promise<string[]>;
+  setDisabledProviders: (providers: string[]) => Promise<{ success: boolean; error?: string }>;
+  setCloudEnabledModels: (provider: string, models: string[]) => Promise<{ success: boolean; error?: string }>;
   setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   // ── In-app review / testimonial prompt ─────────────────────────────────
   reviewGetPromptState: () => Promise<{
@@ -150,7 +155,7 @@ interface ElectronAPI {
     error?: string;
     status?: number;
   }>;
-  getNativelyUsage: () => Promise<{
+  getNativelyUsage: (force?: boolean) => Promise<{
     ok: boolean;
     plan?: string;
     quota?: {
@@ -169,6 +174,8 @@ interface ElectronAPI {
     hasOpenaiKey: boolean;
     hasClaudeKey: boolean;
     hasDeepseekKey: boolean;
+    disabledProviders?: string[];
+    cloudEnabledModels?: Record<string, string[]>;
     hasNativelyKey: boolean;
     googleServiceAccountPath: string | null;
     sttProvider: string;
@@ -1331,6 +1338,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setDeepseekApiKey: (apiKey: string) => ipcRenderer.invoke('set-deepseek-api-key', apiKey),
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => ipcRenderer.invoke('set-litellm-config', config),
   getAvailableLiteLLMModels: () => ipcRenderer.invoke('get-available-litellm-models'),
+  refreshLiteLLMModels: () => ipcRenderer.invoke('refresh-litellm-models'),
+  getCloudFetchedModels: () => ipcRenderer.invoke('get-cloud-fetched-models'),
+  getDisabledProviders: () => ipcRenderer.invoke('get-disabled-providers'),
+  setDisabledProviders: (providers: string[]) => ipcRenderer.invoke('set-disabled-providers', providers),
+  setCloudEnabledModels: (provider: string, models: string[]) => ipcRenderer.invoke('set-cloud-enabled-models', provider, models),
   setNativelyApiKey: (apiKey: string) => ipcRenderer.invoke('set-natively-api-key', apiKey),
 
   // ── In-app review / testimonial prompt ─────────────────────────────────
@@ -1350,7 +1362,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     display_name_publicly: boolean;
   }) => ipcRenderer.invoke('review:update-testimonial', payload),
   getNativelyPricing: () => ipcRenderer.invoke('get-natively-pricing'),
-  getNativelyUsage: () => ipcRenderer.invoke('get-natively-usage'),
+  getNativelyUsage: (force?: boolean) => ipcRenderer.invoke('get-natively-usage', force ? { force: true } : undefined),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
 
   // Permissions

@@ -106,6 +106,30 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
 
 type ChatState = 'idle' | 'waiting_for_llm' | 'streaming_response' | 'error';
 
+// Hard client-side ceiling on the ragQueryGlobal IPC round-trip. The main
+// process has its own internal timeouts (worker deadman switch, stream
+// stall guard), but every one of those protects a DIFFERENT stage of the
+// pipeline — if the hang happens somewhere NONE of them cover (e.g. the
+// main thread itself blocked inside a synchronous native call before any
+// of those timers can even be scheduled), the `await` on this invoke() has
+// no ceiling of its own and can wait forever with the UI showing nothing.
+// This is the backstop: no matter what breaks on the other side of the IPC
+// boundary, the user gets an answer (even if it's "something went wrong")
+// within a bounded time instead of a silently frozen chat bubble.
+const RAG_QUERY_CLIENT_TIMEOUT_MS = 20000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error(`${label} timed out after ${ms}ms — the main process never responded`));
+        }, ms);
+        promise.then(
+            (v) => { clearTimeout(timer); resolve(v); },
+            (e) => { clearTimeout(timer); reject(e); },
+        );
+    });
+}
+
 const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
     isOpen,
     onClose,
@@ -123,6 +147,15 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const chatWindowRef = useRef<HTMLDivElement>(null);
+    // Synchronous busy guard for submitQuestion. `chatState` alone isn't
+    // enough: it's React state, so two calls fired in quick succession (e.g.
+    // repeated Enter presses on the footer input) can both read it before a
+    // re-render lands, both pass the guard, and both register their own
+    // onRAGStreamChunk/onRAGStreamComplete listeners against the ONE shared
+    // streamBuffer — each call's `streamBuffer.reset()` then clobbers
+    // whatever the other call had already buffered, so the eventual
+    // completion can render empty. A ref updates immediately, no batching.
+    const submitInFlightRef = useRef(false);
 
     // Submit initial query when overlay opens
     useEffect(() => {
@@ -169,7 +202,8 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
 
     // Submit question using global RAG
     const submitQuestion = useCallback(async (question: string) => {
-        if (!question.trim() || chatState === 'waiting_for_llm' || chatState === 'streaming_response') return;
+        if (!question.trim() || submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
 
         const userMessage: Message = {
             id: genMessageId(),
@@ -221,7 +255,13 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
             });
 
             const doneCleanup = window.electronAPI?.onRAGStreamComplete(() => {
-                const finalContent = streamBuffer.getBufferedContent();
+                // The stream can legitimately complete with zero chunks (e.g. a
+                // short non-question like "hi" fed through the strict RAG-grounding
+                // prompt can make the model return an empty/degenerate completion).
+                // Without this fallback, the bubble renders as nothing — no text,
+                // no error — which reads as "the app didn't respond at all".
+                const finalContent = streamBuffer.getBufferedContent().trim()
+                    || "I'm not sure how to answer that from your meetings — try asking a more specific question.";
                 setMessages(prev => prev.map(msg =>
                     msg.id === assistantMessageId
                         ? { ...msg, content: finalContent, isStreaming: false }
@@ -249,10 +289,39 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
             if (doneCleanup) activeCleanups.push(doneCleanup);
             if (errorCleanup) activeCleanups.push(errorCleanup);
 
-            // Use global RAG query
-            const result = await window.electronAPI?.ragQueryGlobal(question);
+            // Use global RAG query. Wrapped in a hard client-side ceiling — see
+            // RAG_QUERY_CLIENT_TIMEOUT_MS above for why this exists: nothing
+            // upstream of this call can guarantee the invoke() ever resolves.
+            let result: { fallback?: boolean; success?: boolean; error?: string } | undefined;
+            try {
+                const call = window.electronAPI?.ragQueryGlobal(question);
+                result = call
+                    ? await withTimeout(call, RAG_QUERY_CLIENT_TIMEOUT_MS, 'ragQueryGlobal')
+                    : undefined;
+            } catch (timeoutErr) {
+                console.error('[GlobalChat] ragQueryGlobal client-side timeout:', timeoutErr);
+                // Tear down the RAG listeners we just registered — the main
+                // process may still respond well after this point (its own
+                // internal timeouts run on a longer clock), and a late
+                // rag:stream-chunk/-complete/-error must not land on a message
+                // this function has already abandoned.
+                tokenCleanup?.();
+                doneCleanup?.();
+                errorCleanup?.();
+                activeCleanups = [];
+                setMessages(prev => prev.map(msg =>
+                    msg.id === assistantMessageId
+                        ? { ...msg, content: "This is taking longer than expected. Please try again.", isStreaming: false }
+                        : msg
+                ));
+                setChatState('error');
+                setErrorMessage("The search took too long to respond. Please try again.");
+                return;
+            }
 
-            if (result?.fallback) {
+            // If electronAPI is unavailable or IPC failed, result will be undefined.
+            // Treat this as a fallback case to ensure the user gets SOME response.
+            if (!result || result.fallback) {
                 console.log("[GlobalChat] RAG unavailable, falling back to standard chat");
                 // Cleanup RAG listeners
                 tokenCleanup?.();
@@ -274,7 +343,9 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                 });
 
                 const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone(() => {
-                    const finalContent = streamBuffer.getBufferedContent();
+                    // Same empty-completion guard as the RAG path above.
+                    const finalContent = streamBuffer.getBufferedContent().trim()
+                        || "I'm not sure how to answer that — try rephrasing your question.";
                     setMessages(prev => prev.map(msg =>
                         msg.id === assistantMessageId
                             ? { ...msg, content: finalContent, isStreaming: false }
@@ -302,8 +373,26 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                 if (oldDoneCleanup) activeCleanups.push(oldDoneCleanup);
                 if (oldErrorCleanup) activeCleanups.push(oldErrorCleanup);
 
-                // Call standard chat
-                await window.electronAPI?.streamGeminiChat(question, undefined, undefined, { skipSystemPrompt: false });
+                // Call standard chat — same client-side ceiling as ragQueryGlobal above.
+                const fallbackCall = window.electronAPI?.streamGeminiChat(question, undefined, undefined, { skipSystemPrompt: false });
+                if (fallbackCall) {
+                    try {
+                        await withTimeout(fallbackCall, RAG_QUERY_CLIENT_TIMEOUT_MS, 'streamGeminiChat');
+                    } catch (timeoutErr) {
+                        console.error('[GlobalChat] streamGeminiChat client-side timeout:', timeoutErr);
+                        oldTokenCleanup?.();
+                        oldDoneCleanup?.();
+                        oldErrorCleanup?.();
+                        activeCleanups = [];
+                        setMessages(prev => prev.map(msg =>
+                            msg.id === assistantMessageId
+                                ? { ...msg, content: "This is taking longer than expected. Please try again.", isStreaming: false }
+                                : msg
+                        ));
+                        setChatState('error');
+                        setErrorMessage("The request took too long to respond. Please try again.");
+                    }
+                }
             }
 
         } catch (error) {
@@ -320,8 +409,9 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
             activeCleanups = [];
             setChatState(prev => (prev === 'error' ? prev : 'idle'));
             streamBuffer.reset();
+            submitInFlightRef.current = false;
         }
-    }, [chatState]);
+    }, []);
 
     return (
         <AnimatePresence

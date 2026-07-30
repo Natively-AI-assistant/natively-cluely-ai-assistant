@@ -85,9 +85,6 @@ Natively started as a pixel-perfect recreation of Cluely's interface — then ke
 
 ## What Users Are Saying
 
-> "This is a fantastic piece of software and you should definitely keep up the great work! This is exactly what I was looking for. I started out trying the source-available version, and because it worked so well, I decided to go ahead and buy the full premium license."  
-> — **Oskar Krzak** (⭐⭐⭐⭐⭐ via Gumroad)
-
 > "Natively is significantly faster than Cluely when it comes to response time and screen analysis. The latency is practically non-existent."  
 > — **Premium User**
 

@@ -53,6 +53,14 @@ import {
  */
 export const PROFILE_OKF_RESERVED_MODE_ID = '__profile_okf__';
 
+/**
+ * Where the active-mode snapshot lives so that every inlined copy of this
+ * module shares ONE cache. See ModesManager._cache for why that is required
+ * rather than merely tidy. Exported so a test can assert the shared slot
+ * exists — a per-instance regression would still pass any single-bundle test.
+ */
+export const ACTIVE_MODE_CACHE_KEY = '__nativelyActiveModeInfoCacheV1__';
+
 export type ModeTemplateType =
     | 'general'
     | 'looking-for-work'
@@ -408,13 +416,41 @@ export class ModesManager {
     // The live answer path consults the active mode on EVERY turn (routing
     // prior, pinned instructions, retrieval). The mode itself changes only via
     // setActiveMode/updateMode/deleteMode, so a tiny invalidate-on-write cache
-    // removes the per-question SQLite read without any staleness risk.
-    private _activeModeInfoCache: ActiveModeInfo | null = null;
-    private _activeModeInfoCacheValid = false;
+    // removes the per-question SQLite read.
+    //
+    // The cache is stored on globalThis, NOT on the instance, and that is
+    // load-bearing rather than defensive.
+    //
+    // esbuild inlines this module into every main-process entry bundle that
+    // imports it — 14 of them, including ipcHandlers, IntelligenceEngine and
+    // IntelligenceManager. Each inlined copy is its own module scope with its
+    // own `ModesManager.instance`, so `getInstance()` returns a DIFFERENT
+    // object per bundle. `setActiveMode` is only ever reached through the
+    // ipcHandlers copy, so every other copy's cache was filled once and then
+    // never invalidated again for the life of the process.
+    //
+    // That is not a stale-label bug. `getReferenceFiles(modeInfo.id)` is keyed
+    // off this snapshot, so the whole retrieval set follows it: measured live,
+    // Recruiting and Sales turns retrieved `technical_project_portfolio.md` —
+    // a Technical Interview file — and answered with TalentScope, RedisMart and
+    // Aetherbot content that appears nowhere in their own reference files.
+    // Cross-mode source isolation is exactly what this system exists to
+    // guarantee, so the cache has to live somewhere every copy of the class can
+    // see. globalThis is per-PROCESS however many times the module is inlined.
+    private static get _cache(): { info: ActiveModeInfo | null; valid: boolean } {
+        const g = globalThis as unknown as Record<string, unknown>;
+        let store = g[ACTIVE_MODE_CACHE_KEY] as { info: ActiveModeInfo | null; valid: boolean } | undefined;
+        if (!store) {
+            store = { info: null, valid: false };
+            g[ACTIVE_MODE_CACHE_KEY] = store;
+        }
+        return store;
+    }
 
     private invalidateActiveModeCache(): void {
-        this._activeModeInfoCache = null;
-        this._activeModeInfoCacheValid = false;
+        const store = ModesManager._cache;
+        store.info = null;
+        store.valid = false;
     }
 
     /**
@@ -424,11 +460,12 @@ export class ModesManager {
      * user-authored and surfaced to prompt builders.
      */
     public getActiveModeInfo(): ActiveModeInfo | null {
-        if (this._activeModeInfoCacheValid) return this._activeModeInfoCache;
+        const store = ModesManager._cache;
+        if (store.valid) return store.info;
         const mode = this.getActiveMode();
         if (mode) {
             const grounding = this.getActiveModeDocumentGroundingInfo(mode.id);
-            this._activeModeInfoCache = {
+            store.info = {
                 id: mode.id,
                 templateType: mode.templateType,
                 name: mode.name,
@@ -440,10 +477,10 @@ export class ModesManager {
                 sourceContract: grounding.sourceContract,
             };
         } else {
-            this._activeModeInfoCache = null;
+            store.info = null;
         }
-        this._activeModeInfoCacheValid = true;
-        return this._activeModeInfoCache;
+        store.valid = true;
+        return store.info;
     }
 
     // Modes where the premium knowledge intercept (negotiation coaching, intro

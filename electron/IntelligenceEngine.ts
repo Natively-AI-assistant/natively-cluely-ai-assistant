@@ -2420,6 +2420,7 @@ export class IntelligenceEngine extends EventEmitter {
                         question: String(wtaTurnQuestion || ''),
                         modeTemplateType: _ctx.raw,
                         modeUniqueId: _ctx.modeUniqueId,
+                        attachedSourceCount: _ctx.attachedSourceCount,
                         scope: { meetingId: _ctx.meetingId ?? meetingMarker ?? undefined },
                         requestId: trace.requestId,
                         requestSequence: generationId,
@@ -4052,6 +4053,7 @@ export class IntelligenceEngine extends EventEmitter {
     // so all of them now call this.
     private v3ModeRetrievalContext(): {
         raw: string; modeUniqueId: string | null; meetingId: string | null;
+        attachedSourceCount: number;
         port: unknown; conversationWindow: (sec: number) => string;
     } | null {
         try {
@@ -4097,6 +4099,7 @@ export class IntelligenceEngine extends EventEmitter {
                 raw,
                 modeUniqueId: (_mi as any)?.id ?? null,
                 meetingId,
+                attachedSourceCount: _files.length,
                 port,
                 // Bounded live-transcript window for the composer's labelled
                 // "Conversation so far" section. This is NOT the §32.16 raw-blob
@@ -4143,6 +4146,7 @@ export class IntelligenceEngine extends EventEmitter {
                 question: resolved.resolvedQuestion,
                 modeTemplateType: ctx.raw,
                 modeUniqueId: ctx.modeUniqueId,
+                attachedSourceCount: ctx.attachedSourceCount,
                 scope: { meetingId: ctx.meetingId ?? undefined },
                 conversationSummary: ctx.conversationWindow(60),
                 retrieval: ctx.port as any,
@@ -4593,6 +4597,7 @@ export class IntelligenceEngine extends EventEmitter {
                         question,
                         modeTemplateType: _ctx.raw,
                         modeUniqueId: _ctx.modeUniqueId,
+                        attachedSourceCount: _ctx.attachedSourceCount,
                         scope: { meetingId: _ctx.meetingId ?? undefined },
                         retrieval: _ctx.port as any,
                     });

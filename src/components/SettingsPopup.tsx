@@ -332,7 +332,7 @@ const SettingsPopup = () => {
                             localStorage.setItem('natively_undetectable', String(newState));
                             window.electronAPI?.setUndetectable(newState);
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${isUndetectable
+                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] flex items-center transition-all duration-300 ease-spring active:scale-[0.92] ${isUndetectable
                             ? (isDarkBg ? 'bg-white shadow-[0_2px_8px_rgba(255,255,255,0.2)]' : 'bg-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.18)]')
                             : defaultToggleTrackClass}`}
                     >
@@ -355,7 +355,7 @@ const SettingsPopup = () => {
                             if (!(hasStoredKey.groq || hasStoredKey.natively)) return;
                             setUseGroqFastText(!useGroqFastText);
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${useGroqFastText ? 'bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]' : defaultToggleTrackClass}`}
+                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] flex items-center transition-all duration-300 ease-spring active:scale-[0.92] ${useGroqFastText ? 'bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]' : defaultToggleTrackClass}`}
                         disabled={!(hasStoredKey.groq || hasStoredKey.natively)}
                     >
                         <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${useGroqFastText ? 'translate-x-[12px]' : 'translate-x-0'}`} />
@@ -379,7 +379,7 @@ const SettingsPopup = () => {
                             // Dispatch event for same-window listeners
                             window.dispatchEvent(new Event('storage'));
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${showTranscript ? 'bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]' : defaultToggleTrackClass}`}
+                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] flex items-center transition-all duration-300 ease-spring active:scale-[0.92] ${showTranscript ? 'bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]' : defaultToggleTrackClass}`}
                     >
                         <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${showTranscript ? 'translate-x-[12px]' : 'translate-x-0'}`} />
                     </button>
@@ -414,7 +414,7 @@ const SettingsPopup = () => {
                                 await window.electronAPI?.setActionButtonMode?.(newMode);
                             } catch (e) { console.error(e); }
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${actionButtonMode === 'brainstorm' ? 'bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]' : defaultToggleTrackClass}`}
+                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] flex items-center transition-all duration-300 ease-spring active:scale-[0.92] ${actionButtonMode === 'brainstorm' ? 'bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]' : defaultToggleTrackClass}`}
                     >
                         <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${actionButtonMode === 'brainstorm' ? 'translate-x-[12px]' : 'translate-x-0'}`} />
                     </button>
@@ -441,7 +441,7 @@ const SettingsPopup = () => {
                                     await window.electronAPI?.profileSetMode?.(newState);
                                 } catch (e) { console.error(e); }
                             }}
-                            className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${profileMode && isPremium ? 'bg-accent-primary shadow-[0_2px_10px_rgba(var(--color-accent-primary),0.3)]' : defaultToggleTrackClass}`}
+                            className={`w-[30px] h-[18px] rounded-full p-[1.5px] flex items-center transition-all duration-300 ease-spring active:scale-[0.92] ${profileMode && isPremium ? 'bg-accent-primary shadow-[0_2px_10px_rgba(var(--color-accent-primary),0.3)]' : defaultToggleTrackClass}`}
                             disabled={!isPremium}
                         >
                             <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${profileMode && isPremium ? 'translate-x-[12px]' : 'translate-x-0'}`} />

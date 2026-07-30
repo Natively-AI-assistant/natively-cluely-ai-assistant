@@ -1255,6 +1255,33 @@ export class WindowHelper {
       this.overlayWindow.hide();
     }
 
+    // ─── EXPLICITLY ACTIVATE THE APP ON OVERLAY→LAUNCHER SWAPS ─────────────
+    // During a meeting Natively is NOT the active macOS app: the overlay is a
+    // non-activating panel (type:'panel' + becomesKeyOnlyIfNeeded) so the
+    // user's meeting app stays foreground. show()+focus() above cannot
+    // reliably foreground us from that state — Focus() uses
+    // activateIgnoringOtherApps:NO (never activates while another app is
+    // active) and on macOS 14+ cooperative activation the system may deny
+    // Show()'s self-activation from a background app. Hiding the always-on-top
+    // overlay then removes our only visible surface, so Stop-meeting left the
+    // regular-level launcher behind the meeting app ("app goes to background,
+    // Cmd+B to recover"). app.focus with steal is the documented API for
+    // making the app active. Gates: `!inactive` preserves ghost/showInactive
+    // never-steal-focus invariants; `!wasLauncher` restricts to user-initiated
+    // overlay→launcher swaps (cold-start ready-to-show has currentWindowMode
+    // already 'launcher', so no focus-steal at launch); `!getUndetectable()`
+    // because app activation re-reveals the dock tile and would fight the
+    // _enforceDockState loop — the stealth path is handled by
+    // reassertUndetectableStealth() below.
+    if (
+      process.platform === 'darwin' &&
+      !inactive &&
+      !wasLauncher &&
+      !this.appState.getUndetectable()
+    ) {
+      app.focus({ steal: true });
+    }
+
     // ─── RE-ASSERT STEALTH AFTER THE ACTIVATING SHOW ───────────────────────
     // The launcher is a REGULAR macOS window (no `type: 'panel'`, no
     // skipTaskbar). show()+focus() above re-activates the app as a foreground

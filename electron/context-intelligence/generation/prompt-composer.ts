@@ -27,6 +27,21 @@ export interface ComposeInput {
   /** Tone/length/perspective only. May NEVER widen authorization (§19.2). */
   realtimeInstruction?: string;
   conversationSummary?: string;
+  /**
+   * How many reference files the active mode actually has attached.
+   *
+   * Needed because an empty result has two completely different meanings and
+   * the composer could not previously tell them apart: "the résumé was searched
+   * and does not mention this" versus "no résumé exists". It phrased both as
+   * the first, so a mode with zero attached files answered "the résumé and
+   * profile material consulted for this turn don't mention it" — asserting a
+   * document had been read that was never uploaded. A user reading that
+   * reasonably concludes retrieval is broken; in fact nothing was attached.
+   *
+   * Omitted by callers that genuinely cannot know (the count is then not
+   * claimed either way).
+   */
+  attachedSourceCount?: number;
 }
 
 export interface ComposedPrompt {
@@ -137,11 +152,24 @@ function renderRealtime(instr: string): string {
  * A FAST turn gets nothing — it never needed evidence, and telling it retrieval
  * failed would be false.
  */
-function noEvidenceNotice(d: Readonly<TurnDecision>): string {
+function noEvidenceNotice(d: Readonly<TurnDecision>, attachedSourceCount?: number): string {
   if (d.retrievalPlan.path === 'FAST') return '';
 
   const types = d.retrievalPlan.sourceTypes;
   const has = (t: string) => (types as readonly string[]).includes(t);
+
+  // Nothing is attached, and this turn needs a FILE. Say that, rather than
+  // describing an absent document as merely silent on the subject — the two
+  // are different problems with different fixes, and only the user can tell
+  // them apart from the answer text.
+  const needsAFile = !(has('MEETING_TRANSCRIPT') && types.length === 1);
+  if (attachedSourceCount === 0 && needsAFile && d.retrievalPlan.shouldRetrieve) {
+    return '# Evidence\nThe active mode has NO reference material attached, so there was nothing to search. '
+      + 'Say plainly that no document has been added to this mode yet and that the user can upload one — do NOT '
+      + 'say a résumé, job description or document "does not mention" this, because no such file exists here, and '
+      + 'do not answer from general knowledge as though it were sourced.';
+  }
+
   const subject = has('MEETING_TRANSCRIPT') && types.length === 1
     ? 'nothing has been said about this in the meeting yet'
     : has('RESUME') || has('PROFILE_FACT') || has('CANDIDATE_FILE')
@@ -209,7 +237,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
       // the exact fabrication the grounding policy exists to prevent.
       // A FAST turn gets nothing: it never needed evidence, and telling it that
       // retrieval failed would be false.
-      : push('no_evidence', noEvidenceNotice(d)),
+      : push('no_evidence', noEvidenceNotice(d, input.attachedSourceCount)),
     input.realtimeInstruction ? push('presentation', renderRealtime(input.realtimeInstruction)) : '',
   ].filter((s) => s.trim()).join('\n\n');
 

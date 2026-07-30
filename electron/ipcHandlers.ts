@@ -217,8 +217,50 @@ export function initializeIpcHandlers(appState: AppState): void {
           || modelId.startsWith('qwen/')
           || modelId.startsWith('openai/gpt-oss-'); // Groq-hosted OpenAI OSS models, not OpenAI API models.
       };
+      // Which provider a model id belongs to. Mirrors the family checks below, kept
+      // as one helper so the disabled-provider test and the credential test can
+      // never disagree about what a given id is. The renderer's
+      // isProviderEnabled() in AIProvidersSettings.tsx must use the same names.
+      const providerFamily = (modelId: string): string => {
+        if (modelId === 'natively') return 'natively';
+        if (modelId.startsWith('codex-cli')) return 'codex-cli';
+        if (modelId.startsWith('litellm/')) return 'litellm';
+        if (modelId.startsWith('ollama-')) return 'ollama';
+        if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return 'gemini';
+        if (isKnownGroqModel(modelId)) return 'groq';
+        // o4- included deliberately: modelFetcher.ts admits /^o[134]/, so o4-* ids reach
+        // here. Omitting it made providerFamily return 'unknown', so the disabled-provider
+        // check below never matched and switching OpenAI off did NOT hide o4 models from
+        // routing. Keep this a superset of the fetcher's admitted prefixes.
+        if (modelId.startsWith('gpt-') || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.startsWith('o4-') || modelId.includes('openai')) return 'openai';
+        if (modelId.startsWith('claude-')) return 'claude';
+        if (/^deepseek-v/i.test(modelId)) return 'deepseek';
+        // Custom providers use arbitrary ids, so this must be an identity lookup and
+        // must come last — anything matching a built-in prefix above is that
+        // provider, not a custom one. Without it these classify as 'unknown' and
+        // switching custom providers off would hide them from the picker while
+        // routing still treated them as available.
+        if (allProviders.some((p: any) => p?.id === modelId)) return 'custom';
+        return 'unknown';
+      };
+
       const modelAvailable = (modelId: string): boolean => {
         if (!modelId) return false;
+
+        // Settings -> AI Providers filters come FIRST, so switching a provider off
+        // or de-selecting a model takes effect on the next routing decision instead
+        // of persisting until restart. Ordering matters: checking credentials first
+        // would return true before the filters ever ran.
+        const family = providerFamily(modelId);
+        const disabledProviders = cm.getDisabledProviders?.() || [];
+        if (disabledProviders.includes(family) || disabledProviders.includes(modelId)) return false;
+
+        // A populated allow-list means the model must be in it. Empty means no
+        // filter — see StoredCredentials.cloudEnabledModels. There is deliberately
+        // no "none" sentinel: hiding a provider outright is disabledProviders' job.
+        const enabledForFamily = cm.getCloudEnabledModels?.(family) || [];
+        if (enabledForFamily.length > 0 && !enabledForFamily.includes(modelId)) return false;
+
         if (modelId === 'natively') return has(cm.getNativelyApiKey());
         if (modelId.startsWith('codex-cli')) return codexConfig.enabled === true && codexSignedIn;
         if (modelId.startsWith('litellm/')) return has(cm.getLitellmBaseURL());
@@ -228,7 +270,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Check Groq before the broad OpenAI catch-all so Groq-hosted ids such as
         // openai/gpt-oss-120b are gated by the Groq key, not the OpenAI key.
         if (isKnownGroqModel(modelId)) return has(cm.getGroqApiKey());
-        if (modelId.startsWith('gpt-') || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.includes('openai')) return has(cm.getOpenaiApiKey());
+        if (modelId.startsWith('gpt-') || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.startsWith('o4-') || modelId.includes('openai')) return has(cm.getOpenaiApiKey());
         if (modelId.startsWith('claude-')) return has(cm.getClaudeApiKey());
         if (/^deepseek-v/i.test(modelId)) return has(cm.getDeepseekApiKey());
         // Intentional conservative fallback: unknown model ids may belong to saved
@@ -255,16 +297,26 @@ export function initializeIpcHandlers(appState: AppState): void {
         } catch { /* LiteLLM fallback discovery best-effort */ }
       }
 
-      const next = has(cm.getNativelyApiKey()) ? 'natively'
-        : has(cm.getGeminiApiKey()) ? 'gemini-3.6-flash'
-        : has(cm.getOpenaiApiKey()) ? 'gpt-5.4'
-        : has(cm.getClaudeApiKey()) ? 'claude-sonnet-4-6'
-        : has(cm.getGroqApiKey()) ? 'llama-3.3-70b-versatile'
-        : has(cm.getDeepseekApiKey()) ? 'deepseek-v4-flash'
-        : (codexConfig.enabled === true && codexSignedIn) ? 'codex-cli'
-        : litellmFallbackModel
-          || allProviders[0]?.id
-          || 'natively';
+      // Pick the replacement through modelAvailable() rather than raw key checks,
+      // so a provider the user switched off (or a model they filtered out) is never
+      // installed as the fallback.
+      const next = modelAvailable('natively') ? 'natively'
+        : modelAvailable('gemini-3.6-flash') ? 'gemini-3.6-flash'
+        : modelAvailable('gpt-5.4') ? 'gpt-5.4'
+        : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
+        : modelAvailable('llama-3.3-70b-versatile') ? 'llama-3.3-70b-versatile'
+        : modelAvailable('deepseek-v4-flash') ? 'deepseek-v4-flash'
+        : (codexConfig.enabled === true && codexSignedIn && modelAvailable('codex-cli')) ? 'codex-cli'
+        : (litellmFallbackModel && modelAvailable(litellmFallbackModel)) ? litellmFallbackModel
+        : allProviders.find((p: any) => modelAvailable(p?.id))?.id
+          || null;
+      if (!next) {
+        // Every candidate was rejected. Installing any of them would re-activate a
+        // provider the user just switched off, so leave the stored default alone —
+        // routing surfaces "No AI providers configured" at execution time instead.
+        console.warn('[IPC] refreshRuntimeDefaultIfUnavailable: no available model (all providers disabled or unconfigured)');
+        return null;
+      }
       cm.setDefaultModel(next);
       llmHelper.setModel(next, allProviders);
       appState.broadcast('model-changed', next);
@@ -328,9 +380,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Clears premium-only context when the pro license is lost.
   const clearActiveModeOnLicenseLoss = (): void => {
     try {
-      const { DatabaseManager } = require('./db/DatabaseManager');
-      const db = DatabaseManager.getInstance();
-      db.setActiveMode(null);
+      // Through ModesManager, not DatabaseManager, so the active-mode snapshot
+      // is invalidated with the write. Clearing the row directly left every
+      // answer surface still holding the premium mode it had cached — the
+      // context this function exists to remove.
+      const { ModesManager } = require('./services/ModesManager');
+      ModesManager.getInstance().setActiveMode(null);
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('modes-active-cleared');
       });
@@ -969,7 +1024,29 @@ export function initializeIpcHandlers(appState: AppState): void {
 
             const composed = composePrompt({
               decision: result.decision, policy, evidence: result.evidence,
+              attachedSourceCount: files.length,
             });
+
+            // Per-turn source line. Identity only, never content. A cross-mode
+            // contamination report arrived with a terminal log that recorded
+            // nothing about which mode or files any turn used; the defect had to
+            // be reconstructed from answer prose versus SQLite.
+            try {
+              const _acc = result.trace.acceptedEvidence ?? [];
+              console.log('[V3]', JSON.stringify({
+                surface: 'manual-chat',
+                mode: modeId,
+                modeUniqueId: modeInfo?.id ?? null,
+                modeName: (modeInfo as any)?.name ?? null,
+                attachedFiles: files.length,
+                path: result.decision.retrievalPlan.path,
+                planned: result.decision.retrievalPlan.sourceTypes,
+                evidence: _acc.length,
+                sources: [...new Set(_acc.map((e: any) => e.sourceId))],
+                answerability: result.trace.answerability,
+                fallback: result.trace.fallbackUsed,
+              }));
+            } catch { /* observability must never break an answer */ }
 
             let finalText = '';
             const v3Stream = llmHelper.streamChat(
@@ -5734,6 +5811,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         || (prevMaxTokens || undefined) !== effectiveNewMaxTokens;
       cm.setLitellmConfig(requestedKey, newUrl, config?.maxTokens);
 
+      // The discovered-model cache belongs to one specific proxy. Drop it when the
+      // proxy is removed (its models would otherwise keep appearing in the picker
+      // with nothing behind them) or when the URL changes (they belong to the old
+      // host). A same-URL re-save keeps the cache so the picker stays populated.
+      if (!newUrl.trim() || prevUrl !== newUrl) {
+        cm.setLitellmModels([]);
+      }
+
       // Update the LLMHelper with the EFFECTIVE stored key — a blank apiKey on
       // re-save means "keep the stored one" (the field is masked in Settings),
       // so read back what CredentialsManager actually persisted.
@@ -5763,21 +5848,99 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Discover models from the configured LiteLLM proxy (OpenAI-compatible /v1/models).
   // Returns [] on any failure (proxy down, auth rejected, timeout) so the model
   // selector degrades gracefully rather than throwing.
+  // Discover models from the configured LiteLLM proxy (OpenAI-compatible
+  // /v1/models), answering from the persisted cache when one exists.
+  //
+  // This used to fetch on EVERY call with a 5s timeout, and one of its callers is
+  // ModelSelectorWindow — the overlay model dropdown. A user with a remote proxy
+  // could therefore wait up to 5 seconds for the dropdown to open, and a user with
+  // no proxy configured still paid a connection attempt to localhost:4000 each
+  // time. The cache now answers instantly; discovery is explicit.
+  const discoverLitellmModels = async (timeoutMs: number): Promise<string[]> => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    // No proxy configured -> don't probe localhost:4000 at all.
+    const configuredURL = (cm.getLitellmBaseURL() || '').trim();
+    if (!configuredURL) return [];
+    const baseURL = configuredURL.replace(/\/+$/, '');
+    const apiKey = cm.getLitellmApiKey();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+    const resp = await fetch(`${baseURL}/models`, { method: 'GET', headers, signal: AbortSignal.timeout(timeoutMs) });
+    if (!resp.ok) return [];
+    const data: any = await resp.json();
+    const models: string[] = (data?.data || []).map((m: any) => m?.id).filter(Boolean);
+    if (models.length > 0) cm.setLitellmModels(models);
+    return models;
+  };
+
   safeHandle('get-available-litellm-models', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-      const baseURL = (cm.getLitellmBaseURL() || 'http://localhost:4000/v1').replace(/\/+$/, '');
-      const apiKey = cm.getLitellmApiKey();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
-      const resp = await fetch(`${baseURL}/models`, { method: 'GET', headers, signal: AbortSignal.timeout(5000) });
-      if (!resp.ok) return [];
-      const data: any = await resp.json();
-      const models = (data?.data || []).map((m: any) => m?.id).filter(Boolean);
-      return models;
+      const cached = CredentialsManager.getInstance().getLitellmModels();
+      if (cached.length > 0) return cached;
+      // Cold start: no cache yet, so pay the fetch once rather than showing an
+      // empty model list until the user finds the refresh button.
+      return await discoverLitellmModels(5000);
     } catch {
       return [];
+    }
+  });
+
+  // Explicit re-discovery, for the refresh control on the LiteLLM card.
+  safeHandle('refresh-litellm-models', async () => {
+    try {
+      const models = await discoverLitellmModels(8000);
+      broadcastCredentialsChanged();
+      return models;
+    } catch (error) {
+      console.error('[IPC] refresh-litellm-models failed:', error);
+      return [];
+    }
+  });
+
+  safeHandle('get-disabled-providers', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getDisabledProviders();
+    } catch {
+      return [];
+    }
+  });
+
+  safeHandle('set-disabled-providers', async (_, providers: string[]) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setDisabledProviders(Array.isArray(providers) ? providers : []);
+      // Move the live LLMHelper off the active model if it belonged to a provider
+      // just switched off — not just the credential store.
+      await refreshRuntimeDefaultIfUnavailable();
+      broadcastCredentialsChanged();
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('get-cloud-fetched-models', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      return { models: cm.getAllCloudFetchedModels(), fetchedAt: cm.getCloudFetchedAt() };
+    } catch {
+      return { models: {}, fetchedAt: {} };
+    }
+  });
+
+  safeHandle('set-cloud-enabled-models', async (_, provider: string, models: string[]) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setCloudEnabledModels(provider, Array.isArray(models) ? models : []);
+      await refreshRuntimeDefaultIfUnavailable();
+      broadcastCredentialsChanged();
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
     }
   });
 
@@ -6619,6 +6782,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         openaiPreferredModel: creds.openaiPreferredModel || undefined,
         claudePreferredModel: creds.claudePreferredModel || undefined,
         deepseekPreferredModel: creds.deepseekPreferredModel || undefined,
+        disabledProviders: creds.disabledProviders || [],
+        cloudEnabledModels: creds.cloudEnabledModels || {},
       };
     } catch (error: any) {
       // SECURITY FIX (P0): Error fallback returns masked keys, not raw strings
@@ -6682,6 +6847,23 @@ export function initializeIpcHandlers(appState: AppState): void {
 
         const { fetchProviderModels } = require('./utils/modelFetcher');
         const models = await fetchProviderModels(provider, key);
+        // Persist the catalog. The renderer's allow-list stores ids from this list, so
+        // if it only lived in component state the list would die on a settings-tab
+        // switch (SettingsOverlay unmounts the panel) and the stored allow-list would
+        // reference models the card could no longer render.
+        if (Array.isArray(models) && models.length > 0) {
+            try {
+                const { CredentialsManager } = require('./services/CredentialsManager');
+                CredentialsManager.getInstance().setCloudFetchedModels(
+                    provider,
+                    models.map((m: any) => ({ id: m.id, label: m.label || m.id })),
+                    Date.now(),
+                );
+                broadcastCredentialsChanged();
+            } catch (e) {
+                console.warn('[IPC] could not cache fetched models:', e);
+            }
+        }
         return { success: true, models };
       } catch (error: any) {
         console.error(`[IPC] Failed to fetch ${provider} models:`, error);

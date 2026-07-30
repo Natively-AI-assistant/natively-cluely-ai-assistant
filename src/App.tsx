@@ -1040,7 +1040,7 @@ const App: React.FC = () => {
                               isPremium={isPremiumActive}
                               isLoaded={hasLoadedLicense}
                               isTrialActive={!!activeTrial}
-                              onOpenNativelyAPI={() => openSettingsExclusive('natively-api')}
+                              onOpenNativelyAPI={() => openSettingsExclusive('plans')}
                             />
                           ) : (
                             <ProfileIntelligenceSettings
@@ -1159,7 +1159,7 @@ const App: React.FC = () => {
           <FreeTrialBanner
             expiresAt={activeTrial.expiresAt}
             usage={activeTrial.usage}
-            onUpgrade={() => openSettingsExclusive('api')}
+            onUpgrade={() => openSettingsExclusive('plans')}
           />
         )}
 

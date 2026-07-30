@@ -2,6 +2,7 @@ import { AlertTriangle, Check, ChevronDown, Copy, Cpu, Loader2, Wifi, WifiOff } 
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useT } from '../../i18n';
+import { Disclosure, DisclosureChevron } from '../ui/AccordionSection';
 
 // Label + one-line description + group + TIER for each Intelligence OS flag. Keyed by flag
 // key; an unknown key falls back to the raw key so a newly-added flag still renders.
@@ -143,40 +144,10 @@ const Toggle: React.FC<{ on: boolean; disabled?: boolean; onClick: () => void }>
     disabled={disabled}
     onClick={onClick}
     aria-pressed={on}
-    className={`relative w-11 h-6 shrink-0 rounded-full transition-colors ${on ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'} ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+    className={`w-11 h-6 shrink-0 rounded-full p-[3px] flex items-center transition-colors ${on ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
   >
-    <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-spring motion-reduce:transition-none ${on ? 'translate-x-5' : 'translate-x-0'}`} />
+    <span className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-spring motion-reduce:transition-none ${on ? 'translate-x-5' : 'translate-x-0'}`} />
   </button>
-);
-
-// Smooth height+opacity expand/collapse for the disclosures (Set up / Customize / Developer
-// options), matching the HelpSettings AccordionSection idiom. Height-auto is measured by
-// framer-motion; under prefers-reduced-motion we drop the height/opacity tween so nothing
-// slides or reflows — the content just appears.
-const Disclosure: React.FC<{ open: boolean; children: React.ReactNode }> = ({ open, children }) => {
-  const reduce = useReducedMotion();
-  return (
-    <AnimatePresence initial={false}>
-      {open ? (
-        <motion.div
-          key="disclosure"
-          initial={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
-          animate={reduce ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
-          exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-          style={{ overflow: 'hidden' }}
-        >
-          {children}
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
-  );
-};
-
-// A chevron that rotates between collapsed (▸) and expanded (▾) instead of swapping glyphs,
-// so the disclosure indicator turns smoothly with the panel.
-const DisclosureChevron: React.FC<{ open: boolean }> = ({ open }) => (
-  <ChevronDown size={14} className={`shrink-0 transition-transform duration-200 ease-apple-ease motion-reduce:transition-none ${open ? 'rotate-0' : '-rotate-90'}`} />
 );
 
 // Inline copyable command/snippet block — same idiom as UpdateModal's CopyBlock. Used in the

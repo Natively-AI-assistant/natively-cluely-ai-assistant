@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useT } from '../../i18n';
-import { Trash2, AlertCircle, CheckCircle, ExternalLink, Loader2, ChevronDown, Check, RefreshCw } from 'lucide-react';
+import { Trash2, AlertCircle, ExternalLink, Loader2, ChevronDown, Check, RefreshCw } from 'lucide-react';
+// Primitives live in AIProvidersSettings.tsx, not in their own module:
+// SettingsOrchidPortalScopeGuard.test.mjs asserts that the *.tsx files on disk in
+// src/components/settings/ EXACTLY equal its GUARDED_FILES list, so adding a file
+// here fails that suite. The resulting import cycle is safe — every reference
+// below is inside a render function, never at module-evaluation time.
+import { AipBadge, AipSwitch, AipProviderMark, AipModelList, type AipTone } from './AIProvidersSettings';
 
 interface FetchedModel {
     id: string;
@@ -9,6 +15,18 @@ interface FetchedModel {
 
 interface ProviderCardProps {
     providerId: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek';
+    /** Provider switched off in Settings — keeps the key, hides the models. */
+    isDisabled?: boolean;
+    onToggleDisabled?: (enabled: boolean) => void;
+    /** The provider's full model universe: presets ∪ catalog ∪ allow-listed ids. */
+    selectableModels?: { id: string; label: string }[];
+    /** Allow-list of model ids; empty means all of `selectableModels` are shown. */
+    enabledModels?: string[];
+    onToggleModel?: (modelId: string) => void;
+    /** Clears the allow-list back to "all". */
+    onResetModels?: () => void;
+    /** A persist failed; the control reports it instead of lying about the state. */
+    modelSaveError?: boolean;
     providerName: string;
     apiKey: string;
     preferredModel?: string;
@@ -28,6 +46,13 @@ interface ProviderCardProps {
 
 export const ProviderCard: React.FC<ProviderCardProps> = ({
     providerId,
+    isDisabled = false,
+    onToggleDisabled,
+    selectableModels,
+    enabledModels,
+    onToggleModel,
+    onResetModels,
+    modelSaveError,
     providerName,
     apiKey,
     preferredModel,
@@ -141,129 +166,197 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
     const selectedOption = fetchedModels.find(m => m.id === selectedModel);
 
+    // ── Status. ONE vocabulary via AipBadge; nothing else here carries a status
+    // colour. Key stored + on → ok "Connected"; key stored + off → neutral
+    // "Off"; no key → no badge at all (there is nothing to report yet).
+    const statusBadge: { tone: AipTone; label: string; busy?: boolean } | null = (() => {
+        if (testStatus === 'testing') return { tone: 'info', label: t('Testing'), busy: true };
+        if (testStatus === 'error') return { tone: 'danger', label: t('Failed') };
+        if (savingStatus) return { tone: 'info', label: t('Saving'), busy: true };
+        if (!hasStoredKey) return null;
+        if (isDisabled) return { tone: 'neutral', label: t('Off') };
+        return { tone: 'ok', label: t('Connected') };
+    })();
+
+
     return (
-        <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle">
-            <div className="mb-2 flex items-center justify-between">
-                <label className="flex items-center text-xs font-medium text-text-primary uppercase tracking-wide">
-                    {providerName} {t('API Key')}
-                    {hasStoredKey && <span className="ml-2 text-green-500 normal-case">✓ {t('Saved')}</span>}
+        <div className={`aip-card p-5 ${isDisabled ? 'opacity-60' : ''}`}>
+            <div className="mb-2 flex items-center justify-between gap-3">
+                <label className="flex items-center gap-2 min-w-0 text-xs font-medium uppercase tracking-wide aip-hero">
+                    {/* The provider's official mark (vendored, MIT — see
+                        src/assets/provider-logos/README.md). Falls back to a
+                        two-letter monogram for providers with no licence-clean
+                        logo, so the tile is never an empty gap. */}
+                    <AipProviderMark provider={providerId} name={providerName} />
+                    <span className="truncate">{providerName} {t('API Key')}</span>
+                    {statusBadge && (
+                        <AipBadge tone={statusBadge.tone} label={statusBadge.label} busy={statusBadge.busy} title={testError} />
+                    )}
                 </label>
-                <button
-                    onClick={() => {
-                        // @ts-ignore
-                        window.electronAPI?.openExternal(keyUrl);
-                    }}
-                    className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors"
-                    title={`Get ${providerName} API Key`}
-                >
-                    <span className="text-[10px] uppercase tracking-wide">{t('Get Key')}</span>
-                    <ExternalLink size={12} />
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                    <button
+                        onClick={() => {
+                            // @ts-ignore
+                            window.electronAPI?.openExternal(keyUrl);
+                        }}
+                        className="aip-btn"
+                        data-size="sm"
+                        data-variant="ghost"
+                        title={`Get ${providerName} API Key`}
+                    >
+                        <span className="uppercase tracking-wide">{t('Get Key')}</span>
+                        <ExternalLink size={12} strokeWidth={1.75} />
+                    </button>
+                    {/* Provider on/off. Only offered once a key is stored — there is
+                        nothing to switch off before that. The key is never touched;
+                        this only controls whether the provider's models are offered. */}
+                    {hasStoredKey && onToggleDisabled && (
+                        <AipSwitch
+                            checked={!isDisabled}
+                            onChange={() => onToggleDisabled(isDisabled)}
+                            label={`${isDisabled ? t('Enable') : t('Disable')} ${providerName}`}
+                            title={isDisabled ? t('Enable provider') : t('Disable provider (keeps your key)')}
+                        />
+                    )}
+                </div>
             </div>
             <div className="flex gap-2 mb-3">
+                {/* No reveal-eye toggle, deliberately: these windows are marketed for
+                    on-screen stealth, so a plaintext key in a screen-shared overlay
+                    is a real hazard. */}
                 <input
                     type="password"
                     value={apiKey}
                     onChange={(e) => onKeyChange(e.target.value)}
+                    autoComplete="off"
+                    spellCheck={false}
+                    data-1p-ignore
                     placeholder={hasStoredKey ? "••••••••••••" : keyPlaceholder}
-                    className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
+                    className="aip-input flex-1"
                 />
                 <button
                     onClick={onSaveKey}
                     disabled={savingStatus || !apiKey.trim()}
-                    className={`px-5 py-2.5 rounded-lg text-xs font-medium transition-colors ${savedStatus
-                        ? 'bg-green-500/20 text-green-400'
-                        : 'bg-bg-input hover:bg-bg-secondary border border-border-subtle text-text-primary disabled:opacity-50'
-                        }`}
+                    className="aip-btn min-w-[84px]"
+                    data-tone={savedStatus ? 'ok' : undefined}
                 >
-                    {savingStatus ? t('Saving...') : savedStatus ? t('Saved!') : t('Save')}
+                    {savingStatus
+                        ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
+                        : savedStatus
+                            ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
+                            : t('Save')}
                 </button>
                 {hasStoredKey && (
                     <button
                         onClick={onRemoveKey}
-                        className="px-2.5 py-2.5 rounded-lg text-xs font-medium text-text-tertiary hover:text-red-500 hover:bg-red-500/10 transition-all"
+                        className="aip-btn"
+                        data-icon="true"
+                        data-variant="danger-ghost"
                         title={t("Remove API Key")}
                     >
-                        <Trash2 size={16} strokeWidth={1.5} />
+                        <Trash2 size={14} strokeWidth={1.75} />
                     </button>
                 )}
             </div>
 
             {/* Action Row: Test Connection + Conditional Dropdown + Fetch Models */}
-            <div className="flex items-center justify-between mb-3 w-full">
+            <div className="flex items-center gap-2 mb-3 w-full">
+                {/* Fixed min-width + centred content, so a label change cannot
+                    reflow the row. */}
                 <button
                     onClick={onTestConnection}
                     disabled={(!apiKey.trim() && !hasStoredKey) || testStatus === 'testing'}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-border-subtle flex items-center gap-2 shrink-0 ${testStatus === 'success' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
-                        testStatus === 'error' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                            'bg-bg-input hover:bg-bg-elevated text-text-primary'
-                        }`}
+                    className="aip-btn shrink-0 min-w-[132px]"
+                    data-size="sm"
+                    data-tone={testStatus === 'success' ? 'ok' : testStatus === 'error' ? 'danger' : undefined}
                     title={testError || t("Test Connection")}
                 >
-                    {testStatus === 'testing' ? <><Loader2 size={12} className="animate-spin" /> {t('Testing...')}</> :
-                        testStatus === 'success' ? <><CheckCircle size={12} /> {t('Connected')}</> :
-                            testStatus === 'error' ? <><AlertCircle size={12} /> {t('Error')}</> :
-                                <>{/* No Icon */} {t('Test Connection')}</>}
+                    {testStatus === 'testing' ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</> :
+                        testStatus === 'success' ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Connected')}</> :
+                            testStatus === 'error' ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</> :
+                                <>{t('Test Connection')}</>}
                 </button>
 
-                {/* Inline Model Dropdown */}
+                {/* Inline Model Dropdown. Still a floating layer here — turning it
+                    into the in-flow AipSelect expander is Stage 4's job, together
+                    with the collapsible row. */}
                 {fetchedModels.length > 0 || preferredModel ? (
-                    <div className="relative flex-1 max-w-[200px] mx-4" ref={dropdownRef}>
+                    <div className="relative flex-1 min-w-0" ref={dropdownRef}>
                         <button
                             onClick={() => fetchedModels.length > 0 && setIsDropdownOpen(!isDropdownOpen)}
-                            className={`w-full bg-bg-input border border-border-subtle rounded-md px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary flex items-center justify-between transition-colors ${fetchedModels.length > 0 ? 'hover:bg-bg-elevated' : 'opacity-80 cursor-default'}`}
+                            className="aip-select-trigger"
+                            aria-expanded={isDropdownOpen}
+                            aria-haspopup="listbox"
+                            aria-disabled={fetchedModels.length === 0 || undefined}
+                            title={fetchedModels.length === 0 ? t('Fetch models to change this.') : undefined}
                             type="button"
                         >
                             <span className="truncate pr-2">{selectedOption ? selectedOption.label : (preferredModel || t('Select model'))}</span>
-                            <ChevronDown size={14} className={`text-text-secondary transition-transform ${isDropdownOpen ? 'rotate-180' : ''} ${fetchedModels.length === 0 ? 'opacity-50' : ''}`} />
+                            <ChevronDown size={14} strokeWidth={1.75} className="aip-select-chevron" aria-hidden="true" />
                         </button>
 
                         {isDropdownOpen && fetchedModels.length > 0 && (
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-full min-w-[200px] bg-bg-elevated border border-border-subtle rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto animated fadeIn">
-                                <div className="p-1 space-y-0.5">
-                                    {fetchedModels.map((model) => (
-                                        <button
-                                            key={model.id}
-                                            onClick={() => handleSelectModel(model.id)}
-                                            className={`w-full text-left px-3 py-2 text-xs rounded-md flex items-center justify-between group transition-colors ${selectedModel === model.id ? 'bg-bg-input hover:bg-bg-elevated text-text-primary' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                            type="button"
-                                        >
-                                            <span className="truncate">{model.label}</span>
-                                            {selectedModel === model.id && <Check size={14} className="text-accent-primary shrink-0 ml-2" />}
-                                        </button>
-                                    ))}
-                                </div>
+                            <div
+                                role="listbox"
+                                aria-label={`${providerName} ${t('Select model')}`}
+                                onKeyDown={(e) => { if (e.key === 'Escape') setIsDropdownOpen(false); }}
+                                className="aip-float aip-scroll-y aip-panel-fade absolute top-full left-0 mt-1 w-full z-50 max-h-60 p-1 custom-scrollbar"
+                            >
+                                {fetchedModels.map((model) => (
+                                    <button
+                                        key={model.id}
+                                        onClick={() => handleSelectModel(model.id)}
+                                        role="option"
+                                        aria-selected={selectedModel === model.id}
+                                        className="aip-select-option"
+                                        type="button"
+                                    >
+                                        <span className="truncate">{model.label}</span>
+                                        {selectedModel === model.id && <Check size={13} strokeWidth={1.75} className="aip-accent-fg shrink-0 ml-2" aria-hidden="true" />}
+                                    </button>
+                                ))}
                             </div>
                         )}
                     </div>
                 ) : (
-                    <div className="flex-1 mx-4" />
+                    <div className="flex-1 min-w-0" />
                 )}
 
-                {hasStoredKey ? (
+                {hasStoredKey && (
                     <button
                         onClick={handleFetchModels}
                         disabled={isFetching}
-                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-border-subtle flex items-center gap-2 shrink-0 ${isFetching
-                            ? 'bg-bg-input text-text-secondary'
-                            : 'bg-legacy-action-subtle text-legacy-action-bg border-legacy-action-border hover:bg-legacy-action-subtle-hover'
-                            }`}
+                        className="aip-btn shrink-0 min-w-[118px]"
+                        data-size="sm"
                     >
                         {isFetching ? (
-                            <><Loader2 size={12} className="animate-spin" /> {t('Fetching...')}</>
+                            <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Fetching...')}</>
                         ) : (
-                            <><RefreshCw size={12} /> {t('Fetch Models')}</>
+                            <><RefreshCw size={12} strokeWidth={1.75} /> {t('Fetch Models')}</>
                         )}
                     </button>
-                ) : (
-                    // Placeholder span to perfectly balance flex-between if button isn't shown
-                    <span className="w-[110px]" />
                 )}
             </div>
 
+            {/* Which of this provider's models appear in the active-model picker.
+                Inline rather than in a modal: it is a handful of checkboxes and
+                the card already owns this provider's settings. All-on is the
+                default and shows as every chip lit, so the control reads as
+                "narrow this down" instead of "configure me before use". */}
+            {hasStoredKey && !isDisabled && onToggleModel && selectableModels && selectableModels.length > 1 && (
+                <AipModelList
+                    models={selectableModels}
+                    enabled={enabledModels || []}
+                    onToggle={onToggleModel}
+                    onReset={onResetModels || (() => {})}
+                    defaultLabel={selectedOption?.label || (preferredModel ? preferredModel : undefined)}
+                    error={modelSaveError ? 'save-failed' : null}
+                />
+            )}
+
             {/* Error from test or fetch */}
-            {testError && <p className="text-[10px] text-red-400 mt-1.5 mb-2">{testError}</p>}
-            {fetchError && <p className="text-[10px] text-red-400 mt-1.5 mb-2">{t('Model fetch error:')} {fetchError}</p>}
+            {testError && <p className="aip-meta aip-danger-fg mt-1.5 mb-2">{testError}</p>}
+            {fetchError && <p className="aip-meta aip-danger-fg mt-1.5 mb-2">{t('Model fetch error:')} {fetchError}</p>}
 
 
         </div>

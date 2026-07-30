@@ -3135,8 +3135,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // and that's fine). 400ms is kept as a small grace period so any
       // user-initiated focus shifts in the same tick settle before the OS
       // window goes offscreen, avoiding a one-frame click-through glitch
-      // on fast Cmd+B taps.
-      setTimeout(() => window.electronAPI.hideWindow(), 400);
+      // on fast Cmd+B taps. The timer MUST be cancelled if we re-expand (or
+      // unmount) within the grace period — a stale timer firing after a fast
+      // collapse→re-expand hides BOTH windows out from under the user.
+      const hideTimer = setTimeout(() => window.electronAPI.hideWindow(), 400);
+      return () => clearTimeout(hideTimer);
     }
   }, [isExpanded]);
 

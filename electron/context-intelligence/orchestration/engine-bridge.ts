@@ -28,6 +28,9 @@ export interface BridgeInput {
   /** The mode's UNIQUE id (mode_<uuid>) when one exists. Keys the per-mode
    *  Answer policy choice: two custom modes share a templateType, never an id. */
   modeUniqueId?: string | null;
+  /** How many reference files the active mode has. Lets the composer say "no
+   *  document is attached" instead of "the document does not mention it". */
+  attachedSourceCount?: number;
   scope?: Partial<EvidenceScope>;
   requestId?: string;
   requestSequence?: number;
@@ -95,7 +98,31 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       evidence: result.evidence,
       realtimeInstruction: input.realtimeInstruction,
       conversationSummary: input.conversationSummary,
+      attachedSourceCount: input.attachedSourceCount,
     });
+
+    // ── Per-turn source line ────────────────────────────────────────────────
+    // The one thing production could not answer about itself. A cross-mode
+    // contamination report arrived with a full terminal log that contained no
+    // record of which mode, which files, or which evidence any turn used, so
+    // the defect had to be reconstructed by comparing answer prose against the
+    // reference files in SQLite. Identity only — never content (12 §4).
+    try {
+      const acc = result.trace.acceptedEvidence ?? [];
+      const srcIds = [...new Set(acc.map((e) => e.sourceId))];
+      console.log('[V3]', JSON.stringify({
+        surface: input.surface,
+        mode: modeId,
+        modeUniqueId: input.modeUniqueId ?? null,
+        attachedFiles: input.attachedSourceCount ?? null,
+        path: result.decision.retrievalPlan.path,
+        planned: result.decision.retrievalPlan.sourceTypes,
+        evidence: acc.length,
+        sources: srcIds,
+        answerability: result.trace.answerability,
+        fallback: result.trace.fallbackUsed,
+      }));
+    } catch { /* observability must never break an answer */ }
 
     try {
       recordLegacyTurn({

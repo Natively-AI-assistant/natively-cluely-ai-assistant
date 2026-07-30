@@ -1,12 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useT } from '../../i18n';
 import { motion, useReducedMotion, type Variants, useMotionValue, useTransform, useSpring } from 'framer-motion';
-import {
-    Lock, Key, CheckCircle, AlertCircle, Check, Copy, X, PlayCircle,
-    EyeOff, Shield,
-    Layers, UserCheck, Database, TrendingUp, Maximize2, Target, FileText, Building2,
-} from 'lucide-react';
+import { CheckCircle, AlertCircle, X, ChevronDown } from 'lucide-react';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
+import { Disclosure } from '../ui/AccordionSection';
 
 interface PricingProduct {
     formattedPrice: string | null;
@@ -128,105 +125,37 @@ function InteractiveCard({
 }
 
 // ─── Interactive Feature Card (with custom spotlight and subtle 3D tilt) ─────
-interface InteractiveFeatureCardProps {
-    children: React.ReactNode;
-    className?: string;
-    glowColor?: string;
-    isSoon?: boolean;
-    colorTheme?: 'violet' | 'teal' | 'blue' | 'rose' | 'orange' | 'cyan' | 'gray' | 'pink';
-}
-
-function InteractiveFeatureCard({
-    children,
-    className = '',
-    glowColor = 'rgba(59, 130, 246, 0.12)',
-    isSoon = false,
-    colorTheme = 'blue',
-}: InteractiveFeatureCardProps) {
-    const cardRef = useRef<HTMLDivElement>(null);
-    const prefersReducedMotion = useReducedMotion();
-
-    const mouseX = useMotionValue(0.5);
-    const mouseY = useMotionValue(0.5);
-
-    const spotlightX = useSpring(useTransform(mouseX, [0, 1], [0, 100]), { stiffness: 220, damping: 22 });
-    const spotlightY = useSpring(useTransform(mouseY, [0, 1], [0, 100]), { stiffness: 220, damping: 22 });
-
-    const rotateX = useSpring(useTransform(mouseY, [0, 1], [4, -4]), { stiffness: 150, damping: 22 });
-    const rotateY = useSpring(useTransform(mouseX, [0, 1], [-4, 4]), { stiffness: 150, damping: 22 });
-
-    const scale = useSpring(1, { stiffness: 450, damping: 16 });
-
-    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (prefersReducedMotion || !cardRef.current) return;
-        const rect = cardRef.current.getBoundingClientRect();
-        mouseX.set((e.clientX - rect.left) / rect.width);
-        mouseY.set((e.clientY - rect.top) / rect.height);
-    };
-
-    const handleMouseLeave = () => {
-        mouseX.set(0.5);
-        mouseY.set(0.5);
-        scale.set(1);
-    };
-
-    const handleMouseDown = () => {
-        if (prefersReducedMotion) return;
-        scale.set(0.98);
-    };
-
-    const handleMouseUp = () => {
-        scale.set(1);
-    };
-
-    const dynamicStyle = prefersReducedMotion
-        ? {}
-        : {
-              rotateX,
-              rotateY,
-              scale,
-              transformStyle: 'preserve-3d' as const,
-          };
-
-    const spotlightBg = useTransform(
-        [spotlightX, spotlightY],
-        ([x, y]) => `radial-gradient(circle 120px at ${x}% ${y}%, ${glowColor}, transparent 80%)`
-    );
-
-    return (
-        <motion.div
-            ref={cardRef}
-            className={`pro-feature-card pro-feature-card-${colorTheme} group relative overflow-hidden transition-all duration-200 ${
-                isSoon ? 'opacity-60 saturate-[0.7]' : ''
-            } ${className}`}
-            onMouseMove={handleMouseMove}
-            onMouseLeave={handleMouseLeave}
-            onMouseDown={handleMouseDown}
-            onMouseUp={handleMouseUp}
-            style={dynamicStyle}
-        >
-            {!prefersReducedMotion && !isSoon && (
-                <motion.div
-                    className="absolute inset-0 pointer-events-none z-10 transition-opacity duration-300 opacity-0 group-hover:opacity-100"
-                    style={{ background: spotlightBg }}
-                />
-            )}
-            {children}
-        </motion.div>
-    );
-}
-
 // ─── Modes Poster (jelly-clay × liquid-glass illustration) ──────
 // Inline SVG: a central active mode node branching out to multiple expert
-// persona nodes (Technical, Sales, PM, etc.) with glowing connection orbits
-// in 3D perspective space.
+// persona nodes with glowing connection orbits in 3D perspective space.
+//
+// Deliberately WORDLESS. This renders inside a card that is ~234px of content
+// width in the real settings pane (896px modal, minus the 256px sidebar,
+// minus 32px pane padding each side, split in two with a 12px gutter, minus
+// 24px card padding each side), so a 280-unit viewBox is drawn at ~0.84
+// scale. The per-node text labels this used to carry were set at fontSize
+// 4-4.2, i.e. ~3.5px on screen: unreadable smudges rather than information.
+// The geometry is kept as texture; anything that had to be READ moved to the
+// teaser row and the caption under the cards.
+//
+// `animateShimmer` gates EVERY animation in here, not just the shimmer
+// sweep — the pulse and the orbit ring used to run unconditionally, which
+// ignored prefers-reduced-motion.
 function ModesPoster({ animateShimmer }: { animateShimmer: boolean }) {
     return (
         <div
-            className="relative w-full h-[120px] mt-3 select-none pointer-events-none overflow-hidden"
+            className="relative w-full h-[100px] select-none pointer-events-none overflow-hidden"
             aria-hidden="true"
         >
-            <svg viewBox="0 0 280 120" className="w-full h-full">
+            {/* Cropped viewBox rather than the full 0 0 280 120: with the text
+                gone the nodes were the only content left, and at the real card
+                width they were drawn at ~0.84 scale, which read as a nearly
+                empty panel next to the Lifetime card's two solid plates.
+                Cropping to the occupied bounds draws the same geometry ~1.2x
+                larger. Every node still clears the frame (left node 60-18=42 >
+                25, right node 220+16=236 < 255, bottom nodes 90+16=106 < 108,
+                centre 60±25 inside 12..108). */}
+            <svg viewBox="25 12 230 96" className="w-full h-full">
                 <defs>
                     {/* Soft background radial glows */}
                     <radialGradient id="blueGlowYearly" cx="50%" cy="50%" r="50%">
@@ -289,13 +218,11 @@ function ModesPoster({ animateShimmer }: { animateShimmer: boolean }) {
                         {/* Active Dot */}
                         <circle cx="12" cy="-12" r="2.5" fill="#10b981" />
                         <circle cx="12" cy="-12" r="5" fill="none" stroke="#10b981" strokeWidth="0.8" opacity="0.5">
-                            <animate attributeName="r" values="3;7;3" dur="2s" repeatCount="indefinite" />
+                            {animateShimmer && (
+                                <animate attributeName="r" values="3;7;3" dur="2s" repeatCount="indefinite" />
+                            )}
                         </circle>
                     </g>
-                    {/* Label for Tech */}
-                    <rect x="35" y="60" width="50" height="7" rx="2" fill="rgba(16, 185, 129, 0.1)" stroke="rgba(16, 185, 129, 0.2)" strokeWidth="0.5" />
-                    <text x="60" y="65" textAnchor="middle" fill="#10b981" fontSize="4" fontWeight="bold" fontFamily="Geist, Satoshi, sans-serif" letterSpacing="0.02em">TECH INTERVIEW</text>
-
 
                     {/* NODE 2: SALES (Briefcase representation) */}
                     <g transform="translate(220 35)">
@@ -305,9 +232,6 @@ function ModesPoster({ animateShimmer }: { animateShimmer: boolean }) {
                         <rect x="-4" y="-2" width="8" height="6" rx="1" fill="none" className="pricing-poster-stroke-bright" strokeWidth="1" />
                         <path d="M-2 -2 L-2 -4 L2 -4 L2 -2" fill="none" className="pricing-poster-stroke-bright" strokeWidth="1" />
                     </g>
-                    {/* Label for Sales */}
-                    <text x="220" y="58" textAnchor="middle" className="pricing-poster-text-muted" fontSize="4.2" fontWeight="bold" fontFamily="Geist, Satoshi, sans-serif">SALES</text>
-
 
                     {/* NODE 3: PRODUCT MANAGER */}
                     <g transform="translate(80 90)">
@@ -316,9 +240,6 @@ function ModesPoster({ animateShimmer }: { animateShimmer: boolean }) {
                         <path d="M-4 -2 L0 -4 L4 -2 L0 0 Z" fill="none" className="pricing-poster-stroke-bright" strokeWidth="0.8" />
                         <path d="M-4 1 L0 3 L4 1" fill="none" className="pricing-poster-stroke-bright" strokeWidth="0.8" />
                     </g>
-                    {/* Label for PM */}
-                    <text x="80" y="112" textAnchor="middle" className="pricing-poster-text-muted" fontSize="4.2" fontWeight="bold" fontFamily="Geist, Satoshi, sans-serif">PRODUCT</text>
-
 
                     {/* NODE 4: SYSTEM DESIGN */}
                     <g transform="translate(200 90)">
@@ -330,9 +251,6 @@ function ModesPoster({ animateShimmer }: { animateShimmer: boolean }) {
                         <path d="M-2.5 -1 L-2.5 0 L0 0 L0 1" fill="none" className="pricing-poster-stroke-bright" strokeWidth="0.8" />
                         <path d="M2.5 -1 L2.5 0 L0 0" fill="none" className="pricing-poster-stroke-bright" strokeWidth="0.8" />
                     </g>
-                    {/* Label for System Design */}
-                    <text x="200" y="112" textAnchor="middle" className="pricing-poster-text-muted" fontSize="4.2" fontWeight="bold" fontFamily="Geist, Satoshi, sans-serif">ARCHITECT</text>
-
 
                     {/* CENTRAL NODE: ACTIVE ENGINE */}
                     <g transform="translate(140 60)">
@@ -345,7 +263,9 @@ function ModesPoster({ animateShimmer }: { animateShimmer: boolean }) {
                         
                         {/* Outer rotating/pulsing dashes */}
                         <circle cx="0" cy="0" r="25" fill="none" stroke="rgba(59, 130, 246, 0.3)" strokeWidth="0.8" strokeDasharray="4 6">
-                            <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="15s" repeatCount="indefinite" />
+                            {animateShimmer && (
+                                <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="15s" repeatCount="indefinite" />
+                            )}
                         </circle>
                     </g>
 
@@ -356,16 +276,21 @@ function ModesPoster({ animateShimmer }: { animateShimmer: boolean }) {
 }
 
 // ─── Resume Match Poster (jelly-clay × liquid-glass illustration) ──────
-// Inline SVG: two tilted 3D glass panels (Resume on left, Job Description on right)
-// with laser connection nodes drawing lines between matching skills.
-// Features a floating central pill badge showing a dynamic "94% Match" glow.
+// Inline SVG: two tilted 3D glass panels (resume on the left, job description
+// on the right) with laser connection nodes drawn between matching rows, and
+// a floating central badge marking the match.
+//
+// Wordless for the same reason as ModesPoster above (~3.5px rendered text at
+// the real card width). The central badge also used to read "94% MATCH" — a
+// figure nothing in the product computes, presented as if it were real
+// output. It is now a check glyph: same meaning, no invented statistic.
 function ResumeMatchPoster({ animateShimmer }: { animateShimmer: boolean }) {
     return (
         <div
-            className="relative w-full h-[120px] mt-3 select-none pointer-events-none overflow-hidden"
+            className="relative w-full h-[80px] select-none pointer-events-none overflow-hidden"
             aria-hidden="true"
         >
-            <svg viewBox="0 0 280 120" className="w-full h-full">
+            <svg viewBox="0 0 280 96" className="w-full h-full">
                 <defs>
                     {/* Soft background radial glows */}
                     <radialGradient id="purpleGlow" cx="50%" cy="50%" r="50%">
@@ -428,21 +353,17 @@ function ResumeMatchPoster({ animateShimmer }: { animateShimmer: boolean }) {
                         {/* Check 1 */}
                         <circle cx="4" cy="5" r="2.5" fill="rgba(16, 185, 129, 0.2)" stroke="rgba(16, 185, 129, 0.6)" strokeWidth="0.6" />
                         <rect x="11" y="3.5" width="48" height="3" rx="1.5" className="pricing-poster-rect-light" />
-                        <text x="12" y="6.5" className="pricing-poster-text-bright" fontSize="4.5" fontFamily="Geist, Satoshi, sans-serif" fontWeight="600" letterSpacing="0.02em">React Native</text>
 
                         {/* Check 2 */}
                         <circle cx="4" cy="17" r="2.5" fill="rgba(16, 185, 129, 0.2)" stroke="rgba(16, 185, 129, 0.6)" strokeWidth="0.6" />
                         <rect x="11" y="15.5" width="55" height="3" rx="1.5" className="pricing-poster-rect-light" />
-                        <text x="12" y="18.5" className="pricing-poster-text-bright" fontSize="4.5" fontFamily="Geist, Satoshi, sans-serif" fontWeight="600" letterSpacing="0.02em">System Design</text>
 
                         {/* Check 3 */}
                         <circle cx="4" cy="29" r="2.5" className="pricing-poster-check3-bg pricing-poster-check3-border" strokeWidth="0.6" />
                         <rect x="11" y="27.5" width="40" height="3" rx="1.5" className="pricing-poster-rect-subtle" />
-                        <text x="12" y="30.5" className="pricing-poster-text-muted" fontSize="4.5" fontFamily="Geist, Satoshi, sans-serif" fontWeight="600" letterSpacing="0.02em">Python</text>
                     </g>
                     {/* Small Resume Badge */}
                     <rect x="34" y="81" width="30" height="7" rx="2" fill="rgba(139, 92, 246, 0.2)" stroke="rgba(139, 92, 246, 0.3)" strokeWidth="0.5" />
-                    <text x="49" y="85" textAnchor="middle" fill="#c4b5fd" className="pricing-poster-badge-text-purple" fontSize="4.5" fontWeight="bold" fontFamily="Geist, Satoshi, sans-serif">RESUME</text>
 
 
                     {/* RIGHT PANEL: JOB DESCRIPTION */}
@@ -458,19 +379,15 @@ function ResumeMatchPoster({ animateShimmer }: { animateShimmer: boolean }) {
                     <g transform="translate(169 42)">
                         {/* Requirement 1 */}
                         <rect x="0" y="3.5" width="60" height="3" rx="1.5" className="pricing-poster-rect-light" />
-                        <text x="2" y="6.5" className="pricing-poster-text-bright" fontSize="4.5" fontFamily="Geist, Satoshi, sans-serif" fontWeight="600" letterSpacing="0.02em">React Native</text>
 
                         {/* Requirement 2 */}
                         <rect x="0" y="15.5" width="65" height="3" rx="1.5" className="pricing-poster-rect-light" />
-                        <text x="2" y="18.5" className="pricing-poster-text-bright" fontSize="4.5" fontFamily="Geist, Satoshi, sans-serif" fontWeight="600" letterSpacing="0.02em">System Design</text>
 
                         {/* Requirement 3 */}
                         <rect x="0" y="27.5" width="50" height="3" rx="1.5" className="pricing-poster-rect-light" />
-                        <text x="2" y="30.5" className="pricing-poster-text-muted" fontSize="4.5" fontFamily="Geist, Satoshi, sans-serif" fontWeight="600" letterSpacing="0.02em">TypeScript</text>
                     </g>
                     {/* Small JD Badge */}
                     <rect x="169" y="81" width="30" height="7" rx="2" fill="rgba(59, 130, 246, 0.2)" stroke="rgba(59, 130, 246, 0.3)" strokeWidth="0.5" />
-                    <text x="184" y="85" textAnchor="middle" fill="#93c5fd" className="pricing-poster-badge-text-blue" fontSize="4.5" fontWeight="bold" fontFamily="Geist, Satoshi, sans-serif">ROLE JD</text>
 
 
                     {/* CONNECTING AI LASER LINES */}
@@ -491,8 +408,8 @@ function ResumeMatchPoster({ animateShimmer }: { animateShimmer: boolean }) {
                         <rect x="-24" y="-8" width="48" height="16" rx="8" fill="rgba(16, 185, 129, 0.15)" stroke="rgba(16, 185, 129, 0.4)" strokeWidth="0.8" style={{ filter: 'drop-shadow(0 0 4px rgba(16,185,129,0.3))' }} />
                         {/* Solid Badge */}
                         <rect x="-22" y="-7" width="44" height="14" rx="7" fill="rgba(16, 185, 129, 0.95)" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.25))' }} />
-                        {/* Match text */}
-                        <text x="0" y="2.5" textAnchor="middle" fill="#ffffff" fontSize="5.5" fontWeight="900" fontFamily="Geist, Satoshi, sans-serif" letterSpacing="0.01em">94% MATCH</text>
+                        {/* Match glyph (replaces the fabricated "94% MATCH" figure) */}
+                        <path d="M-5 0.5 L-1.5 4 L5 -3" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </g>
 
                 </g>
@@ -504,9 +421,22 @@ function ResumeMatchPoster({ animateShimmer }: { animateShimmer: boolean }) {
 
 interface NativelyProSettingsProps {
     initialIsPremium?: boolean | null;
+    /**
+     * When true (the caller's user is not already Pro), the Yearly/Lifetime
+     * pricing grid renders behind a compact always-visible teaser row rather
+     * than inline. Keeps the tab from stacking two full pricing UIs while
+     * still putting a price and a call to action on screen without a click.
+     * Ignored once this component's own license fetch says the user IS Pro:
+     * the Pro-active status card is not a pricing wall, so there is nothing
+     * to collapse.
+     */
+    collapsePricing?: boolean;
 }
 
-export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initialIsPremium = null }) => {
+export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
+    initialIsPremium = null,
+    collapsePricing = false,
+}) => {
     const t = useT();
     const prefersReducedMotion = useReducedMotion();
     const [interfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => {
@@ -523,21 +453,32 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
         return () => window.removeEventListener('storage', handleStorage);
     }, []);
 
-    const [licenseKey, setLicenseKey] = useState('');
-    const [hardwareId, setHardwareId] = useState('');
-    const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    // Surfaced under the Deactivate button — deactivation is the only action
+    // this component still owns (license-key *entry* moved to the unified
+    // "Natively key" card in NativelyApiSettings.tsx).
     const [errorMessage, setErrorMessage] = useState('');
-    const [copiedHwid, setCopiedHwid] = useState(false);
     const [pricingProducts, setPricingProducts] = useState<Record<string, PricingProduct>>({});
+    // Whether the Yearly/Lifetime grid is revealed. Only consulted when
+    // `collapsePricing` is set; otherwise the grid is always shown.
+    const [pricingOpen, setPricingOpen] = useState(false);
 
 
     const [isPremium, setIsPremium] = useState<boolean | null>(initialIsPremium);
+    // Distinguishes a Pro entitlement bundled with a Natively API plan
+    // ('natively_api' — server-validated per request, stored with hwid: '',
+    // not device-slot-limited) from a standalone device license
+    // ('dodo'/'gumroad' — HWID-bound, where deactivating frees a real
+    // activation slot). The deactivate caption below is only true for the
+    // latter. Undefined (unknown / still loading) deliberately falls through
+    // to the device-license wording rather than under-warning.
+    const [licenseProvider, setLicenseProvider] = useState<string | undefined>(undefined);
 
     const refreshLicense = async () => {
         try {
             const details = await window.electronAPI?.licenseGetDetails?.();
             if (details) {
                 setIsPremium(details.isPremium ?? false);
+                setLicenseProvider((details as any).provider);
             } else {
                 setIsPremium(prev => prev ?? false);
             }
@@ -557,7 +498,6 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
     };
 
     useEffect(() => {
-        window.electronAPI?.licenseGetHardwareId?.().then(setHardwareId).catch(() => setHardwareId('unavailable'));
         refreshLicense();
         window.electronAPI?.getNativelyPricing?.()
             .then((res) => {
@@ -565,13 +505,12 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
             })
             .catch(() => {});
 
-        // Optional: listen to license status changes if the main process sends them
-        const onStatusChanged = (data?: { isPremium: boolean; plan?: string }) => {
-            if (data && typeof data.isPremium === 'boolean') {
-                setIsPremium(data.isPremium);
-            } else {
-                refreshLicense();
-            }
+        // Listen to license status changes if the main process sends them.
+        // Always re-fetch full details rather than trusting the event payload:
+        // it only carries `isPremium`, not `provider`, so taking the fast path
+        // would leave `licenseProvider` stale after an activate/deactivate.
+        const onStatusChanged = () => {
+            refreshLicense();
         };
         const removeLicenseListener = window.electronAPI?.onLicenseStatusChanged?.(onStatusChanged);
 
@@ -580,30 +519,6 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
         };
     }, []);
 
-    const handleActivate = async () => {
-        if (!licenseKey.trim()) return;
-        setStatus('loading');
-        setErrorMessage('');
-
-        try {
-            const result = await window.electronAPI?.licenseActivate?.(licenseKey.trim());
-            if (result?.success) {
-                setStatus('success');
-                setLicenseKey('');
-                setTimeout(() => {
-                    refreshLicense();
-                    setStatus('idle');
-                }, 1200);
-            } else {
-                setStatus('error');
-                setErrorMessage(result?.error || 'Activation failed. Please try again.');
-            }
-        } catch (e: any) {
-            setStatus('error');
-            setErrorMessage(e.message || 'Activation failed.');
-        }
-    };
-
     const handleDeactivate = async () => {
         try {
             await window.electronAPI?.licenseDeactivate?.();
@@ -611,12 +526,6 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
         } catch (e: any) {
             setErrorMessage(e.message || 'Deactivation failed.');
         }
-    };
-
-    const copyHardwareId = () => {
-        navigator.clipboard.writeText(hardwareId);
-        setCopiedHwid(true);
-        setTimeout(() => setCopiedHwid(false), 2000);
     };
 
     const openExternal = (url: string) => { (window.electronAPI as any)?.openExternal?.(url); };
@@ -705,38 +614,6 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
             },
         };
 
-    const gridVariants: Variants = prefersReducedMotion
-        ? {
-            hidden: { opacity: 0 },
-            visible: { opacity: 1, transition: { duration: 0.18 } },
-        }
-        : {
-            hidden: { opacity: 0 },
-            visible: {
-                opacity: 1,
-                transition: {
-                    staggerChildren: 0.045,
-                    delayChildren: 0,
-                },
-            },
-        };
-
-    const gridItemVariants: Variants = prefersReducedMotion
-        ? {
-            hidden: { opacity: 0 },
-            visible: { opacity: 1, transition: { duration: 0.18 } },
-        }
-        : {
-            hidden: { opacity: 0, y: 6 },
-            visible: {
-                opacity: 1,
-                y: 0,
-                transition: { duration: 0.28, ease: EASE_OUT },
-            },
-        };
-
-    // Price-tick pulse on plan change. Memoised so it only fires when the key
-    // (active plan) flips, not on every render.
     const priceTickAnim = prefersReducedMotion
         ? undefined
         : { scale: [1, 1.04, 1] };
@@ -762,7 +639,9 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
                         </div>
                         <h2 className="text-[18px] font-semibold tracking-tight text-text-primary">Pro License Active</h2>
                         <p className="text-[13px] mt-2 max-w-[280px] mx-auto leading-relaxed mb-8 text-text-secondary">
-                            Your device is fully authorized for Natively's premium features including the Profile Engine, Job Description Intelligence, and Company Research.
+                            {licenseProvider === 'natively_api'
+                                ? "Included with your Natively API plan. Premium features are unlocked: Profile Engine, Job Description Intelligence, and Company Research."
+                                : "Your device is fully authorized for Natively's premium features including the Profile Engine, Job Description Intelligence, and Company Research."}
                         </p>
 
                         <button
@@ -772,9 +651,19 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
                         >
                             <X size={15} /> Deactivate License
                         </button>
+                        {/* Copy differs by provider because the mechanics differ: an
+                            API-plan-bundled entitlement isn't device-bound, so the
+                            "use it on another computer" framing is simply false for it. */}
                         <p className="text-[11px] text-center px-4 mt-4 leading-relaxed text-text-tertiary max-w-[300px]">
-                            Deactivating will remove the license from this device, allowing you to use it on another computer.
+                            {licenseProvider === 'natively_api'
+                                ? 'Turns Pro off on this device only. Your Natively API plan is unaffected. To turn it back on, save your Natively API key again.'
+                                : 'Deactivating will remove the license from this device, allowing you to use it on another computer.'}
                         </p>
+                        {errorMessage && (
+                            <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg text-[12px] text-red-500 font-medium">
+                                <AlertCircle size={14} className="shrink-0" /> {errorMessage}
+                            </div>
+                        )}
                     </div>
                 </Card>
             ) : (
@@ -784,28 +673,71 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
                     animate="visible"
                     className="space-y-4"
                 >
-                    <header>
-                        <h3 className="text-lg font-bold text-text-primary mb-1">{t('Natively Pro')}</h3>
-                        <p className="text-xs text-text-secondary mb-5">
-                            Unlock the full Natively Pro toolkit.
-                        </p>
-                    </header>
+                    {/* ── Teaser row ───────────────────────────────────────────
+                        The only part of this section a non-Pro visitor sees
+                        before interacting, so it has to carry the whole offer:
+                        what it is, what it costs, and one thing to press. The
+                        generic accordion header it replaces carried a title, a
+                        60-word grey paragraph and a chevron, which rendered
+                        identically to the "How it works & refund policy" row
+                        beneath it. A purchase path that looks like an FAQ entry
+                        does not get opened.
+
+                        It is one <button>, not a button containing a button:
+                        the CTA-looking pill is a <span>, because nesting
+                        interactive elements is invalid and because the pill and
+                        the row do the same thing. Pressing it reveals pricing,
+                        it never navigates. Checkout stays where the owner put
+                        it, on the two card CTAs only. */}
+                    {collapsePricing && (
+                        <button
+                            type="button"
+                            onClick={() => setPricingOpen((o) => !o)}
+                            aria-expanded={pricingOpen}
+                            aria-controls="natively-pro-pricing"
+                            className="pro-teaser group relative w-full overflow-hidden text-left flex items-center gap-4 px-5 py-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                        >
+                            <span className="relative z-[3] min-w-0 flex-1 block">
+                                <span className="pro-teaser-eyebrow inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-bold" style={{ letterSpacing: '0.09em' }}>
+                                    NATIVELY PRO
+                                </span>
+                                <span className="pro-teaser-title block mt-2 text-[14.5px] font-semibold tracking-[-0.012em]">
+                                    Own the app. Use your own AI keys.
+                                </span>
+                                {/* The live prices are the hook. This is the number
+                                    the old collapsed header never showed. */}
+                                <span className="pro-teaser-sub block mt-1 text-[11.5px] leading-snug">
+                                    {yearlyPriceText} per year, or {lifetimePriceText} once. No monthly API plan, no usage quota.
+                                </span>
+                            </span>
+                            <span className="pro-teaser-cta relative z-[3] shrink-0 inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[12.5px] font-semibold" style={{ letterSpacing: '-0.005em' }}>
+                                {pricingOpen ? 'Hide' : 'See pricing'}
+                                <ChevronDown
+                                    size={14}
+                                    className={`shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${pricingOpen ? 'rotate-0' : '-rotate-90'}`}
+                                />
+                            </span>
+                        </button>
+                    )}
 
                     {/* ── Choose-your-plan hero ────────────────────────────── */}
-                    <div className="space-y-3">
+                    <Disclosure open={collapsePricing ? pricingOpen : true}>
+                    {/* No top padding here: the parent's `space-y-4` already
+                        supplies the gap, and it only exists while the disclosure
+                        is mounted, so a collapsed teaser has no dead space
+                        hanging off its bottom edge. */}
+                    <div className="space-y-3" id="natively-pro-pricing">
 
-                        {/* Two-card pricing grid — asymmetric: lifetime ~16px taller */}
+                        {/* Two-card pricing grid. Lifetime is the recommended
+                            option: it carries the "Best value" pill, the price
+                            anchor, and the concrete savings line. */}
                         <div className="grid grid-cols-2 gap-3 items-stretch">
                             {/* ── Left: Pro · Yearly (pale ice-blue jelly) ───── */}
                             <InteractiveCard
-                                className="pricing-card-yearly group relative overflow-hidden px-6 py-7 flex flex-col cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
-                                role="button"
-                                tabIndex={0}
-                                aria-pressed={false}
+                                className="pricing-card-yearly group relative overflow-hidden px-6 py-5 flex flex-col"
                                 data-active="false"
-                                style={{ minHeight: 264, transformStyle: 'preserve-3d' }}
+                                style={{ minHeight: 200, transformStyle: 'preserve-3d' }}
                                 glowColor="rgba(59, 130, 246, 0.28)"
-                                onClick={() => openExternal(yearlyUrl)}
                             >
                                 <div className="relative flex items-center justify-between" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(12px)' }}>
                                     <span className="badge-tier-label inline-flex items-center px-2 py-0.5 rounded-full text-text-primary text-[10px] font-semibold" style={{ letterSpacing: '0.02em' }}>
@@ -813,22 +745,21 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
                                     </span>
                                 </div>
 
-                                {/* Price block: anchor (was) + current, inline */}
+                                {/* Price block. No strikethrough anchor here on
+                                    purpose. `yearlyOriginalText` is synthesized by
+                                    dividing the real price by 0.8, which only ever
+                                    meant anything while the INSIDER20 coupon chip
+                                    was on screen; that chip was removed at the
+                                    owner's request, so the crossed-out figure was
+                                    left standing with nothing to explain it, and the
+                                    percentage it produced (round(30/0.8) = 38, so
+                                    21%) did not even match the 20% coupon it came
+                                    from. The computation is left in the useMemo
+                                    untouched, it is simply not rendered. The one
+                                    surviving anchor is Lifetime's, where 3 x yearly
+                                    is honest arithmetic and the line under the CTA
+                                    says so. */}
                                 <div className="relative mt-4 flex items-baseline gap-2 flex-wrap" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(20px)' }}>
-                                    {yearlyOriginalText && (
-                                        <span
-                                            className="pricing-card-original-price text-[17px] font-normal"
-                                            style={{
-                                                textDecoration: 'line-through',
-                                                textDecorationThickness: '1px',
-                                                fontVariantNumeric: 'tabular-nums',
-                                                fontFeatureSettings: '"tnum"',
-                                                letterSpacing: '-0.02em',
-                                            }}
-                                        >
-                                            {yearlyOriginalText}
-                                        </span>
-                                    )}
                                     <span
                                         className="pricing-card-price text-[44px] font-bold leading-none text-text-primary"
                                         style={{
@@ -846,42 +777,20 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
                                 </p>
 
                                 {/* Crisp gradient hairline divider */}
-                                <div className="relative h-px my-4 pricing-card-divider" style={{ transform: 'translateZ(8px)' }} />
-
-                                {/* Hero feature: Expert Persona Modes */}
-                                <div className="relative" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(14px)' }}>
-                                    <div className="flex items-start gap-2.5">
-                                        <span className="feature-icon-chip w-6 h-6 flex items-center justify-center shrink-0 mt-px">
-                                            <Layers size={12} className="text-text-primary" strokeWidth={2.4} />
-                                        </span>
-                                        <div className="min-w-0">
-                                            <p className="text-[12.5px] font-semibold leading-tight text-text-primary" style={{ letterSpacing: '-0.01em' }}>
-                                                Expert Persona Modes
-                                            </p>
-                                            <p className="text-[10.5px] leading-snug mt-1 text-text-secondary">
-                                                Switch between 7 specialized AI personas tailored for different conversation dynamics.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
+                                <div className="relative h-px my-2 pricing-card-divider" style={{ transform: 'translateZ(8px)' }} />
 
                                 {/* Modes poster — flex-1 pushes it to bottom */}
-                                <div className="relative flex-1 min-h-0 flex items-end" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(18px)' }}>
+                                <div className="relative flex-1 min-h-0 flex items-center" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(18px)' }}>
                                     <ModesPoster animateShimmer={!prefersReducedMotion} />
                                 </div>
 
                                 {/* CTA — neutral-bright jelly, dark text */}
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); openExternal(yearlyUrl); }}
-                                    className="pricing-cta-yearly relative mt-3 h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                                    onClick={() => openExternal(yearlyUrl)}
+                                    className="pricing-cta-yearly relative mt-4 h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                                     style={{ letterSpacing: '-0.005em', transform: 'translateZ(28px)' }}
                                 >
                                     Get Pro
-                                    {yearlyDiscountAbs !== null && (
-                                        <span className="pricing-card-discount-badge inline-flex items-center px-1.5 py-0.5 rounded-full text-[9.5px] font-bold tracking-wider">
-                                            -{yearlyDiscountAbs}%
-                                        </span>
-                                    )}
                                 </button>
                                 <p className="relative mt-2 text-center text-[10px] leading-snug text-text-secondary" style={{ transform: 'translateZ(6px)' }}>
                                     Cancels anytime. Renews at {yearlyPriceText}/yr.
@@ -890,25 +799,22 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
 
                             {/* ── Right: Pro · Lifetime (deeper indigo-violet jelly) ── */}
                             <InteractiveCard
-                                className="pricing-card-lifetime group relative overflow-hidden px-6 py-7 flex flex-col cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
-                                role="button"
-                                tabIndex={0}
-                                aria-pressed={true}
+                                className="pricing-card-lifetime group relative overflow-hidden px-6 py-5 flex flex-col"
                                 data-active="true"
-                                style={{ minHeight: 264, transformStyle: 'preserve-3d' }}
+                                style={{ minHeight: 200, transformStyle: 'preserve-3d' }}
                                 glowColor="rgba(139, 92, 246, 0.32)"
-                                onClick={() => openExternal(lifetimeUrl)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                        e.preventDefault();
-                                        openExternal(lifetimeUrl);
-                                    }
-                                }}
                             >
-                                {/* Label row: Pro · Lifetime */}
-                                <div className="relative flex items-center justify-between" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(12px)' }}>
+                                {/* Label row: Pro · Lifetime + the recommendation.
+                                    Without this the two cards read as equally
+                                    weighted alternatives, which pushes the choice
+                                    back onto the visitor. `.badge-best-value` was
+                                    already defined in index.css and unused. */}
+                                <div className="relative flex items-center justify-between gap-2" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(12px)' }}>
                                     <span className="badge-tier-label inline-flex items-center px-2 py-0.5 rounded-full text-text-primary text-[10px] font-semibold" style={{ letterSpacing: '0.02em' }}>
                                         Pro · Lifetime
+                                    </span>
+                                    <span className="badge-best-value inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-bold shrink-0" style={{ letterSpacing: '0.06em' }}>
+                                        BEST VALUE
                                     </span>
                                 </div>
 
@@ -939,45 +845,30 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
                                     >
                                         {lifetimePriceText}
                                     </span>
-                                    {lifetimeSavingsPct !== null && (
-                                        <span className="pricing-card-savings-badge text-[10px] font-medium tracking-[0.01em] px-2 py-0.5 rounded-full select-none ml-1.5 self-center">
-                                            Save {lifetimeSavingsPct}%
-                                        </span>
-                                    )}
+                                    {/* No "Save N%" chip alongside. The strikethrough
+                                        anchor, the chip and the line under the CTA
+                                        were three renderings of one fact. The
+                                        anchor plus the concrete dollar line survive,
+                                        because dollars anchor harder than a percent
+                                        and the line is what explains where the
+                                        crossed-out figure comes from. */}
                                 </div>
                                 <p className="relative mt-1 text-[11px] font-medium text-text-secondary" style={{ transform: 'translateZ(10px)' }}>
                                     One-time payment. Yours forever.
                                 </p>
 
                                 {/* Crisp divider */}
-                                <div className="relative h-px my-4 pricing-card-divider" style={{ transform: 'translateZ(8px)' }} />
-
-                                {/* Hero feature: Resume & Context Grounding */}
-                                <div className="relative" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(14px)' }}>
-                                    <div className="flex items-start gap-2.5">
-                                        <span className="feature-icon-chip w-6 h-6 flex items-center justify-center shrink-0 mt-px">
-                                            <UserCheck size={12} className="text-text-primary" strokeWidth={2.4} />
-                                        </span>
-                                        <div className="min-w-0">
-                                            <p className="text-[12.5px] font-semibold leading-tight text-text-primary" style={{ letterSpacing: '-0.01em' }}>
-                                                Resume &amp; Context Grounding
-                                            </p>
-                                            <p className="text-[10.5px] leading-snug mt-1 text-text-secondary">
-                                                Align your live assistant guidance with your CV, background files, and target job description.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
+                                <div className="relative h-px my-2 pricing-card-divider" style={{ transform: 'translateZ(8px)' }} />
 
                                 {/* Match poster — flex-1 pushes it to bottom */}
-                                <div className="relative flex-1 min-h-0 flex items-end" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(18px)' }}>
+                                <div className="relative flex-1 min-h-0 flex items-center" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(18px)' }}>
                                     <ResumeMatchPoster animateShimmer={!prefersReducedMotion} />
                                 </div>
 
                                 {/* CTA — tinted jelly, light text, brighter specular crown */}
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); openExternal(lifetimeUrl); }}
-                                    className="pricing-cta-lifetime relative mt-3 h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                                    onClick={() => openExternal(lifetimeUrl)}
+                                    className="pricing-cta-lifetime relative mt-4 h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                                     style={{ letterSpacing: '-0.005em', transform: 'translateZ(28px)' }}
                                 >
                                     Lock in lifetime
@@ -994,500 +885,46 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({ initia
                             </InteractiveCard>
                         </div>
 
-                        {/* ── Feature Comparison Section (Bento Grid) ────────── */}
-                        <motion.div variants={itemVariants} className="mt-2 space-y-3">
-                            {/* Header */}
-                            <div className="flex items-center justify-between px-0.5">
-                                <h3 className="text-[13px] font-bold tracking-[-0.015em] text-text-primary">
-                                    Everything you get in Pro
-                                </h3>
-                                <span className="text-[9px] uppercase tracking-[0.1em] font-semibold text-text-tertiary px-2 py-0.5 rounded-full border border-white/5 bg-white/2">
-                                    Both tiers
-                                </span>
-                            </div>
+                        {/* The detail that used to sit in the collapsed accordion
+                            header, where it was unreadable weight above the fold.
+                            It belongs here: past the point where someone has
+                            already asked to see pricing, and reading as a caption
+                            to the cards rather than a wall in front of them.
 
-                            {/* Bento Grid */}
-                            <motion.div
-                                variants={gridVariants}
-                                initial="hidden"
-                                animate="visible"
-                                className="grid grid-cols-2 gap-3"
-                            >
-                                {/* 1. Modes Manager (Spans 2 columns) */}
-                                <InteractiveFeatureCard
-                                    colorTheme="violet"
-                                    glowColor="rgba(139, 92, 246, 0.15)"
-                                    className="col-span-2 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
-                                >
-                                    <div className="flex items-start gap-3 flex-1">
-                                        <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-violet-500/15 to-blue-500/15 border border-violet-400/25 text-violet-300">
-                                            <Layers size={16} strokeWidth={2} />
-                                        </span>
-                                        <div className="min-w-0">
-                                            <p className="text-[12.5px] font-bold tracking-tight text-text-primary leading-tight">
-                                                Modes Manager
-                                            </p>
-                                            <p className="text-[11px] text-text-secondary leading-snug mt-1 max-w-[340px]">
-                                                7 expert personas customized for tech interview prep, PM strategy, executive presence, and sales negotiation.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3 bg-white/[0.04] border border-white/[0.09] rounded-full px-3 py-1.5 shadow-sm">
-                                        <span className="text-[9px] font-extrabold text-text-primary tracking-wider uppercase">
-                                            7 expert personas
-                                        </span>
-                                        <div className="flex -space-x-1.5">
-                                            {['bg-emerald-400', 'bg-blue-400', 'bg-violet-400', 'bg-pink-400', 'bg-orange-400', 'bg-cyan-400', 'bg-yellow-400'].map((color, idx) => (
-                                                <span
-                                                    key={idx}
-                                                    className={`w-3 h-3 rounded-full ${color} border border-black/30 shadow relative shrink-0`}
-                                                    style={{
-                                                        boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.45), 0 1px 3px rgba(0,0,0,0.35)'
-                                                    }}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                </InteractiveFeatureCard>
-
-                                {/* 2. Resume Intelligence (1 column) */}
-                                <InteractiveFeatureCard
-                                    colorTheme="teal"
-                                    glowColor="rgba(20, 184, 166, 0.12)"
-                                    className="p-4 flex flex-col justify-between min-h-[110px]"
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-teal-500/15 to-emerald-500/15 border border-teal-400/25 text-teal-300">
-                                            <UserCheck size={16} strokeWidth={2} />
-                                        </span>
-                                        <div className="min-w-0">
-                                            <p className="text-[12px] font-bold tracking-tight text-text-primary leading-tight">
-                                                Resume Intelligence
-                                            </p>
-                                            <p className="text-[10.5px] text-text-secondary leading-snug mt-1">
-                                                AI grounded in your lived experience, background, and career accomplishments.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="mt-3 flex items-center gap-1.5">
-                                        <div className="h-1.5 w-full bg-white/[0.06] rounded-full overflow-hidden border border-white/[0.04]">
-                                            <motion.div
-                                                className="h-full bg-gradient-to-r from-teal-400 to-emerald-400 rounded-full"
-                                                initial={{ width: 0 }}
-                                                animate={{ width: '92%' }}
-                                                transition={{ duration: 1.5, delay: 0.5, ease: EASE_OUT }}
-                                            />
-                                        </div>
-                                        <span className="text-[8.5px] font-mono text-emerald-350 font-bold shrink-0">92% MATCH</span>
-                                    </div>
-                                </InteractiveFeatureCard>
-
-                                {/* 3. Context Intelligence (1 column) */}
-                                <InteractiveFeatureCard
-                                    colorTheme="blue"
-                                    glowColor="rgba(59, 130, 246, 0.12)"
-                                    className="p-4 flex flex-col justify-between min-h-[110px]"
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-blue-500/15 to-indigo-500/15 border border-blue-400/25 text-blue-350">
-                                            <Database size={16} strokeWidth={2} />
-                                        </span>
-                                        <div className="min-w-0">
-                                            <p className="text-[12px] font-bold tracking-tight text-text-primary leading-tight">
-                                                Context Intelligence
-                                            </p>
-                                            <p className="text-[10.5px] text-text-secondary leading-snug mt-1">
-                                                Ground the AI response in custom reference files, PDFs, docs, and codebases.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="mt-3 flex items-center gap-1 flex-wrap">
-                                        {['.pdf', '.docx', '.txt', '.json'].map((ext) => (
-                                            <span key={ext} className="text-[8.5px] font-mono font-bold text-blue-300 uppercase px-1.5 py-0.5 rounded border border-blue-500/20 bg-blue-500/8">
-                                                {ext}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </InteractiveFeatureCard>
-
-                                {/* 4. Negotiation Assistance (1 column) */}
-                                <InteractiveFeatureCard
-                                    colorTheme="rose"
-                                    glowColor="rgba(244, 63, 94, 0.12)"
-                                    className="p-4 flex flex-col justify-between min-h-[110px]"
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-rose-500/15 to-amber-500/15 border border-rose-400/25 text-rose-300">
-                                            <TrendingUp size={16} strokeWidth={2} />
-                                        </span>
-                                        <div className="min-w-0">
-                                            <p className="text-[12px] font-bold tracking-tight text-text-primary leading-tight">
-                                                Negotiation Coaching
-                                            </p>
-                                            <p className="text-[10.5px] text-text-secondary leading-snug mt-1">
-                                                Live coaching, counter-offer scripting, and real-time market-band analysis.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="mt-3 flex items-center justify-between text-[8.5px] font-mono text-text-secondary bg-white/[0.03] border border-white/[0.07] rounded-lg px-2 py-1">
-                                        <span>$140k</span>
-                                        <div className="h-1 w-16 bg-white/[0.08] rounded-full relative">
-                                            <div className="absolute left-[30%] right-[20%] top-0 bottom-0 bg-rose-400 rounded-full" />
-                                            <div className="absolute left-[55%] top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-text-primary rounded-full border border-rose-400" />
-                                        </div>
-                                        <span className="text-text-primary font-bold">$185k</span>
-                                    </div>
-                                </InteractiveFeatureCard>
-
-                                {/* 5. JD Intelligence (1 column) */}
-                                <InteractiveFeatureCard
-                                    colorTheme="orange"
-                                    glowColor="rgba(249, 115, 22, 0.12)"
-                                    className="p-4 flex flex-col justify-between min-h-[110px]"
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-orange-500/15 to-amber-500/15 border border-orange-400/25 text-orange-300">
-                                            <FileText size={16} strokeWidth={2} />
-                                        </span>
-                                        <div className="min-w-0">
-                                            <p className="text-[12px] font-bold tracking-tight text-text-primary leading-tight">
-                                                JD Intelligence
-                                            </p>
-                                            <p className="text-[10.5px] text-text-secondary leading-snug mt-1">
-                                                Gap-analysis comparing your profile directly against target job descriptions.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="mt-3 space-y-1 text-[8.5px] font-semibold">
-                                        <div className="flex items-center justify-between text-emerald-300">
-                                            <span className="flex items-center gap-1">
-                                                <Check size={8} strokeWidth={3} />
-                                                System Design
-                                            </span>
-                                            <span className="font-mono text-[7.5px] font-bold tracking-wider text-emerald-400">MATCH</span>
-                                        </div>
-                                        <div className="flex items-center justify-between text-amber-300">
-                                            <span className="flex items-center gap-1">
-                                                <AlertCircle size={8} strokeWidth={3} />
-                                                Distributed Caching
-                                            </span>
-                                            <span className="font-mono text-[7.5px] font-bold tracking-wider text-amber-400">GAP</span>
-                                        </div>
-                                    </div>
-                                </InteractiveFeatureCard>
-
-                                {/* 6. Company Research (1 column) */}
-                                <InteractiveFeatureCard
-                                    colorTheme="cyan"
-                                    glowColor="rgba(6, 182, 212, 0.12)"
-                                    className="p-4 flex flex-col justify-between min-h-[110px]"
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-cyan-500/15 to-teal-500/15 border border-cyan-400/25 text-cyan-300">
-                                            <Building2 size={16} strokeWidth={2} />
-                                        </span>
-                                        <div className="min-w-0">
-                                            <p className="text-[12px] font-bold tracking-tight text-text-primary leading-tight">
-                                                Company Research
-                                            </p>
-                                            <p className="text-[10.5px] text-text-secondary leading-snug mt-1">
-                                                Real-time deep-dive into culture, tech stack, and strategic industry positioning.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="mt-3 flex items-center justify-between text-[8.5px] text-text-primary bg-white/[0.03] border border-white/[0.07] rounded-lg px-2 py-1">
-                                        <span className="flex items-center gap-1 font-semibold text-text-secondary">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-350 animate-pulse" />
-                                            Culture Intel
-                                        </span>
-                                        <span className="font-mono text-cyan-350 font-bold uppercase tracking-wider text-[7.5px]">FETCHED LIVE</span>
-                                    </div>
-                                </InteractiveFeatureCard>
-
-                                {/* 7. System Design (1 column - Soon) */}
-                                <InteractiveFeatureCard
-                                    colorTheme="gray"
-                                    glowColor="rgba(148, 163, 184, 0.05)"
-                                    isSoon
-                                    className="p-4 flex flex-col justify-between min-h-[110px]"
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-slate-400/20 to-slate-500/10 border border-slate-400/25 text-slate-300">
-                                            <Maximize2 size={16} strokeWidth={2} />
-                                        </span>
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-1.5">
-                                                <p className="text-[12px] font-bold tracking-tight text-text-secondary leading-tight">
-                                                    System Design
-                                                </p>
-                                                <span className="text-[8px] font-extrabold uppercase tracking-wider px-1 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/25 shrink-0">
-                                                    Soon
-                                                </span>
-                                            </div>
-                                            <p className="text-[10.5px] text-text-tertiary leading-snug mt-1">
-                                                Architecture whiteboard blueprints & diagram image OCR extraction.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="mt-3 relative h-6 rounded border border-dashed border-white/10 bg-white/[0.01] overflow-hidden flex items-center justify-center">
-                                        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:6px_6px]" />
-                                        <span className="text-[8px] font-mono font-bold text-slate-400 select-none tracking-wider">ARCHITECTURE GRID</span>
-                                    </div>
-                                </InteractiveFeatureCard>
-
-                                {/* 8. Mock Interviews (Spans 2 columns - Soon) */}
-                                <InteractiveFeatureCard
-                                    colorTheme="pink"
-                                    glowColor="rgba(139, 92, 246, 0.05)"
-                                    isSoon
-                                    className="col-span-2 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
-                                >
-                                    <div className="flex items-start gap-3 flex-1">
-                                        <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-pink-400/20 to-violet-400/10 border border-pink-400/25 text-pink-300">
-                                            <Target size={16} strokeWidth={2} />
-                                        </span>
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-1.5">
-                                                <p className="text-[12px] font-bold tracking-tight text-text-secondary leading-tight">
-                                                    Mock Interviews
-                                                </p>
-                                                <span className="text-[8px] font-extrabold uppercase tracking-wider px-1 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/25 shrink-0">
-                                                    Soon
-                                                </span>
-                                            </div>
-                                            <p className="text-[11px] text-text-tertiary leading-snug mt-1 max-w-[340px]">
-                                                Practice dialogues with specialized hiring manager personas, offering dynamic difficulty and grading reports.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col gap-1 border border-white/[0.07] bg-white/[0.02] rounded-xl p-2 min-w-[160px] select-none shadow-sm shrink-0">
-                                        <div className="flex items-center justify-between border-b border-white/[0.05] pb-1">
-                                            <span className="text-[8px] font-mono text-text-secondary uppercase tracking-wider">Report</span>
-                                            <span className="text-[9px] font-mono font-bold text-pink-450">SCORE: 88%</span>
-                                        </div>
-                                        <div className="space-y-0.5 text-[8px] text-text-secondary leading-tight">
-                                            <div className="flex items-center gap-1">
-                                                <span className="w-1 h-1 rounded-full bg-emerald-400" />
-                                                <span>Strong behavioral stats</span>
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                <span className="w-1 h-1 rounded-full bg-amber-400" />
-                                                <span>Add details in architecture</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </InteractiveFeatureCard>
-                            </motion.div>
-                        </motion.div>
-
-                        {/* Footer row: coupon + demo link */}
-                        <motion.div variants={itemVariants} className="flex items-center justify-between gap-3 flex-wrap pt-1 px-0.5">
-                            <div className="overlay-subtle-surface inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full">
-                                <span className="text-[10.5px] font-medium text-text-secondary">
-                                    Code{' '}
-                                    <strong className="font-mono font-semibold text-text-primary tracking-tight" style={{ letterSpacing: '-0.01em' }}>INSIDER20</strong>
-                                    {' '}· 20% off yearly
-                                </span>
-                            </div>
-                            <button
-                                onClick={() => openExternal('https://natively.software/pro')}
-                                className="text-[11.5px] font-medium flex items-center gap-1.5 text-text-secondary hover:text-text-primary cursor-pointer active:scale-[0.97] h-8 px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded-md"
-                                style={{ transition: `color 180ms ${EASE_OUT_CSS}, transform 140ms ${EASE_OUT_CSS}` }}
-                            >
-                                <PlayCircle size={13} />
-                                <span className="underline underline-offset-4 decoration-border-subtle hover:decoration-current">
-                                    Watch it in action
-                                </span>
-                            </button>
-                        </motion.div>
-                        <motion.p variants={itemVariants} className="text-[10px] text-text-tertiary leading-relaxed text-center px-2 pt-1">
-                            By upgrading you agree to our{' '}
-                            <span
-                                onClick={() => openExternal('https://natively.software/nativelypro/t&c')}
-                                className="text-text-secondary hover:text-text-primary underline decoration-border-subtle underline-offset-[3px] cursor-pointer"
-                                style={{ transition: `color 180ms ${EASE_OUT_CSS}` }}
-                            >
-                                Terms &amp; Conditions
-                            </span>
-                            .
-                        </motion.p>
-                    </div>
-
-                    <motion.div variants={itemVariants}>
-                    <Card>
-                        <div className="px-5 pt-5 pb-5">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-8 h-8 rounded-[10px] bg-bg-input border border-border-subtle shadow-[inset_0_1px_rgba(255,255,255,0.06),0_2px_4px_rgba(0,0,0,0.02)] flex items-center justify-center shrink-0">
-                                    <Key size={14} className="text-text-primary" strokeWidth={2} />
-                                </div>
-                                <div>
-                                    <h3 className="text-[13.5px] font-semibold tracking-tight text-text-primary leading-none">Already purchased?</h3>
-                                    <p className="text-[11.5px] text-text-tertiary mt-1">Enter your license key to activate this device.</p>
-                                </div>
-                            </div>
-
-                            <div className="space-y-3 mt-1">
-                                <div className="relative">
-                                    <Key size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                                    <input
-                                        type="text"
-                                        value={licenseKey}
-                                        onChange={(e) => setLicenseKey(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleActivate()}
-                                        placeholder={t("Enter your license key")}
-                                        disabled={status === 'loading' || status === 'success'}
-                                        className="w-full rounded-[10px] pl-9 pr-3 py-2.5 text-[13px] font-mono focus:outline-none disabled:opacity-50 bg-bg-input border border-border-subtle text-text-primary placeholder-text-tertiary focus:border-white/30 focus:ring-1 focus:ring-white/20 shadow-[inset_0_1px_2px_rgba(0,0,0,0.1)]"
-                                        style={{ transition: `border-color 180ms ${EASE_OUT_CSS}, box-shadow 180ms ${EASE_OUT_CSS}` }}
-                                    />
-                                </div>
-
-                                <button
-                                    onClick={handleActivate}
-                                    disabled={!licenseKey.trim() || status === 'loading' || status === 'success'}
-                                    className={`w-full h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary ${status === 'success'
-                                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-none'
-                                        : status === 'loading'
-                                            ? 'bg-button-primary-disabled-bg border border-button-primary-disabled-border text-button-primary-disabled-text cursor-wait shadow-none'
-                                            : !licenseKey.trim()
-                                                ? 'bg-button-primary-disabled-bg border border-button-primary-disabled-border text-button-primary-disabled-text cursor-default shadow-none'
-                                                : 'pricing-cta-lifetime cursor-pointer'
-                                        }`}
-                                    style={{ letterSpacing: '-0.005em', transition: status === 'success' || status === 'loading' || !licenseKey.trim() ? `transform 140ms ${EASE_OUT_CSS}, background-color 180ms ${EASE_OUT_CSS}, opacity 180ms ${EASE_OUT_CSS}, box-shadow 200ms ${EASE_OUT_CSS}` : undefined }}
-                                >
-                                    {status === 'success' ? (
-                                        <><CheckCircle size={14} /> Activated!</>
-                                    ) : status === 'loading' ? (
-                                        <><div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> Verifying...</>
-                                    ) : (
-                                        <><Lock size={14} /> Activate License</>
-                                    )}
-                                </button>
-
-                                {/* Error message */}
-                                {status === 'error' && errorMessage && (
-                                    <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg text-[12px] text-red-500 font-medium">
-                                        <AlertCircle size={14} className="shrink-0" /> {errorMessage}
-                                    </div>
-                                )}
-
-                                {/* T&C consent */}
-                                <p className="text-[10.5px] text-text-tertiary leading-relaxed text-center pt-1">
-                                    By activating, you agree to our{' '}
-                                    <span
-                                        onClick={() => openExternal('https://natively.software/nativelypro/t&c')}
-                                        className="text-text-secondary hover:text-text-primary underline decoration-border-subtle underline-offset-[3px] cursor-pointer"
-                                        style={{ transition: `color 180ms ${EASE_OUT_CSS}` }}
-                                    >
-                                        Terms &amp; Conditions
-                                    </span>
-                                    .
-                                </p>
-                            </div>
+                            Feature bento grid, coupon/demo footer row and the
+                            upgrade T&C line were removed at the product owner's
+                            request. The two pricing cards plus these two lines are
+                            the whole purchase surface for the app-only license. */}
+                        <div className="px-1 pt-1 space-y-1">
+                            <p className="text-[11px] leading-relaxed text-text-tertiary">
+                                {t('Works with OpenAI, Gemini, Claude, Groq, DeepSeek, or a local model.')}
+                            </p>
+                            <p className="text-[11px] leading-relaxed text-text-tertiary">
+                                {t('Full Pro feature set: expert persona modes, the Profile Engine, job description intelligence, and company research.')}
+                            </p>
                         </div>
-                    </Card>
-                    </motion.div>
+                    </div>
+                    </Disclosure>
+
+                    {/* "Already purchased? Enter your license key" card intentionally
+                        removed — the Natively key card (NativelyApiSettings.tsx,
+                        rendered above this component in PlansSettings.tsx) accepts
+                        either credential type in one box and routes by prefix, so a
+                        second license-key input here is a redundant entry point. */}
                 </motion.div>
             )}
 
-            {/* ── Refund Policy ────────────────────────────────── */}
-            <Card>
-                <div className="flex items-center gap-3 px-5 pt-5 pb-4">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0">
-                        <Shield size={18} className="text-emerald-400" />
-                    </div>
-                    <div className="min-w-0">
-                        <p className="text-[13px] font-semibold text-text-primary">Refund Policy — Natively Pro</p>
-                        <p className="text-[11px] text-text-tertiary leading-snug mt-0.5">
-                            Please try the Free Trial first
-                        </p>
-                    </div>
-                </div>
+            {/* Refund Policy — intentionally NOT duplicated here. It lives once,
+                covering both purchase types (24-hour API subscription window vs
+                1-hour Pro pre-activation window), in NativelyApiSettings.tsx's
+                "How it works & refund policy" accordion, which renders above this
+                component in PlansSettings.tsx. */}
 
-                <div className="h-px bg-border-subtle mx-5" />
-
-                <div className="px-5 pt-4 pb-4">
-                    <div className="space-y-3">
-                        <div className="rounded-xl bg-bg-input/50 border border-border-subtle px-3.5 py-3">
-                            <p className="text-[11.5px] text-text-secondary leading-relaxed">
-                                <strong className="text-text-primary font-semibold">A quick heads-up:</strong> Natively is built and maintained by a single developer and integrates a lot of third-party services — AI providers, speech-to-text engines, search APIs, payments, OS-level audio &amp; screen capture. That gives Pro a lot of capability, but the surface area is wider than a typical closed-source app, and once in a while something may not behave exactly as expected. If that happens, please <em>report it</em> rather than disputing the charge — we read every report and fixes typically land in the next update.
-                            </p>
-                        </div>
-
-                        <div className="flex items-start gap-3">
-                            <div className="w-1.5 h-1.5 rounded-full bg-text-tertiary/40 shrink-0 mt-[6px]" />
-                            <p className="text-[11.5px] text-text-secondary leading-relaxed">
-                                Purchases made with a coupon, voucher, referral credit, or limited-time offer are <strong className="text-text-primary font-semibold">final sale</strong> and not eligible for refund.
-                            </p>
-                        </div>
-
-                        <div className="flex items-start gap-3">
-                            <div className="w-1.5 h-1.5 rounded-full bg-text-tertiary/40 shrink-0 mt-[6px]" />
-                            <p className="text-[11.5px] text-text-secondary leading-relaxed">
-                                To cancel your subscription, log in to the{' '}
-                                <span
-                                    onClick={() => openExternal('https://customer.dodopayments.com/')}
-                                    className="text-accent-primary hover:text-accent-hover underline decoration-accent-border underline-offset-[3px] cursor-pointer"
-                                    style={{ transition: `color 180ms ${EASE_OUT_CSS}` }}
-                                >
-                                    customer portal
-                                </span>{' '}
-                                to manage or cancel your plan.
-                            </p>
-                        </div>
-
-                        <div className="h-px bg-border-subtle mt-4 mb-3" />
-
-                        <p className="text-[11.5px] text-text-secondary leading-relaxed">
-                            For everything else — the 1-hour pre-activation window, subscription handling, taxes &amp; fees, and your local consumer rights — please see our full{' '}
-                            <span
-                                onClick={() => openExternal('https://natively.software/refundpolicy')}
-                                className="text-text-primary hover:text-text-secondary underline decoration-border-subtle underline-offset-[3px] cursor-pointer"
-                                style={{ transition: `color 180ms ${EASE_OUT_CSS}` }}
-                            >
-                                Refund Policy
-                            </span>
-                            . Have a question before buying? Email{' '}
-                            <span
-                                onClick={() => openExternal('mailto:natively.contact@gmail.com')}
-                                className="text-text-primary hover:text-text-secondary underline decoration-border-subtle underline-offset-[3px] cursor-pointer"
-                                style={{ transition: `color 180ms ${EASE_OUT_CSS}` }}
-                            >
-                                natively.contact@gmail.com
-                            </span>
-                            .
-                        </p>
-
-                        <div className="mt-3 px-3 py-2.5 rounded-xl bg-amber-500/6 border border-amber-500/15">
-                            <p className="text-[11.5px] text-text-secondary leading-relaxed">
-                                <strong className="text-text-primary font-semibold">A personal note:</strong>{' '}
-                                Natively is built, maintained, and supported entirely by one person — in their free time.
-                                Email replies may take a few days, and weekends (Sat &amp; Sun) are offline.
-                                Your patience is genuinely appreciated.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </Card>
-
-            {/* Hardware ID */}
-            {hardwareId && (
-                <div className="px-2 pt-2">
-                    <div className="flex items-center justify-between">
-                        <span className="text-[10px] uppercase tracking-widest font-semibold text-text-tertiary">Device ID</span>
-                        <button
-                            onClick={copyHardwareId}
-                            className="text-[11px] font-medium flex items-center gap-1 text-text-secondary hover:text-text-primary cursor-pointer active:scale-[0.97] h-8 px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded-md"
-                            style={{ transition: `color 180ms ${EASE_OUT_CSS}, transform 140ms ${EASE_OUT_CSS}` }}
-                        >
-                            {copiedHwid ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
-                            {copiedHwid ? 'Copied' : 'Copy ID'}
-                        </button>
-                    </div>
-                    <p className="text-[11px] font-mono mt-1.5 truncate select-all text-text-tertiary">
-                        {hardwareId}
-                    </p>
-                </div>
-            )}
+            {/* The Device ID row (hardware hash + "Copy ID") used to render here.
+                Removed at the product owner's request — it was a 64-char hash
+                shown to every user, and nothing in the current UI asks them to
+                supply it (license activation happens through the unified
+                "Natively key" box, which needs no device identifier). */}
         </div>
     );
 };
