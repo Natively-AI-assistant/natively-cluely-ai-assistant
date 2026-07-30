@@ -233,7 +233,7 @@ Every number in §9 was produced by a harness with four gates that could not fai
 | `noStaleVersionAccepted` | `!/resume_v1/.test(documentTitle)` — against a corpus that **never contained `resume_v1`**. Nothing to reject, so 42/42. |
 | version filtering generally | `golden-live` stamped `'legacy'` as every file's active version and passed **no `chunkVersions`**, so the filter compared a value with itself (F25b). |
 | `answerabilityMatchesExpected` | Did not exist. `expectedAnswerability` was recorded by all three harnesses and asserted by none — which is how F24 survived. |
-| `evidenceCarriesProvenance` | `e.scopeId &&` is a truthiness test on a field the adapter always populates from the turn's own scope. Still vacuous — see F25a. |
+| `evidenceCarriesProvenance` | `e.scopeId &&` is a truthiness test on a field the adapter always populates from the turn's own scope. **FIXED** — see F25a. |
 
 Two fixtures central to 8 questions — `resume_v1_2023.md` and `meeting_transcript_previous.txt` — were **ingested by no harness at all**, while the two harness corpora had drifted to 13 files versus 10.
 
@@ -243,7 +243,7 @@ Adding them naively made things worse in a way worth recording: `lfw_resume.txt`
 
 That includes **C-02, the canonical JD-as-experience result quoted in `10_BENCHMARK_RESULTS.md` §3.** It was passing, contaminated.
 
-**Fixed** by splitting retrieval into `base` and `versioned` groups, each ingested into its own mode, with a question answered only against its own group. Deliberately *not* done with `scopeId`, which filters nothing here (F25a).
+**Fixed** by splitting retrieval into `base` and `versioned` groups, each ingested into its own mode, with a question answered only against its own group. Deliberately *not* done with `scopeId` — which, at the time, filtered nothing (F25a, since fixed). The group split remains the right mechanism regardless: the two résumés belong to different *people*, not different scopes of one user.
 
 Discriminating check: superseded-rejection turns fell **25 → 6** after the split, confirming Priya's stale résumé had been a candidate on every résumé question. C-01 and C-02 now measure `NONE` on the base group.
 
@@ -252,7 +252,8 @@ Discriminating check: superseded-rejection turns fell **25 → 6** after the spl
 | Gate | Result | |
 |---|---|---|
 | `noProhibitedSourceInEvidence` | 42/42 | |
-| `evidenceCarriesProvenance` | 42/42 | still vacuous (F25a) |
+| `evidenceCarriesProvenance` | 42/42 | **no longer vacuous** — asserts `scopeId` equals the turn's scope (F25a fixed) |
+| `noForeignScopeAccepted` | 42/42 | **NEW** — exercised on 14 turns rejecting an out-of-scope record |
 | `promptLabelsEvidenceUntrusted` | 42/42 | |
 | `noStaleVersionAccepted` | 42/42 | **now exercised** — a superseded chunk is retrieved and rejected on **6 of the 7** versioned questions. The exception is G-03, which retrieves nothing at all (`raw=0`), the same defect as its `retrievalPath` failure. |
 | `retrievalPath` | 41/42 | G-03, known |

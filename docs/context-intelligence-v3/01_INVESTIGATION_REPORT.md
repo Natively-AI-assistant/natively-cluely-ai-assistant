@@ -940,4 +940,15 @@ const chunkVersion = opts.chunkVersions?.get(c.sourceId) ?? active;
 
 A caller supplying no `chunkVersions` map had every chunk treated as current. `golden-live.cjs` did exactly that — and additionally stamped the literal `'legacy'` as every file's active version — so version filtering was inert for the entire mission while the module's docblock read *"Fails CLOSED."*
 
-**Fixed:** an unknown chunk version now rejects as `UNKNOWN_CHUNK_VERSION`. The fail-open survives only as an explicit `assumeCurrentWhenVersionUnknown` opt-in, set by the wired manual-chat surface alone because the legacy mode-reference store genuinely has no version column. (a) is **not** fixed — recorded as open.
+**Fixed:** an unknown chunk version now rejects as `UNKNOWN_CHUNK_VERSION`. The fail-open survives only as an explicit `assumeCurrentWhenVersionUnknown` opt-in, set by the wired manual-chat surface alone because the legacy mode-reference store genuinely has no version column.
+
+**(a) FIXED 2026-07-30.** `AdaptOptions` gained `sourceScopes` — a structured `EvidenceScope` per source — and scope is now compared before version, because a foreign meeting record is not "a stale version of this meeting" and the wrong rejection reason misdirects the reader.
+
+The comparison is **containment, not equality**, and getting that wrong nearly shipped: comparing scope *keys* as strings gives `u:alice` !== `u:alice|m:sept`, which would have rejected the user's own résumé from every meeting turn. `scopeAdmits()` therefore compares structurally — a qualifier the source declares must match; one it leaves open does not restrict it.
+
+Two consequences worth recording:
+
+- `noForeignScopeAccepted` is a **new** gate, and it is exercised: 14 of 42 turns reject an out-of-scope record.
+- `evidenceCarriesProvenance` stops being vacuous. It now asserts `scopeId` **equals the turn's scope** rather than merely being non-empty.
+
+`filterByScopeAndVersion` itself still has no callers — the adapter implements the equivalent rule inline on the wired path. That duplication is deliberate for now (the adapter is what production runs) but should collapse to one implementation; recorded so it does not become a third unadopted component.

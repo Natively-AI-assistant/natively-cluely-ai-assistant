@@ -314,11 +314,11 @@ Recorded because it is the through-line of the whole continuation.
 
 | Item | State |
 |---|---|
-| **F25a — scope filtering unwired** | Open. `filterByScopeAndVersion` has no callers; `evidenceCarriesProvenance` is vacuous until it does |
+| ~~**F25a — scope filtering unwired**~~ | **FIXED.** `sourceScopes` added with structural containment; `noForeignScopeAccepted` is a new gate exercised on 14 turns, and `evidenceCarriesProvenance` now asserts scope equality. `filterByScopeAndVersion` still has no callers — the adapter implements the rule inline; the duplication should collapse |
 | **Six answerability failures** | Diagnosed per stage, not guessed: 2 retrieval misses (A-03, G-02), 2 claim-type misclassifications (A-06, A-12), 2 leniency (D-01, F-06), plus G-03's path |
 | ~~**§26.5 on `gemini-3.1-flash-lite`**~~ | **DONE** (§9). The block was the AI Studio **project's billing**, not the credential — the *same key*, fingerprint unchanged, began working once credit was added, which is why rotating in a new key had not helped |
 | **Value-level conflict detection** | Not implemented (06 §5.1). No corpus fixture exists for it either |
 | **Phase 7 UI swap** | Architecture done; the two rendering surfaces deliberately untouched (§12.2) |
 | **Phase 9 legacy removal** | Correctly still blocked: the flag has never been on for a real user |
 
-**The honest summary:** the decision layer's safety properties are measured against a real corpus on **two** real models and they hold — forbidden-claim 0%, over-refusal 0%, disclosure 100% on both. Its *precision* is measured for the first time and is 33/42. Nothing here authorises Phase 9: the flag has never been on for a real user, and F25a is open.
+**The honest summary:** the decision layer's safety properties are measured against a real corpus on **two** real models and they hold — forbidden-claim 0%, over-refusal 0%, disclosure 100% on both. Its *precision* is measured for the first time and is 33/42. Nothing here authorises Phase 9: **the flag has never been on for a real user.** That single fact, not any measurement, is what gates legacy removal.
