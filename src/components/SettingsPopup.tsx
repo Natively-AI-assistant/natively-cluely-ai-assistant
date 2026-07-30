@@ -20,6 +20,17 @@ const SettingsPopup = () => {
         return localStorage.getItem('natively_groq_fast_text') === 'true';
     });
     const [profileMode, setProfileMode] = useState(false);
+    // Context Intelligence V3 (Phase 7): when the V3 flag is on, the Profile
+    // Mode toggle is HIDDEN — under V3 source authority decides per turn when
+    // profile evidence applies, and a global override is the compensation
+    // control §6 removes. Flag off (the default) renders it unchanged.
+    const [ciV3Enabled, setCiV3Enabled] = useState(false);
+    useEffect(() => {
+        // All decisions main-side; this only reads the flag.
+        (window.electronAPI as any)?.answerPolicyGet?.({ templateType: 'general' })
+            .then((st: any) => setCiV3Enabled(Boolean(st?.v3Enabled)))
+            .catch(() => setCiV3Enabled(false));
+    }, []);
     const [hasProfile, setHasProfile] = useState(false);
     const [isPremium, setIsPremium] = useState(false);
 
@@ -409,8 +420,9 @@ const SettingsPopup = () => {
                     </button>
                 </div>
 
-                {/* Profile Mode Toggle */}
-                {hasProfile && (
+                {/* Profile Mode Toggle — hidden under Context Intelligence V3,
+                    where source authority replaces the global override (§6). */}
+                {hasProfile && !ciV3Enabled && (
                     <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group ${!isPremium ? 'opacity-50 grayscale cursor-not-allowed' : `${itemHoverClass} ${glassRowClass} cursor-default`}`} title={!isPremium ? 'Requires Pro license to be active' : ''}>
                         <div className="flex items-center gap-2.5">
                             <User

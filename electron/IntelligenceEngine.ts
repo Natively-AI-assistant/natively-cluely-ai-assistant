@@ -2411,6 +2411,7 @@ export class IntelligenceEngine extends EventEmitter {
                         surface: 'what-to-answer',
                         question: String(wtaTurnQuestion || ''),
                         modeTemplateType: _raw,
+                        modeUniqueId: (_mi as any)?.id ?? null,
                         scope: { meetingId: meetingMarker ?? undefined },
                         requestId: trace.requestId,
                         requestSequence: generationId,
@@ -4476,6 +4477,7 @@ export class IntelligenceEngine extends EventEmitter {
                         surface: 'manual-chat',
                         question,
                         modeTemplateType: _raw,
+                        modeUniqueId: (_mi as any)?.id ?? null,
                         scope: { meetingId: (this.session as any)?.getMeetingMetadata?.()?.id ?? undefined },
                         retrieval: createModeRetrievalPort({
                             modesManager: _mm, modeInfo: _mi, files: _files,

@@ -19,6 +19,7 @@ import type {
 } from '../contracts/types';
 import { freezeTurnDecision } from '../contracts/types';
 import { resolveModePolicy, generalKnowledgeAllowed, type ModePolicy } from '../policies/mode-policy-registry';
+import { resolveAnswerPolicy, type AnswerPolicy } from '../policies/answer-policy';
 import { CLAIM_AUTHORITY } from '../policies/source-authority-policy';
 import { classifyTurn, isBareFollowUp } from '../question/turn-classifier';
 import type { AnswerTrace, RetrievalAttemptTrace } from '../observability/answer-trace';
@@ -30,6 +31,15 @@ export interface AnswerRequest {
   modeId: string;
   scope: EvidenceScope;
   sessionId: string;
+
+  /**
+   * The user's per-mode grounding choice (§6) — one of exactly two values, from
+   * the Answer policy control. Optional: absent means the mode default applies.
+   * This can TIGHTEN grounding (strict) or restore the default; it can never
+   * authorize a source — resolveAnswerPolicy maps it onto GroundingPolicy and
+   * nothing else.
+   */
+  userAnswerPolicy?: AnswerPolicy | null;
 
   /** Manual input ALWAYS wins over transcript extraction (§12.2). */
   manualQuestion?: string;
@@ -84,7 +94,21 @@ function buildClaimRequirements(
 
 /** Decide ONCE. The result is deep-frozen; nothing downstream may reinterpret it. */
 export function decide(req: AnswerRequest): Readonly<TurnDecision> {
-  const policy = resolveModePolicy(req.modeId);   // THROWS on unknown id — fails closed
+  const basePolicy = resolveModePolicy(req.modeId);   // THROWS on unknown id — fails closed
+
+  // The user's Answer policy choice is applied ONCE, here, as an effective
+  // policy — before classification, deliberately: choosing "Only answer from
+  // references" makes a reference-holding mode document-centric, so factual
+  // questions become document claims instead of general-knowledge escapes.
+  // resolveAnswerPolicy can only move between the two exposed grounding values;
+  // it cannot reach OPEN_KNOWLEDGE and it cannot touch allowedSourceTypes.
+  const resolvedGrounding = resolveAnswerPolicy({
+    modeId: req.modeId, userChoice: req.userAnswerPolicy ?? null,
+  });
+  const policy: ModePolicy = resolvedGrounding.source === 'user_choice'
+    ? { ...basePolicy, groundingPolicy: resolvedGrounding.groundingPolicy }
+    : basePolicy;
+
   const q = resolveQuestion(req);
 
   const cls = classifyTurn({

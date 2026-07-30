@@ -919,10 +919,15 @@ export function initializeIpcHandlers(appState: AppState): void {
               userId: V3_USER_ID,
             });
 
+            // Per-mode Answer policy choice (§6) — read per turn so a Settings
+            // change applies to the very next answer. Keyed by the mode's
+            // unique id; built-in singletons fall back to templateType.
+            const { getStoredAnswerPolicy } = require('./context-intelligence/policies/answer-policy-store');
             const result = await orchestrate({
               requestId: `v3-${myStreamId}`, requestSequence: myStreamId,
               surface: 'manual-chat', modeId, scope: { userId: V3_USER_ID },
               sessionId: String(senderId), manualQuestion: String(message || ''),
+              userAnswerPolicy: getStoredAnswerPolicy(modeInfo?.id ?? modeId),
             }, port);
 
             const composed = composePrompt({
@@ -10220,6 +10225,57 @@ export function initializeIpcHandlers(appState: AppState): void {
       // save-failure path. A swallowed null here would silently persist the
       // wrong contract shape — the bug this IPC was introduced to prevent.
       throw e;
+    }
+  });
+
+  // ── CONTEXT INTELLIGENCE V3 — the Answer policy control (§6, Phase 7) ─────
+  //
+  // One GET carrying every decision the renderer needs — whether V3 is on,
+  // whether the control binds to anything in this mode, the resolved value and
+  // where it came from — so the renderer renders and never decides. The two
+  // labels ship from here too: FORBIDDEN_UI_TERMS is enforced against this
+  // module's exports by test, and a renderer-side string would escape that.
+  safeHandle('context-intelligence:answer-policy-get', async (_, input: { modeId?: string; templateType?: string }) => {
+    try {
+      const { isContextIntelligenceV3Enabled } = require('./context-intelligence/contracts/flag');
+      const { resolveAnswerPolicy, shouldOfferAnswerPolicyControl, ANSWER_POLICY_LABELS } = require('./context-intelligence/policies/answer-policy');
+      const { getStoredAnswerPolicy } = require('./context-intelligence/policies/answer-policy-store');
+      const templateType = String(input?.templateType ?? 'general');
+      const key = String(input?.modeId ?? templateType);
+      const userChoice = getStoredAnswerPolicy(key);
+      const resolved = resolveAnswerPolicy({ modeId: templateType, userChoice });
+      return {
+        v3Enabled: isContextIntelligenceV3Enabled(),
+        offered: shouldOfferAnswerPolicyControl(templateType),
+        answerPolicy: resolved.answerPolicy,
+        source: resolved.source,
+        modeIsStrictByDefault: resolved.modeIsStrictByDefault,
+        labels: ANSWER_POLICY_LABELS,
+      };
+    } catch (e: any) {
+      console.error('[IPC] context-intelligence:answer-policy-get error:', e);
+      // Fail toward "legacy UI": a renderer that cannot learn the policy state
+      // must keep showing the old control, not hide both.
+      return { v3Enabled: false, offered: false, answerPolicy: null, source: 'error', labels: {} };
+    }
+  });
+
+  safeHandle('context-intelligence:answer-policy-set', async (_, input: { modeId?: string; templateType?: string; policy?: string | null }) => {
+    try {
+      const { setStoredAnswerPolicy } = require('./context-intelligence/policies/answer-policy-store');
+      const key = String(input?.modeId ?? input?.templateType ?? '');
+      const p = input?.policy ?? null;
+      // Only the two legal values or an explicit clear; anything else is
+      // rejected rather than coerced — the store validates on read as well,
+      // but a bad write should fail loudly at the boundary it crossed.
+      if (p !== null && p !== 'use_references_when_relevant' && p !== 'only_answer_from_references') {
+        return { success: false, error: 'invalid_policy' };
+      }
+      setStoredAnswerPolicy(key, p as any);
+      return { success: true };
+    } catch (e: any) {
+      console.error('[IPC] context-intelligence:answer-policy-set error:', e);
+      return { success: false, error: e.message };
     }
   });
 

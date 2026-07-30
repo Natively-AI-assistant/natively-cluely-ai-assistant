@@ -946,6 +946,11 @@ interface ElectronAPI {
     switches: string[];
     hasLiveTranscriptCapable?: boolean;
   }) => Promise<any>;
+  /** Context Intelligence V3 — the two-option Answer policy control (§6).
+   *  All decisions (v3Enabled, offered, labels) are made main-side; the
+   *  renderer only renders what this returns. */
+  answerPolicyGet: (input: { modeId?: string; templateType?: string }) => Promise<any>;
+  answerPolicySet: (input: { modeId?: string; templateType?: string; policy?: string | null }) => Promise<{ success: boolean; error?: string }>;
   modesDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
   modesSetActive: (id: string | null) => Promise<{ success: boolean; error?: string }>;
   modesGetReferenceFiles: (
@@ -2502,6 +2507,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     switches: string[];
     hasLiveTranscriptCapable?: boolean;
   }) => ipcRenderer.invoke('modes:build-user-source-contract', input),
+  answerPolicyGet: (input: { modeId?: string; templateType?: string }) =>
+    ipcRenderer.invoke('context-intelligence:answer-policy-get', input),
+  answerPolicySet: (input: { modeId?: string; templateType?: string; policy?: string | null }) =>
+    ipcRenderer.invoke('context-intelligence:answer-policy-set', input),
   modesDelete: (id: string) => ipcRenderer.invoke('modes:delete', id),
   modesSetActive: (id: string | null) => ipcRenderer.invoke('modes:set-active', id),
   modesGetReferenceFiles: (modeId: string) =>

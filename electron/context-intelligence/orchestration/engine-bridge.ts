@@ -25,6 +25,9 @@ export interface BridgeInput {
   question: string;
   /** Raw templateType from ModesManager; unknown ids fall back rather than throw. */
   modeTemplateType?: string | null;
+  /** The mode's UNIQUE id (mode_<uuid>) when one exists. Keys the per-mode
+   *  Answer policy choice: two custom modes share a templateType, never an id. */
+  modeUniqueId?: string | null;
   scope?: Partial<EvidenceScope>;
   requestId?: string;
   requestSequence?: number;
@@ -62,6 +65,14 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
 
     const raw = input.modeTemplateType ?? 'general';
     const modeId: ModeId = isModeId(raw) ? raw : 'general';
+
+    // The user's per-mode grounding choice (§6). Read per turn — not cached on
+    // the bridge — so a change in Settings applies to the very next answer.
+    let userAnswerPolicy: import('../policies/answer-policy').AnswerPolicy | null = null;
+    try {
+      const { getStoredAnswerPolicy } = require('../policies/answer-policy-store');
+      userAnswerPolicy = getStoredAnswerPolicy(input.modeUniqueId ?? modeId);
+    } catch { /* store unavailable — mode default applies */ }
     const policy = resolveModePolicy(modeId);
 
     const req: AnswerRequest = {
@@ -72,6 +83,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       scope: { userId: 'local', ...input.scope },
       sessionId: input.scope?.sessionId ?? 'engine',
       manualQuestion: question,
+      userAnswerPolicy,
       isFollowUp: input.isFollowUp,
       hasScreenContext: input.hasScreenContext,
     };
