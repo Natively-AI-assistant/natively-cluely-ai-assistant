@@ -54,6 +54,16 @@ export class IntelligenceManager extends EventEmitter {
     }
 
     /**
+     * Give the engine lazy access to the meeting-RAG retriever.
+     *
+     * Called from main.ts AFTER RAGManager exists — this manager is constructed
+     * first, so a provider is passed rather than the instance.
+     */
+    setRagRetrieverProvider(provider: (() => unknown) | null): void {
+        this.engine.setRagRetrieverProvider(provider);
+    }
+
+    /**
      * Forward all events from IntelligenceEngine through this facade
      * so existing listeners on IntelligenceManager continue to work.
      */

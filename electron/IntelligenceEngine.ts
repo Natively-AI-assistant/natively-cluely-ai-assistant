@@ -196,6 +196,16 @@ export class IntelligenceEngine extends EventEmitter {
     private readonly wtaDiversityGuard = new AnswerDiversityGuard(20);
 
     // Timestamps for tracking
+    /**
+     * Lazy access to the meeting-RAG retriever, injected after RAGManager exists.
+     *
+     * A PROVIDER rather than the instance: IntelligenceManager is constructed
+     * before RAGManager in main.ts, so holding the object would capture null
+     * forever and a later re-init would never be picked up. The engine keeps no
+     * RAG import — it only calls what it is handed.
+     */
+    private ragRetrieverProvider: (() => unknown) | null = null;
+
     private lastTranscriptTime: number = 0;
     private lastTriggerTime: number = 0;
     private readonly triggerCooldown: number = 3000; // 3 seconds
@@ -2410,7 +2420,7 @@ export class IntelligenceEngine extends EventEmitter {
                         question: String(wtaTurnQuestion || ''),
                         modeTemplateType: _ctx.raw,
                         modeUniqueId: _ctx.modeUniqueId,
-                        scope: { meetingId: meetingMarker ?? undefined },
+                        scope: { meetingId: _ctx.meetingId ?? meetingMarker ?? undefined },
                         requestId: trace.requestId,
                         requestSequence: generationId,
                         // The live meeting's own recent words, into the composer's
@@ -4029,6 +4039,11 @@ export class IntelligenceEngine extends EventEmitter {
      * MODE 3: Follow-Up (Refinement)
      * Modify the last assistant message
      */
+    /** Injected by IntelligenceManager once the RAG stack is up. */
+    setRagRetrieverProvider(provider: (() => unknown) | null): void {
+        this.ragRetrieverProvider = provider;
+    }
+
     // ── CONTEXT INTELLIGENCE V3 — shared adoption plumbing (Phase 6) ─────────
     //
     // One place that knows how to stand up the fail-closed retrieval port for
@@ -4036,7 +4051,8 @@ export class IntelligenceEngine extends EventEmitter {
     // this block; a third copy for the proactive surfaces is where drift starts,
     // so all of them now call this.
     private v3ModeRetrievalContext(): {
-        raw: string; modeUniqueId: string | null; port: unknown; conversationWindow: (sec: number) => string;
+        raw: string; modeUniqueId: string | null; meetingId: string | null;
+        port: unknown; conversationWindow: (sec: number) => string;
     } | null {
         try {
             const { createModeRetrievalPort } = require('./context-intelligence/retrieval/mode-retrieval-port');
@@ -4047,13 +4063,38 @@ export class IntelligenceEngine extends EventEmitter {
             const _files = _mi?.id ? (_mm.getReferenceFiles?.(_mi.id) ?? []) : [];
             const raw = (_mi as any)?.templateType ?? 'general';
             const policy = resolveModePolicy(isModeId(raw) ? raw : 'general');
+            const modePort = createModeRetrievalPort({
+                modesManager: _mm, modeInfo: _mi, files: _files,
+                tokenBudget: policy.contextBudget.evidenceTokens, userId: 'local',
+            });
+
+            // Meeting evidence, when this turn is INSIDE a meeting and the mode
+            // authorizes transcripts. Without it a live meeting question found
+            // only reference files and disclosed a gap for something that had
+            // just been said aloud. Cross-meeting isolation is the scope
+            // filter's job, not this call site's (06 §4).
+            const meetingId = (this.session as any)?.getMeetingMetadata?.()?.id ?? null;
+            let port: unknown = modePort;
+            try {
+                const retriever = this.ragRetrieverProvider?.();
+                if (retriever && meetingId && policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT')) {
+                    const { createMeetingRetrievalPort, combineRetrievalPorts } =
+                        require('./context-intelligence/retrieval/meeting-retrieval-port');
+                    port = combineRetrievalPorts([
+                        modePort,
+                        createMeetingRetrievalPort({
+                            retriever, currentMeetingId: meetingId, userId: 'local',
+                            tokenBudget: policy.contextBudget.evidenceTokens,
+                        }),
+                    ]);
+                }
+            } catch { /* meeting evidence is additive — mode port alone still answers */ }
+
             return {
                 raw,
                 modeUniqueId: (_mi as any)?.id ?? null,
-                port: createModeRetrievalPort({
-                    modesManager: _mm, modeInfo: _mi, files: _files,
-                    tokenBudget: policy.contextBudget.evidenceTokens, userId: 'local',
-                }),
+                meetingId,
+                port,
                 // Bounded live-transcript window for the composer's labelled
                 // "Conversation so far" section. This is NOT the §32.16 raw-blob
                 // anti-pattern: it enters ONE named, untrusted, size-bounded
@@ -4099,7 +4140,7 @@ export class IntelligenceEngine extends EventEmitter {
                 question: resolved.resolvedQuestion,
                 modeTemplateType: ctx.raw,
                 modeUniqueId: ctx.modeUniqueId,
-                scope: { meetingId: (this.session as any)?.getMeetingMetadata?.()?.id ?? undefined },
+                scope: { meetingId: ctx.meetingId ?? undefined },
                 conversationSummary: ctx.conversationWindow(60),
                 retrieval: ctx.port as any,
             });
@@ -4549,7 +4590,7 @@ export class IntelligenceEngine extends EventEmitter {
                         question,
                         modeTemplateType: _ctx.raw,
                         modeUniqueId: _ctx.modeUniqueId,
-                        scope: { meetingId: (this.session as any)?.getMeetingMetadata?.()?.id ?? undefined },
+                        scope: { meetingId: _ctx.meetingId ?? undefined },
                         retrieval: _ctx.port as any,
                     });
                 } catch { return null; }

@@ -2124,6 +2124,16 @@ export class AppState {
         ModesManager.getInstance().setSharedEmbeddingPipeline(modeEmbeddingPipeline);
         this.scheduleModeReferenceIndexRetry();
 
+        // Context Intelligence V3: hand the engine LAZY access to the meeting
+        // retriever. IntelligenceManager was constructed before this block, so a
+        // provider closure is passed rather than the instance — it also means a
+        // later RAGManager re-init is picked up without re-wiring.
+        try {
+          this.intelligenceManager?.setRagRetrieverProvider?.(
+            () => this.ragManager?.getRetriever() ?? null,
+          );
+        } catch (e) { console.warn('[AppState] V3 meeting retriever wiring skipped:', e); }
+
         console.log('[AppState] RAGManager initialized');
       }
     } catch (error) {
