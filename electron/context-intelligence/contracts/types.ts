@@ -42,7 +42,10 @@ export type QuestionType =
   | 'MEETING_FACT' | 'SCREEN_SPECIFIC'
   | 'GENERAL_TECHNICAL' | 'GENERAL_INDUSTRY'
   | 'CODING_TASK' | 'SYSTEM_DESIGN'
-  | 'MIXED' | 'FOLLOW_UP' | 'AMBIGUOUS';
+  | 'MIXED' | 'FOLLOW_UP' | 'AMBIGUOUS'
+  /** A request to reveal or override the assistant's own instructions. Refused
+   *  at the policy layer, before retrieval — see META_REQUEST_RE. */
+  | 'META_REQUEST';
 
 export type GroundingPolicy =
   | 'STRICT_SOURCE_ONLY' | 'SOURCE_FIRST' | 'OPEN_KNOWLEDGE' | 'ASK_BEFORE_FALLBACK';
