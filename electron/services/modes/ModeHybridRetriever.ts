@@ -1757,22 +1757,32 @@ export class ModeHybridRetriever {
      * downstream by the SECTION_CAP two-pass in enforceTokenBudget so siblings
      * survive without any single section crowding out the others.
      *
-     * The non-doc-grounded default path is unchanged (keyed by sourceId in
-     * deduplicateChunks — one best chunk per file).
+     * APPLIED TO EVERY CALLER since 2026-07-31. The default path used to key by
+     * `sourceId` — one best chunk per file — which is degenerate for a mode whose
+     * reference file is large: a 66-page PDF returned exactly ONE chunk no matter
+     * what topK asked for, and the fact being asked about was usually not in it.
+     * Measured on a real thesis: 1 chunk with per-file keying, 12 with per-chunk,
+     * and the answer moved from unreachable to rank 2.
+     *
+     * This is the SAME failure this docblock already describes ("throws the list
+     * away BEFORE top-K selection ... the answer is unrecoverable") — it was
+     * fixed for doc-grounded callers and left live for everyone else. The
+     * section-diversity protection it depends on (the SECTION_CAP two-pass in
+     * enforceTokenBudget) is now unconditional too; the two changes are a pair
+     * and must not be separated.
      */
     private dedupeGroupKey(candidate: ChunkCandidate): string {
         return `${candidate.sourceId}#chunk${candidate.chunkIndex}`;
     }
 
     private deduplicateChunks(candidates: ChunkCandidate[], byRerank: boolean = false, forceDocumentGrounding: boolean = false): ChunkCandidate[] {
-        // Document-grounded mode: dedup per-section (or per-chunk when no
-        // section prefix) so multi-section answers survive. Non-doc-grounded
-        // callers keep the original per-file behavior (unchanged default
-        // mode UX — one best chunk per reference file).
+        // Suppress only EXACT duplicates (same file, same chunk). Within-file
+        // siblings survive to top-K selection, where SECTION_CAP and the token
+        // budget decide what actually fits.
         const bestByKey = new Map<string, ChunkCandidate>();
 
         for (const candidate of candidates) {
-            const key = forceDocumentGrounding ? this.dedupeGroupKey(candidate) : candidate.sourceId;
+            const key = this.dedupeGroupKey(candidate);
             const existing = bestByKey.get(key);
 
             if (!existing) {
@@ -1838,14 +1848,15 @@ export class ModeHybridRetriever {
         // pass 2 (below) backfills any remaining slots cap-free by pure score, so
         // a section that legitimately holds the whole answer can still fill topK.
         // Mirrors the lexical ModeContextRetriever SECTION_CAP two-pass so the two
-        // retrievers select consistently. Only for doc-grounded; default mode is
-        // untouched (it already dedups to one chunk per file).
+        // retrievers select consistently. UNCONDITIONAL since 2026-07-31: every
+        // caller now keeps within-file siblings through dedupe, so every caller
+        // needs the protection that stops one section monopolising top-K.
         const sectionOf = (c: ChunkCandidate): string => {
             const m = c.text.match(/^\[Section\s+([\d.]+)/);
             return m ? m[1] : `__chunk_${c.sourceId}_${c.chunkIndex}`;
         };
         const SECTION_CAP = Number(process.env.NATIVELY_RETRIEVAL_SECTION_CAP) || 4;
-        if (forceDocumentGrounding) {
+        {
             const perSection = new Map<string, number>();
             for (const c of sorted) {
                 if (selected.length >= topK) break;
