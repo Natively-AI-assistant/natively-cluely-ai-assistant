@@ -343,3 +343,39 @@ Both need the system to recognise that *"the postmortem"* and *"the payments API
 None of the four is a safety failure. Across both models in `10_BENCHMARK_RESULTS.md` §8–§9 the forbidden-claim rate is 0%, over-refusal is 0%, and unsupported-claim disclosure is 100%. Every gate that governs *what the system may assert* is at 42/42. The four open items are **precision** failures — the system declines to use evidence it has (A-03, A-06) or claims support it does not have (F-06, G-03).
 
 G-03 is the one to fix first, because "FULL with zero evidence" is the shape that licenses an ungrounded answer.
+
+---
+
+## 12. Regression check on the shared tokenizer (2026-07-30)
+
+The numeral-aware tokenizer replaced code in `ModeContextRetriever` and
+`ModeHybridRetriever` — legacy files on the **default** answer path, used with the
+V3 flag off. A change there is not covered by the context-intelligence suite, so it
+was verified against a baseline rather than assumed safe.
+
+**Method.** All 34 test files referencing either retriever were run twice: once in
+an isolated `git worktree` at the parent commit, once at `HEAD`. Comparing failure
+*sets*, not counts, so a new failure masked by a fixed one cannot hide.
+
+| | tests | pass | fail |
+|---|---|---|---|
+| baseline (before) | 363 | 354 | 9 |
+| HEAD (after) | 366 | 358 | 8 |
+
+**Regressions attributable to the change: NONE.** Twelve failures are present in
+both and are pre-existing — for example `ModeContextRetriever includes reference
+grounding guard with retrieved snippets`, which fails on an `EVIDENCE_USE_RULE`
+prompt-text expectation, and several Whisper/ONNX-worker and embedding-batching
+tests that a tokenizer cannot reach.
+
+**One apparent improvement was NOT real.** The baseline showed
+`QueryEmbedBudgetAndLexicalShortCircuit2026_07_05` failing where HEAD does not, but
+the baseline failure is a `readFileSync` error on
+`electron/knowledge/KnowledgeOrchestrator.ts` — an artefact of the isolated
+worktree, not a defect the change fixed. Recorded because a raw count of 9 → 8
+would otherwise read as an improvement that did not happen.
+
+Note also that `zsh` does not word-split an unquoted `$var` (only command
+substitution), so a first attempt at this comparison silently passed all five paths
+as one filename and reported "no failures" for both sides. Both runs looked clean
+and meant nothing.
