@@ -1,7 +1,7 @@
 # Phase 9 — Legacy Removal Matrix
 
-**Status:** BLOCKED — analysis complete, **execution deliberately not performed**.
-**Date:** 2026-07-29
+**Status:** PARTIALLY EXECUTED (2026-07-30) — see §5. The blocking chain in §4 is cleared; one removal performed, and the rest **re-verified as NOT dead**.
+**Date:** 2026-07-29, revised 2026-07-30
 
 ---
 
@@ -90,3 +90,44 @@ removal §2.1 → §2.2, each with its own regression test
 ```
 
 **Nothing below the first arrow can proceed today.**
+
+
+---
+
+## 5. Execution, 2026-07-30
+
+### 5.1 The §4 unblock chain is cleared
+
+| Link | State |
+|---|---|
+| F21 disposal fix | **DONE** — suite terminates (67 s) |
+| suite terminates → gates measurable | **DONE** |
+| AnswerTrace on legacy layers | **DONE** — both engines feed one counter set |
+| config 11 measured vs the same corpus | **DONE** — golden-live 39/42, provider eval on two models |
+| gates pass | **DONE** — six gates, four previously vacuous, now exercised |
+
+### 5.2 Removed
+
+| Target | Evidence at removal time | Guard |
+|---|---|---|
+| `electron/llm/promptComposer.ts` | ZERO importers. Only its own file and its own test referenced `composePrompt`, while the V3 composer drives five surfaces | `SingleComposerInvariant.test.mjs` — asserts the file stays gone, exactly one implementation exists under `electron/`, **and that the survivor is still reached** (deleting the wired one and keeping the orphan would satisfy a naive "only one" check) |
+| its test file | Existed solely to test the deleted module | — |
+| `promptComposerV2` flag | Zero production readers; its `isInternalDevTestContext` default was an instance of F5 | Same test asserts the flag stays gone |
+
+### 5.3 §2.1 candidates RE-VERIFIED AS NOT DEAD
+
+The matrix's own §3 says verify at removal time, not from the snapshot. That paid off — most §2.1 entries have live references now, and deleting on the 2026-07-29 evidence would have broken working code:
+
+| Target | 2026-07-29 verdict | Evidence 2026-07-30 |
+|---|---|---|
+| `runManualAnswer` / `submit-manual-question` | "zero renderer callers" | **Wired to V3** in Phase 6 and called from `IntelligenceManager`; the IPC is declared in `electron.d.ts` |
+| `RrfFusion` | removable if SearchOrchestrator out of scope | Referenced by `SearchOrchestrator` — in scope |
+| `PromptAssemblerV2` | delete with the composer decision | Runs **shadow-mode** inside `WhatToAnswerLLM` |
+| `ProfileGraphExtractor` | flags false everywhere | Used by `ProfilePackBuilder` |
+| `OkfCardEditor` | flags false everywhere | Live in `KnowledgeManager`, `OkfRetriever`, `ipcHandlers` |
+
+Every check used `/usr/bin/grep -ra`, because plain `grep` in this repo misdetects four files as binary and silently produces false negatives — the documented cause of earlier false DEAD verdicts.
+
+### 5.4 §2.2 remains gated, and one item is now decided differently
+
+`computeFtsScore` was slated for deletion once BM25 replaced it. It is **no longer a removal candidate**: Phase 9's tokenizer work made it the consumer of the shared numeral-aware tokenizer, and it is live on the default answer path with the V3 flag off. The five duplicate source-decision sites, the `_geminiChatStreamHandler` extraction, and the eight answerability implementations stay gated on the same conditions as before — each is a reorder or an extraction, not a cut.

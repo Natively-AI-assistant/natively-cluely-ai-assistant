@@ -1,7 +1,7 @@
 # Phase 10 — Rollout and Rollback
 
-**Status:** PLAN ONLY — nothing enabled, no flag flipped, no telemetry wired.
-**Date:** 2026-07-29
+**Status:** TELEMETRY IMPLEMENTED · **Stage 0 EXECUTED and passing** (2026-07-30) — see §7. Stages 1+ require real users and remain unstarted.
+**Date:** 2026-07-29, revised 2026-07-30
 
 ---
 
@@ -90,3 +90,39 @@ Both are inherited by the reused ingestion layer and are **not** gated by the fl
 | **F12** | Re-uploading a resume or JD leaves the salary estimate, negotiation state, and company dossiers stale — a new JD carries the **previous role's** negotiation phase forward. |
 
 Neither should wait for this migration.
+
+
+---
+
+## 7. Execution, 2026-07-30
+
+### 7.1 §4's signals now exist
+
+`observability/rollout-metrics.ts` implements every signal in §4, derived entirely from the `AnswerTrace` that already existed — no new instrumentation on the answer path, because a monitoring layer that touches that path can cause the regression it watches for. Both engines record into **one** counter set, which is what makes §3's "within baseline" comparable. §5's abort conditions are **evaluated**, not described.
+
+Two vacuity guards, since gates that cannot fail were this mission's recurring defect: rates are `null` rather than `0` with no data, and `evaluateAbortConditions` returns `insufficientData` below a turn threshold instead of "all clear".
+
+### 7.2 Stage 0 — executed, flag ON, gate passes
+
+`benchmarks/ci-v3-retrieval/stage0-rollout.cjs`, 42 corpus questions through the production retrieval port:
+
+| | |
+|---|---|
+| turns | 42 (42 v3 / 0 legacy) |
+| path split | GROUNDED 39 · FAST 3 |
+| contamination | **0.0%** |
+| §5 abort conditions | **NONE triggered** |
+| evidence text in telemetry | **none** |
+
+**Two signals are structurally 0% and must not be read as proof.** The production port's registry is degenerate by design — one synthetic version, one user scope — so stale-version and out-of-scope rejections *cannot* occur on this configuration. `golden-live` exercises them on a real versioned/scoped registry (7 and 14 turns). `groundedWithNoEvidence` is 50% because the port covers reference files only, so RESUME/JD/MEETING questions correctly find nothing rather than fabricating.
+
+### 7.3 Running Stage 0 found two defects in the monitoring itself
+
+Recorded because both would have produced a green rollout gate over a broken instrument:
+
+1. **Counters were per-bundle.** Self-contained esbuild bundles duplicate the module, so the orchestrator incremented one instance and the IPC read another — production would have reported permanent zeros. Now `globalThis`-backed. Caught only because null-with-no-data meant the run said `insufficientData` over 42 executed turns rather than "0%, green".
+2. **Contamination read 45.2% on a clean corpus.** The check compared a type string against `trace.authorizedSources` (objects), and that field is derived *from* the accepted evidence, so the comparison was tautological and could not detect a leak in principle. The trace now carries `plannedSourceTypes`, and the rate's denominator is *checkable* turns so an uninstrumented path reports `null`. Exposed by the contradiction with `golden-live`'s 42/42 — neither number was reported until one was proven wrong.
+
+### 7.4 What Stage 1+ needs from a human
+
+Stages 1–5 are population rollouts: they need real users, and the flag default stays `false` in every environment until someone decides otherwise. The instrument is ready — `context-intelligence:rollout-metrics` returns the live rates and the evaluated abort conditions, so a stage can be gated on measurement rather than on a description of measurement.
