@@ -911,7 +911,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             // security-relevant construction is how the tokenizer copies
             // drifted, and this one decides what evidence a turn may see.
             const { createModeRetrievalPort } = require('./context-intelligence/retrieval/mode-retrieval-port');
-            const port = createModeRetrievalPort({
+            const { createMeetingRetrievalPort, combineRetrievalPorts } = require('./context-intelligence/retrieval/meeting-retrieval-port');
+            const modePort = createModeRetrievalPort({
               modesManager: mm,
               modeInfo,
               files,
@@ -919,13 +920,44 @@ export function initializeIpcHandlers(appState: AppState): void {
               userId: V3_USER_ID,
             });
 
+            // Meeting evidence, when this turn happens inside a meeting and the
+            // mode authorizes transcripts. Without it a MEETING_STATEMENT
+            // question composed an honest but useless no-evidence disclosure
+            // even when the answer had been said out loud a minute earlier.
+            //
+            // Cross-meeting isolation is NOT re-implemented here: the port
+            // declares each chunk's scope as its own meeting, so the adapter's
+            // existing scope containment rejects a foreign meeting OUT_OF_SCOPE
+            // — one filter, already measured, rather than a second copy of the
+            // rule (06 §4).
+            const v3MeetingId = (appState.getIntelligenceManager?.() as any)
+              ?.getSessionTracker?.()?.getMeetingMetadata?.()?.id ?? null;
+            const ragForV3 = appState.getRAGManager?.();
+            const wantsMeeting = policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT')
+              && Boolean(v3MeetingId) && Boolean(ragForV3?.getRetriever);
+            const port = wantsMeeting
+              ? combineRetrievalPorts([
+                modePort,
+                createMeetingRetrievalPort({
+                  retriever: ragForV3!.getRetriever(),
+                  currentMeetingId: v3MeetingId,
+                  userId: V3_USER_ID,
+                  tokenBudget: policy.contextBudget.evidenceTokens,
+                }),
+              ])
+              : modePort;
+
             // Per-mode Answer policy choice (§6) — read per turn so a Settings
             // change applies to the very next answer. Keyed by the mode's
             // unique id; built-in singletons fall back to templateType.
             const { getStoredAnswerPolicy } = require('./context-intelligence/policies/answer-policy-store');
             const result = await orchestrate({
               requestId: `v3-${myStreamId}`, requestSequence: myStreamId,
-              surface: 'manual-chat', modeId, scope: { userId: V3_USER_ID },
+              surface: 'manual-chat', modeId,
+              // The meeting must be on the TURN scope too: containment admits a
+              // user-level source into a meeting turn, but a meeting-scoped
+              // chunk is only visible from inside that meeting.
+              scope: { userId: V3_USER_ID, ...(v3MeetingId ? { meetingId: v3MeetingId } : {}) },
               sessionId: String(senderId), manualQuestion: String(message || ''),
               userAnswerPolicy: getStoredAnswerPolicy(modeInfo?.id ?? modeId),
             }, port);

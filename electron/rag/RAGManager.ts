@@ -13,10 +13,60 @@ import { LiveRAGIndexer } from './LiveRAGIndexer';
 import { buildRAGPrompt, NO_CONTEXT_FALLBACK, NO_GLOBAL_CONTEXT_FALLBACK } from './prompts';
 import type { ProviderDataScopePolicy } from '../llm/ProviderRouter';
 
+/**
+ * A bare `for await` over an LLM stream blocks forever if the provider hangs
+ * mid-stream (no token, no error, no close) — this is the exact mechanism
+ * behind the previously-fixed 134s manual-chat hang (see electron/llm/
+ * liveDeadlines.ts). That fix (raceStreamWithDeadline) was wired into manual
+ * chat and WhatToAnswer but never into RAGManager's queryMeeting/queryGlobal,
+ * so the meeting-search and global-search chat surfaces were still exposed to
+ * an unbounded hang. This mirrors the same Promise.race-per-next() mechanism,
+ * reshaped to fit an `async *` generator (yield per token) instead of the
+ * callback-based onToken() the shared helper uses.
+ */
+const RAG_STREAM_STALL_MS = 15_000;
+
+async function* raceGeneratorWithDeadline(
+    stream: AsyncGenerator<string, void, unknown>,
+    stallMs: number,
+): AsyncGenerator<string, void, unknown> {
+    const DEADLINE = Symbol('rag-stream-deadline');
+    try {
+        while (true) {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const deadline = new Promise<typeof DEADLINE>((resolve) => {
+                timer = setTimeout(() => resolve(DEADLINE), stallMs);
+            });
+            const nextP = stream.next();
+            // Defuse: if the deadline wins, nextP is still pending and unobserved —
+            // when the hung provider's request later settles it must not surface as
+            // an unhandledRejection (fatal in Electron main).
+            nextP.catch(() => { /* loser of the race — defused */ });
+            const res = await Promise.race([nextP, deadline]);
+            if (timer) clearTimeout(timer);
+            if (res === DEADLINE) {
+                console.warn(`[RAGManager] Stream stalled for ${stallMs}ms — aborting.`);
+                try { const p = stream.return?.(undefined); if (p && typeof (p as any).then === 'function') (p as Promise<unknown>).catch(() => {}); } catch { /* already closed */ }
+                return;
+            }
+            if (res.done) return;
+            yield res.value;
+        }
+    } catch (e) {
+        try { const p = stream.return?.(undefined); if (p && typeof (p as any).then === 'function') (p as Promise<unknown>).catch(() => {}); } catch { /* already closed */ }
+        throw e;
+    }
+}
+
 export interface RAGManagerConfig {
     db: Database.Database;
-    dbPath: string;       // Passed to VectorStore so worker can open its own read-only connection
-    extPath: string;      // Resolved sqlite-vec extension path (no platform suffix)
+    // dbPath/extPath are unused by VectorStore now (it runs on `db` directly —
+    // see VectorStore.ts's header comment for why the worker-thread design
+    // that needed these was removed) but kept required here so every existing
+    // call site doesn't need to change, and so a future re-introduction of an
+    // out-of-process search path doesn't have to re-thread them.
+    dbPath: string;
+    extPath: string;
     openaiKey?: string;
     geminiKey?: string;
     geminiKeys?: string[];   // optional pool for embedding key-rotation + 429 cooldown
@@ -72,6 +122,18 @@ export class RAGManager {
      */
     setLLMHelper(llmHelper: LLMHelper): void {
         this.llmHelper = llmHelper;
+    }
+
+    /**
+     * The retriever, for callers that need typed chunks rather than a formatted
+     * blob — specifically the Context Intelligence V3 meeting retrieval port,
+     * which builds its own evidence with per-meeting scope.
+     *
+     * Read-only accessor: retrieval itself stays owned by RAGRetriever, so this
+     * does not become a second query path with its own ranking rules.
+     */
+    getRetriever(): RAGRetriever {
+        return this.retriever;
     }
 
     getEmbeddingPipeline(): EmbeddingPipeline {
@@ -200,7 +262,7 @@ export class RAGManager {
         // Stream response
         const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
 
-        for await (const chunk of stream) {
+        for await (const chunk of raceGeneratorWithDeadline(stream, RAG_STREAM_STALL_MS)) {
             if (abortSignal?.aborted) break;
             yield chunk;
         }
@@ -231,7 +293,7 @@ export class RAGManager {
         // Stream response
         const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
 
-        for await (const chunk of stream) {
+        for await (const chunk of raceGeneratorWithDeadline(stream, RAG_STREAM_STALL_MS)) {
             if (abortSignal?.aborted) break;
             yield chunk;
         }
