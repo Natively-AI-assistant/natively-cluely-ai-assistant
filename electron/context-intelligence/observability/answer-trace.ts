@@ -109,6 +109,18 @@ export interface AnswerTrace {
   authorizedSources: SourceTrace[];
   prohibitedSources: SourceTrace[];
 
+  /**
+   * The source types the turn PLANNED to read, before any retrieval.
+   *
+   * Contamination cannot be measured against `authorizedSources`: that field is
+   * derived from the evidence that was accepted, so comparing accepted evidence
+   * to it is tautological and scored a clean corpus at 45.2% contaminated. The
+   * plan is the only checkable denominator, because it is fixed before anything
+   * is retrieved. Optional so a trace built by an older caller still typechecks
+   * — rollout-metrics treats a missing value as "not checkable", never as zero.
+   */
+  plannedSourceTypes?: SourceType[];
+
   retrievalPath: RetrievalPath;
   retrievalAttempts: RetrievalAttemptTrace[];
 
