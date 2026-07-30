@@ -227,16 +227,20 @@ Until then, §1 and §3 stand as **measured on a contaminated corpus with a mode
 |---|---|---|---|
 | **Forbidden-claim rate** | **0.0%** | 0% | **PASS** |
 | **Over-refusal on general questions** | **0.0%** | 0% | **PASS** |
-| **Unsupported-claim disclosure** (category C) | **100%** (4/4) | high | **PASS** |
-| Judged factual grounding | **80–83%** | — | two clean runs: 83.3%, 80.0% |
+| **Unsupported-claim disclosure** (category C) | **100%** (4/4) | high | **PASS** — but see the C-03 footnote |
+| Judged factual grounding | **80–83%** | — | 83.3% (no mangled rows) · 80.0% (one mangled row, C-03) |
 | Exact-string grounding | 50–53% | — | lower bound only, see §2 |
 | Generation latency | p50 4.7 s · p95 19.6 s | — | M3 is far slower than flash-lite |
+
+**C-03 footnote.** In the committed run C-03 survived 5 retries still mangled, losing its opening words. The surviving text is nonetheless a genuine §20 disclosure — *"material doesn't say why you chose to build PriceX, so I can't give you a sourced reason… but frame it as your own reasoning, not as something the source documents"* — so the 4/4 verdict is not an artifact of the cut. It is flagged rather than quietly counted, and the 83.3% run had no mangled rows at all.
 
 ### 8.1 Why the model changed, and what that costs the comparison
 
 `gemini-3.1-flash-lite` is **unreachable**: both keys report depleted prepayment credits, and fingerprinting confirmed the backend pool holds the *same two keys*, so routing through `natively-api` gains nothing.
 
 MiniMax-M3 was chosen because this repository already designates it the *"Gemini is rate-limited / out of credits / unusable"* safety net in the standard AI chain — not because it was convenient. It is nonetheless **a different model**, so §8 is not an A/B against §1. Provider and model are recorded in every results file.
+
+**These numbers describe M3's well-formed responses, not M3's responses.** Malformed think-closures were re-asked up to 5 times, and that fired **26–32 times across 42 questions** — a resample rate around 60–75%. The mitigation is sound (M3 is non-deterministic, and the alternative is averaging over mangled text) but it *is* selection, and the reported grounding and style rates should be read with that in mind rather than as unconditional model behaviour.
 
 ### 8.2 §20 read-aloud quality — measured, and the earlier figures were void
 

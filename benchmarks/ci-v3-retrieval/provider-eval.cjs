@@ -169,6 +169,8 @@ function closedMidSentence(rawText) {
 
 const KEEP_RAW = process.env.CI_V3_EVAL_KEEP_RAW === '1';
 const rawByCall = [];
+/** Pre-strip text of the most recent call, always kept, for mangling detection. */
+let lastRaw = '';
 
 /** Extra attempts allowed when M3 returns a mid-clause think close. */
 const MALFORMED_RETRIES = Number(process.env.CI_V3_EVAL_MALFORMED_RETRIES || 3);
@@ -257,6 +259,11 @@ async function generate(keys, system, user, attempt = 0) {
     }
     const rawText = String(j?.choices?.[0]?.message?.content ?? '');
     const stripped = stripLeadingThink(rawText).trim();
+    // Recorded UNCONDITIONALLY: `truncatedByStrip` is computed from this, and
+    // gating it on the audit flag would silently fall back to the leading-capital
+    // heuristic — the one that reported 0 mangled while two of the four
+    // fabrication probes were cut. Only the row-level `raw` copy is flag-gated.
+    lastRaw = rawText;
     if (KEEP_RAW) rawByCall.push({ rawLen: rawText.length, raw: rawText, stripped });
 
     // M3 sometimes closes its think block INSIDE a clause, so a spec-correct
@@ -488,7 +495,7 @@ function spokenQuality(answer, answerability) {
       evidence: result?.evidence.length ?? 0,
       answerChars: answer.length,
       exactStringHit: groundedHit, forbiddenHit, disclosed, refusedGeneral,
-      truncatedByStrip: looksTruncated(answer) || closedMidSentence(rawByCall[rawByCall.length - 1]?.raw ?? ''),
+      truncatedByStrip: looksTruncated(answer) || closedMidSentence(lastRaw),
       ...spokenQuality(answer, result?.answerability ?? null),
       answer,          // synthetic fixtures only — no user data in this corpus
       ...(KEEP_RAW ? { raw: rawByCall[rawByCall.length - 1]?.raw ?? null } : {}),
