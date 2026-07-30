@@ -338,7 +338,9 @@ Recorded because it is the through-line of the whole continuation.
 | **Refinement** | follow-up ("make it shorter") · recap · follow-up-questions | **NOT wired through the classifier, deliberately.** Their subject is the *prior answer or the transcript itself*, not a new question — a turn classifier would read "make it shorter" as a question and decide sources for it. The invariant that matters (a refinement must never WIDEN sources beyond the answer it refines) is already enforced by the Context OS Phase 11 contract inheritance on these exact surfaces. Re-deciding sources per refinement would be the duplicate-decision-site disease (F2) in new clothes. |
 | **Proactive** | assist · clarify · brainstorm | **DEFERRED with a named prerequisite.** They receive no question; the bridge exists for them, but honest adoption requires `question-resolver.ts` extracting the live interviewer question from the transcript window — the resolver is built, tested, and currently has no production caller (the F1 pattern, §13.2). Wiring the resolver is its own arc; bolting the bridge on without it would degrade proactive value into no-evidence disclosures. |
 
-**Stated limitation on WTA:** the retrieval port covers mode reference files only. A `MEETING_STATEMENT` question on the live surface with the flag on composes an honest no-evidence disclosure rather than fabricating; meeting evidence requires the meeting-RAG port (`meetingChunksToEvidenceItems` — zero production callers). That is the next port, not a papered-over gap.
+**Stated limitation on WTA — RESOLVED 2026-07-30.** The port covered mode reference files only, so a `MEETING_STATEMENT` question composed an honest but useless no-evidence disclosure. `retrieval/meeting-retrieval-port.ts` closes it, and `combineRetrievalPorts` lets one turn draw on a reference file *and* something that was said. Wired on manual-chat (which has `appState`); the engine surfaces still need the retriever threaded through, which is plumbing rather than design.
+
+Notably it is **not** built on `meetingChunksToEvidenceItems`. That adapter produces a Context OS `EvidenceItem` — a different evidence contract — and routing V3 through it would put two contracts on one answer, the exact duplication (F2) the rebuild exists to end. Its invariant is delegated instead: the port declares each chunk's scope as its own meeting and the existing scope containment rejects foreigners, so there is one filter rather than two implementations of one rule.
 
 
 ### 12.3 Phase 7 completed end to end (2026-07-30)
@@ -398,7 +400,7 @@ Nine instrument defects. Each was caught by cross-checking two measurements that
 |---|---|
 | Rollout Stages 1–5 | **Real users.** The flag default stays `false` everywhere; the instrument is ready and gates on measured rates |
 | A-03 · A-06 · F-06 | Deliberate holds with reasons (09 §11) — A-06's obvious fix would weaken the C-01/C-02 contamination guards |
-| Meeting-RAG port | Named prerequisite for meeting evidence on WTA; today those turns disclose honestly |
+| ~~Meeting-RAG port~~ | **DONE** — `meeting-retrieval-port.ts` + `combineRetrievalPorts`, wired on manual-chat. Threading the retriever into the engine surfaces remains, and is plumbing |
 | §2.2 removals | Each is a reorder or extraction requiring trace parity, not a cut |
 | F22 · F12 | Independent P1s the rollout does not fix and should not wait for it |
 

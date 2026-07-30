@@ -51,7 +51,7 @@ Recorded because a careless reading of "dead code" would delete exactly the wron
 
 | Target | Why it stays |
 |--------|--------------|
-| `meetingChunksToEvidenceItems` | Complete, tested, **zero production callers** — the fix is to WIRE it. Meeting RAG currently bypasses the evidence contract entirely |
+| `meetingChunksToEvidenceItems` | Complete, tested, **zero production callers**. Still NOT a removal candidate, but the reasoning changed (2026-07-30): V3 now has its own meeting port, and it deliberately does not use this adapter because that would put a second evidence contract on one answer. This one remains the Context OS path's adapter — wire it there, or retire it with that path, but do not delete it as "dead" while Context OS still owns surfaces |
 | `assistantClaims` + precedence check | One call site and disabled in production. Wire and enable |
 | Tier-2 OKF provenance | The only content-hash versioning in the system, and §6.2 proved version isolation is the top measured risk |
 | `EvidenceResolver` | Already returns the target shape with injected dependencies — config 11 is built on it |
