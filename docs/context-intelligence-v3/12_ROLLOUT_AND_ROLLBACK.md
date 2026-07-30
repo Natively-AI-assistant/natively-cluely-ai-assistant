@@ -1,6 +1,6 @@
 # Phase 10 — Rollout and Rollback
 
-**Status:** TELEMETRY IMPLEMENTED · **Stage 0 EXECUTED and passing** (2026-07-30) — see §7. Stages 1+ require real users and remain unstarted.
+**Status:** TELEMETRY IMPLEMENTED · Stage 0 passing · **STAGE 1 ENTERED** (2026-07-30) — the flag is ON for one internal user by persisted opt-in. See §7–§8.
 **Date:** 2026-07-29, revised 2026-07-30
 
 ---
@@ -126,3 +126,37 @@ Recorded because both would have produced a green rollout gate over a broken ins
 ### 7.4 What Stage 1+ needs from a human
 
 Stages 1–5 are population rollouts: they need real users, and the flag default stays `false` in every environment until someone decides otherwise. The instrument is ready — `context-intelligence:rollout-metrics` returns the live rates and the evaluated abort conditions, so a stage can be gated on measurement rather than on a description of measurement.
+
+
+---
+
+## 8. Stage 1 — entered 2026-07-30
+
+**The flag is ON for one internal user**, via the persisted opt-in in userData. `DEFAULT_ENABLED` remains `false` in dev, test and production alike — the rule that held through all eleven phases is untouched, and this is an explicit choice layered on top of it.
+
+### 8.1 Entering Stage 1 required a fix, and the defect is the mission's own thesis
+
+The flag's resolution order documented an "explicit persisted setting" from the day it was written. **No caller ever supplied one.** Every call site invoked `isContextIntelligenceV3Enabled()` with no arguments, so `overrides.setting` was permanently `undefined` and the environment variable was the only functioning switch.
+
+That is F1 — a documented path with no caller — living inside the flag module written to end exactly that pattern. It survived every test, because the tests supplied the override the production callers never did.
+
+It surfaced the first time anyone tried to actually opt in, which is the honest answer to "why run a rollout stage at all": an opt-in that requires relaunching the app from a shell with an env var set is not an opt-in, and no amount of reading the file would have revealed that.
+
+### 8.2 How to leave
+
+| Intent | Action |
+|---|---|
+| Turn it off, keep the choice explicit | `context-intelligence:flag-set` with `{ enabled: false }` |
+| Return to the shipped default | `context-intelligence:flag-set` with `{ enabled: null }` — clears to `DEFAULT_ENABLED`, not to "last value" |
+| Force off without touching user state | `NATIVELY_CONTEXT_INTELLIGENCE_V3=0` — the env var wins over the persisted choice in both directions |
+| Nuclear | delete `~/Library/Application Support/natively/context-intelligence-v3.json` |
+
+Rollback remains a flag flip. Nothing about entering Stage 1 changed that.
+
+### 8.3 The Stage 1 exit criterion, and what to watch
+
+§3's exit is *"no decision divergence on shadow traces for 3 days"*. The instrument for it exists: `context-intelligence:rollout-metrics` returns the live §4 rates and the evaluated §5 abort conditions, and both engines record into one counter set so the comparison is like-for-like.
+
+Read `abort.insufficientData` before reading any rate. Below the turn threshold it reports that instead of "all clear" — the guard that caught the per-bundle counter defect on the very first Stage 0 run.
+
+The three known golden-suite failures (A-03, A-06, F-06) are precision, not safety: across two models the forbidden-claim rate is 0%, over-refusal is 0%, and unsupported-claim disclosure is 100%.
