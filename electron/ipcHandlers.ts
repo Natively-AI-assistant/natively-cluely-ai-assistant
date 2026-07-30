@@ -916,6 +916,11 @@ export function initializeIpcHandlers(appState: AppState): void {
               modesManager: mm,
               modeInfo,
               files,
+              // Without this every file is typed REFERENCE_FILE, and a résumé in
+              // a mode that authorizes [RESUME, PROFILE_FACT] is retrieved and
+              // then discarded by claim authority — the user sees "not covered"
+              // for facts in their own résumé.
+              allowedSourceTypes: policy.allowedSourceTypes,
               tokenBudget: policy.contextBudget.evidenceTokens,
               userId: V3_USER_ID,
             });

@@ -4065,6 +4065,9 @@ export class IntelligenceEngine extends EventEmitter {
             const policy = resolveModePolicy(isModeId(raw) ? raw : 'general');
             const modePort = createModeRetrievalPort({
                 modesManager: _mm, modeInfo: _mi, files: _files,
+                // Types each file by shape against what this mode authorizes —
+                // a résumé is RESUME here and CANDIDATE_FILE in recruiting.
+                allowedSourceTypes: policy.allowedSourceTypes,
                 tokenBudget: policy.contextBudget.evidenceTokens, userId: 'local',
             });
 
