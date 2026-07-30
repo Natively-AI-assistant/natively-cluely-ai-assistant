@@ -1,6 +1,6 @@
 # Phase 10 — Rollout and Rollback
 
-**Status:** TELEMETRY IMPLEMENTED · Stage 0 passing · **STAGE 1 ENTERED** (2026-07-30) — the flag is ON for one internal user by persisted opt-in. See §7–§8.
+**Status:** **V3 IS THE DEFAULT ANSWER SYSTEM** (2026-07-30, owner direction). `DEFAULT_ENABLED = true`; stages 1–4 were collapsed by decision, not by measurement. See §9.
 **Date:** 2026-07-29, revised 2026-07-30
 
 ---
@@ -160,3 +160,44 @@ Rollback remains a flag flip. Nothing about entering Stage 1 changed that.
 Read `abort.insufficientData` before reading any rate. Below the turn threshold it reports that instead of "all clear" — the guard that caught the per-bundle counter defect on the very first Stage 0 run.
 
 The three known golden-suite failures (A-03, A-06, F-06) are precision, not safety: across two models the forbidden-claim rate is 0%, over-refusal is 0%, and unsupported-claim disclosure is 100%.
+
+
+---
+
+## 9. Default-on, 2026-07-30 — a decision, not a measurement
+
+The owner directed that V3 become the main system. Stages 1–4 of §3 were **not** executed; they were skipped. This section says so plainly because §3 otherwise implies these numbers were earned by population rollout, and they were not.
+
+### 9.1 What changed
+
+| | |
+|---|---|
+| `DEFAULT_ENABLED` | `false` → **`true`** |
+| premium gitlink | `a19ecd71` → `c6d46bc2`, so the Answer-policy UI renders (backend was already wired) |
+| per-user opt-in file | **removed** — the default now governs, so this machine and a fresh install behave identically |
+
+### 9.2 The F5 rule is intact, and the tests now protect it properly
+
+The rule was never "false". It is that the default resolves **identically in dev, test and production** — F5 is about environment-sensitivity, not about a particular value. One constant, read the same way everywhere, no environment branch above it.
+
+The flag tests had been asserting the literal `false`, which would have made them *fight* the rollout — the delete-the-test-to-ship pressure that quietly erodes an invariant. They now assert environment-invariance against `DEFAULT_ENABLED` itself, so the protection survives a value change instead of being deleted by one.
+
+### 9.3 What is running, and its known limits
+
+Live on all five answer surfaces, with reference-file **and** meeting evidence, the Answer-policy control, and the §4 telemetry recording every turn.
+
+Carried in knowingly:
+
+- **Three golden-suite failures** — A-03, A-06, F-06. Precision, not safety: across two models forbidden-claim 0%, over-refusal 0%, disclosure 100%.
+- **`groundedWithNoEvidence` ran 50% in Stage 0.** Expected — the port covers what the mode authorizes, so questions outside it disclose rather than fabricate. Watch it in real use; a *rise* means retrieval is degrading.
+- **No population data.** Stage 0 was a 42-question harness. Real traffic has not been observed.
+
+### 9.4 Rollback — still one flip, now three ways
+
+| | |
+|---|---|
+| Ship it off | `DEFAULT_ENABLED = false` in `contracts/flag.ts` |
+| Force off, no code change | `NATIVELY_CONTEXT_INTELLIGENCE_V3=0` — env wins over everything |
+| Per-user off | persist `{ "enabled": false }` via `context-intelligence:flag-set` |
+
+The module stayed additive, so none of these is a revert.
