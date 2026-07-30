@@ -21,10 +21,23 @@ export interface ClaimAuthority {
  */
 export const CLAIM_AUTHORITY: Record<ClaimType, ClaimAuthority> = {
   // A JD states what the EMPLOYER wants. It can never evidence what the user has.
-  USER_EMPLOYMENT: { authoritative: ['RESUME', 'PROFILE_FACT'], prohibited: ['JOB_DESCRIPTION'] },
-  USER_PROJECT:    { authoritative: ['RESUME', 'PROJECT_FILE', 'PROFILE_FACT'], prohibited: ['JOB_DESCRIPTION'] },
-  USER_SKILL:      { authoritative: ['RESUME', 'PROFILE_FACT'], prohibited: ['JOB_DESCRIPTION'] },
-  USER_EDUCATION:  { authoritative: ['RESUME', 'PROFILE_FACT'], prohibited: ['JOB_DESCRIPTION'] },
+  //
+  // CANDIDATE_FILE is authoritative for the same claims because in Recruiting the
+  // person being described is the CANDIDATE, not the operator — the claim types
+  // are named USER_* but they mean "the person this turn is about". Omitting it
+  // made Recruiting structurally unanswerable: its primary source is
+  // CANDIDATE_FILE, the primary-source fallback therefore emitted USER_PROJECT,
+  // and USER_PROJECT's authoritative list contained nothing Recruiting
+  // authorizes — so the turn's authorized source types resolved to [] and NO
+  // retrieval was possible. Measured: raw candidates 0 in Recruiting where the
+  // identical query returned 9 in every other mode.
+  //
+  // This does not widen anything elsewhere: a mode must ALSO authorize
+  // CANDIDATE_FILE for it to be reachable, and only Recruiting does.
+  USER_EMPLOYMENT: { authoritative: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'], prohibited: ['JOB_DESCRIPTION'] },
+  USER_PROJECT:    { authoritative: ['RESUME', 'CANDIDATE_FILE', 'PROJECT_FILE', 'PROFILE_FACT'], prohibited: ['JOB_DESCRIPTION'] },
+  USER_SKILL:      { authoritative: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'], prohibited: ['JOB_DESCRIPTION'] },
+  USER_EDUCATION:  { authoritative: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'], prohibited: ['JOB_DESCRIPTION'] },
   // Motivation is only ever direct user context. Anything else is inference and
   // must be labelled as such, never asserted as history.
   USER_MOTIVATION: { authoritative: ['PROFILE_FACT', 'CONVERSATION_STATE'], prohibited: ['JOB_DESCRIPTION', 'RESUME'] },

@@ -128,3 +128,16 @@ describe('TurnDecision immutability', () => {
     assert.equal(scopeKey({ userId: 'u1', meetingId: 'm1' }), 'u:u1|m:m1');
   });
 });
+
+// The broadened candidate claims must NOT become a JD-contamination route.
+describe('CANDIDATE_FILE additions keep the JD prohibition', () => {
+  for (const claim of ['USER_EMPLOYMENT', 'USER_PROJECT', 'USER_SKILL', 'USER_EDUCATION']) {
+    test(`${claim} accepts CANDIDATE_FILE and still prohibits JOB_DESCRIPTION`, () => {
+      const a = CLAIM_AUTHORITY[claim];
+      assert.ok(a.authoritative.includes('CANDIDATE_FILE'),
+        'recruiting needs this claim reachable from the candidate file');
+      assert.ok(a.prohibited.includes('JOB_DESCRIPTION'),
+        'a job description must never evidence what a person has done');
+    });
+  }
+});

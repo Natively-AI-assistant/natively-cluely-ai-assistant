@@ -81,7 +81,7 @@ const MOTIVATION_RE = /\b(why|reason|motivat\w*|what (led|made)|decided? to|chos
 const EDUCATION_RE = /\b(degrees?|graduat\w*|universit\w*|college|studied|majors?|majored|alma mater)\b/;
 const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|job title|tenure|manage[srd]?|managing|led|leads?|reports?|team of|headcount|salary expectation\w*|compensation expectation\w*)\b/;
 
-const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit\w*|required skills?|preferred skills?|compensation|salary band|the team you)\b/;
+const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit\w*|required skills?|preferred skills?|compensation|salary band|the team you|qualification\w*|requirement\w*|minimum quals?)\b/;
 
 const MEETING_RE = /\b(we (decided|agreed|discussed)|did we|are we|action item|owns?|owner|the meeting|last (call|meeting)|this (call|meeting)|standup|sync)\b/;
 
@@ -264,6 +264,21 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     if (personal && EDUCATION_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EDUCATION', clause); }
     if (personal && EMPLOYMENT_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause); }
 
+    // A question that is plainly ABOUT A PERSON but names no specific aspect —
+    // "does this candidate meet the minimum qualifications?", "what is the
+    // candidate's strongest signal?" — previously emitted NO claim at all. With
+    // no required claim the turn reports FULL with zero evidence, which is the
+    // shape that licenses answering from model knowledge about a real person.
+    //
+    // USER_EMPLOYMENT is the broadest "about this person's history" claim, and
+    // its authority still PROHIBITS the job description, so this cannot become a
+    // route for JD requirements to describe the candidate.
+    const namedAnAspect = PROJECT_RE.test(clause) || SKILL_RE.test(clause)
+      || EDUCATION_RE.test(clause) || EMPLOYMENT_RE.test(clause) || MOTIVATION_RE.test(clause);
+    if (personal && !namedAnAspect) {
+      types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause);
+    }
+
     if (JOB_RE.test(clause)) {
       // In a document-centric mode WITHOUT a job description, JD vocabulary is
       // document vocabulary: "What is the base salary band for a backend L4?"
@@ -432,11 +447,21 @@ function hasNonGenericProperNoun(text: string): boolean {
   return /\$\s?\d|\b\d{2,}\b/.test(String(text));
 }
 
+// NOTE: this must stay consistent with CLAIM_AUTHORITY in
+// policies/source-authority-policy.ts. They answer different questions — that
+// one says which source may EVIDENCE a claim, this one says which sources a
+// claim should RETRIEVE from — but a source missing here is unreachable no
+// matter what the authority table allows.
+//
+// Measured: CANDIDATE_FILE was added to CLAIM_AUTHORITY for the candidate claims
+// and Recruiting was STILL unanswerable, because this map had not been updated
+// and the intersection with the mode's allowed types came out empty. Two maps,
+// one of them silently authoritative for reachability.
 const CLAIM_TO_SOURCE: Partial<Record<ClaimType, SourceType[]>> = {
-  USER_PROJECT: ['RESUME', 'PROJECT_FILE', 'PROFILE_FACT'],
-  USER_SKILL: ['RESUME', 'PROFILE_FACT'],
-  USER_EDUCATION: ['RESUME', 'PROFILE_FACT'],
-  USER_EMPLOYMENT: ['RESUME', 'PROFILE_FACT'],
+  USER_PROJECT: ['RESUME', 'CANDIDATE_FILE', 'PROJECT_FILE', 'PROFILE_FACT'],
+  USER_SKILL: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'],
+  USER_EDUCATION: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'],
+  USER_EMPLOYMENT: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'],
   JOB_REQUIRED_SKILL: ['JOB_DESCRIPTION'],
   DOCUMENT_FACT: ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'],
   MEETING_STATEMENT: ['MEETING_TRANSCRIPT'],

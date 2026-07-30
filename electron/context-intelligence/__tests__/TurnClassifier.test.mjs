@@ -329,3 +329,34 @@ describe('response-request follow-ups resolve against the previous turn', () => 
     assert.equal(isBareFollowUp('What is the success rate?'), false);
   });
 });
+
+// ── Recruiting was structurally unanswerable ─────────────────────────────────
+//
+// Found by sweeping all eight modes with one question. Recruiting returned ZERO
+// raw candidates where the identical query returned 9 everywhere else — not a
+// retrieval miss, a policy dead end: its primary source is CANDIDATE_FILE, the
+// primary-source fallback emitted USER_PROJECT, and USER_PROJECT listed no
+// source Recruiting authorizes, so authorized sourceTypes resolved to [].
+
+describe('candidate claims are reachable in recruiting', () => {
+  test('a candidate question authorizes the candidate file', () => {
+    const c = classify('Has the candidate worked with GCP?', 'recruiting');
+    assert.ok(c.requiredSourceTypes.includes('CANDIDATE_FILE'),
+      `expected CANDIDATE_FILE, got ${JSON.stringify(c.requiredSourceTypes)}`);
+  });
+
+  test('a qualifications comparison authorizes BOTH sides', () => {
+    // The whole point of the mode: compare the person against the role.
+    const c = classify('Does this candidate meet the minimum qualifications?', 'recruiting');
+    assert.ok(c.requiredSourceTypes.includes('CANDIDATE_FILE'), JSON.stringify(c.requiredSourceTypes));
+    assert.ok(c.requiredSourceTypes.includes('JOB_DESCRIPTION'), JSON.stringify(c.requiredSourceTypes));
+  });
+
+  test('a personal question naming no aspect still makes a claim', () => {
+    // No claim ⇒ no required evidence ⇒ FULL with zero evidence, which licenses
+    // answering from model knowledge about a real person.
+    const c = classify("What is the candidate's strongest signal?", 'recruiting');
+    assert.ok(c.claimTypes.length > 0, 'must not resolve to zero claims');
+    assert.equal(c.shouldRetrieve, true);
+  });
+});
