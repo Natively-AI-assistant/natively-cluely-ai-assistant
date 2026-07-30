@@ -50,7 +50,11 @@ async function* raceGeneratorWithDeadline(
                 return;
             }
             if (res.done) return;
-            yield res.value;
+            // TS cannot discriminate the IteratorResult union through the
+            // Promise.race with the DEADLINE symbol, so `res.value` widens to
+            // `string | void` despite the `done` check above. The check makes
+            // the cast sound: a non-done result's value is the yielded string.
+            yield res.value as string;
         }
     } catch (e) {
         try { const p = stream.return?.(undefined); if (p && typeof (p as any).then === 'function') (p as Promise<unknown>).catch(() => {}); } catch { /* already closed */ }
@@ -90,8 +94,22 @@ export class RAGManager {
     private retriever: RAGRetriever;
     private llmHelper: LLMHelper | null = null;
     private liveIndexer: LiveRAGIndexer;
-    /** Guards against concurrent reprocessMeeting() calls for the same meeting ID. */
-    private _reprocessInFlight = new Set<string>();
+    /**
+     * Guards against concurrent reprocessMeeting()/reindex calls for the same
+     * target. Process-wide on globalThis, not per-instance: RAGManager is
+     * constructor-owned (not a getInstance singleton), so a harness that
+     * constructs two instances over ONE natively.db — or co-loads two esbuild
+     * bundles — would otherwise run duplicate embedding jobs for the same
+     * documents (duplicate spend; duplicate vectors if inserts aren't
+     * idempotent). Same bug class as the 2026-07-31 singleton sweep, LOW
+     * severity because the DB itself is shared truth.
+     */
+    private get _jobGuards(): { reprocess: Set<string>; reindexing: boolean } {
+        const g = globalThis as unknown as Record<string, { reprocess: Set<string>; reindexing: boolean } | undefined>;
+        if (!g.__nativelyRagJobGuardsV1__) g.__nativelyRagJobGuardsV1__ = { reprocess: new Set(), reindexing: false };
+        return g.__nativelyRagJobGuardsV1__;
+    }
+    private get _reprocessInFlight(): Set<string> { return this._jobGuards.reprocess; }
 
     constructor(config: RAGManagerConfig) {
         this.db = config.db;
@@ -561,7 +579,8 @@ export class RAGManager {
      *  - Search during re-index is empty-not-wrong: a cleared, not-yet-re-embedded
      *    meeting has NULL space and is excluded by the space-filtered search.
      */
-    private _reindexInFlight = false;
+    private get _reindexInFlight(): boolean { return this._jobGuards.reindexing; }
+    private set _reindexInFlight(v: boolean) { this._jobGuards.reindexing = v; }
     private _autoReindexTimer: ReturnType<typeof setTimeout> | null = null;
     private static readonly AUTO_REINDEX_DEFER_MS = 15_000;
     private static readonly REINDEX_LIVE_RECHECK_MS = 30_000;
