@@ -42,9 +42,12 @@ const chain = async (question, { modeId = 'technical-interview', chunks = [], fi
 };
 
 describe('flag gate', () => {
-  test('the wired path is OFF by default in every environment', () => {
+  test('the wired path resolves the SAME in every environment', () => {
+    // Not "off" — the value moved at rollout. The invariant is that no
+    // environment marker changes the answer (F5).
+    const baseline = isContextIntelligenceV3Enabled({ env: {} });
     for (const env of [{}, { NODE_ENV: 'test' }, { NODE_ENV: 'production' }, { NATIVELY_INTERNAL: '1' }]) {
-      assert.equal(isContextIntelligenceV3Enabled({ env }), false, JSON.stringify(env));
+      assert.equal(isContextIntelligenceV3Enabled({ env }), baseline, JSON.stringify(env));
     }
   });
 });

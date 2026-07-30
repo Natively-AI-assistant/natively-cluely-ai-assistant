@@ -93,7 +93,19 @@ const falsy = (v: string | undefined): boolean => {
  *   2. explicit persisted setting (either direction)
  *   3. DEFAULT_ENABLED — one constant, every environment
  */
-export const DEFAULT_ENABLED = false;
+// ROLLOUT: flipped to `true` on 2026-07-30 at the owner's direction — V3 is the
+// main answer system, not an opt-in.
+//
+// The rule this module was built around is NOT "false". It is that the default
+// is IDENTICAL in dev, test and production — F5, the split that let composePrompt
+// be built, tested, and never executed for a user. That rule is intact: this is
+// one constant, read the same way everywhere, with no environment branch above
+// it. The tests assert environment-invariance rather than a literal value, so
+// they keep protecting the actual invariant through the rollout.
+//
+// Rollback is unchanged and still a flip: set this to false, or set
+// NATIVELY_CONTEXT_INTELLIGENCE_V3=0, or persist { "enabled": false }.
+export const DEFAULT_ENABLED = true;
 
 export interface FlagOverrides {
   /** Persisted user/dev setting, when the caller has SettingsManager available. */

@@ -19,21 +19,26 @@ const { adaptLegacyChunks, evidenceForClaim } =
   await import(pathToFileURL(path.join(base, 'retrieval/legacy-adapter.js')).href);
 
 describe('flag — must not vary by environment', () => {
-  test('defaults to false, and the default is a single constant', () => {
-    assert.equal(DEFAULT_ENABLED, false);
-    assert.equal(isContextIntelligenceV3Enabled({ env: {} }), false);
+  test('the default is a single constant, whatever its value', () => {
+    // Asserting the VALUE would make this test fight the rollout. The property
+    // that matters is that one constant decides it everywhere.
+    assert.equal(typeof DEFAULT_ENABLED, 'boolean');
+    assert.equal(isContextIntelligenceV3Enabled({ env: {} }), DEFAULT_ENABLED);
   });
 
-  test('resolves identically under dev, test and production markers', () => {
-    // The exact conditions isInternalDevTestContext keys on. If any of these
-    // flipped the answer, we would have rebuilt the disease.
+  test('resolves IDENTICALLY under dev, test and production markers', () => {
+    // THE rule this module exists for (F5). The exact conditions
+    // isInternalDevTestContext keys on — if any of these flipped the answer, we
+    // would have rebuilt the disease. Compared against DEFAULT_ENABLED rather
+    // than a literal, so the assertion survives the rollout instead of being
+    // deleted by it.
     const envs = [
       {}, { NODE_ENV: 'test' }, { NODE_ENV: 'development' }, { NODE_ENV: 'production' },
       { NATIVELY_INTERNAL: '1' }, { NATIVELY_DEV: '1' }, { BENCHMARK_MODEL: 'gemini' },
     ];
     for (const env of envs) {
-      assert.equal(isContextIntelligenceV3Enabled({ env }), false,
-        `flag must stay false under ${JSON.stringify(env)}`);
+      assert.equal(isContextIntelligenceV3Enabled({ env }), DEFAULT_ENABLED,
+        `flag must resolve identically under ${JSON.stringify(env)}`);
     }
   });
 
@@ -312,7 +317,7 @@ describe('the persisted opt-in', () => {
 
   test('the DEFAULT is untouched by any of this', () => {
     // The rule that held through all eleven phases.
-    assert.equal(DEFAULT_ENABLED, false);
-    assert.equal(isContextIntelligenceV3Enabled({ env: {}, setting: null }), false);
+    assert.equal(typeof DEFAULT_ENABLED, 'boolean');
+    assert.equal(isContextIntelligenceV3Enabled({ env: {}, setting: null }), DEFAULT_ENABLED);
   });
 });

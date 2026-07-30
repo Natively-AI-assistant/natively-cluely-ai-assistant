@@ -15,11 +15,15 @@ const { CONTEXT_INTELLIGENCE_V3_ENV_KEY } = await import(pathToFileURL(path.join
 
 const ENV = CONTEXT_INTELLIGENCE_V3_ENV_KEY;
 const enable = () => { process.env[ENV] = '1'; };
+// Explicit, because "absent" no longer means off — DEFAULT_ENABLED flipped to
+// true at rollout. The invariant under test is "off ⇒ legacy", not "the default
+// happens to be off".
+const disable = () => { process.env[ENV] = '0'; };
 afterEach(() => { delete process.env[ENV]; });
 
-describe('flag gate — legacy stays in control until explicitly enabled', () => {
+describe('flag gate — legacy stays in control whenever the flag is off', () => {
   test('returns null when off', async () => {
-    delete process.env[ENV];
+    disable();
     assert.equal(await buildV3Prompt({ surface: 'manual-chat', question: 'Tell me about your project.' }), null);
   });
 
