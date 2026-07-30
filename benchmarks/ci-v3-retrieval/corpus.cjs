@@ -54,6 +54,7 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
  * @property {string}  versionId this revision
  * @property {boolean} active    true for the single current revision of sourceKey
  * @property {string[]} groups    retrieval groups this document is indexed into
+ * @property {string} [meetingId]  meeting this record belongs to; absent ⇒ user-scoped
  */
 
 /** @type {CorpusDoc[]} */
@@ -74,13 +75,21 @@ const CORPUS = [
     sourceKey: 'candidate-resume', versionId: '2026', active: true, groups: ['versioned'] },
 
   // ── Cross-meeting isolation ────────────────────────────────────────────────
-  // Two revisions of ONE recurring sync that reverse each other's decisions.
-  // Written with deliberately high lexical overlap so similarity ranking cannot
-  // separate them and only the version/scope filter can.
+  // Two meetings that REVERSE each other's decisions, written with deliberately
+  // high lexical overlap so similarity ranking cannot separate them.
+  //
+  // Modelled as distinct SCOPES, not as versions of one source. A past meeting is
+  // not a stale draft of the current one — both are permanent records, and
+  // 06_SOURCE_AUTHORITY_SPEC §4 is explicit that the separating mechanism is
+  // `scopeId = currentMeetingId`. Modelling them as versions made the H-* family
+  // pass for the wrong reason: it rejected the June transcript as SUPERSEDED,
+  // which is the wrong rejection reason for the right outcome.
   { path: 'test-fixtures/ci-v3-corpus/additions/meeting_transcript_previous.txt', label: 'MEETING_TRANSCRIPT',
-    sourceKey: 'eng-sync', versionId: 'previous', active: false, groups: ['versioned'] },
+    sourceKey: 'eng-sync-june', versionId: 'v1', active: true, groups: ['versioned'],
+    meetingId: 'm-june' },
   { path: 'test-fixtures/ci-v3-corpus/additions/meeting_transcript_current.txt', label: 'MEETING_TRANSCRIPT',
-    sourceKey: 'eng-sync', versionId: 'current', active: true, groups: ['base', 'versioned'] },
+    sourceKey: 'eng-sync-sept', versionId: 'v1', active: true, groups: ['base', 'versioned'],
+    meetingId: 'm-sept' },
 
   // ── Reference files ────────────────────────────────────────────────────────
   { path: 'tests/fixtures/modes/sales/sales_pricing_policy.json', label: 'REFERENCE_FILE',
@@ -151,7 +160,19 @@ const MODE_FOR_SOURCE = {
  *
  * @param {Array<{label:string, path:string, file:{id:string}|null}>} ingested
  */
-function buildRegistry(ingested) {
+/**
+ * The scope a document belongs to, as a structured EvidenceScope.
+ *
+ * Structured rather than a pre-formatted key string: the adapter compares scopes
+ * by CONTAINMENT (a user-level résumé stays visible inside a meeting turn), which
+ * string keys cannot express, and it removes any need for this file to reproduce
+ * `scopeKey()`'s exact format.
+ */
+function scopeFor(decl, userId) {
+  return decl.meetingId ? { userId, meetingId: decl.meetingId } : { userId };
+}
+
+function buildRegistry(ingested, { userId = 'local' } = {}) {
   const byPath = new Map(CORPUS.map((d) => [d.path, d]));
 
   // The active version of each logical source, taken from the declaration.
@@ -161,6 +182,7 @@ function buildRegistry(ingested) {
   const sourceTypes = new Map();
   const activeVersions = new Map();
   const chunkVersions = new Map();
+  const sourceScopes = new Map();
   /** fileId -> declaration, for assertions that need to know what a file IS. */
   const docOf = new Map();
 
@@ -175,10 +197,11 @@ function buildRegistry(ingested) {
     sourceTypes.set(item.file.id, decl.label);
     activeVersions.set(item.file.id, active);
     chunkVersions.set(item.file.id, decl.versionId);
+    sourceScopes.set(item.file.id, scopeFor(decl, userId));
     docOf.set(item.file.id, decl);
   }
 
-  return { sourceTypes, activeVersions, chunkVersions, docOf };
+  return { sourceTypes, activeVersions, chunkVersions, sourceScopes, docOf };
 }
 
 /**
@@ -210,8 +233,46 @@ function assertCorpusWellFormed() {
   return { logicalSources: seen.size, documents: CORPUS.length };
 }
 
+/** The meeting a live turn is taking place in, for questions that need one. */
+const CURRENT_MEETING_ID = 'm-sept';
+
+/**
+ * The scope a QUESTION is asked in, DERIVED from the sources it needs.
+ *
+ * A question about a meeting is asked *inside* that meeting — so any question
+ * that draws on MEETING_TRANSCRIPT gets the current meeting's scope, and the
+ * previous meeting's record is then rejected OUT_OF_SCOPE.
+ *
+ * This was first written as a hardcoded set of the four H-* ids, which was wrong:
+ * A-09, F-05 and F-06 are also transcript questions, so they were asked at plain
+ * user scope and could not see the September transcript at all — the filter
+ * rejected the evidence they needed. Deriving the scope from `requiredSources`
+ * keeps the two from drifting as the corpus grows.
+ */
+function scopeForQuestion(q, userId = 'local') {
+  const sources = [...(q.requiredSources || []), ...(q.optionalSources || [])];
+  return sources.includes('MEETING_TRANSCRIPT')
+    ? { userId, meetingId: CURRENT_MEETING_ID }
+    : { userId };
+}
+
+/**
+ * File ids that must be rejected OUT_OF_SCOPE for a given turn scope.
+ * Mirrors the adapter's containment rule, so a user-level document is NOT
+ * expected to be rejected inside a meeting turn.
+ */
+function outOfScopeFileIds(registry, scope) {
+  const out = new Set();
+  for (const [fileId, s] of registry.sourceScopes) {
+    const narrows = (a, b) => a !== undefined && a !== b;
+    if (s.userId !== scope.userId || narrows(s.meetingId, scope.meetingId)) out.add(fileId);
+  }
+  return out;
+}
+
 module.exports = {
   CORPUS, MODE_FOR_SOURCE, REPO_ROOT,
   docsForGroup, groupForQuestion, VERSIONED_QUESTIONS,
+  scopeForQuestion, CURRENT_MEETING_ID, outOfScopeFileIds, scopeFor,
   buildRegistry, supersededFileIds, assertCorpusWellFormed,
 };

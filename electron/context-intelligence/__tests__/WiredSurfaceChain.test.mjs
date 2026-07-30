@@ -27,6 +27,7 @@ const chain = async (question, { modeId = 'technical-interview', chunks = [], fi
   const chunkVersions = new Map(files.map((f) => [f, 'legacy']));
   const port = createLegacyRetrievalPort({
     registry: { sourceTypes, activeVersions, chunkVersions },
+    assumeInScopeWhenUnknown: true,
     retrieve: async () => chunks,
   });
   const result = await orchestrate({
@@ -114,6 +115,7 @@ describe('stale evidence never reaches the prompt', () => {
         activeVersions: new Map([['f1', 'v2']]),
         chunkVersions: new Map([['f1', 'v1']]),   // stale: active is v2
       },
+      assumeInScopeWhenUnknown: true,
       retrieve: async () => [{ sourceId: 'f1', text: 'superseded value', chunkIndex: 0, score: 0.99 }],
     });
     const result = await orchestrate({
@@ -123,5 +125,9 @@ describe('stale evidence never reaches the prompt', () => {
     const composed = composePrompt({ decision: result.decision, policy, evidence: result.evidence });
     assert.ok(!composed.user.includes('superseded value'), 'a 0.99-scoring stale chunk must not reach the model');
     assert.equal(result.trace.retrievalAttempts[0].rejectedByScopeFilter, 1);
+    // The REASON matters, not just the count: an unrelated fail-closed check
+    // (unknown scope, unknown type) would also reject exactly one chunk and let
+    // this test pass while proving nothing about version filtering.
+    assert.equal(result.trace.retrievalAttempts[0].rejections[0].reason, 'SUPERSEDED_VERSION');
   });
 });

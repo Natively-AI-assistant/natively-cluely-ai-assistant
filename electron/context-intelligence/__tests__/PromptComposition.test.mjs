@@ -21,6 +21,7 @@ const ADAPT = {
   sourceTypes: new Map([['resume-1', 'RESUME'], ['jd-1', 'JOB_DESCRIPTION']]),
   activeVersions: new Map([['resume-1', 'v2'], ['jd-1', 'v1']]),
   chunkVersions: new Map([['resume-1', 'v2'], ['jd-1', 'v1']]),
+  assumeInScopeWhenUnknown: true,
 };
 const ev = (chunks) => adaptLegacyChunks(chunks, ADAPT).evidence;
 const decision = (q = 'Tell me about your WebRTC project.', modeId = 'technical-interview') =>

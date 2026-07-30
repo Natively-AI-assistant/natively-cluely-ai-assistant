@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-07-29T23:24:14.453Z",
+  "runAt": "2026-07-30T01:24:34.196Z",
   "mode": "LIVE retrieval stack",
   "groups": {
     "base": {
@@ -10,7 +10,7 @@
     "versioned": {
       "files": 4,
       "chunks": 20,
-      "superseded": 2
+      "superseded": 1
     }
   },
   "questions": 42,
@@ -21,22 +21,25 @@
     "promptLabelsEvidenceUntrusted": 42,
     "noStaleVersionAccepted": 42,
     "retrievalPath": 41,
+    "noForeignScopeAccepted": 42,
     "answerabilityMatchesExpected": 33
   },
-  "supersededRevisionsIndexed": 2,
+  "supersededRevisionsIndexed": 1,
   "staleRejectionsObserved": 6,
+  "scopeRejectionsObserved": 14,
   "latencyMs": {
-    "p50": 11,
-    "p95": 13,
-    "p99": 27
+    "p50": 12,
+    "p95": 14,
+    "p99": 28
   },
-  "totalMs": 389,
+  "totalMs": 402,
   "rows": [
     {
       "id": "A-01",
       "category": "A",
       "modeId": "looking-for-work",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
@@ -51,6 +54,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -60,6 +64,7 @@
       "category": "A",
       "modeId": "looking-for-work",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
@@ -74,6 +79,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -83,6 +89,7 @@
       "category": "A",
       "modeId": "looking-for-work",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "NONE",
       "evidence": 0,
@@ -97,6 +104,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": false
       },
       "failed": [
@@ -108,6 +116,7 @@
       "category": "A",
       "modeId": "looking-for-work",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
@@ -122,6 +131,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -131,6 +141,7 @@
       "category": "A",
       "modeId": "looking-for-work",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
@@ -145,6 +156,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -154,6 +166,7 @@
       "category": "A",
       "modeId": "looking-for-work",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "NONE",
       "evidence": 1,
@@ -168,6 +181,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": false
       },
       "failed": [
@@ -179,6 +193,7 @@
       "category": "A",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 3,
@@ -193,6 +208,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -202,12 +218,18 @@
       "category": "A",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 2,
       "retrievedRaw": 3,
-      "rejectedByScope": 0,
-      "rejections": [],
+      "rejectedByScope": 1,
+      "rejections": [
+        {
+          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "reason": "OUT_OF_SCOPE"
+        }
+      ],
       "staleRejected": 0,
       "expectedAnswerability": "FULL",
       "checks": {
@@ -216,6 +238,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -225,6 +248,7 @@
       "category": "F",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 3,
@@ -239,6 +263,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -248,6 +273,7 @@
       "category": "F",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 4,
@@ -262,6 +288,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -271,12 +298,18 @@
       "category": "F",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 3,
       "retrievedRaw": 5,
-      "rejectedByScope": 0,
-      "rejections": [],
+      "rejectedByScope": 1,
+      "rejections": [
+        {
+          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "reason": "OUT_OF_SCOPE"
+        }
+      ],
       "staleRejected": 0,
       "expectedAnswerability": "FULL",
       "checks": {
@@ -285,6 +318,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -294,12 +328,18 @@
       "category": "F",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 3,
       "retrievedRaw": 5,
-      "rejectedByScope": 0,
-      "rejections": [],
+      "rejectedByScope": 1,
+      "rejections": [
+        {
+          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "reason": "OUT_OF_SCOPE"
+        }
+      ],
       "staleRejected": 0,
       "expectedAnswerability": "FULL",
       "checks": {
@@ -308,6 +348,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -317,6 +358,7 @@
       "category": "B",
       "modeId": "general",
       "group": "base",
+      "scopeId": "u:local",
       "path": "FAST",
       "answerability": "FULL",
       "evidence": 0,
@@ -331,6 +373,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -340,6 +383,7 @@
       "category": "B",
       "modeId": "general",
       "group": "base",
+      "scopeId": "u:local",
       "path": "FAST",
       "answerability": "FULL",
       "evidence": 0,
@@ -354,6 +398,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -363,6 +408,7 @@
       "category": "B",
       "modeId": "general",
       "group": "base",
+      "scopeId": "u:local",
       "path": "FAST",
       "answerability": "FULL",
       "evidence": 0,
@@ -377,6 +423,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -386,12 +433,18 @@
       "category": "C",
       "modeId": "looking-for-work",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "NONE",
       "evidence": 0,
       "retrievedRaw": 6,
-      "rejectedByScope": 0,
-      "rejections": [],
+      "rejectedByScope": 1,
+      "rejections": [
+        {
+          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "reason": "OUT_OF_SCOPE"
+        }
+      ],
       "staleRejected": 0,
       "expectedAnswerability": "NONE",
       "checks": {
@@ -400,6 +453,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -409,12 +463,18 @@
       "category": "C",
       "modeId": "looking-for-work",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "NONE",
       "evidence": 1,
       "retrievedRaw": 4,
-      "rejectedByScope": 0,
-      "rejections": [],
+      "rejectedByScope": 1,
+      "rejections": [
+        {
+          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "reason": "OUT_OF_SCOPE"
+        }
+      ],
       "staleRejected": 0,
       "expectedAnswerability": "NONE",
       "checks": {
@@ -423,6 +483,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -432,6 +493,7 @@
       "category": "C",
       "modeId": "looking-for-work",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "NONE",
       "evidence": 0,
@@ -446,6 +508,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": false
       },
       "failed": [
@@ -457,6 +520,7 @@
       "category": "D",
       "modeId": "looking-for-work",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
@@ -471,6 +535,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": false
       },
       "failed": [
@@ -482,6 +547,7 @@
       "category": "G",
       "modeId": "looking-for-work",
       "group": "versioned",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
@@ -489,7 +555,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_1f11bf7c-f91c-4168-9094-a11d30cc831b",
+          "sourceId": "ref_82622560-f6dc-4fe2-8dc4-bd639b7bf9e7",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
@@ -501,6 +567,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -510,6 +577,7 @@
       "category": "G",
       "modeId": "looking-for-work",
       "group": "versioned",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
@@ -517,15 +585,15 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_1f11bf7c-f91c-4168-9094-a11d30cc831b",
+          "sourceId": "ref_82622560-f6dc-4fe2-8dc4-bd639b7bf9e7",
           "reason": "SUPERSEDED_VERSION"
         },
         {
-          "sourceId": "ref_cfa36ed6-eb47-4f84-a5b2-1500a5475567",
-          "reason": "SUPERSEDED_VERSION"
+          "sourceId": "ref_4265c783-687e-4df6-bb90-992114889a28",
+          "reason": "OUT_OF_SCOPE"
         }
       ],
-      "staleRejected": 2,
+      "staleRejected": 1,
       "expectedAnswerability": "FULL",
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -533,6 +601,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -542,6 +611,7 @@
       "category": "G",
       "modeId": "looking-for-work",
       "group": "versioned",
+      "scopeId": "u:local",
       "path": "FAST",
       "answerability": "FULL",
       "evidence": 0,
@@ -556,6 +626,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": false,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": [
@@ -567,6 +638,7 @@
       "category": "H",
       "modeId": "team-meet",
       "group": "versioned",
+      "scopeId": "u:local|m:m-sept",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
@@ -574,15 +646,15 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_cfa36ed6-eb47-4f84-a5b2-1500a5475567",
-          "reason": "SUPERSEDED_VERSION"
+          "sourceId": "ref_4265c783-687e-4df6-bb90-992114889a28",
+          "reason": "OUT_OF_SCOPE"
         },
         {
-          "sourceId": "ref_1f11bf7c-f91c-4168-9094-a11d30cc831b",
+          "sourceId": "ref_82622560-f6dc-4fe2-8dc4-bd639b7bf9e7",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
-      "staleRejected": 2,
+      "staleRejected": 1,
       "expectedAnswerability": "FULL",
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -590,6 +662,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -599,6 +672,7 @@
       "category": "H",
       "modeId": "team-meet",
       "group": "versioned",
+      "scopeId": "u:local|m:m-sept",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
@@ -606,15 +680,15 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_cfa36ed6-eb47-4f84-a5b2-1500a5475567",
-          "reason": "SUPERSEDED_VERSION"
+          "sourceId": "ref_4265c783-687e-4df6-bb90-992114889a28",
+          "reason": "OUT_OF_SCOPE"
         },
         {
-          "sourceId": "ref_1f11bf7c-f91c-4168-9094-a11d30cc831b",
+          "sourceId": "ref_82622560-f6dc-4fe2-8dc4-bd639b7bf9e7",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
-      "staleRejected": 2,
+      "staleRejected": 1,
       "expectedAnswerability": "FULL",
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -622,6 +696,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -631,6 +706,7 @@
       "category": "H",
       "modeId": "team-meet",
       "group": "versioned",
+      "scopeId": "u:local|m:m-sept",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
@@ -638,15 +714,15 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_cfa36ed6-eb47-4f84-a5b2-1500a5475567",
-          "reason": "SUPERSEDED_VERSION"
+          "sourceId": "ref_4265c783-687e-4df6-bb90-992114889a28",
+          "reason": "OUT_OF_SCOPE"
         },
         {
-          "sourceId": "ref_1f11bf7c-f91c-4168-9094-a11d30cc831b",
+          "sourceId": "ref_82622560-f6dc-4fe2-8dc4-bd639b7bf9e7",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
-      "staleRejected": 2,
+      "staleRejected": 1,
       "expectedAnswerability": "FULL",
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -654,6 +730,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -663,6 +740,7 @@
       "category": "H",
       "modeId": "team-meet",
       "group": "versioned",
+      "scopeId": "u:local|m:m-sept",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
@@ -670,15 +748,15 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_cfa36ed6-eb47-4f84-a5b2-1500a5475567",
-          "reason": "SUPERSEDED_VERSION"
+          "sourceId": "ref_4265c783-687e-4df6-bb90-992114889a28",
+          "reason": "OUT_OF_SCOPE"
         },
         {
-          "sourceId": "ref_1f11bf7c-f91c-4168-9094-a11d30cc831b",
+          "sourceId": "ref_82622560-f6dc-4fe2-8dc4-bd639b7bf9e7",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
-      "staleRejected": 2,
+      "staleRejected": 1,
       "expectedAnswerability": "FULL",
       "checks": {
         "noProhibitedSourceInEvidence": true,
@@ -686,6 +764,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -695,6 +774,7 @@
       "category": "A",
       "modeId": "team-meet",
       "group": "base",
+      "scopeId": "u:local|m:m-sept",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
@@ -709,6 +789,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -718,6 +799,7 @@
       "category": "F",
       "modeId": "team-meet",
       "group": "base",
+      "scopeId": "u:local|m:m-sept",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
@@ -732,6 +814,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -741,6 +824,7 @@
       "category": "F",
       "modeId": "team-meet",
       "group": "base",
+      "scopeId": "u:local|m:m-sept",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
@@ -755,6 +839,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": false
       },
       "failed": [
@@ -766,6 +851,7 @@
       "category": "I",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 3,
@@ -780,6 +866,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": false
       },
       "failed": [
@@ -791,12 +878,18 @@
       "category": "J",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 5,
       "retrievedRaw": 6,
-      "rejectedByScope": 0,
-      "rejections": [],
+      "rejectedByScope": 1,
+      "rejections": [
+        {
+          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "reason": "OUT_OF_SCOPE"
+        }
+      ],
       "staleRejected": 0,
       "expectedAnswerability": "FULL",
       "checks": {
@@ -805,6 +898,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -814,6 +908,7 @@
       "category": "A",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 4,
@@ -828,6 +923,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -837,6 +933,7 @@
       "category": "A",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 4,
@@ -851,6 +948,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -860,6 +958,7 @@
       "category": "A",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "NONE",
       "evidence": 0,
@@ -874,6 +973,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": false
       },
       "failed": [
@@ -885,6 +985,7 @@
       "category": "F",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 2,
@@ -899,6 +1000,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -908,6 +1010,7 @@
       "category": "F",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 2,
@@ -922,6 +1025,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -931,6 +1035,7 @@
       "category": "F",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 4,
@@ -945,6 +1050,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -954,6 +1060,7 @@
       "category": "A",
       "modeId": "seminar",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 4,
@@ -968,6 +1075,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -977,6 +1085,7 @@
       "category": "H",
       "modeId": "general",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "NONE",
       "evidence": 0,
@@ -991,6 +1100,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -1000,12 +1110,18 @@
       "category": "C",
       "modeId": "looking-for-work",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "NONE",
       "evidence": 0,
       "retrievedRaw": 3,
-      "rejectedByScope": 0,
-      "rejections": [],
+      "rejectedByScope": 1,
+      "rejections": [
+        {
+          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "reason": "OUT_OF_SCOPE"
+        }
+      ],
       "staleRejected": 0,
       "expectedAnswerability": "NONE",
       "checks": {
@@ -1014,6 +1130,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": true
       },
       "failed": []
@@ -1023,12 +1140,18 @@
       "category": "E",
       "modeId": "general",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 6,
       "retrievedRaw": 10,
-      "rejectedByScope": 0,
-      "rejections": [],
+      "rejectedByScope": 1,
+      "rejections": [
+        {
+          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "reason": "OUT_OF_SCOPE"
+        }
+      ],
       "staleRejected": 0,
       "expectedAnswerability": "NONE",
       "checks": {
@@ -1037,6 +1160,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": false
       },
       "failed": [
@@ -1048,12 +1172,18 @@
       "category": "E",
       "modeId": "general",
       "group": "base",
+      "scopeId": "u:local",
       "path": "GROUNDED",
       "answerability": "FULL",
-      "evidence": 5,
+      "evidence": 4,
       "retrievedRaw": 5,
-      "rejectedByScope": 0,
-      "rejections": [],
+      "rejectedByScope": 1,
+      "rejections": [
+        {
+          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "reason": "OUT_OF_SCOPE"
+        }
+      ],
       "staleRejected": 0,
       "expectedAnswerability": "PARTIAL",
       "checks": {
@@ -1062,6 +1192,7 @@
         "promptLabelsEvidenceUntrusted": true,
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
+        "noForeignScopeAccepted": true,
         "answerabilityMatchesExpected": false
       },
       "failed": [

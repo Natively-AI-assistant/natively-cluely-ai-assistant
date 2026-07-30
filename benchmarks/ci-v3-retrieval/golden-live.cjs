@@ -23,7 +23,7 @@ const fs = require('fs');
 const { boot, assertVectorRunValid, REPO_ROOT, DIST } = require('./bootstrap.cjs');
 const { ingestCorpus } = require('./ingest.cjs');
 const {
-  MODE_FOR_SOURCE, docsForGroup, groupForQuestion,
+  MODE_FOR_SOURCE, docsForGroup, groupForQuestion, scopeForQuestion, outOfScopeFileIds,
   buildRegistry, supersededFileIds, assertCorpusWellFormed,
 } = require('./corpus.cjs');
 
@@ -52,6 +52,7 @@ const d = (rel) => require(path.join(DIST, rel));
   const { resolveModePolicy, isModeId } = d('electron/context-intelligence/policies/mode-policy-registry.js');
   const { createLegacyRetrievalPort } = d('electron/context-intelligence/retrieval/legacy-retrieval-port.js');
   const { ModesManager } = d('electron/services/ModesManager.js');
+  const { scopeKey } = d('electron/context-intelligence/contracts/types.js');
 
   console.log('[live] corpus', JSON.stringify(assertCorpusWellFormed()));
 
@@ -103,13 +104,14 @@ const d = (rel) => require(path.join(DIST, rel));
 
   const CHECKS = ['noProhibitedSourceInEvidence', 'evidenceCarriesProvenance',
     'promptLabelsEvidenceUntrusted', 'noStaleVersionAccepted', 'retrievalPath',
-    'answerabilityMatchesExpected'];
+    'noForeignScopeAccepted', 'answerabilityMatchesExpected'];
 
   // Questions whose gold answer lives in the CURRENT revision of a source that
   // also has a superseded revision indexed. For these the run must show the
   // stale revision being actively rejected, not merely absent.
   const VERSIONED = new Set(['G-01', 'G-02', 'G-03', 'H-01', 'H-02', 'H-03', 'H-04']);
   let staleRejectionsObserved = 0;
+  let scopeRejectionsObserved = 0;
   const rows = [];
   const t0 = Date.now();
   const latencies = [];
@@ -122,26 +124,39 @@ const d = (rel) => require(path.join(DIST, rel));
     // which documents exist for this question, the mode decides which source
     // types it may read. Conflating them is what merged the two corpora.
     const group = groupForQuestion(q.id);
-    const { port, stale } = groups[group];
+    const { port, stale, registry } = groups[group];
+    // Meeting questions are asked INSIDE the September meeting, so the June
+    // transcript must be rejected OUT_OF_SCOPE (06 §4). Everything else is
+    // user-scoped.
+    const scope = scopeForQuestion(q);
+    const foreign = outOfScopeFileIds(registry, scope);
 
     const tq = Date.now();
     const result = await orchestrate({
       requestId: `live-${q.id}`, requestSequence: 1, surface: 'manual-chat',
-      modeId, scope: { userId: 'local' }, sessionId: 's', manualQuestion: q.question,
+      modeId, scope, sessionId: 's', manualQuestion: q.question,
     }, port);
     latencies.push(Date.now() - tq);
 
+    const expectedScopeId = scopeKey(scope);
     const composed = composePrompt({ decision: result.decision, policy, evidence: result.evidence });
     const prohibited = new Set(q.prohibitedSources || []);
 
     const rejections = result.trace.retrievalAttempts[0]?.rejections ?? [];
     const supersededRejections = rejections.filter((r) => r.reason === 'SUPERSEDED_VERSION');
     if (supersededRejections.length) staleRejectionsObserved++;
+    const scopeRejections = rejections.filter((r) => r.reason === 'OUT_OF_SCOPE');
+    if (scopeRejections.length) scopeRejectionsObserved++;
 
     const checks = {
       noProhibitedSourceInEvidence: !result.evidence.some((e) => prohibited.has(e.sourceType)),
+      // Was a truthiness test on scopeId — a field the adapter always populates
+      // from the turn's own scope, so it could not fail. Now it asserts the value
+      // MATCHES the turn's scope, which is only meaningful because scope is
+      // actually filtered (F25a).
       evidenceCarriesProvenance: result.evidence.every(
-        (e) => e.sourceId && e.versionId && e.scopeId && typeof e.isDirectFact === 'boolean'),
+        (e) => e.sourceId && e.versionId && typeof e.isDirectFact === 'boolean'
+          && e.scopeId === expectedScopeId),
       promptLabelsEvidenceUntrusted: result.evidence.length === 0 || /untrusted data/i.test(composed.user),
 
       // The measured top risk: a superseded version must never be accepted.
@@ -155,6 +170,11 @@ const d = (rel) => require(path.join(DIST, rel));
 
       retrievalPath: !q.expectedPath || result.decision.retrievalPlan.path === q.expectedPath,
 
+      // Cross-meeting isolation: a record from another meeting must never be
+      // accepted. The H-* transcripts are written with deliberately high lexical
+      // overlap precisely so ranking cannot do this.
+      noForeignScopeAccepted: !result.evidence.some((e) => foreign.has(e.sourceId)),
+
       // expectedAnswerability was recorded by all three harnesses and asserted
       // by none, which is how 4 questions came to expect CONFLICTING — a state
       // the orchestrator could not produce.
@@ -163,7 +183,7 @@ const d = (rel) => require(path.join(DIST, rel));
     };
 
     rows.push({
-      id: q.id, category: q.category, modeId, group,
+      id: q.id, category: q.category, modeId, group, scopeId: scopeKey(scope),
       path: result.decision.retrievalPlan.path,
       answerability: result.answerability,
       evidence: result.evidence.length,
@@ -186,7 +206,8 @@ const d = (rel) => require(path.join(DIST, rel));
       files: v.indexed.length, chunks: v.validity.chunkCount, superseded: v.stale.size,
     }])),
     questions: total, fullyPassing: clean, perCheck: per,
-    supersededRevisionsIndexed: groups.versioned.stale.size, staleRejectionsObserved,
+    supersededRevisionsIndexed: groups.versioned.stale.size,
+    staleRejectionsObserved, scopeRejectionsObserved,
     latencyMs: { p50: p(latencies, 0.5), p95: p(latencies, 0.95), p99: p(latencies, 0.99) },
     totalMs: Date.now() - t0, rows,
   };
@@ -208,6 +229,11 @@ const d = (rel) => require(path.join(DIST, rel));
   // actually exercised. Report the count and say so plainly when it is zero.
   console.log(`\nsuperseded revisions indexed       ${groups.versioned.stale.size}`);
   console.log(`turns where one was REJECTED       ${staleRejectionsObserved}`);
+  console.log(`turns rejecting a FOREIGN SCOPE    ${scopeRejectionsObserved}`);
+  if (!scopeRejectionsObserved) {
+    console.log('  *** noForeignScopeAccepted is VACUOUS this run: no out-of-scope chunk was');
+    console.log('      ever a candidate, so scope filtering was never exercised. ***');
+  }
   if (!staleRejectionsObserved) {
     console.log('  *** noStaleVersionAccepted is VACUOUS this run: no superseded chunk was ever');
     console.log('      a retrieval candidate, so the filter was never exercised. ***');

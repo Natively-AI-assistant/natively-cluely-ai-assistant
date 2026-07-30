@@ -24,8 +24,12 @@ const req = (q, over = {}) => ({
   manualQuestion: q, ...over,
 });
 
+// assumeInScopeWhenUnknown belongs at the DEPS level, not inside `registry` —
+// createLegacyRetrievalPort reads deps.assumeInScopeWhenUnknown, so a flag nested
+// in the registry object is silently ignored and every chunk fails closed on
+// UNKNOWN_SOURCE_SCOPE. These tests are about authority, not scope.
 const port = (chunks, reg = registry(), opts = {}) => createLegacyRetrievalPort({
-  retrieve: async () => chunks, registry: reg, ...opts,
+  retrieve: async () => chunks, registry: reg, assumeInScopeWhenUnknown: true, ...opts,
 });
 
 describe('does not retrieve when the decision says not to', () => {

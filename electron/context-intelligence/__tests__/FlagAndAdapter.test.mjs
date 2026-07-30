@@ -65,7 +65,7 @@ describe('legacy adapter — scope and version', () => {
   const chunk = (over = {}) => ({ sourceId: 'resume-1', text: 'Built a WebRTC pipeline', chunkIndex: 0, score: 0.8, ...over });
 
   test('admits an active-version chunk and stamps scopeId', () => {
-    const r = adaptLegacyChunks([chunk()], { scope, sourceTypes, activeVersions, chunkVersions });
+    const r = adaptLegacyChunks([chunk()], { scope, sourceTypes, activeVersions, chunkVersions, assumeInScopeWhenUnknown: true });
     assert.equal(r.evidence.length, 1);
     assert.equal(r.evidence[0].scopeId, 'u:u1|m:m1');
     assert.equal(r.evidence[0].versionId, 'v2');
@@ -75,20 +75,21 @@ describe('legacy adapter — scope and version', () => {
     const r = adaptLegacyChunks([chunk()], {
       scope, sourceTypes, activeVersions,
       chunkVersions: new Map([['resume-1', 'v1']]),
+      assumeInScopeWhenUnknown: true,
     });
     assert.equal(r.evidence.length, 0, 'a superseded chunk must not be retrievable at all');
     assert.equal(r.rejected[0].reason, 'SUPERSEDED_VERSION');
   });
 
   test('fails CLOSED on an unknown source type — never guesses', () => {
-    const r = adaptLegacyChunks([chunk({ sourceId: 'mystery' })], { scope, sourceTypes, activeVersions, chunkVersions });
+    const r = adaptLegacyChunks([chunk({ sourceId: 'mystery' })], { scope, sourceTypes, activeVersions, chunkVersions, assumeInScopeWhenUnknown: true });
     assert.equal(r.evidence.length, 0);
     assert.equal(r.rejected[0].reason, 'UNKNOWN_SOURCE_TYPE');
   });
 
   test('fails CLOSED when no active version is known', () => {
     const r = adaptLegacyChunks([chunk({ sourceId: 'jd-1' })], {
-      scope, sourceTypes, activeVersions: new Map([['resume-1', 'v2']]),
+      scope, sourceTypes, activeVersions: new Map([['resume-1', 'v2']]), assumeInScopeWhenUnknown: true,
     });
     assert.equal(r.rejected[0].reason, 'NO_ACTIVE_VERSION');
   });
@@ -99,7 +100,7 @@ describe('legacy adapter — scope and version', () => {
   // exactly that and scored version isolation 42/42 against a corpus that
   // contained no superseded document at all.
   test('fails CLOSED when the chunk version is UNKNOWN — the fail-open default is gone', () => {
-    const r = adaptLegacyChunks([chunk()], { scope, sourceTypes, activeVersions });
+    const r = adaptLegacyChunks([chunk()], { scope, sourceTypes, activeVersions, assumeInScopeWhenUnknown: true });
     assert.equal(r.evidence.length, 0,
       'an unregistered chunk version must not be assumed current');
     assert.equal(r.rejected[0].reason, 'UNKNOWN_CHUNK_VERSION');
@@ -109,7 +110,7 @@ describe('legacy adapter — scope and version', () => {
     // The wired manual-chat surface needs this: the legacy mode-reference store
     // has no version column, so there is no chunkVersions map to supply.
     const r = adaptLegacyChunks([chunk()], {
-      scope, sourceTypes, activeVersions, assumeCurrentWhenVersionUnknown: true,
+      scope, sourceTypes, activeVersions, assumeCurrentWhenVersionUnknown: true, assumeInScopeWhenUnknown: true,
     });
     assert.equal(r.evidence.length, 1);
     assert.equal(r.evidence[0].retrievedVersionId, 'v2', 'assumed to be the active version');
@@ -120,7 +121,7 @@ describe('legacy adapter — scope and version', () => {
     // fire. While every admitted item was stamped with the ACTIVE version, two
     // items from one source could not differ, so CONFLICTING was unreachable.
     const r = adaptLegacyChunks([chunk()], {
-      scope, sourceTypes, activeVersions, chunkVersions,
+      scope, sourceTypes, activeVersions, chunkVersions, assumeInScopeWhenUnknown: true,
     });
     assert.equal(r.evidence[0].versionId, 'v2');
     assert.equal(r.evidence[0].retrievedVersionId, 'v2');
@@ -133,6 +134,7 @@ describe('legacy adapter — carries the dropped signals through', () => {
     sourceTypes: new Map([['resume-1', 'RESUME']]),
     activeVersions: new Map([['resume-1', 'v2']]),
     chunkVersions: new Map([['resume-1', 'v2']]),
+    assumeInScopeWhenUnknown: true,
   };
 
   test('preserves answerabilityScore and rerankScore that the legacy type discards', () => {
@@ -161,6 +163,7 @@ describe('claim-level authority filtering', () => {
     sourceTypes: new Map([['resume-1', 'RESUME'], ['jd-1', 'JOB_DESCRIPTION']]),
     activeVersions: new Map([['resume-1', 'v2'], ['jd-1', 'v1']]),
     chunkVersions: new Map([['resume-1', 'v2'], ['jd-1', 'v1']]),
+    assumeInScopeWhenUnknown: true,
   };
 
   test('a JD is never returned for a USER_SKILL claim — the canonical contamination', () => {
@@ -184,5 +187,90 @@ describe('claim-level authority filtering', () => {
     const forJob = evidenceForClaim(evidence, 'JOB_REQUIRED_SKILL');
     assert.equal(forJob.length, 1);
     assert.equal(forJob[0].sourceType, 'JOB_DESCRIPTION');
+  });
+});
+
+// ── F25a — scope isolation, which previously did not exist ───────────────────
+//
+// `filterByScopeAndVersion` implemented this comparison and had ZERO call sites
+// outside its own tests. The adapter stamped every item with `scopeKey(turn)` and
+// never compared it against anything, so a record from another meeting was
+// admitted and then LABELLED as belonging to the current scope. 06 §4 requires
+// the filter specifically because the two meeting transcripts are written with
+// high lexical overlap so ranking cannot separate them.
+
+describe('legacy adapter — scope isolation', () => {
+  const sourceTypes = new Map([['june', 'MEETING_TRANSCRIPT'], ['sept', 'MEETING_TRANSCRIPT'], ['resume', 'RESUME']]);
+  const activeVersions = new Map([['june', 'v1'], ['sept', 'v1'], ['resume', 'v1']]);
+  const chunkVersions = new Map([['june', 'v1'], ['sept', 'v1'], ['resume', 'v1']]);
+  const sourceScopes = new Map([
+    ['june', { userId: 'u1', meetingId: 'm-june' }],
+    ['sept', { userId: 'u1', meetingId: 'm-sept' }],
+    ['resume', { userId: 'u1' }],                       // user-level, no meeting
+  ]);
+  const base = { sourceTypes, activeVersions, chunkVersions, sourceScopes };
+  const chunk = (sourceId, text) => ({ sourceId, text, chunkIndex: 0, score: 0.9 });
+  const septTurn = { userId: 'u1', meetingId: 'm-sept' };
+
+  test('a record from ANOTHER meeting is rejected, however well it scores', () => {
+    const r = adaptLegacyChunks(
+      [{ ...chunk('june', 'We are moving the ledger to Cassandra'), score: 0.99 }],
+      { ...base, scope: septTurn },
+    );
+    assert.equal(r.evidence.length, 0, 'the June decision must not answer a September turn');
+    assert.equal(r.rejected[0].reason, 'OUT_OF_SCOPE');
+  });
+
+  test('the current meeting IS admitted', () => {
+    const r = adaptLegacyChunks([chunk('sept', 'We are explicitly NOT migrating the ledger')], { ...base, scope: septTurn });
+    assert.equal(r.evidence.length, 1);
+    assert.equal(r.evidence[0].scopeId, 'u:u1|m:m-sept');
+  });
+
+  // CONTAINMENT, not equality — the bug this design nearly shipped. Comparing
+  // scope keys as strings gives `u:u1` !== `u:u1|m:m-sept`, which would reject
+  // the user's own résumé from every meeting turn.
+  test('a USER-level document stays visible inside a meeting turn', () => {
+    const r = adaptLegacyChunks([chunk('resume', 'Managed a team of 11 engineers')], { ...base, scope: septTurn });
+    assert.equal(r.evidence.length, 1,
+      'narrowing to a meeting does not revoke the user’s own material');
+  });
+
+  test('a meeting record is NOT visible from a user-level turn', () => {
+    const r = adaptLegacyChunks([chunk('sept', 'x')], { ...base, scope: { userId: 'u1' } });
+    assert.equal(r.evidence.length, 0, 'a meeting-scoped record must not leak into a general turn');
+    assert.equal(r.rejected[0].reason, 'OUT_OF_SCOPE');
+  });
+
+  test('another USER is rejected — the strongest isolation case', () => {
+    const r = adaptLegacyChunks([chunk('resume', 'someone else')], { ...base, scope: { userId: 'u2' } });
+    assert.equal(r.evidence.length, 0);
+    assert.equal(r.rejected[0].reason, 'OUT_OF_SCOPE');
+  });
+
+  test('fails CLOSED when the source scope is UNKNOWN', () => {
+    const r = adaptLegacyChunks([chunk('sept', 'x')], {
+      sourceTypes, activeVersions, chunkVersions, scope: septTurn,   // no sourceScopes
+    });
+    assert.equal(r.evidence.length, 0);
+    assert.equal(r.rejected[0].reason, 'UNKNOWN_SOURCE_SCOPE');
+  });
+
+  test('the fail-open exists only when explicitly requested', () => {
+    // The wired manual-chat surface needs it: mode reference files carry no scope.
+    const r = adaptLegacyChunks([chunk('sept', 'x')], {
+      sourceTypes, activeVersions, chunkVersions, scope: septTurn, assumeInScopeWhenUnknown: true,
+    });
+    assert.equal(r.evidence.length, 1);
+  });
+
+  test('scope is checked BEFORE version, so the reason is not misattributed', () => {
+    // A foreign meeting record that is ALSO stale must report OUT_OF_SCOPE: it is
+    // not "a stale version of this meeting", and the wrong reason would send a
+    // reader looking at version handling for a scope bug.
+    const r = adaptLegacyChunks([chunk('june', 'x')], {
+      ...base, scope: septTurn, chunkVersions: new Map([['june', 'v0']]),
+    });
+    assert.equal(r.rejected[0].reason, 'OUT_OF_SCOPE');
   });
 });

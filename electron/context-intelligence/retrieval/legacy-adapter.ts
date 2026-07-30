@@ -54,6 +54,29 @@ export interface AdaptOptions {
   /** sourceId -> versionId the chunk actually came from, when the store knows. */
   chunkVersions?: Map<string, string>;
   /**
+   * sourceId -> the scopeId the SOURCE belongs to.
+   *
+   * Without this, scope isolation does not exist. The adapter stamps every
+   * admitted item with `scopeKey(opts.scope)` — the scope of the TURN — and never
+   * compares it against anything, so a chunk from another user or another meeting
+   * is admitted and then labelled as though it belonged to the current scope.
+   * `filterByScopeAndVersion` implements the comparison and has no callers (F25a).
+   *
+   * 06_SOURCE_AUTHORITY_SPEC §4 requires this specifically for cross-meeting
+   * isolation: the previous and current meeting transcripts are written with high
+   * lexical overlap so that similarity ranking CANNOT separate them, and only a
+   * `scopeId = currentMeetingId` filter can.
+   */
+  sourceScopes?: Map<string, EvidenceScope>;
+  /**
+   * Admit a chunk whose source scope is UNKNOWN. Same rationale, and the same
+   * fail-open hazard, as `assumeCurrentWhenVersionUnknown`: the legacy
+   * mode-reference store has no scope column, so the wired surface must opt in,
+   * and a harness that simply forgets to declare scopes must fail loudly instead
+   * of measuring an inert filter as a pass.
+   */
+  assumeInScopeWhenUnknown?: boolean;
+  /**
    * Admit a chunk whose own version is UNKNOWN, treating it as current.
    *
    * This must be opted into. The legacy mode-reference store has no version
@@ -74,8 +97,32 @@ export interface AdaptResult {
   evidence: EvidenceItem[];
   rejected: Array<{
     sourceId: string;
-    reason: 'UNKNOWN_SOURCE_TYPE' | 'SUPERSEDED_VERSION' | 'NO_ACTIVE_VERSION' | 'UNKNOWN_CHUNK_VERSION';
+    reason: 'UNKNOWN_SOURCE_TYPE' | 'SUPERSEDED_VERSION' | 'NO_ACTIVE_VERSION'
+      | 'UNKNOWN_CHUNK_VERSION' | 'OUT_OF_SCOPE' | 'UNKNOWN_SOURCE_SCOPE';
   }>;
+}
+
+/**
+ * Is a source visible from this turn's scope?
+ *
+ * CONTAINMENT, not equality. A user-level document — a résumé — must stay visible
+ * inside a meeting turn, because narrowing to a meeting does not revoke the
+ * user's own material. Comparing scope KEYS as strings gets this exactly
+ * backwards: `u:alice` !== `u:alice|m:sept`, so the user's résumé would be
+ * rejected from every meeting turn.
+ *
+ * A qualifier the source declares must match; a qualifier it leaves open does
+ * not restrict it. So the June transcript (`m:m-june`) is rejected from a
+ * September turn, while the résumé (no meeting) is admitted to both.
+ */
+export function scopeAdmits(turn: EvidenceScope, source: EvidenceScope): boolean {
+  if (source.userId !== turn.userId) return false;
+  const narrows = (a?: string, b?: string) => a !== undefined && a !== b;
+  if (narrows(source.meetingId, turn.meetingId)) return false;
+  if (narrows(source.profileId, turn.profileId)) return false;
+  if (narrows(source.sessionId, turn.sessionId)) return false;
+  if (narrows(source.workspaceId, turn.workspaceId)) return false;
+  return true;
 }
 
 /**
@@ -97,6 +144,18 @@ export function adaptLegacyChunks(chunks: LegacyChunk[], opts: AdaptOptions): Ad
 
     const active = opts.activeVersions.get(c.sourceId);
     if (!active) { rejected.push({ sourceId: c.sourceId, reason: 'NO_ACTIVE_VERSION' }); continue; }
+
+    // Scope BEFORE version: a chunk from another meeting is not "a stale version
+    // of this meeting", and reporting it as one would misattribute the rejection.
+    const sourceScope = opts.sourceScopes?.get(c.sourceId);
+    if (sourceScope === undefined && !opts.assumeInScopeWhenUnknown) {
+      rejected.push({ sourceId: c.sourceId, reason: 'UNKNOWN_SOURCE_SCOPE' });
+      continue;
+    }
+    if (sourceScope !== undefined && !scopeAdmits(opts.scope, sourceScope)) {
+      rejected.push({ sourceId: c.sourceId, reason: 'OUT_OF_SCOPE' });
+      continue;
+    }
 
     const known = opts.chunkVersions?.get(c.sourceId);
     if (known === undefined && !opts.assumeCurrentWhenVersionUnknown) {

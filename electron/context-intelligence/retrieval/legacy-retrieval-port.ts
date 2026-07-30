@@ -31,6 +31,8 @@ export interface SourceRegistry {
   activeVersions: Map<string, string>;
   /** sourceId -> the version a chunk actually came from, when the store knows. */
   chunkVersions?: Map<string, string>;
+  /** sourceId -> the scope the source belongs to. Absent ⇒ fails closed. */
+  sourceScopes?: Map<string, import('../contracts/types').EvidenceScope>;
 }
 
 export interface LegacyPortDeps {
@@ -44,6 +46,8 @@ export interface LegacyPortDeps {
    * `chunkVersions` fails closed instead of measuring an inert filter as a pass.
    */
   assumeCurrentWhenVersionUnknown?: boolean;
+  /** See AdaptOptions.assumeInScopeWhenUnknown. Required by the legacy store. */
+  assumeInScopeWhenUnknown?: boolean;
 }
 
 export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
@@ -79,7 +83,9 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
         sourceTypes: deps.registry.sourceTypes,
         activeVersions: deps.registry.activeVersions,
         chunkVersions: deps.registry.chunkVersions,
+        sourceScopes: deps.registry.sourceScopes,
         assumeCurrentWhenVersionUnknown: deps.assumeCurrentWhenVersionUnknown,
+        assumeInScopeWhenUnknown: deps.assumeInScopeWhenUnknown,
       });
 
       // Only source types the MODE authorized for this turn.
