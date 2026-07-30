@@ -451,6 +451,7 @@ export async function orchestrate(
     authorizedSources: evidence.map((e) => ({
       sourceType: e.sourceType, sourceId: e.sourceId, versionId: e.versionId, scopeId: e.scopeId,
     })),
+    plannedSourceTypes: [...decision.retrievalPlan.sourceTypes],
     prohibitedSources: [],
     retrievalPath: decision.retrievalPlan.path,
     retrievalAttempts: attempts,

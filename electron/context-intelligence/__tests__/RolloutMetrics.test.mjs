@@ -17,7 +17,7 @@ const { recordTurnMetrics, getRolloutMetrics, evaluateAbortConditions, resetRoll
 const turn = (over = {}) => ({
   engine: 'v3', status: 'COMPLETED', retrievalPath: 'GROUNDED',
   answerability: 'FULL', fallbackUsed: 'NONE',
-  authorizedSources: ['REFERENCE_FILE'],
+  plannedSourceTypes: ['REFERENCE_FILE'],
   acceptedEvidence: [{ sourceType: 'REFERENCE_FILE', evidenceId: 'e1' }],
   retrievalAttempts: [{ rejections: [], failed: undefined }],
   timings: { providerTtfbMs: 100 },
@@ -36,9 +36,20 @@ describe('signals', () => {
       'the filter doing its job must never trip an abort');
   });
 
+  test('contamination is NOT COMPUTABLE without planned source types — null, never 0%', () => {
+    // The signal's first implementation compared accepted evidence against a
+    // field derived FROM that evidence (and compared strings to objects),
+    // reporting 45.2% contamination on a corpus with none. A trace that cannot
+    // support the check must report null.
+    recordTurnMetrics(turn({ plannedSourceTypes: undefined }));
+    const m = getRolloutMetrics();
+    assert.equal(m.counters.contaminationCheckableTurns, 0);
+    assert.equal(m.rates.contamination, null, 'unmeasurable must not read as clean');
+  });
+
   test('contamination = an ACCEPTED item the turn never authorized, and it aborts on ANY occurrence', () => {
     recordTurnMetrics(turn({
-      authorizedSources: ['REFERENCE_FILE'],
+      plannedSourceTypes: ['REFERENCE_FILE'],
       acceptedEvidence: [{ sourceType: 'JOB_DESCRIPTION', evidenceId: 'e9' }],
     }));
     assert.equal(getRolloutMetrics().counters.contaminationTurns, 1);

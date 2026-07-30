@@ -54,6 +54,10 @@ export interface RolloutCounters {
    *  non-zero value here means the filter was bypassed, which is an abort
    *  condition, not a metric to trend. */
   contaminationTurns: number;
+  /** Turns where contamination COULD be evaluated (the trace carried planned
+   *  source types). A rate over turns that could not be checked would read 0%
+   *  and look like a pass — the same vacuity that hid four gates earlier. */
+  contaminationCheckableTurns: number;
 
   /** §4: F4 — stale answers overwriting current ones. */
   supersededTurns: number;
@@ -75,12 +79,35 @@ function emptyCounters(): RolloutCounters {
       groundedWithNoEvidenceTurns: 0, dependencyFailureTurns: 0,
     },
     contaminationTurns: 0,
+    contaminationCheckableTurns: 0,
     supersededTurns: 0,
     latencyMs: [],
   };
 }
 
-let counters = emptyCounters();
+// PROCESS-GLOBAL, deliberately — not a module-level `let`.
+//
+// The build produces self-contained esbuild bundles, so the same source file is
+// duplicated into several of them and a module-scoped variable becomes a
+// SEPARATE instance per bundle. The orchestrator writes counters inside its
+// bundle; the IPC handler reads them inside another; the numbers would have been
+// permanently zero in production while every gate reported a clean pass.
+//
+// Caught by this module's own vacuity guard on the first Stage-0 run: 42 turns
+// executed and the counters read 0, and because rates are null-with-no-data
+// rather than 0, the gate reported `insufficientData` instead of "0%
+// contamination, stage green". A metric that cannot see its own writes is the
+// exact failure this mission exists to end, and it very nearly shipped inside
+// the tool built to detect it.
+const GLOBAL_KEY = '__nativelyCiV3RolloutCounters__';
+const store = globalThis as unknown as Record<string, RolloutCounters | undefined>;
+if (!store[GLOBAL_KEY]) store[GLOBAL_KEY] = emptyCounters();
+
+/** The one shared counter set, whichever bundle asks. */
+const c0 = (): RolloutCounters => {
+  if (!store[GLOBAL_KEY]) store[GLOBAL_KEY] = emptyCounters();
+  return store[GLOBAL_KEY]!;
+};
 
 const bump = (m: Record<string, number>, k: string | undefined) => {
   if (!k) return;
@@ -98,6 +125,7 @@ export function recordTurnMetrics(trace: AnswerTrace | null | undefined): void {
   try {
     if (!trace) return;
     const t = trace as unknown as Record<string, any>;
+    const counters = c0();
     counters.turns += 1;
     if (t.engine === 'v3') counters.engine.v3 += 1;
     else counters.engine.legacy += 1;
@@ -123,12 +151,19 @@ export function recordTurnMetrics(trace: AnswerTrace | null | undefined): void {
       }
     }
 
-    // Contamination: an accepted item whose source type the turn never
-    // authorized. Structurally impossible via the port — so this counts filter
-    // BYPASS, which §5 treats as an immediate rollback trigger.
-    const authorized: string[] = t.authorizedSources ?? t.decision?.retrievalPlan?.sourceTypes ?? [];
-    if (Array.isArray(authorized) && authorized.length && Array.isArray(t.acceptedEvidence)) {
-      const bad = t.acceptedEvidence.some((e: any) => e?.sourceType && !authorized.includes(e.sourceType));
+    // Contamination: an accepted item whose source type the turn's PLAN never
+    // authorized. Structurally impossible via the port, so a non-zero value
+    // means the filter was bypassed — §5 treats it as immediate rollback.
+    //
+    // Must compare against plannedSourceTypes, NOT trace.authorizedSources:
+    // the latter is built from the accepted evidence, so the comparison is
+    // tautological, and it holds objects rather than type strings. Both
+    // mistakes were live at once and produced a 45.2% false contamination rate.
+    const planned: unknown = t.plannedSourceTypes;
+    if (Array.isArray(planned) && planned.length && Array.isArray(t.acceptedEvidence)) {
+      counters.contaminationCheckableTurns += 1;
+      const allowed = new Set(planned.map(String));
+      const bad = t.acceptedEvidence.some((e: any) => e?.sourceType && !allowed.has(String(e.sourceType)));
       if (bad) counters.contaminationTurns += 1;
     }
 
@@ -160,7 +195,7 @@ export function getRolloutMetrics(): {
   rates: Record<string, number | null>;
   latency: { p50: number | null; p95: number | null; samples: number };
 } {
-  const c = counters;
+  const c = c0();
   const withRetrieval = c.retrieval.turnsWithRetrieval;
   return {
     counters: { ...c, latencyMs: [...c.latencyMs] },
@@ -169,7 +204,9 @@ export function getRolloutMetrics(): {
       outOfScopeRejected: pct(c.retrieval.outOfScopeRejectedTurns, withRetrieval),
       groundedWithNoEvidence: pct(c.retrieval.groundedWithNoEvidenceTurns, withRetrieval),
       retrievalDependencyFailure: pct(c.retrieval.dependencyFailureTurns, withRetrieval),
-      contamination: pct(c.contaminationTurns, c.turns),
+      // Denominator is CHECKABLE turns, so an uninstrumented path reports null
+      // rather than a reassuring 0%.
+      contamination: pct(c.contaminationTurns, c.contaminationCheckableTurns),
       superseded: pct(c.supersededTurns, c.turns),
       strictRefusal: pct(c.fallback.STRICT_NOT_FOUND ?? 0, c.turns),
       generalFallback: pct(c.fallback.GENERAL_KNOWLEDGE ?? 0, c.turns),
@@ -233,4 +270,4 @@ export function evaluateAbortConditions(input: {
 }
 
 /** Test seam / session boundary. */
-export function resetRolloutMetrics(): void { counters = emptyCounters(); }
+export function resetRolloutMetrics(): void { store[GLOBAL_KEY] = emptyCounters(); }
