@@ -24,7 +24,7 @@ const { ingestCorpus } = require('./ingest.cjs');
 // ONE corpus, shared with golden-live.cjs. These two lists had drifted to 10
 // files versus 13 — the thesis and both superseded revisions were missing here,
 // so §26.5 was measured on a smaller corpus than the gates it is reported beside.
-const { MODE_FOR_SOURCE, docsForGroup, groupForQuestion, buildRegistry } = require('./corpus.cjs');
+const { MODE_FOR_SOURCE, docsForGroup, groupForQuestion, scopeForQuestion, buildRegistry } = require('./corpus.cjs');
 
 process.env.NATIVELY_CONTEXT_INTELLIGENCE_V3 = '1';
 // F23 — MUST be set, or this measurement is void.
@@ -455,7 +455,13 @@ function spokenQuality(answer, answerability) {
     try {
       result = await orchestrate({
         requestId: `pe-${q.id}`, requestSequence: 1, surface: 'manual-chat',
-        modeId, scope: { userId: 'local' }, sessionId: 's', manualQuestion: q.question,
+        // Per-question scope, matching golden-live. Meeting questions are asked
+        // INSIDE the September meeting; at plain user scope the meeting-scoped
+        // transcript is (correctly) rejected OUT_OF_SCOPE and every meeting
+        // answer degrades to a disclosure — measured as judged grounding
+        // falling 83.3% -> 63.3% when this call site was missed in the scope
+        // wiring while golden-live's was updated.
+        modeId, scope: scopeForQuestion(q), sessionId: 's', manualQuestion: q.question,
       }, port);
       composed = composePrompt({ decision: result.decision, policy, evidence: result.evidence });
       const t = Date.now();

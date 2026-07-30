@@ -334,3 +334,20 @@ Exactly the §20 shape: disclose the gap, then label the rationale as reasoning.
 | Malformed responses needing retry | **0** | 26–32 per 42 |
 
 **The safety properties hold on both models**, which is the first evidence in this mission that they are a property of the pipeline rather than of one model's disposition. §5's "one model, one temperature" limitation is now partly addressed.
+
+
+### 9.4 Re-measured after the decision-layer fixes (2026-07-30, later)
+
+The answerability fixes (`09_TEST_MATRIX.md` §11.5: metric lookup, JD reroute, summary scaffolding, referent cap) changed which turns ground, so §26.5 was re-run on the same model to keep this document describing the shipped decisions.
+
+| | §9 run | **§9.4 run** |
+|---|---|---|
+| Judged factual grounding | 83.3% | **86.7%** |
+| Disclosure on a FULL turn (decision precision) | 14.7% | **9.4%** |
+| Forbidden claims · over-refusal · category C | 0% · 0% · 100% | **0% · 0% · 100%** |
+| Boilerplate · over-long · length p95 | 0% · 0% · 66 w | **0% · 0% · 65 w** |
+| Errors · mangled · retries | 0 · 0 · 0 | **0 · 0 · 0** |
+
+The two questions the decision fixes grounded now answer with real values on a live model: G-03 *"The payments API processes a peak volume of **5.1 million** transactions per day"* — from the **active** résumé revision, while the superseded revision carrying the wrong 2.3M figure scored *highest* on similarity and was rejected by the version filter; A-12 *"The base salary band for a backend L4 is 165,000 to 185,000 USD"* — the L3/L4/L5 adjacency probe answered with the right row.
+
+**A voided run in between, worth recording.** The first re-run read judged grounding **63.3%**, an apparent 20-point collapse. Every flipped verdict was a meeting question whose evidence went 1 → 0: when scope isolation was wired, `golden-live`'s call site got the per-question meeting scope and **`provider-eval`'s did not**, so the September transcript — now correctly meeting-scoped — was rejected `OUT_OF_SCOPE` from the eval's user-level turns. The isolation code did exactly its job; the harness was asking meeting questions from outside the meeting. One missed call site out of two, found by diffing per-question judge verdicts against the committed prior run rather than accepting the headline number.
