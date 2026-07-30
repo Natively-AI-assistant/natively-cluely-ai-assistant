@@ -43,7 +43,7 @@ Total production change: **51 lines across 3 files, purely additive** — one `t
 | 4 — Core implementation | **SUBSTANTIALLY COMPLETE** | contracts · source authority + scope filter · mode registry · turn classifier · BM25 · AnswerTrace · **context packer · prompt composer · conversation state** · **120 tests** |
 | 5 — Ingestion migration | **DONE** (scope-reduced by decision) | `retrieval/legacy-adapter.ts` — scopeId + the dropped signals |
 | 6 — Surface integration | **PARTIAL** — manual-chat (short-circuit) AND WTA (prompt substitution into the frozen request snapshot) wired flag-gated; refinement surfaces governed by inheritance, proactive surfaces deferred — see §13.7 | `orchestration/orchestrator.ts` · §13.7 |
-| 7 — UI simplification | **NOT STARTED** | — |
+| 7 — UI simplification | **DONE** (2026-07-30) — control, plumbing and both UI surfaces; see §12.3 | `policies/answer-policy.ts` · `answer-policy-store.ts` · §12.3 |
 | 8 — Full verification | **PARTIAL** — suite runs (6593 tests, 67 s); golden suite run against the LIVE stack; provider-backed §26.5 run on MiniMax-M3 with all three behavioural gates passing | `09_TEST_MATRIX.md` §10 · `10_BENCHMARK_RESULTS.md` §8 |
 | 9 — Legacy removal | **BLOCKED, deliberately not executed** | `11_LEGACY_REMOVAL_MATRIX.md` |
 | 10 — Rollout | **PLAN ONLY** | `12_ROLLOUT_AND_ROLLBACK.md` |
@@ -223,7 +223,9 @@ Answer policy
 - **The control is only offered where it binds to something** — a mode with no reference files gets no "only answer from references" toggle, since it could only make the answer worse. Asserted against the registry so the two cannot drift, which is how the old selector came to offer sources a mode never allowed.
 - **Any developer diagnostic override is passed per call and never read from settings**, satisfying §6's requirement that it never become persisted production state.
 
-### 12.2 The UI edit itself is NOT done, and the reason is not caution
+### 12.2 The UI edit itself was NOT done at first, and the reason was not caution
+
+> **SUPERSEDED by §12.3 (2026-07-30):** the owner explicitly authorized editing the submodule ("continue, even on premium submodule"), and both surfaces are now done. The section below records why it was deferred at the time.
 
 The two surfaces that render the old control are:
 
@@ -337,3 +339,19 @@ Recorded because it is the through-line of the whole continuation.
 | **Proactive** | assist · clarify · brainstorm | **DEFERRED with a named prerequisite.** They receive no question; the bridge exists for them, but honest adoption requires `question-resolver.ts` extracting the live interviewer question from the transcript window — the resolver is built, tested, and currently has no production caller (the F1 pattern, §13.2). Wiring the resolver is its own arc; bolting the bridge on without it would degrade proactive value into no-evidence disclosures. |
 
 **Stated limitation on WTA:** the retrieval port covers mode reference files only. A `MEETING_STATEMENT` question on the live surface with the flag on composes an honest no-evidence disclosure rather than fabricating; meeting evidence requires the meeting-RAG port (`meetingChunksToEvidenceItems` — zero production callers). That is the next port, not a papered-over gap.
+
+
+### 12.3 Phase 7 completed end to end (2026-07-30)
+
+The §12.1 architecture gained the two things it was missing — a consumer and a UI:
+
+| Piece | What landed |
+|---|---|
+| **Persistence** | `answer-policy-store.ts` — one JSON file in userData, atomic writes, validates on read so a hand-edited third value can never become a grounding state nobody chose. Keyed by mode unique id. |
+| **Decision layer** | `AnswerRequest.userAnswerPolicy`, applied once in `decide()` as an effective policy — *before* classification, so "Only answer from references" makes a reference-holding mode document-centric. Pinned: the strict choice closes the general-knowledge fallback (`GENERAL_KNOWLEDGE` → `STRICT_NOT_FOUND`); `OPEN_KNOWLEDGE` is unreachable; source authorization is untouchable; an absent choice reproduces the mode default bit for bit. |
+| **Per-turn reads** | All three wired call sites read the store per turn, so a Settings change applies to the next answer — no restart, no cache. |
+| **IPC** | `answer-policy-get` ships every decision (flag, offered, labels, value, source) so the renderer renders and never decides; failure degrades toward the **legacy** UI, never toward hiding both controls. |
+| **ModesSettings (premium)** | Flag ON → the Knowledge source selector is replaced by the two-option control; `offered=false` renders nothing rather than a dead toggle. Flag OFF → legacy panel byte-for-byte, because it still drives the live legacy source contracts. Committed on its own branch (`ci-v3-phase7-answer-policy`) so the submodule's in-flight branch stays clean. |
+| **SettingsPopup** | The Profile Mode toggle — a global source override, i.e. the compensation control §6 removes — is hidden when V3 is on, unchanged when off. |
+
+**A staging hazard worth recording:** the render swap's closing `)}` landed in a hunk that keyword-filtering classified as the concurrent agent's, and in `SettingsPopup` one of their cosmetic edits sat close enough to mine that git merged the changes into a single hunk. Both were caught only because every staged blob was **parsed standalone** before committing — a hunk filter without a parse check would have committed a file that does not compile.
