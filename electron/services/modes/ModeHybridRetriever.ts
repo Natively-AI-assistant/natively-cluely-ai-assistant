@@ -8,6 +8,7 @@ import { VectorStore, ScoredChunk } from '../../rag/VectorStore';
 import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import Database from 'better-sqlite3';
 import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks } from './DocumentMap';
+import { wordsOf } from './lexicalTokens';
 // Round-8 (seminar-fix-2): use the SHARED 6-clause evidence rule so the hybrid
 // (live) path gives the model the SAME completeness + off-topic-redirect guidance
 // as the lexical path. Previously formatContext had a stale 1-sentence copy.
@@ -195,21 +196,8 @@ function encodePayload(value: unknown): string {
 function estimateTokens(text: string): number {
     return Math.ceil(text.length / 4);
 }
+// Tokenizer lives in ./lexicalTokens so the two retrievers cannot drift.
 
-// Simple word tokenization (matching ModeContextRetriever for FTS compatibility).
-// English possessive `'s` is stripped as a unit so "Green's"/"interviewer's"
-// collapse to the noun root, then any remaining apostrophes (contractions) are
-// dropped. Keep this in lock-step with ModeContextRetriever.wordsOf —
-// divergence breaks hybrid score fusion.
-function wordsOf(text: string): string[] {
-    return text
-        .toLowerCase()
-        .replace(/['’]s\b/g, '')
-        .replace(/['’]/g, '')
-        .replace(/[^a-z0-9\s-]/g, ' ')
-        .split(/\s+/)
-        .filter(word => word.length > 2);
-}
 
 // Content-aware hash using cityhash-style simple hash
 // Uses polynomial rolling hash for speed and reasonable distribution

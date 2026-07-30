@@ -22,7 +22,7 @@ const path = require('path');
 const fs = require('fs');
 const { boot, REPO_ROOT, DIST } = require('./bootstrap.cjs');
 const { ingestCorpus } = require('./ingest.cjs');
-const { MODE_FOR_SOURCE, docsForGroup, groupForQuestion, buildRegistry } = require('./corpus.cjs');
+const { MODE_FOR_SOURCE, docsForGroup, groupForQuestion, buildRegistry, scopeForQuestion } = require('./corpus.cjs');
 
 process.env.NATIVELY_CONTEXT_INTELLIGENCE_V3 = '1';
 process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL =
@@ -59,6 +59,7 @@ const IDS = process.argv.slice(2).filter((a) => /^[A-J]-\d+$/.test(a));
     groups[group] = {
       registry, rawRetrieve,
       port: createLegacyRetrievalPort({ registry, retrieve: rawRetrieve }),
+      registryRef: registry,
     };
   }
 
@@ -74,7 +75,7 @@ const IDS = process.argv.slice(2).filter((a) => /^[A-J]-\d+$/.test(a));
 
     const req = {
       requestId: `diag-${q.id}`, requestSequence: 1, surface: 'manual-chat',
-      modeId, scope: { userId: 'local' }, sessionId: 's', manualQuestion: q.question,
+      modeId, scope: scopeForQuestion(q), sessionId: 's', manualQuestion: q.question,
     };
     const decision = decide(req);
     const result = await orchestrate(req, port);

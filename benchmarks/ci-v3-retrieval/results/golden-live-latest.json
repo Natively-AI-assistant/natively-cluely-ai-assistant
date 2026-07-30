@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-07-30T01:24:34.196Z",
+  "runAt": "2026-07-30T01:47:49.827Z",
   "mode": "LIVE retrieval stack",
   "groups": {
     "base": {
@@ -14,7 +14,7 @@
     }
   },
   "questions": 42,
-  "fullyPassing": 32,
+  "fullyPassing": 34,
   "perCheck": {
     "noProhibitedSourceInEvidence": 42,
     "evidenceCarriesProvenance": 42,
@@ -22,17 +22,17 @@
     "noStaleVersionAccepted": 42,
     "retrievalPath": 41,
     "noForeignScopeAccepted": 42,
-    "answerabilityMatchesExpected": 33
+    "answerabilityMatchesExpected": 35
   },
   "supersededRevisionsIndexed": 1,
   "staleRejectionsObserved": 6,
   "scopeRejectionsObserved": 14,
   "latencyMs": {
-    "p50": 12,
-    "p95": 14,
-    "p99": 28
+    "p50": 19,
+    "p95": 21,
+    "p99": 37
   },
-  "totalMs": 402,
+  "totalMs": 617,
   "rows": [
     {
       "id": "A-01",
@@ -43,7 +43,7 @@
       "path": "GROUNDED",
       "answerability": "FULL",
       "evidence": 1,
-      "retrievedRaw": 2,
+      "retrievedRaw": 1,
       "rejectedByScope": 0,
       "rejections": [],
       "staleRejected": 0,
@@ -226,7 +226,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "sourceId": "ref_bd1c64cb-f30d-4bf3-be1f-1e322decbbfe",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -306,7 +306,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "sourceId": "ref_bd1c64cb-f30d-4bf3-be1f-1e322decbbfe",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -336,7 +336,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "sourceId": "ref_bd1c64cb-f30d-4bf3-be1f-1e322decbbfe",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -441,7 +441,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "sourceId": "ref_bd1c64cb-f30d-4bf3-be1f-1e322decbbfe",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -471,7 +471,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "sourceId": "ref_bd1c64cb-f30d-4bf3-be1f-1e322decbbfe",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -501,7 +501,7 @@
       "rejectedByScope": 0,
       "rejections": [],
       "staleRejected": 0,
-      "expectedAnswerability": "PARTIAL",
+      "expectedAnswerability": "NONE",
       "checks": {
         "noProhibitedSourceInEvidence": true,
         "evidenceCarriesProvenance": true,
@@ -509,11 +509,9 @@
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
         "noForeignScopeAccepted": true,
-        "answerabilityMatchesExpected": false
+        "answerabilityMatchesExpected": true
       },
-      "failed": [
-        "answerabilityMatchesExpected"
-      ]
+      "failed": []
     },
     {
       "id": "D-01",
@@ -528,7 +526,7 @@
       "rejectedByScope": 0,
       "rejections": [],
       "staleRejected": 0,
-      "expectedAnswerability": "PARTIAL",
+      "expectedAnswerability": "FULL",
       "checks": {
         "noProhibitedSourceInEvidence": true,
         "evidenceCarriesProvenance": true,
@@ -536,11 +534,9 @@
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
         "noForeignScopeAccepted": true,
-        "answerabilityMatchesExpected": false
+        "answerabilityMatchesExpected": true
       },
-      "failed": [
-        "answerabilityMatchesExpected"
-      ]
+      "failed": []
     },
     {
       "id": "G-01",
@@ -555,7 +551,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_82622560-f6dc-4fe2-8dc4-bd639b7bf9e7",
+          "sourceId": "ref_15991e93-3f77-49d3-8971-d5702ce5e35c",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
@@ -585,11 +581,11 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_82622560-f6dc-4fe2-8dc4-bd639b7bf9e7",
+          "sourceId": "ref_15991e93-3f77-49d3-8971-d5702ce5e35c",
           "reason": "SUPERSEDED_VERSION"
         },
         {
-          "sourceId": "ref_4265c783-687e-4df6-bb90-992114889a28",
+          "sourceId": "ref_16bfc452-5287-465d-b0c6-901c6bebf52f",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -646,11 +642,11 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_4265c783-687e-4df6-bb90-992114889a28",
+          "sourceId": "ref_16bfc452-5287-465d-b0c6-901c6bebf52f",
           "reason": "OUT_OF_SCOPE"
         },
         {
-          "sourceId": "ref_82622560-f6dc-4fe2-8dc4-bd639b7bf9e7",
+          "sourceId": "ref_15991e93-3f77-49d3-8971-d5702ce5e35c",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
@@ -680,11 +676,11 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_4265c783-687e-4df6-bb90-992114889a28",
+          "sourceId": "ref_16bfc452-5287-465d-b0c6-901c6bebf52f",
           "reason": "OUT_OF_SCOPE"
         },
         {
-          "sourceId": "ref_82622560-f6dc-4fe2-8dc4-bd639b7bf9e7",
+          "sourceId": "ref_15991e93-3f77-49d3-8971-d5702ce5e35c",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
@@ -714,11 +710,11 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_4265c783-687e-4df6-bb90-992114889a28",
+          "sourceId": "ref_16bfc452-5287-465d-b0c6-901c6bebf52f",
           "reason": "OUT_OF_SCOPE"
         },
         {
-          "sourceId": "ref_82622560-f6dc-4fe2-8dc4-bd639b7bf9e7",
+          "sourceId": "ref_15991e93-3f77-49d3-8971-d5702ce5e35c",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
@@ -748,11 +744,11 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_4265c783-687e-4df6-bb90-992114889a28",
+          "sourceId": "ref_16bfc452-5287-465d-b0c6-901c6bebf52f",
           "reason": "OUT_OF_SCOPE"
         },
         {
-          "sourceId": "ref_82622560-f6dc-4fe2-8dc4-bd639b7bf9e7",
+          "sourceId": "ref_15991e93-3f77-49d3-8971-d5702ce5e35c",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
@@ -853,7 +849,7 @@
       "group": "base",
       "scopeId": "u:local",
       "path": "GROUNDED",
-      "answerability": "FULL",
+      "answerability": "NONE",
       "evidence": 3,
       "retrievedRaw": 4,
       "rejectedByScope": 0,
@@ -867,11 +863,9 @@
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
         "noForeignScopeAccepted": true,
-        "answerabilityMatchesExpected": false
+        "answerabilityMatchesExpected": true
       },
-      "failed": [
-        "answerabilityMatchesExpected"
-      ]
+      "failed": []
     },
     {
       "id": "J-01",
@@ -880,13 +874,13 @@
       "group": "base",
       "scopeId": "u:local",
       "path": "GROUNDED",
-      "answerability": "FULL",
+      "answerability": "NONE",
       "evidence": 5,
       "retrievedRaw": 6,
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "sourceId": "ref_bd1c64cb-f30d-4bf3-be1f-1e322decbbfe",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -899,9 +893,11 @@
         "noStaleVersionAccepted": true,
         "retrievalPath": true,
         "noForeignScopeAccepted": true,
-        "answerabilityMatchesExpected": true
+        "answerabilityMatchesExpected": false
       },
-      "failed": []
+      "failed": [
+        "answerabilityMatchesExpected"
+      ]
     },
     {
       "id": "A-10",
@@ -1118,7 +1114,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "sourceId": "ref_bd1c64cb-f30d-4bf3-be1f-1e322decbbfe",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -1148,7 +1144,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "sourceId": "ref_bd1c64cb-f30d-4bf3-be1f-1e322decbbfe",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -1180,7 +1176,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_3f077e50-9c04-47ce-a3fc-9d7a11a87bb1",
+          "sourceId": "ref_bd1c64cb-f30d-4bf3-be1f-1e322decbbfe",
           "reason": "OUT_OF_SCOPE"
         }
       ],

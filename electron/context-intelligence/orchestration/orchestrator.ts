@@ -152,7 +152,26 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
 const STOPWORDS = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'have', 'has', 'was',
   'were', 'you', 'your', 'our', 'their', 'about', 'what', 'how', 'why', 'when', 'did', 'does', 'can',
   'could', 'would', 'should', 'they', 'them', 'been', 'into', 'more', 'than', 'then', 'tell', 'give',
-  'explain', 'describe', 'candidate', 'applicant', 'experience', 'project', 'projects', 'skills']);
+  'explain', 'describe', 'candidate', 'applicant', 'experience', 'project', 'projects', 'skills',
+
+  // ── Source-scaffolding vocabulary ──────────────────────────────────────────
+  //
+  // Words that describe the ACT of consulting a source are not evidence of its
+  // content, and treating them as salient produced confident answers from
+  // unrelated documents. Measured on I-01, "What does the empty reference file
+  // say about pricing?": the sales battlecard chunk reading "Cluely lacks
+  // per-mode reference files" shares `reference` and `file` with the question and
+  // was therefore accepted as supporting a DOCUMENT_FACT claim about pricing. The
+  // turn reported FULL on three chunks, none of which mentioned pricing.
+  //
+  // Every entry here is a word a user says to point AT a source, never a fact a
+  // source states. Content nouns are deliberately absent — 'pricing', 'outage'
+  // and 'salary' stay salient.
+  'file', 'files', 'document', 'documents', 'documentation', 'reference', 'references',
+  'material', 'materials', 'provided', 'according', 'information', 'detail', 'details',
+  'say', 'says', 'said', 'state', 'states', 'stated', 'mention', 'mentions', 'mentioned',
+  'contain', 'contains', 'note', 'notes', 'text', 'page', 'pages', 'attached', 'upload',
+  'uploaded', 'source', 'sources', 'anything', 'something', 'know', 'knows']);
 
 /**
  * Fold a word to a light stem so inflections match.
@@ -174,11 +193,24 @@ const stem = (w: string): string => w
   .replace(/e$/, '')
   .replace(/i$/, 'y');
 
-const salientTerms = (text: string): Set<string> => new Set(
-  String(text).toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/)
-    .filter((w) => w.length > 2 && !STOPWORDS.has(w))
-    .map((w) => (w.length > 4 ? stem(w) : w)),
-);
+/**
+ * Salient terms of a text: content words, stemmed, scaffolding removed.
+ *
+ * The stoplist is checked against BOTH the surface form and the stem. Checking
+ * only the surface form let inflections slip past — `mentions` is listed but
+ * `mentioning` was not, and after stemming both become `mention`, so the filter
+ * has to run on the stem as well or the list silently has holes.
+ */
+const salientTerms = (text: string): Set<string> => {
+  const out = new Set<string>();
+  for (const raw of String(text).toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/)) {
+    if (raw.length <= 2 || STOPWORDS.has(raw)) continue;
+    const t = raw.length > 4 ? stem(raw) : raw;
+    if (STOPWORDS.has(t)) continue;
+    out.add(t);
+  }
+  return out;
+};
 
 /**
  * Does this item actually support THIS claim?

@@ -434,14 +434,16 @@
       "prohibitedSources": [],
       "goldDoc": null,
       "goldFacts": [],
-      "expectedAnswerability": "PARTIAL",
+      "expectedAnswerability": "NONE",
       "expectedFallback": "PARTIAL_SUPPORT",
       "generalKnowledgeAllowed": false,
       "inferenceAllowed": true,
       "expectedPath": "GROUNDED",
       "category": "C",
       "scoring": "judge",
-      "notes": "The project exists; the MOTIVATION does not. §20's partial-support shape: state the fact, label the rationale as inference."
+      "notes": "The project exists; the MOTIVATION does not. §20's partial-support shape: state the fact, label the rationale as inference.",
+      "priorExpectedAnswerability": "PARTIAL",
+      "labelRationale": "PARTIAL predates the fix this question caused. C-03 originally FAILED by inventing a motivation, and the fix (10_BENCHMARK_RESULTS §3.1) made USER_MOTIVATION a claim of its own whose only authoritative source is explicit user context — never the resume, never the JD. A resume is therefore NOT authoritative for it, so no accepted evidence can support the claim and NONE is the designed outcome, with the composer prescribing the disclosure shape. Verified on two live models: both disclose the gap and label any rationale as reasoning rather than fact. PARTIAL would require the resume to partially support a motivation claim, which is exactly the conflation that caused the original fabrication."
     },
     {
       "id": "D-01",
@@ -460,14 +462,16 @@
       "goldFacts": [
         "PriceX"
       ],
-      "expectedAnswerability": "PARTIAL",
+      "expectedAnswerability": "FULL",
       "expectedFallback": "PARTIAL_SUPPORT",
       "generalKnowledgeAllowed": true,
       "inferenceAllowed": true,
       "expectedPath": "GROUNDED",
       "category": "D",
       "scoring": "deterministic",
-      "notes": "§3.7 claim-level split: project claim needs RESUME; crawler claim is general knowledge."
+      "notes": "§3.7 claim-level split: project claim needs RESUME; crawler claim is general knowledge.",
+      "priorExpectedAnswerability": "PARTIAL",
+      "labelRationale": "PARTIAL was spec-incorrect. §17 uses this exact shape as its worked example (\"Tell me about your WebRTC project and explain how WebRTC establishes a connection\") and plans the personal claim as DIRECT_EVIDENCE and the general claim as GENERAL_KNOWLEDGE — both INCLUDED. PARTIAL is for an UNSUPPORTED private claim, not for a mixed question whose general half needs no private evidence. The résumé does support the PriceX half, so the turn is fully answerable."
     },
     {
       "id": "G-01",
