@@ -279,9 +279,11 @@ Fixed by splitting retrieval into `base` and `versioned` groups, each ingested i
 |---|---|
 | `noProhibitedSourceInEvidence` | 42/42 |
 | `promptLabelsEvidenceUntrusted` | 42/42 |
-| `noStaleVersionAccepted` | 42/42 — **now exercised**, on 6 of the 7 versioned questions |
+| `evidenceCarriesProvenance` | 42/42 — asserts `scopeId` equals the turn's scope |
+| `noStaleVersionAccepted` | 42/42 — **exercised**, 6 turns reject a superseded chunk |
+| `noForeignScopeAccepted` | 42/42 — **exercised**, 14 turns reject an out-of-scope record |
 | `retrievalPath` | 41/42 |
-| `answerabilityMatchesExpected` | **33/42** — newly measured, never previously asserted |
+| `answerabilityMatchesExpected` | **35/42** — newly measured, never previously asserted (29/42 when first turned on) |
 
 `answerabilityMatchesExpected` moved 29 → 32 → 33 as two decision-layer defects were fixed: **subject-level satisfaction** (several claim types for one clause are alternatives, not a conjunction — requiring all made `PARTIAL` unavoidable) and **light stemming** (`graduate` ≠ `graduated` under exact token comparison).
 
@@ -315,7 +317,7 @@ Recorded because it is the through-line of the whole continuation.
 | Item | State |
 |---|---|
 | ~~**F25a — scope filtering unwired**~~ | **FIXED.** `sourceScopes` added with structural containment; `noForeignScopeAccepted` is a new gate exercised on 14 turns, and `evidenceCarriesProvenance` now asserts scope equality. `filterByScopeAndVersion` still has no callers — the adapter implements the rule inline; the duplication should collapse |
-| **Six answerability failures** | Diagnosed per stage, not guessed: 2 retrieval misses (A-03, G-02), 2 claim-type misclassifications (A-06, A-12), 2 leniency (D-01, F-06), plus G-03's path |
+| **Four answerability failures** | Down from 14. Each recorded with a mechanism in `09_TEST_MATRIX.md` §11: A-03 (retrieval floor, lexical half fixed), A-06 (vocabulary mismatch — the obvious fix would weaken the C-01/C-02 contamination guards), F-06 and G-03 (named-artifact reference). **None is a safety failure**; every gate governing what the system may assert is 42/42 on two models. G-03 is first to fix: it reports FULL with zero evidence |
 | ~~**§26.5 on `gemini-3.1-flash-lite`**~~ | **DONE** (§9). The block was the AI Studio **project's billing**, not the credential — the *same key*, fingerprint unchanged, began working once credit was added, which is why rotating in a new key had not helped |
 | **Value-level conflict detection** | Not implemented (06 §5.1). No corpus fixture exists for it either |
 | **Phase 7 UI swap** | Architecture done; the two rendering surfaces deliberately untouched (§12.2) |

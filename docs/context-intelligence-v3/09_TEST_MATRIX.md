@@ -257,7 +257,7 @@ Discriminating check: superseded-rejection turns fell **25 → 6** after the spl
 | `promptLabelsEvidenceUntrusted` | 42/42 | |
 | `noStaleVersionAccepted` | 42/42 | **now exercised** — a superseded chunk is retrieved and rejected on **6 of the 7** versioned questions. The exception is G-03, which retrieves nothing at all (`raw=0`), the same defect as its `retrievalPath` failure. |
 | `retrievalPath` | 41/42 | G-03, known |
-| `answerabilityMatchesExpected` | **33/42** | newly measured; 29/42 before the two fixes in §10.4.1 |
+| `answerabilityMatchesExpected` | **35/42** | newly measured; 29/42 when first asserted |
 
 `base` 12 files / 406 chunks · `versioned` 4 files / 20 chunks · retrieval p50 12 ms · p95 14 ms.
 
@@ -304,3 +304,42 @@ Labels were changed only where the **spec** decides the answer, never to match o
 | H-05 | `CONFLICTING` → **unasserted** | Cross-source ambiguity, i.e. 06 §5 — genuinely unimplemented. Left unasserted rather than given a convenient label. |
 
 Critically, **relabelling G-01/G-02 did not make them pass** — they still fail as too-strict claim support. Had the labels been changed to match output rather than to match the spec, two real defects would have been buried.
+
+
+---
+
+## 11. The four remaining failures, and why each is left (2026-07-30)
+
+`answerabilityMatchesExpected` is **35/42**; 34 of 42 questions pass every gate. The seven earlier failures resolved to five distinct causes, three of which are fixed. The rest are recorded with a mechanism rather than a symptom, because a bare list invites the wrong fix.
+
+### 11.1 A-03 — retrieval floor, not claim support
+
+*"How fast did Natively reach ten thousand users?"* The résumé says *"scaled Natively to 10k users in the first 90 days."*
+
+| query phrasing | résumé fts | retrieved |
+|---|---|---|
+| `…reach ten thousand users?` | 0.000 → **0.187** after the numeral fix | still **no** |
+| `…reach 10k users?` | 0.152 → **0.187** | **yes**, now ranked first |
+
+The lexical half is fixed: both phrasings now emit the token `10000`. What still rejects the spelled-out form is `combinedScore = 0.4·fts + 0.6·vector` against an adaptive floor — the vector arm scores the spelled-out phrasing lower, and the floor is the binding constraint.
+
+**Why it is left:** the fix is a global retrieval-threshold change affecting every query in the product. That deserves its own measurement, not an unattended tweak justified by one question. It is also worth noting the adaptive floor *rises* with query-token count (`MIN_COMBINED_SCORE · min(1, tokens/5)`), so adding a token to help lexical matching also raises the bar — an interaction that needs measuring before either is touched.
+
+### 11.2 A-06 — vocabulary mismatch that lexical claim-support cannot resolve
+
+*"Which company is hiring for this position and where is it based?"* The JD chunk literally contains *"AI Product Engineer at Helio Labs, hybrid"*, is the top-ranked candidate, and comes from the only authorized source type. It is rejected because the subject's terms — `company`, `hiring`, `position` — appear nowhere in a document that says *"Job description"*, *"Role"* and *"Helio Labs"*.
+
+**Why it is left, explicitly:** the obvious fix — accept the top-ranked authoritative chunk when the subject shares no distinctive term — would weaken the guard that makes **C-01 and C-02** work. Those are the canonical contamination probes, and they pass precisely *because* a résumé chunk lacking `kubernetes`/`postgres` is refused. Trading the mission's core safety property for one question would be a bad exchange. A correct fix needs semantic (embedding) claim-support, which is a build, not a tweak.
+
+### 11.3 F-06 and G-03 — the named-artifact class
+
+- **F-06** *"What did the postmorten say about the outage?"* — there is no postmortem in the corpus. A transcript chunk mentioning the outage satisfies the claim, so the turn reports FULL where PARTIAL is expected.
+- **G-03** *"What is the peak transaction volume of the payments API?"* — classified as general knowledge, so `shouldRetrieve` is false and the turn never looks at the résumé that holds the answer. This is a `retrievalPath` failure, and it also makes the turn report `FULL` with **zero evidence** — the most dangerous shape of the four.
+
+Both need the system to recognise that *"the postmortem"* and *"the payments API"* name a specific artifact the user believes exists, and to distinguish "a document that mentions this topic" from "the document being referred to". A definite-article heuristic was considered and rejected: it over-fires on ordinary phrasing (*"the discount floor"*, *"the compensation range"*) which currently work.
+
+### 11.4 What the remaining failures are NOT
+
+None of the four is a safety failure. Across both models in `10_BENCHMARK_RESULTS.md` §8–§9 the forbidden-claim rate is 0%, over-refusal is 0%, and unsupported-claim disclosure is 100%. Every gate that governs *what the system may assert* is at 42/42. The four open items are **precision** failures — the system declines to use evidence it has (A-03, A-06) or claims support it does not have (F-06, G-03).
+
+G-03 is the one to fix first, because "FULL with zero evidence" is the shape that licenses an ungrounded answer.
