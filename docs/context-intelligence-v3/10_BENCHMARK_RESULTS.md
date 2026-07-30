@@ -16,7 +16,7 @@ Every prior number in this mission measured a *decision*. This is the first run 
 
 ## 1. Results
 
-> **SUPERSEDED IN PART — see §6.** These rates were measured on a corpus in which two different people's résumés shared the `RESUME` label, and they depend on `evidenceSupportsClaim`, since measured wrong in both directions. Re-measurement is blocked on provider billing, not on engineering.
+> **SUPERSEDED — see §8** for the same gates re-measured on the corrected corpus. **SUPERSEDED IN PART — see §6.** These rates were measured on a corpus in which two different people's résumés shared the `RESUME` label, and they depend on `evidenceSupportsClaim`, since measured wrong in both directions. Re-measurement is blocked on provider billing, not on engineering.
 
 | §26.5 measure | Result | Target | |
 |---------------|--------|--------|---|
@@ -179,7 +179,7 @@ Gates hold at double the corpus size. **The 42/42 in this table is now known to 
 
 ---
 
-## 6. Re-measurement on the corrected corpus — BLOCKED (2026-07-30)
+## 6. Re-measurement on the corrected corpus — DONE on MiniMax-M3, still blocked on Gemini (2026-07-30)
 
 §1 and §3 were measured on the **uncorrected** corpus, and two problems make them non-final:
 
@@ -197,13 +197,13 @@ Your prepayment credits are depleted.
 
 This is **not** a rate limit and will not clear by waiting — an earlier attempt spent an hour retrying a bare `provider 429` on that assumption. The runner now reads the error body, distinguishes credit exhaustion from throttling, aborts immediately, and **writes no results file**, so no partial run can be mistaken for a measurement.
 
-**To unblock:** top up the Gemini key's billing at `ai.studio/projects`, then re-run
+**Gemini remains blocked.** The run below was completed on **MiniMax-M3** instead — see §8. To reproduce §1/§3 on `gemini-3.1-flash-lite` specifically, top up billing at `ai.studio/projects`, then re-run
 
 ```
 NATIVELY_TEST_USERDATA=<scratch> NATIVELY_INTERNAL=1 ELECTRON_RUN_AS_NODE=1   ./node_modules/.bin/electron benchmarks/ci-v3-retrieval/provider-eval.cjs
 ```
 
-Until then, §1 and §3 stand as **measured on a contaminated corpus** and the §20 read-aloud style metrics remain **unmeasured** — the only run that exercised them was voided at n=3.
+Until then, §1 and §3 stand as **measured on a contaminated corpus with a model that is no longer reachable**. §20 read-aloud style is now measured — on M3, in §8.
 
 ---
 
@@ -215,3 +215,58 @@ Until then, §1 and §3 stand as **measured on a contaminated corpus** and the �
 4. **Six remaining answerability failures**, now diagnosed per stage rather than attributed to one function (`09_TEST_MATRIX.md` §10.4): two retrieval misses (A-03, G-02-class), two claim-type misclassifications (A-06, A-12-class), leniency (D-01, F-06), and G-03's path. Two causes were fixed and measured — 29/42 → 33/42. Blocking for Phase 9.
 5. Wire scope filtering, or stop claiming it: `filterByScopeAndVersion` has zero callers outside its own tests (F25a).
 6. Expand the corpus toward §26.3's 200 questions; 42 is thin for a judged metric with run-to-run variance.
+
+
+---
+
+## 8. §26.5 on the corrected corpus — MiniMax-M3 (2026-07-30)
+
+**All three behavioural gates pass.**
+
+| §26.5 measure | Result | Target | |
+|---|---|---|---|
+| **Forbidden-claim rate** | **0.0%** | 0% | **PASS** |
+| **Over-refusal on general questions** | **0.0%** | 0% | **PASS** |
+| **Unsupported-claim disclosure** (category C) | **100%** (4/4) | high | **PASS** |
+| Judged factual grounding | **80–83%** | — | two clean runs: 83.3%, 80.0% |
+| Exact-string grounding | 50–53% | — | lower bound only, see §2 |
+| Generation latency | p50 4.7 s · p95 19.6 s | — | M3 is far slower than flash-lite |
+
+### 8.1 Why the model changed, and what that costs the comparison
+
+`gemini-3.1-flash-lite` is **unreachable**: both keys report depleted prepayment credits, and fingerprinting confirmed the backend pool holds the *same two keys*, so routing through `natively-api` gains nothing.
+
+MiniMax-M3 was chosen because this repository already designates it the *"Gemini is rate-limited / out of credits / unusable"* safety net in the standard AI chain — not because it was convenient. It is nonetheless **a different model**, so §8 is not an A/B against §1. Provider and model are recorded in every results file.
+
+### 8.2 §20 read-aloud quality — measured, and the earlier figures were void
+
+| §20 metric | Result | Target |
+|---|---|---|
+| Attribution boilerplate | **0.0%** | 0% |
+| Over-long for spoken use (>120 words) | **2.4%** | low |
+| Answer length | p50 **34** words · p95 **80** | ≤120 |
+| Disclosure on a FULL turn | 20.6% | decision precision, **not** style — see §4 |
+
+The previous attempt at these numbers was **voided at n=3** by a rate-limited run. For reference only, and across both a model change and a corpus change, the earlier contaminated run read boilerplate 7.1%, over-long 14.3%, length p95 **235** words.
+
+### 8.3 The measurement was wrong three times before it was right
+
+Worth recording, because each failure produced a plausible number.
+
+**1. M3 splits its answer across the closing think tag.** It writes the answer *inside* the reasoning block and closes the tag mid-clause, verbatim:
+
+```
+...have any information about the candidate\n</think>\n\n's Kubernetes experience...
+```
+
+A spec-correct stripper returns the fragment. **8 of 42 answers** were mangled this way, and their grounding, disclosure and length values were being averaged in. Worse, a front-cut *deletes the attribution preface*, so `boilerplate 0.0%` was partly an artifact of the damage.
+
+**2. The first mangling detector was too weak.** "Does the answer start with a capital?" passes `I have doesn't state why...` and, because an apostrophe was allowed for quoted openings, passes `'s Kubernetes experience` too. It reported **0 mangled** while two of the four fabrication probes were mangled.
+
+The reliable test reads the **raw** text instead of guessing from the result: trim whitespace before the close tag and require sentence-terminating punctuation. Verified against three real responses — the well-formed one ends `...honest about the gap.`, the malformed ones end `the candidate` and `The material`. Malformed calls are now re-asked, which is sound because M3 is not deterministic even at temperature 0.
+
+Effect of eliminating the mangling: judged grounding **62.1% → 83.3%** on the same corpus and prompt. The earlier spread across runs (60.0, 72.4, 62.1) was largely this artefact, not model variance.
+
+**3. The disclosure detector under-counted twice more.** `does not cover` matched but `doesn't cover` did not — the full and contracted negations had been written as two alternations and drifted. Then `don't tell me why` missed because `tell` was absent from the gap-verb list. Both times the model was disclosing correctly and the instrument said otherwise, dropping category C to 50%. The branches are now generated from one shared verb list, and the detector is unit-tested against negatives so it cannot be widened into always-true.
+
+**The pattern, for the third time this mission:** a metric that under-reports good behaviour is as dangerous as one that over-reports it. `disclosure 50%` and `grounding 62%` were both instrument defects, and both looked like model defects.

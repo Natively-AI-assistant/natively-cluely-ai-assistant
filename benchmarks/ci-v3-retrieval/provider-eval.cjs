@@ -113,6 +113,69 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const deadKeys = new Set();
 
 /**
+ * Pre-strip provider text, by question id, when CI_V3_EVAL_KEEP_RAW=1.
+ *
+ * A reasoning stripper that removes too much is indistinguishable from a model
+ * that answered tersely — both just produce a shorter string. Keeping the raw
+ * text lets a suspicious answer be checked against what the provider actually
+ * sent instead of reasoning about the regex.
+ */
+/**
+ * Did the reasoning strip cut into the middle of a sentence?
+ *
+ * MiniMax-M3's think-leak is not well-formed: it sometimes emits the CLOSING
+ * think tag mid-sentence, so a spec-correct stripper returns an answer that
+ * begins partway through a clause — one measured run produced
+ * "thousand users, so I can't give you a specific timeframe."
+ *
+ * Averaging grounding, disclosure and length over text like that silently
+ * measures a mangled string. These rows are FLAGGED and counted rather than
+ * quietly folded into the rates.
+ */
+function looksTruncated(answer) {
+  const a = String(answer).trim();
+  if (!a) return false;
+  // A well-formed answer opens with a capital, a digit, or a quote/bullet.
+  // NOTE: weak on its own. A cut answer can still open with a capital ("I have
+  // doesn't state why...") or with an apostrophe ("'s Kubernetes experience"),
+  // both measured. `closedMidSentence` below is the reliable test; this stays as
+  // a cheap secondary for providers where no raw text is available.
+  return !/^[A-Z0-9"'“‘\-*(\[]/.test(a);
+}
+
+/**
+ * Did the provider close its think block in the MIDDLE of a sentence?
+ *
+ * This is the reliable signal, and it reads the RAW text rather than guessing
+ * from the result. MiniMax-M3 sometimes writes the answer INSIDE the reasoning
+ * block and closes the tag mid-clause, measured verbatim:
+ *
+ *   ...have any information about the candidate\n</think>\n\n's Kubernetes experience...
+ *
+ * The answer is split across the tag, so a spec-correct stripper returns the
+ * fragment after it. A well-formed block ends its last sentence before closing;
+ * so trim the whitespace before the tag and require sentence-terminating
+ * punctuation. Verified against three real responses: the well-formed one ends
+ * "...honest about the gap." and the two malformed ones end "the candidate" and
+ * "The material".
+ */
+function closedMidSentence(rawText) {
+  const m = /<\/[a-z0-9]*:?think\s*>/i.exec(String(rawText));
+  if (!m) return false;
+  const before = String(rawText).slice(0, m.index).replace(/\s+$/, '');
+  if (!before) return false;
+  return !/[.!?:;)"'”’\]]$/.test(before.slice(-1));
+}
+
+const KEEP_RAW = process.env.CI_V3_EVAL_KEEP_RAW === '1';
+const rawByCall = [];
+
+/** Extra attempts allowed when M3 returns a mid-clause think close. */
+const MALFORMED_RETRIES = Number(process.env.CI_V3_EVAL_MALFORMED_RETRIES || 3);
+let malformedRetries = 0;
+
+
+/**
  * Generate with key rotation and exponential backoff.
  *
  * A 429 is a quota condition, not a system defect — treating it as an error row
@@ -192,7 +255,21 @@ async function generate(keys, system, user, attempt = 0) {
     if (code !== undefined && code !== 0) {
       throw new Error(`minimax base_resp ${code}: ${String(j?.base_resp?.status_msg ?? '').slice(0, 120)}`);
     }
-    return stripLeadingThink(String(j?.choices?.[0]?.message?.content ?? '')).trim();
+    const rawText = String(j?.choices?.[0]?.message?.content ?? '');
+    const stripped = stripLeadingThink(rawText).trim();
+    if (KEEP_RAW) rawByCall.push({ rawLen: rawText.length, raw: rawText, stripped });
+
+    // M3 sometimes closes its think block INSIDE a clause, so a spec-correct
+    // strip returns an answer starting partway through a sentence — measured on
+    // 8 of 42 questions. It is not deterministic, so re-asking usually yields a
+    // well-formed block. Retry rather than average grounding, disclosure and
+    // length over a mangled string; a front-cut also deletes the very sentence
+    // opening the boilerplate metric inspects, which would read as a pass.
+    if ((closedMidSentence(rawText) || looksTruncated(stripped)) && attempt < MALFORMED_RETRIES) {
+      malformedRetries += 1;
+      return generate(keys, system, user, attempt + 1);
+    }
+    return stripped;
   }
   return (j?.candidates?.[0]?.content?.parts ?? []).map((p) => p.text || '').join('').trim();
 }
@@ -244,17 +321,33 @@ async function judgeGrounded(keys, question, goldFacts, answer) {
 // "My resume does not explicitly list Postgres..."). It required "no
 // information" and a fixed verb list, and missed both. A detector that
 // under-reports disclosure makes a well-behaved system look like it fabricates.
+// One shared verb list for BOTH the full and contracted negations.
+//
+// They were written as two separate alternations and drifted: "cover" was in the
+// "does not (...)" branch but missing from the "doesn't (...)" branch, so
+// "The evidence I have doesn't cover what the candidate said about salary
+// expectations" — a textbook §20 disclosure — scored as NO disclosure. An
+// earlier version of this detector reported 0% while the model was disclosing
+// perfectly; a detector that under-reports makes a well-behaved system look like
+// it fabricates, so the two branches are now generated from one list.
+const GAP_VERBS = '(?:have|contain|include|list|specify|mention|state|say|cover|detail|address'
+  + '|reference|show|indicate|provide|tell|explain|reveal|disclose|record|note)';
+
 const DISCLOSURE_RE = new RegExp([
-  'do(es)? not (have|contain|include|list|specify|mention|state|say|cover|detail)',
-  "don'?t have", "doesn'?t (have|list|mention|state|include|specify)",
-  'no (information|mention|record|detail|reference|indication|data)',
-  '(not|isn\'?t|aren\'?t) (covered|mentioned|stated|listed|specified|included|available|present|provided)',
-  'cannot (find|determine|confirm)', "could ?n'?t find",
-  'nothing (in|about|regarding)', 'not explicitly',
+  `do(?:es)? not ${GAP_VERBS}`,
+  `do(?:es)?n'?t ${GAP_VERBS}`,
+  `did not ${GAP_VERBS}`,
+  'no (?:information|mention|record|detail|reference|indication|data|evidence|statement)',
+  "(?:not|isn'?t|aren'?t|was ?n'?t) (?:covered|mentioned|stated|listed|specified|included|available|present|provided|captured)",
+  "can ?n?o?t (?:find|determine|confirm|tell|quote|state|say|give|answer|verify)",
+  "ca ?n'?t (?:find|determine|confirm|tell|quote|state|say|give|answer|verify)",
+  "could ?n'?t find",
+  'unable to (?:find|determine|confirm|answer)',
+  'nothing (?:in|about|regarding|showed|shows|turned up|was retrieved)',
+  'not explicitly',
+  'no such (?:information|detail)',
+  `(?:material|document|resume|transcript|reference|evidence)s? (?:i have )?do(?:es)?n'?t ${GAP_VERBS}`,
   'based on general knowledge', 'general knowledge',
-  'unable to (find|determine|confirm)',
-  'no such (information|detail)',
-  '(material|document|resume|transcript|reference)s? do(es)? not',
 ].join('|'), 'i');
 
 
@@ -395,8 +488,10 @@ function spokenQuality(answer, answerability) {
       evidence: result?.evidence.length ?? 0,
       answerChars: answer.length,
       exactStringHit: groundedHit, forbiddenHit, disclosed, refusedGeneral,
+      truncatedByStrip: looksTruncated(answer) || closedMidSentence(rawByCall[rawByCall.length - 1]?.raw ?? ''),
       ...spokenQuality(answer, result?.answerability ?? null),
       answer,          // synthetic fixtures only — no user data in this corpus
+      ...(KEEP_RAW ? { raw: rawByCall[rawByCall.length - 1]?.raw ?? null } : {}),
       goldFacts: q.goldFacts || [],
     });
     console.log(`  ${q.id.padEnd(6)} [${(q.category)}] ev=${rows[rows.length - 1].evidence} ` +
@@ -414,6 +509,7 @@ function spokenQuality(answer, answerability) {
   console.log('');
 
   const ok = rows.filter((r) => !r.error);
+  const mangled = rows.filter((r) => r.truncatedByStrip);
   const withGold = ok.filter((r) => r.exactStringHit !== null);
   const catC = ok.filter((r) => r.category === 'C');
   const catB = ok.filter((r) => r.category === 'B');
@@ -422,6 +518,8 @@ function spokenQuality(answer, answerability) {
   const summary = {
     runAt: new Date().toISOString(), provider: PROVIDER, model: MODEL, temperature: 0,
     questions: rows.length, errors: rows.length - ok.length,
+    truncatedByStrip: mangled.length, truncatedIds: mangled.map((r) => r.id),
+    malformedRetries,
     exactStringGrounding: withGold.length ? withGold.filter((r) => r.exactStringHit).length / withGold.length : null,
     judgedGrounding: (() => {
       const j = ok.filter((r) => typeof r.judgeGrounded === 'boolean');
@@ -460,6 +558,16 @@ function spokenQuality(answer, answerability) {
   console.log(`unsupported-claim disclosure   ${pc(summary.unsupportedDisclosureRate)}  (category C)`);
   console.log(`over-refusal on general Qs     ${pc(summary.overRefusalRate)}   (target 0%)`);
   console.log(`generation latency             p50 ${summary.ttlMs.p50}ms · p95 ${summary.ttlMs.p95}ms`);
+  if (malformedRetries) {
+    console.log(`\nmalformed-think retries        ${malformedRetries}`
+      + '  (M3 closed a think block mid-clause; the call was re-asked)');
+  }
+  if (mangled.length) {
+    console.log(`\n*** ${mangled.length}/${rows.length} answers STILL begin mid-sentence after retries — M3 emitted a`);
+    console.log(`    closing think tag inside a clause, so the strip cut real answer text.`);
+    console.log(`    Affected: ${mangled.map((r) => r.id).join(', ')}`);
+    console.log(`    Their grounding/disclosure/length values measure a mangled string.`);
+  }
   console.log('\n--- §20 READ-ALOUD QUALITY ---');
   console.log(`  attribution boilerplate      ${pc(summary.boilerplateRate)}   (target 0%)`);
   console.log(`  over-long for spoken use     ${pc(summary.overLongRate)}   (>${SPOKEN_WORD_CEILING} words)`);
