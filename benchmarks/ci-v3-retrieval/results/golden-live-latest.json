@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-07-30T11:04:13.784Z",
+  "runAt": "2026-07-30T12:15:27.600Z",
   "mode": "LIVE retrieval stack",
   "groups": {
     "base": {
@@ -28,11 +28,11 @@
   "staleRejectionsObserved": 7,
   "scopeRejectionsObserved": 14,
   "latencyMs": {
-    "p50": 20,
-    "p95": 24,
-    "p99": 44
+    "p50": 19,
+    "p95": 22,
+    "p99": 38
   },
-  "totalMs": 710,
+  "totalMs": 643,
   "rows": [
     {
       "id": "A-01",
@@ -226,7 +226,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_a51574d8-5886-4d15-b3ed-9524186587b5",
+          "sourceId": "ref_272a58ae-bb6f-430c-b497-17ef11f9d106",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -306,7 +306,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_a51574d8-5886-4d15-b3ed-9524186587b5",
+          "sourceId": "ref_272a58ae-bb6f-430c-b497-17ef11f9d106",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -336,7 +336,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_a51574d8-5886-4d15-b3ed-9524186587b5",
+          "sourceId": "ref_272a58ae-bb6f-430c-b497-17ef11f9d106",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -441,7 +441,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_a51574d8-5886-4d15-b3ed-9524186587b5",
+          "sourceId": "ref_272a58ae-bb6f-430c-b497-17ef11f9d106",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -471,7 +471,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_a51574d8-5886-4d15-b3ed-9524186587b5",
+          "sourceId": "ref_272a58ae-bb6f-430c-b497-17ef11f9d106",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -551,7 +551,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_68db2c19-5aae-483a-b726-684af327a043",
+          "sourceId": "ref_ca6f4d2d-60e4-4eff-94d9-e05f8b4505eb",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
@@ -581,11 +581,11 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_68db2c19-5aae-483a-b726-684af327a043",
+          "sourceId": "ref_ca6f4d2d-60e4-4eff-94d9-e05f8b4505eb",
           "reason": "SUPERSEDED_VERSION"
         },
         {
-          "sourceId": "ref_55ef5330-95b8-487a-9a42-7f83a716db2f",
+          "sourceId": "ref_cf836173-18f7-4432-9c13-b7140a2d7d2d",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -615,7 +615,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_68db2c19-5aae-483a-b726-684af327a043",
+          "sourceId": "ref_ca6f4d2d-60e4-4eff-94d9-e05f8b4505eb",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
@@ -645,11 +645,11 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_55ef5330-95b8-487a-9a42-7f83a716db2f",
+          "sourceId": "ref_cf836173-18f7-4432-9c13-b7140a2d7d2d",
           "reason": "OUT_OF_SCOPE"
         },
         {
-          "sourceId": "ref_68db2c19-5aae-483a-b726-684af327a043",
+          "sourceId": "ref_ca6f4d2d-60e4-4eff-94d9-e05f8b4505eb",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
@@ -679,11 +679,11 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_55ef5330-95b8-487a-9a42-7f83a716db2f",
+          "sourceId": "ref_cf836173-18f7-4432-9c13-b7140a2d7d2d",
           "reason": "OUT_OF_SCOPE"
         },
         {
-          "sourceId": "ref_68db2c19-5aae-483a-b726-684af327a043",
+          "sourceId": "ref_ca6f4d2d-60e4-4eff-94d9-e05f8b4505eb",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
@@ -713,11 +713,11 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_55ef5330-95b8-487a-9a42-7f83a716db2f",
+          "sourceId": "ref_cf836173-18f7-4432-9c13-b7140a2d7d2d",
           "reason": "OUT_OF_SCOPE"
         },
         {
-          "sourceId": "ref_68db2c19-5aae-483a-b726-684af327a043",
+          "sourceId": "ref_ca6f4d2d-60e4-4eff-94d9-e05f8b4505eb",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
@@ -747,11 +747,11 @@
       "rejectedByScope": 2,
       "rejections": [
         {
-          "sourceId": "ref_55ef5330-95b8-487a-9a42-7f83a716db2f",
+          "sourceId": "ref_cf836173-18f7-4432-9c13-b7140a2d7d2d",
           "reason": "OUT_OF_SCOPE"
         },
         {
-          "sourceId": "ref_68db2c19-5aae-483a-b726-684af327a043",
+          "sourceId": "ref_ca6f4d2d-60e4-4eff-94d9-e05f8b4505eb",
           "reason": "SUPERSEDED_VERSION"
         }
       ],
@@ -883,7 +883,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_a51574d8-5886-4d15-b3ed-9524186587b5",
+          "sourceId": "ref_272a58ae-bb6f-430c-b497-17ef11f9d106",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -1113,7 +1113,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_a51574d8-5886-4d15-b3ed-9524186587b5",
+          "sourceId": "ref_272a58ae-bb6f-430c-b497-17ef11f9d106",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -1143,7 +1143,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_a51574d8-5886-4d15-b3ed-9524186587b5",
+          "sourceId": "ref_272a58ae-bb6f-430c-b497-17ef11f9d106",
           "reason": "OUT_OF_SCOPE"
         }
       ],
@@ -1173,7 +1173,7 @@
       "rejectedByScope": 1,
       "rejections": [
         {
-          "sourceId": "ref_a51574d8-5886-4d15-b3ed-9524186587b5",
+          "sourceId": "ref_272a58ae-bb6f-430c-b497-17ef11f9d106",
           "reason": "OUT_OF_SCOPE"
         }
       ],
