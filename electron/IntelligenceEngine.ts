@@ -2383,6 +2383,54 @@ export class IntelligenceEngine extends EventEmitter {
                     govern: true,
                 };
             }
+            // CONTEXT INTELLIGENCE V3 (Phase 6) — WTA adoption, second surface.
+            //
+            // Same contract as the manual-chat wiring: flag off or ANY failure
+            // yields null and the legacy assembly below runs byte-for-byte
+            // unchanged. When a prompt comes back, it is frozen INTO the request
+            // snapshot with the rest of the t0 decision, and WhatToAnswerLLM
+            // sends it verbatim — the legacy transport (streaming, deadlines,
+            // supersession) is untouched.
+            //
+            // Unlike the runManualAnswer adoption, this one passes a RETRIEVAL
+            // PORT, so grounded turns carry real evidence instead of composing a
+            // no-evidence disclosure. The port is the shared fail-closed factory
+            // — the same one the manual-chat handler uses.
+            const wtaV3Prompt = await (async () => {
+                try {
+                    const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
+                    const { createModeRetrievalPort } = require('./context-intelligence/retrieval/mode-retrieval-port');
+                    const { resolveModePolicy, isModeId } = require('./context-intelligence/policies/mode-policy-registry');
+                    const { ModesManager } = require('./services/ModesManager');
+                    const _mm = ModesManager.getInstance();
+                    const _mi = _mm.getActiveModeInfo?.() ?? null;
+                    const _files = _mi?.id ? (_mm.getReferenceFiles?.(_mi.id) ?? []) : [];
+                    const _raw = (_mi as any)?.templateType ?? 'general';
+                    const _policy = resolveModePolicy(isModeId(_raw) ? _raw : 'general');
+                    const _v3 = await buildV3Prompt({
+                        surface: 'what-to-answer',
+                        question: String(wtaTurnQuestion || ''),
+                        modeTemplateType: _raw,
+                        scope: { meetingId: meetingMarker ?? undefined },
+                        requestId: trace.requestId,
+                        requestSequence: generationId,
+                        retrieval: createModeRetrievalPort({
+                            modesManager: _mm, modeInfo: _mi, files: _files,
+                            tokenBudget: _policy.contextBudget.evidenceTokens, userId: 'local',
+                        }),
+                    });
+                    if (_v3) {
+                        wtaTrace.lifecycle('planned', {
+                            answerType: answerPlan.answerType,
+                            sourceAuthority: 'context-intelligence-v3',
+                            sourceKinds: [],
+                        });
+                        console.log(`[IntelligenceEngine] WTA V3 prompt in effect: answerability=${_v3.answerability} evidence=${_v3.evidenceCount} fallback=${_v3.fallbackUsed}`);
+                    }
+                    return _v3 ? { system: _v3.system, user: _v3.user } : undefined;
+                } catch { return undefined; }
+            })();
+
             const requestSnapshot: WhatToAnswerRequestSnapshot = Object.freeze({
                 activeModeInfo: snapshotModeInfo,
                 modeId: snapshotModeId,
@@ -2393,6 +2441,7 @@ export class IntelligenceEngine extends EventEmitter {
                 surface: 'what_to_answer' as const,
                 generationId,
                 ...(wtaContextOsGeneration ? { contextOsGeneration: wtaContextOsGeneration } : {}),
+                ...(wtaV3Prompt ? { v3Prompt: wtaV3Prompt } : {}),
             });
 
             // RC-03 fix: hold a reference to the generator so we can call .return()
@@ -4411,11 +4460,27 @@ export class IntelligenceEngine extends EventEmitter {
             const _v3 = await (async () => {
                 try {
                     const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
+                    // Phase 6: this adoption originally passed NO retrieval port,
+                    // so every grounded turn composed a no-evidence disclosure —
+                    // the decision layer was live but blind. Same shared
+                    // fail-closed factory as the other two call sites.
+                    const { createModeRetrievalPort } = require('./context-intelligence/retrieval/mode-retrieval-port');
+                    const { resolveModePolicy, isModeId } = require('./context-intelligence/policies/mode-policy-registry');
+                    const { ModesManager } = require('./services/ModesManager');
+                    const _mm = ModesManager.getInstance();
+                    const _mi = _mm.getActiveModeInfo?.() ?? null;
+                    const _files = _mi?.id ? (_mm.getReferenceFiles?.(_mi.id) ?? []) : [];
+                    const _raw = (activeModeInfo as any)?.templateType ?? 'general';
+                    const _policy = resolveModePolicy(isModeId(_raw) ? _raw : 'general');
                     return await buildV3Prompt({
                         surface: 'manual-chat',
                         question,
-                        modeTemplateType: (activeModeInfo as any)?.templateType ?? null,
+                        modeTemplateType: _raw,
                         scope: { meetingId: (this.session as any)?.getMeetingMetadata?.()?.id ?? undefined },
+                        retrieval: createModeRetrievalPort({
+                            modesManager: _mm, modeInfo: _mi, files: _files,
+                            tokenBudget: _policy.contextBudget.evidenceTokens, userId: 'local',
+                        }),
                     });
                 } catch { return null; }
             })();

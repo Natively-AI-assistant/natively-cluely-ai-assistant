@@ -731,7 +731,20 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     answerType: answerPlan?.answerType,
                     pinnedModeId: requestSnapshot?.modeUniqueId ?? null,
                 };
-            for await (const token of this.llmHelper.streamChat(packet.userMessage, imagePaths, undefined, finalPromptOverride, true, true, packetScopes, abortSignal, wtaThinkingBudget, wtaRouteOptions)) {
+            // CONTEXT INTELLIGENCE V3 (Phase 6) — prompt substitution, transport intact.
+            //
+            // When the frozen snapshot carries a V3-composed prompt, THAT is what the
+            // provider sees: the orchestrator already decided sources, scope, version
+            // and claim requirements, and re-wrapping its output in the legacy
+            // assembly would re-inject exactly the ungoverned context V3 excluded.
+            // Everything around the call — streaming, deadlines, supersession,
+            // cancellation, token accounting — is byte-for-byte the legacy transport,
+            // which is the point: the decision layer is swapped, the delivery is not.
+            const _v3p = (requestSnapshot as any)?.v3Prompt;
+            const _wtaUserMessage = _v3p?.user ?? packet.userMessage;
+            const _wtaSystemPrompt = _v3p?.system ?? finalPromptOverride;
+            if (_v3p) console.log('[WhatToAnswerLLM] V3 prompt in effect (Phase 6 wiring)');
+            for await (const token of this.llmHelper.streamChat(_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, wtaRouteOptions)) {
                 if (MEASURE) {
                     const now = performance.now();
                     if (!tFirstToken) tFirstToken = now;
