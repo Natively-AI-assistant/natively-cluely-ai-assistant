@@ -10260,6 +10260,42 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // ── CONTEXT INTELLIGENCE V3 — the rollout opt-in (§3 Stage 1) ─────────────
+  //
+  // Stage 1 is "internal users, opt-in", which requires a switch a user can
+  // actually reach. DEFAULT_ENABLED stays false in every environment — this
+  // persists an explicit choice, and clearing it returns to that default.
+  safeHandle('context-intelligence:flag-get', async () => {
+    try {
+      const { isContextIntelligenceV3Enabled, readPersistedSetting, DEFAULT_ENABLED } =
+        require('./context-intelligence/contracts/flag');
+      return {
+        ok: true,
+        enabled: isContextIntelligenceV3Enabled(),
+        persisted: readPersistedSetting(),
+        default: DEFAULT_ENABLED,
+        envOverride: process.env.NATIVELY_CONTEXT_INTELLIGENCE_V3 ?? null,
+      };
+    } catch (e: any) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  safeHandle('context-intelligence:flag-set', async (_, input: { enabled?: boolean | null }) => {
+    try {
+      const { writePersistedSetting, isContextIntelligenceV3Enabled } =
+        require('./context-intelligence/contracts/flag');
+      const v = input?.enabled;
+      if (v !== null && typeof v !== 'boolean') return { success: false, error: 'invalid_value' };
+      writePersistedSetting(v ?? null);
+      console.log(`[IPC] Context Intelligence V3 opt-in set to ${JSON.stringify(v)}`);
+      return { success: true, enabled: isContextIntelligenceV3Enabled() };
+    } catch (e: any) {
+      console.error('[IPC] context-intelligence:flag-set error:', e);
+      return { success: false, error: e.message };
+    }
+  });
+
   // ── CONTEXT INTELLIGENCE V3 — rollout telemetry (§4/§5, Phase 10) ─────────
   //
   // Read-only. Counters, enum tallies, ids and durations — never evidence text

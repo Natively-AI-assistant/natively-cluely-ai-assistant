@@ -13,8 +13,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const base = path.resolve(process.cwd(), 'dist-electron/electron/context-intelligence');
-const { isContextIntelligenceV3Enabled, whenV3Enabled, DEFAULT_ENABLED, CONTEXT_INTELLIGENCE_V3_ENV_KEY } =
-  await import(pathToFileURL(path.join(base, 'contracts/flag.js')).href);
+const flagMod = await import(pathToFileURL(path.join(base, 'contracts/flag.js')).href);
+const { isContextIntelligenceV3Enabled, whenV3Enabled, DEFAULT_ENABLED, CONTEXT_INTELLIGENCE_V3_ENV_KEY } = flagMod;
 const { adaptLegacyChunks, evidenceForClaim } =
   await import(pathToFileURL(path.join(base, 'retrieval/legacy-adapter.js')).href);
 
@@ -272,5 +272,47 @@ describe('legacy adapter — scope isolation', () => {
       ...base, scope: septTurn, chunkVersions: new Map([['june', 'v0']]),
     });
     assert.equal(r.rejected[0].reason, 'OUT_OF_SCOPE');
+  });
+});
+
+// ── Stage 1 opt-in: the persisted setting must actually be REACHABLE ─────────
+//
+// The resolution order documented "explicit persisted setting" from the start,
+// and it was unreachable: every call site invoked the resolver with no
+// arguments, so `overrides.setting` was always undefined and the env var was the
+// only working switch. That is the F1 pattern inside the flag module written to
+// end it, and it surfaced the first time anyone tried to opt in.
+
+describe('the persisted opt-in', () => {
+  const { readPersistedSetting, writePersistedSetting } = flagMod;
+
+  test('reads back what was written, and clearing returns to the default', () => {
+    writePersistedSetting(true);
+    assert.equal(readPersistedSetting(), true);
+    assert.equal(isContextIntelligenceV3Enabled(), true,
+      'the resolver must consult the store ITSELF — no caller passes `setting`');
+
+    writePersistedSetting(false);
+    assert.equal(isContextIntelligenceV3Enabled(), false);
+
+    writePersistedSetting(null);
+    assert.equal(readPersistedSetting(), null);
+    assert.equal(isContextIntelligenceV3Enabled(), DEFAULT_ENABLED,
+      'cleared means DEFAULT_ENABLED, not "last value"');
+  });
+
+  test('an explicit env var still wins over the persisted choice, both ways', () => {
+    writePersistedSetting(true);
+    assert.equal(isContextIntelligenceV3Enabled({ env: { NATIVELY_CONTEXT_INTELLIGENCE_V3: '0' } }), false,
+      'an operator must be able to force it off without touching user state');
+    writePersistedSetting(false);
+    assert.equal(isContextIntelligenceV3Enabled({ env: { NATIVELY_CONTEXT_INTELLIGENCE_V3: '1' } }), true);
+    writePersistedSetting(null);
+  });
+
+  test('the DEFAULT is untouched by any of this', () => {
+    // The rule that held through all eleven phases.
+    assert.equal(DEFAULT_ENABLED, false);
+    assert.equal(isContextIntelligenceV3Enabled({ env: {}, setting: null }), false);
   });
 });
