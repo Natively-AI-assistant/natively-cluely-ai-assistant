@@ -1034,7 +1034,11 @@ export function initializeIpcHandlers(appState: AppState): void {
                   }
                 }
               }
-            } catch { /* profile evidence is additive — mode port alone still answers */ }
+            } catch (profErr) {
+              // Additive, but NEVER silent: a broken collector is indistinguishable
+              // from "no profile" and reintroduces the upload-again defect (§22.1).
+              console.warn('[V3] profile hydration failed — continuing with mode attachments only:', (profErr as Error)?.message ?? profErr);
+            }
 
             const v3Ports = [
               modePort,

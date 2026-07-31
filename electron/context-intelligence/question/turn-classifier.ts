@@ -67,15 +67,22 @@ const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 // in the third person, and a second-person-only pattern silently classified
 // "What is the name of the price-comparison website the candidate built?" as
 // requiring no source at all.
-// FIRST person is included (2026-07-31): manual chat is the USER asking about
-// THEMSELF — "Do I have Kubernetes experience?", "Which required languages do I
-// not list?" — and a second/third-person-only pattern classified every one of
-// those as impersonal, so the résumé side of the claim was never planned (the
-// live 2-year-requirement question planned only JOB_DESCRIPTION). The negative
-// lookbehinds keep INSTRUCTION requests impersonal: "how do I reverse a linked
-// list" asks how to do a thing, not what the user's history says, and treating
-// it as personal would drag a coding question through résumé retrieval.
-const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|walk me through your|my|the candidate|candidate'?s?|the applicant|applicant'?s?)\b|(?<!\b(?:how|where|when)\s)\b(?:do|does|am|are|have|has|did|would|should|could|can|will) i\b|\bi (?:have|had|meet|qualify|lack|miss|built|build|created|developed|worked|interned|studied|graduated|know|list|use)\b|\bi'?m\b/;
+const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|walk me through your|my|the candidate|candidate'?s?|the applicant|applicant'?s?)\b/;
+// FIRST person is personal too (2026-07-31): manual chat is the USER asking
+// about THEMSELF — "Do I have Kubernetes experience?", "Which required
+// languages do I not list?" — and a second/third-person-only pattern classified
+// every one of those as impersonal, so the résumé side was never planned (the
+// live 2-year-requirement question planned only JOB_DESCRIPTION).
+//
+// Applied SEPARATELY from PERSONAL_RE because bare first person over-triggers
+// on technical self-talk: "why do I get a segfault", "should I use a hashmap"
+// are questions about CODE, not about the speaker's history, and routing them
+// through résumé claims put a motivation/employment disclosure on
+// technical-interview's bread-and-butter questions (review finding, 2026-07-31).
+// The lookbehinds keep instruction requests ("how do I reverse a list")
+// impersonal; TECH_SELF_TALK_RE suppresses debugging/design self-talk.
+const FIRST_PERSON_RE = /(?<!\b(?:how|where|when)\s)\b(?:do|does|am|are|have|has|did|would|should|could|can|will) i\b|\bi (?:have|had|meet|qualify|lack|miss|built|build|created|developed|worked|interned|studied|graduated|know|list|use)\b|\bi'?m\b/;
+const TECH_SELF_TALK_RE = /\b(segfault|error|exception|crash\w*|bug\b|bugs\b|stack ?trace|compil\w*|syntax|debug\w*|hash ?map|hashmap|bst\b|big-?o\b|time complexity|runtime|refactor\w*|this (code|function|query|test|snippet|approach))\b/;
 const PROJECT_RE = /\b(project|built|build|shipped|implemented|designed|architect(ed|ure) of your)\b/;
 // Matches BOTH orderings, because interviewers use both interchangeably:
 //   "experience WITH Kubernetes"   (preposition-led)
@@ -93,11 +100,13 @@ const SKILL_PRESENCE_RE = /\b(do (i|you) (have|know)|have (i|you) (used|worked)|
 const EDUCATION_RE = /\b(degrees?|graduat\w*|universit\w*|college|studied|majors?|majored|alma mater|c?gpa)\b/;
 const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|job title|tenure|manage[srd]?|managing|led|leads?|reports?|team of|headcount|salary expectation\w*|compensation expectation\w*)\b/;
 
-// `required\b` and bare `salar\w*` added 2026-07-31: "which REQUIRED languages
-// do I not list?" and "what is the base SALARY?" are JD questions, and the old
-// pattern ('required skills?', 'salary band') missed both phrasings — the JD
-// side of the comparison was never planned.
-const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit\w*|required\b|preferred skills?|compensation|salar\w*|the team you|qualification\w*|requirement\w*|minimum quals?)\b/;
+// Widened 2026-07-31 for "which REQUIRED LANGUAGES do I not list?" and "what is
+// the BASE SALARY?" — the old pattern ('required skills?', 'salary band')
+// missed both, so the JD side of the comparison was never planned. Kept
+// NARROW on review: bare `required\b` matched "what fields are required in
+// this form" and bare `salar\w*` matched "average salary for data scientists",
+// converting general questions into JD claims a JD-less mode then refuses.
+const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit\w*|required (skills?|languages?|qualifications?|experience|technolog\w*)|preferred skills?|compensation|base salar\w*|salary (band|range)s?|the salary\b|the team you|qualification\w*|requirement\w*|minimum quals?)\b/;
 
 const MEETING_RE = /\b(we (decided|agreed|discussed)|did we|are we|action item|owns?|owner|the meeting|last (call|meeting)|this (call|meeting)|standup|sync)\b/;
 
@@ -268,7 +277,11 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   const looksFactualQ = /\b(what|which|how many|how much|when|who|where|summari[sz]e|list)\b/.test(q);
 
   for (const clause of splitClauses(q)) {
-    const personal = PERSONAL_RE.test(clause);
+    const personal = PERSONAL_RE.test(clause)
+      || (FIRST_PERSON_RE.test(clause)
+        && !TECH_SELF_TALK_RE.test(clause)
+        && !CODING_TASK_RE.test(clause)
+        && !SYSTEM_DESIGN_RE.test(clause));
 
     if (personal && PROJECT_RE.test(clause)) { types.add('PERSONAL_PROJECT'); noteClaim('USER_PROJECT', clause); }
     // "why did you choose/build X" asks for a REASON. Motivation is authoritative
@@ -278,14 +291,17 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     if (personal && MOTIVATION_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_MOTIVATION', clause); }
     if (personal && SKILL_RE.test(clause)) {
       types.add('PERSONAL_SKILL'); noteClaim('USER_SKILL', clause);
-      // A PRESENCE CHECK ("Do I have Kubernetes experience?") in a mode with a
-      // JD is implicitly a comparison against the target role: the grounded
-      // answer is "not on the résumé — the JD asks for it", which needs BOTH
-      // sides retrieved. Narrative asks ("tell me about your Redis work") stay
-      // résumé-only. The answerability layer groups user/job claims from one
-      // clause as a conjunction, and claim authority still stops the JD from
-      // EVIDENCING the user side — this only widens what is retrieved.
-      if (SKILL_PRESENCE_RE.test(clause) && input.policy.allowedSourceTypes.includes('JOB_DESCRIPTION')) {
+      // A PRESENCE CHECK ("Do I have Kubernetes experience?") in a mode that
+      // HYDRATES a target JD is implicitly a comparison against that role: the
+      // grounded answer is "not on the résumé — the JD asks for it", which
+      // needs BOTH sides retrieved. Narrative asks ("tell me about your Redis
+      // work") stay résumé-only. Gated on profileSources — not
+      // allowedSourceTypes — because the conjunction demands JD evidence, and
+      // in recruiting ("does the candidate have java experience?") a JD is
+      // merely POSSIBLE, so the widening produced structural PARTIAL on plain
+      // candidate questions whenever none was attached (review finding).
+      // Claim authority still stops the JD from EVIDENCING the user side.
+      if (SKILL_PRESENCE_RE.test(clause) && input.policy.profileSources.includes('JOB_DESCRIPTION')) {
         types.add('JOB_REQUIREMENT'); noteClaim('JOB_REQUIRED_SKILL', clause);
       }
     }
@@ -303,7 +319,12 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     // route for JD requirements to describe the candidate.
     const namedAnAspect = PROJECT_RE.test(clause) || SKILL_RE.test(clause)
       || EDUCATION_RE.test(clause) || EMPLOYMENT_RE.test(clause) || MOTIVATION_RE.test(clause);
-    if (personal && !namedAnAspect) {
+    // …and never for a clause that is plainly a technical task: "can I solve
+    // this with dynamic programming" is about the problem, not the person, and
+    // a USER_EMPLOYMENT claim here demands résumé evidence for an algorithm
+    // question (review finding, 2026-07-31).
+    if (personal && !namedAnAspect
+        && !CODING_TASK_RE.test(clause) && !SYSTEM_DESIGN_RE.test(clause) && !TECH_SELF_TALK_RE.test(clause)) {
       types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause);
     }
 
@@ -398,7 +419,13 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     && !METRIC_LOOKUP_RE.test(q);
   const primaryClaimsIt = looksFactualQ && !isGeneralConcept;
 
-  if (!claims.size && (namesEntity || primaryClaimsIt)) {
+  // …and never for technical self-talk: "why do I get a segfault when I run
+  // this?" contains "when", which looksFactualQ reads as a factual cue, and the
+  // fallback then claimed a debugging question as USER_PROJECT in
+  // technical-interview (whose primary source is RESUME). Same gate as the
+  // personal branches (review finding, 2026-07-31).
+  const techTask = TECH_SELF_TALK_RE.test(q) || CODING_TASK_RE.test(q) || SYSTEM_DESIGN_RE.test(q);
+  if (!claims.size && !techTask && (namesEntity || primaryClaimsIt)) {
     const primary = primarySource;
     const claimForSource: Partial<Record<SourceType, ClaimType>> = {
       RESUME: 'USER_PROJECT',

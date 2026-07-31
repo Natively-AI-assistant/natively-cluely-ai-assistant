@@ -149,7 +149,9 @@ describe('the fields the card pipeline drops', () => {
     assert.ok(comp, 'the salary band must be retrievable — no card carries it');
     assert.ok(comp.text.includes('₹35–55 LPA'));
     assert.ok(comp.text.includes('2+ years'));
-    assert.equal(comp.completeInventory, true);
+    // Retrievable by term match, but NOT an inventory — a comp blurb must not
+    // license term-free absence claims (review hardening).
+    assert.equal(comp.completeInventory, false);
   });
 
   test('the salary question retrieves the compensation section', async () => {
@@ -192,6 +194,7 @@ describe('complete-inventory metadata (grounded absence)', () => {
     const sections = renderProfileSections('jd', JD_STRUCTURED);
     const reqs = sections.find((s) => s.section === 'Job requirements (complete)');
     assert.equal(reqs.completeInventory, true);
+    assert.equal(reqs.inventoryCategory, 'requirements');
     assert.ok(reqs.text.includes('Kotlin'));
   });
 });
@@ -246,24 +249,50 @@ describe('scope and card hygiene', () => {
 });
 
 describe('cross-port dedup in combineRetrievalPorts', () => {
+  const mk = (sourceId, score, metadata = {}) => ({
+    async retrieve() {
+      return {
+        evidence: [{
+          evidenceId: `ev-${sourceId}-0`, sourceType: 'RESUME', sourceId,
+          versionId: 'v', retrievedVersionId: 'v', scopeId: 'u:local',
+          content: 'CGPA: 7.5/10 at CUSAT', finalScore: score,
+          authorityFor: ['USER_EDUCATION'], acceptedFor: ['USER_EDUCATION'],
+          isDirectFact: true, isInferred: false, metadata, trustLevel: 'untrusted_reference',
+        }],
+        attempts: [],
+      };
+    },
+  });
+
   test('identical passages from two sources keep only the higher-scoring copy', async () => {
-    const mk = (sourceId, score) => ({
-      async retrieve() {
-        return {
-          evidence: [{
-            evidenceId: `ev-${sourceId}-0`, sourceType: 'RESUME', sourceId,
-            versionId: 'v', retrievedVersionId: 'v', scopeId: 'u:local',
-            content: 'CGPA: 7.5/10 at CUSAT', finalScore: score,
-            authorityFor: ['USER_EDUCATION'], acceptedFor: ['USER_EDUCATION'],
-            isDirectFact: true, isInferred: false, metadata: {}, trustLevel: 'untrusted_reference',
-          }],
-          attempts: [],
-        };
-      },
-    });
     const combined = combineRetrievalPorts([mk('profile-resume', 0.9), mk('mode-file-copy', 0.5)]);
     const r = await combined.retrieve({ decision: lfwDecision('What is my CGPA?') });
     assert.equal(r.evidence.length, 1, 'the duplicate passage is served once');
     assert.equal(r.evidence[0].sourceId, 'profile-resume', 'the higher-scoring copy wins');
+  });
+
+  test('the complete-record declaration survives even when the unstamped copy wins', async () => {
+    const combined = combineRetrievalPorts([
+      mk('mode-file-copy', 0.9),                                       // wins on score, no metadata
+      mk('profile-resume', 0.5, { completeInventory: true, inventoryCategory: 'education' }),
+    ]);
+    const r = await combined.retrieve({ decision: lfwDecision('What is my CGPA?') });
+    assert.equal(r.evidence.length, 1);
+    assert.equal(r.evidence[0].metadata.completeInventory, true,
+      'identical text: the declaration transfers, or the absence contract silently stops rendering');
+  });
+});
+
+describe('review hardening: boost-only ranking', () => {
+  test('a fired-intent inventory is policy-admitted at 0.6 — below real matches, above the cut', async () => {
+    const r = await lfwPort().retrieve({ decision: lfwDecision('Do I know COBOL?') });
+    // 'COBOL' appears nowhere; the skills inventory can never rank on
+    // similarity for the very questions it exists to answer, so it is admitted
+    // at a fixed 0.6 — beneath genuine lexical matches (0.7+) so it cannot
+    // displace real mode-attachment hits at the top of the cap.
+    const skills = r.evidence.find((e) => e.metadata?.completeInventory === true
+      && e.metadata?.inventoryCategory === 'skills');
+    assert.ok(skills, 'the inventory must be present for grounded absence');
+    assert.ok(Math.abs(skills.finalScore - 0.6) < 1e-9, `policy-admitted score, got ${skills.finalScore}`);
   });
 });

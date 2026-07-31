@@ -102,14 +102,21 @@ export function collectV3ProfileSources(orchestrator: unknown): CollectedProfile
         profileResume: ctx.activeResume ? 1 : 0,
         profileJd: ctx.activeJD ? 1 : 0,
         // profile_custom_notes has no production accessor (orphaned v13→14
-        // table) — the PROFILE_FACT pool is empty until one exists. Résumé
-        // sections carry those claims: claim authority accepts RESUME wherever
-        // PROFILE_FACT is authoritative.
+        // table) — the PROFILE_FACT pool is empty until one exists. Most
+        // PROFILE_FACT-authoritative claims are also RESUME-authoritative and
+        // ride the résumé sections; the KNOWN exception is USER_MOTIVATION
+        // (RESUME is PROHIBITED for it), which therefore stays structurally
+        // unsupported — an unstated reason is disclosed as unstated, which is
+        // the correct behaviour until real profile facts exist.
         profileFact: 0,
       },
       resolved,
     };
-  } catch {
+  } catch (err) {
+    // Degrading is right; degrading SILENTLY is not — an empty result here is
+    // indistinguishable from "no profile uploaded" and reproduces the very
+    // defect this module fixes (§22.1: failures are recorded, never converted).
+    try { console.warn('[V3] collectV3ProfileSources failed:', (err as Error)?.message ?? err); } catch { /* noop */ }
     return EMPTY;
   }
 }

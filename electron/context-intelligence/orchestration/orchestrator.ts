@@ -261,6 +261,18 @@ const salientTerms = (text: string): Set<string> => {
  * term is scored as unsupported — a FALSE NEGATIVE that discloses a gap, which
  * is the safe direction. The alternative false positive fabricates.
  */
+/** Which complete-record category may term-free-support each claim class.
+ *  Absent entries (USER_MOTIVATION, MEETING_*, DOCUMENT_FACT…) get no
+ *  shortcut at all — only term overlap. */
+const INVENTORY_CATEGORY_FOR_CLAIM: Record<string, string> = {
+  USER_SKILL: 'skills',
+  USER_EMPLOYMENT: 'experience',
+  USER_PROJECT: 'projects',
+  USER_EDUCATION: 'education',
+  JOB_REQUIRED_SKILL: 'requirements',
+  JOB_PREFERRED_SKILL: 'nice_to_haves',
+};
+
 export function evidenceSupportsClaim(
   evidence: { acceptedFor: string[]; content: string; metadata?: Record<string, unknown> },
   claimType: string,
@@ -269,14 +281,23 @@ export function evidenceSupportsClaim(
   if (!evidence.acceptedFor.includes(claimType)) return false;
   // AUTHORITATIVE ABSENCE: an item its port declares to be the COMPLETE
   // extracted record of a category (the whole skills inventory, the whole
-  // employment list) supports any claim its source is authoritative for, term
-  // overlap or not — the correct grounded answer may be that the asked-about
-  // thing is NOT in it, and "Do I have Kubernetes experience?" shares no term
-  // with a skills list that (correctly) lacks Kubernetes. Term matching would
-  // report NONE for exactly the questions where the evidence proves the answer.
-  // Authority is still enforced above: a JD's complete requirements list can
-  // never support a USER_* claim.
-  if (evidence.metadata?.completeInventory === true) return true;
+  // employment list) supports the MATCHING claim class, term overlap or not —
+  // the correct grounded answer may be that the asked-about thing is NOT in
+  // it, and "Do I have Kubernetes experience?" shares no term with a skills
+  // list that (correctly) lacks Kubernetes. Term matching would report NONE
+  // for exactly the questions where the evidence proves the answer.
+  //
+  // CATEGORY-MATCHED, not merely authority-matched (review finding,
+  // 2026-07-31): acceptedFor covers every claim the SOURCE TYPE is
+  // authoritative for, so a category-blind shortcut let the complete
+  // employment list "support" a certifications question and the JD keyword
+  // list "support" a requirements question — manufacturing confidently-wrong
+  // grounded negatives, the exact failure class this feature exists to remove.
+  // Authority is still enforced above: a JD list can never support USER_*.
+  if (evidence.metadata?.completeInventory === true
+      && evidence.metadata?.inventoryCategory === INVENTORY_CATEGORY_FOR_CLAIM[claimType]) {
+    return true;
+  }
   const qTerms = salientTerms(question);
   if (qTerms.size === 0) return true;          // nothing to match on — do not block
   const eTerms = salientTerms(evidence.content);
@@ -346,10 +367,23 @@ export function evaluateAnswerability(
   // FULL with the requirement never retrieved (measured: the 2-year question
   // planned only JOB_DESCRIPTION and compared nothing). Claims within one
   // family remain alternatives, which is what H-02/H-04 established.
-  const family = (c: ClaimType | string): string => String(c).startsWith('JOB_') ? 'job' : 'user';
+  //
+  // The conjunction applies ONLY to claims whose authoritative source the turn
+  // actually PLANS. A claim no planned source can ever satisfy (JOB vocabulary
+  // in team-meet, which authorizes no JD at all) folds back into the base
+  // family as an alternative — otherwise a fully-answered meeting question
+  // that merely contains the word "required" reports structural PARTIAL
+  // forever (review finding, 2026-07-31). Disclosure for genuinely
+  // unreachable sources belongs to the unsupported-in-mode machinery, not to
+  // answerability.
+  const plannedTypes = new Set<string>(decision.retrievalPlan.sourceTypes as readonly string[]);
+  const plannable = (req: ClaimRequirement): boolean =>
+    (req.authoritativeSources ?? []).some((s) => plannedTypes.has(s));
+  const family = (req: ClaimRequirement): string =>
+    plannable(req) && String(req.claimType).startsWith('JOB_') ? 'job' : 'user';
   const bySubject = new Map<string, typeof required>();
   for (const req of required) {
-    const subject = `${req.subject ?? decision.resolvedQuestion} ${family(req.claimType)}`;
+    const subject = `${req.subject ?? decision.resolvedQuestion} ${family(req)}`;
     if (!bySubject.has(subject)) bySubject.set(subject, []);
     bySubject.get(subject)!.push(req);
   }

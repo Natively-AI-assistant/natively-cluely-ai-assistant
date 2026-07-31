@@ -160,7 +160,18 @@ export function combineRetrievalPorts(ports: RetrievalPort[]): RetrievalPort {
       for (const e of merged) {
         const key = e.content.trim().toLowerCase().replace(/\s+/g, ' ');
         const prior = byContent.get(key);
-        if (!prior || e.finalScore > prior.finalScore) byContent.set(key, e);
+        if (!prior) { byContent.set(key, e); continue; }
+        const winner = e.finalScore > prior.finalScore ? e : prior;
+        const loser = winner === e ? prior : e;
+        // Identical text: the complete-record declaration transfers to the
+        // surviving copy, or the absence contract would silently stop
+        // rendering because the higher-scoring duplicate came from a port
+        // that does not stamp metadata (review finding, 2026-07-31).
+        const keep = (loser.metadata as Record<string, unknown> | undefined)?.completeInventory === true
+          && (winner.metadata as Record<string, unknown> | undefined)?.completeInventory !== true
+          ? { ...winner, metadata: { ...winner.metadata, ...loser.metadata } }
+          : winner;
+        byContent.set(key, keep);
       }
       const evidence = [...byContent.values()];
 

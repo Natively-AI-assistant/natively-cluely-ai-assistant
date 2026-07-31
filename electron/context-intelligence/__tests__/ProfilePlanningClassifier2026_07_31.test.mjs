@@ -55,6 +55,41 @@ describe('first-person self-reference is personal', () => {
   });
 });
 
+describe('review hardening: first-person technical self-talk stays impersonal', () => {
+  // Review finding (2026-07-31): the first-person widening dragged
+  // technical-interview's bread-and-butter questions through résumé-claim
+  // machinery — a segfault question got a motivation disclosure.
+  for (const q of [
+    'why do I get a segfault when I run this?',
+    'should I use a hashmap or a BST here?',
+    'can I solve this with dynamic programming?',
+  ]) {
+    test(`${JSON.stringify(q)} carries no USER_* claim`, () => {
+      const c = cls(q, resolveModePolicy('technical-interview'));
+      assert.ok(!c.claimTypes.some((t) => String(t).startsWith('USER_')),
+        `got claims: ${c.claimTypes.join(',')}`);
+    });
+  }
+});
+
+describe('review hardening: JOB_RE widening stays narrow', () => {
+  const GENERAL = resolveModePolicy('general');
+  test('"what fields are required in this form" is not a JD claim', () => {
+    const c = cls('what fields are required in this form?', GENERAL);
+    assert.ok(!c.claimTypes.includes('JOB_REQUIRED_SKILL'));
+  });
+  test('"average salary for data scientists" is not a JD claim', () => {
+    const c = cls('what is the average salary for data scientists?', GENERAL);
+    assert.ok(!c.claimTypes.includes('JOB_REQUIRED_SKILL'));
+  });
+  test('recruiting presence-check does NOT force a JD conjunction (no profile JD there)', () => {
+    const c = cls('do you know if the candidate has java experience?', resolveModePolicy('recruiting'));
+    assert.ok(!c.claimTypes.includes('JOB_REQUIRED_SKILL'),
+      'a JD is merely possible in recruiting — forcing the comparison made plain candidate questions structurally PARTIAL');
+    assert.ok(c.claimTypes.includes('USER_SKILL'));
+  });
+});
+
 describe('motivation questions are grounded turns, not FAST', () => {
   test('"Why did I build Natively?" claims motivation and retrieves', () => {
     const c = cls('Why did I build Natively?');

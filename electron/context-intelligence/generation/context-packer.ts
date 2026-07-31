@@ -35,10 +35,14 @@ export interface PackedContext {
 export const estimateTokens = (s: string): number => Math.ceil(s.length / 4);
 
 /** XML-escape so document text can never close the tag it lives in or forge a
- *  sibling tag. Retrieved content is DATA (§23) and must not be able to
- *  restructure the prompt around it. */
+ *  sibling tag OR ATTRIBUTE. Retrieved content is DATA (§23) and must not be
+ *  able to restructure the prompt around it. `"` matters as of 2026-07-31:
+ *  section names are now derived from document content (the profile port's
+ *  `Experience: <role> at <company>`), and an unescaped quote inside an
+ *  attribute value let a hostile JD title forge `complete_inventory="true"` —
+ *  the exact attribute the checked-absence contract keys on (review finding). */
 function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 /**
@@ -91,12 +95,13 @@ export function packContext(
 
   for (const e of ordered) {
     // Duplicate content is dropped regardless of score — two copies of the same
-    // passage buy nothing and crowd out a second perspective. Keyed on CONTENT
-    // ALONE (2026-07-31): the same document can now legitimately arrive from
-    // two sources — the Profile Intelligence résumé and a duplicate mode
-    // attachment — and a sourceId-qualified key let both copies of the same
-    // passage through, double-weighting one document.
-    const key = e.content.trim().toLowerCase().replace(/\s+/g, ' ');
+    // passage buy nothing and crowd out a second perspective. Keyed per SOURCE:
+    // cross-source duplicates (the profile résumé vs a duplicate mode
+    // attachment) are handled upstream by combineRetrievalPorts, which keeps
+    // one copy and merges its complete-record declaration — deduping across
+    // sources HERE would also merge distinct reference files that share
+    // boilerplate in strict modes (review finding, 2026-07-31).
+    const key = `${e.sourceId}:${e.content.trim().toLowerCase().replace(/\s+/g, ' ')}`;
     if (seen.has(key)) { dropped.push(e.evidenceId); continue; }
 
     const rendered = renderEvidence(e);

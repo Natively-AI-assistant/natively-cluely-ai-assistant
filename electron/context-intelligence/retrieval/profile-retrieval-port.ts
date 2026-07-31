@@ -107,6 +107,15 @@ export interface ProfileSection {
    * evidenceSupportsClaim via chunk metadata.
    */
   completeInventory: boolean;
+  /**
+   * WHICH category this is the complete record of. Consumed by
+   * evidenceSupportsClaim so the term-free absence shortcut is
+   * category-matched: the complete EMPLOYMENT list must never license a
+   * grounded negative about CERTIFICATIONS (review finding, 2026-07-31 — a
+   * category-blind shortcut manufactured confidently-wrong absences from
+   * whichever complete chunk happened to rank).
+   */
+  inventoryCategory?: string;
   /** Coarse kind used by the intent boosts below. */
   boostKey: string;
 }
@@ -122,8 +131,10 @@ function renderResumeSections(sd: Record<string, unknown>): ProfileSection[] {
   const identityBits = [str(id.name), str(id.summary), str(id.location)].filter(Boolean);
   if (identityBits.length) {
     out.push({
+      // NOT an inventory: a name/summary blurb enumerates nothing, so it must
+      // never license a term-free absence claim (review finding).
       section: 'Identity & summary', boostKey: 'identity',
-      text: identityBits.join('. '), completeInventory: true,
+      text: identityBits.join('. '), completeInventory: false,
     });
   }
 
@@ -147,7 +158,7 @@ function renderResumeSections(sd: Record<string, unknown>): ProfileSection[] {
       out.push({
         section: 'Complete employment history', boostKey: 'experience',
         text: `Complete list of all work experience on the résumé: ${index}. No other employment is listed.`,
-        completeInventory: true,
+        completeInventory: true, inventoryCategory: 'experience',
       });
     }
   }
@@ -164,7 +175,7 @@ function renderResumeSections(sd: Record<string, unknown>): ProfileSection[] {
       out.push({
         section: 'Complete project list', boostKey: 'projects',
         text: `Complete list of all projects on the résumé: ${index}. No other projects are listed.`,
-        completeInventory: true,
+        completeInventory: true, inventoryCategory: 'projects',
       });
     }
   }
@@ -185,7 +196,7 @@ function renderResumeSections(sd: Record<string, unknown>): ProfileSection[] {
       section: 'Complete skills inventory', boostKey: 'skills',
       text: `Complete list of all skills, languages, frameworks and tools on the résumé: ${body}. `
         + 'Any skill or technology not in this list is not listed on the résumé.',
-      completeInventory: true,
+      completeInventory: true, inventoryCategory: 'skills',
     });
   }
 
@@ -197,7 +208,7 @@ function renderResumeSections(sd: Record<string, unknown>): ProfileSection[] {
       str(ed.gpa) ? `CGPA/GPA: ${str(ed.gpa)}` : '',
       [str(ed.start_date), str(ed.end_date)].filter(Boolean).join(' to '),
     ].filter(Boolean).join(', ')).join('; ');
-    if (body) out.push({ section: 'Education', boostKey: 'education', text: `Complete education record: ${body}`, completeInventory: true });
+    if (body) out.push({ section: 'Education', boostKey: 'education', text: `Complete education record: ${body}`, completeInventory: true, inventoryCategory: 'education' });
   }
 
   const achievements = arr(sd.achievements) as Array<Record<string, unknown>>;
@@ -226,7 +237,7 @@ function renderJdSections(sd: Record<string, unknown>): ProfileSection[] {
     out.push({
       section: 'Job requirements (complete)', boostKey: 'requirements',
       text: `Complete list of requirements in the job description: ${reqs.join('; ')}.`,
-      completeInventory: true,
+      completeInventory: true, inventoryCategory: 'requirements',
     });
   }
   const nice = lines(sd.nice_to_haves);
@@ -234,7 +245,7 @@ function renderJdSections(sd: Record<string, unknown>): ProfileSection[] {
     out.push({
       section: 'Nice-to-haves (complete)', boostKey: 'requirements',
       text: `Complete list of preferred/nice-to-have qualifications: ${nice.join('; ')}.`,
-      completeInventory: true,
+      completeInventory: true, inventoryCategory: 'nice_to_haves',
     });
   }
   const resp = lines(sd.responsibilities);
@@ -253,17 +264,21 @@ function renderJdSections(sd: Record<string, unknown>): ProfileSection[] {
   ].filter(Boolean);
   if (compBits.length) {
     out.push({
+      // Retrievable by term match; not an inventory that grounds absences.
       section: 'Compensation & experience bar', boostKey: 'compensation',
-      text: compBits.join('. '), completeInventory: true,
+      text: compBits.join('. '), completeInventory: false,
     });
   }
 
   const tech = [...lines(sd.technologies), ...lines(sd.keywords)];
   if (tech.length) {
     out.push({
+      // Category 'technologies', NOT 'requirements': a keyword list ranking in
+      // must not term-free-support a requirements claim while the actual
+      // requirements chunk went unretrieved (review finding: the clearance case).
       section: 'Technologies & keywords (complete)', boostKey: 'requirements',
       text: `Complete list of technologies and keywords named by the job description: ${[...new Set(tech)].join(', ')}.`,
-      completeInventory: true,
+      completeInventory: true, inventoryCategory: 'technologies',
     });
   }
   return out;
@@ -326,6 +341,7 @@ interface PortChunk {
   chunkIndex: number;
   boostKey: string;
   completeInventory: boolean;
+  inventoryCategory?: string;
 }
 
 /** Squash an unbounded BM25 score into the 0..1 band the mode/meeting ports
@@ -360,15 +376,15 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
 
     let idx = 0;
     const seen = new Set<string>();
-    const push = (section: string, text: string, boostKey: string, completeInventory: boolean) => {
+    const push = (section: string, text: string, boostKey: string, completeInventory: boolean, inventoryCategory?: string) => {
       const key = normText(text);
       if (!key || seen.has(key)) return;
       seen.add(key);
-      chunks.push({ sourceId: doc.sourceId, fileName: doc.fileName, section, text, chunkIndex: idx++, boostKey, completeInventory });
+      chunks.push({ sourceId: doc.sourceId, fileName: doc.fileName, section, text, chunkIndex: idx++, boostKey, completeInventory, inventoryCategory });
     };
 
     for (const s of renderProfileSections(doc.kind, doc.structured)) {
-      push(s.section, s.text, s.boostKey, s.completeInventory);
+      push(s.section, s.text, s.boostKey, s.completeInventory, s.inventoryCategory);
     }
     for (const c of doc.cards ?? []) {
       if (c.approvalStatus === 'rejected') continue;
@@ -397,7 +413,18 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
         .map((c, i) => {
           const lexical = squash(bm25ById.get(String(i)) ?? 0);
           const boost = boosts.get(c.boostKey) ?? 0;
-          return { c, score: Math.min(1, lexical * 0.85 + boost) };
+          // A boost with NO lexical signal must rank BELOW genuine matches —
+          // additive flat boosts were crowding real mode-attachment hits out of
+          // the 6-item cap (review finding). ONE exception, by design: a
+          // COMPLETE INVENTORY targeted by a fired intent is admitted at a
+          // fixed 0.6. Absence evidence can never rank on similarity — the
+          // skills list that proves "Kubernetes is not listed" deliberately
+          // does not contain the word Kubernetes — so it is policy-admitted at
+          // a level below real matches (0.7+) but above the cut line. Bounded:
+          // at most one or two inventory chunks per fired intent.
+          const boostOnly = c.completeInventory && boost > 0 ? 0.6 : Math.min(0.35, boost);
+          const score = lexical > 0 ? Math.min(1, lexical * 0.85 + boost) : boostOnly;
+          return { c, score };
         })
         .filter((s) => s.score > 0.05)
         .sort((a, b) => b.score - a.score || a.c.chunkIndex - b.c.chunkIndex)
@@ -410,8 +437,12 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
           chunkIndex: c.chunkIndex,
           score,
           // Carried through the adapter so evidenceSupportsClaim can treat a
-          // checked COMPLETE inventory as grounded support for absence answers.
-          metadata: c.completeInventory ? { completeInventory: true } : {},
+          // checked COMPLETE inventory as grounded support for absence answers
+          // — category-matched, so the shortcut only fires for the claim class
+          // the record actually enumerates.
+          metadata: c.completeInventory
+            ? { completeInventory: true, ...(c.inventoryCategory ? { inventoryCategory: c.inventoryCategory } : {}) }
+            : {},
         }));
     },
   });
