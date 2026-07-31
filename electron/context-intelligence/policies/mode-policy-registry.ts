@@ -66,6 +66,20 @@ export interface ModePolicy {
   allowedSourceTypes: SourceType[];
   sourcePriorities: Partial<Record<SourceType, number>>;
 
+  /**
+   * Which Profile Intelligence pools this mode hydrates WITHOUT duplicate mode
+   * attachments (the user's active résumé / target JD / verified facts,
+   * uploaded once in Profile settings).
+   *
+   * EXPLICIT opt-in, deliberately distinct from allowedSourceTypes: Recruiting
+   * allows JOB_DESCRIPTION — a hiring JD attached to the mode — but the user's
+   * own target JD must never leak into candidate evaluation, and Recruiting's
+   * CANDIDATE_FILE must never be conflated with the user's résumé. An empty
+   * list means "mode attachments only", which is every mode's pre-2026-07-31
+   * behaviour. Subset of allowedSourceTypes by contract (asserted in tests).
+   */
+  profileSources: SourceType[];
+
   groundingPolicy: GroundingPolicy;
   capabilityPolicy: CapabilityPolicy;
 
@@ -132,6 +146,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     purpose: 'Universal adaptive copilot for any meeting or conversation.',
     allowedSourceTypes: ['REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'CONVERSATION_STATE', 'SCREEN_CONTEXT'],
     sourcePriorities: { REFERENCE_FILE: 1, MEETING_TRANSCRIPT: 2 },
+    profileSources: [],
     groundingPolicy: 'OPEN_KNOWLEDGE', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
@@ -144,6 +159,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     purpose: 'Close deals with strategic discovery and objection handling.',
     allowedSourceTypes: ['REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'CONVERSATION_STATE', 'SCREEN_CONTEXT'],
     sourcePriorities: { REFERENCE_FILE: 1, MEETING_TRANSCRIPT: 2 },
+    profileSources: [],
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
     // Pricing, commitments and customer statements are product claims: they
     // require evidence and must never be generated.
@@ -160,6 +176,8 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     // documents can never be confused with the Natively user's own resume.
     allowedSourceTypes: ['CANDIDATE_FILE', 'JOB_DESCRIPTION', 'REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'CONVERSATION_STATE'],
     sourcePriorities: { CANDIDATE_FILE: 1, JOB_DESCRIPTION: 2, REFERENCE_FILE: 3 },
+    // The user's OWN profile must never describe a candidate: no hydration.
+    profileSources: [],
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
@@ -172,6 +190,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     purpose: 'Track action items and key decisions from meetings.',
     allowedSourceTypes: ['MEETING_TRANSCRIPT', 'REFERENCE_FILE', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
     sourcePriorities: { MEETING_TRANSCRIPT: 1, REFERENCE_FILE: 2 },
+    profileSources: [],
     groundingPolicy: 'OPEN_KNOWLEDGE', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
@@ -180,11 +199,14 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
   },
 
   'looking-for-work': {
-    id: 'looking-for-work', version: '1.0.0', name: 'Looking for work',
+    id: 'looking-for-work', version: '1.1.0', name: 'Looking for work',
     purpose: 'Answer interview questions with confidence and clarity.',
     allowedSourceTypes: ['RESUME', 'JOB_DESCRIPTION', 'PROFILE_FACT', 'REFERENCE_FILE', 'CONVERSATION_STATE'],
     // Resume outranks JD: the JD may shape EMPHASIS, never prove experience.
     sourcePriorities: { RESUME: 1, PROFILE_FACT: 2, JOB_DESCRIPTION: 3 },
+    // Profile Intelligence is the PRIMARY source here (uploaded once in
+    // Profile settings); mode attachments are optional supplements.
+    profileSources: ['RESUME', 'JOB_DESCRIPTION', 'PROFILE_FACT'],
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
@@ -193,10 +215,14 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
   },
 
   'technical-interview': {
-    id: 'technical-interview', version: '1.0.0', name: 'Technical Interview',
+    id: 'technical-interview', version: '1.1.0', name: 'Technical Interview',
     purpose: 'Whiteboard-style coding and system design support.',
     allowedSourceTypes: ['RESUME', 'JOB_DESCRIPTION', 'PROJECT_FILE', 'CODING_SAMPLE', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
     sourcePriorities: { RESUME: 1, PROJECT_FILE: 2, CODING_SAMPLE: 3, JOB_DESCRIPTION: 4 },
+    // Same latent defect as looking-for-work: RESUME was planned but had no
+    // pool without duplicate attachments. JD/résumé hydrate; PROFILE_FACT is
+    // not in this mode's allowlist so it is not opted in.
+    profileSources: ['RESUME', 'JOB_DESCRIPTION'],
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
@@ -209,6 +235,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     purpose: 'Capture key concepts and content from lectures.',
     allowedSourceTypes: ['REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'CONVERSATION_STATE'],
     sourcePriorities: { REFERENCE_FILE: 1, MEETING_TRANSCRIPT: 2 },
+    profileSources: [],
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
@@ -221,6 +248,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     purpose: 'Strict file-grounded Q&A for presentations, thesis defences and paper walkthroughs.',
     allowedSourceTypes: ['REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'CONVERSATION_STATE'],
     sourcePriorities: { REFERENCE_FILE: 1, MEETING_TRANSCRIPT: 2 },
+    profileSources: [],
     // SOURCE_FIRST, not STRICT_SOURCE_ONLY: the existing seminar contract is
     // "answer general-labeled with a visible preamble, NEVER refuse". §27.2
     // forbids hiding failures behind over-refusal, so labelling beats refusing.

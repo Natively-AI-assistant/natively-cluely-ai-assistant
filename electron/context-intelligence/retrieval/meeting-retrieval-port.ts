@@ -146,8 +146,23 @@ export function combineRetrievalPorts(ports: RetrievalPort[]): RetrievalPort {
         }
       }));
 
-      const evidence = results.flatMap((r) => r.evidence);
+      const merged = results.flatMap((r) => r.evidence);
       const attempts = results.flatMap((r) => r.attempts);
+
+      // Cross-port content dedup (2026-07-31): the same document can now
+      // legitimately arrive from two pools — the Profile Intelligence résumé
+      // AND a duplicate copy attached to the mode. Identical passages from
+      // different sourceIds would double-weight one document inside the cap,
+      // so exact (normalised) duplicates keep only the highest-scoring copy.
+      // Distinct wordings of the same fact are NOT deduped — that is ordinary
+      // multi-source corroboration and the packer budget handles it.
+      const byContent = new Map<string, (typeof merged)[number]>();
+      for (const e of merged) {
+        const key = e.content.trim().toLowerCase().replace(/\s+/g, ' ');
+        const prior = byContent.get(key);
+        if (!prior || e.finalScore > prior.finalScore) byContent.set(key, e);
+      }
+      const evidence = [...byContent.values()];
 
       // Re-rank across sources, then apply the turn's own accepted-evidence cap
       // — otherwise two ports each returning their maximum would double it.

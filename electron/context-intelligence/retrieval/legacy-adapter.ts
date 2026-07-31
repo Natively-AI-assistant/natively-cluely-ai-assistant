@@ -41,6 +41,10 @@ export interface LegacyChunk {
   answerabilityScore?: number;
   section?: string;
   headingPath?: string[];
+  /** Structured flags a port declares about its own chunk (e.g. the profile
+   *  port's `completeInventory`). Carried through verbatim — the adapter never
+   *  invents metadata, and consumers must treat it as the PORT's claim. */
+  metadata?: Record<string, unknown>;
 }
 
 export interface AdaptOptions {
@@ -194,7 +198,7 @@ export function adaptLegacyChunks(chunks: LegacyChunk[], opts: AdaptOptions): Ad
       // inference drawn from one.
       isDirectFact: true,
       isInferred: false,
-      metadata: {},
+      metadata: c.metadata ?? {},
 
       // Literal, not a variable: similarity never confers trust. Retrieved text
       // is DATA and must never be executed as instructions (§23).

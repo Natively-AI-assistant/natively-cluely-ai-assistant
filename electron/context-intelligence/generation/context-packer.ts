@@ -68,6 +68,10 @@ function renderEvidence(e: EvidenceItem): string {
     e.section ? `section="${esc(e.section)}"` : '',
     `authority="${e.authorityFor.join(',')}"`,
     `direct_fact="${e.isDirectFact}"`,
+    // Surfaces the port's complete-record declaration so the composer's
+    // checked-absence contract has something in the evidence to point at.
+    (e.metadata as Record<string, unknown> | undefined)?.completeInventory === true
+      ? 'complete_inventory="true"' : '',
   ].filter(Boolean).join(' ');
   return `<evidence ${attrs}>\n${esc(e.content.trim())}\n</evidence>`;
 }
@@ -87,8 +91,12 @@ export function packContext(
 
   for (const e of ordered) {
     // Duplicate content is dropped regardless of score — two copies of the same
-    // passage buy nothing and crowd out a second perspective.
-    const key = `${e.sourceId}:${e.content.trim()}`;
+    // passage buy nothing and crowd out a second perspective. Keyed on CONTENT
+    // ALONE (2026-07-31): the same document can now legitimately arrive from
+    // two sources — the Profile Intelligence résumé and a duplicate mode
+    // attachment — and a sourceId-qualified key let both copies of the same
+    // passage through, double-weighting one document.
+    const key = e.content.trim().toLowerCase().replace(/\s+/g, ' ');
     if (seen.has(key)) { dropped.push(e.evidenceId); continue; }
 
     const rendered = renderEvidence(e);

@@ -31,6 +31,14 @@ export interface BridgeInput {
   /** How many reference files the active mode has. Lets the composer say "no
    *  document is attached" instead of "the document does not mention it". */
   attachedSourceCount?: number;
+  /** How many Profile Intelligence sources hydrated this turn's retrieval
+   *  (active résumé / target JD). Composer wording + telemetry — a zero-
+   *  attachment turn with a live profile must NOT claim nothing was searched. */
+  profileSourceCount?: number;
+  /** Identity of the profile sources resolved into the turn ({role, id} only,
+   *  never content) — the [V3] line's answer to "which source pools existed",
+   *  as distinct from `sources` = what retrieval actually accepted. */
+  resolvedProfileSources?: Array<{ role: string; id: string }>;
   /** Human-readable mode name for the [V3] observability line. */
   modeName?: string | null;
   /** Distinguishes call sites that share an AnswerSurface (AnswerSurface has
@@ -123,6 +131,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       realtimeInstruction: input.realtimeInstruction,
       conversationSummary: convoSummary,
       attachedSourceCount: input.attachedSourceCount,
+      profileSourceCount: input.profileSourceCount,
     });
 
     // ── Per-turn source line ────────────────────────────────────────────────
@@ -134,17 +143,29 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     try {
       const acc = result.trace.acceptedEvidence ?? [];
       const srcIds = [...new Set(acc.map((e) => e.sourceId))];
+      // {role, id} pairs of what retrieval actually ACCEPTED — the counterpart
+      // of resolvedSources (what pools existed). Identity only, never content.
+      const retrievedSources = [...new Map(
+        acc.map((e) => [`${e.sourceType}:${e.sourceId}`, { role: e.sourceType, id: e.sourceId }]),
+      ).values()];
       console.log('[V3]', JSON.stringify({
         surface: input.surface,
         ...(input.pathTag ? { tag: input.pathTag } : {}),
         mode: modeId,
         modeUniqueId: input.modeUniqueId ?? null,
         modeName: input.modeName ?? null,
+        // `attachedFiles` kept for rerun-protocol parsers; the split fields are
+        // the honest representation — attachedFiles alone reported the whole
+        // source state as 0 while a profile résumé/JD pool existed.
         attachedFiles: input.attachedSourceCount ?? null,
+        modeAttachedFiles: input.attachedSourceCount ?? null,
+        profileSources: input.profileSourceCount ?? 0,
+        resolvedSources: input.resolvedProfileSources ?? [],
         path: result.decision.retrievalPlan.path,
         planned: result.decision.retrievalPlan.sourceTypes,
         evidence: acc.length,
         sources: srcIds,
+        retrievedSources,
         answerability: result.trace.answerability,
         fallback: result.trace.fallbackUsed,
       }));

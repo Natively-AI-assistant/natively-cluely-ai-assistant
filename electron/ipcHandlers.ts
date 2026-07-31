@@ -1004,17 +1004,49 @@ export function initializeIpcHandlers(appState: AppState): void {
             const ragForV3 = appState.getRAGManager?.();
             const wantsMeeting = policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT')
               && Boolean(v3MeetingId) && Boolean(ragForV3?.getRetriever);
-            const port = wantsMeeting
-              ? combineRetrievalPorts([
-                modePort,
-                createMeetingRetrievalPort({
-                  retriever: ragForV3!.getRetriever(),
-                  currentMeetingId: v3MeetingId,
-                  userId: V3_USER_ID,
-                  tokenBudget: policy.contextBudget.evidenceTokens,
-                }),
-              ])
-              : modePort;
+
+            // Profile Intelligence hydration (2026-07-31 source-routing fix).
+            // The user's active résumé/target JD, uploaded ONCE in Profile
+            // settings, are the PRIMARY pool for profile-aware modes — mode
+            // attachments are optional supplements, and requiring duplicates
+            // was the live defect. Gated on the mode's EXPLICIT
+            // policy.profileSources opt-in (empty for recruiting/sales/etc so
+            // the user's own documents can never leak into those turns), and
+            // additive: any failure here degrades to mode attachments only.
+            let v3ProfilePort: unknown = null;
+            let v3ProfileCounts = { profileResume: 0, profileJd: 0, profileFact: 0 };
+            let v3ProfileResolved: Array<{ role: string; id: string }> = [];
+            try {
+              if (policy.profileSources?.length) {
+                const { collectV3ProfileSources } = require('./services/knowledge/v3ProfileSources');
+                const collected = collectV3ProfileSources(llmHelper.getKnowledgeOrchestrator?.() ?? null);
+                if (collected.docs.length) {
+                  const { createProfileRetrievalPort } = require('./context-intelligence/retrieval/profile-retrieval-port');
+                  v3ProfilePort = createProfileRetrievalPort({
+                    docs: collected.docs,
+                    allowedSourceTypes: policy.allowedSourceTypes,
+                    profileSources: policy.profileSources,
+                    userId: V3_USER_ID,
+                  });
+                  if (v3ProfilePort) {
+                    v3ProfileCounts = collected.counts;
+                    v3ProfileResolved = collected.resolved;
+                  }
+                }
+              }
+            } catch { /* profile evidence is additive — mode port alone still answers */ }
+
+            const v3Ports = [
+              modePort,
+              ...(v3ProfilePort ? [v3ProfilePort] : []),
+              ...(wantsMeeting ? [createMeetingRetrievalPort({
+                retriever: ragForV3!.getRetriever(),
+                currentMeetingId: v3MeetingId,
+                userId: V3_USER_ID,
+                tokenBudget: policy.contextBudget.evidenceTokens,
+              })] : []),
+            ];
+            const port = v3Ports.length > 1 ? combineRetrievalPorts(v3Ports as never[]) : modePort;
 
             // ONE construction, shared with every engine surface: the bridge
             // resolves the per-mode Answer policy, reads conversation state for
@@ -1031,6 +1063,8 @@ export function initializeIpcHandlers(appState: AppState): void {
               modeUniqueId: modeInfo?.id ?? null,
               modeName: (modeInfo as any)?.name ?? null,
               attachedSourceCount: files.length,
+              profileSourceCount: v3ProfileCounts.profileResume + v3ProfileCounts.profileJd + v3ProfileCounts.profileFact,
+              resolvedProfileSources: v3ProfileResolved,
               requestId: `v3-${myStreamId}`,
               requestSequence: myStreamId,
               // sessionId rides the scope: the bridge keys the AnswerRequest's

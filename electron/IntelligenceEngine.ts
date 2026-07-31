@@ -2422,6 +2422,8 @@ export class IntelligenceEngine extends EventEmitter {
                         modeUniqueId: _ctx.modeUniqueId,
                         modeName: _ctx.modeName,
                         attachedSourceCount: _ctx.attachedSourceCount,
+                        profileSourceCount: _ctx.profileSourceCount,
+                        resolvedProfileSources: _ctx.resolvedProfileSources,
                         scope: { meetingId: _ctx.meetingId ?? meetingMarker ?? undefined },
                         requestId: trace.requestId,
                         requestSequence: generationId,
@@ -4068,6 +4070,8 @@ export class IntelligenceEngine extends EventEmitter {
     private v3ModeRetrievalContext(): {
         raw: string; modeUniqueId: string | null; modeName: string | null; meetingId: string | null;
         attachedSourceCount: number;
+        profileSourceCount: number;
+        resolvedProfileSources: Array<{ role: string; id: string }>;
         port: unknown; conversationWindow: (sec: number) => string;
     } | null {
         try {
@@ -4087,6 +4091,34 @@ export class IntelligenceEngine extends EventEmitter {
                 tokenBudget: policy.contextBudget.evidenceTokens, userId: 'local',
             });
 
+            // Profile Intelligence hydration (2026-07-31 source-routing fix):
+            // the active résumé/target JD are the PRIMARY pool for modes that
+            // opt in via policy.profileSources — mode attachments supplement,
+            // never gate. Same construction as the ipcHandlers manual-chat
+            // site; additive, so a failure degrades to attachments only.
+            let profilePort: unknown = null;
+            let profileSourceCount = 0;
+            let resolvedProfileSources: Array<{ role: string; id: string }> = [];
+            try {
+                if (policy.profileSources?.length) {
+                    const { collectV3ProfileSources } = require('./services/knowledge/v3ProfileSources');
+                    const collected = collectV3ProfileSources(this.llmHelper.getKnowledgeOrchestrator?.() ?? null);
+                    if (collected.docs.length) {
+                        const { createProfileRetrievalPort } = require('./context-intelligence/retrieval/profile-retrieval-port');
+                        profilePort = createProfileRetrievalPort({
+                            docs: collected.docs,
+                            allowedSourceTypes: policy.allowedSourceTypes,
+                            profileSources: policy.profileSources,
+                            userId: 'local',
+                        });
+                        if (profilePort) {
+                            profileSourceCount = collected.docs.length;
+                            resolvedProfileSources = collected.resolved;
+                        }
+                    }
+                }
+            } catch { /* profile evidence is additive — mode port alone still answers */ }
+
             // Meeting evidence, when this turn is INSIDE a meeting and the mode
             // authorizes transcripts. Without it a live meeting question found
             // only reference files and disclosed a gap for something that had
@@ -4095,19 +4127,19 @@ export class IntelligenceEngine extends EventEmitter {
             const meetingId = (this.session as any)?.getMeetingMetadata?.()?.id ?? null;
             let port: unknown = modePort;
             try {
+                const { combineRetrievalPorts } = require('./context-intelligence/retrieval/meeting-retrieval-port');
+                const ports: unknown[] = [modePort, ...(profilePort ? [profilePort] : [])];
                 const retriever = this.ragRetrieverProvider?.();
                 if (retriever && meetingId && policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT')) {
-                    const { createMeetingRetrievalPort, combineRetrievalPorts } =
+                    const { createMeetingRetrievalPort } =
                         require('./context-intelligence/retrieval/meeting-retrieval-port');
-                    port = combineRetrievalPorts([
-                        modePort,
-                        createMeetingRetrievalPort({
-                            retriever, currentMeetingId: meetingId, userId: 'local',
-                            tokenBudget: policy.contextBudget.evidenceTokens,
-                        }),
-                    ]);
+                    ports.push(createMeetingRetrievalPort({
+                        retriever, currentMeetingId: meetingId, userId: 'local',
+                        tokenBudget: policy.contextBudget.evidenceTokens,
+                    }));
                 }
-            } catch { /* meeting evidence is additive — mode port alone still answers */ }
+                if (ports.length > 1) port = combineRetrievalPorts(ports as never[]);
+            } catch { /* meeting/profile combination is additive — mode port alone still answers */ }
 
             return {
                 raw,
@@ -4115,6 +4147,8 @@ export class IntelligenceEngine extends EventEmitter {
                 modeName: (_mi as any)?.name ?? null,
                 meetingId,
                 attachedSourceCount: _files.length,
+                profileSourceCount,
+                resolvedProfileSources,
                 port,
                 // Bounded live-transcript window for the composer's labelled
                 // "Conversation so far" section. This is NOT the §32.16 raw-blob
@@ -4173,6 +4207,8 @@ export class IntelligenceEngine extends EventEmitter {
                 modeUniqueId: ctx.modeUniqueId,
                 modeName: ctx.modeName,
                 attachedSourceCount: ctx.attachedSourceCount,
+                profileSourceCount: ctx.profileSourceCount,
+                resolvedProfileSources: ctx.resolvedProfileSources,
                 requestSequence: this.currentGenerationId,
                 scope: { meetingId: ctx.meetingId ?? undefined },
                 conversationSummary: ctx.conversationWindow(60),
@@ -4630,6 +4666,8 @@ export class IntelligenceEngine extends EventEmitter {
                         modeUniqueId: _ctx.modeUniqueId,
                         modeName: _ctx.modeName,
                         attachedSourceCount: _ctx.attachedSourceCount,
+                        profileSourceCount: _ctx.profileSourceCount,
+                        resolvedProfileSources: _ctx.resolvedProfileSources,
                         requestSequence: this.currentGenerationId,
                         scope: { meetingId: _ctx.meetingId ?? undefined },
                         retrieval: _ctx.port as any,

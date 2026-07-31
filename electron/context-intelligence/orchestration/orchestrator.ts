@@ -15,7 +15,7 @@
 
 import type {
   TurnDecision, AnswerSurface, EvidenceScope, EvidenceItem,
-  RetrievalPlan, ClaimRequirement, SourceType, Answerability,
+  RetrievalPlan, ClaimRequirement, SourceType, Answerability, ClaimType,
 } from '../contracts/types';
 import { freezeTurnDecision } from '../contracts/types';
 import { resolveModePolicy, generalKnowledgeAllowed, type ModePolicy } from '../policies/mode-policy-registry';
@@ -262,11 +262,21 @@ const salientTerms = (text: string): Set<string> => {
  * is the safe direction. The alternative false positive fabricates.
  */
 export function evidenceSupportsClaim(
-  evidence: { acceptedFor: string[]; content: string },
+  evidence: { acceptedFor: string[]; content: string; metadata?: Record<string, unknown> },
   claimType: string,
   question: string,
 ): boolean {
   if (!evidence.acceptedFor.includes(claimType)) return false;
+  // AUTHORITATIVE ABSENCE: an item its port declares to be the COMPLETE
+  // extracted record of a category (the whole skills inventory, the whole
+  // employment list) supports any claim its source is authoritative for, term
+  // overlap or not — the correct grounded answer may be that the asked-about
+  // thing is NOT in it, and "Do I have Kubernetes experience?" shares no term
+  // with a skills list that (correctly) lacks Kubernetes. Term matching would
+  // report NONE for exactly the questions where the evidence proves the answer.
+  // Authority is still enforced above: a JD's complete requirements list can
+  // never support a USER_* claim.
+  if (evidence.metadata?.completeInventory === true) return true;
   const qTerms = salientTerms(question);
   if (qTerms.size === 0) return true;          // nothing to match on — do not block
   const eTerms = salientTerms(evidence.content);
@@ -327,16 +337,31 @@ export function evaluateAnswerability(
   // questions strict — "tell me about PriceX AND explain how WebRTC works" is two
   // distinct subjects and still requires both — while letting one clause be
   // satisfied by any authoritative route to it.
+  // …with ONE refinement (2026-07-31): claims about the USER and claims about
+  // the JOB on the SAME clause are a COMPARISON, not alternatives. "Do I meet
+  // the two-year experience requirement?" emits USER_SKILL (the résumé side)
+  // and JOB_REQUIRED_SKILL (the JD side) from one clause; the JD is PROHIBITED
+  // from evidencing the user claim and vice versa, so neither can substitute
+  // for the other — grouping them together let résumé evidence alone report
+  // FULL with the requirement never retrieved (measured: the 2-year question
+  // planned only JOB_DESCRIPTION and compared nothing). Claims within one
+  // family remain alternatives, which is what H-02/H-04 established.
+  const family = (c: ClaimType | string): string => String(c).startsWith('JOB_') ? 'job' : 'user';
   const bySubject = new Map<string, typeof required>();
   for (const req of required) {
-    const subject = req.subject ?? decision.resolvedQuestion;
+    const subject = `${req.subject ?? decision.resolvedQuestion} ${family(req.claimType)}`;
     if (!bySubject.has(subject)) bySubject.set(subject, []);
     bySubject.get(subject)!.push(req);
   }
 
   let supported = 0;
-  for (const [subject, reqs] of bySubject) {
-    const ok = reqs.some((req) => evidence.some((e) => evidenceSupportsClaim(e, req.claimType, subject)));
+  for (const [, reqs] of bySubject) {
+    // Term-match against the CLEAN clause, not the grouping key — the family
+    // suffix is a bucket label, and letting it into salientTerms would hand
+    // every user-side group a free "user" term to match on.
+    const ok = reqs.some((req) => evidence.some(
+      (e) => evidenceSupportsClaim(e, req.claimType, req.subject ?? decision.resolvedQuestion),
+    ));
     if (ok) supported++;
   }
   if (supported === 0) return 'NONE';

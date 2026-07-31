@@ -71,8 +71,15 @@ describe('claim authority filtering', () => {
       { sourceId: 'resume-1', text: 'Go, Kafka', chunkIndex: 0, score: 0.4 },
     ]);
     const r = await p.retrieve({ decision: decide(req('Do you have experience with Postgres?')) });
-    assert.ok(!r.evidence.some((e) => e.sourceType === 'JOB_DESCRIPTION'),
-      'the JD scored highest and must still be excluded — it states what the EMPLOYER wants');
+    // 2026-07-31: a presence check now ALSO plans the JD side (the grounded
+    // answer is "not on the résumé — the JD asks for it"), so the JD chunk is
+    // legitimately ADMITTED — for the JOB claim. The contamination invariant
+    // moved to where it always really lived: acceptedFor. A JD item may never
+    // be accepted for the user-skill claim, no matter its score.
+    for (const e of r.evidence.filter((x) => x.sourceType === 'JOB_DESCRIPTION')) {
+      assert.ok(!e.acceptedFor.includes('USER_SKILL'),
+        'the JD states what the EMPLOYER wants — it can never evidence what the user has');
+    }
   });
 
   test('a JD chunk DOES satisfy a job-requirement claim', async () => {

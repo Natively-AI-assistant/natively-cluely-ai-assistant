@@ -67,8 +67,16 @@ const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 // in the third person, and a second-person-only pattern silently classified
 // "What is the name of the price-comparison website the candidate built?" as
 // requiring no source at all.
-const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|walk me through your|my|the candidate|candidate'?s?|the applicant|applicant'?s?)\b/;
-const PROJECT_RE = /\b(project|built|shipped|implemented|designed|architect(ed|ure) of your)\b/;
+// FIRST person is included (2026-07-31): manual chat is the USER asking about
+// THEMSELF — "Do I have Kubernetes experience?", "Which required languages do I
+// not list?" — and a second/third-person-only pattern classified every one of
+// those as impersonal, so the résumé side of the claim was never planned (the
+// live 2-year-requirement question planned only JOB_DESCRIPTION). The negative
+// lookbehinds keep INSTRUCTION requests impersonal: "how do I reverse a linked
+// list" asks how to do a thing, not what the user's history says, and treating
+// it as personal would drag a coding question through résumé retrieval.
+const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|walk me through your|my|the candidate|candidate'?s?|the applicant|applicant'?s?)\b|(?<!\b(?:how|where|when)\s)\b(?:do|does|am|are|have|has|did|would|should|could|can|will) i\b|\bi (?:have|had|meet|qualify|lack|miss|built|build|created|developed|worked|interned|studied|graduated|know|list|use)\b|\bi'?m\b/;
+const PROJECT_RE = /\b(project|built|build|shipped|implemented|designed|architect(ed|ure) of your)\b/;
 // Matches BOTH orderings, because interviewers use both interchangeably:
 //   "experience WITH Kubernetes"   (preposition-led)
 //   "your Kubernetes EXPERIENCE"   (noun-final)
@@ -76,12 +84,20 @@ const PROJECT_RE = /\b(project|built|shipped|implemented|designed|architect(ed|u
 // "Tell me about your Kubernetes experience" as AMBIGUOUS with no claims —
 // which meant no source was required and a fabricated answer would have been
 // permitted. Gated on `personal`, so the bare nouns cannot over-trigger.
-const SKILL_RE = /\b(experience|expertise|background|proficien\w*|familiar with|worked with|know how to|skills?|leadership|hands-on)\b/;
+const SKILL_RE = /\b(experience|expertise|background|proficien\w*|familiar with|worked with|know how to|skills?|leadership|hands-on|languages?|technolog\w*)\b/;
 const MOTIVATION_RE = /\b(why|reason|motivat\w*|what (led|made)|decided? to|chose to|choose to)\b/;
-const EDUCATION_RE = /\b(degrees?|graduat\w*|universit\w*|college|studied|majors?|majored|alma mater)\b/;
+// The presence-check shape of a skill question — "do I HAVE it", not "tell me
+// about it". Used to widen a personal skill claim into a résumé-vs-JD
+// comparison in modes that carry a JD.
+const SKILL_PRESENCE_RE = /\b(do (i|you) (have|know)|have (i|you) (used|worked)|am i|are you (familiar|experienced|proficient)|(do|does) (i|you) (not )?(list|lack|miss)|missing|lack\w*)\b/;
+const EDUCATION_RE = /\b(degrees?|graduat\w*|universit\w*|college|studied|majors?|majored|alma mater|c?gpa)\b/;
 const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|job title|tenure|manage[srd]?|managing|led|leads?|reports?|team of|headcount|salary expectation\w*|compensation expectation\w*)\b/;
 
-const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit\w*|required skills?|preferred skills?|compensation|salary band|the team you|qualification\w*|requirement\w*|minimum quals?)\b/;
+// `required\b` and bare `salar\w*` added 2026-07-31: "which REQUIRED languages
+// do I not list?" and "what is the base SALARY?" are JD questions, and the old
+// pattern ('required skills?', 'salary band') missed both phrasings — the JD
+// side of the comparison was never planned.
+const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit\w*|required\b|preferred skills?|compensation|salar\w*|the team you|qualification\w*|requirement\w*|minimum quals?)\b/;
 
 const MEETING_RE = /\b(we (decided|agreed|discussed)|did we|are we|action item|owns?|owner|the meeting|last (call|meeting)|this (call|meeting)|standup|sync)\b/;
 
@@ -260,7 +276,19 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     // USER_PROJECT claim is satisfied by evidence that the project exists, which
     // says nothing about why it was built (measured failure C-03).
     if (personal && MOTIVATION_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_MOTIVATION', clause); }
-    if (personal && SKILL_RE.test(clause)) { types.add('PERSONAL_SKILL'); noteClaim('USER_SKILL', clause); }
+    if (personal && SKILL_RE.test(clause)) {
+      types.add('PERSONAL_SKILL'); noteClaim('USER_SKILL', clause);
+      // A PRESENCE CHECK ("Do I have Kubernetes experience?") in a mode with a
+      // JD is implicitly a comparison against the target role: the grounded
+      // answer is "not on the résumé — the JD asks for it", which needs BOTH
+      // sides retrieved. Narrative asks ("tell me about your Redis work") stay
+      // résumé-only. The answerability layer groups user/job claims from one
+      // clause as a conjunction, and claim authority still stops the JD from
+      // EVIDENCING the user side — this only widens what is retrieved.
+      if (SKILL_PRESENCE_RE.test(clause) && input.policy.allowedSourceTypes.includes('JOB_DESCRIPTION')) {
+        types.add('JOB_REQUIREMENT'); noteClaim('JOB_REQUIRED_SKILL', clause);
+      }
+    }
     if (personal && EDUCATION_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EDUCATION', clause); }
     if (personal && EMPLOYMENT_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause); }
 
@@ -462,6 +490,12 @@ const CLAIM_TO_SOURCE: Partial<Record<ClaimType, SourceType[]>> = {
   USER_SKILL: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'],
   USER_EDUCATION: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'],
   USER_EMPLOYMENT: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'],
+  // Was ABSENT (2026-07-31): a motivation-only question ("Why did I build X?")
+  // produced wanted = {} → isPurelyGeneral → FAST path → answered from model
+  // knowledge with NO disclosure. CLAIM_AUTHORITY makes PROFILE_FACT (never the
+  // résumé — facts are not motives) the authoritative source, so retrieval now
+  // runs and an unstated reason is disclosed as unstated.
+  USER_MOTIVATION: ['PROFILE_FACT'],
   JOB_REQUIRED_SKILL: ['JOB_DESCRIPTION'],
   DOCUMENT_FACT: ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'],
   MEETING_STATEMENT: ['MEETING_TRANSCRIPT'],

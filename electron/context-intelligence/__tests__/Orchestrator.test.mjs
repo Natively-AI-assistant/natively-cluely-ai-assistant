@@ -93,8 +93,15 @@ describe('grounded path and claim support', () => {
     // "Postgres required" is in the JD and NOWHERE in the resume.
     const port = portFrom([{ sourceId: 'jd-1', text: 'Postgres required', chunkIndex: 0, score: 0.95 }], ADAPT);
     const r = await orchestrate(req({ manualQuestion: 'Do you have experience with Postgres?' }), port);
-    assert.equal(r.answerability, 'NONE',
-      'the JD scored highest, and still cannot evidence what the candidate has');
+    // 2026-07-31: the presence check now plans BOTH sides as a comparison, and
+    // the JD side IS supported ("Postgres required" answers "what does the job
+    // want"). PARTIAL — with the user side disclosed as unsupported — is the
+    // honest verdict; NONE previously routed this to GENERAL_KNOWLEDGE. The
+    // contamination invariant is the claim plan: the USER_SKILL claim must
+    // never gain direct evidence from a JD.
+    assert.equal(r.answerability, 'PARTIAL',
+      'the JD supports only the job side; the user side stays unsupported');
+    assert.equal(r.trace.fallbackUsed, 'PARTIAL_SUPPORT');
     assert.ok(!r.trace.claimPlan.some((c) => c.claimType === 'USER_SKILL' && c.support === 'DIRECT_EVIDENCE'));
   });
 

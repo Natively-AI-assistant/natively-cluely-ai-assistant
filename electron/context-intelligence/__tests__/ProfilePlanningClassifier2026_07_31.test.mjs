@@ -1,0 +1,79 @@
+// Context Intelligence V3 — first-person planning + comparison intent (2026-07-31).
+//
+// The planner half of the source-routing defect: PERSONAL_RE knew "your",
+// "my" and "the candidate" but not first-person auxiliaries, so manual-chat
+// questions — which the USER asks about THEMSELF — planned no résumé side at
+// all ("Do I meet the two-year requirement?" planned only JOB_DESCRIPTION,
+// verified live). And USER_MOTIVATION was missing from CLAIM_TO_SOURCE, so
+// motivation questions took the FAST path and answered from model knowledge
+// with no disclosure.
+
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const base = path.resolve(process.cwd(), 'dist-electron/electron/context-intelligence');
+const { classifyTurn } = await import(pathToFileURL(path.join(base, 'question/turn-classifier.js')).href);
+const { resolveModePolicy } = await import(pathToFileURL(path.join(base, 'policies/mode-policy-registry.js')).href);
+
+const LFW = resolveModePolicy('looking-for-work');
+const cls = (q, policy = LFW) => classifyTurn({ resolvedQuestion: q, policy, isFollowUp: false });
+
+describe('first-person self-reference is personal', () => {
+  test('"Do I have Kubernetes experience?" plans the résumé side', () => {
+    const c = cls('Do I have Kubernetes experience?');
+    assert.ok(c.claimTypes.includes('USER_SKILL'));
+    assert.ok(c.requiredSourceTypes.includes('RESUME'));
+  });
+
+  test('"Do I meet the two-year professional experience requirement?" plans BOTH sides', () => {
+    const c = cls('Do I meet the two-year professional experience requirement?');
+    assert.ok(c.claimTypes.includes('USER_SKILL') || c.claimTypes.includes('USER_EMPLOYMENT'),
+      'the résumé side is claimed');
+    assert.ok(c.claimTypes.includes('JOB_REQUIRED_SKILL'), 'the JD side is claimed');
+    assert.ok(c.requiredSourceTypes.includes('RESUME'));
+    assert.ok(c.requiredSourceTypes.includes('JOB_DESCRIPTION'));
+  });
+
+  test('"Which required languages do I not list?" is a résumé-vs-JD comparison', () => {
+    const c = cls('Which required languages do I not list?');
+    assert.ok(c.requiredSourceTypes.includes('RESUME'));
+    assert.ok(c.requiredSourceTypes.includes('JOB_DESCRIPTION'));
+  });
+
+  test('"What is my CGPA?" claims education', () => {
+    const c = cls('What is my CGPA?');
+    assert.ok(c.claimTypes.includes('USER_EDUCATION'));
+    assert.ok(c.requiredSourceTypes.includes('RESUME'));
+  });
+
+  test('"how do I reverse a linked list in Python?" stays IMPERSONAL', () => {
+    const c = cls('how do I reverse a linked list in Python?');
+    assert.ok(!c.claimTypes.some((t) => String(t).startsWith('USER_')),
+      'an instruction request must not be dragged through résumé retrieval');
+  });
+});
+
+describe('motivation questions are grounded turns, not FAST', () => {
+  test('"Why did I build Natively?" claims motivation and retrieves', () => {
+    const c = cls('Why did I build Natively?');
+    assert.ok(c.claimTypes.includes('USER_MOTIVATION'));
+    assert.notEqual(c.path, 'FAST', 'FAST here means answering a personal WHY from model knowledge');
+    assert.equal(c.shouldRetrieve, true);
+  });
+});
+
+describe('presence-check comparison respects mode authorization', () => {
+  test('the JD side is only added where the mode allows a JD at all', () => {
+    const seminar = resolveModePolicy('seminar');
+    const c = cls('Do I have Kubernetes experience?', seminar);
+    assert.ok(!c.requiredSourceTypes.includes('JOB_DESCRIPTION'),
+      'seminar authorizes no JD — the comparison cannot widen authorization');
+  });
+
+  test('the salary question plans the JD', () => {
+    const c = cls('What is the base salary?');
+    assert.ok(c.requiredSourceTypes.includes('JOB_DESCRIPTION'));
+  });
+});
