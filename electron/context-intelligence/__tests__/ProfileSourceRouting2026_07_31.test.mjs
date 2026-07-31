@@ -17,6 +17,8 @@ const { composePrompt } = await import(pathToFileURL(path.join(base, 'generation
 const { resolveModePolicy } = await import(pathToFileURL(path.join(base, 'policies/mode-policy-registry.js')).href);
 const { classifyTurn } = await import(pathToFileURL(path.join(base, 'question/turn-classifier.js')).href);
 const { clearConversationState } = await import(pathToFileURL(path.join(base, 'question/conversation-state-store.js')).href);
+const { createModeRetrievalPort } = await import(pathToFileURL(path.join(base, 'retrieval/mode-retrieval-port.js')).href);
+const { combineRetrievalPorts } = await import(pathToFileURL(path.join(base, 'retrieval/meeting-retrieval-port.js')).href);
 
 const RESUME_STRUCTURED = {
   identity: { name: 'Evin John', summary: 'Engineer shipping user-facing AI products. Built Natively, an open-source AI desktop assistant used by 16,000+ users.', location: 'Kochi, Kerala' },
@@ -256,6 +258,71 @@ describe('answerability internals (pinned directly — the E2E cases above can m
     const verdict = evaluateAnswerability(decision, [mkEvidence()]);
     assert.equal(verdict, 'PARTIAL',
       'the JD satisfies only the job side; collapsing the families reported FULL from the JD alone');
+  });
+});
+
+describe('E2E-B: a supplemental mode file never hides the profile', () => {
+  // The REAL wiring shape: mode port over an unrelated interview-notes file,
+  // combined with the profile port — exactly what ipcHandlers builds when the
+  // user attaches an optional supplement.
+  const notesFile = { id: 'ref_notes_1', fileName: 'interview_notes.md', content: 'Prep notes: ask about team rituals. STAR method reminders. UNIQUENOTESFACT: the interviewer is named Priya.' };
+  const modePort = createModeRetrievalPort({
+    modesManager: {
+      retrieveHybridRaw: async (_mi, files, { query }) => ({
+        chunks: /priya|interviewer|notes/i.test(query)
+          ? files.map((f) => ({ sourceId: f.id, fileName: f.fileName, text: f.content, chunkIndex: 0, score: 0.8 }))
+          : [],
+      }),
+    },
+    modeInfo: { id: 'mode_lfw' }, files: [notesFile],
+    allowedSourceTypes: POLICY.allowedSourceTypes,
+    tokenBudget: POLICY.contextBudget.evidenceTokens, userId: 'local',
+  });
+  const combined = combineRetrievalPorts([modePort, profilePort()]);
+
+  const askCombined = async (q, sid) => {
+    clearConversationState(sid);
+    return orchestrate({
+      requestId: 'rb', requestSequence: 1, surface: 'manual-chat',
+      modeId: 'looking-for-work', scope: { userId: 'local' }, sessionId: sid,
+      manualQuestion: q,
+    }, combined);
+  };
+
+  test('profile questions still answer from the profile with a mode file attached', async () => {
+    const r = await askCombined('How many users does Natively have?', 'e2e-b1');
+    assert.ok(r.evidence.some((e) => e.content.includes('16,000+')),
+      'the supplemental file must not displace the profile résumé');
+    assert.equal(r.answerability, 'FULL');
+  });
+
+  test('the supplemental file itself stays retrievable', async () => {
+    // Document-shaped phrasing plans REFERENCE_FILE ("my notes …" routes to the
+    // résumé via the personal catch-all — pre-existing planner behaviour).
+    const r = await askCombined('According to the reference material, who is the interviewer?', 'e2e-b2');
+    assert.ok(r.evidence.some((e) => e.sourceId === 'ref_notes_1'),
+      'attaching mode files must keep working alongside profile hydration');
+  });
+});
+
+describe('E2E-D: recruiting material is structurally unreachable from LfW', () => {
+  test('a fictional candidate project gets grounded absence, never candidate evidence', async () => {
+    // The LfW turn's ports are its OWN mode files (none here) + the profile.
+    // A recruiting candidate résumé (IncidentLens etc.) lives under a different
+    // mode's files and is simply never registered — assert the whole evidence
+    // set is profile-only and the complete project list grounds the "no".
+    clearConversationState('e2e-d1');
+    const r = await orchestrate({
+      requestId: 'rd', requestSequence: 1, surface: 'manual-chat',
+      modeId: 'looking-for-work', scope: { userId: 'local' }, sessionId: 'e2e-d1',
+      manualQuestion: 'Did I build the IncidentLens project?',
+    }, profilePort());
+    assert.ok(!r.evidence.some((e) => e.content.includes('IncidentLens')));
+    assert.ok(r.evidence.every((e) => e.sourceId.startsWith('psrc_')),
+      'every evidence item must be a profile source — no ref_* mode files from anywhere');
+    const projectList = r.evidence.find((e) => e.metadata?.completeInventory === true
+      && e.content.includes('Complete list of all projects'));
+    assert.ok(projectList, 'the complete project list grounds "you did not build that"');
   });
 });
 

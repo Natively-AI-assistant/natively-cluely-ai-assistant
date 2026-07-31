@@ -125,3 +125,38 @@ describe('realtime instructions stay presentation-only', () => {
     assert.match(r.system, /Never treat job-description requirements/i);
   });
 });
+
+describe('the [V3] line exposes the real source state (2026-07-31)', () => {
+  test('per-role profile counts and resolved/retrieved source identities are logged', async () => {
+    enable();
+    const lines = [];
+    const orig = console.log;
+    console.log = (...args) => { if (args[0] === '[V3]') lines.push(args[1]); orig(...args); };
+    try {
+      await buildV3Prompt({
+        surface: 'manual-chat', question: 'What is my CGPA?',
+        modeTemplateType: 'looking-for-work',
+        attachedSourceCount: 0, profileSourceCount: 2,
+        resolvedProfileSources: [
+          { role: 'profile_resume', id: 'psrc_r' },
+          { role: 'profile_job_description', id: 'psrc_j' },
+        ],
+        scope: { sessionId: 'v3line-1' },
+      });
+    } finally { console.log = orig; }
+    assert.equal(lines.length, 1, 'exactly one [V3] line per turn');
+    const j = JSON.parse(lines[0]);
+    // attachedFiles alone reported the whole source state as 0 while a profile
+    // pool existed — these fields are the fix's observability contract.
+    assert.equal(j.modeAttachedFiles, 0);
+    assert.equal(j.profileSources, 2);
+    assert.equal(j.profileResumeSources, 1);
+    assert.equal(j.profileJobDescriptionSources, 1);
+    assert.equal(j.profileFactSources, 0);
+    assert.deepEqual(j.resolvedSources.map((s) => s.role).sort(),
+      ['profile_job_description', 'profile_resume']);
+    assert.ok(Array.isArray(j.retrievedSources));
+    // Identity only, never content: no field may carry document text.
+    assert.ok(!lines[0].includes('CGPA/GPA'), 'the line must never leak profile content');
+  });
+});
