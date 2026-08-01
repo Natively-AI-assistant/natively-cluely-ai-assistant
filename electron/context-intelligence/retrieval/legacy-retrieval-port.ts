@@ -104,9 +104,49 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
         ? inScope.filter((e) => e.acceptedFor.some((c) => neededClaims.has(c)))
         : inScope;
 
-      const ranked = evidence
-        .sort((a, b) => b.finalScore - a.finalScore)
-        .slice(0, decision.retrievalPlan.maximumAcceptedEvidence);
+      // STATUS PRECEDENCE (deep-run 2, issue 4): a retired document's chunk
+      // must never outrank a current one on similarity alone — retired pricing
+      // beat active pricing in the live run. Retired-class sources sort BELOW
+      // every current/unknown source unless the question explicitly asks for
+      // the historical value.
+      const wantsHistorical = /\b(retired|legacy|archived|old|previous|former|superseded|original|historical)\b/i
+        .test(decision.resolvedQuestion);
+      const RETIRED = new Set(['retired', 'deprecated', 'archived', 'superseded', 'legacy', 'obsolete']);
+      const statusClass = (e: EvidenceItem): number => {
+        if (wantsHistorical) return 0;
+        const s = (e.metadata as Record<string, unknown> | undefined)?.documentStatus;
+        return typeof s === 'string' && RETIRED.has(s) ? 1 : 0;
+      };
+      const sorted = evidence.sort((a, b) =>
+        statusClass(a) - statusClass(b) || b.finalScore - a.finalScore);
+
+      // PER-TYPE DIVERSITY (deep-run 2, issue 5): a flooded pool (résumé
+      // chunks on a project question) consumed every accepted slot. Round-robin
+      // across source types in best-first order guarantees each planned type
+      // with any admitted evidence keeps at least one slot; within a type,
+      // score order is unchanged.
+      const max = decision.retrievalPlan.maximumAcceptedEvidence;
+      const byType = new Map<string, EvidenceItem[]>();
+      for (const e of sorted) {
+        const list = byType.get(e.sourceType) ?? [];
+        list.push(e);
+        byType.set(e.sourceType, list);
+      }
+      const ranked: EvidenceItem[] = [];
+      if (byType.size <= 1) {
+        ranked.push(...sorted.slice(0, max));
+      } else {
+        const groups = [...byType.values()];   // insertion order = best-first
+        for (let round = 0; ranked.length < max; round++) {
+          let added = false;
+          for (const g of groups) {
+            if (ranked.length >= max) break;
+            const item = g[round];
+            if (item) { ranked.push(item); added = true; }
+          }
+          if (!added) break;
+        }
+      }
 
       // Post-adapter drops, made observable (context-debug, 2026-08-01). These
       // three narrowing stages were SILENT — "20 admitted, 0 evidence" was a

@@ -215,6 +215,9 @@ export function getRolloutMetrics(): {
       superseded: pct(c.supersededTurns, c.turns),
       strictRefusal: pct(c.fallback.STRICT_NOT_FOUND ?? 0, c.turns),
       generalFallback: pct(c.fallback.GENERAL_KNOWLEDGE ?? 0, c.turns),
+      // Deep-run 2 (issue 14): document-specific retrieval misses now carry
+      // their own label instead of hiding inside generalFallback.
+      documentFactMiss: pct(c.fallback.DOCUMENT_FACT_NOT_FOUND ?? 0, c.turns),
       clarification: pct(c.fallback.CLARIFICATION ?? 0, c.turns),
       fastPath: pct(c.path.FAST ?? 0, c.turns),
       v3Share: pct(c.engine.v3, c.turns),
@@ -267,7 +270,8 @@ export function evaluateAbortConditions(input: {
 
   // Over-refusal: strict refusals rising while general fallback is flat/low.
   // §27.2 forbids hiding failures behind refusal.
-  if ((m.rates.strictRefusal ?? 0) > 0.25 && (m.rates.generalFallback ?? 0) < 0.05) {
+  if ((m.rates.strictRefusal ?? 0) > 0.25
+      && ((m.rates.generalFallback ?? 0) + ((m.rates as Record<string, number | null>).documentFactMiss ?? 0)) < 0.05) {
     triggered.push('over_refusal_suspected');
   }
 

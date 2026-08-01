@@ -28,6 +28,7 @@
 // one truth across all bundles.
 
 import type { EvidenceItem, SourceType } from '../contracts/types';
+import { PROVIDER_DATA_SCOPES } from '../../llm/ProviderRouter';
 import type { ProviderDataScope, ProviderDataScopePolicy } from '../../llm/ProviderRouter';
 
 /**
@@ -94,9 +95,9 @@ export function sourceTypesForScopes(scopes: readonly ProviderDataScope[]): Set<
  */
 export const DENY_PROVIDER_SCOPES_ENV = 'NATIVELY_DENY_PROVIDER_SCOPES';
 
-const ALL_SCOPES: readonly ProviderDataScope[] = [
-  'transcript', 'screenshots', 'reference_files', 'profile_history', 'embeddings', 'post_call_summary',
-];
+// Derived, never re-typed: a hand-copied list here is exactly the drift that
+// let `code_execution` be enforced in one place and erased in another.
+const ALL_SCOPES: readonly ProviderDataScope[] = PROVIDER_DATA_SCOPES;
 
 export function parseDeniedScopesEnv(raw: unknown): ProviderDataScope[] {
   if (typeof raw !== 'string' || !raw.trim()) return [];
@@ -222,6 +223,7 @@ export function scopeLabels(scopes: readonly string[]): string {
     profile_history: 'Profile & history',
     embeddings: 'Embeddings',
     post_call_summary: 'Post-call summaries',
+    code_execution: 'Cloud code execution',
   };
   return scopes.map((s) => LABEL[s] ?? s).join(', ');
 }

@@ -121,7 +121,10 @@ describe('grounding policy governs fallback, not source selection', () => {
   test('SOURCE_FIRST falls back to general knowledge when unsupported', async () => {
     const r = await orchestrate(req({ modeId: 'technical-interview', manualQuestion: 'Tell me about your Rust experience.' }), portFrom([], ADAPT));
     assert.equal(r.decision.generalKnowledgeAllowed, true);
-    assert.equal(r.trace.fallbackUsed, 'GENERAL_KNOWLEDGE');
+    // Renamed label (deep-run 2, issue 14): the general-knowledge fallback for
+    // a DOCUMENT-SPECIFIC miss is DOCUMENT_FACT_NOT_FOUND — same behaviour,
+    // honest telemetry.
+    assert.equal(r.trace.fallbackUsed, 'DOCUMENT_FACT_NOT_FOUND');
   });
 
   test('seminar labels rather than refusing — over-refusal is forbidden', async () => {

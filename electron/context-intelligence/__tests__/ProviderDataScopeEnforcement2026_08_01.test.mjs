@@ -318,7 +318,22 @@ describe('composer coherence when material was withheld', () => {
   });
 });
 
-// ── 6. Markup read-back (the transport backstop's input) ────────────────────
+// ── 6. Wiring ───────────────────────────────────────────────────────────────
+
+describe('the V3 transport declares the scopes it is sending', () => {
+  // STRUCTURAL, and honestly labelled as such: because the bridge already
+  // filtered the evidence, reverting this line to `[]` leaks nothing and no
+  // behavioural test can fail. What it costs is honesty at the transport — the
+  // routing/denial decision goes back to being guessed from the bytes — so it
+  // is guarded here rather than not at all.
+  test('ipcHandlers passes the bridge-declared scopes into streamChat', () => {
+    const src = fs.readFileSync(path.join(repoRoot, 'electron/ipcHandlers.ts'), 'utf8');
+    assert.match(src, /composed\.packedDataScopes \?\? \[\],/,
+      'the V3 call site must declare its real data scopes, not []');
+  });
+});
+
+// ── 7. Markup read-back (the transport backstop's input) ────────────────────
 
 describe('scopes read back off composed markup', () => {
   test('V3 evidence markup discloses its scopes', () => {

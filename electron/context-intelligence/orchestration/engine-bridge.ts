@@ -38,6 +38,10 @@ export interface BridgeInput {
   /** How many reference files the active mode has. Lets the composer say "no
    *  document is attached" instead of "the document does not mention it". */
   attachedSourceCount?: number;
+  /** Attached file NAMES — deterministic filename-role routing (glossary /
+   *  formula sheet, deep-run 2 issue 9). Always populated by call sites;
+   *  never gated on debug level (routing must not depend on logging). */
+  attachedFileNames?: readonly string[];
   /** How many Profile Intelligence sources hydrated this turn's retrieval
    *  (active résumé / target JD). Composer wording + telemetry — a zero-
    *  attachment turn with a live profile must NOT claim nothing was searched. */
@@ -150,6 +154,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       // Definite value lookups ground only where documents exist (deep-test D2).
       hasAttachedDocuments: (input.attachedSourceCount ?? 0) > 0
         || (input.profileSourceCount ?? 0) > 0,
+      attachedFileNames: input.attachedFileNames,
       extraAllowedSourceTypes: input.extraAllowedSourceTypes,
     };
 
@@ -327,7 +332,14 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
           profileJobDescriptionCount: resolvedProfiles.filter((s) => s.role === 'profile_job_description').length,
           profileFactCount: resolvedProfiles.filter((s) => s.role === 'profile_fact').length,
         });
-        if (input.debugSources?.length) collector.recordAuthorizedSources(input.debugSources);
+        // Authorized sources = mode attachments PLUS resolved Profile
+        // Intelligence pools (deep-run 2, issue 14: profile turns logged
+        // authorizedSources: [] while the résumé/JD pools answered the turn).
+        const authorized = [
+          ...(input.debugSources ?? []),
+          ...resolvedProfiles.map((s) => ({ id: s.id, role: s.role })),
+        ];
+        if (authorized.length) collector.recordAuthorizedSources(authorized);
         const rr = result.trace.referentResolution;
         if (rr) {
           collector.recordConversationState({

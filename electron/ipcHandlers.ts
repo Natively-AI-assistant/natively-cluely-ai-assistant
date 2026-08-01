@@ -43,6 +43,10 @@ import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProf
 import { buildManualProfileEvidenceRoute } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
 import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGroundedAnswerType, isAssistantRefusal, SYSTEM_REFUSAL_RE } from './llm/documentGroundedPrompt';
+// ONE list of provider data scopes (see ProviderRouter). The handler below used
+// to carry its own copy, which had already drifted and was erasing an enforced
+// scope on every write.
+import { mergeProviderDataScopes } from './llm/ProviderRouter';
 
 // Generic tokens excluded when splitting OKF entity names / card titles into
 // distinctive words for the document-grounded false-refusal gate (2026-07-02).
@@ -1094,6 +1098,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               modeUniqueId: modeInfo?.id ?? null,
               modeName: (modeInfo as any)?.name ?? null,
               attachedSourceCount: files.length,
+              attachedFileNames: (files as Array<{ fileName?: string }>).map((f) => f.fileName ?? '').filter(Boolean),
               profileSourceCount: v3ProfileCounts.profileResume + v3ProfileCounts.profileJd + v3ProfileCounts.profileFact,
               resolvedProfileSources: v3ProfileResolved,
               extraAllowedSourceTypes: extraSourceTypes,
@@ -5255,24 +5260,22 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (!scopes || typeof scopes !== 'object') {
       return { success: false, error: 'invalid_scopes' };
     }
-    const allowedKeys = new Set([
-      'transcript',
-      'screenshots',
-      'reference_files',
-      'profile_history',
-      'embeddings',
-      'post_call_summary',
-    ]);
-    const sanitized: Record<string, boolean> = {};
-    for (const [key, value] of Object.entries(scopes)) {
-      if (allowedKeys.has(key) && typeof value === 'boolean') {
-        sanitized[key] = value;
-      }
-    }
-    SettingsManager.getInstance().set('providerDataScopes', sanitized as any);
+    // MERGE over the stored policy, using the ONE scope list in ProviderRouter.
+    // The previous inline `allowedKeys` set omitted `code_execution` — a scope
+    // that IS declared in SettingsManager and IS enforced in
+    // llm/codeVerification/cloudRunner.ts — and the handler then persisted a
+    // whole-object REPLACEMENT. So toggling any scope in the Privacy panel
+    // deleted a stored `code_execution: false` and silently re-enabled sending
+    // model-generated code to the cloud runner.
+    const settings = SettingsManager.getInstance();
+    const merged = mergeProviderDataScopes(settings.get('providerDataScopes'), scopes);
+    settings.set('providerDataScopes', merged as any);
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
-        win.webContents.send('provider-data-scopes-changed', sanitized);
+        // Broadcast the MERGED object, not the incoming payload: the renderer
+        // seeds its next write from this, so echoing a partial payload would
+        // reintroduce the erasure one turn later.
+        win.webContents.send('provider-data-scopes-changed', merged);
       }
     });
     return { success: true };

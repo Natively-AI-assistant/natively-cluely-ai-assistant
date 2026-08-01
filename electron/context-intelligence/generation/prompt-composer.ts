@@ -309,7 +309,8 @@ function weakEvidenceGuidance(
   hasEvidence: boolean,
 ): string {
   if (!hasEvidence) return '';
-  if (fallbackUsed !== 'PARTIAL_SUPPORT' && fallbackUsed !== 'GENERAL_KNOWLEDGE') return '';
+  if (fallbackUsed !== 'PARTIAL_SUPPORT' && fallbackUsed !== 'GENERAL_KNOWLEDGE'
+      && fallbackUsed !== 'DOCUMENT_FACT_NOT_FOUND') return '';
   const documentSpecific = d.claimRequirements.some((c) =>
     c.authority === 'PRIVATE_SOURCE_REQUIRED');
   if (!documentSpecific) return '';

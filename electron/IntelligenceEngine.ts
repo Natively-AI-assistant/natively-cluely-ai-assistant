@@ -2422,6 +2422,7 @@ export class IntelligenceEngine extends EventEmitter {
                         modeUniqueId: _ctx.modeUniqueId,
                         modeName: _ctx.modeName,
                         attachedSourceCount: _ctx.attachedSourceCount,
+                        attachedFileNames: _ctx.attachedFileNames,
                         profileSourceCount: _ctx.profileSourceCount,
                         resolvedProfileSources: _ctx.resolvedProfileSources,
                         extraAllowedSourceTypes: _ctx.extraAllowedSourceTypes as never[],
@@ -4071,6 +4072,7 @@ export class IntelligenceEngine extends EventEmitter {
     private v3ModeRetrievalContext(): {
         raw: string; modeUniqueId: string | null; modeName: string | null; meetingId: string | null;
         attachedSourceCount: number;
+        attachedFileNames: string[];
         profileSourceCount: number;
         resolvedProfileSources: Array<{ role: string; id: string }>;
         extraAllowedSourceTypes: string[];
@@ -4158,6 +4160,7 @@ export class IntelligenceEngine extends EventEmitter {
                 modeName: (_mi as any)?.name ?? null,
                 meetingId,
                 attachedSourceCount: _files.length,
+                attachedFileNames: (_files as Array<{ fileName?: string }>).map((f) => f.fileName ?? '').filter(Boolean),
                 profileSourceCount,
                 resolvedProfileSources,
                 extraAllowedSourceTypes: extraSourceTypes,
@@ -4219,6 +4222,7 @@ export class IntelligenceEngine extends EventEmitter {
                 modeUniqueId: ctx.modeUniqueId,
                 modeName: ctx.modeName,
                 attachedSourceCount: ctx.attachedSourceCount,
+                attachedFileNames: ctx.attachedFileNames,
                 profileSourceCount: ctx.profileSourceCount,
                 resolvedProfileSources: ctx.resolvedProfileSources,
                 extraAllowedSourceTypes: ctx.extraAllowedSourceTypes as never[],

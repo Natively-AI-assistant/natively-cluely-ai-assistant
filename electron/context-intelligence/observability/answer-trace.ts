@@ -88,7 +88,11 @@ export type TraceStatus = 'COMPLETED' | 'SUPERSEDED' | 'CANCELLED' | 'FAILED';
 
 export type FallbackUsed =
   | 'NONE' | 'GENERAL_KNOWLEDGE' | 'STRICT_NOT_FOUND'
-  | 'PARTIAL_SUPPORT' | 'CLARIFICATION' | 'CONFLICT';
+  | 'PARTIAL_SUPPORT' | 'CLARIFICATION' | 'CONFLICT'
+  /** A document-specific request whose evidence was empty/unsupporting — a
+   *  retrieval miss, distinct from an intended general-knowledge answer
+   *  (deep-run 2, issue 14). */
+  | 'DOCUMENT_FACT_NOT_FOUND';
 
 export interface AnswerTrace {
   requestId: string;

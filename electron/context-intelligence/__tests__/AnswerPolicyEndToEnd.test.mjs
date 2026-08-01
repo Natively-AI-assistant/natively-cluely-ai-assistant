@@ -54,7 +54,10 @@ describe('decide() honours the choice', () => {
     // falls back to general knowledge. The user's strict choice must close that.
     const dflt = await orchestrate(req({ manualQuestion: 'Tell me about your Rust experience.' }));
     assert.equal(dflt.decision.generalKnowledgeAllowed, true, 'mode default is SOURCE_FIRST');
-    assert.equal(dflt.trace.fallbackUsed, 'GENERAL_KNOWLEDGE');
+    // DOCUMENT_FACT_NOT_FOUND since deep-run 2 (issue 14): a document-specific
+    // miss carries its own label; GENERAL_KNOWLEDGE is reserved for turns that
+    // never required private evidence.
+    assert.equal(dflt.trace.fallbackUsed, 'DOCUMENT_FACT_NOT_FOUND');
 
     const strict = await orchestrate(req({
       manualQuestion: 'Tell me about your Rust experience.',

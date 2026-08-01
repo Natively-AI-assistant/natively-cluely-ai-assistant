@@ -49,6 +49,8 @@ export interface AnswerRequest {
   /** True when the turn has real documents (mode attachments or hydrated
    *  profile sources) — see ClassificationInput.hasAttachedDocuments. */
   hasAttachedDocuments?: boolean;
+  /** Attached file names — filename-role routing (glossary/formula). */
+  attachedFileNames?: readonly string[];
 
   /**
    * Source types the TURN adds to the mode's allowlist because of what is
@@ -142,6 +144,7 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     isFollowUp: Boolean(req.isFollowUp),
     hasScreenContext: req.hasScreenContext,
     hasAttachedDocuments: req.hasAttachedDocuments,
+    attachedFileNames: req.attachedFileNames,
   });
 
   const optional = policy.allowedSourceTypes.filter((s) => !cls.requiredSourceTypes.includes(s));
@@ -149,8 +152,16 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   const retrievalPlan: RetrievalPlan = {
     path: cls.path,
     shouldRetrieve: cls.shouldRetrieve,
+    // When no claim named a source, retrieval used to fan out to EVERY allowed
+    // type — "Reverse a linked list in Python" retrieved six résumé/JD chunks
+    // (deep-run 2, issue 5). An unclaimed retrieval consults document pools
+    // only; identity pools (résumé/JD/profile) are reachable solely through
+    // claims that name them.
     sourceTypes: cls.shouldRetrieve
-      ? (cls.requiredSourceTypes.length ? cls.requiredSourceTypes : policy.allowedSourceTypes)
+      ? (cls.requiredSourceTypes.length
+        ? cls.requiredSourceTypes
+        : policy.allowedSourceTypes.filter((s) =>
+          s === 'REFERENCE_FILE' || s === 'PROJECT_FILE' || s === 'CODING_SAMPLE' || s === 'MEETING_TRANSCRIPT'))
       : [],
     queries: [q.resolved],
     entities: [],
@@ -399,8 +410,57 @@ export function evidenceSupportsClaim(
   const heads = propertyHeadTerms(question);
   if (heads.length === 0) return true;         // nothing to match on — do not block
   const eTerms = salientTerms(evidence.content);
-  for (const t of heads) if (eTerms.has(t)) return true;
-  return false;
+  const headMatched = heads.some((t) => eTerms.has(t));
+  if (!headMatched) return false;
+
+  // QUALIFIED value heads (deep-run 2, issue 7): "the CSV canary" matched the
+  // security canary — the bare head satisfied every sibling value of the same
+  // kind. For countable/config-like value nouns (canary, limit, price, …) a
+  // qualifier the question states must also appear, in the evidence text or
+  // its source identity ("05_competitor_matrix.csv" satisfies "csv").
+  // Descriptive heads ("framework", "process") keep head-only matching —
+  // their qualifiers ("backend framework") are often absent from a correct
+  // answer chunk ("Frameworks: FastAPI").
+  if (VALUE_HEAD_RE.test(heads[0])) {
+    const quals = propertyQualifierTerms(question);
+    if (quals.length > 0) {
+      const identity = salientTerms(
+        `${(evidence as { documentTitle?: string }).documentTitle ?? ''} ${(evidence as { section?: string }).section ?? ''}`,
+      );
+      const qualMatched = quals.some((t) => eTerms.has(t) || identity.has(t));
+      if (!qualMatched) return false;
+    }
+  }
+  return true;
+}
+
+/** Countable/config-like value nouns where sibling values abound and a bare
+ *  head match is meaningless without its qualifier. Generic vocabulary — not
+ *  fixture-derived. */
+const VALUE_HEAD_RE = /^(canar\w*|limits?|prices?|pricing|costs?|ids?|keys?|tokens?|thresholds?|weights?|counts?|sizes?|rates?|seats?|quotas?|budgets?|versions?|values?|numbers?|totals?)$/;
+
+/** Temporal/deictic modifiers are not distinguishing qualifiers. */
+const NON_QUALIFIER = new Set(['current', 'activ', 'latest', 'default', 'exact', 'effectiv', 'today', 'new', 'the']);
+
+/**
+ * The distinguishing modifiers preceding the requested head noun — "CSV" in
+ * "the CSV canary", "business plan" in "the Business plan seat limit".
+ */
+export function propertyQualifierTerms(clause: string): string[] {
+  const heads = propertyHeadTerms(clause);
+  if (!heads.length) return [];
+  let q = String(clause).toLowerCase().replace(/[?!.]+\s*$/, '');
+  q = q.replace(/\s*\((?:referring to|follow-up to|rephrasing request)[^)]*\)\s*$/, '');
+  let prev;
+  do {
+    prev = q;
+    q = q.replace(/\s+(?:written|stated|listed|recorded|documented|mentioned)?\s*\b(?:in|from|per|inside|within|on)\s+(?:the|this|that|our|its|my|your)\s+[\w-]+\s*$/, '');
+  } while (q !== prev);
+  const terms = salientTermList(q);
+  const headIdx = terms.lastIndexOf(heads[0]);
+  if (headIdx <= 0) return [];
+  return terms.slice(Math.max(0, headIdx - 2), headIdx)
+    .filter((t) => !NON_QUALIFIER.has(t) && !heads.includes(t));
 }
 
 /**
@@ -435,6 +495,19 @@ export function evaluateAnswerability(
       // judgement — so it is PARTIAL, not NONE. "Why?" has nothing but the
       // referent.
       return decision.claimRequirements.length ? 'PARTIAL' : 'NONE';
+    }
+    // IMPOSSIBLE-STATE invariant (deep-run 2, issue 6): a turn that produced
+    // NO claims at all, was NOT recognised as a general/coding question, and
+    // holds zero evidence must not report FULL — that exact combination
+    // ("Give one tailored interview question", "How long did the incident
+    // last?") is what licensed confident fabrication with a clean trace.
+    // Genuine general questions carry a GENERAL/CODING/SYSTEM_DESIGN type and
+    // keep FULL.
+    const generalish = decision.questionTypes.some((t) =>
+      t === 'GENERAL_TECHNICAL' || t === 'CODING_TASK' || t === 'SYSTEM_DESIGN' || t === 'META_REQUEST');
+    if (!generalish && decision.claimRequirements.length === 0 && evidence.length === 0
+        && decision.retrievalPlan.path !== 'FAST') {
+      return 'NONE';
     }
     return 'FULL';           // general question — nothing to ground
   }
@@ -645,13 +718,20 @@ export async function orchestrate(
   const referentUnresolved = decision.isFollowUp && !referentWasResolved
     && isBareFollowUp(decision.resolvedQuestion);
 
+  // Label accuracy (deep-run 2, issue 14): a DOCUMENT-SPECIFIC question whose
+  // evidence came back empty/unsupporting is a document retrieval miss, not a
+  // general-knowledge answer — labelling it GENERAL_KNOWLEDGE hid every
+  // retrieval failure behind the healthy-looking label.
+  const documentSpecificTurn = decision.claimRequirements
+    .some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED');
   const fallbackUsed =
     answerability === 'FULL' ? 'NONE'
       : answerability === 'CONFLICTING' ? 'CONFLICT'
         : referentUnresolved ? (answerability === 'PARTIAL' ? 'PARTIAL_SUPPORT' : 'CLARIFICATION')
           : answerability === 'PARTIAL' ? 'PARTIAL_SUPPORT'
             : unsupportedInMode ? 'STRICT_NOT_FOUND'
-              : decision.generalKnowledgeAllowed ? 'GENERAL_KNOWLEDGE' : 'STRICT_NOT_FOUND';
+              : documentSpecificTurn && decision.generalKnowledgeAllowed ? 'DOCUMENT_FACT_NOT_FOUND'
+                : decision.generalKnowledgeAllowed ? 'GENERAL_KNOWLEDGE' : 'STRICT_NOT_FOUND';
 
   const trace: AnswerTrace = {
     requestId: decision.requestId,

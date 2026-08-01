@@ -34,6 +34,13 @@ export interface ClassificationInput {
    * attached, while plain `general` with nothing attached keeps its fast path.
    */
   hasAttachedDocuments?: boolean;
+  /**
+   * Attached file names (deep-run 2, issue 9) — a deterministic routing
+   * signal: a glossary among the attachments makes a definition request a
+   * glossary lookup; a formula sheet makes threshold/frequency questions a
+   * formula lookup. Names only, never content.
+   */
+  attachedFileNames?: readonly string[];
 }
 
 export interface Classification {
@@ -337,14 +344,43 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // the false-positive retrieval §13.1 forbids.
   const documentCentricMode = primarySrc === 'REFERENCE_FILE'
     && input.policy.groundingPolicy !== 'OPEN_KNOWLEDGE';
-  const looksFactualQ = /\b(what|which|how many|how much|when|who|where|summari[sz]e|list)\b/.test(q);
+  // `how long/how often/compare/difference` added 2026-08-01 (deep-run 2,
+  // issue 1): "How long did the incident last?" carried no factual cue, so the
+  // turn produced zero claims and reported FULL with zero evidence — the
+  // impossible state that licensed fabrication.
+  const looksFactualQ = /\b(what|which|how (many|much|long|often|large|big|fast)|when|who|where|summari[sz]e|list|compare|difference)\b/.test(q);
 
   for (const clause of splitClauses(q)) {
-    const personal = PERSONAL_RE.test(clause)
+    // ── deep-run 2 guards (2026-08-01) ──────────────────────────────────────
+    // "Why did YOU refuse?" is about the ASSISTANT's own behaviour, not the
+    // user's history — classified personal it claimed USER_MOTIVATION, planned
+    // an unreachable profile pool and refused with STRICT_NOT_FOUND instead of
+    // explaining itself from the conversation.
+    // Scoped to ASSISTANT-BEHAVIOUR verbs only: "did you refuse/ignore/say" is
+    // about the assistant; "did you build PriceX" is about the candidate and
+    // must keep its personal classification.
+    const aboutAssistant = /\byou (?:refus\w*|ignor\w*|answered|said|replied|responded)\b|\bwhy (?:did|do) you (?:refuse|ignore|say|answer|respond|reply)\b|\byour (?:answer|refusal|response|reasoning)\b/.test(clause);
+    // "Can I promise zero hallucinations?" is a question about what the
+    // MATERIAL authorizes the user to say — first-person grammar made it a
+    // USER_EMPLOYMENT claim, which Sales cannot source, so a purely
+    // document-answerable compliance question was refused.
+    const salesClaimCue = /\b(promise|guarantee|commit to|tell (?:customers?|clients?|prospects?))\b/.test(clause);
+    const anyDocSource = (['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'] as SourceType[])
+      .some((s) => input.policy.allowedSourceTypes.includes(s));
+    if (aboutAssistant) {
+      // Conversational meta-question: answered from the exchange itself plus
+      // general knowledge of this mode's policy — never a private-source claim.
+      types.add('GENERAL_TECHNICAL'); noteClaim('GENERAL_TECHNICAL', clause);
+    }
+    if (salesClaimCue && anyDocSource) {
+      types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
+    }
+
+    const personal = !aboutAssistant && !salesClaimCue && (PERSONAL_RE.test(clause)
       || (FIRST_PERSON_RE.test(clause)
         && !TECH_SELF_TALK_RE.test(clause)
         && !CODING_TASK_RE.test(clause)
-        && !SYSTEM_DESIGN_RE.test(clause));
+        && !SYSTEM_DESIGN_RE.test(clause)));
 
     if (personal && PROJECT_RE.test(clause)) { types.add('PERSONAL_PROJECT'); noteClaim('USER_PROJECT', clause); }
     // "why did you choose/build X" asks for a REASON. Motivation is authoritative
@@ -404,6 +440,33 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
         types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
       } else {
         types.add('JOB_REQUIREMENT'); noteClaim('JOB_REQUIRED_SKILL', clause);
+        // COMPARISON widening (deep-run 2, issue 3): "Does Leena meet every
+        // minimum qualification?" / "Which preferred qualifications are
+        // missing?" are candidate-vs-JD comparisons, but with no personal-cue
+        // token the candidate side was never planned — the JD alone was
+        // retrieved and the gaps were guessed. Comparative vocabulary in a mode
+        // that authorizes a candidate/résumé pool claims BOTH sides; the two
+        // families stay a CONJUNCTION in answerability, so a missing side
+        // reads PARTIAL instead of silently one-sided.
+        const candidateSideAvailable = input.policy.allowedSourceTypes.includes('CANDIDATE_FILE')
+          || input.policy.allowedSourceTypes.includes('RESUME');
+        const comparativeCue = /\b(meets?|missing|miss|lack\w*|gaps?|match\w*|satisf\w*|qualif\w*|compare)\b/.test(clause);
+        if (candidateSideAvailable && comparativeCue) {
+          types.add('PERSONAL_SKILL'); noteClaim('USER_SKILL', clause);
+        }
+      }
+    }
+    // Tailored interview material (deep-run 2, issue 1): "Give one tailored
+    // distributed-systems interview question" produced ZERO claims — an
+    // imperative with no factual cue — so the turn reported FULL with no
+    // evidence and the question was generic. Tailoring requires the candidate
+    // context (and the JD when one exists).
+    if (/\btailored\b|\binterview question\b/.test(clause)
+        && (input.policy.allowedSourceTypes.includes('CANDIDATE_FILE')
+          || input.policy.allowedSourceTypes.includes('RESUME'))) {
+      types.add('PERSONAL_SKILL'); noteClaim('USER_SKILL', clause);
+      if (input.policy.allowedSourceTypes.includes('JOB_DESCRIPTION')) {
+        noteClaim('JOB_REQUIRED_SKILL', clause);
       }
     }
     // Defect A (2026-08-01): transcript events vs reference facts, decided per
@@ -415,8 +478,15 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     // meeting context with neither kind of cue keeps its transcript route.
     {
       const meetingMode = input.policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT');
-      const meetingEvent = MEETING_EVENT_RE.test(clause)
-        || (meetingMode && MEETING_ATTRIBUTION_RE.test(clause));
+      // PROPOSED vs CONFIRMED provenance (deep-run 2, issue 2): "Who is the
+      // PROPOSED owner of source leakage?" names a pre-meeting artifact (risk
+      // register / agenda / brief) — attribution vocabulary routed it to the
+      // transcript alone and the register was never read. A proposal modifier
+      // claims the reference side too; bare attribution ("Who owns the
+      // source-contract patch?") stays transcript-only.
+      const proposedCue = /\b(proposed|planned|suggested|pre-?meeting|risk register|register|agenda|briefs?)\b/.test(clause);
+      const attribution = MEETING_ATTRIBUTION_RE.test(clause);
+      const meetingEvent = MEETING_EVENT_RE.test(clause) || (meetingMode && attribution);
       const decisionStatus = DECISION_STATUS_RE.test(clause);
       const meetingContext = MEETING_CONTEXT_RE.test(clause);
       const referenceFact = REFERENCE_FACT_RE.test(clause);
@@ -424,6 +494,18 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       if (meetingEvent || decisionStatus
           || (meetingContext && !(referenceFact && refAllowed))) {
         types.add('MEETING_FACT'); noteClaim('MEETING_STATEMENT', clause);
+      }
+      // "Are we SOC 2 certified?" (deep-run 2, issue 2): bare meeting-context
+      // wording ("are we") in a mode with reference files routed a document
+      // fact to the transcript ALONE — the security FAQ holding the answer was
+      // excluded by plan. Context wording alone cannot prove the fact lives in
+      // the conversation, so the reference side is claimed as an ALTERNATIVE;
+      // real events ("what did we decide") still claim the transcript only.
+      if (refAllowed && meetingContext && !meetingEvent && !decisionStatus && !referenceFact) {
+        types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
+      }
+      if (refAllowed && meetingMode && attribution && proposedCue) {
+        types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
       }
       // Context-free reference facts ("What are the current success criteria?")
       // use a stricter shape: a DEFINITE reference-fact noun with no concept
@@ -438,7 +520,17 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
         types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
       }
     }
-    if (DOCUMENT_RE.test(clause)) { types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause); }
+    if (DOCUMENT_RE.test(clause)) {
+      types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
+      // Deictic identity documents (deep-run 2, issue 5): DOCUMENT_FACT's
+      // retrieval targets are now document-ish pools only, so a question that
+      // points AT the résumé must claim the résumé side explicitly.
+      if (/\b(the|this|that|my|your) (resume|r[ée]sum[ée]|cv)\b/.test(clause)
+          && (input.policy.allowedSourceTypes.includes('RESUME')
+            || input.policy.allowedSourceTypes.includes('CANDIDATE_FILE'))) {
+        noteClaim('USER_PROJECT', clause);
+      }
+    }
     if (SCREEN_RE.test(clause)) { types.add('SCREEN_SPECIFIC'); noteClaim('SCREEN_FACT', clause); }
 
     if (CODING_TASK_RE.test(clause)) { types.add('CODING_TASK'); noteClaim('GENERAL_TECHNICAL', clause); }
@@ -532,8 +624,14 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // absence of a concept complement ("the goal OF dependency injection", "the
   // difference BETWEEN…", "the best way TO learn…") is a structural signal
   // that needs no noun list.
+  // `for` REMOVED 2026-08-01 (deep-run 2, issue 1): "the scorecard weight FOR
+  // distributed-systems reasoning" is a value lookup whose complement names the
+  // thing being weighed, not a concept — treating any "the X for Y" as
+  // conceptual sent it to the FAST path and the model invented the weight.
+  // `of/behind/between/to-verb` complements remain conceptual ("the goal of
+  // dependency injection", "the difference between TCP and UDP").
   const conceptComplement =
-    /\bthe (?:[\w-]+ ){0,3}[\w-]+ (?:of|for|behind|between|versus|vs|to [a-z])/.test(q);
+    /\bthe (?:[\w-]+ ){0,3}[\w-]+ (?:of|behind|between|to [a-z])/.test(q);
   // Grounding a definite lookup only makes sense where documents can hold the
   // value: document-first modes always qualify; an OPEN_KNOWLEDGE mode
   // qualifies only when this turn actually has documents (attachments or a
@@ -541,9 +639,15 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // path for the same grammar.
   const modeHoldsDocuments = input.policy.groundingPolicy !== 'OPEN_KNOWLEDGE'
     || input.hasAttachedDocuments === true;
-  const definiteValueLookup = modeHoldsDocuments
-    && /\b(what|which) (is|are|was|were) (the|our|its|this|that)\b/.test(q)
-    && !conceptComplement;
+  // Definite markers widened 2026-08-01 (deep-run 2): "what is DEFAULT
+  // retention?" and "what is CURRENT pricing?" presuppose a specific
+  // documented value exactly like "the"; and "explain/describe/compare the X"
+  // is a document operation on X, not a concept definition ("Explain the
+  // source-precedence decision" took the FAST path and fabricated one).
+  const definiteValueLookup = modeHoldsDocuments && !conceptComplement
+    && (/\b(what|which) (is|are|was|were) (the|our|its|this|that|default|current|active|latest)\b/.test(q)
+      || /^(explain|describe|compare)\b.*\bthe [\w-]/.test(q)
+      || /^compare\b/.test(q));
 
   // The fallback used to be sealed by ANY claim — including the
   // GENERAL_TECHNICAL claim the definition grammar just added — so a
@@ -552,9 +656,35 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // one carve-out: a recognised CONCEPT question ("what is a bloom filter?")
   // whose grammar is NOT a definite lookup stays general, or the unsealing
   // would drag every definition through retrieval in document-centric modes.
+  // ── Filename-role routing (deep-run 2, issue 9) ────────────────────────────
+  // A glossary or formula sheet among the attachments is a deterministic
+  // routing signal: "Define communication shadow" with a glossary attached is
+  // a glossary lookup, and "What battery threshold…" with a formula sheet is a
+  // formula lookup — both previously took the FAST path and answered
+  // generically while the answer sat in the named file.
+  const nameBlob = (input.attachedFileNames ?? []).join(' ').toLowerCase();
+  const glossaryDoc = /glossar|terminolog|definitions?/.test(nameBlob);
+  const formulaDoc = /formula|equations?|cheat.?sheet/.test(nameBlob);
+  const noteWholeQ = (c: ClaimType) => { claims.add(c); if (!clauses[c]) clauses[c] = q; };
+  if (modeHoldsDocuments && glossaryDoc && DEFINITION_RE.test(q) && !techTask) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+  }
+  if (modeHoldsDocuments && formulaDoc && looksFactualQ
+      && /\b(threshold\w*|frequenc\w*|rates?|formulas?|calculat\w*|weights?|coefficients?|detect\w*)\b/.test(q)) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+  }
   const hasPrivateClaim = [...claims].some((c) => (CLAIM_AUTHORITY[c]?.authoritative ?? []).length > 0);
   const conceptOnly = claims.has('GENERAL_TECHNICAL') && !definiteValueLookup;
-  if (!hasPrivateClaim && !techTask && !conceptOnly
+  // A PURE value lookup ("what is the worker batch size?") with no named
+  // entity claims the DOCUMENT side only — fanning it through the primary
+  // résumé pool is what buried project facts under résumé chunks (issue 5).
+  if (!hasPrivateClaim && !techTask && definiteValueLookup && !namesEntity) {
+    const docish = (['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'] as SourceType[])
+      .some((s) => input.policy.allowedSourceTypes.includes(s));
+    if (docish) { types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT'); }
+  }
+  const hasPrivateClaim2 = [...claims].some((c) => (CLAIM_AUTHORITY[c]?.authoritative ?? []).length > 0);
+  if (!hasPrivateClaim2 && !techTask && !conceptOnly
       && (namesEntity || primaryClaimsIt || definiteValueLookup)) {
     const primary = primarySource;
     const claimForSource: Partial<Record<SourceType, ClaimType>> = {
@@ -596,6 +726,16 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       }
     }
   }
+  // LAST-RESORT document claim (deep-run 2, issue 1): a question-shaped input
+  // that STILL produced zero claims in a mode holding documents ("How does a
+  // heartbeat failure get detected?") previously became AMBIGUOUS → zero
+  // retrieval → FULL → fabrication. Runs strictly AFTER the primary-source
+  // fallback so entity/personal questions keep their richer claims.
+  if (claims.size === 0 && modeHoldsDocuments && !techTask && !isBareFollowUp(q)
+      && /^(how|what|why|where|when|who|which|is|are|was|were|does|do|did|can|could|should|explain|describe|compare|define|list)\b/.test(q)) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+  }
+
   if (input.isFollowUp || isBareFollowUp(q)) types.add('FOLLOW_UP');
 
   // A meta-request is not a question about the sources, so it carries no claim
@@ -677,6 +817,15 @@ const CLAIM_TO_SOURCE: Partial<Record<ClaimType, SourceType[]>> = Object.fromEnt
     .filter(([, a]) => a.authoritative.length > 0)
     .map(([claim, a]) => [claim, a.authoritative.filter((s) => !NON_RETRIEVABLE.includes(s))]),
 );
+// RETRIEVAL narrowing (deep-run 2, issue 5): a résumé/JD may still EVIDENCE a
+// document-deictic claim (authority stays wide — "the canary written in this
+// résumé"), but DOCUMENT_FACT does not RETRIEVE from identity pools by
+// default: fanning every project-value lookup across RESUME + JD flooded
+// top-k with résumé chunks and buried the exact project fact (measured:
+// "last-page canary" NONE in technical-interview while the identical question
+// passed in Sales, whose plan held REFERENCE_FILE alone). Questions that point
+// at the résumé/JD claim those sides explicitly (deictic side-claims above).
+CLAIM_TO_SOURCE.DOCUMENT_FACT = ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'];
 
 export function classifyTurn(input: ClassificationInput): Classification {
   const q = norm(input.resolvedQuestion);
@@ -684,13 +833,26 @@ export function classifyTurn(input: ClassificationInput): Classification {
 
   // Required sources = union of what the detected claims need, INTERSECTED with
   // what the mode authorizes. A mode never has sources forced into it.
+  //
+  // Per-CLAIM reachability (deep-run 2): a claim is unsupported only when NONE
+  // of its sources are authorized. Pooling all wanted types first made every
+  // partially-reachable claim leak its unavailable ALTERNATIVES into
+  // unsupportedInMode — a team-meet document claim reported PROJECT_FILE/
+  // CODING_SAMPLE "unsupported" while REFERENCE_FILE answered it fine.
   const wanted = new Set<SourceType>();
-  for (const c of claims) for (const s of (CLAIM_TO_SOURCE[c] ?? [])) wanted.add(s);
-  const requiredSourceTypes = [...wanted].filter((s) => input.policy.allowedSourceTypes.includes(s));
+  const unreachable = new Set<SourceType>();
+  for (const c of claims) {
+    const srcs = CLAIM_TO_SOURCE[c] ?? [];
+    if (!srcs.length) continue;
+    const allowedSrcs = srcs.filter((s) => input.policy.allowedSourceTypes.includes(s));
+    if (allowedSrcs.length) for (const s of allowedSrcs) wanted.add(s);
+    else for (const s of srcs) unreachable.add(s);
+  }
+  const requiredSourceTypes = [...wanted];
   // What the question needed but the mode refuses to authorize. Kept separate so
   // "no source required" and "source required but forbidden here" cannot be
   // confused — they demand opposite behaviour.
-  const unsupportedInMode = [...wanted].filter((s) => !input.policy.allowedSourceTypes.includes(s));
+  const unsupportedInMode = [...unreachable].filter((s) => !input.policy.allowedSourceTypes.includes(s));
 
   // A "what is X" phrasing is only genuinely general when X is a CONCEPT. Asking
   // for the value of a specific named thing — "the discount floor for Acme", the

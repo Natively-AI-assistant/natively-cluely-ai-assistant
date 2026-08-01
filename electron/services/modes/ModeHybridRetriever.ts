@@ -1050,13 +1050,19 @@ export class ModeHybridRetriever {
     }): Promise<ModeRetrievedContext> {
         const {
             query,
-            files,
+            files: rawFiles,
             tokenBudget: _rawTokenBudget,
             topK: _rawTopK,
             hasTranscript = false,
             allowRerank = false,
             forceDocumentGrounding = false,
         } = params;
+        // Unsearchable placeholder files (deep-run 2, issue 12): an image-only
+        // PDF's "[Page 1] [Page 2]" extraction is not evidence — served as a
+        // candidate it was retrieved, admitted, and answered from generically.
+        // OCR_REQUIRED files are excluded from retrieval entirely; the ingest
+        // audit already told the user why the file cannot answer anything.
+        const files = rawFiles.filter((f) => !isPlaceholderOnlyContent(f.content || ''));
         // Auto-upgrade limits for doc-grounded large PDFs (mirrors the guard in
         // ModeContextRetriever.retrieve()). Must be applied AFTER extracting
         // forceDocumentGrounding from params — JS destructuring can't reference
