@@ -581,8 +581,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       const settingsWin = appState.settingsWindowHelper.getSettingsWindow();
       const overlayWin = appState.getWindowHelper().getOverlayWindow();
       const launcherWin = appState.getWindowHelper().getLauncherWindow();
+      const pillWin = appState.getWindowHelper().getPillWindow();
 
       if (
+        pillWin &&
+        !pillWin.isDestroyed() &&
+        pillWin.webContents.id === senderWebContents.id
+      ) {
+        // Overlay pill window: its renderer reports the pill's w-fit size;
+        // WindowHelper resizes the tiny window and re-centers it over the shell.
+        appState.getWindowHelper().setPillWindowSize(width, height);
+      } else if (
         settingsWin &&
         !settingsWin.isDestroyed() &&
         settingsWin.webContents.id === senderWebContents.id
@@ -609,8 +618,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     },
   );
 
-  // Centered variant: keeps horizontal center fixed during width changes.
-  // Used by code-expansion animations to prevent the top pill from sliding sideways.
+  // X-anchored variant: the window's X origin never moves. The overlay window
+  // is a FIXED WIDTH (WindowHelper.OVERLAY_DEFAULT_WIDTH = 732) and the
+  // renderer always reports that width, so in practice this is a pure
+  // height-only, top-anchored resize. Channel name is historical (it used to
+  // keep the center fixed across width changes).
   safeHandle(
     'update-content-dimensions-centered',
     async (event, { width, height }: { width: number; height: number }) => {
@@ -622,19 +634,62 @@ export function initializeIpcHandlers(appState: AppState): void {
         !overlayWin.isDestroyed() &&
         overlayWin.webContents.id === senderWebContents.id
       ) {
-        appState.getWindowHelper().setOverlayDimensionsCentered(width, height);
+        appState.getWindowHelper().setOverlayDimensionsAnchored(width, height);
       }
     },
   );
 
+  // ── Overlay aux-window coordination relays ────────────────────────────────
+  // Overlay renderer → aux windows: UI-state broadcast (expanded/shellWide/
+  // theme/opacity/hasContent). Only the overlay window may broadcast.
+  safeHandle('overlay-ui-state', async (event, state: Record<string, unknown>) => {
+    const overlayWin = appState.getWindowHelper().getOverlayWindow();
+    if (!overlayWin || overlayWin.isDestroyed()) return;
+    if (overlayWin.webContents.id !== event.sender.id) return;
+    appState.getWindowHelper().setOverlayUiState(state ?? {});
+  });
+
+  // Overlay renderer → main: the panel's LIVE right edge (px from the overlay
+  // window's left edge), streamed during the width spring so the toggle aux
+  // window rides the panel's top-right corner. Only the overlay may send.
+  safeHandle('overlay-toggle-anchor', async (event, payload: { panelRight?: number }) => {
+    const overlayWin = appState.getWindowHelper().getOverlayWindow();
+    if (!overlayWin || overlayWin.isDestroyed()) return;
+    if (overlayWin.webContents.id !== event.sender.id) return;
+    if (typeof payload?.panelRight !== 'number') return;
+    appState.getWindowHelper().setOverlayToggleAnchor(payload.panelRight);
+  });
+
+  // Overlay renderer → main: hover hit-test result — false while the pointer
+  // is over the fixed window's transparent side margins (collapsed state), so
+  // those margins become click-through. Only the overlay may send.
+  safeHandle('overlay-hover-interactive', async (event, interactive: boolean) => {
+    const overlayWin = appState.getWindowHelper().getOverlayWindow();
+    if (!overlayWin || overlayWin.isDestroyed()) return;
+    if (overlayWin.webContents.id !== event.sender.id) return;
+    appState.getWindowHelper().setOverlayHoverInteractive(!!interactive);
+  });
+
+  // Aux windows → overlay renderer: user actions (toggle-width / end-meeting /
+  // toggle-expand). Only the pill/toggle windows may send.
+  safeHandle('overlay-ui-action', async (event, action: { type?: string }) => {
+    const helper = appState.getWindowHelper();
+    const pillWin = helper.getPillWindow();
+    const toggleWin = helper.getToggleWindow();
+    const fromAux =
+      (pillWin && !pillWin.isDestroyed() && pillWin.webContents.id === event.sender.id) ||
+      (toggleWin && !toggleWin.isDestroyed() && toggleWin.webContents.id === event.sender.id);
+    if (!fromAux || !action?.type) return;
+    helper.forwardOverlayUiAction(action);
+  });
+
   // (Removed) 'animate-overlay-width' — the overlay window is a FIXED WIDTH
-  // (WindowHelper.OVERLAY_DEFAULT_WIDTH = 780) and is NEVER width-resized. The
-  // expand/contract animation is CSS-only in the renderer (the panel tweens
-  // 600↔780 centered inside the fixed window). 'update-content-dimensions-centered'
-  // now only carries HEIGHT changes (the renderer always sends the fixed width),
-  // which is a top-anchored resize that does not move X — so there is no
-  // sideways jump and no per-frame transparent-window re-raster. See
-  // NativelyInterface.startTransition for the renderer side.
+  // (WindowHelper.OVERLAY_DEFAULT_WIDTH = 732) and is NEVER width-resized.
+  // The expand/contract animation is CSS-only in the renderer (the panel
+  // tweens 600↔732 centered inside the fixed window), so every
+  // 'update-content-dimensions-centered' report is height-only — a
+  // top-anchored resize that does not move X. No sideways jump, no per-frame
+  // transparent-window re-raster. See NativelyInterface.startTransition.
 
   safeHandle('set-window-mode', async (event, mode: 'launcher' | 'overlay', inactive?: boolean) => {
     appState.getWindowHelper().setWindowMode(mode, inactive);

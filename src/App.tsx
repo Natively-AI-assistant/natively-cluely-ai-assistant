@@ -6,6 +6,7 @@ import HindsightStatusBanner from "./components/HindsightStatusBanner"
 import SettingsPopup from "./components/SettingsPopup" // Keeping for legacy/specific window support if needed
 import Launcher from "./components/Launcher"
 import ModelSelectorWindow from "./components/ModelSelectorWindow"
+import { OverlayPillWindow, OverlayToggleWindow } from "./components/OverlayAuxWindows"
 import SettingsOverlay from "./components/SettingsOverlay"
 import StartupSequence from "./components/StartupSequence"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
@@ -111,14 +112,29 @@ const App: React.FC = () => {
   const isOverlayWindow = new URLSearchParams(window.location.search).get('window') === 'overlay';
   const isModelSelectorWindow = new URLSearchParams(window.location.search).get('window') === 'model-selector';
   const isCropperWindow = new URLSearchParams(window.location.search).get('window') === 'cropper';
+  // Overlay aux windows: the TopPill and the resize toggle live in their own
+  // tiny BrowserWindows so the main overlay window can hug the shell card
+  // exactly (no transparent-but-interactive regions).
+  const isOverlayPillWindow = new URLSearchParams(window.location.search).get('window') === 'overlay-pill';
+  const isOverlayToggleWindow = new URLSearchParams(window.location.search).get('window') === 'overlay-toggle';
   const launcherIsolation = getLauncherIsolation();
   const isolateOnboarding = launcherIsolation === 'onboarding' || launcherIsolation === 'global-surfaces';
   const isolatePermissionsToaster = launcherIsolation === 'permissions-toaster';
   const isolateModals = launcherIsolation === 'no-modals' || launcherIsolation === 'global-surfaces';
   const isolateGlobalSurfaces = launcherIsolation === 'global-surfaces';
 
-  // Default to launcher if not specified (dev mode safety)
-  const isDefault = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !isCropperWindow;
+  // Default to launcher if not specified (dev mode safety). The overlay aux
+  // windows (pill/toggle) MUST be excluded: they early-return minimal JSX, but
+  // hooks above those returns still run — without the exclusion each aux
+  // renderer would fire launcher-only effects (analytics app-open/close, the
+  // onboarding orchestrator, permission pushes) two extra times per launch.
+  const isDefault =
+    !isSettingsWindow &&
+    !isOverlayWindow &&
+    !isModelSelectorWindow &&
+    !isCropperWindow &&
+    !isOverlayPillWindow &&
+    !isOverlayToggleWindow;
 
   // Initialize Analytics
   useEffect(() => {
@@ -882,6 +898,25 @@ const App: React.FC = () => {
             </ToastProvider>
           </QueryClientProvider>
         </div>
+      </ErrorBoundary>
+    );
+  }
+
+  // --- OVERLAY AUX WINDOWS (pill / resize toggle) ---
+  // Deliberately minimal: no providers, no banners — just the floating chrome.
+  // State arrives over the 'overlay-ui-state' broadcast; geometry/visibility
+  // are owned by WindowHelper.
+  if (isOverlayPillWindow) {
+    return (
+      <ErrorBoundary context="OverlayPill">
+        <OverlayPillWindow />
+      </ErrorBoundary>
+    );
+  }
+  if (isOverlayToggleWindow) {
+    return (
+      <ErrorBoundary context="OverlayToggle">
+        <OverlayToggleWindow />
       </ErrorBoundary>
     );
   }

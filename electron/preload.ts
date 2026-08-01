@@ -17,6 +17,12 @@ interface DomCaptureMeta {
 interface ElectronAPI {
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) => Promise<void>;
+  sendOverlayUiState: (state: Record<string, unknown>) => Promise<void>;
+  onOverlayUiState: (callback: (state: Record<string, unknown>) => void) => () => void;
+  sendOverlayToggleAnchor: (payload: { panelRight: number }) => Promise<void>;
+  setOverlayHoverInteractive: (interactive: boolean) => Promise<void>;
+  sendOverlayUiAction: (action: { type: string }) => Promise<void>;
+  onOverlayUiAction: (callback: (action: { type: string }) => void) => () => void;
   getRecognitionLanguages: () => Promise<Record<string, any>>;
   getScreenshots: () => Promise<Array<{ path: string; preview: string }>>;
   deleteScreenshot: (path: string) => Promise<{ success: boolean; error?: string }>;
@@ -1083,6 +1089,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('update-content-dimensions', dimensions),
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) =>
     ipcRenderer.invoke('update-content-dimensions-centered', dimensions),
+  // ── Overlay aux windows (pill / resize toggle) coordination ──────────────
+  // Overlay renderer → main → aux windows: UI-state broadcast.
+  sendOverlayUiState: (state: Record<string, unknown>) =>
+    ipcRenderer.invoke('overlay-ui-state', state),
+  onOverlayUiState: (callback: (state: Record<string, unknown>) => void) => {
+    const subscription = (_: any, state: Record<string, unknown>) => callback(state);
+    ipcRenderer.on('overlay-ui-state', subscription);
+    return () => {
+      ipcRenderer.removeListener('overlay-ui-state', subscription);
+    };
+  },
+  // Overlay renderer → main: live panel right edge (toggle window rides it).
+  sendOverlayToggleAnchor: (payload: { panelRight: number }) =>
+    ipcRenderer.invoke('overlay-toggle-anchor', payload),
+  // Overlay renderer → main: hover hit-test (margins click-through gate).
+  setOverlayHoverInteractive: (interactive: boolean) =>
+    ipcRenderer.invoke('overlay-hover-interactive', interactive),
+  // Aux windows → main → overlay renderer: user actions.
+  sendOverlayUiAction: (action: { type: string }) =>
+    ipcRenderer.invoke('overlay-ui-action', action),
+  onOverlayUiAction: (callback: (action: { type: string }) => void) => {
+    const subscription = (_: any, action: { type: string }) => callback(action);
+    ipcRenderer.on('overlay-ui-action', subscription);
+    return () => {
+      ipcRenderer.removeListener('overlay-ui-action', subscription);
+    };
+  },
   getRecognitionLanguages: () => ipcRenderer.invoke('get-recognition-languages'),
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
   takeSelectiveScreenshot: () => ipcRenderer.invoke('take-selective-screenshot'),

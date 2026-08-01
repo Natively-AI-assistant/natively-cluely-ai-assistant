@@ -46,6 +46,15 @@ export interface ElectronAPI {
     width: number
     height: number
   }) => Promise<void>
+  // Overlay aux windows (pill / resize toggle) coordination
+  sendOverlayUiState?: (state: Record<string, unknown>) => Promise<void>
+  onOverlayUiState?: (
+    callback: (state: Record<string, unknown>) => void
+  ) => () => void
+  sendOverlayUiAction?: (action: { type: string }) => Promise<void>
+  onOverlayUiAction?: (callback: (action: { type: string }) => void) => () => void
+  sendOverlayToggleAnchor?: (payload: { panelRight: number }) => Promise<void>
+  setOverlayHoverInteractive?: (interactive: boolean) => Promise<void>
   onToggleExpand: (callback: () => void) => () => void
   getRecognitionLanguages: () => Promise<Record<string, any>>
   getScreenshots: () => Promise<Array<{ path: string; preview: string }>>

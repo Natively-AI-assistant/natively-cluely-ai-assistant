@@ -319,9 +319,7 @@ import { getModifierSymbol, isMac } from '../utils/platformUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { OverlayBanner, OverlayBannerButton } from './ui/OverlayBanner';
-import ResizeToggle from './ui/ResizeToggle';
 import RollingTranscript from './ui/RollingTranscript';
-import TopPill from './ui/TopPill';
 
 // PERF: hoisted plugin arrays. ReactMarkdown receives `remarkPlugins` and
 // `rehypePlugins` as new array literals if defined inline at the call site —
@@ -1404,7 +1402,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [stealthHotkeyConflict, setStealthHotkeyConflict] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const resizeToggleRef = useRef<HTMLButtonElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const rafDimUpdateRef = useRef<number | null>(null);
   const codeExpandedRef = useRef(false);
@@ -1425,16 +1422,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       : false,
   );
   // Wall-clock deadline until which the CSS width animation is running. The OS
-  // window is a FIXED WIDTH (OVERLAY_WINDOW_WIDTH = 780) and never width-resizes;
-  // only the CSS panel animates 600↔780 centered inside it. But that CSS width
-  // change reflows content HEIGHT every frame, firing the ResizeObserver ~60×,
-  // and a height setBounds on every one re-rasterizes the transparent backdrop-
-  // blur window → flicker. So while now < this deadline the ResizeObserver's own
-  // height reporting is SUPPRESSED; the width animation instead drives a single
-  // RATE-LIMITED (~30fps) height channel itself + one authoritative settle at
-  // onComplete (see startTransition). (Width is never reported as anything but
-  // the fixed 780, so there is no width setBounds to suppress — that is the
-  // whole point of the fix.)
+  // window is a FIXED WIDTH (OVERLAY_WINDOW_WIDTH = 732) and never
+  // width-resizes; only the CSS panel animates 600↔732 centered inside it.
+  // But that CSS width change reflows content HEIGHT every frame, firing the
+  // ResizeObserver ~60×, and a height setBounds on every one re-rasterizes
+  // the transparent backdrop-blur window → flicker. So while now < this
+  // deadline the ResizeObserver's own height reporting is SUPPRESSED; the
+  // width animation instead drives a single RATE-LIMITED (~30fps) height
+  // channel itself + one authoritative settle at onComplete (see
+  // startTransition). (Width is never reported as anything but the fixed 732,
+  // so there is no width setBounds to suppress — that is the whole point.)
   //
   // A self-expiring DEADLINE (not a boolean cleared by framer's onComplete) is
   // deliberate: framer's stop() does NOT fire onComplete, so a boolean could
@@ -1861,39 +1858,40 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   );
 
   // ── Code-expansion spring ────────────────────────────────────────────────
-  // Architecture: the OS window is a FIXED WIDTH (780) for its whole lifetime;
-  // only the CSS panel animates 600↔780, centered inside it. So width motion is
-  // PURELY renderer-side — there is no per-frame native width setBounds and the
-  // window X origin never moves (TopPill stays pixel-stable, no blur re-raster).
+  // Architecture: the OS window is a FIXED WIDTH (732 = SHELL_WIDTH_EXPANDED)
+  // for its whole visible lifetime; only the CSS panel animates 600↔732,
+  // CENTERED (mx-auto) inside it. Width motion is PURELY renderer-side — no
+  // width setBounds ever, so the window's X origin never moves, the panel's
+  // center is pixel-stable (symmetric growth), and the pill aux window
+  // (centered over this window by the main process) is pixel-STATIONARY.
+  // The TopPill and resize toggle live in their own aux BrowserWindows
+  // (OverlayAuxWindows.tsx); the toggle rides the panel's live top-right
+  // corner via the sendOverlayToggleAnchor stream below.
+  //
+  // The collapsed state leaves 66px transparent margins each side INSIDE this
+  // window; they are click-through via the hover hit-test effect below
+  // (setOverlayHoverInteractive), so they don't swallow clicks meant for apps
+  // beneath — while the painted panel is ALWAYS interactive (drag-safe).
   //
   // `shellWidth` is a MotionValue driven by OVERLAY_RESIZE_SPRING and bound
   // directly to the panel's CSS `width`. Content reflows to the real panel width
   // on every frame (correct at every in-between width — no clip/scale/transform).
-  // Only HEIGHT flows to the OS, via the ResizeObserver / reportShellSize (and a
-  // rate-limited channel during the tween); reportShellSize reads shellWidth.get()
-  // so the height it reports always matches the panel's current width.
+  // Only HEIGHT flows to the OS, via the ResizeObserver / reportShellSize (and
+  // a rate-limited channel during the tween).
   const SHELL_WIDTH_COLLAPSED = 600;
-  // The EXPANDED panel is intentionally NARROWER than the OS window (732 < 780).
-  // The window is fixed at 780 (OVERLAY_WINDOW_WIDTH below); decoupling the panel
-  // from it leaves a permanent ~24px gutter on each side even when expanded, which
-  // is the room the floating resize toggle needs to keep its corner gap in the
-  // expanded state (when the panel filled the window edge-to-edge there was no
-  // gutter, so the button was forced inward over the panel — the reported bug).
   const SHELL_WIDTH_EXPANDED = 732;
-  // The OS overlay window is a FIXED WIDTH for its entire visible lifetime. The
-  // window is created/shown at this width and never width-resized; the CSS panel
-  // animates 600↔732 centered inside it (mx-auto). This MUST match
-  // WindowHelper.OVERLAY_DEFAULT_WIDTH. Keeping the window width fixed means its
-  // X origin never moves, so the TopPill is pixel-stable and there is zero
-  // per-frame transparent-window re-raster. It is INTENTIONALLY wider than
-  // SHELL_WIDTH_EXPANDED so a side gutter always exists for the resize toggle.
-  const OVERLAY_WINDOW_WIDTH = 780;
+  // The OS overlay window's FIXED width. MUST equal
+  // WindowHelper.OVERLAY_DEFAULT_WIDTH (the window's birth width — the
+  // startup-slide invariant) and SHELL_WIDTH_EXPANDED (the panel fills the
+  // window edge-to-edge when expanded; the old 780 gutter existed only for
+  // the resize toggle, which now has its own aux window).
+  const OVERLAY_WINDOW_WIDTH = SHELL_WIDTH_EXPANDED;
   const shellWidth = useMotionValue(SHELL_WIDTH_COLLAPSED);
   // Vertical budget cap for the chat scroll area. Default Infinity = "not yet
   // measured / unbounded", so the width-derived aesthetic max applies until we
   // know the display height. measureVerticalCap (below) sets the real value:
   // floor(workArea.height*0.9) - chrome, mirroring the main-process clamp in
-  // WindowHelper.setOverlayDimensionsCentered. This keeps total content height
+  // WindowHelper.setOverlayDimensionsAnchored. This keeps total content height
   // ≤ the budget the OS window will be granted, so the footer (model selector /
   // settings / send) can never be cropped below the clamped window edge.
   const verticalCap = useMotionValue(Infinity);
@@ -1915,57 +1913,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       cap,
     ),
   );
-  // The floating resize toggle rides the panel's top-right CORNER along that
-  // corner's 45° bisector, with a small gap from the body when there's room. Its
-  // center is offset from the corner point by the SAME distance `d` on BOTH axes,
-  // which is what keeps it exactly on the 45° diagonal in every state (an earlier
-  // version clamped only the horizontal when expanded → unequal offsets → off the
-  // diagonal, the reported bug).
-  //
-  // Corner point in viewport coords:
-  //   • x: the panel is centered in the fixed-width OVERLAY_WINDOW_WIDTH window,
-  //     so its right edge sits M = (OVERLAY_WINDOW_WIDTH - shellWidth) / 2 px from
-  //     the window right (M = 90 collapsed → 0 expanded). Off the LIVE shellWidth,
-  //     so the button follows the corner every spring frame.
-  //   • y: the panel's measured top edge (panelTop, via measureButtonTop()).
-  //
-  // `d` = signed diagonal offset of the button CENTER from the corner, measured
-  // outward (toward the window's top-right corner = up-and-right):
-  //   • Desired: +GAP, so the button sits GAP px outside the corner in the gutter
-  //     — the space between body and button the user asked for.
-  //   • Constraint: the button must stay on-screen. The outward room to the right
-  //     is M (the gutter width); going further clips past the window edge. So we
-  //     cap d at (M - BTN/2 - EDGE_MARGIN). When expanded M→0 this cap is
-  //     NEGATIVE, so d flips negative and the button tucks INWARD along the SAME
-  //     diagonal (equal on both axes) — still on the 45° line, just inside the
-  //     corner instead of outside it.
-  // center-x from window right = M - d  → right = (M - d) - BTN/2
-  // center-y from window top   = panelTop - d → top = (panelTop - d) - BTN/2
-  const RESIZE_BTN_SIZE = 28; // matches ResizeToggle's w-[28px]
-  const RESIZE_BTN_DIAGONAL_GAP = 8; // outward gap from the corner when there's room
-  const RESIZE_BTN_EDGE_MARGIN = 2; // keep this much of the button on-screen when expanded
-  // Diagonal offset `d`, shared by both axes so the button is always on the 45°
-  // bisector. Capped by the available gutter so it never clips off the window.
-  const resizeBtnDiagonalOffset = useTransform(shellWidth, (w) => {
-    const m = (OVERLAY_WINDOW_WIDTH - w) / 2;
-    return Math.min(RESIZE_BTN_DIAGONAL_GAP, m - RESIZE_BTN_SIZE / 2 - RESIZE_BTN_EDGE_MARGIN);
-  });
-  const buttonRight = useTransform([shellWidth, resizeBtnDiagonalOffset], ([w, d]: number[]) =>
-    (OVERLAY_WINDOW_WIDTH - w) / 2 - d - RESIZE_BTN_SIZE / 2,
-  );
-  // Vertical anchor. `panelTopMV` holds the panel card's measured top edge
-  // (viewport-relative), set by measureButtonTop(). The button is position:fixed,
-  // but the panel card is NOT at the window top — it sits below the TopPill + 8px
-  // gap (plus any status pills / banners) — so this offset is dynamic and measured
-  // from shellRef. The panel's TOP does not move during a width animation (only
-  // its width does), so refreshing on layout change — not per frame — is enough.
-  // Initial guess covers TopPill(~36) + gap(8). buttonTop applies the SAME
-  // diagonal offset `d` as buttonRight (subtracted, since up = toward the window
-  // top) so the button center stays on the corner's 45° bisector in every state.
-  const panelTopMV = useMotionValue(44);
-  const buttonTop = useTransform([panelTopMV, resizeBtnDiagonalOffset], ([top, d]: number[]) =>
-    top - d - RESIZE_BTN_SIZE / 2,
-  );
+  // NOTE: the resize toggle and the TopPill no longer render in this window at
+  // all — each lives in its OWN tiny BrowserWindow (see
+  // WindowHelper.createOverlayAuxWindows + OverlayAuxWindows.tsx), positioned
+  // by the main process around this window's bounds. This window contains
+  // ONLY the shell card, so its rectangle has no transparent-but-interactive
+  // region. State flows to them via the sendOverlayUiState broadcast below;
+  // their actions come back via onOverlayUiAction.
 
   // isExpanded mirror for closures inside refs/observers that must not
   // re-bind on every toggle.
@@ -2195,8 +2149,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   }, []);
 
   // This is called by every channel that ever sets the native window height
-  // directly (this function, resizeOverlayWindowCentered's width-transition
-  // callers, and the streaming-height buffer below via resizeOverlayWindowCentered
+  // directly (this function, resizeOverlayWindow's width-transition
+  // callers, and the streaming-height buffer below via resizeOverlayWindow
   // itself is a pure sender — this one carries the side effect) to keep
   // streamingHeightCommittedRef in sync with whatever the OS window's real
   // height now is. Without this, whichever channel last won would leave that
@@ -2210,11 +2164,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     streamingHeightCommittedRef.current = height;
   }, []);
 
-  // Single canonical size-reporter. Width is ALWAYS the fixed OVERLAY_WINDOW_WIDTH
-  // (the OS window never width-resizes — the CSS panel animates inside it), so
-  // this is effectively a height-only reporter; height is from the
-  // ResizeObserver-measured content rect. Centered IPC keeps the
-  // TopPill's horizontal center invariant across resizes. Also the channel
+  // Single canonical size-reporter. Width is ALWAYS the fixed
+  // OVERLAY_WINDOW_WIDTH (the OS window never width-resizes — the CSS panel
+  // animates inside it), so this is effectively a height-only reporter;
+  // height is from the ResizeObserver-measured content rect. Also the channel
   // that settles the streaming-height buffer back to the exact final size
   // once a stream ends (see the ResizeObserver call site below: once
   // streamingMsgIdRef.current goes null, the next observer fire takes this
@@ -2245,12 +2198,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // clock — the startup shake. Layout height is immune to descendant
     // transforms, so genuine content growth still flows through while the
     // entry flourish stays purely compositor-side.
-    // The OS window is a FIXED WIDTH (OVERLAY_WINDOW_WIDTH = 780) and never
-    // width-resizes — ALWAYS report that fixed width, never the live in-between
-    // CSS shell width. This makes setOverlayDimensionsCentered see widthDelta 0
-    // on every call, so the window's X origin never moves (no sideways jump) and
-    // the centered setBounds becomes a pure height-only, top-anchored resize.
-    // Height is content-driven and keeps flowing through this same call.
+    // The OS window is a FIXED WIDTH (OVERLAY_WINDOW_WIDTH = 732) and never
+    // width-resizes — ALWAYS report that fixed width, never the live
+    // in-between CSS shell width. setOverlayDimensionsAnchored therefore sees
+    // widthDelta 0 on every call: a pure height-only, top-anchored resize.
     const width = OVERLAY_WINDOW_WIDTH;
     const height = contentRef.current.offsetHeight;
     if (process.env.NODE_ENV === 'development') {
@@ -2310,27 +2261,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     verticalCap.set(nextCap);
   }, [attachedContext.length, verticalCap]);
 
-  // Measure the panel card's top edge (viewport-relative) into panelTopMV so the
-  // floating resize toggle can ride the panel's TOP-RIGHT CORNER, not the window
-  // top. The panel sits below the TopPill + 8px gap (and any status pills /
-  // warning banners that push it further down), so this offset is dynamic. We read
-  // shellRef (the rounded panel card itself), not contentRef (the whole stack
-  // including the TopPill). We store the RAW top edge here; buttonTop applies the
-  // diagonal offset + BTN/2 centering. getBoundingClientRect().top is
-  // viewport-relative, which is what position:fixed `top` wants. The panel's TOP
-  // does not move during a width animation (only its width does), so measuring on
-  // layout change — not per frame — is correct and cheap.
-  const measureButtonTop = useCallback(() => {
-    const shellEl = shellRef.current;
-    if (!shellEl) return;
-    const top = shellEl.getBoundingClientRect().top;
-    if (top > 0) panelTopMV.set(Math.round(top));
-  }, [panelTopMV]);
-
   // NOTE: the old per-frame "chase" subscriber that pushed the live shell width
-  // to setBounds every frame is GONE. The OS window is a fixed width (780) for
+  // to setBounds every frame is GONE. The OS window is a fixed width (732) for
   // its whole lifetime, so there is nothing to chase — the panel animates
-  // 600↔780 purely renderer-side (CSS `width` bound to the shellWidth spring),
+  // 600↔732 purely renderer-side (CSS `width` bound to the shellWidth spring),
   // with no native width resize at all. Only HEIGHT flows to the OS, via
   // reportShellSize / the ResizeObserver.
 
@@ -2348,11 +2282,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // the observer fires again and this self-converges in ≤2 frames; chrome
         // height is scroll-invariant, so there is no feedback loop.
         measureVerticalCap();
-        // Re-anchor the floating resize toggle: anything that changes content
-        // height above the panel (status pills, warning banners, an attached
-        // screenshot strip) shifts the panel's top edge, so the button's `top`
-        // must follow. Cheap rect read, not per width-frame.
-        measureButtonTop();
         // FLICKER GUARD: during the CSS width tween the panel width changes every
         // frame, which reflows content height every frame and fires this observer
         // ~60×; each reportShellSize() would do a native height setBounds, and
@@ -2391,7 +2320,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         rafDimUpdateRef.current = null;
       }
     };
-  }, [reportShellSize, measureVerticalCap, measureButtonTop]);
+  }, [reportShellSize, measureVerticalCap]);
 
   // attachedContext (screenshots add/remove) and initial-sizing safety:
   // both re-derive the vertical cap (a screenshot strip grows chrome) and
@@ -2400,54 +2329,48 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       measureVerticalCap();
-      measureButtonTop();
       reportShellSize();
     });
     return () => cancelAnimationFrame(id);
-  }, [attachedContext, reportShellSize, measureVerticalCap, measureButtonTop]);
+  }, [attachedContext, reportShellSize, measureVerticalCap]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       measureVerticalCap();
-      measureButtonTop();
       reportShellSize();
     }, 600);
     return () => clearTimeout(timer);
-  }, [reportShellSize, measureVerticalCap, measureButtonTop]);
+  }, [reportShellSize, measureVerticalCap]);
 
-  // ── Code-expansion (renderer-only width spring, fixed-width window) ──────────
-  // THE FIX: the OS window is a FIXED WIDTH (OVERLAY_WINDOW_WIDTH = 780) for its
-  // entire visible lifetime, and the panel is centered (mx-auto) inside it. There
-  // is NO width setBounds during the interaction at all. The expand/contract
-  // travel is a renderer-only CSS `width` animation: the `shellWidth` spring is
-  // bound to the panel's `width` style, so the content reflows (text re-wrap +
-  // code re-layout) to the real panel width on every frame and is correct at
-  // every in-between width — no clipping, no phantom layout width, no transform
-  // distortion. Per-frame reflow cost is held down by `contain: layout style` on
-  // the shell (scopes the reflow) + memoized syntax highlighting (a width change
-  // re-wraps without re-tokenizing).
+  // ── Code-expansion (renderer-only width spring, fixed-width window) ─────────
+  // The expand/contract travel is a renderer-only CSS `width` animation: the
+  // `shellWidth` spring is bound to the panel's `width` style, so the content
+  // reflows (text re-wrap + code re-layout) to the real panel width on every
+  // frame and is correct at every in-between width — no clipping, no phantom
+  // layout width, no transform distortion. Per-frame reflow cost is held down
+  // by `contain: layout style` on the shell (scopes the reflow) + memoized
+  // syntax highlighting (a width change re-wraps without re-tokenizing).
   //
-  // Why: the previous two attempts shifted the window's X origin during the
-  // animation (to keep the panel centered as the window width changed). But
-  // Chromium does NOT synchronize a programmatic setBounds with the renderer's
-  // paint on macOS, so for one frame the old framebuffer (painted at the old
-  // origin) was shown at the new shifted origin → the TopPill snapped sideways,
-  // and repeating that per frame WAS the flicker. With a fixed window width the
-  // X origin never moves, so:
-  //   • TopPill (centered in the fixed window) is pixel-stable — zero jump.
-  //   • No per-frame width setBounds → no transparent-blur re-raster — zero flicker.
+  // The OS window is a FIXED WIDTH — there is NO width setBounds during the
+  // interaction at all. Why: Chromium does NOT synchronize a programmatic
+  // setBounds with the renderer's paint on macOS, so a setBounds that moves
+  // painted pixels shows the old framebuffer at the new origin for one frame
+  // — repeating that per frame WAS the historical flicker, and a boundary
+  // resize of a CENTERED panel flashes the same way once. A fixed window
+  // sidesteps the whole class: the panel grows symmetrically in CSS around a
+  // pixel-stable center.
   //
-  // Only HEIGHT still flows to the OS (content/streaming growth), via a
+  // HEIGHT flows to the OS continuously (content/streaming growth), via a
   // height-only, top-anchored setBounds — which does not move X. During the CSS
   // width animation the height reflows every frame, so the ResizeObserver's own
   // reporting is SUPPRESSED (heightReportSuppressedUntilRef) and the animation
   // instead drives height itself, rate-limited to ~30fps (see startTransition),
   // with a final authoritative settle at onComplete.
-  const resizeOverlayWindowCentered = useCallback(
+  const resizeOverlayWindow = useCallback(
     (height: number) => {
       if (height <= 0) return;
       // Width is ALWAYS the fixed window width → widthDelta 0 in the main
-      // process → X never moves; this collapses to a pure height-only resize.
+      // process; this collapses to a pure height-only resize.
       const api = window.electronAPI as any;
       if (api?.updateContentDimensionsCentered) {
         api.updateContentDimensionsCentered({ width: OVERLAY_WINDOW_WIDTH, height });
@@ -2483,7 +2406,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         streamingHeightStreamIdRef.current = currentStreamId;
         const committed = targetHeight + STREAMING_HEIGHT_GROW_BUFFER_PX;
         streamingHeightCommittedRef.current = committed;
-        resizeOverlayWindowCentered(committed);
+        resizeOverlayWindow(committed);
         return;
       }
 
@@ -2501,9 +2424,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // height.
       const committed = targetHeight + STREAMING_HEIGHT_GROW_BUFFER_PX;
       streamingHeightCommittedRef.current = committed;
-      resizeOverlayWindowCentered(committed);
+      resizeOverlayWindow(committed);
     },
-    [resizeOverlayWindowCentered],
+    [resizeOverlayWindow],
   );
   // Keep the ResizeObserver's indirection ref current (see
   // driveStreamingHeightRef's declaration above for why this can't just be a
@@ -2604,7 +2527,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         reserveScrollHeadroomIfNeeded();
         const h = contentRef.current?.offsetHeight ?? 0;
         if (h > 0) {
-          resizeOverlayWindowCentered(h);
+          resizeOverlayWindow(h);
           syncStreamingHeightBaseline(h);
         }
         return;
@@ -2642,8 +2565,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       let lastReportedHeight = -1;
       const HEIGHT_REPORT_INTERVAL_MS = 33; // ~30fps
 
-      // WIDTH SPRING on the renderer clock (600↔780 inside the fixed window). Why
-      // a spring instead of the old duration+bezier tween:
+      // WIDTH SPRING on the renderer clock (600↔732 inside the fixed window).
+      // Why a spring instead of the old duration+bezier tween:
       //
       //   The scroll scanner re-fires startTransition whenever a code block
       //   crosses the viewport edge during a scroll. A duration+bezier RESTARTS
@@ -2672,7 +2595,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           if (h <= 0 || h === lastReportedHeight) return;
           lastHeightReportAt = now;
           lastReportedHeight = h;
-          resizeOverlayWindowCentered(h);
+          resizeOverlayWindow(h);
           syncStreamingHeightBaseline(h);
         },
         onComplete: () => {
@@ -2685,7 +2608,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           // scroll max) has fully settled — guarantees the final frame is exact
           // even if the last rate-limited sample landed a few px short.
           const settledHeight = contentRef.current?.offsetHeight ?? 0;
-          resizeOverlayWindowCentered(settledHeight);
+          resizeOverlayWindow(settledHeight);
           syncStreamingHeightBaseline(settledHeight);
         },
       });
@@ -2693,7 +2616,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     [
       shellWidth,
       SHELL_WIDTH_EXPANDED,
-      resizeOverlayWindowCentered,
+      resizeOverlayWindow,
       syncStreamingHeightBaseline,
       pinScrollBottomIfNeeded,
       reserveScrollHeadroomIfNeeded,
@@ -2713,6 +2636,101 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     manualWidthOverrideRef.current = target;
     startTransition(target);
   }, [shellWidth, startTransition, SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED]);
+
+  // ── Aux-window bridge ─────────────────────────────────────────────────────
+  // The TopPill and resize toggle live in their own BrowserWindows. Broadcast
+  // the UI state they render from; execute the actions they send back.
+  useEffect(() => {
+    window.electronAPI
+      ?.sendOverlayUiState?.({
+        expanded: isExpanded,
+        shellWide: isShellWide,
+        hasContent: messages.length > 0,
+        overlayOpacity,
+        themeMode: isLightTheme ? 'light' : 'dark',
+        interfaceTheme: isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default',
+      })
+      .catch(() => {});
+  }, [
+    isExpanded,
+    isShellWide,
+    messages.length,
+    overlayOpacity,
+    isLightTheme,
+    isGlassTheme,
+    isModernTheme,
+  ]);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.onOverlayUiAction?.((action) => {
+      switch (action?.type) {
+        case 'toggle-width':
+          handleManualResizeToggle();
+          break;
+        case 'toggle-expand':
+          setIsExpanded((prev) => !prev);
+          break;
+        case 'end-meeting':
+          if (onEndMeeting) onEndMeeting();
+          else window.electronAPI.quitApp();
+          break;
+      }
+    });
+    return () => unsubscribe?.();
+  }, [handleManualResizeToggle, onEndMeeting]);
+
+  // Stream the panel's LIVE right edge (px from the window's left edge) to the
+  // main process so the toggle aux window rides the panel's top-right corner
+  // through the width spring — the same corner-riding the old in-window
+  // MotionValue gave. The panel is centered in the fixed window, so
+  // right edge = (OVERLAY_WINDOW_WIDTH + shellWidth) / 2. MotionValue 'change'
+  // fires per spring frame AND on imperative .set()s (session reset, no-op
+  // snap, reduced-motion), so every path that moves the corner is covered;
+  // integer dedupe keeps the IPC rate at ~60 msgs for a 0.3s spring, and
+  // moving a 36px window is a compositor-only surface move (no re-raster).
+  useEffect(() => {
+    let lastSent = -1;
+    const send = (w: number) => {
+      const panelRight = Math.round((OVERLAY_WINDOW_WIDTH + w) / 2);
+      if (panelRight === lastSent) return;
+      lastSent = panelRight;
+      window.electronAPI?.sendOverlayToggleAnchor?.({ panelRight }).catch(() => {});
+    };
+    send(shellWidth.get());
+    const unsubscribe = shellWidth.on('change', send);
+    return () => unsubscribe();
+  }, [shellWidth, OVERLAY_WINDOW_WIDTH]);
+
+  // Hover hit-test → margins click-through. The fixed window is wider than
+  // the collapsed panel (66px transparent margin each side); while the
+  // pointer is over a margin the main process flips the window to
+  // setIgnoreMouseEvents(true, {forward:true}) so clicks land on the app
+  // beneath. forward:true keeps mousemove streaming even while ignored, so
+  // crossing back over the panel re-arms interactivity BEFORE a click can
+  // happen. The default (main-process side) is interactive — the panel and
+  // its drag regions are never gated. PAD inflates the panel rect slightly so
+  // fast pointer travel can't outrun the flip at the boundary.
+  useEffect(() => {
+    let interactive = true;
+    // Handshake reset: this effect only sends on boundary CROSSINGS, so the
+    // renderer's local flag and the main process's cached flag must start
+    // aligned. After a renderer reload (crash recovery) main may have a
+    // latched non-interactive state from the previous renderer — without this
+    // unconditional resync, an expanded panel (margin 0 → "inside" always
+    // true → no crossing ever) would stay click-through forever.
+    window.electronAPI?.setOverlayHoverInteractive?.(true).catch(() => {});
+    const PAD = 8;
+    const onMouseMove = (e: MouseEvent) => {
+      const margin = (OVERLAY_WINDOW_WIDTH - shellWidth.get()) / 2;
+      const inside =
+        e.clientX >= margin - PAD && e.clientX <= OVERLAY_WINDOW_WIDTH - margin + PAD;
+      if (inside === interactive) return;
+      interactive = inside;
+      window.electronAPI?.setOverlayHoverInteractive?.(inside).catch(() => {});
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    return () => window.removeEventListener('mousemove', onMouseMove);
+  }, [shellWidth, OVERLAY_WINDOW_WIDTH]);
 
   // Derive the resize-button icon state from the live shell width. Subscribing
   // to the motion value (rather than tracking each startTransition caller)
@@ -3266,9 +3284,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // Release any height-report suppression from an in-flight tween.
       heightReportSuppressedUntilRef.current = 0;
       // Imperative .set() (not animate) — no transient frame. The OS window
-      // stays fixed at OVERLAY_WINDOW_WIDTH, so snapping the shell width back to
-      // collapsed is a renderer-only width reset (content reflows once for the
-      // fresh meeting) with no native resize and no sideways motion.
+      // stays fixed at OVERLAY_WINDOW_WIDTH, so snapping the shell width back
+      // to collapsed is a renderer-only width reset (content reflows once for
+      // the fresh meeting) with no native resize and no sideways motion. The
+      // toggle aux window follows via the shellWidth 'change' anchor stream.
       shellWidth.set(SHELL_WIDTH_COLLAPSED);
       setInputValue('');
       setAttachedContext([]);
@@ -7409,27 +7428,16 @@ Provide only the answer, nothing else.`;
 
   return (
     <>
-    {/* Standalone resize toggle — fixed to the top-right corner of the Electron
-        window, completely outside the main panel body. Inherits screen-capture
-        protection from the BrowserWindow's setContentProtection. The hover
-        hit-test in the useEffect above includes this button's rect so hovering
-        it keeps the window interactive; stealth passthrough still wins when
-        undetectable mode is on (syncOverlayInteractionPolicy in WindowHelper
-        ORs the master passthrough flag). Only rendered once there's content. */}
-    {messages.length > 0 && (
-      <ResizeToggle
-        ref={resizeToggleRef}
-        expanded={isShellWide}
-        onToggle={handleManualResizeToggle}
-        appearance={appearance}
-        interfaceTheme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default'}
-        rightOffset={buttonRight}
-        topOffset={buttonTop}
-      />
-    )}
+    {/* The resize toggle and the TopPill render in their OWN aux
+        BrowserWindows (OverlayAuxWindows.tsx), positioned by the main
+        process around this window. This window is exactly the shell card. */}
     <div
       ref={contentRef}
       data-interface-theme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default'}
+      // CENTERED (mx-auto) in the fixed-width window: the window never
+      // width-resizes, so centering is stable — the panel's center (and the
+      // pill window centered over this window) never moves as the panel
+      // springs 600↔732 symmetrically inside it.
       className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-0 rounded-[24px] font-sans gap-2 overlay-text-primary"
     >
       {/*
@@ -7477,13 +7485,6 @@ Provide only the answer, nothing else.`;
         inert={!isExpanded}
         className="flex flex-col items-center gap-2 w-full"
       >
-            <TopPill
-              expanded={isExpanded}
-              onToggle={() => setIsExpanded(!isExpanded)}
-              onQuit={() => (onEndMeeting ? onEndMeeting() : window.electronAPI.quitApp())}
-              appearance={appearance}
-              onLogoClick={() => window.electronAPI?.setWindowMode?.('launcher')}
-            />
             <motion.div
               ref={shellRef}
               data-shell-card=""
@@ -7491,13 +7492,14 @@ Provide only the answer, nothing else.`;
               style={{
                 ...appearance.shellStyle,
                 // The panel width is bound to the LIVE `shellWidth` motion value,
-                // animated 600↔780 by OVERLAY_RESIZE_SPRING. The content reflows
+                // animated 600↔732 by OVERLAY_RESIZE_SPRING. The content reflows
                 // (text re-wrap + code re-layout) to the real panel width on every
                 // frame, so it is always correct at every in-between width — there
                 // is no clipping, no phantom layout width, no transform distortion.
-                // The OS window stays a fixed OVERLAY_WINDOW_WIDTH (780) and the
-                // panel is centered (mx-auto) inside it, so this width change never
-                // touches a native setBounds and the X origin never moves.
+                // The OS window stays a fixed OVERLAY_WINDOW_WIDTH (732) and
+                // the panel is centered (mx-auto) inside it, so this width
+                // change never touches a native setBounds, the X origin never
+                // moves, and the panel's center is pixel-stable.
                 //
                 // The cost of reflowing per frame is held down by keeping each
                 // reflow cheap: `contain: layout style` scopes it to this subtree
