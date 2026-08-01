@@ -109,6 +109,28 @@ export function numeralTokens(lowercased: string): string[] {
  * contractions stay one token, non-alphanumerics to spaces, tokens of 1–2
  * characters discarded.
  */
+// HYPHENATED IDENTIFIERS — measured defect (deep-test D2, 2026-08-01)
+// The keep-set on line ~121 preserves hyphens, so `TECH-SMALL-CANARY-524`
+// tokenizes to ONE opaque token. Asking "What is the small technical canary?"
+// then shares ZERO tokens with the line that answers it — fts is exactly
+// 0.0000 before any threshold runs, and no floor tuning can recover a chunk
+// the tokenizer made invisible. Underscored identifiers never had this
+// problem (`WORKER_BATCH_SIZE` splits on `_` into worker/batch/size), which is
+// why snake_case facts retrieved and hyphenated ones did not.
+//
+// Same pattern as numeralTokens: the parts are EXTRA tokens, never
+// replacements, so retrieval BY the full identifier keeps working.
+function hyphenSubTokens(base: string[]): string[] {
+  const extra: string[] = [];
+  for (const w of base) {
+    if (!w.includes('-')) continue;
+    for (const part of w.split('-')) {
+      if (part.length > 2 && !base.includes(part) && !extra.includes(part)) extra.push(part);
+    }
+  }
+  return extra;
+}
+
 export function wordsOf(text: string): string[] {
   const lower = text.toLowerCase();
   const base = lower
@@ -122,10 +144,13 @@ export function wordsOf(text: string): string[] {
     .split(/\s+/)
     .filter((word) => word.length > 2);
 
+  const hyphenExtra = hyphenSubTokens(base);
+  const withHyphens = hyphenExtra.length ? base.concat(hyphenExtra) : base;
+
   // Only pay for the numeral pass when the text actually contains a quantity.
   if (!/\d/.test(lower) && !/\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)\b/.test(lower)) {
-    return base;
+    return withHyphens;
   }
-  const extra = numeralTokens(lower).filter((t) => t.length > 2 && !base.includes(t));
-  return extra.length ? base.concat(extra) : base;
+  const extra = numeralTokens(lower).filter((t) => t.length > 2 && !withHyphens.includes(t));
+  return extra.length ? withHyphens.concat(extra) : withHyphens;
 }

@@ -46,6 +46,22 @@ export interface AnswerRequest {
   transcriptQuestion?: string;
   isFollowUp?: boolean;
   hasScreenContext?: boolean;
+  /** True when the turn has real documents (mode attachments or hydrated
+   *  profile sources) — see ClassificationInput.hasAttachedDocuments. */
+  hasAttachedDocuments?: boolean;
+
+  /**
+   * Source types the TURN adds to the mode's allowlist because of what is
+   * actually attached (deep-test D10, 2026-08-01). A custom mode is coerced to
+   * the `general` policy, whose allowlist has no CANDIDATE_FILE/JOB_DESCRIPTION
+   * — so a custom mode with a candidate résumé and a JD attached planned []
+   * for every job question and refused with STRICT_NOT_FOUND. The call sites
+   * derive these from the attached files' detected document shapes
+   * (attachmentSourceTypeExtensions); this can only ever ADD types for
+   * documents the mode itself holds — it cannot reach profile pools or another
+   * mode's files, so source isolation is unchanged.
+   */
+  extraAllowedSourceTypes?: SourceType[];
 }
 
 export interface RetrievalPort {
@@ -105,9 +121,18 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   const resolvedGrounding = resolveAnswerPolicy({
     modeId: req.modeId, userChoice: req.userAnswerPolicy ?? null,
   });
-  const policy: ModePolicy = resolvedGrounding.source === 'user_choice'
+  let policy: ModePolicy = resolvedGrounding.source === 'user_choice'
     ? { ...basePolicy, groundingPolicy: resolvedGrounding.groundingPolicy }
     : basePolicy;
+
+  // Attachment-derived source types (deep-test D10). Additive and LOW priority:
+  // extras never displace the mode's primary source, they only make the claim →
+  // source intersection non-empty for documents the mode actually holds.
+  const extra = (req.extraAllowedSourceTypes ?? [])
+    .filter((s) => !policy.allowedSourceTypes.includes(s));
+  if (extra.length) {
+    policy = { ...policy, allowedSourceTypes: [...policy.allowedSourceTypes, ...extra] };
+  }
 
   const q = resolveQuestion(req);
 
@@ -116,6 +141,7 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     policy,
     isFollowUp: Boolean(req.isFollowUp),
     hasScreenContext: req.hasScreenContext,
+    hasAttachedDocuments: req.hasAttachedDocuments,
   });
 
   const optional = policy.allowedSourceTypes.filter((s) => !cls.requiredSourceTypes.includes(s));
@@ -273,6 +299,73 @@ const INVENTORY_CATEGORY_FOR_CLAIM: Record<string, string> = {
   JOB_PREFERRED_SKILL: 'nice_to_haves',
 };
 
+/**
+ * Ordered variant of salientTerms — the property extractor needs POSITION
+ * (English noun phrases are head-final), which a Set cannot give it.
+ */
+const salientTermList = (text: string): string[] => {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of String(text).toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/)) {
+    if (raw.length <= 2 || STOPWORDS.has(raw)) continue;
+    const t = raw.length > 4 ? stem(raw) : raw;
+    if (STOPWORDS.has(t) || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+};
+
+/**
+ * The PROPERTY a clause requests — its head noun(s) (deep-test D6, 2026-08-01).
+ *
+ * "What backend framework is explicitly documented?" requests a FRAMEWORK.
+ * Single-shared-term support let any chunk containing "backend" report FULL
+ * while the answer claimed nothing was documented — a confident trace over
+ * unsupporting evidence. English noun phrases are head-final, so after
+ * stripping the locative tail ("…in the dossier") and the trailing
+ * verb phrase ("…is explicitly documented"), the last salient term is the
+ * property, and coordinated siblings ("the RTO and RPO") are alternatives.
+ */
+export function propertyHeadTerms(clause: string): string[] {
+  let q = String(clause).toLowerCase().replace(/[?!.]+\s*$/, '');
+  q = q.replace(/\s*\((?:referring to|follow-up to|rephrasing request)[^)]*\)\s*$/, '');
+  // trailing locatives: "in the dossier", "written in this resume", "from the file"
+  let prev;
+  do {
+    prev = q;
+    q = q.replace(/\s+(?:written|stated|listed|recorded|documented|mentioned)?\s*\b(?:in|from|per|inside|within|on)\s+(?:the|this|that|our|its|my|your)\s+[\w-]+\s*$/, '');
+  } while (q !== prev);
+  // trailing predicate: "is explicitly documented", "are configured", "was used"
+  q = q.replace(/\s+(?:is|are|was|were)\s+(?:\w+ly\s+)?(?:documented|used|configured|listed|stated|mentioned|recorded|defined|specified|required|described)\s*$/, '');
+  const terms = salientTermList(q);
+  if (!terms.length) return [];
+  const heads = [terms[terms.length - 1]];
+  // Coordination at the tail: "the RTO and RPO" — both are requested; evidence
+  // for either is evidence for the property.
+  const m = q.match(/([\w-]+)(?:\s*,\s*|\s+and\s+|\s+or\s+)([\w-]+)\s*$/);
+  if (m) {
+    for (const w of [m[1], m[2]]) {
+      const t = w.length > 4 ? stem(w) : w;
+      if (t.length > 2 && !STOPWORDS.has(t) && !heads.includes(t)) heads.push(t);
+    }
+  }
+  return heads;
+}
+
+/** Weak topical overlap — ANY shared salient term. Enough to say the evidence
+ *  is about the right neighbourhood, never enough to report FULL (D6). */
+function evidenceTopicallyRelated(
+  evidence: { content: string },
+  question: string,
+): boolean {
+  const qTerms = salientTerms(question);
+  if (qTerms.size === 0) return true;
+  const eTerms = salientTerms(evidence.content);
+  for (const t of qTerms) if (eTerms.has(t)) return true;
+  return false;
+}
+
 export function evidenceSupportsClaim(
   evidence: { acceptedFor: string[]; content: string; metadata?: Record<string, unknown> },
   claimType: string,
@@ -298,10 +391,15 @@ export function evidenceSupportsClaim(
       && evidence.metadata?.inventoryCategory === INVENTORY_CATEGORY_FOR_CLAIM[claimType]) {
     return true;
   }
-  const qTerms = salientTerms(question);
-  if (qTerms.size === 0) return true;          // nothing to match on — do not block
+  // PROPERTY-SPECIFIC support (deep-test D6, 2026-08-01): the requested head
+  // noun must appear in the evidence, not merely ANY shared word. One generic
+  // shared term ("backend") let a chunk about on-call rotations fully support
+  // a framework question — FULL answerability while the model rightly said
+  // nothing was documented, i.e. a telemetry lie in the confident direction.
+  const heads = propertyHeadTerms(question);
+  if (heads.length === 0) return true;         // nothing to match on — do not block
   const eTerms = salientTerms(evidence.content);
-  for (const t of qTerms) if (eTerms.has(t)) return true;
+  for (const t of heads) if (eTerms.has(t)) return true;
   return false;
 }
 
@@ -389,6 +487,7 @@ export function evaluateAnswerability(
   }
 
   let supported = 0;
+  let weaklySupported = 0;
   for (const [, reqs] of bySubject) {
     // Term-match against the CLEAN clause, not the grouping key — the family
     // suffix is a bucket label, and letting it into salientTerms would hand
@@ -396,9 +495,19 @@ export function evaluateAnswerability(
     const ok = reqs.some((req) => evidence.some(
       (e) => evidenceSupportsClaim(e, req.claimType, req.subject ?? decision.resolvedQuestion),
     ));
-    if (ok) supported++;
+    if (ok) { supported++; continue; }
+    // Topically-related-but-property-missing evidence (deep-test D6): the right
+    // document neighbourhood was retrieved but the requested value is not
+    // provably in it. That is PARTIAL — never FULL (the old single-shared-term
+    // rule), and not NONE either (the evidence may still contain the answer
+    // under different vocabulary; the composer directs an honest answer).
+    const weak = reqs.some((req) => evidence.some(
+      (e) => e.acceptedFor.includes(req.claimType)
+        && evidenceTopicallyRelated(e, req.subject ?? decision.resolvedQuestion),
+    ));
+    if (weak) weaklySupported++;
   }
-  if (supported === 0) return 'NONE';
+  if (supported === 0 && weaklySupported === 0) return 'NONE';
   if (supported < bySubject.size) return 'PARTIAL';
 
   // Conflict detection (§16.1).
@@ -457,12 +566,30 @@ export async function orchestrate(
   // resolveReference is deliberately conservative: no state or no pronoun →
   // question passes through untouched, and nothing below this line changes.
   let effectiveReq = req;
+  let referentWasResolved = false;
+  // Observability snapshot of the resolver's decision + the state it saw
+  // (context-debug logging). Captured BEFORE this turn advances the state.
+  let referentResolution: AnswerTrace['referentResolution'];
+  // The PRE-resolution question. decision.rawQuestion is derived from
+  // effectiveReq, which the rewrite below may have already changed — logging
+  // that as "original" hid every resolver decision from the telemetry.
+  const originalQuestion = (req.manualQuestion ?? req.transcriptQuestion ?? '').trim();
   try {
-    const { resolveAgainstSession } = require('../question/conversation-state-store');
-    const rawQ = (req.manualQuestion ?? req.transcriptQuestion ?? '').trim();
+    const { resolveAgainstSession, getConversationState } = require('../question/conversation-state-store');
+    const rawQ = originalQuestion;
     if (rawQ) {
+      const priorState = getConversationState(req.sessionId);
       const ref = resolveAgainstSession(req.sessionId, rawQ);
+      referentResolution = {
+        applied: Boolean(ref.usedState && ref.resolved !== rawQ),
+        ...(ref.referent ? { referent: ref.referent } : {}),
+        ...(ref.reason ? { reason: ref.reason } : {}),
+        ...(priorState?.activePerson ? { activePerson: priorState.activePerson } : {}),
+        ...(priorState?.activeTopic ? { activeTopic: priorState.activeTopic } : {}),
+        ...(priorState?.previousQuestion ? { previousQuestion: priorState.previousQuestion } : {}),
+      };
       if (ref.usedState && ref.resolved !== rawQ) {
+        referentWasResolved = true;
         effectiveReq = req.manualQuestion
           ? { ...req, manualQuestion: ref.resolved, isFollowUp: true }
           : { ...req, transcriptQuestion: ref.resolved, isFollowUp: true };
@@ -510,7 +637,13 @@ export async function orchestrate(
 
   // An unresolved referent is a CLARIFICATION case, not a knowledge gap:
   // "Why?" with no antecedent cannot be answered from general knowledge either.
-  const referentUnresolved = decision.isFollowUp && isBareFollowUp(decision.resolvedQuestion);
+  // `!referentWasResolved` added 2026-08-01 (Defect D): resolution appends only
+  // three tokens ("(referring to: X)"), so a two-word follow-up stays under the
+  // bare-follow-up word cap even after a SUCCESSFUL resolution — the cap's
+  // "self-disables once resolution is wired" note was false for exactly the
+  // short follow-ups the cap exists for. Success is now tracked explicitly.
+  const referentUnresolved = decision.isFollowUp && !referentWasResolved
+    && isBareFollowUp(decision.resolvedQuestion);
 
   const fallbackUsed =
     answerability === 'FULL' ? 'NONE'
@@ -525,7 +658,7 @@ export async function orchestrate(
     requestSequence: decision.requestSequence,
     scope: decision.scope,
     surface: req.surface,
-    originalQuestion: decision.rawQuestion,
+    originalQuestion: originalQuestion || decision.rawQuestion,
     resolvedQuestion: decision.resolvedQuestion,
     resolutionConfidence: req.manualQuestion ? 1 : 0.7,
     modeId: decision.modeId,
@@ -549,7 +682,11 @@ export async function orchestrate(
     answerability,
     claimPlan: decision.claimRequirements.map((c, i) => ({
       claimId: `c${i}`, claimType: c.claimType,
-      support: evidence.some((e) => e.acceptedFor.includes(c.claimType)) ? 'DIRECT_EVIDENCE'
+      // Same support definition answerability uses (deep-test D6): the trace
+      // used to carry a SECOND, authority-only notion here, so one object could
+      // say DIRECT_EVIDENCE and NONE about the same claim.
+      support: evidence.some((e) => evidenceSupportsClaim(e, c.claimType, c.subject ?? decision.resolvedQuestion))
+        ? 'DIRECT_EVIDENCE'
         : c.authority === 'PRIVATE_SOURCE_REQUIRED' ? 'UNSUPPORTED' : 'GENERAL_KNOWLEDGE',
       evidenceIds: evidence.filter((e) => e.acceptedFor.includes(c.claimType)).map((e) => e.evidenceId),
       disclosure: 'NONE', action: 'INCLUDE',
@@ -565,6 +702,7 @@ export async function orchestrate(
     status: 'COMPLETED',
     errorCodes: [],
     engine: 'v3',
+    ...(referentResolution ? { referentResolution } : {}),
   };
 
   // Phase 10 §4: count the decision-layer signals. Derived from the trace
@@ -589,7 +727,11 @@ export async function orchestrate(
     advanceConversationState({
       sessionId: req.sessionId,
       scope: decision.scope,
-      question: decision.resolvedQuestion,
+      // The ORIGINAL question, never the referent-rewritten one (deep-test D9):
+      // advancing with "… (referring to: X)" re-ingested X as an entity every
+      // turn, so one wrong referent outranked every fresh entity and the drift
+      // was self-reinforcing.
+      question: originalQuestion || decision.resolvedQuestion,
       evidenceIds: evidence.map((e) => e.evidenceId),
       sourceIds: [...new Set(evidence.map((e) => e.sourceId))],
     });

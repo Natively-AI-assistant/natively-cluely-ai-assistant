@@ -2424,6 +2424,7 @@ export class IntelligenceEngine extends EventEmitter {
                         attachedSourceCount: _ctx.attachedSourceCount,
                         profileSourceCount: _ctx.profileSourceCount,
                         resolvedProfileSources: _ctx.resolvedProfileSources,
+                        extraAllowedSourceTypes: _ctx.extraAllowedSourceTypes as never[],
                         scope: { meetingId: _ctx.meetingId ?? meetingMarker ?? undefined },
                         requestId: trace.requestId,
                         requestSequence: generationId,
@@ -4072,22 +4073,28 @@ export class IntelligenceEngine extends EventEmitter {
         attachedSourceCount: number;
         profileSourceCount: number;
         resolvedProfileSources: Array<{ role: string; id: string }>;
+        extraAllowedSourceTypes: string[];
         port: unknown; conversationWindow: (sec: number) => string;
     } | null {
         try {
-            const { createModeRetrievalPort } = require('./context-intelligence/retrieval/mode-retrieval-port');
+            const { createModeRetrievalPort, attachmentSourceTypeExtensions } = require('./context-intelligence/retrieval/mode-retrieval-port');
             const { resolveModePolicy, isModeId } = require('./context-intelligence/policies/mode-policy-registry');
             const { ModesManager } = require('./services/ModesManager');
             const _mm = ModesManager.getInstance();
             const _mi = _mm.getActiveModeInfo?.() ?? null;
             const _files = _mi?.id ? (_mm.getReferenceFiles?.(_mi.id) ?? []) : [];
             const raw = (_mi as any)?.templateType ?? 'general';
-            const policy = resolveModePolicy(isModeId(raw) ? raw : 'general');
+            const _modeId = isModeId(raw) ? raw : 'general';
+            const policy = resolveModePolicy(_modeId);
+            // Deep-test D10: custom/general modes gain the source types their own
+            // attachments evidence (candidate résumé → CANDIDATE_FILE, JD →
+            // JOB_DESCRIPTION). Same list feeds the bridge so plan and port agree.
+            const extraSourceTypes = attachmentSourceTypeExtensions(_modeId, _files);
             const modePort = createModeRetrievalPort({
                 modesManager: _mm, modeInfo: _mi, files: _files,
                 // Types each file by shape against what this mode authorizes —
                 // a résumé is RESUME here and CANDIDATE_FILE in recruiting.
-                allowedSourceTypes: policy.allowedSourceTypes,
+                allowedSourceTypes: [...policy.allowedSourceTypes, ...extraSourceTypes],
                 tokenBudget: policy.contextBudget.evidenceTokens, userId: 'local',
             });
 
@@ -4153,6 +4160,7 @@ export class IntelligenceEngine extends EventEmitter {
                 attachedSourceCount: _files.length,
                 profileSourceCount,
                 resolvedProfileSources,
+                extraAllowedSourceTypes: extraSourceTypes,
                 port,
                 // Bounded live-transcript window for the composer's labelled
                 // "Conversation so far" section. This is NOT the §32.16 raw-blob
@@ -4213,6 +4221,7 @@ export class IntelligenceEngine extends EventEmitter {
                 attachedSourceCount: ctx.attachedSourceCount,
                 profileSourceCount: ctx.profileSourceCount,
                 resolvedProfileSources: ctx.resolvedProfileSources,
+                extraAllowedSourceTypes: ctx.extraAllowedSourceTypes as never[],
                 requestSequence: this.currentGenerationId,
                 scope: { meetingId: ctx.meetingId ?? undefined },
                 conversationSummary: ctx.conversationWindow(60),

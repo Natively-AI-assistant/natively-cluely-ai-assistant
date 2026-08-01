@@ -70,6 +70,12 @@ function renderEvidence(e: EvidenceItem): string {
     `version_id="${esc(e.versionId)}"`,
     `scope_id="${esc(e.scopeId)}"`,
     e.section ? `section="${esc(e.section)}"` : '',
+    // Provenance (deep-test D8): the human-readable source name and the file's
+    // own declared status. Without these the model saw two conflicting values
+    // with no way to explain WHY one wins, and invented a rationale.
+    e.documentTitle ? `source_name="${esc(e.documentTitle)}"` : '',
+    typeof (e.metadata as Record<string, unknown> | undefined)?.documentStatus === 'string'
+      ? `status="${esc(String((e.metadata as Record<string, unknown>).documentStatus))}"` : '',
     `authority="${e.authorityFor.join(',')}"`,
     `direct_fact="${e.isDirectFact}"`,
     // Surfaces the port's complete-record declaration so the composer's

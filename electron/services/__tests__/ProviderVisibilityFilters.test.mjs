@@ -129,13 +129,22 @@ test('the renderer picker and main-process routing agree on family names', () =>
 });
 
 test('every provider with a UI toggle is a family the main process can classify', () => {
-    const toggled = new Set(
-        [...read(SETTINGS).matchAll(/handleToggleProvider\('([a-z-]+)'/g)].map((m) => m[1]),
-    );
+    const settings = read(SETTINGS);
+    // The five cloud providers are rendered from a table now, so their toggles call
+    // handleToggleProvider(id, ...) with a VARIABLE — the literals only remain for the
+    // bespoke cards. Read both sources, or this silently stops covering the cloud five.
+    const fromLiterals = [...settings.matchAll(/handleToggleProvider\('([a-z-]+)'/g)].map(m => m[1]);
+    const tableMatch = settings.match(/export const CLOUD_PROVIDERS = \[([\s\S]*?)\n\];/);
+    assert.ok(tableMatch, 'CLOUD_PROVIDERS table should exist — the cloud cards render from it');
+    const fromTable = [...tableMatch[1].matchAll(/id:\s*'([a-z-]+)'/g)].map(m => m[1]);
+
+    const toggled = new Set([...fromLiterals, ...fromTable]);
     const ipcAll = new Set(
         [...read(IPC).matchAll(/return '([a-z-]+)';/g)].map((m) => m[1]),
     );
-    assert.ok(toggled.size >= 5, 'expected toggles for at least the five cloud providers');
+
+    assert.ok(fromTable.length === 5, `expected 5 cloud providers in the table, got ${fromTable.length}`);
+    assert.ok(toggled.size >= 9, `expected at least 9 toggleable families, got ${toggled.size}`);
     for (const family of toggled) {
         assert.ok(
             ipcAll.has(family),
@@ -204,4 +213,20 @@ test('no native confirm() survives in the AI Providers settings surface', () => 
         });
         assert.equal(calls.length, 0, `${file} must not call native confirm() (found ${calls.length})`);
     }
+});
+
+test('AIP_CSS contains no stray backticks', () => {
+    // AIP_CSS is a template literal, so a backtick anywhere inside it — including in a
+    // comment quoting a class name — terminates the string and produces a cascade of
+    // misleading syntax errors far from the real cause. This has happened twice.
+    const src = read(SETTINGS);
+    const start = src.indexOf('const AIP_CSS = `');
+    assert.ok(start >= 0, 'AIP_CSS should exist');
+    const body = src.slice(start + 'const AIP_CSS = `'.length);
+    const end = body.indexOf('`;');
+    assert.ok(end > 0, 'AIP_CSS should be terminated');
+    assert.equal(
+        body.slice(0, end).includes('`'), false,
+        'A backtick inside AIP_CSS terminates the template literal. Quote class names with "double quotes" in CSS comments.',
+    );
 });

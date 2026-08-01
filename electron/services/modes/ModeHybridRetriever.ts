@@ -407,11 +407,36 @@ export class ModeHybridRetriever {
         const chunks = this.chunkText(content);
         if (chunks.length === 0) return;
 
+        // Context-debug ingest event (observability only, 2026-08-01): reports
+        // what THIS pipeline computed — chunk/embed counts, page counts from
+        // the extractor, terminal index state. Level 'off' costs one call.
+        const ingestT0 = Date.now();
+        const emitIngestDebug = (indexState: string, embeddedCount: number, errorMessage?: string): void => {
+            try {
+                const { emitModeFileIngestDebug } = require('../../context-intelligence/debug/ingest-debug');
+                emitModeFileIngestDebug({
+                    fileId: file.id,
+                    fileName: file.fileName,
+                    modeId: (file as { modeId?: string }).modeId,
+                    characters: content.length,
+                    expectedPages: (file as { pageCount?: number }).pageCount,
+                    parsedPages: (file as { extractedPageCount?: number }).extractedPageCount,
+                    chunkCount: chunks.length,
+                    embeddedChunkCount: embeddedCount,
+                    embeddingSpace: activeSpace,
+                    indexState,
+                    totalMs: Date.now() - ingestT0,
+                    errorMessage,
+                });
+            } catch { /* debug logging must never affect indexing */ }
+        };
+
         if (!this.isEmbeddingAvailable() || !activeSpace) {
             // No embedder: persist chunk TEXT (lexical retrieval still wins a
             // re-chunk per query) and mark lexical_only so prewarm retries later.
             this.persistChunks(file.id, chunks, null, null);
             this.updateIndexState(file.id, contentHash, chunks.length, 'lexical_only', null);
+            emitIngestDebug('lexical_only', 0);
             return;
         }
 
@@ -435,6 +460,7 @@ export class ModeHybridRetriever {
                 }
                 this.persistChunks(file.id, chunks, embeddings, result.space);
                 this.updateIndexState(file.id, contentHash, chunks.length, 'ready', result.space);
+                emitIngestDebug('ready', chunks.length);
             } else {
                 // FAULT-TOLERANT batched indexing: a mid-file sub-batch failure (429
                 // rotation exhausted, timeout) must NOT discard the chunks already
@@ -466,9 +492,11 @@ export class ModeHybridRetriever {
                     // Nothing embedded — lexical only, mark failed so a later prewarm retries.
                     this.persistChunks(file.id, chunks, null, null);
                     this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null);
+                    emitIngestDebug('failed', 0, `embedding failed at offset ${failedOffset}`);
                 } else if (embeddedCount === chunks.length) {
                     this.persistChunks(file.id, chunks, embeddedVectors, embeddingSpace);
                     this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace);
+                    emitIngestDebug('ready', embeddedCount);
                 } else {
                     // Partial: persist the embedded prefix WITH vectors, and the tail as
                     // lexical-only text. persistChunks reads embeddings[i] per row and
@@ -480,6 +508,7 @@ export class ModeHybridRetriever {
                     // A follow-up prewarm/retry can complete the tail when quota frees up.
                     this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace);
                     console.log(`[ModeHybridRetriever] ${file.fileName}: partial index READY (${embeddedCount}/${chunks.length} vectors, tail lexical; failed@${failedOffset})`);
+                    emitIngestDebug('ready', embeddedCount, `embedding stopped at offset ${failedOffset}; tail lexical-only`);
                 }
             }
         } catch (e) {
@@ -487,6 +516,7 @@ export class ModeHybridRetriever {
             // Keep the chunk text for lexical retrieval; mark failed for retry.
             this.persistChunks(file.id, chunks, null, null);
             this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null);
+            emitIngestDebug('failed', 0, e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -1160,6 +1190,52 @@ export class ModeHybridRetriever {
             candidates = this.applyAnswerabilityScores(candidates, queryText, queryShape, uniqueSectionTargets);
             markH4HybridStage('answerability_exit', { candidateCount: candidates.length });
 
+            // Positional restore (deep-test D4, 2026-08-01): "What is the
+            // last-page canary?" names a POSITION, not content. When the target
+            // line is a bare identifier the answer chunk shares no vocabulary
+            // with the question (measured: all 14 chunks of the system-design
+            // PDF tied on the stopword "the"), so ranking is noise and the tail
+            // chunk loses. A first/last locator in the query is a deterministic
+            // navigation signal — restore and boost the corresponding chunk per
+            // file, exactly as the section-target and ToC restores above do for
+            // their signals. Generic: no content or identifier text referenced.
+            {
+                const wantsTail = /\b(last|final|end(?:ing)?|closing)[-\s]?(page|pages|section|chunk|part|paragraph|appendix)\b|\bend of (the )?(document|file|pdf|doc)\b/i.test(queryText);
+                const wantsHead = /\b(first|opening|beginning|start(?:ing)?)[-\s]?(page|pages|section|chunk|part|paragraph)\b|\b(start|beginning) of (the )?(document|file|pdf|doc)\b/i.test(queryText);
+                if (wantsTail || wantsHead) {
+                    const range = new Map<string, { min: number; max: number }>();
+                    for (const c of allCandidates) {
+                        const idx = c.chunkIndex ?? 0;
+                        const cur = range.get(c.sourceId) ?? { min: Infinity, max: -Infinity };
+                        if (idx < cur.min) cur.min = idx;
+                        if (idx > cur.max) cur.max = idx;
+                        range.set(c.sourceId, cur);
+                    }
+                    const isPositional = (c: { sourceId: string; chunkIndex?: number }): boolean => {
+                        const r = range.get(c.sourceId);
+                        if (!r) return false;
+                        const idx = c.chunkIndex ?? 0;
+                        return (wantsTail && idx === r.max) || (wantsHead && idx === r.min);
+                    };
+                    const admitted = new Set(candidates.map((c) => `${c.sourceId}:${c.chunkIndex}`));
+                    for (const c of allCandidates) {
+                        if (!isPositional(c)) continue;
+                        const key = `${c.sourceId}:${c.chunkIndex}`;
+                        if (!admitted.has(key)) {
+                            candidates.push({ ...c });
+                            admitted.add(key);
+                        }
+                    }
+                    candidates = candidates.map((c) => (isPositional(c)
+                        ? {
+                            ...c,
+                            answerabilityScore: (c.answerabilityScore ?? 0) + 0.6,
+                            answerabilityBoosts: [...(c.answerabilityBoosts ?? []), 'positional_locator_match'],
+                        }
+                        : c));
+                }
+            }
+
             // A Table of Contents is navigation evidence, not topical evidence.
             // It is excluded from routine section ranking above, then explicitly
             // promoted only when the question directly identifies an entry or a
@@ -1606,16 +1682,34 @@ export class ModeHybridRetriever {
 
         // Compute combined scores from persisted or ephemeral vectors.
         const scored: ChunkCandidate[] = [];
+        // Chunks whose vector is UNAVAILABLE this turn (cross-space skip, batch
+        // embed failure) — their score is lexical-only and must be judged on
+        // the lexical scale (F23), not against the combined floor.
+        const vectorless = new Set<string>();
         for (const candidate of candidates) {
             const key = `${candidate.sourceId}:${candidate.chunkIndex}`;
             const ftsScore = this.computeFtsScore(candidate.text, queryWords);
             const vec = persisted.get(key) ?? ephemeral.get(key);
+            if (!vec) vectorless.add(key);
             const vectorScore = vec ? this.computeVectorScore(queryEmbedding, vec) : 0;
             scored.push({ ...candidate, ftsScore, vectorScore });
         }
 
         // Filter by minimum combined score (adaptive — see retrieve()).
+        //
+        // Defect F-C (2026-08-01): F23's lexical-scale correction was applied
+        // only to the EXPLICIT lexical branches. A chunk degraded to
+        // lexical-only INSIDE the hybrid path (mid-query embedding-space flip,
+        // batch-embed failure) still had combined = FTS_WEIGHT * fts compared
+        // against the combined-scale floor — the lexical arm had to do 100% of
+        // the work while contributing at most FTS_WEIGHT of the scale. F23's
+        // own measured example (fts 0.109, floor 0.15) returned ZERO chunks on
+        // the transition turn after an embedding-provider promotion, which is
+        // exactly a mid-session "the résumé disappeared" symptom.
         return scored.filter(c => {
+            if (vectorless.has(`${c.sourceId}:${c.chunkIndex}`)) {
+                return c.ftsScore >= toLexicalThreshold(minScore);
+            }
             const combined = this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT);
             return combined >= minScore;
         });
@@ -1830,12 +1924,24 @@ export class ModeHybridRetriever {
         // without blowing topK. Cheap: at most (#files * PER_FILE_FLOOR) reserved slots.
         const PER_FILE_FLOOR = Number(process.env.NATIVELY_RETRIEVAL_PER_FILE_FLOOR) || 2;
         if (guaranteePerFile) {
-            const perFileCount = new Map<string, number>();
+            // ROUND-ROBIN, not global order (deep-test D3, 2026-08-01): walking
+            // `sorted` globally let a large file's chunks consume the token
+            // budget before a small file's turn ever came — tryAdd rejects on
+            // budget, so the "guarantee" silently guaranteed nothing for
+            // whichever files ranked late. One chunk per file per round means
+            // every file gets its first pick before any file gets its second.
+            const byFile = new Map<string, ChunkCandidate[]>();
             for (const c of sorted) {
-                if (selected.length >= topK) break;
-                const n = perFileCount.get(c.sourceId) || 0;
-                if (n >= PER_FILE_FLOOR) continue;
-                if (tryAdd(c)) perFileCount.set(c.sourceId, n + 1);
+                const list = byFile.get(c.sourceId);
+                if (list) list.push(c);
+                else byFile.set(c.sourceId, [c]);
+            }
+            for (let round = 0; round < PER_FILE_FLOOR; round++) {
+                for (const list of byFile.values()) {
+                    if (selected.length >= topK) break;
+                    const c = list[round];
+                    if (c) tryAdd(c);
+                }
             }
         }
 

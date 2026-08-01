@@ -18,7 +18,14 @@ import { orchestrate, type AnswerRequest, type RetrievalPort } from './orchestra
 import { composePrompt } from '../generation/prompt-composer';
 import { resolveModePolicy, isModeId, type ModeId } from '../policies/mode-policy-registry';
 import { recordLegacyTurn } from '../observability/legacy-trace';
+import {
+  readProviderScopePolicy,
+  filterEvidenceByProviderScopes,
+  dataScopesForEvidence,
+  isScopeDenied,
+} from '../policies/provider-scope-policy';
 import type { AnswerSurface, EvidenceScope } from '../contracts/types';
+import type { ProviderDataScope } from '../../llm/ProviderRouter';
 
 export interface BridgeInput {
   surface: AnswerSurface;
@@ -51,6 +58,25 @@ export interface BridgeInput {
   requestSequence?: number;
   isFollowUp?: boolean;
   hasScreenContext?: boolean;
+  /**
+   * Attachment-derived source types for custom/general modes (deep-test D10) —
+   * computed at the call site that holds the files, via
+   * attachmentSourceTypeExtensions. Additive only.
+   */
+  extraAllowedSourceTypes?: import('../contracts/types').SourceType[];
+  /**
+   * Context-debug (2026-08-01): identity of the sources this turn COULD read
+   * — id/role/name/status only, built at the call site that holds the files.
+   * Never content.
+   */
+  debugSources?: import('../debug/debug-types').ContextDebugSource[];
+  /**
+   * TRUE when the calling transport will record generation timing + the final
+   * answer and call the collector's complete() itself (manual-chat). Surfaces
+   * that cannot correlate the final answer leave this unset and the bridge
+   * finalizes a decision-only record immediately.
+   */
+  deferDebugCompletion?: boolean;
   /** Tone/length only — cannot widen authorization (§19.2). */
   realtimeInstruction?: string;
   conversationSummary?: string;
@@ -67,6 +93,23 @@ export interface BridgeResult {
    *  should NOT quietly answer from model knowledge. */
   unsupportedInMode: boolean;
   modeId: ModeId;
+  /**
+   * The provider data scopes this prompt ACTUALLY carries, derived from the
+   * source types of the evidence that survived filtering AND packing.
+   *
+   * The transport must be TOLD what it is sending. Before this existed, the V3
+   * call site passed `[]` and LLMHelper regex-sniffed the payload for legacy
+   * tag names that a V3 prompt never contains — so it inferred nothing and
+   * enforced nothing. Pass this straight into streamChat's `extraDataScopes`.
+   */
+  packedDataScopes: ProviderDataScope[];
+  /** Scopes whose evidence a privacy setting withheld from this turn. Empty on
+   *  a normal turn. Present so callers can log/surface the withholding. */
+  withheldDataScopes: ProviderDataScope[];
+  /** Set when a context-debug collector is open for this turn (deferred
+   *  completion) — the transport looks it up by this id to record the final
+   *  answer and timings. */
+  debugRequestId?: string;
 }
 
 /**
@@ -104,6 +147,10 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       userAnswerPolicy,
       isFollowUp: input.isFollowUp,
       hasScreenContext: input.hasScreenContext,
+      // Definite value lookups ground only where documents exist (deep-test D2).
+      hasAttachedDocuments: (input.attachedSourceCount ?? 0) > 0
+        || (input.profileSourceCount ?? 0) > 0,
+      extraAllowedSourceTypes: input.extraAllowedSourceTypes,
     };
 
     // Prior-turn continuity: callers that have a live transcript window pass
@@ -124,15 +171,53 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     }
 
     const result = await orchestrate(req, input.retrieval);
+
+    // ── Outbound provider-data-scope filter ─────────────────────────────────
+    // Settings > AI Providers > Privacy. Applied HERE — after retrieval, before
+    // packing — because the composer writes its instructions against the
+    // evidence it is handed. Filtering downstream of the composer would leave a
+    // prompt whose checked-absence and no-evidence contracts describe material
+    // the model can no longer see, which is a fabrication engine.
+    //
+    // The policy is read LIVE every turn: never cached here or anywhere, since
+    // esbuild inlines this module into every entry bundle and a cached copy
+    // would go stale outside the bundle that wrote it.
+    const scopePolicy = readProviderScopePolicy();
+    const scopeFilter = filterEvidenceByProviderScopes(result.evidence, scopePolicy);
+    const withheldScopes = new Set<ProviderDataScope>(scopeFilter.withheldScopes);
+
+    // Conversation continuity is CONVERSATION_STATE data, which maps to the
+    // transcript scope. It reaches the prompt as prose rather than as an
+    // EvidenceItem, so the evidence filter above cannot see it — drop it here
+    // or the scope leaks through the one door the filter does not cover.
+    if (convoSummary && isScopeDenied('transcript', scopePolicy)) {
+      convoSummary = undefined;
+      withheldScopes.add('transcript');
+    }
+
     const composed = composePrompt({
       decision: result.decision,
       policy,
-      evidence: result.evidence,
+      evidence: scopeFilter.evidence,
+      withheldScopes: [...withheldScopes],
       realtimeInstruction: input.realtimeInstruction,
       conversationSummary: convoSummary,
       attachedSourceCount: input.attachedSourceCount,
       profileSourceCount: input.profileSourceCount,
+      // Defect D (2026-08-01): the CLARIFICATION verdict was computed and then
+      // dropped here — the composer is the only place it can act.
+      fallbackUsed: result.trace.fallbackUsed,
     });
+
+    // What this prompt actually carries: the scopes of the evidence that
+    // survived BOTH the privacy filter and the packing budget, plus the
+    // transcript scope when a conversation summary rides along. This is the
+    // truth handed to the transport instead of it guessing from the bytes.
+    const includedIds = new Set(composed.packed.includedEvidenceIds);
+    const packedDataScopes = new Set<ProviderDataScope>(
+      dataScopesForEvidence(scopeFilter.evidence.filter((e) => includedIds.has(e.evidenceId))),
+    );
+    if (convoSummary) packedDataScopes.add('transcript');
 
     // ── Per-turn source line ────────────────────────────────────────────────
     // The one thing production could not answer about itself. A cross-mode
@@ -164,15 +249,109 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
         profileJobDescriptionSources: (input.resolvedProfileSources ?? []).filter((s) => s.role === 'profile_job_description').length,
         profileFactSources: (input.resolvedProfileSources ?? []).filter((s) => s.role === 'profile_fact').length,
         resolvedSources: input.resolvedProfileSources ?? [],
+        // Defect D/F telemetry (2026-08-01): the resolver's decision and the
+        // retrieval funnel were both invisible — a stale referent rewrite and a
+        // "0 raw candidates" vs "all candidates filtered" distinction each had
+        // to be reconstructed from answer prose.
+        originalQuestion: result.trace.originalQuestion,
+        resolvedQuestion: result.trace.resolvedQuestion,
+        intent: result.trace.questionTypes,
+        knowledgePolicy: policy.groundingPolicy,
         path: result.decision.retrievalPlan.path,
         planned: result.decision.retrievalPlan.sourceTypes,
         evidence: acc.length,
         sources: srcIds,
         retrievedSources,
+        retrieval: (result.trace.retrievalAttempts ?? []).map((a) => ({
+          candidates: a.candidateCount,
+          admitted: a.admittedAfterScopeFilter,
+          rejected: a.rejectedByScopeFilter,
+          ...(a.failed ? { failed: true } : {}),
+        })),
         answerability: result.trace.answerability,
         fallback: result.trace.fallbackUsed,
+        // Privacy withholding (2026-08-01). Identity/counts only. A turn that
+        // answered thinly because the user switched a data scope off was
+        // previously indistinguishable in the logs from a retrieval miss.
+        privacyWithheldCount: scopeFilter.withheldCount,
+        privacyWithheldScopes: [...withheldScopes],
+        outboundScopes: [...packedDataScopes],
+        // Deep-test D5/D6 (2026-08-01): the two signals that turn a masked
+        // failure into a diagnosable one — was this a document-specific
+        // question, and did any claim get property-level (not merely topical)
+        // support.
+        documentSpecific: result.decision.claimRequirements
+          .some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED'),
+        propertyMatched: (result.trace.claimPlan ?? [])
+          .some((c) => c.support === 'DIRECT_EVIDENCE'),
       }));
     } catch { /* observability must never break an answer */ }
+
+    // ── Context Intelligence debug collector (2026-08-01) ───────────────────
+    // Observes the SAME objects the [V3] line reads — the production trace and
+    // frozen decision — never recomputing any of it. Level 'off' costs one
+    // function call. Any failure here degrades to "no debug record".
+    let debugRequestId: string | undefined;
+    try {
+      const { getContextDebugLevel, getContentInclusionEnabled } = require('../debug/debug-config');
+      const level = getContextDebugLevel();
+      if (level !== 'off') {
+        const { beginTurnCollector } = require('../debug/turn-collector');
+        const collector = beginTurnCollector({
+          sessionId: req.sessionId,
+          ...(req.scope.meetingId ? { meetingId: req.scope.meetingId } : {}),
+          turnId: `turn_${req.requestId}`,
+          requestId: req.requestId,
+          conversationGeneration: req.requestSequence,
+          modeId,
+          ...(input.modeUniqueId ? { modeUniqueId: input.modeUniqueId } : {}),
+          surface: `${input.surface}${input.pathTag ? `:${input.pathTag}` : ''}`,
+        }, { level, includeContent: getContentInclusionEnabled(level) });
+
+        collector.recordDecisionTrace({
+          trace: result.trace,
+          decision: result.decision,
+          modeName: input.modeName,
+          modeType: raw === 'general' && (input.modeName ?? 'General') !== 'General' ? 'custom' : 'default',
+          policyVersion: policy.version,
+          extraAllowedSourceTypes: input.extraAllowedSourceTypes as readonly string[] | undefined,
+          documentSpecific: result.decision.claimRequirements
+            .some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED'),
+          propertyMatched: (result.trace.claimPlan ?? [])
+            .some((c) => c.support === 'DIRECT_EVIDENCE'),
+        });
+        const resolvedProfiles = input.resolvedProfileSources ?? [];
+        collector.recordAvailableSources({
+          modeAttachmentCount: input.attachedSourceCount ?? 0,
+          profileResumeCount: resolvedProfiles.filter((s) => s.role === 'profile_resume').length,
+          profileJobDescriptionCount: resolvedProfiles.filter((s) => s.role === 'profile_job_description').length,
+          profileFactCount: resolvedProfiles.filter((s) => s.role === 'profile_fact').length,
+        });
+        if (input.debugSources?.length) collector.recordAuthorizedSources(input.debugSources);
+        const rr = result.trace.referentResolution;
+        if (rr) {
+          collector.recordConversationState({
+            activePerson: rr.activePerson ?? null,
+            activeTopic: rr.activeTopic ?? null,
+            previousQuestion: rr.previousQuestion ?? null,
+            referentApplied: rr.applied,
+            referentReason: rr.reason ?? null,
+            referent: rr.referent ?? null,
+          });
+        }
+        // The FILTERED set: the debug record must show what the model was
+        // actually sent, and must not persist content the user's privacy
+        // setting withheld from a cloud provider.
+        collector.recordEvidenceItems(scopeFilter.evidence);
+
+        if (input.deferDebugCompletion) {
+          debugRequestId = req.requestId;   // the transport completes it
+        } else {
+          collector.recordAnswer('', false, 'answer_not_correlated_on_this_surface');
+          collector.complete();
+        }
+      }
+    } catch { /* debug logging must never break an answer */ }
 
     try {
       recordLegacyTurn({
@@ -186,12 +365,17 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       user: composed.user,
       answerability: result.answerability,
       fallbackUsed: result.trace.fallbackUsed,
-      evidenceCount: result.evidence.length,
+      // Post-filter: the count callers branch on must describe the evidence the
+      // model was actually given, not the evidence retrieval found.
+      evidenceCount: scopeFilter.evidence.length,
+      packedDataScopes: [...packedDataScopes],
+      withheldDataScopes: [...withheldScopes],
       // GROUNDED with nothing to retrieve means the mode authorizes no source
       // for this question. Distinct from FAST, where none was needed.
       unsupportedInMode: result.decision.retrievalPlan.path !== 'FAST'
         && result.decision.retrievalPlan.shouldRetrieve === false,
       modeId,
+      ...(debugRequestId ? { debugRequestId } : {}),
     };
   } catch (e) {
     // Flag-off returns null EARLY above; reaching here means the V3 path

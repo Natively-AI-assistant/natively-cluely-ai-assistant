@@ -16,6 +16,7 @@
 
 import type { EvidenceScope } from '../contracts/types';
 import { scopeKey } from '../contracts/types';
+import { isBareFollowUp, isResponseRequest } from './turn-classifier';
 
 export interface ConversationTurn {
   role: 'user' | 'interviewer' | 'assistant';
@@ -26,6 +27,15 @@ export interface ConversationTurn {
 export interface ConversationState {
   scopeId: string;
   activeTopic?: string;
+  /**
+   * The PERSON the conversation is about (deep-test D9, 2026-08-01). A single
+   * untyped topic slot bound "she" to whatever capitalised token came last —
+   * "Does she have Kubernetes experience?" made the topic Kubernetes, and the
+   * next "Has she used GCP?" resolved she = Kubernetes. Personal pronouns
+   * resolve ONLY against this slot, and it is deliberately sticky: a tech noun
+   * can take the topic slot without evicting the person.
+   */
+  activePerson?: string;
   activeEntities: string[];
   previousQuestion?: string;
   /** A SUMMARY of the assistant's last answer, usable only to resolve
@@ -51,7 +61,8 @@ const STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'have
 const SENTENCE_STARTERS = new Set(['tell', 'what', 'how', 'why', 'when', 'where', 'who', 'which',
   'can', 'could', 'would', 'should', 'did', 'does', 'do', 'is', 'are', 'was', 'were', 'will',
   'explain', 'describe', 'walk', 'give', 'show', 'let', 'please', 'talk', 'help', 'compare',
-  'summarize', 'summarise', 'list', 'write', 'and', 'but', 'so', 'now', 'okay', 'ok', 'also']);
+  'summarize', 'summarise', 'list', 'write', 'and', 'but', 'so', 'now', 'okay', 'ok', 'also',
+  'has', 'have', 'had']);
 
 /** Capitalised tokens and code-ish identifiers — the things a pronoun usually
  *  refers back to. Deliberately conservative: a wrong entity silently redirects
@@ -74,6 +85,60 @@ export function extractEntities(text: string): string[] {
   for (const m of text.matchAll(/\b([a-z]+[A-Z]\w+|\w+\.\w+|\w+_\w+)\b/g)) add(m[1]);
 
   return out.filter((e) => !STOP.has(e.toLowerCase())).slice(0, MAX_ENTITIES);
+}
+
+/**
+ * Lowercase TOPIC of a question — what capitalisation-gated entity extraction
+ * structurally cannot see (Defect D, 2026-08-01).
+ *
+ * "What does this lecture say about quantum computing?" holds no capitalised
+ * token, so activeTopic stayed empty and the follow-up "Can you explain it
+ * generally instead?" resolved nothing — the turn was answered about an
+ * unrelated retrieved chunk. The topic of a question is usually its
+ * about-complement or the definiendum; both are extractable without guessing.
+ */
+export function extractTopicPhrase(text: string): string | undefined {
+  const q = String(text).trim().replace(/[?!.]+$/, '');
+  const pats = [
+    /\babout ((?:[\w-]+ ){0,4}[\w-]+)$/i,                       // "…about quantum computing"
+    /\bwhat (?:is|are) (?:a |an |the )?((?:[\w-]+ ){0,3}[\w-]+)$/i, // "what is a mutex"
+    /\b(?:explain|define|describe) (?:a |an |the )?((?:[\w-]+ ){0,3}[\w-]+)$/i,
+  ];
+  for (const p of pats) {
+    const m = q.match(p);
+    if (!m) continue;
+    const phrase = m[1]
+      .split(/\s+/)
+      .filter((w) => !STOP.has(w.toLowerCase()) || w.includes('-'))
+      .join(' ')
+      .trim();
+    // A topic must carry substance: pure stop/aux residue resolves the next
+    // pronoun at nothing, which silently redirects retrieval.
+    if (phrase.length >= 3 && !SENTENCE_STARTERS.has(phrase.toLowerCase())) return phrase;
+  }
+  return undefined;
+}
+
+/**
+ * People named in a question — conservative on purpose, like extractEntities.
+ * A person is recognised only by an explicit person-shaped cue: a possessive
+ * ("Leena's strongest signal"), a person title ("candidate Leena", "Dr Raman"),
+ * or a who-question subject ("Who is Leena?"). A bare capitalised token is NOT
+ * enough — that is exactly how Kubernetes became "she".
+ */
+export function extractPersonEntities(text: string): string[] {
+  const s = String(text);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (v: string | undefined) => {
+    const t = (v ?? '').trim();
+    if (!t || seen.has(t) || STOP.has(t.toLowerCase()) || SENTENCE_STARTERS.has(t.toLowerCase())) return;
+    seen.add(t); out.push(t);
+  };
+  for (const m of s.matchAll(/\b([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)['’]s\b/g)) add(m[1]);
+  for (const m of s.matchAll(/\b(?:candidate|mr|mrs|ms|dr|prof(?:essor)?)\.?\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)/gi)) add(m[1]);
+  for (const m of s.matchAll(/\bwho\s+is\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)\b/g)) add(m[1]);
+  return out;
 }
 
 export function emptyState(scope: EvidenceScope): ConversationState {
@@ -109,10 +174,16 @@ export function advance(prev: ConversationState | null, input: AdvanceInput): Co
 
   const fresh = extractEntities(input.question);
   const merged = [...new Set([...fresh, ...base.activeEntities])].slice(0, MAX_ENTITIES);
+  const persons = extractPersonEntities(input.question);
 
   return {
     scopeId: sid,
-    activeTopic: fresh[0] ?? base.activeTopic,
+    // Lowercase topics ("quantum computing", "a mutex") fall back to phrase
+    // extraction — capitalisation-gated entities alone left activeTopic empty
+    // for exactly the questions whose follow-ups need resolving (Defect D).
+    activeTopic: fresh[0] ?? extractTopicPhrase(input.question) ?? base.activeTopic,
+    // Sticky: a turn about a technology must not evict the person (D9).
+    activePerson: persons[0] ?? base.activePerson,
     activeEntities: merged,
     previousQuestion: input.question,
     previousAnswerSummary: input.answerSummary
@@ -125,12 +196,29 @@ export function advance(prev: ConversationState | null, input: AdvanceInput): Co
   };
 }
 
-const PRONOUN_RE = /\b(it|that|this|those|these|they|them|the (?:same|latter|former)|there)\b/i;
+// Split by referent TYPE (deep-test D9, 2026-08-01): a personal pronoun refers
+// to a person and must never resolve to a technology topic; the untyped union
+// is how "she" became Kubernetes.
+const PERSONAL_PRONOUN_RE = /\b(she|he|her|him|his|hers)\b/i;
+const NONPERSON_PRONOUN_RE = /\b(it|that|this|those|these|they|them|the (?:same|latter|former)|there)\b/i;
 
 export interface ResolvedReference {
   resolved: string;
   usedState: boolean;
   referent?: string;
+  /**
+   * WHY this outcome — observability only (context-debug logging), never
+   * consulted by routing. Stable machine-readable identifiers.
+   */
+  reason?:
+    | 'NO_CONVERSATION_STATE'
+    | 'NO_REFERENT_TRIGGER'
+    | 'CURRENT_QUESTION_CONTAINS_EXPLICIT_ENTITY'
+    | 'PRONOUN_RESOLVED_TO_ACTIVE_PERSON'
+    | 'RESOLVED_TO_ACTIVE_TOPIC'
+    | 'REPHRASE_ANCHORED_TO_PREVIOUS_QUESTION'
+    | 'ANCHORED_TO_PREVIOUS_QUESTION'
+    | 'PERSONAL_PRONOUN_NO_KNOWN_PERSON';
 }
 
 /**
@@ -139,15 +227,77 @@ export interface ResolvedReference {
  * Returns the question UNCHANGED when there is nothing to resolve against —
  * guessing a referent silently redirects retrieval at a document the user never
  * mentioned, which is worse than asking.
+ *
+ * REWRITTEN 2026-08-01 (Defect D): detection and resolution previously used
+ * DISJOINT gates — `isBareFollowUp` (turn-classifier) flagged "What should I
+ * say?" and "Why not?" which PRONOUN_RE could not resolve, while "Can you
+ * explain it generally instead?" carried a resolvable pronoun but exceeded the
+ * bare-follow-up word cap and was planned as a fresh question. Every reported
+ * failure fell in a cell where the two gates disagreed. The resolver now
+ * accepts the union of both gates and falls back to the previous QUESTION as
+ * the referent when no topic/entity exists — the previous answer stays a
+ * referent-only summary, never evidence.
  */
 export function resolveReference(question: string, state: ConversationState | null): ResolvedReference {
   const q = question.trim();
-  if (!state || !PRONOUN_RE.test(q)) return { resolved: q, usedState: false };
+  if (!state) return { resolved: q, usedState: false, reason: 'NO_CONVERSATION_STATE' };
 
-  const referent = state.activeTopic ?? state.activeEntities[0];
-  if (!referent) return { resolved: q, usedState: false };
+  const personal = PERSONAL_PRONOUN_RE.test(q);
+  const pronoun = personal || NONPERSON_PRONOUN_RE.test(q);
+  const bare = isBareFollowUp(q);
+  const rephrase = isResponseRequest(q);
+  if (!pronoun && !bare && !rephrase) return { resolved: q, usedState: false, reason: 'NO_REFERENT_TRIGGER' };
 
-  return { resolved: `${q} (referring to: ${referent})`, usedState: true, referent };
+  // SELF-CONTAINED questions get no referent (deep-test D9): "How many
+  // students used CampusMesh?" is five words starting with "how", so the bare
+  // gate fired and glued "(referring to: exact interview process)" onto a
+  // question that already names its own subject. An explicit entity in the
+  // current question always takes precedence over inherited state.
+  if (!pronoun && !rephrase && extractEntities(q).length > 0) {
+    return { resolved: q, usedState: false, reason: 'CURRENT_QUESTION_CONTAINS_EXPLICIT_ENTITY' };
+  }
+
+  // Personal pronouns resolve ONLY to a person; everything else resolves to
+  // the topic. No known person → anchor to the previous QUESTION rather than
+  // guess a topic — a wrong referent silently redirects retrieval.
+  const referent = personal
+    ? state.activePerson
+    : state.activeTopic ?? state.activeEntities[0];
+
+  // "What should I say?" asks how to DELIVER the previous exchange, not a new
+  // fact. Embedding the previous question keeps its salient terms in the
+  // retrieval query, so the same sources ground the rephrasing.
+  if (rephrase && state.previousQuestion) {
+    return {
+      resolved: `${q} (rephrasing request: how to phrase the answer to "${state.previousQuestion}"${referent ? `, topic: ${referent}` : ''})`,
+      usedState: true,
+      referent: referent ?? state.previousQuestion,
+      reason: 'REPHRASE_ANCHORED_TO_PREVIOUS_QUESTION',
+    };
+  }
+
+  if (referent) {
+    return {
+      resolved: `${q} (referring to: ${referent})`, usedState: true, referent,
+      reason: personal ? 'PRONOUN_RESOLVED_TO_ACTIVE_PERSON' : 'RESOLVED_TO_ACTIVE_TOPIC',
+    };
+  }
+
+  // No topic and no entity — a bare follow-up can still anchor to the previous
+  // question itself ("Why not?" after "What is a mutex?").
+  if ((pronoun || bare) && state.previousQuestion) {
+    return {
+      resolved: `${q} (follow-up to: "${state.previousQuestion}")`,
+      usedState: true,
+      referent: state.previousQuestion,
+      reason: 'ANCHORED_TO_PREVIOUS_QUESTION',
+    };
+  }
+
+  return {
+    resolved: q, usedState: false,
+    reason: personal ? 'PERSONAL_PRONOUN_NO_KNOWN_PERSON' : 'NO_REFERENT_TRIGGER',
+  };
 }
 
 /**

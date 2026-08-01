@@ -20,6 +20,25 @@ export interface MeetingTranscriptSegment {
   speaker: string;
   text: string;
   timestamp?: number;
+  /** Provider STT confidence when the segment came from real audio. */
+  confidence?: number;
+  /**
+   * Provenance (Defect B fix, 2026-08-01) — mirrors SessionTracker.TranscriptOrigin:
+   * 'stt' | 'manual_chat' | 'assistant' | 'system_instruction' | 'test'. Kept as a
+   * plain string here so this module stays import-free and tolerant of stored data.
+   */
+  origin?: string;
+}
+
+/** Evidence pointer for an extracted item: which transcript segments support it. */
+export interface ExtractedItemMeta {
+  text: string;
+  /**
+   * Indices into the ORIGINAL segments array passed to extract()/buildMeetingRecord.
+   * Stable for a stored transcript: re-extracting the same stored array yields the
+   * same ids (boot recovery, regenerate).
+   */
+  sourceSegmentIds: number[];
 }
 
 export interface MeetingInsights {
@@ -32,6 +51,37 @@ export interface MeetingInsights {
   entities: string[];
   skillsDiscussed: string[];
   companiesDiscussed: string[];
+  /** Parallel evidence pointers for `decisions` (additive; consumers of the string arrays are unaffected). */
+  decisionsMeta: ExtractedItemMeta[];
+  /** Parallel evidence pointers for `actionItems`. */
+  actionItemsMeta: ExtractedItemMeta[];
+}
+
+/**
+ * DEFECT B (P0, 2026-08-01) — memory eligibility. A transcript segment may feed
+ * meeting-MEMORY extraction (decisions/actionItems/topics/entities/risks/questions/
+ * participants/cleanTranscript) ONLY if it is real spoken audio:
+ *
+ *   1. If the segment carries a provenance `origin`, it must be exactly 'stt'
+ *      (the main.ts STT seam is the only writer of that value). 'manual_chat',
+ *      'assistant', 'system_instruction' and 'test' are never meeting evidence.
+ *   2. LEGACY FALLBACK (stored/old segments written before provenance existed):
+ *      real STT always carries a provider confidence < 1; SessionTracker.
+ *      addAssistantMessage hardcodes confidence 1.0 with speaker 'assistant';
+ *      typed manual-chat questions omit confidence entirely. So an un-tagged
+ *      segment is eligible iff speaker is not assistant-like AND it has a
+ *      numeric confidence < 1. This intentionally errs toward EXCLUDING
+ *      ambiguous segments — a missed real segment costs one memory line; a
+ *      mined assistant answer fabricates meeting history.
+ */
+export function isMemoryEligibleSegment(
+  seg: { speaker?: string; confidence?: number; origin?: string } | null | undefined,
+): boolean {
+  if (!seg || typeof seg !== 'object') return false;
+  if (typeof seg.origin === 'string' && seg.origin.length > 0) return seg.origin === 'stt';
+  const speaker = String(seg.speaker || '').trim().toLowerCase();
+  if (speaker === 'assistant' || speaker === 'ai' || speaker === 'model') return false;
+  return typeof seg.confidence === 'number' && Number.isFinite(seg.confidence) && seg.confidence < 1;
 }
 
 export interface MeetingRecord extends MeetingInsights {
@@ -92,26 +142,55 @@ function cleanLine(text: string): string {
     .trim();
 }
 
+// Dedupe {text, sourceSegmentId} entries by trimmed text (preserving first-seen order,
+// matching the prior dedupe() behavior) while merging the supporting segment ids.
+function dedupeWithSources(entries: Array<{ text: string; id: number }>, max: number): { texts: string[]; meta: ExtractedItemMeta[] } {
+  const byText = new Map<string, number[]>();
+  for (const e of entries) {
+    const t = (e.text || '').trim();
+    if (!t) continue;
+    const ids = byText.get(t);
+    if (ids) { if (!ids.includes(e.id)) ids.push(e.id); }
+    else byText.set(t, [e.id]);
+  }
+  const texts = [...byText.keys()].slice(0, max);
+  return { texts, meta: texts.map((t) => ({ text: t, sourceSegmentIds: byText.get(t)! })) };
+}
+
 /**
  * Deterministic meeting insight extractor. Pure, no LLM, no IO, never throws. Caps
  * everything so a huge transcript can't blow up memory.
+ *
+ * DEFECT B (P0, 2026-08-01): extraction operates ONLY on memory-eligible segments
+ * (see isMemoryEligibleSegment) — manual-chat questions and assistant answers share
+ * the session transcript store but are NOT meeting evidence and can no longer mint
+ * phantom decisions/actionItems/topics/entities.
  */
 export class MeetingInsightExtractor {
   extract(segments: MeetingTranscriptSegment[], max = 20): MeetingInsights {
     const empty: MeetingInsights = {
       topics: [], questionsAsked: [], decisions: [], actionItems: [], risks: [], entities: [], skillsDiscussed: [], companiesDiscussed: [],
+      decisionsMeta: [], actionItemsMeta: [],
     };
     try {
       if (!Array.isArray(segments) || segments.length === 0) return empty;
+      // PROVENANCE FILTER — the id is the index in the ORIGINAL array so evidence
+      // pointers remain stable against the stored transcript.
+      const eligible: Array<{ seg: MeetingTranscriptSegment; id: number }> = [];
+      for (let i = 0; i < segments.length; i++) {
+        if (isMemoryEligibleSegment(segments[i])) eligible.push({ seg: segments[i], id: i });
+      }
+      if (eligible.length === 0) return empty;
+
       const questions: string[] = [];
-      const decisions: string[] = [];
-      const actions: string[] = [];
+      const decisionEntries: Array<{ text: string; id: number }> = [];
+      const actionEntries: Array<{ text: string; id: number }> = [];
       const risks: string[] = [];
       const entities: string[] = [];
       const skills: string[] = [];
       const seenEnt = new Set<string>();
 
-      for (const seg of segments) {
+      for (const { seg, id } of eligible) {
         const raw = (seg?.text || '').trim();
         if (!raw) continue;
         const line = cleanLine(raw);
@@ -123,8 +202,8 @@ export class MeetingInsightExtractor {
         const isRisk = hasAny(line, RISK_PATTERNS);
         if (isRisk) risks.push(line);
         if (hasAny(line, QUESTION_PATTERNS) && line.length > 8) questions.push(line);
-        if (!isRisk && hasAny(line, DECISION_PATTERNS)) decisions.push(line);
-        if (!isRisk && hasAny(line, ACTION_PATTERNS) && line.length > 8) actions.push(line);
+        if (!isRisk && hasAny(line, DECISION_PATTERNS)) decisionEntries.push({ text: line, id });
+        if (!isRisk && hasAny(line, ACTION_PATTERNS) && line.length > 8) actionEntries.push({ text: line, id });
 
         // Skills (generic lexicon).
         let m: RegExpExecArray | null;
@@ -149,15 +228,20 @@ export class MeetingInsightExtractor {
       // companiesDiscussed = entities that look org-like (>=2 words or known suffixes).
       const companies = dedupe(entities.filter((e) => /\b(Inc|LLC|Corp|Technologies|Labs|Systems|AI|Software)\b/i.test(e))).slice(0, max);
 
+      const decisionsDeduped = dedupeWithSources(decisionEntries, max);
+      const actionsDeduped = dedupeWithSources(actionEntries, max);
+
       return {
         topics,
         questionsAsked: dedupe(questions).slice(0, max),
-        decisions: dedupe(decisions).slice(0, max),
-        actionItems: dedupe(actions).slice(0, max),
+        decisions: decisionsDeduped.texts,
+        actionItems: actionsDeduped.texts,
         risks: dedupe(risks).slice(0, max),
         entities: dedupe(entities).slice(0, max),
         skillsDiscussed: dedupe(topSkills).slice(0, max),
         companiesDiscussed: companies,
+        decisionsMeta: decisionsDeduped.meta,
+        actionItemsMeta: actionsDeduped.meta,
       };
     } catch {
       return empty;
@@ -185,14 +269,20 @@ export class MeetingMemoryService {
     const segments = Array.isArray(input.segments) ? input.segments : [];
     const insights = this.extractor.extract(segments);
 
-    const participants = dedupe(segments.map((s) => (s?.speaker || '').trim()).filter(Boolean));
-    const cleanTranscript = segments
+    // DEFECT B (P0, 2026-08-01): the MEMORY view of the meeting — participants,
+    // cleanTranscript, turn count for sourceQuality — is computed ONLY from
+    // memory-eligible (real spoken) segments, so "assistant" can never appear as a
+    // participant and typed-chat text never lands in the memory transcript.
+    const eligibleSegments = segments.filter((s) => isMemoryEligibleSegment(s));
+
+    const participants = dedupe(eligibleSegments.map((s) => (s?.speaker || '').trim()).filter(Boolean));
+    const cleanTranscript = eligibleSegments
       .map((s) => { const t = cleanLine(s?.text || ''); return t ? `${s.speaker || 'speaker'}: ${t}` : ''; })
       .filter(Boolean)
       .join('\n');
 
     // Coarse source quality: more turns + presence of structure → higher.
-    const turns = segments.length;
+    const turns = eligibleSegments.length;
     const structureScore = (insights.questionsAsked.length > 0 ? 0.3 : 0) + (insights.decisions.length > 0 ? 0.2 : 0) + (insights.actionItems.length > 0 ? 0.2 : 0) + (insights.risks.length > 0 ? 0.1 : 0);
     const sourceQuality = Math.max(0, Math.min(1, Math.min(turns / 20, 0.3) + structureScore));
 
@@ -207,4 +297,94 @@ export class MeetingMemoryService {
       ...insights,
     };
   }
+}
+
+// ─── Persistence projection + HARD INVARIANT (Defect B, P0, 2026-08-01) ─────────────
+
+/** The exact object MeetingPersistence writes under summary_json.meetingMemory. */
+export interface PersistedMeetingMemory {
+  topics: string[];
+  questionsAsked: string[];
+  decisions: string[];
+  actionItems: string[];
+  risks: string[];
+  entities: string[];
+  skillsDiscussed: string[];
+  companiesDiscussed: string[];
+  participants: string[];
+  decisionsMeta: ExtractedItemMeta[];
+  actionItemsMeta: ExtractedItemMeta[];
+  sourceQuality: number;
+  schemaVersion: number;
+}
+
+/** Content-free telemetry for the '[MeetingMemoryV2] structured memory persisted' log. */
+export interface MeetingMemoryProvenanceTelemetry {
+  actualTranscriptSegments: number;
+  manualChatMessages: number;
+  assistantMessages: number;
+  memoryEligibleSegments: number;
+  persistedDecisions: number;
+  persistedActionItems: number;
+  zeroEligibleGuardApplied: boolean;
+}
+
+const MEETING_MEMORY_SCHEMA_VERSION = 2;
+
+/**
+ * Builds the meetingMemory blob MeetingPersistence persists, enforcing the HARD
+ * INVARIANT: if the transcript contains ZERO memory-eligible (real spoken) segments,
+ * the persisted structured memory is EMPTY — regardless of what the extractor
+ * returned. This is defense-in-depth ON TOP of the extractor's own provenance
+ * filter, not a replacement for it: a future extractor regression cannot re-open
+ * the phantom-meeting-memory hole as long as this guard stands. Pure + never throws.
+ */
+export function buildPersistedMeetingMemory(
+  transcript: MeetingTranscriptSegment[] | null | undefined,
+  record: MeetingRecord,
+): { meetingMemory: PersistedMeetingMemory; telemetry: MeetingMemoryProvenanceTelemetry } {
+  const segs = Array.isArray(transcript) ? transcript : [];
+  const memoryEligibleSegments = segs.filter((s) => isMemoryEligibleSegment(s)).length;
+  const manualChatMessages = segs.filter((s) => s?.origin === 'manual_chat').length;
+  const assistantMessages = segs.filter(
+    (s) => s?.origin === 'assistant' || (!s?.origin && String(s?.speaker || '').trim().toLowerCase() === 'assistant'),
+  ).length;
+  const zeroEligibleGuardApplied = memoryEligibleSegments === 0;
+
+  const meetingMemory: PersistedMeetingMemory = zeroEligibleGuardApplied
+    ? {
+        topics: [], questionsAsked: [], decisions: [], actionItems: [], risks: [], entities: [],
+        skillsDiscussed: [], companiesDiscussed: [], participants: [],
+        decisionsMeta: [], actionItemsMeta: [],
+        sourceQuality: 0,
+        schemaVersion: MEETING_MEMORY_SCHEMA_VERSION,
+      }
+    : {
+        topics: record.topics,
+        questionsAsked: record.questionsAsked,
+        decisions: record.decisions,
+        actionItems: record.actionItems,
+        risks: record.risks,
+        entities: record.entities,
+        skillsDiscussed: record.skillsDiscussed,
+        companiesDiscussed: record.companiesDiscussed,
+        participants: record.participants,
+        decisionsMeta: record.decisionsMeta || [],
+        actionItemsMeta: record.actionItemsMeta || [],
+        sourceQuality: record.sourceQuality,
+        schemaVersion: MEETING_MEMORY_SCHEMA_VERSION,
+      };
+
+  return {
+    meetingMemory,
+    telemetry: {
+      actualTranscriptSegments: memoryEligibleSegments,
+      manualChatMessages,
+      assistantMessages,
+      memoryEligibleSegments,
+      persistedDecisions: meetingMemory.decisions.length,
+      persistedActionItems: meetingMemory.actionItems.length,
+      zeroEligibleGuardApplied,
+    },
+  };
 }

@@ -11,7 +11,27 @@
 // drift pattern this codebase keeps re-learning.
 
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 import type { ProfileDocLike, ProfileCardLike } from '../../context-intelligence/retrieval/profile-retrieval-port';
+
+/**
+ * Raw text for a profile doc (deep-test D1). Prefer the persisted raw_text
+ * column; for rows ingested before it existed, fall back to re-reading the
+ * original file — plain-text formats only (a PDF on disk is bytes, not text)
+ * and size-capped to the same bound ingestion uses. Best-effort: any failure
+ * returns null and the structured sections still answer.
+ */
+const RAW_FALLBACK_TEXT_EXT = /\.(md|markdown|txt|text|csv|json|ya?ml|rst|org)$/i;
+const RAW_FALLBACK_MAX_CHARS = 200_000;
+function rawTextForDoc(persisted: string | null | undefined, sourceUri: string | undefined): string | null {
+  if (typeof persisted === 'string' && persisted.trim()) return persisted;
+  try {
+    if (!sourceUri || !RAW_FALLBACK_TEXT_EXT.test(sourceUri)) return null;
+    if (!fs.existsSync(sourceUri)) return null;
+    const text = fs.readFileSync(sourceUri, 'utf8');
+    return text.trim() ? text.slice(0, RAW_FALLBACK_MAX_CHARS) : null;
+  } catch { return null; }
+}
 
 /** Same derivation as ProfilePackBuilder.shortId('psrc', `__profile_okf__:${kind}`)
  *  — pure sha1, no timestamp — so the port's sourceIds MATCH the knowledge_sources
@@ -80,6 +100,7 @@ export function collectV3ProfileSources(orchestrator: unknown): CollectedProfile
         fileName: 'Candidate Resume (Profile Intelligence)',
         structured: ctx.activeResume.structured as Record<string, unknown>,
         cards: resumeCards,
+        rawText: rawTextForDoc(ctx.activeResume.rawText, ctx.activeResume.sourceUri),
       });
       resolved.push({ role: 'profile_resume', id });
     }
@@ -92,6 +113,7 @@ export function collectV3ProfileSources(orchestrator: unknown): CollectedProfile
         fileName: 'Target Job Description (Profile Intelligence)',
         structured: ctx.activeJD.structured as Record<string, unknown>,
         cards: jdCards,
+        rawText: rawTextForDoc(ctx.activeJD.rawText, ctx.activeJD.sourceUri),
       });
       resolved.push({ role: 'profile_job_description', id });
     }

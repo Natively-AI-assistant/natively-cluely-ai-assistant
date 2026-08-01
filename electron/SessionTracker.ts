@@ -25,6 +25,17 @@ function isCannedFallbackPhrase(text: string): boolean {
     return CANNED_FALLBACK_PHRASES.includes(normalized);
 }
 
+/**
+ * Provenance of a transcript segment (Defect B fix, 2026-08-01). Real spoken
+ * audio ('stt') is the ONLY origin that is evidence for meeting memory
+ * extraction; typed manual-chat questions, assistant answers, injected system
+ * instructions, and test fixtures share this store but must never be mined as
+ * things that "happened in the meeting". Optional so old stored segments and
+ * un-migrated callers keep working — readers fall back to a documented
+ * heuristic (see isMemoryEligibleSegment in intelligence/MeetingMemoryService).
+ */
+export type TranscriptOrigin = 'stt' | 'manual_chat' | 'assistant' | 'system_instruction' | 'test';
+
 export interface TranscriptSegment {
     marker?: string;
     speaker: string;
@@ -36,6 +47,8 @@ export interface TranscriptSegment {
     timestamp: number;
     final: boolean;
     confidence?: number;
+    /** Where this segment came from. Absent = legacy/unknown writer (see TranscriptOrigin). */
+    origin?: TranscriptOrigin;
 }
 
 export interface SuggestionTrigger {
@@ -394,7 +407,10 @@ export class SessionTracker {
             text: cleanText,
             timestamp: Date.now(),
             final: true,
-            confidence: 1.0
+            confidence: 1.0,
+            // Defect B (2026-08-01): assistant answers are NOT meeting evidence.
+            // Meeting-memory extraction filters on origin === 'stt'.
+            origin: 'assistant'
         });
 
         // Compact transcript with summarization instead of losing early context

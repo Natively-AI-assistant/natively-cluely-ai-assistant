@@ -9,7 +9,8 @@ import { GROQ_TITLE_PROMPT, GROQ_SUMMARY_JSON_PROMPT } from './llm';
 import { buildPostCallEnhancements } from './services/post-call/PostCallWorkflow';
 import { MeetingContextAssembler } from './services/meeting/MeetingContextAssembler';
 import type { MeetingSummaryTelemetryMeta } from './services/meeting/types';
-import { MeetingMemoryService } from './intelligence/MeetingMemoryService';
+import { MeetingMemoryService, buildPersistedMeetingMemory } from './intelligence/MeetingMemoryService';
+import type { MeetingMemoryProvenanceTelemetry } from './intelligence/MeetingMemoryService';
 import { LongTermMemoryService } from './intelligence/memory/LongTermMemoryService';
 import { isIntelligenceFlagEnabled } from './intelligence/intelligenceFlags';
 import { recordAttribution, hindsightModeFor } from './intelligence/IntelligenceAttribution';
@@ -161,7 +162,7 @@ export class MeetingPersistence {
         const _postCallStart = Date.now();
         // ATTRIBUTION (task Phase 3/9): prove the post-meeting memory pipeline ran.
         let _meetingMemoryRecorded = false;
-        let _meetingMemoryCounts: { topics: number; decisions: number; actionItems: number; entities: number } | null = null;
+        let _meetingMemoryCounts: ({ topics: number; decisions: number; actionItems: number; entities: number } & Partial<MeetingMemoryProvenanceTelemetry>) | null = null;
         let _hindsightRetainQueued = false;
         try {
             telemetryService.track({
@@ -529,26 +530,31 @@ Return ONLY valid JSON (no markdown code blocks):
                         startedAt: data.startTime,
                         endedAt: data.startTime + data.durationMs,
                     });
-                    (summaryData as any).meetingMemory = {
-                        topics: record.topics,
-                        questionsAsked: record.questionsAsked,
-                        decisions: record.decisions,
-                        actionItems: record.actionItems,
-                        risks: record.risks,
-                        entities: record.entities,
-                        skillsDiscussed: record.skillsDiscussed,
-                        companiesDiscussed: record.companiesDiscussed,
-                        participants: record.participants,
-                        sourceQuality: record.sourceQuality,
-                        schemaVersion: 2,
-                    };
+                    // DEFECT B (P0, 2026-08-01) HARD INVARIANT: buildPersistedMeetingMemory
+                    // recomputes eligibility over the raw transcript and forces EMPTY
+                    // decisions/actionItems/topics/entities when ZERO memory-eligible
+                    // (origin 'stt' / legacy provider-confidence) segments exist —
+                    // regardless of what the extractor returned. Defense-in-depth on top
+                    // of the extractor's own provenance filter. A zero-audio session of
+                    // manual-chat questions + assistant answers persists NO meeting memory.
+                    const persisted = buildPersistedMeetingMemory(data.transcript, record);
+                    if (persisted.telemetry.zeroEligibleGuardApplied) {
+                        console.warn('[MeetingMemoryV2] zero memory-eligible (spoken/STT) transcript segments — persisting EMPTY structured memory. Manual-chat questions and assistant answers are not meeting evidence (Defect B provenance guard).', {
+                            meetingId,
+                            totalSegments: data.transcript.length,
+                            manualChatMessages: persisted.telemetry.manualChatMessages,
+                            assistantMessages: persisted.telemetry.assistantMessages,
+                        });
+                    }
+                    (summaryData as any).meetingMemory = persisted.meetingMemory;
                     _meetingMemoryRecorded = true;
                     // Content-free attribution: COUNTS only, never the extracted text.
                     _meetingMemoryCounts = {
-                        topics: record.topics.length,
-                        decisions: record.decisions.length,
-                        actionItems: record.actionItems.length,
-                        entities: record.entities.length,
+                        topics: persisted.meetingMemory.topics.length,
+                        decisions: persisted.meetingMemory.decisions.length,
+                        actionItems: persisted.meetingMemory.actionItems.length,
+                        entities: persisted.meetingMemory.entities.length,
+                        ...persisted.telemetry,
                     };
                 }
             } catch (memErr) {

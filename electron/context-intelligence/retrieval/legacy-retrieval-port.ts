@@ -108,6 +108,20 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
         .sort((a, b) => b.finalScore - a.finalScore)
         .slice(0, decision.retrievalPlan.maximumAcceptedEvidence);
 
+      // Post-adapter drops, made observable (context-debug, 2026-08-01). These
+      // three narrowing stages were SILENT — "20 admitted, 0 evidence" was a
+      // reachable and unexplainable telemetry state. Set-difference bookkeeping
+      // over ≤ maximumCandidates items; no behavioural change.
+      const inScopeSet = new Set(inScope);
+      const evidenceSet = new Set(evidence);
+      const rankedSet = new Set(ranked);
+      const postAdapterRejections: Array<{ sourceId: string; reason: string }> = [];
+      for (const e of adapted.evidence) {
+        if (!inScopeSet.has(e)) postAdapterRejections.push({ sourceId: e.sourceId, reason: 'PLANNED_TYPE_FILTER' });
+        else if (!evidenceSet.has(e)) postAdapterRejections.push({ sourceId: e.sourceId, reason: 'CLAIM_AUTHORITY' });
+        else if (!rankedSet.has(e)) postAdapterRejections.push({ sourceId: e.sourceId, reason: 'SCORE_CAP' });
+      }
+
       attempts.push({
         attempt: 1,
         strategy: 'legacy_mode_hybrid',
@@ -117,7 +131,10 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
         rejectedByScopeFilter: adapted.rejected.length,
         // The adapter already knows the reason for every rejection; dropping it
         // here is what made "0 rejected" and "nothing to reject" look identical.
-        rejections: adapted.rejected.map((r) => ({ sourceId: r.sourceId, reason: r.reason })),
+        rejections: [
+          ...adapted.rejected.map((r) => ({ sourceId: r.sourceId, reason: r.reason })),
+          ...postAdapterRejections,
+        ],
         durationMs: now() - t0,
         ...(failed ? { failed } : {}),
       });

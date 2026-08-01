@@ -45,6 +45,10 @@ import {
   customProviderIsLocal,
 } from "./llm/visionCapability"
 import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
+// Outbound-scope vocabulary shared with Context Intelligence V3. ONE mapping of
+// SourceType → privacy toggle: a second copy here is how the two layers would
+// drift into disagreeing about what a `<evidence source_type="RESUME">` block is.
+import { applyEnvScopeDenials, sourceTypesForScopes, dataScopesForEvidenceMarkup, scopeLabels, DENY_PROVIDER_SCOPES_ENV } from "./context-intelligence/policies/provider-scope-policy"
 // D1 (PROFILE_INTELLIGENCE_RESEARCH_AND_REDESIGN.md §15 R1): make the routing
 // decision authoritative at this central execution choke-point.
 import { profileInterceptAllowedByRoute, modeAnswerType, type StreamRouteOptions } from "./llm/streamContextPolicy"
@@ -385,13 +389,24 @@ export class LLMHelper {
   // but 10× the cost.
   private _claudeCacheFirstHitLogged: boolean = false;
 
+  // Read LIVE on every call — never memoised. esbuild inlines this module into
+  // many entry bundles, so a cached policy would go stale in every bundle but
+  // the one that wrote it. SettingsManager is anchored on globalThis, so the
+  // read below is one truth across all of them.
   private getProviderScopePolicy(): ProviderDataScopePolicy | undefined {
+    let stored: ProviderDataScopePolicy | undefined;
     try {
       const { SettingsManager } = require('./services/SettingsManager');
-      return SettingsManager.getInstance().get('providerDataScopes');
+      stored = SettingsManager.getInstance().get('providerDataScopes');
     } catch {
-      return undefined;
+      stored = undefined;
     }
+    // Deny-only env override (NATIVELY_DENY_PROVIDER_SCOPES). It can add a
+    // denial, never grant one, so it cannot be used to weaken the user's
+    // choice — and it is what lets the enforcement path be exercised end to
+    // end without a live settings store. Same helper the V3 layer uses, so the
+    // two layers can never disagree about the effective policy.
+    return applyEnvScopeDenials(stored, process.env[DENY_PROVIDER_SCOPES_ENV]);
   }
 
   private inferContextScopes(context?: string): ProviderDataScope[] {
@@ -400,7 +415,13 @@ export class LLMHelper {
     if (/<reference_file|<active_mode_retrieved_context|mode_retrieval/i.test(context)) scopes.push('reference_files');
     if (/<meeting_history|USER-PROVIDED PERSONA CONTEXT|<user_context|<candidate_|<active_mode_custom_instructions/i.test(context)) scopes.push('profile_history');
     if (/<post_call_summary|meeting summary|silent meeting summarizer|silent meeting note-taker/i.test(context)) scopes.push('post_call_summary');
-    return scopes;
+    // Context Intelligence V3 evidence markup. The patterns above are the
+    // LEGACY tag vocabulary; V3 has been the default answer path since
+    // 2026-07-30 and packs every source as `<evidence source_type="…">`, which
+    // matched none of them — so a V3-composed payload was inferred to carry no
+    // scope at all and no toggle was enforced on the shipped default path.
+    scopes.push(...dataScopesForEvidenceMarkup(context));
+    return [...new Set(scopes)];
   }
 
   private inferEmbeddedMessageScopes(message?: string): ProviderDataScope[] {
@@ -409,7 +430,14 @@ export class LLMHelper {
     if (/<reference_file|<active_mode_retrieved_context|mode_retrieval/i.test(message)) scopes.push('reference_files');
     if (/<meeting_history|USER-PROVIDED PERSONA CONTEXT|<user_context|<candidate_|<active_mode_custom_instructions/i.test(message)) scopes.push('profile_history');
     if (/<post_call_summary/i.test(message)) scopes.push('post_call_summary');
-    return scopes;
+    // V3 evidence markup — see inferContextScopes. A V3 prompt carries its
+    // evidence in the MESSAGE (context is undefined), so this is the branch
+    // that actually fires on the default path.
+    scopes.push(...dataScopesForEvidenceMarkup(message));
+    // V3 renders prior-turn continuity as a labelled prose section rather than
+    // as evidence; it is CONVERSATION_STATE data, i.e. transcript scope.
+    if (/^# Conversation so far$/m.test(message)) scopes.push('transcript');
+    return [...new Set(scopes)];
   }
 
   private stripDeniedScopedBlocksFromMessage(message: string, deniedScopes: ProviderDataScope[]): string {
@@ -435,12 +463,79 @@ export class LLMHelper {
     if (deniedScopes.includes('post_call_summary')) {
       scrubbed = scrubbed.replace(/<post_call_summary\b[\s\S]*?<\/post_call_summary>\s*/gi, '');
     }
+    // TRANSCRIPT had NO branch at all. Enforcement for it was `context =
+    // undefined` and nothing else, so a payload carrying the transcript inside
+    // the MESSAGE (every V3 turn, and the legacy assemblers below) shipped
+    // byte-identical while `logScopeFallback(scope, 'omitting')` printed a line
+    // claiming it had been removed.
+    if (deniedScopes.includes('transcript')) {
+      scrubbed = scrubbed
+        .replace(/<transcript\b[\s\S]*?<\/transcript>\s*/gi, '')
+        .replace(/<recent_transcript\b[\s\S]*?<\/recent_transcript>\s*/gi, '')
+        // V3's prior-turn continuity section (CONVERSATION_STATE data). Runs to
+        // the next top-level section or tag, both of which the composer emits
+        // after a blank line.
+        .replace(/^# Conversation so far\n[\s\S]*?(?=\n\n(?:#|<)|$)/gm, '');
+    }
+
+    // ── Context Intelligence V3 evidence blocks ─────────────────────────────
+    // The transport-layer BACKSTOP. The primary enforcement is the filter in
+    // engine-bridge, which runs before packing so the composed instructions
+    // agree with the evidence that survived. This exists for prompts that reach
+    // a transport without having been through that filter.
+    //
+    // Safe to match with a regex: context-packer's esc() XML-escapes every
+    // attribute value and all content, so no `<`/`>` from a document can forge
+    // or prematurely close an <evidence> tag.
+    const deniedSourceTypes = sourceTypesForScopes(deniedScopes);
+    if (deniedSourceTypes.size > 0 && /<evidence\b/i.test(scrubbed)) {
+      let removed = 0;
+      scrubbed = scrubbed.replace(/<evidence\b[^>]*>[\s\S]*?<\/evidence>\s*/gi, (block) => {
+        const match = /\bsource_type="([A-Za-z_]+)"/.exec(block);
+        if (match && deniedSourceTypes.has(match[1])) { removed += 1; return ''; }
+        return block;
+      });
+      if (removed > 0) {
+        // Never leave a prompt whose instructions describe evidence that is no
+        // longer there: an "# Evidence" heading over nothing, with a
+        // checked-absence contract still in the system prompt, is a fabrication
+        // engine. Say what happened, in the prompt, where the model can act on
+        // it.
+        scrubbed += `\n\n<evidence_withheld scopes="${deniedScopes.join(',')}">`
+          + `${removed} piece(s) of evidence were removed from this prompt by a privacy setting in this app `
+          + `(Settings > AI Providers > Privacy — cloud data scopes: ${scopeLabels(deniedScopes)}). `
+          + 'Treat NO evidence here as a complete record, never state that something is absent from a source, '
+          + 'and do not answer from general knowledge in place of the withheld material. If the question cannot '
+          + 'be answered from what remains, say plainly that a privacy setting is withholding it.'
+          + '</evidence_withheld>';
+      }
+    }
     return scrubbed.replace(/\n{3,}/g, '\n\n').trim();
   }
 
+  /**
+   * The data scopes a payload carries.
+   *
+   * `extraScopes` is what the CALLER declares — always prefer it. The
+   * transcript rule below is the LAST-BOUNDARY backstop: the ~20
+   * assertOutboundScopes() sites sit inside the individual provider methods
+   * (generateWithGroq, callNatively, …), which are reached from dozens of call
+   * paths and know nothing about the payload's provenance. Treating any
+   * non-empty payload there as transcript-bearing is deliberately conservative:
+   * it is the only thing standing between those sites and an unclassified send.
+   *
+   * The removed `&& extraScopes.length === 0` guard was NOT that conservatism —
+   * it was a hole in it. It made any OTHER detected scope suppress transcript
+   * detection entirely, so a payload with a reference-file block was checked for
+   * reference_files and silently exempted from the transcript check, while the
+   * very same payload with no detected scope WAS checked. It also desynchronised
+   * the two layers: the gate in _streamChatInner (which does have extraScopes)
+   * would clear a payload the provider-level assert then rejected, turning a
+   * "route this to Ollama" outcome into "all providers failed".
+   */
   private scopesForPayload(text: string, imagePaths?: string[], extraScopes: ProviderDataScope[] = []): ProviderDataScope[] {
     const scopes = new Set<ProviderDataScope>(extraScopes);
-    if (text.trim().length > 0 && extraScopes.length === 0) scopes.add('transcript');
+    if (text.trim().length > 0) scopes.add('transcript');
     if (imagePaths?.length) scopes.add('screenshots');
     return [...scopes];
   }
@@ -2101,9 +2196,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.().documentGroundedCustomModeActive === true;
         } catch { return false; }
       })();
-      if (documentGroundedCustomModeActive) {
-        console.log('[LLMHelper] Generic bypass disabled: document-grounded custom mode active', {
-          genericBypassDisabledReason: 'document_grounded_custom_mode',
+      // Defect C (2026-08-01): log the EXPLICIT strictness flag — the broad
+      // flag is true for every default non-interview mode via the template
+      // seed, so this line falsely announced strictness on stock Team Meet
+      // and Lecture sessions.
+      if ((() => {
+        try {
+          const { ModesManager } = require('./services/ModesManager');
+          return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.().strictDocumentGroundedActive === true;
+        } catch { return false; }
+      })()) {
+        console.log('[LLMHelper] Generic bypass disabled: strict document-grounded mode active', {
+          genericBypassDisabledReason: 'strict_document_grounded_mode',
           retrievalRequired: true,
         });
       }
@@ -3957,6 +4061,9 @@ const isMultimodal = !!(imagePaths?.length);
       }
       const shouldOmitContext = deniedOutboundScopes.some(scope => scope === 'transcript' || scope === 'reference_files' || scope === 'profile_history' || scope === 'post_call_summary');
       if (shouldOmitContext) context = undefined;
+      // Same defect as _streamChatInner: clearing `context` does nothing when
+      // the scoped material is embedded in the MESSAGE (every composed prompt).
+      message = this.stripDeniedScopedBlocksFromMessage(message, deniedOutboundScopes);
       if (deniedOutboundScopes.includes('screenshots')) imagePaths = undefined;
       isMultimodal = !!(imagePaths?.length);
     }
@@ -4487,9 +4594,20 @@ const isMultimodal = !!(imagePaths?.length);
         return mm.getActiveModeDocumentGroundingInfo?.(pin ?? undefined).documentGroundedCustomModeActive === true;
       } catch { return false; }
     })();
-    if (documentGroundedCustomModeActive) {
-      console.log('[LLMHelper.stream] Generic bypass disabled: document-grounded custom mode active', {
-        genericBypassDisabledReason: 'document_grounded_custom_mode',
+    // Defect C (2026-08-01): the log now reports the EXPLICIT strictness flag —
+    // this line fired on every default Team Meet/Lecture session (template seed
+    // = reference_files_primary) and was the primary runtime evidence of the
+    // misclassification. `retrievalRequired` was a hardcoded literal.
+    const strictDocGroundedForLog = (() => {
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        const pin = routeOptions?.pinnedModeId ?? null;
+        return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.(pin ?? undefined).strictDocumentGroundedActive === true;
+      } catch { return false; }
+    })();
+    if (strictDocGroundedForLog) {
+      console.log('[LLMHelper.stream] Generic bypass disabled: strict document-grounded mode active', {
+        genericBypassDisabledReason: 'strict_document_grounded_mode',
         retrievalRequired: true,
       });
     }
@@ -4691,7 +4809,16 @@ const isMultimodal = !!(imagePaths?.length);
     // block, the userContent wrapping at ~5260) — see the v3OwnedTurn comment
     // above. Legacy callers are unaffected (v3OwnedTurn is false without the
     // route option).
-    const forceDocumentGrounding = !v3OwnedTurn && activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
+    // Defect C (2026-08-01): STRICT shaping (system-prompt reshape, question-
+    // first doc wrapping, scope-denied refusal) now keys on the EXPLICIT
+    // strictness flag. The template seed marks every non-interview mode
+    // `reference_files_primary`, so the broad flag classified a stock Team
+    // Meet/Lecture — zero files, zero custom prompt — as a strict document-
+    // grounded custom mode and suppressed its general-knowledge fallback.
+    // Reference-file INJECTION above (:documentGroundedCustomModeActive) is
+    // unchanged: surfacing attached documents is correct for default modes;
+    // refusing to answer beyond them is not.
+    const forceDocumentGrounding = !v3OwnedTurn && activeModeGroundingInfo?.strictDocumentGroundedActive === true;
     // Hoisted to function scope (round-6) so the document-grounded userContent
     // shaping below can read the actual retrieval output as `retrievedBlock`.
     // It is assigned inside the mode-injection block; '' when retrieval didn't
@@ -5003,7 +5130,16 @@ const isMultimodal = !!(imagePaths?.length);
 
     // Preparation
     let isMultimodal = !!(imagePaths?.length);
-    const contextScopes = [...extraDataScopes, ...this.inferContextScopes(context), ...this.inferEmbeddedMessageScopes(message)];
+    // `context` here is the legacy transcript/context blob — state that
+    // LITERALLY, the way chatWithGemini already does, instead of leaving it to
+    // the payload heuristic. Everything else the caller declares
+    // (extraDataScopes) or the payload's own markup discloses.
+    const contextScopes = [
+      ...extraDataScopes,
+      ...(context?.trim() ? ['transcript' as ProviderDataScope] : []),
+      ...this.inferContextScopes(context),
+      ...this.inferEmbeddedMessageScopes(message),
+    ];
     const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, contextScopes);
     if (deniedOutboundScopes.length > 0) {
       const ollamaAvailable = this.useOllama && await this.checkOllamaAvailable(deniedOutboundScopes.includes('screenshots'));

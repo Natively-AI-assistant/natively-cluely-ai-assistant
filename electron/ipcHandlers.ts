@@ -832,6 +832,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             speaker: 'user',
             timestamp: Date.now(),
             final: true,
+            origin: 'manual_chat',
           },
           true,
         );
@@ -974,8 +975,33 @@ export function initializeIpcHandlers(appState: AppState): void {
             // with the engine surfaces — a second inline copy of a
             // security-relevant construction is how the tokenizer copies
             // drifted, and this one decides what evidence a turn may see.
-            const { createModeRetrievalPort } = require('./context-intelligence/retrieval/mode-retrieval-port');
+            const { createModeRetrievalPort, attachmentSourceTypeExtensions } = require('./context-intelligence/retrieval/mode-retrieval-port');
             const { createMeetingRetrievalPort, combineRetrievalPorts } = require('./context-intelligence/retrieval/meeting-retrieval-port');
+            // Custom/general modes gain the source types their OWN attachments
+            // evidence (deep-test D10): a candidate résumé + JD attached to an
+            // "Untitled" custom mode planned [] for every job question because
+            // the general policy's allowlist has no CANDIDATE_FILE/JOB_DESCRIPTION.
+            // Empty for every built-in non-general mode.
+            const extraSourceTypes = attachmentSourceTypeExtensions(modeId, files);
+            const effectiveAllowedSourceTypes = [...policy.allowedSourceTypes, ...extraSourceTypes];
+
+            // Context-debug: identity list of the sources this turn could read
+            // (id/role/name/status — never content). Built only when the debug
+            // level is active; Off costs one function call.
+            let v3DebugSources: Array<Record<string, unknown>> | undefined;
+            try {
+              const { getContextDebugLevel } = require('./context-intelligence/debug/debug-config');
+              if (getContextDebugLevel() !== 'off') {
+                const { sourceTypeForFile, detectDocumentStatus } = require('./context-intelligence/retrieval/mode-retrieval-port');
+                v3DebugSources = (files as Array<Record<string, unknown>>).map((f) => ({
+                  id: String(f.id ?? ''),
+                  role: sourceTypeForFile(f.fileName as string | undefined, f.content as string | undefined, effectiveAllowedSourceTypes),
+                  name: f.fileName,
+                  ...(detectDocumentStatus(f.content as string | undefined) ? { status: detectDocumentStatus(f.content as string | undefined) } : {}),
+                  ...(typeof f.pageCount === 'number' ? { pageCount: f.pageCount } : {}),
+                }));
+              }
+            } catch { /* debug identity only */ }
             const modePort = createModeRetrievalPort({
               modesManager: mm,
               modeInfo,
@@ -983,8 +1009,9 @@ export function initializeIpcHandlers(appState: AppState): void {
               // Without this every file is typed REFERENCE_FILE, and a résumé in
               // a mode that authorizes [RESUME, PROFILE_FACT] is retrieved and
               // then discarded by claim authority — the user sees "not covered"
-              // for facts in their own résumé.
-              allowedSourceTypes: policy.allowedSourceTypes,
+              // for facts in their own résumé. Must match what decide() plans,
+              // so the extension list is shared with the bridge below.
+              allowedSourceTypes: effectiveAllowedSourceTypes,
               tokenBudget: policy.contextBudget.evidenceTokens,
               userId: V3_USER_ID,
             });
@@ -1069,6 +1096,9 @@ export function initializeIpcHandlers(appState: AppState): void {
               attachedSourceCount: files.length,
               profileSourceCount: v3ProfileCounts.profileResume + v3ProfileCounts.profileJd + v3ProfileCounts.profileFact,
               resolvedProfileSources: v3ProfileResolved,
+              extraAllowedSourceTypes: extraSourceTypes,
+              debugSources: v3DebugSources as never,
+              deferDebugCompletion: true,
               requestId: `v3-${myStreamId}`,
               requestSequence: myStreamId,
               // sessionId rides the scope: the bridge keys the AnswerRequest's
@@ -1087,7 +1117,27 @@ export function initializeIpcHandlers(appState: AppState): void {
             // re-throwing (the outer catch would double-count it).
             if (composed) {
 
+            // Context-debug completion hook. The collector was registered by the
+            // bridge under this requestId; every exit path below finalizes it
+            // exactly once (complete() is idempotent). Failure to log must never
+            // fail the request — every call is inside the collector's own guards.
+            const v3DebugCollector = (() => {
+              try {
+                if (!composed.debugRequestId) return null;
+                const { getTurnCollector } = require('./context-intelligence/debug/turn-collector');
+                return getTurnCollector(composed.debugRequestId) ?? null;
+              } catch { return null; }
+            })();
+            const finishDebug = (finalText: string, committed: boolean, reason: string | null) => {
+              try {
+                v3DebugCollector?.recordAnswer(finalText, committed, reason);
+                v3DebugCollector?.complete();
+              } catch { /* logging must never break the request */ }
+            };
+            try { v3DebugCollector?.recordGenerationStart({ provider: 'llmHelper' }); } catch { /* noop */ }
+
             let finalText = '';
+            let v3SawFirstToken = false;
             const v3Stream = llmHelper.streamChat(
               composed.user,
               imagePaths,
@@ -1095,7 +1145,15 @@ export function initializeIpcHandlers(appState: AppState): void {
               composed.system,
               true,   // ignoreKnowledgeMode — V3 owns evidence; legacy injection must not re-enter
               true,   // skipModeInjection — same reason
-              [],
+              // Declared outbound data scopes. Was `[]`, which told the
+              // transport this payload carried nothing — so LLMHelper fell back
+              // to sniffing for LEGACY tag names that a V3 prompt never
+              // contains, inferred no scope, and enforced none of the six
+              // privacy toggles on the default (V3) answer path. The bridge
+              // already filtered the evidence against the same policy, so these
+              // scopes are by construction permitted; declaring them keeps the
+              // transport's routing/denial decision honest instead of guessed.
+              composed.packedDataScopes ?? [],
               myController.signal,
               undefined, // thinkingBudget — keep the interactive default
               // v3Owned: LLMHelper must TRANSPORT this prompt, not rewrite it.
@@ -1105,13 +1163,65 @@ export function initializeIpcHandlers(appState: AppState): void {
               { v3Owned: true },
             ) as AsyncGenerator<string>;
 
-            for await (const tok of v3Stream) {
-              if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
-              finalText += tok;
-              event.sender.send('gemini-stream-token', tok, { streamId: myStreamId });
+            try {
+              for await (const tok of v3Stream) {
+                if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
+                  finishDebug(finalText, false, 'superseded_by_newer_stream');
+                  return null;
+                }
+                if (!v3SawFirstToken) {
+                  v3SawFirstToken = true;
+                  try { v3DebugCollector?.recordFirstToken(); } catch { /* noop */ }
+                }
+                finalText += tok;
+                event.sender.send('gemini-stream-token', tok, { streamId: myStreamId });
+              }
+            } catch (streamErr) {
+              // Finalize the debug record with the partial answer, then let the
+              // existing V3 error handling run unchanged (falls back to legacy).
+              try {
+                v3DebugCollector?.recordError({
+                  stage: 'generation',
+                  message: streamErr instanceof Error ? streamErr.message : String(streamErr),
+                  recoverable: true,
+                });
+              } catch { /* noop */ }
+              finishDebug(finalText, false, 'generation_error');
+              throw streamErr;
             }
-            if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
+            if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
+              finishDebug(finalText, false, 'superseded_by_newer_stream');
+              return null;
+            }
+            // Defect G (2026-08-01): mode-identity check BEFORE the user-visible
+            // done emit — identity is enforced at commit, not left to abort
+            // timing. The registry invalidation in modes:set-active already
+            // makes the streamId guard above fail deterministically after an
+            // IPC-driven mode switch; this closes the remaining paths where the
+            // mode flips WITHOUT that handler running (e.g. upload-driven mode
+            // auto-activation) and the registry entry survives. Compare live vs
+            // request-time mode by .id (templateType collapses for custom
+            // modes). NOT checked per token: ModesManager.getActiveMode() is a
+            // DB read, too expensive for the token loop — tokens are covered by
+            // the deterministic registry invalidation. Fail open on a getter
+            // throw (never suppress a real answer on infrastructure failure);
+            // the record guard below stays as defense in depth for writes.
+            {
+              const v3RequestModeId = modeInfo?.id ?? null;
+              let liveModeIdAtEmit: string | null = v3RequestModeId;
+              try { liveModeIdAtEmit = mm.getActiveMode()?.id ?? null; } catch { /* fail open — emit-guard only */ }
+              if (liveModeIdAtEmit !== v3RequestModeId) {
+                console.warn('[IPC] stale stream suppressed: mode changed mid-generation', {
+                  streamId: myStreamId,
+                  requestMode: v3RequestModeId,
+                  liveMode: liveModeIdAtEmit,
+                });
+                finishDebug(finalText, false, 'mode_changed_mid_generation');
+                return null;
+              }
+            }
             event.sender.send('gemini-stream-done', { finalText, streamId: myStreamId });
+            finishDebug(finalText, true, null);
 
             // ── Record the turn (V3 previously recorded NOTHING) ────────────
             // The short-circuit skipped every store the legacy path writes, so
@@ -1144,8 +1254,8 @@ export function initializeIpcHandlers(appState: AppState): void {
               } catch { /* memory only */ }
               try {
                 const im = appState.getIntelligenceManager();
-                im?.addTranscript?.({ text: String(message || ''), speaker: 'user', timestamp: Date.now(), final: true }, true);
-                im?.addAssistantMessage?.(finalText);
+                im?.addTranscript?.({ text: String(message || ''), speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
+                im?.addAssistantMessage?.(finalText, undefined, 'manual_chat');
                 // Usage too: ai_interactions ("usage" in Meeting Notes) is
                 // populated solely from SessionTracker's usage log at
                 // saveMeeting time. Every legacy exit logs it; without this,
@@ -1223,7 +1333,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           if (probe.kind === 'assistant_reply') {
             const identityHit = probe.reply;
             intelligenceManager.addTranscript(
-              { text: message, speaker: 'user', timestamp: Date.now(), final: true },
+              { text: message, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' },
               true,
             );
             try {
@@ -1287,6 +1397,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             speaker: 'user',
             timestamp: Date.now(),
             final: true,
+            origin: 'manual_chat',
           },
           true,
         );
@@ -4549,8 +4660,30 @@ export function initializeIpcHandlers(appState: AppState): void {
             finalText = fullResponse;
           }
 
+          // Defect G (2026-08-01): mode-identity check BEFORE the user-visible
+          // done emit, same contract as the V3 block above. Registry
+          // invalidation in modes:set-active already fails the streamId guard
+          // below deterministically after an IPC-driven switch; this closes
+          // the non-IPC switch paths (e.g. upload-driven mode auto-activation)
+          // where the registry entry survives. Compares the LIVE mode against
+          // `manualActiveMode` (captured once near handler start) by .id, not
+          // templateType (custom modes collapse to 'general'). Fail open on a
+          // getter throw — never suppress a real answer on infrastructure
+          // failure. The conversationMemoryV2 record guard further down keeps
+          // its own liveModeIdAtRecord check as defense in depth.
+          let liveModeIdAtDoneEmit: string | null = manualActiveMode?.id ?? null;
+          try {
+            const { ModesManager: _MmDoneEmitGuard } = require('./services/ModesManager');
+            liveModeIdAtDoneEmit = _MmDoneEmitGuard.getInstance().getActiveMode()?.id ?? null;
+          } catch { /* fail open — emit-guard only */ }
           // Final check: only send done if we are still the active stream
-          if (_chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
+          if (liveModeIdAtDoneEmit !== (manualActiveMode?.id ?? null)) {
+            console.warn('[IPC] stale stream suppressed: mode changed mid-generation', {
+              streamId: myStreamId,
+              requestMode: manualActiveMode?.id ?? null,
+              liveMode: liveModeIdAtDoneEmit,
+            });
+          } else if (_chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
             // finalText is set ONLY when repair changed the streamed answer — the
             // renderer replaces the streamed row in place (no double-render). When
             // the streamed answer was already valid, finalText is undefined and the
@@ -5424,6 +5557,87 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e.message };
+    }
+  });
+
+  // ── Context Intelligence debug logging (Developer settings) ───────────────
+  // All paths are resolved MAIN-side from the bound log directory — the
+  // renderer never supplies a path, so there is nothing to contain/validate.
+  safeHandle('context-debug:get-config', async () => {
+    try {
+      const { describeContextDebugConfig } = require('./context-intelligence/debug/debug-config');
+      const { getContextDebugLogDirectory, getContextDebugWriter } = require('./context-intelligence/debug/jsonl-writer');
+      const cfg = describeContextDebugConfig();
+      return {
+        ...cfg,
+        storedLevel: SettingsManager.getInstance().getContextDebugLevel(),
+        logDirectory: getContextDebugLogDirectory(),
+        currentFile: cfg.level !== 'off' ? getContextDebugWriter()?.getCurrentFilePath() ?? null : null,
+      };
+    } catch (e) {
+      return { level: 'off', levelSource: 'default', contentInclusion: false, error: (e as Error)?.message };
+    }
+  });
+
+  safeHandle('context-debug:set-level', async (_e, payload: unknown) => {
+    try {
+      const level = (payload as { level?: unknown })?.level;
+      if (level !== 'off' && level !== 'standard' && level !== 'verbose') {
+        return { ok: false, error: 'invalid_level' };
+      }
+      SettingsManager.getInstance().setContextDebugLevel(level);
+      // Effective config is re-read per turn, so this applies to the next
+      // question without a restart. Env override (if set) still wins.
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error)?.message };
+    }
+  });
+
+  safeHandle('context-debug:open-folder', async () => {
+    try {
+      const { getContextDebugLogDirectory } = require('./context-intelligence/debug/jsonl-writer');
+      const dir = getContextDebugLogDirectory();
+      if (!dir) return { ok: false, error: 'log directory not configured' };
+      fs.mkdirSync(dir, { recursive: true });
+      const err = await shell.openPath(dir);
+      return err ? { ok: false, error: err } : { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error)?.message };
+    }
+  });
+
+  safeHandle('context-debug:clear', async () => {
+    try {
+      const { getContextDebugLogDirectory, flushContextDebugWriter } = require('./context-intelligence/debug/jsonl-writer');
+      const dir = getContextDebugLogDirectory();
+      if (!dir || !fs.existsSync(dir)) return { ok: true, removed: 0 };
+      await flushContextDebugWriter();
+      let removed = 0;
+      for (const f of fs.readdirSync(dir)) {
+        if (!f.endsWith('.jsonl')) continue;        // never touch anything else
+        try { fs.unlinkSync(path.join(dir, f)); removed += 1; } catch { /* best-effort */ }
+      }
+      return { ok: true, removed };
+    } catch (e) {
+      return { ok: false, error: (e as Error)?.message };
+    }
+  });
+
+  // Export = flush + reveal the current session file locally. Nothing is ever
+  // uploaded; sharing is the user's explicit action from there.
+  safeHandle('context-debug:export', async () => {
+    try {
+      const { getContextDebugWriter, flushContextDebugWriter } = require('./context-intelligence/debug/jsonl-writer');
+      const writer = getContextDebugWriter();
+      if (!writer) return { ok: false, error: 'debug logging not configured' };
+      await flushContextDebugWriter();
+      const file = writer.getCurrentFilePath();
+      if (!fs.existsSync(file)) return { ok: false, error: 'no debug records written this session yet' };
+      shell.showItemInFolder(file);
+      return { ok: true, path: file };
+    } catch (e) {
+      return { ok: false, error: (e as Error)?.message };
     }
   });
 
@@ -8573,6 +8787,18 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
 
     const anyOk = results.some((r) => r.ok);
+    // The failure branch interpolates raw `tccutil` stderr, which is unbounded.
+    // This string lands in the overlay warning banner, which clamps to 2 lines
+    // and has no escape hatch: a native `title=` tooltip never fires during
+    // overlay mouse passthrough, and the global `::-webkit-scrollbar {width:0}`
+    // rules out a scroll region. Truncate at the source so the banner shows a
+    // complete-looking sentence rather than text that silently stops. Full
+    // stderr is already in the log via the console.warn above.
+    const REPAIR_MESSAGE_MAX_CHARS = 180;
+    const truncateForBanner = (text: string): string =>
+      text.length > REPAIR_MESSAGE_MAX_CHARS
+        ? `${text.slice(0, REPAIR_MESSAGE_MAX_CHARS).trimEnd()}…`
+        : text;
     return {
       ok: anyOk,
       bundleId,
@@ -8580,10 +8806,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       promptRelaunch: anyOk,
       message: anyOk
         ? 'Permissions reset. Quit Natively completely (Cmd+Q) and reopen — macOS will ask you to grant Microphone and Screen Recording again. Approve both to restore audio capture.'
-        : `Permission reset failed for ${bundleId}. ${results
-            .filter((r) => !r.ok)
-            .map((r) => `${r.service}: ${r.output}`)
-            .join('; ')}`,
+        : truncateForBanner(
+            `Permission reset failed for ${bundleId}. ${results
+              .filter((r) => !r.ok)
+              .map((r) => `${r.service}: ${r.output}`)
+              .join('; ')}`,
+          ),
     };
   });
 
@@ -9222,6 +9450,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             text: segment.text,
             timestamp: segment.timestamp ?? Date.now(),
             final: segment.final ?? true,
+            origin: 'test',
           },
           true,
         );
@@ -10657,15 +10886,27 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
       }
       const { ModesManager } = require('./services/ModesManager');
-      // Abort every in-flight chat stream BEFORE the mode flips. A turn planned
-      // under mode A must not keep streaming into a UI whose badge now says
-      // mode B — with no per-message mode marker in the renderer, that answer
-      // is indistinguishable from a B answer carrying A's evidence and policy.
-      // Same bug family as BUG-MODE-BLEEDING below, one layer up: that fix
-      // cleared the CONTEXT the next turn would read; this stops the PREVIOUS
-      // turn's output from outliving the mode it was decided under.
-      for (const [, s] of _chatStreamsBySender) {
-        try { s.controller.abort(); } catch { /* already finished */ }
+      // Abort AND INVALIDATE every in-flight chat stream BEFORE the mode
+      // flips. A turn planned under mode A must not keep streaming into a UI
+      // whose badge now says mode B — with no per-message mode marker in the
+      // renderer, that answer is indistinguishable from a B answer carrying
+      // A's evidence and policy. Same bug family as BUG-MODE-BLEEDING below,
+      // one layer up: that fix cleared the CONTEXT the next turn would read;
+      // this stops the PREVIOUS turn's output from outliving the mode it was
+      // decided under.
+      //
+      // Defect G (2026-08-01): abort() alone was a RACE, not a decision — the
+      // provider stream could finish before the abort landed, and because the
+      // registry entry survived, every streamId supersession guard
+      // (`_chatStreamsBySender.get(senderId)?.streamId !== myStreamId`) still
+      // said "I am current", so the old mode's answer was delivered as the new
+      // mode's. Deleting the registry entries (mirroring
+      // gemini-chat-stream-stop) is what makes those ~10 streamId guards
+      // deterministic: a stream started under the old mode can never look
+      // current again after the switch, no matter how the abort raced.
+      {
+        const { abortAndInvalidateChatStreams } = require('./services/chatStreamRegistry') as typeof import('./services/chatStreamRegistry');
+        abortAndInvalidateChatStreams(_chatStreamsBySender);
       }
       // BUG-MODE-BLEEDING fix: clear mode-specific session context BEFORE switching modes
       // so Interview mode resume/JD context doesn't bleed into the new mode's responses.
@@ -11559,7 +11800,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
 
       intelligenceManager.addTranscript(
-        { text: message, speaker: 'user', timestamp: Date.now(), final: true },
+        { text: message, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' },
         true,
       );
 
@@ -12009,6 +12250,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           timestamp: Date.now(),
           final: seg.final !== false,
           confidence: typeof seg.confidence === 'number' ? seg.confidence : 0.9,
+          origin: 'test',
         } as any);
         return { success: true };
       } catch (e: any) {
@@ -12148,9 +12390,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // makes the model greet instead of answer).
       if (params.injectAsTranscript !== false) {
         for (const t of params.priorTurns ?? []) {
-          im.addTranscript({ speaker: t.speaker, text: t.text, timestamp: Date.now(), final: true, confidence: 0.95 } as any, true);
+          im.addTranscript({ speaker: t.speaker, text: t.text, timestamp: Date.now(), final: true, confidence: 0.95, origin: 'test' } as any, true);
         }
-        im.addTranscript({ speaker: 'interviewer', text: params.question, timestamp: Date.now(), final: true, confidence: 0.95 } as any, true);
+        im.addTranscript({ speaker: 'interviewer', text: params.question, timestamp: Date.now(), final: true, confidence: 0.95, origin: 'test' } as any, true);
       }
       const builtContext = params.context ?? im.getFormattedContext(180);
       return await new Promise((resolve) => {

@@ -62,6 +62,16 @@ export interface ProfileDocLike {
   structured: Record<string, unknown> | null | undefined;
   /** OKF verified cards for this doc, if a pack exists. Optional. */
   cards?: ProfileCardLike[];
+  /**
+   * The document's RAW parsed text (deep-test D1, 2026-08-01). The structured
+   * extraction is inherently lossy — anything without a schema slot (a canary
+   * line, a 7-stage interview list, arbitrary metrics) was unretrievable
+   * forever. Raw text is chunked into additional sections so every fact the
+   * document states remains reachable; the structured sections stay as the
+   * higher-precision ranking aid. Optional: absent for legacy rows until the
+   * caller can supply it.
+   */
+  rawText?: string | null;
 }
 
 export interface ProfilePortInput {
@@ -166,7 +176,14 @@ function renderResumeSections(sd: Record<string, unknown>): ProfileSection[] {
   const projects = arr(sd.projects) as Array<Record<string, unknown>>;
   for (const p of projects) {
     const tech = lines(p.technologies).join(', ');
-    const text = [str(p.name), str(p.description), tech ? `Technologies: ${tech}` : ''].filter(Boolean).join(' — ');
+    // `highlights` are the extractor's VERBATIM metric bullets ("Reached 27,450
+    // registered users") — the schema exists precisely so numbers are never
+    // lost, and StructuredExtractor's prompt promises as much. This renderer
+    // dropped them (deep-test D1, 2026-08-01): the model saw a project's name
+    // and stack but none of its metrics, and fabricated the numbers.
+    const highlights = lines(p.highlights).join(' ');
+    const text = [str(p.name), str(p.description), highlights, tech ? `Technologies: ${tech}` : '']
+      .filter(Boolean).join(' — ');
     if (text) out.push({ section: `Project: ${str(p.name) || 'entry'}`, boostKey: 'projects', text, completeInventory: false });
   }
   if (projects.length) {
@@ -217,6 +234,15 @@ function renderResumeSections(sd: Record<string, unknown>): ProfileSection[] {
 
   const certs = lines(sd.certifications).join('; ');
   if (certs) out.push({ section: 'Certifications', boostKey: 'skills', text: `Certifications: ${certs}`, completeInventory: false });
+
+  // Leadership had ZERO readers in this renderer (deep-test D1) — extracted,
+  // stored, and invisible at answer time.
+  const leadership = arr(sd.leadership) as Array<Record<string, unknown> | string>;
+  const leadBody = leadership.map((l) => (typeof l === 'string'
+    ? l.trim()
+    : [str((l as Record<string, unknown>).title), str((l as Record<string, unknown>).description)].filter(Boolean).join(': ')))
+    .filter(Boolean).join('; ');
+  if (leadBody) out.push({ section: 'Leadership', boostKey: 'experience', text: `Leadership: ${leadBody}`, completeInventory: false });
 
   return out;
 }
@@ -391,6 +417,34 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
       const body = str(c.body);
       if (!body) continue;
       push(c.title || 'Card', `${c.title ? `${c.title}: ` : ''}${body}`, `card_${c.type ?? 'unknown'}`, false);
+    }
+    // LOSSLESS raw-text sections (deep-test D1): ~110-word windows with a one-
+    // line overlap, so a fact with no schema slot is still retrievable. Ranked
+    // by the same BM25 as everything else; the structured sections usually
+    // outrank them on common questions, so this adds recall without disturbing
+    // precision. Deduped against the structured sections by normText via push().
+    const raw = str(doc.rawText);
+    if (raw) {
+      const rawLines = raw.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+      let buf: string[] = [];
+      let words = 0;
+      let part = 1;
+      const flush = () => {
+        if (!buf.length) return;
+        push(`Document text (part ${part})`, buf.join('\n'), 'raw_document', false);
+        part += 1;
+        const overlap = buf[buf.length - 1];
+        buf = overlap ? [overlap] : [];
+        words = overlap ? overlap.split(/\s+/).length : 0;
+      };
+      for (const line of rawLines) {
+        buf.push(line);
+        words += line.split(/\s+/).length;
+        if (words >= 110) flush();
+      }
+      if (buf.length && (part === 1 || buf.length > 1)) {
+        push(`Document text (part ${part})`, buf.join('\n'), 'raw_document', false);
+      }
     }
 
     if (idx === 0) continue;                                    // nothing renderable ⇒ not registered

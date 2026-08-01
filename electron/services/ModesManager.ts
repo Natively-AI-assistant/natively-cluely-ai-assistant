@@ -16,6 +16,7 @@ import {
     parseModeSourceContract,
     serializeModeSourceContract,
     documentGroundedFromContract,
+    strictDocumentGroundedFromContract,
     buildUserSelectedSourceContract,
 } from './modeSourceContract';
 
@@ -280,6 +281,29 @@ export interface ActiveModeDocumentGroundingInfo {
      * profile suppression off one flag instead of re-deriving the four conditions.
      */
     documentGroundedCustomModeActive: boolean;
+    /**
+     * EXPLICIT strictness only (Defect C fix, 2026-08-01).
+     *
+     * `documentGroundedCustomModeActive` does double duty at ~65 call sites:
+     * source ISOLATION (keep Hindsight/OKF/profile out of document modes — the
+     * 2026-07-15 fix, correct even for a fresh default mode) and STRICT
+     * knowledge suppression (disable the generic bypass, force retrieval,
+     * block general-knowledge fallback). The template seed gives EVERY
+     * non-interview mode `reference_files_primary`, so a stock Team Meet or
+     * Lecture session — zero files, zero custom prompt — was logging
+     * "Generic bypass disabled: document-grounded custom mode active" and
+     * running the strict pipeline.
+     *
+     * This flag is TRUE only when strictness was actually chosen:
+     *   - the contract authority is `reference_files_only` (only reachable by
+     *     explicit selection or prompt migration, never by template seed), or
+     *   - a reference-files-first authority whose contract origin is NOT the
+     *     template default, with at least one real reference file attached.
+     * Attaching a file to a default mode does not flip it; changing a policy
+     * does. Knowledge-suppression call sites read THIS; isolation call sites
+     * keep the broad flag.
+     */
+    strictDocumentGroundedActive: boolean;
     modeId?: string;
     modeName?: string;
     hasCustomPrompt: boolean;
@@ -837,6 +861,15 @@ export class ModesManager {
             pageCount: params.pageCount,
             extractedPageCount: params.extractedPageCount,
         });
+        // Ingestion audit (deep-test D4, 2026-08-01): a document must not be
+        // treated as fully ingested when pages are missing. Extraction is
+        // all-or-nothing upstream, so a mismatch here means image-only/empty
+        // pages — surfaced loudly instead of discovered later as a "retrieval
+        // miss" on a fact that was never ingested.
+        if (typeof params.pageCount === 'number' && typeof params.extractedPageCount === 'number'
+            && params.extractedPageCount < params.pageCount) {
+            console.warn(`[ModesManager] INGESTION AUDIT: "${params.fileName}" parsed ${params.extractedPageCount}/${params.pageCount} pages — ${params.pageCount - params.extractedPageCount} page(s) produced no text. Facts on those pages are NOT retrievable.`);
+        }
         this.invalidateActiveModeCache();
         // OKF Phase 2/7 (2026-07-01): generate a Knowledge Pack alongside the
         // existing chunk pipeline. Heuristic v1 extraction is pure string
@@ -1259,7 +1292,8 @@ export class ModesManager {
         if (!mode) {
             return {
                 isCustom: false, hasReferenceFiles: false, documentGrounded: false,
-                documentGroundedCustomModeActive: false, hasCustomPrompt: false,
+                documentGroundedCustomModeActive: false, strictDocumentGroundedActive: false,
+                hasCustomPrompt: false,
                 sourceContract: defaultSourceContractForNewMode(),
             };
         }
@@ -1306,11 +1340,19 @@ export class ModesManager {
             sourceContract.sourceAuthority === 'reference_files_only'
             || sourceContract.sourceAuthority === 'reference_files_primary'
             || sourceContract.sourceAuthority === 'reference_files_plus_transcript';
+        // Defect C (2026-08-01): strictness must be EXPLICIT. The template seed
+        // stamps `reference_files_primary` with origin 'default_new_mode' on
+        // every non-interview mode, so the authority-only test above classifies
+        // a stock Team Meet/Lecture as a strict document-grounded custom mode.
+        // See the field's doc comment on ActiveModeDocumentGroundingInfo.
+        const strictDocumentGroundedActive =
+            strictDocumentGroundedFromContract(sourceContract, hasReferenceFiles);
         return {
             isCustom: custom,
             hasReferenceFiles,
             documentGrounded,
             documentGroundedCustomModeActive,
+            strictDocumentGroundedActive,
             modeId: mode.id,
             modeName: mode.name,
             hasCustomPrompt,

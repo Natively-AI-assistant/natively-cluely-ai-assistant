@@ -153,6 +153,21 @@ export interface AnswerTrace {
   /** Which implementation produced this turn. Lets a shadow run diff
    *  legacy-vs-v3 on identical inputs. */
   engine: 'legacy' | 'v3';
+
+  /**
+   * Follow-up referent resolution outcome (context-debug logging, 2026-08-01).
+   * Observability only — records what the resolver DID, plus the state
+   * snapshot it resolved against (identity-scale strings, never content).
+   * Optional so traces from older builders still typecheck.
+   */
+  referentResolution?: {
+    applied: boolean;
+    referent?: string;
+    reason?: string;
+    activePerson?: string;
+    activeTopic?: string;
+    previousQuestion?: string;
+  };
 }
 
 // ── redaction ───────────────────────────────────────────────────────────────

@@ -92,6 +92,8 @@ export function classifyDocShape(fileName = '', content = ''): DocShape {
  * Falls back to REFERENCE_FILE whenever the mode does not authorize the specific
  * type — never upgrades a file into a source the mode forbids.
  */
+const CODE_FILE_RE = /\.(py|js|jsx|ts|tsx|mjs|cjs|go|rs|java|c|cc|cpp|h|hpp|rb|swift|kt|kts|scala|sql|sh|bash|zsh|pl|php|cs|m|mm)$/i;
+
 export function sourceTypeForFile(
   fileName: string | undefined,
   content: string | undefined,
@@ -106,7 +108,60 @@ export function sourceTypeForFile(
   }
   if (shape === 'job_description' && can('JOB_DESCRIPTION')) return 'JOB_DESCRIPTION';
 
-  return can('REFERENCE_FILE') ? 'REFERENCE_FILE' : (allowed[0] ?? 'REFERENCE_FILE');
+  // Unclassified content NEVER becomes an identity-bearing type (deep-test D7,
+  // 2026-08-01). The old fallback was `allowed[0]`, and technical-interview's
+  // allowed[0] is RESUME — so every project note, code sample, PDF and incident
+  // postmortem in that mode was stamped "the user's résumé": telemetry lied
+  // about roles, DOCUMENT_FACT turns had their evidence dropped by the
+  // planned-type filter, and arbitrary file text became eligible to evidence
+  // USER_* claims (a contamination hazard, not a cosmetic bug). RESUME,
+  // CANDIDATE_FILE and JOB_DESCRIPTION are reachable ONLY via positive shape
+  // detection above.
+  if (CODE_FILE_RE.test(fileName ?? '') && can('CODING_SAMPLE')) return 'CODING_SAMPLE';
+  if (can('REFERENCE_FILE')) return 'REFERENCE_FILE';
+  if (can('PROJECT_FILE')) return 'PROJECT_FILE';
+  if (can('CODING_SAMPLE')) return 'CODING_SAMPLE';
+  return 'REFERENCE_FILE';
+}
+
+/**
+ * Document status declared by the file itself ("Status: RETIRED. …"), read from
+ * the head of the content. This is the provenance the precedence answer needs
+ * (deep-test D8): the value resolver picked current-over-retired by ranking
+ * luck, and when asked WHY, the model invented a rationale because no status
+ * ever reached the prompt.
+ */
+export function detectDocumentStatus(content: string | undefined): string | undefined {
+  const head = String(content ?? '').slice(0, 600);
+  const m = head.match(/\bstatus\s*[:\-]\s*(retired|deprecated|archived|superseded|legacy|obsolete|current|active|draft)\b/i);
+  if (m) return m[1].toLowerCase();
+  if (/\b(retired|deprecated|superseded|obsolete)\b/i.test(head.split('\n').slice(0, 3).join('\n'))) return 'retired';
+  return undefined;
+}
+
+/**
+ * Source types a GENERAL/custom mode gains from what is actually attached
+ * (deep-test D10). Custom modes are coerced to the `general` policy, whose
+ * allowlist has no CANDIDATE_FILE/JOB_DESCRIPTION — so a custom mode holding a
+ * candidate résumé and a JD planned [] for every job-comparison question and
+ * refused with STRICT_NOT_FOUND while both files sat indexed. The extension is
+ * derived ONLY from the mode's own attachments (never profile pools, never
+ * another mode's files) and only for `general`, so built-in mode contracts and
+ * source isolation are unchanged. A résumé attached to a custom mode is a
+ * CANDIDATE_FILE — someone the mode is ABOUT — never the operator's RESUME.
+ */
+export function attachmentSourceTypeExtensions(
+  modeId: string,
+  files: Array<{ fileName?: string; content?: string }>,
+): SourceType[] {
+  if (modeId !== 'general') return [];
+  const out = new Set<SourceType>();
+  for (const f of files) {
+    const shape = classifyDocShape(f.fileName, f.content);
+    if (shape === 'resume') out.add('CANDIDATE_FILE');
+    if (shape === 'job_description') out.add('JOB_DESCRIPTION');
+  }
+  return [...out];
 }
 
 export interface ModePortInput {
@@ -141,12 +196,15 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
   const activeVersions = new Map<string, string>();
   const chunkVersions = new Map<string, string>();
   const sourceScopes = new Map<string, EvidenceScope>();
+  const documentStatuses = new Map<string, string>();
   const allowed = input.allowedSourceTypes ?? (['REFERENCE_FILE'] as const);
   for (const f of input.files) {
     sourceTypes.set(f.id, sourceTypeForFile(f.fileName, f.content, allowed));
     activeVersions.set(f.id, 'legacy');
     chunkVersions.set(f.id, 'legacy');
     sourceScopes.set(f.id, { userId: input.userId });
+    const status = detectDocumentStatus(f.content);
+    if (status) documentStatuses.set(f.id, status);
   }
 
   return createLegacyRetrievalPort({
@@ -167,15 +225,24 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
         // source authority, scope and version filtering downstream.
         forceDocumentGrounding: true,
       });
-      return (res?.chunks ?? []).map((c: Record<string, unknown>) => ({
-        sourceId: String(c.sourceId ?? ''),
-        fileName: c.fileName as string | undefined,
-        text: String(c.text ?? ''),
-        chunkIndex: c.chunkIndex as number | undefined,
-        score: c.score as number | undefined,
-        ftsScore: c.ftsScore as number | undefined,
-        vectorScore: c.vectorScore as number | undefined,
-      }));
+      return (res?.chunks ?? []).map((c: Record<string, unknown>) => {
+        const sid = String(c.sourceId ?? '');
+        const status = documentStatuses.get(sid);
+        return {
+          sourceId: sid,
+          fileName: c.fileName as string | undefined,
+          text: String(c.text ?? ''),
+          chunkIndex: c.chunkIndex as number | undefined,
+          score: c.score as number | undefined,
+          ftsScore: c.ftsScore as number | undefined,
+          vectorScore: c.vectorScore as number | undefined,
+          // Provenance the precedence answer needs (deep-test D8): the file's
+          // own declared status, carried as port metadata so the composer can
+          // render current-vs-retired instead of letting the model invent why
+          // one value won.
+          ...(status ? { metadata: { documentStatus: status } } : {}),
+        };
+      });
     },
   });
 }

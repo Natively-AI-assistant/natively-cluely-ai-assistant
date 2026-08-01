@@ -37,9 +37,14 @@ describe('source authority', () => {
     }
   });
 
-  test('a resume is authoritative for exactly the user-owned claims', () => {
+  test('a resume is authoritative for the user-owned claims plus document facts', () => {
+    // DOCUMENT_FACT added 2026-08-01 (deep-test D2): "What is the canary
+    // written in this résumé?" is a document-deictic claim, and a résumé IS an
+    // attached document — its chunks must be able to evidence it. The
+    // load-bearing protections are asserted separately above: a JD still
+    // cannot evidence USER_* claims and a résumé still cannot evidence JOB_*.
     const claims = authorityOf('RESUME').sort();
-    assert.deepEqual(claims, ['USER_EDUCATION', 'USER_EMPLOYMENT', 'USER_PROJECT', 'USER_SKILL']);
+    assert.deepEqual(claims, ['DOCUMENT_FACT', 'USER_EDUCATION', 'USER_EMPLOYMENT', 'USER_PROJECT', 'USER_SKILL']);
   });
 
   test('every ClaimType has an authority entry (exhaustiveness)', () => {

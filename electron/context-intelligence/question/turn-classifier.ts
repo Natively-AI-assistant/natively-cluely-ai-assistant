@@ -18,6 +18,7 @@
 
 import type { QuestionType, ClaimType, RetrievalPath, SourceType } from '../contracts/types';
 import type { ModePolicy } from '../policies/mode-policy-registry';
+import { CLAIM_AUTHORITY } from '../policies/source-authority-policy';
 
 export interface ClassificationInput {
   resolvedQuestion: string;
@@ -25,6 +26,14 @@ export interface ClassificationInput {
   isFollowUp: boolean;
   /** True when the surface supplied screen content for this turn. */
   hasScreenContext?: boolean;
+  /**
+   * True when the turn actually has documents to consult (mode attachments or
+   * hydrated profile sources). Used ONLY to widen the definite-value-lookup
+   * grounding into OPEN_KNOWLEDGE modes that hold documents (deep-test D2):
+   * "What is the worker batch size?" must retrieve when a config file is
+   * attached, while plain `general` with nothing attached keeps its fast path.
+   */
+  hasAttachedDocuments?: boolean;
 }
 
 export interface Classification {
@@ -106,11 +115,52 @@ const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|
 // NARROW on review: bare `required\b` matched "what fields are required in
 // this form" and bare `salar\w*` matched "average salary for data scientists",
 // converting general questions into JD claims a JD-less mode then refuses.
-const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit\w*|required (skills?|languages?|qualifications?|experience|technolog\w*)|preferred skills?|compensation|base salar\w*|salary (band|range)s?|the salary\b|the team you|qualification\w*|requirement\w*|minimum quals?)\b/;
+// `(interview|hiring) (process|stages…)` added 2026-08-01 (Defect E): "What is
+// the interview process?" carried no capitalised entity, classified as a pure
+// concept question, took the FAST path, and a JD that lists SIX named stages
+// lost to a generic three-round model answer — with a clean trace (answerability
+// FULL, zero evidence). The stages live in the JD, so this is a JOB claim.
+const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit\w*|required (skills?|languages?|qualifications?|experience|technolog\w*)|preferred skills?|compensation|base salar\w*|salary (band|range)s?|the salary\b|the team you|qualification\w*|requirement\w*|minimum quals?|(interview|hiring|recruitment) (process|stages?|rounds?|loops?|steps?|timeline))\b/;
 
-const MEETING_RE = /\b(we (decided|agreed|discussed)|did we|are we|action item|owns?|owner|the meeting|last (call|meeting)|this (call|meeting)|standup|sync)\b/;
+// Split 2026-08-01 (Defect A): the old single MEETING_RE conflated TRANSCRIPT
+// EVENTS (things people said/decided/assigned — only the live transcript can
+// evidence them) with REFERENCE FACTS (objective, agenda, success criteria —
+// things the attached brief STATES). "What is the objective of this meeting?"
+// matched `this meeting`, planned MEETING_TRANSCRIPT alone, scored NONE with no
+// transcript, and fell back to general knowledge while the answer sat in the
+// attached reference file the whole time (measured, 2026-08-01).
+//
+// TRANSCRIPT EVENT — something that happened in the conversation. Only the
+// transcript is authoritative; with no transcript the honest answer is
+// "nothing has been recorded yet", never the brief's suggested content.
+// Split 2026-08-01 (deep-test D3): CONVERSATIONAL events name the conversation
+// itself ("we decided", "action items", "standup") — in a mode with no
+// transcript the honest outcome is the unsupported-in-mode disclosure, in any
+// mode. ATTRIBUTION vocabulary ("who owns", "assigned to") also appears in
+// ordinary documents (a postmortem's "Follow-up owner:"), so it claims the
+// transcript only where a transcript can exist — in technical-interview it
+// routed "Who owns the follow-up?" to a source the mode forbids and the
+// attached postmortem was never searched.
+const MEETING_EVENT_RE = /\b(we (decided|agreed|discussed|assigned|concluded)|did (we|anyone)|action items?|(discussion|discussed|said) so far|decisions? (made|recorded|so far)|last (call|meeting)|standup|sync\b)\b/;
+const MEETING_ATTRIBUTION_RE = /\b(who owns|owns the|owner\b|who (agreed|committed|said|is responsible)|assigned to|was (decided|agreed|assigned))\b/;
+// DECISION-STATUS — "is it decided whether…" asks whether a decision EXISTS.
+// The brief can state it (pre-made decisions, open questions) and the
+// transcript can contain it, so both sides are claimed.
+const DECISION_STATUS_RE = /\b(is|was|has) it (been )?(decided|agreed|settled)\b/;
+// Meeting CONTEXT alone ("this meeting", "are we") no longer forces the
+// transcript route — it only does when the clause names no reference-stated
+// fact below.
+const MEETING_CONTEXT_RE = /\b(the meeting|this (call|meeting)|that meeting|are we|are you all|is the (call|meeting))\b/;
+// REFERENCE-STATED facts of a meeting: what the brief/agenda document declares.
+const REFERENCE_FACT_RE = /\b(objectives?|agendas?|purpose|goals?|success criteri\w*|planning to|planned|scope|briefs?\b)\b/;
 
-const DOCUMENT_RE = /\b(reference material|the material|the (document|paper|thesis|slide|deck|file|report|policy|spec)|according to|does the (document|paper|file)|in the (document|paper|file)|section|figure|table|chapter)\b/;
+// Noun list widened 2026-08-01 (deep-test D5): "What are the RTO and RPO in the
+// dossier?" and "What is the canary written in this résumé?" are document-deictic
+// — they point AT an attached artifact — but neither "dossier" nor "resume" was
+// in the list, so both took the general-knowledge route and a generic definition
+// replaced the document's value. The verb forms ("written in", "documented")
+// are the generic deictic signal that does not depend on the noun list at all.
+const DOCUMENT_RE = /\b(reference material|the material|(the|this|that) (document|paper|thesis|slide|deck|file|report|policy|spec|handout|lecture|brief|dossier|resume|r[ée]sum[ée]|cv|postmortem|post-?mortem|readme|playbook|appendix|glossary|manual|guide)|reference files?|according to|does the (document|paper|file|handout)|in the (document|paper|file|handout)|section|figure|table|chapter|(written|stated|listed|recorded|documented|mentioned) in (the|this|that|its|my|your)\b|explicitly documented)\b/;
 
 /**
  * Requests to reveal or override the assistant's own instructions.
@@ -202,8 +252,15 @@ function onlyAcronymEntities(text: string): boolean {
   return caps.every((t) => t.length <= 6 && t === t.toUpperCase());
 }
 
+// `process/stages/steps/workflow` added 2026-08-01 (Defect E): "What is the
+// deployment process?" in a document-centric mode is a lookup of a document's
+// OWN named procedure, not a concept definition — classified as a definition it
+// took the FAST path and generic knowledge replaced the document's actual
+// steps. Concept questions keep their route via the general-claim gates
+// (coding tasks match CODING_TASK_RE first; OPEN_KNOWLEDGE modes never enter
+// the document-centric branch).
 const VALUE_LOOKUP_RE =
-  /\b(price|pricing|cost|rate|band|salary|limit|threshold|quota|budget|version|deadline|date|count|total|percentage|score|value)\b|\bhow (many|much)\b/;
+  /\b(price|pricing|cost|rate|band|salary|limit|threshold|quota|budget|version|deadline|date|count|total|percentage|score|value|process(es)?|procedures?|stages?|steps?|rounds?|workflow)\b|\bhow (many|much)\b/;
 
 const METRIC_LOOKUP_RE =
   /\b(volume|throughput|latency|uptime|capacity|bandwidth|qps|tps|rps|p\d{2,3}|rate)\s+(?:of|for)\s+(?:the|our|your|its|this|that)\b/;
@@ -237,6 +294,12 @@ export const isBareFollowUp = (raw: string): boolean => {
   if (RESPONSE_REQUEST_RE.test(q)) return true;
   return FOLLOW_UP_RE.test(q) && q.split(/\s+/).filter(Boolean).length <= FOLLOW_UP_MAX_WORDS;
 };
+
+/** Exported for the conversation-state resolver (Defect D, 2026-08-01): the
+ *  rephrase class needs DIFFERENT resolution (embed the previous question, not
+ *  a bare referent), so detection and resolution must share one definition —
+ *  the old duplicate gates disagreed on every reported failure. */
+export const isResponseRequest = (raw: string): boolean => RESPONSE_REQUEST_RE.test(String(raw).toLowerCase());
 
 /**
  * Classify per CLAUSE, then union.
@@ -343,7 +406,38 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
         types.add('JOB_REQUIREMENT'); noteClaim('JOB_REQUIRED_SKILL', clause);
       }
     }
-    if (MEETING_RE.test(clause)) { types.add('MEETING_FACT'); noteClaim('MEETING_STATEMENT', clause); }
+    // Defect A (2026-08-01): transcript events vs reference facts, decided per
+    // clause. An EVENT is transcript-only. A reference-stated fact (objective,
+    // agenda, success criteria) routes to the reference file when the mode
+    // allows one — with or without meeting-context wording, because "What are
+    // the current success criteria?" names no meeting and previously fell all
+    // the way to the FAST path (answerability FULL, zero evidence). Bare
+    // meeting context with neither kind of cue keeps its transcript route.
+    {
+      const meetingMode = input.policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT');
+      const meetingEvent = MEETING_EVENT_RE.test(clause)
+        || (meetingMode && MEETING_ATTRIBUTION_RE.test(clause));
+      const decisionStatus = DECISION_STATUS_RE.test(clause);
+      const meetingContext = MEETING_CONTEXT_RE.test(clause);
+      const referenceFact = REFERENCE_FACT_RE.test(clause);
+      const refAllowed = input.policy.allowedSourceTypes.includes('REFERENCE_FILE');
+      if (meetingEvent || decisionStatus
+          || (meetingContext && !(referenceFact && refAllowed))) {
+        types.add('MEETING_FACT'); noteClaim('MEETING_STATEMENT', clause);
+      }
+      // Context-free reference facts ("What are the current success criteria?")
+      // use a stricter shape: a DEFINITE reference-fact noun with no concept
+      // complement — "the goal of dependency injection" is a concept question
+      // and must keep its general route, while "the current success criteria"
+      // has no subject other than the engagement the brief describes.
+      const standaloneReferenceFact = meetingMode
+        && /\b(the|current|our) (\w+ )?(objectives?|agendas?|success criteri\w*|scope\b)/.test(clause)
+        && !/\b(objectives?|agendas?|success criteri\w*|scope) (of|for|behind) (?!(this|the|that|our) (meeting|call|session|project|release|sprint|review))/.test(clause);
+      if (!meetingEvent && refAllowed
+          && (decisionStatus || (meetingContext && referenceFact) || standaloneReferenceFact)) {
+        types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
+      }
+    }
     if (DOCUMENT_RE.test(clause)) { types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause); }
     if (SCREEN_RE.test(clause)) { types.add('SCREEN_SPECIFIC'); noteClaim('SCREEN_FACT', clause); }
 
@@ -425,7 +519,43 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // technical-interview (whose primary source is RESUME). Same gate as the
   // personal branches (review finding, 2026-07-31).
   const techTask = TECH_SELF_TALK_RE.test(q) || CODING_TASK_RE.test(q) || SYSTEM_DESIGN_RE.test(q);
-  if (!claims.size && !techTask && (namesEntity || primaryClaimsIt)) {
+
+  // ── Definite value lookup (deep-test D2/D3, 2026-08-01) ────────────────────
+  //
+  // "What is THE resume canary?" / "the dead-letter topic" / "the worker batch
+  // size" presuppose a SPECIFIC referent — a value some attached artifact
+  // holds — while "what is A mutex?" asks what a concept means. The boundary
+  // used to be the VALUE_LOOKUP_RE noun list, which failed for every noun not
+  // on it (canary, topic, batch size…): the question became GENERAL_TECHNICAL,
+  // took the FAST path, retrieval never ran, and the model's generic answer
+  // shipped with a clean FULL trace. The definite/indefinite article plus the
+  // absence of a concept complement ("the goal OF dependency injection", "the
+  // difference BETWEEN…", "the best way TO learn…") is a structural signal
+  // that needs no noun list.
+  const conceptComplement =
+    /\bthe (?:[\w-]+ ){0,3}[\w-]+ (?:of|for|behind|between|versus|vs|to [a-z])/.test(q);
+  // Grounding a definite lookup only makes sense where documents can hold the
+  // value: document-first modes always qualify; an OPEN_KNOWLEDGE mode
+  // qualifies only when this turn actually has documents (attachments or a
+  // hydrated profile). Plain `general` with nothing attached keeps its fast
+  // path for the same grammar.
+  const modeHoldsDocuments = input.policy.groundingPolicy !== 'OPEN_KNOWLEDGE'
+    || input.hasAttachedDocuments === true;
+  const definiteValueLookup = modeHoldsDocuments
+    && /\b(what|which) (is|are|was|were) (the|our|its|this|that)\b/.test(q)
+    && !conceptComplement;
+
+  // The fallback used to be sealed by ANY claim — including the
+  // GENERAL_TECHNICAL claim the definition grammar just added — so a
+  // misclassified lookup could never be recovered ("self-sealing", see the
+  // note above GENERAL_TECH_RE). It now yields only to PRIVATE claims — with
+  // one carve-out: a recognised CONCEPT question ("what is a bloom filter?")
+  // whose grammar is NOT a definite lookup stays general, or the unsealing
+  // would drag every definition through retrieval in document-centric modes.
+  const hasPrivateClaim = [...claims].some((c) => (CLAIM_AUTHORITY[c]?.authoritative ?? []).length > 0);
+  const conceptOnly = claims.has('GENERAL_TECHNICAL') && !definiteValueLookup;
+  if (!hasPrivateClaim && !techTask && !conceptOnly
+      && (namesEntity || primaryClaimsIt || definiteValueLookup)) {
     const primary = primarySource;
     const claimForSource: Partial<Record<SourceType, ClaimType>> = {
       RESUME: 'USER_PROJECT',
@@ -443,6 +573,27 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       types.add(inferred === 'DOCUMENT_FACT' ? 'DOCUMENT_FACT'
         : inferred === 'MEETING_STATEMENT' ? 'MEETING_FACT'
           : inferred === 'JOB_REQUIRED_SKILL' ? 'JOB_REQUIREMENT' : 'PERSONAL_PROJECT');
+      // Defect A (2026-08-01): a transcript-primary mode with reference files
+      // attached must not route every unclassified factual question to the
+      // transcript ALONE — "What should the facilitator ask first?" planned
+      // MEETING_TRANSCRIPT only, found nothing, and the attached brief never
+      // entered the prompt. The reference side is claimed too; answerability
+      // grades the transcript side PARTIAL honestly when nothing was said yet.
+      if (inferred === 'MEETING_STATEMENT'
+          && input.policy.allowedSourceTypes.includes('REFERENCE_FILE')) {
+        claims.add('DOCUMENT_FACT'); types.add('DOCUMENT_FACT');
+      }
+      // Deep-test D2/D3 (2026-08-01): a definite value can live in ANY attached
+      // document, not only the primary source's pool. In technical-interview
+      // the primary is RESUME, but "what is the dead-letter topic?" lives in a
+      // project/code attachment — claiming the document side too plans those
+      // pools, and the claims stay ALTERNATIVES for answerability (same clause,
+      // same family), so an answer from either is graded honestly.
+      if (inferred !== 'MEETING_STATEMENT' && inferred !== 'DOCUMENT_FACT'
+          && (['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'] as SourceType[])
+            .some((s) => input.policy.allowedSourceTypes.includes(s))) {
+        claims.add('DOCUMENT_FACT'); types.add('DOCUMENT_FACT');
+      }
     }
   }
   if (input.isFollowUp || isBareFollowUp(q)) types.add('FOLLOW_UP');
@@ -512,22 +663,20 @@ function hasNonGenericProperNoun(text: string): boolean {
 // and Recruiting was STILL unanswerable, because this map had not been updated
 // and the intersection with the mode's allowed types came out empty. Two maps,
 // one of them silently authoritative for reachability.
-const CLAIM_TO_SOURCE: Partial<Record<ClaimType, SourceType[]>> = {
-  USER_PROJECT: ['RESUME', 'CANDIDATE_FILE', 'PROJECT_FILE', 'PROFILE_FACT'],
-  USER_SKILL: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'],
-  USER_EDUCATION: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'],
-  USER_EMPLOYMENT: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'],
-  // Was ABSENT (2026-07-31): a motivation-only question ("Why did I build X?")
-  // produced wanted = {} → isPurelyGeneral → FAST path → answered from model
-  // knowledge with NO disclosure. CLAIM_AUTHORITY makes PROFILE_FACT (never the
-  // résumé — facts are not motives) the authoritative source, so retrieval now
-  // runs and an unstated reason is disclosed as unstated.
-  USER_MOTIVATION: ['PROFILE_FACT'],
-  JOB_REQUIRED_SKILL: ['JOB_DESCRIPTION'],
-  DOCUMENT_FACT: ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'],
-  MEETING_STATEMENT: ['MEETING_TRANSCRIPT'],
-  SCREEN_FACT: ['SCREEN_CONTEXT'],
-};
+// DERIVED, not hand-maintained (2026-08-01, deep-test simplification): this map
+// used to be a second copy of CLAIM_AUTHORITY's authoritative lists, and the
+// comment above records the drift incident that duplication caused — a source
+// added to one map and not the other made a claim silently unreachable
+// (Recruiting/CANDIDATE_FILE, twice). One table now answers both questions.
+// The only divergence retrieval needs is excluding source kinds that no
+// retriever can fetch (conversation state arrives with the turn; it is not a
+// queryable pool).
+const NON_RETRIEVABLE: readonly SourceType[] = ['CONVERSATION_STATE'];
+const CLAIM_TO_SOURCE: Partial<Record<ClaimType, SourceType[]>> = Object.fromEntries(
+  (Object.entries(CLAIM_AUTHORITY) as Array<[ClaimType, { authoritative: SourceType[] }]>)
+    .filter(([, a]) => a.authoritative.length > 0)
+    .map(([claim, a]) => [claim, a.authoritative.filter((s) => !NON_RETRIEVABLE.includes(s))]),
+);
 
 export function classifyTurn(input: ClassificationInput): Classification {
   const q = norm(input.resolvedQuestion);

@@ -35,19 +35,38 @@ export const CLAIM_AUTHORITY: Record<ClaimType, ClaimAuthority> = {
   // This does not widen anything elsewhere: a mode must ALSO authorize
   // CANDIDATE_FILE for it to be reachable, and only Recruiting does.
   USER_EMPLOYMENT: { authoritative: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'], prohibited: ['JOB_DESCRIPTION'] },
-  USER_PROJECT:    { authoritative: ['RESUME', 'CANDIDATE_FILE', 'PROJECT_FILE', 'PROFILE_FACT'], prohibited: ['JOB_DESCRIPTION'] },
+  // CODING_SAMPLE added 2026-08-01 (deep-test D3/D7): technical-interview
+  // authorizes coding samples precisely so they can evidence the user's own
+  // project ("what is the worker batch size?" lives in a .py sample). Without
+  // it, a correctly-typed CODING_SAMPLE chunk was retrieved and then dropped by
+  // claim authority on every USER_PROJECT turn.
+  USER_PROJECT:    { authoritative: ['RESUME', 'CANDIDATE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE', 'PROFILE_FACT'], prohibited: ['JOB_DESCRIPTION'] },
   USER_SKILL:      { authoritative: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'], prohibited: ['JOB_DESCRIPTION'] },
   USER_EDUCATION:  { authoritative: ['RESUME', 'CANDIDATE_FILE', 'PROFILE_FACT'], prohibited: ['JOB_DESCRIPTION'] },
   // Motivation is only ever direct user context. Anything else is inference and
   // must be labelled as such, never asserted as history.
-  USER_MOTIVATION: { authoritative: ['PROFILE_FACT', 'CONVERSATION_STATE'], prohibited: ['JOB_DESCRIPTION', 'RESUME'] },
+  // CANDIDATE_FILE added 2026-08-01 (Defect F): the operator's OWN résumé stays
+  // prohibited (a résumé's facts are not the user's motives), but a candidate
+  // file may carry an explicit objective/reason-for-change statement, and
+  // omitting it here while Recruiting authorizes no PROFILE_FACT made every
+  // candidate-motivation question unreachable — the résumé was never queried
+  // and the answer claimed no résumé existed. When the file states no reason,
+  // retrieval now runs and the absence is disclosed as grounded absence.
+  USER_MOTIVATION: { authoritative: ['PROFILE_FACT', 'CONVERSATION_STATE', 'CANDIDATE_FILE'], prohibited: ['JOB_DESCRIPTION', 'RESUME'] },
 
   // Symmetric rule: a resume cannot state what a job requires.
   JOB_RESPONSIBILITY:   { authoritative: ['JOB_DESCRIPTION'], prohibited: ['RESUME'] },
   JOB_REQUIRED_SKILL:   { authoritative: ['JOB_DESCRIPTION'], prohibited: ['RESUME'] },
   JOB_PREFERRED_SKILL:  { authoritative: ['JOB_DESCRIPTION'], prohibited: ['RESUME'] },
 
-  DOCUMENT_FACT:     { authoritative: ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'], prohibited: [] },
+  // RESUME/CANDIDATE_FILE/JOB_DESCRIPTION added 2026-08-01 (deep-test D2/D10):
+  // a DOCUMENT_FACT claim means "a fact this mode's ATTACHED DOCUMENTS state"
+  // ("what is the canary written in this résumé?"). A résumé and a JD are
+  // attached documents; excluding them meant document-deictic questions about
+  // them planned only REFERENCE_FILE and the correctly-retrieved chunks were
+  // dropped by claim authority. The JD-as-experience protection is untouched:
+  // it lives on the USER_* claims, which still prohibit JOB_DESCRIPTION.
+  DOCUMENT_FACT:     { authoritative: ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE', 'RESUME', 'CANDIDATE_FILE', 'JOB_DESCRIPTION'], prohibited: [] },
   // One meeting cannot evidence another. Enforced by scope, not by ranking.
   MEETING_STATEMENT: { authoritative: ['MEETING_TRANSCRIPT'], prohibited: [] },
   MEETING_DECISION:  { authoritative: ['MEETING_TRANSCRIPT'], prohibited: [] },
