@@ -2,16 +2,26 @@ import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
 
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
-const MAX_OUTPUT_TOKENS = 2048;
-// DeepSeek V4 Flash is a reasoning model: internal reasoning tokens
-// (message.reasoning_content) are counted against max_tokens alongside the
-// final answer (message.content). At MAX_OUTPUT_TOKENS=2048 the reasoning
-// phase alone can exhaust the entire budget (finish_reason: 'length',
-// content: '', reasoning_tokens: 2048), leaving zero tokens for the answer.
-// Matches the validated production cap in electron/LLMHelper.ts
-// (DEEPSEEK_MAX_OUTPUT_TOKENS = 8192). Gemini is unaffected and keeps
-// MAX_OUTPUT_TOKENS.
-const DEEPSEEK_MAX_OUTPUT_TOKENS = 8192;
+// Default output-token budgets used by run-raw-comparison.mjs (unaffected by
+// this change — it never passes maxOutputTokens). Both DeepSeek V4 Flash and
+// Gemini 3.x are reasoning/thinking models: their internal reasoning tokens
+// (DeepSeek: message.reasoning_content / usage.completion_tokens_details
+// .reasoning_tokens; Gemini: usageMetadata.thoughtsTokenCount) are counted
+// against the SAME budget as the visible answer (max_tokens / maxOutputTokens
+// respectively). On hard problems the reasoning/thinking phase alone can
+// exhaust the entire budget (finish_reason: 'length', empty content/text),
+// leaving zero tokens for the answer. Live diagnostics on run-coding-harness.mjs
+// confirmed this at both DEEPSEEK_MAX_OUTPUT_TOKENS=8192 (reasoning_tokens
+// hit the cap) and Gemini's MAX_OUTPUT_TOKENS=2048 (thoughtsTokenCount ate
+// most of the budget). Callers needing more headroom for hard problems pass
+// an explicit `maxOutputTokens` override to callDeepseek/callGemini instead
+// of raising these shared defaults out from under run-raw-comparison.mjs.
+// Both are set to 64k (the max output Gemini 3.x supports; DeepSeek V4 Flash
+// allows up to 384k) so the reasoning/thinking phase can never starve the
+// visible answer. This is a CEILING, not a spend: billing is on tokens
+// actually emitted, and a model that answers in 300 tokens still costs 300.
+const MAX_OUTPUT_TOKENS = 65536;
+const DEEPSEEK_MAX_OUTPUT_TOKENS = 65536;
 const INTERACTIVE_SEED = 7;
 
 export function createDeepseekClient(apiKey) {
@@ -22,7 +32,7 @@ export function createGeminiClient(apiKey) {
   return new GoogleGenAI({ apiKey });
 }
 
-export async function callDeepseek(client, { model = 'deepseek-v4-flash', systemPrompt, userPrompt }) {
+export async function callDeepseek(client, { model = 'deepseek-v4-flash', systemPrompt, userPrompt, maxOutputTokens }) {
   const start = Date.now();
   try {
     const completion = await client.chat.completions.create({
@@ -31,7 +41,7 @@ export async function callDeepseek(client, { model = 'deepseek-v4-flash', system
         ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
         { role: 'user', content: userPrompt },
       ],
-      max_tokens: DEEPSEEK_MAX_OUTPUT_TOKENS,
+      max_tokens: maxOutputTokens ?? DEEPSEEK_MAX_OUTPUT_TOKENS,
       seed: INTERACTIVE_SEED,
     });
     return {
@@ -46,14 +56,14 @@ export async function callDeepseek(client, { model = 'deepseek-v4-flash', system
   }
 }
 
-export async function callGemini(client, { model, systemPrompt, userPrompt }) {
+export async function callGemini(client, { model, systemPrompt, userPrompt, maxOutputTokens }) {
   const start = Date.now();
   try {
     const response = await client.models.generateContent({
       model,
       contents: userPrompt,
       config: {
-        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        maxOutputTokens: maxOutputTokens ?? MAX_OUTPUT_TOKENS,
         temperature: 0.4,
         ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
       },

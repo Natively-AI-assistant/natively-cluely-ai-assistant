@@ -11,7 +11,7 @@ describe('callDeepseek', () => {
             assert.equal(req.model, 'deepseek-v4-flash');
             assert.equal(req.messages[0].role, 'system');
             assert.equal(req.messages[1].content, 'hello');
-            assert.equal(req.max_tokens, 8192);
+            assert.equal(req.max_tokens, 65536);
             return {
               choices: [{ message: { content: 'hi there' } }],
               usage: { prompt_tokens: 12, completion_tokens: 3 },
@@ -55,6 +55,34 @@ describe('callDeepseek', () => {
     };
     await callDeepseek(fakeClient, { model: 'deepseek-v4-flash', userPrompt: 'x' });
   });
+
+  test('uses the DEEPSEEK_MAX_OUTPUT_TOKENS default (65536) when maxOutputTokens is omitted', async () => {
+    const fakeClient = {
+      chat: {
+        completions: {
+          create: async (req) => {
+            assert.equal(req.max_tokens, 65536);
+            return { choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } };
+          },
+        },
+      },
+    };
+    await callDeepseek(fakeClient, { model: 'deepseek-v4-flash', userPrompt: 'x' });
+  });
+
+  test('uses the provided maxOutputTokens override instead of the default', async () => {
+    const fakeClient = {
+      chat: {
+        completions: {
+          create: async (req) => {
+            assert.equal(req.max_tokens, 16384);
+            return { choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } };
+          },
+        },
+      },
+    };
+    await callDeepseek(fakeClient, { model: 'deepseek-v4-flash', userPrompt: 'x', maxOutputTokens: 16384 });
+  });
 });
 
 describe('callGemini', () => {
@@ -64,7 +92,7 @@ describe('callGemini', () => {
         generateContent: async (req) => {
           assert.equal(req.model, 'gemini-3.6-flash');
           assert.equal(req.config.systemInstruction.parts[0].text, 'be terse');
-          assert.equal(req.config.maxOutputTokens, 2048);
+          assert.equal(req.config.maxOutputTokens, 65536);
           return {
             text: 'gemini says hi',
             usageMetadata: { promptTokenCount: 20, candidatesTokenCount: 5 },
@@ -88,5 +116,29 @@ describe('callGemini', () => {
     const result = await callGemini(fakeClient, { model: 'gemini-3.1-flash-lite', userPrompt: 'x' });
     assert.equal(result.text, '');
     assert.equal(result.error, 'quota exceeded');
+  });
+
+  test('uses the MAX_OUTPUT_TOKENS default (65536) when maxOutputTokens is omitted', async () => {
+    const fakeClient = {
+      models: {
+        generateContent: async (req) => {
+          assert.equal(req.config.maxOutputTokens, 65536);
+          return { text: 'ok', usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 } };
+        },
+      },
+    };
+    await callGemini(fakeClient, { model: 'gemini-3.1-flash-lite', userPrompt: 'x' });
+  });
+
+  test('uses the provided maxOutputTokens override instead of the default', async () => {
+    const fakeClient = {
+      models: {
+        generateContent: async (req) => {
+          assert.equal(req.config.maxOutputTokens, 8192);
+          return { text: 'ok', usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 } };
+        },
+      },
+    };
+    await callGemini(fakeClient, { model: 'gemini-3.6-flash', userPrompt: 'x', maxOutputTokens: 8192 });
   });
 });

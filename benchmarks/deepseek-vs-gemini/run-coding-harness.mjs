@@ -27,6 +27,15 @@ const FIXTURES_DIR = path.join(__dirname, 'fixtures');
 const RESULTS_DIR = path.join(__dirname, 'results');
 const ALL_MODELS = ['deepseek-v4-flash', 'gemini-3.6-flash', 'gemini-3.1-flash-lite'];
 const SYSTEM_PROMPT = 'You are an expert programmer. Respond with a single fenced code block containing only the requested function, no explanation.';
+// Coding problems can be hard enough that reasoning/thinking tokens alone
+// exhaust the lib/clients.mjs defaults (see clients.mjs top-of-file comment
+// for the live-diagnostic evidence: DeepSeek hit finish_reason:'length' with
+// reasoning_tokens:8192 on code-044; Gemini 3.6 Flash showed
+// thoughtsTokenCount:1169 against a 2048 budget on code-036). These
+// per-call overrides only affect this harness — run-raw-comparison.mjs is
+// untouched and keeps the lib/clients.mjs defaults.
+const DEEPSEEK_CODING_MAX_OUTPUT_TOKENS = 65536;
+const GEMINI_CODING_MAX_OUTPUT_TOKENS = 65536;
 
 function runSubprocess(command, args, timeoutMs = 5000) {
   return new Promise((resolve) => {
@@ -121,8 +130,8 @@ async function main() {
       : problem.language;
     const userPrompt = `${problem.prompt}\n\nWrite the function named exactly "${problem.function_name || 'solve'}" in ${languageLabel}. Do not use any other programming language.`;
     const call = modelId === 'deepseek-v4-flash'
-      ? await callDeepseek(deepseekClient, { model: modelId, systemPrompt: SYSTEM_PROMPT, userPrompt })
-      : await callGemini(geminiClient, { model: modelId, systemPrompt: SYSTEM_PROMPT, userPrompt });
+      ? await callDeepseek(deepseekClient, { model: modelId, systemPrompt: SYSTEM_PROMPT, userPrompt, maxOutputTokens: DEEPSEEK_CODING_MAX_OUTPUT_TOKENS })
+      : await callGemini(geminiClient, { model: modelId, systemPrompt: SYSTEM_PROMPT, userPrompt, maxOutputTokens: GEMINI_CODING_MAX_OUTPUT_TOKENS });
 
     let scored = { passCount: null, totalCount: null, error: call.error };
     if (!call.error && problem.execution) {
