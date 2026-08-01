@@ -51,10 +51,18 @@ print(json.dumps(out))
 async function executeCode(language, code, functionName, testCases) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-vs-gemini-'));
   try {
-    if (language === 'javascript' || language === 'typescript') {
+    if (language === 'javascript') {
       const file = path.join(tmpDir, 'harness.mjs');
       fs.writeFileSync(file, buildJsHarness(code, functionName, testCases));
       return await runSubprocess('node', [file], '');
+    }
+    if (language === 'typescript') {
+      // TS reference solutions may contain real type annotations that plain `node`
+      // can't parse; run via Node's built-in type-stripping (same convention as
+      // package.json's test:lib / eval:intelligence:ui / benchmark:l4-aggregate scripts).
+      const file = path.join(tmpDir, 'harness.ts');
+      fs.writeFileSync(file, buildJsHarness(code, functionName, testCases));
+      return await runSubprocess('node', ['--experimental-strip-types', file], '');
     }
     if (language === 'python') {
       const file = path.join(tmpDir, 'harness.py');

@@ -39,4 +39,15 @@ describe('executeAndScore', () => {
     const result = await executeAndScore(problem, null);
     assert.equal(result.error, 'no code extracted from response');
   });
+
+  test('a TS answer with real type annotations executes via --experimental-strip-types and scores correctly', async () => {
+    const problem = {
+      language: 'typescript', execution: true, function_name: 'add',
+      test_cases: [{ input: [1, 2], expected: 3 }, { input: [5, 5], expected: 10 }],
+    };
+    const result = await executeAndScore(problem, 'function add(a: number, b: number): number { return a + b; }');
+    assert.equal(result.error, null);
+    assert.equal(result.passCount, 2);
+    assert.equal(result.totalCount, 2);
+  });
 });

@@ -55,10 +55,17 @@ export async function executeAndScore(problem, extractedCode) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-vs-gemini-coding-'));
   try {
     let run;
-    if (problem.language === 'javascript' || problem.language === 'typescript') {
+    if (problem.language === 'javascript') {
       const file = path.join(tmpDir, 'harness.mjs');
       fs.writeFileSync(file, buildJsHarness(extractedCode, problem.function_name, problem.test_cases));
       run = await runSubprocess('node', [file]);
+    } else if (problem.language === 'typescript') {
+      // TS answers may contain real type annotations that plain `node` can't parse.
+      // Write as .ts and run with Node's built-in type-stripping (same convention as
+      // package.json's test:lib / eval:intelligence:ui / benchmark:l4-aggregate scripts).
+      const file = path.join(tmpDir, 'harness.ts');
+      fs.writeFileSync(file, buildJsHarness(extractedCode, problem.function_name, problem.test_cases));
+      run = await runSubprocess('node', ['--experimental-strip-types', file]);
     } else if (problem.language === 'python') {
       const file = path.join(tmpDir, 'harness.py');
       fs.writeFileSync(file, buildPyHarness(extractedCode, problem.function_name, problem.test_cases));
