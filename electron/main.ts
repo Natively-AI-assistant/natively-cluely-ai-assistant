@@ -7127,8 +7127,19 @@ async function initializeApp() {
 
   // Load stored Google Service Account path (for Speech-to-Text)
   // Fall back to GOOGLE_APPLICATION_CREDENTIALS env var (set in terminal but not Spotlight)
-  const storedServiceAccountPath = CredentialsManager.getInstance().getGoogleServiceAccountPath()
+  const storedServiceAccountPathRaw = CredentialsManager.getInstance().getGoogleServiceAccountPath()
     || process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  
+  // Guard against the default dummy path from .env being persisted
+  const storedServiceAccountPath = storedServiceAccountPathRaw === '/path/to/your/service-account.json' 
+    ? undefined 
+    : storedServiceAccountPathRaw;
+
+  if (storedServiceAccountPathRaw === '/path/to/your/service-account.json') {
+    CredentialsManager.getInstance().setGoogleServiceAccountPath('');
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  }
+
   if (storedServiceAccountPath) {
     console.log("[Init] Loading stored Google Service Account path");
     appState.updateGoogleCredentials(storedServiceAccountPath);

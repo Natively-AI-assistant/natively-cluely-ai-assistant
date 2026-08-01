@@ -39,7 +39,21 @@
  *     stream consumer; partial deltas yielded so far are NOT lost.
  */
 
+import fs from 'fs';
+import path from 'path';
 import { CodexOAuthService } from './CodexOAuthService';
+
+// Extension → MIME for image data-URL encoding. The Responses API accepts
+// these four formats in `input_image` items (same set as the Chat Completions
+// vision endpoint). Default to PNG for unknown extensions — the backend will
+// reject truly unsupported formats with a clear error.
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+};
 
 export type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
 export type CodexServiceTier = 'default' | 'fast' | 'flex';
@@ -368,19 +382,39 @@ export class CodexCliService {
   private static buildRequestBody(options: CodexCliRunOptions): Record<string, unknown> {
     const resolvedEffort = resolveCodexReasoningEffort(options.model, options.modelReasoningEffort);
 
-    // Image inputs: Responses API wants `type: "input_image"` items.
-    // We don't yet support image-bearing Codex calls in this rewrite
-    // (LLMHelper.buildCodexCliPrompt only passes text) — the imagePaths
-    // arg is accepted for backward-compat but ignored at the wire level.
-    // Future: encode as data URLs the same way LocalWhisperSTT does.
+    // Build the user message content array. Always starts with the text
+    // prompt; image paths (screenshots) are encoded as data-URL
+    // `input_image` items so the Codex backend can process them with
+    // vision-capable models (gpt-5.4, gpt-5.5-codex, etc.).
+    const contentItems: Array<Record<string, unknown>> = [
+      { type: 'input_text', text: options.prompt },
+    ];
+
+    if (options.imagePaths?.length) {
+      for (const imagePath of options.imagePaths) {
+        try {
+          const imageData = fs.readFileSync(imagePath);
+          const ext = path.extname(imagePath).toLowerCase();
+          const mimeType = IMAGE_MIME_BY_EXT[ext] || 'image/png';
+          const dataUrl = `data:${mimeType};base64,${imageData.toString('base64')}`;
+          contentItems.push({
+            type: 'image_url',
+            image_url: { url: dataUrl },
+          });
+        } catch (e: any) {
+          // Non-fatal: skip unreadable images (already validated at IPC
+          // layer, so this is a belt-and-suspenders guard for race
+          // conditions like tmp-file cleanup between capture and send).
+          console.warn(`[CodexCliService] Failed to read image, skipping: ${imagePath}`, e?.message);
+        }
+      }
+    }
 
     const input: Array<Record<string, unknown>> = [
       {
         type: 'message',
         role: 'user',
-        content: [
-          { type: 'input_text', text: options.prompt },
-        ],
+        content: contentItems,
       },
     ];
 

@@ -1052,23 +1052,27 @@ export class CredentialsManager {
 
                 if (keyringAvailable && fs.existsSync(CREDENTIALS_PATH)) {
                     const encrypted = fs.readFileSync(CREDENTIALS_PATH);
-                    const decrypted = safeStorage.decryptString(encrypted);
+                    let keyringSuccess = false;
                     try {
+                        const decrypted = safeStorage.decryptString(encrypted);
                         const parsed = JSON.parse(decrypted);
                         if (typeof parsed === 'object' && parsed !== null) {
                             this.credentials = parsed;
                             console.log('[CredentialsManager] Loaded encrypted credentials');
+                            keyringSuccess = true;
                         } else {
                             throw new Error('Decrypted credentials is not a valid object');
                         }
-                    } catch (parseError) {
-                        console.error('[CredentialsManager] Failed to parse decrypted credentials — file may be corrupted. Starting fresh:', parseError);
-                        this.credentials = {};
+                    } catch (keyringReadError) {
+                        console.error('[CredentialsManager] Failed to read/decrypt keyring credentials. Falling through to app-managed fallback:', keyringReadError);
                     }
-                    // Keyring is authoritative — clean up any stale fallback + plaintext.
-                    this.removeFallbackFile();
-                    this.removePlaintextFile();
-                    return;
+                    
+                    if (keyringSuccess) {
+                        // Keyring is authoritative — clean up any stale fallback + plaintext.
+                        this.removeFallbackFile();
+                        this.removePlaintextFile();
+                        return;
+                    }
                 }
                 // Keyring file exists but keyring is unavailable: fall through to try
                 // the app-managed fallback below (we cannot decrypt the keyring file).

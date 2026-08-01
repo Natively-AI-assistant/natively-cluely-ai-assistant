@@ -4275,6 +4275,10 @@ const isMultimodal = !!(imagePaths?.length);
         cloud.push({ id: 'natively', name: 'Natively API', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
           open: (sig) => this.streamWithNatively(userContent, systemPrompt, imagePaths, sig) });
       }
+      if (this.codexCliConfig.enabled || this.isCodexCliModel(this.currentModelId)) {
+        cloud.push({ id: 'codex-cli', name: `Codex CLI (${this.codexCliConfig.model})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithCodexCli(userContent, systemPrompt, false, imagePaths, sig) });
+      }
     }
 
     // Local providers (always available, including in local-only mode).
@@ -4315,8 +4319,10 @@ const isMultimodal = !!(imagePaths?.length);
       const front: VisionStreamProvider[] = [];
       if (this.useOllama) { const o = local.find(p => p.id === 'ollama'); if (o) front.push(o); }
       if (this.customProvider) { const c = local.find(p => p.id === 'custom'); if (c) front.push(c); }
+      if (this.isCodexCliModel(this.currentModelId)) { const cdx = cloud.find(p => p.id === 'codex-cli'); if (cdx) front.push(cdx); }
       const backLocal = local.filter(p => !front.includes(p));
-      ordered = [...front, ...orderVisionByHealth(cloud, this.visionHealth, nowMs), ...backLocal];
+      const backCloud = cloud.filter(p => !front.includes(p));
+      ordered = [...front, ...orderVisionByHealth(backCloud, this.visionHealth, nowMs), ...backLocal];
     }
 
     if (ordered.length === 0) {

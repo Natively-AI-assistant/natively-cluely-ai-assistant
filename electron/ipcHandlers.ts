@@ -4480,7 +4480,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             piTelemetry.emit('pi_provider_error_classified', { kind: klass.kind, outage: klass.isOutage, retryable: klass.retryable, surface: 'manual' });
             if (answerPlan.profileContextPolicy === 'required' && !fullResponse.trim()
                 && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
-              const safe = "The model failed before generating an answer, so I won't guess from your profile. Please try again.";
+              const isAuthErr = streamError?.message?.includes('Not signed in to ChatGPT') || streamError?.message?.includes('Codex session expired');
+              const safe = isAuthErr ? streamError.message : "The model failed before generating an answer, so I won't guess from your profile. Please try again.";
               finalGenerationMode = 'provider_error_no_answer';
               sessionWriteDecision = decideSessionWritePolicy({
                 finalGenerationMode,
