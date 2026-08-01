@@ -6783,7 +6783,12 @@ Provide only the answer, nothing else.`;
         e.preventDefault();
         handlers.toggleVisibility();
       } else if (isShortcutPressed(e, 'processScreenshots')) {
-        if (!isInput) {
+        // The bound accelerator carries a modifier (Cmd/Ctrl+Enter): it is the
+        // "What should I say?" trigger, never text entry, so the input-focus
+        // suppression must not swallow it. Without this, a press while the chat
+        // textarea holds focus does nothing at all — the textarea's own Enter
+        // handler claims it and no-ops on an empty input.
+        if (!isInput || e.metaKey || e.ctrlKey) {
           e.preventDefault();
           handlers.processScreenshots();
         }
@@ -8444,6 +8449,11 @@ Provide only the answer, nothing else.`;
                         }
                       }
                       if (e.key !== 'Enter' || e.repeat) return;
+                      // Cmd/Ctrl+Enter belongs to general:process-screenshots.
+                      // Let it bubble to the window keydown handler instead of
+                      // submitting — handleManualSubmit silently returns on an
+                      // empty input, which is why the shortcut appeared dead.
+                      if (e.metaKey || e.ctrlKey) return;
                       e.preventDefault();
                       handleManualSubmit();
                     }}

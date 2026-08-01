@@ -9125,6 +9125,18 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         }
 
+        // Diagnostic (2026-08-02): the renderer's own "[DOM Context] Forwarding…"
+        // notice is a console.debug in the RENDERER, which is not forwarded to the
+        // main-process console — so from a user's terminal log there was no way to
+        // tell a capture that never arrived from one that arrived and was ignored
+        // downstream. Those two have completely different fixes. Log it once here,
+        // at the main-process boundary where the value is authoritative.
+        console.log('[WTA] domContext at IPC boundary:', {
+          received: typeof options?.domContext === 'string' ? options.domContext.length : 0,
+          envelope: Boolean(options?.domContextEnvelope),
+          effective: effectiveDomContext ? effectiveDomContext.length : 0,
+        });
+
         // Question and imagePaths are now optional - IntelligenceManager infers from transcript
         const answer = await intelligenceManager.runWhatShouldISay(
           question,

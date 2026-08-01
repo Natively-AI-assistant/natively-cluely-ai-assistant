@@ -2928,15 +2928,29 @@ export class IntelligenceEngine extends EventEmitter {
             // check naturally returns false for genuinely clean extracted
             // text (no double-fire on the common case) and only fires this
             // fallback when the extracted tail is ITSELF still contaminated.
+            // Gate on a real question (2026-08-02). The repair prompt below ships
+            // ONLY <question> + optional <candidate_facts> — no transcript, no
+            // DOM/screen context, no evidence. On surfaces where the question is
+            // empty (turnPlanner:empty_question, plus no transcript because
+            // Ambient AI Chat suppresses STT), ALL FOUR fallbacks below are
+            // blank, so the model is asked to "answer the question below" with
+            // nothing below it and returns a refusal that then REPLACES a
+            // validated answer the user already watched stream in.
+            //
+            // Gate on the SAME four-way fallback the prompt actually consumes —
+            // not on extractedQuestion alone, which is only the third source and
+            // would skip repairs that had a perfectly good `question` or
+            // `answerPlan.question` available.
+            const scaffoldQuestion = question || answerPlan.question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
             if (!isSpeculative
                 && fullAnswer
+                && scaffoldQuestion.trim()
                 && !isCodingAnswerType(answerPlan.answerType)
                 && !TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION.has(answerPlan.answerType)
                 && !isDocGroundedAnswerType(answerPlan.answerType)
                 && hasUnrecoveredScaffoldContamination(answerPlan.answerType, fullAnswer)
                 && this.currentGenerationId === generationId) {
                 try {
-                    const scaffoldQuestion = question || answerPlan.question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
                     if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                         try {
                             console.log('[TRACE:LONGCTX] scaffold_contamination_discard', JSON.stringify({
@@ -2999,8 +3013,22 @@ export class IntelligenceEngine extends EventEmitter {
                         // Reject and fall through with the ORIGINAL fullAnswer
                         // unchanged if either check fails, rather than shipping a
                         // possibly-worse second guess.
+                        // Also reject a repair that is ITSELF a non-answer, so a
+                        // strictly worse second guess can't overwrite a validated
+                        // answer. NOTE the coverage limit: both predicates match
+                        // only near-exact known sentinel phrasings, so a
+                        // free-form refusal ("To answer that, please clarify…")
+                        // still slips through — the empty-question gate above is
+                        // the real guard; this is a cheap backstop. Also note
+                        // isNonAnswerSentinel now additionally matches the
+                        // promptSystemV2 [[NO_ACTION]] sentinel, so if that flag
+                        // is ever enabled a repair leading with a stripped
+                        // sentinel would be rejected here rather than cleaned.
                         const stillContaminated = hasUnrecoveredScaffoldContamination(answerPlan.answerType, scaffoldRepairedTrim);
-                        if (!stillContaminated && !isLeakedAnswerArtifact(scaffoldRepairedTrim)) {
+                        if (!stillContaminated
+                            && !isLeakedAnswerArtifact(scaffoldRepairedTrim)
+                            && !IntelligenceEngine.isNonAnswerSentinel(scaffoldRepairedTrim)
+                            && !IntelligenceEngine.isFalseNoContentClaim(scaffoldRepairedTrim)) {
                             fullAnswer = scaffoldRepairedTrim;
                             trace.mark('repair_used', { reason: 'scaffold_contamination_regenerated' });
                         } else {

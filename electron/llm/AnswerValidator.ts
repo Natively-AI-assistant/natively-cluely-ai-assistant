@@ -55,6 +55,36 @@ const hasComplexity = (answer: string): boolean =>
 const isCodingType = (answerType: AnswerType): boolean =>
   answerType === 'coding_question_answer' || answerType === 'dsa_question_answer';
 
+/**
+ * "We never classified this", NOT "we determined this is not coding"
+ * (2026-08-02). AnswerPlanner assigns `unknown_answer` from a single
+ * condition — `if (!question) answerType = 'unknown_answer'` (AnswerPlanner.ts
+ * ~:2527) — so it is the ABSENCE of a classification, reached whenever no
+ * question could be extracted (empty transcript, Ambient AI Chat suppressing
+ * STT, a screen/DOM-only press with no spoken or typed question).
+ *
+ * That distinction is load-bearing for the two scaffold detectors below. Their
+ * entire premise (see detectAndExtractScaffoldMisfire's doc comment) is that a
+ * real negotiation/behavioral/lecture answer "has no reason to ever contain"
+ * coding vocabulary — true of answers KNOWN to be non-coding, false of
+ * unclassified ones. A user who captures a coding problem from their browser
+ * and presses "What should I say?" without ever asking a question out loud gets
+ * `unknown_answer` plus a legitimate coding answer carrying exactly the
+ * fingerprint these detectors treat as proof of contamination: `## Approach`,
+ * `## Code`, `## Complexity`, `O(n)`. Both detectors then fire on a correct
+ * answer — extraction discards the real content as scaffold, and the
+ * unrecovered path replaces the whole answer via bounded regeneration.
+ * Observed live 2026-08-01 (two of three presses destroyed).
+ *
+ * Treat unclassified as out of scope for both, matching the codebase's
+ * established preference for shipping intact content over silently discarding
+ * real answers. `general_meeting_answer` is deliberately NOT included: it is a
+ * real classification reached only when a question EXISTS, and is pinned by
+ * ScaffoldMisfireExtraction_2026_07_18.test.mjs.
+ */
+const isUnclassifiedType = (answerType: AnswerType): boolean =>
+  answerType === 'unknown_answer';
+
 const startsWithCodeLikeContent = (answer: string): boolean => {
   const trimmed = answer.trimStart();
   return /^```/.test(trimmed)
@@ -445,6 +475,7 @@ const hasCodingScaffoldFingerprint = (text: string): boolean =>
 
 export const detectAndExtractScaffoldMisfire = (answerType: AnswerType, answer: string): string | null => {
   if (isCodingType(answerType)) return null; // that's validateAnswerStructure's job
+  if (isUnclassifiedType(answerType)) return null; // no classification ⇒ premise doesn't hold
   const text = String(answer || '');
   if (!text.trim()) return null;
 
@@ -554,6 +585,7 @@ export const detectAndExtractScaffoldMisfire = (answerType: AnswerType, answer: 
  */
 export const hasUnrecoveredScaffoldContamination = (answerType: AnswerType, answer: string): boolean => {
   if (isCodingType(answerType)) return false;
+  if (isUnclassifiedType(answerType)) return false; // no classification ⇒ premise doesn't hold
   const text = String(answer || '');
   if (!text.trim()) return false;
   const headingMatches = [...text.matchAll(new RegExp(SCAFFOLD_MISFIRE_HEADING_RE.source, 'gim'))];
