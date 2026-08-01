@@ -86,8 +86,8 @@
     "difficulty": "easy",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `reverseWithinWords(s)` that reverses the characters inside each single-space-separated word of s, while keeping the words themselves in their original order (e.g. 'hello world' -> 'olleh dlrow').",
-    "function_name": "reverseWithinWords",
+    "prompt": "Write a function `reverseLettersWithinWords(s)` that processes a string of single-space-separated words. Within each word, reverse the ORDER of alphabetic (a-z, A-Z) characters only, while leaving every non-alphabetic character (digits, punctuation, etc.) fixed in its original position within the word. Word order and the spacing between words must stay unchanged. For example, in the word 'a1bc', the letters are a, b, c at positions 0, 2, 3; reversing just those letters (keeping the digit '1' pinned at position 1) gives 'c1ba'. Note this differs from simply reversing the whole word: a plain full-word reversal of 'a1bc' would give 'cb1a'.",
+    "function_name": "reverseLettersWithinWords",
     "test_cases": [
       {
         "input": [
@@ -112,9 +112,21 @@
           "a bb ccc"
         ],
         "expected": "a bb ccc"
+      },
+      {
+        "input": [
+          "a1bc de,f2"
+        ],
+        "expected": "c1ba fe,d2"
+      },
+      {
+        "input": [
+          "123"
+        ],
+        "expected": "123"
       }
     ],
-    "reference_solution": "def reverseWithinWords(s):\n    return ' '.join(w[::-1] for w in s.split(' '))\n"
+    "reference_solution": "def reverseLettersWithinWords(s):\n    def reverse_word(w):\n        positions = [i for i, c in enumerate(w) if c.isalpha()]\n        letters = [w[i] for i in positions][::-1]\n        chars = list(w)\n        for pos, ch in zip(positions, letters):\n            chars[pos] = ch\n        return ''.join(chars)\n    return ' '.join(reverse_word(w) for w in s.split(' '))\n"
   },
   {
     "id": "code-004",
@@ -2071,8 +2083,8 @@
     "difficulty": "hard",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `cycleEntryNode(start, next_nodes)` modeling a singly linked list where next_nodes[i] is the index of the node after node i, or -1 for the last node. Given the start node's index, return the index of the node where a cycle BEGINS (using Floyd's algorithm), or -1 if there is no cycle.",
-    "function_name": "cycleEntryNode",
+    "prompt": "Write a function `cycleCanonicalIndex(start, next_nodes)` modeling a singly linked structure where next_nodes[i] is the index of the node after node i, or -1 for the last node (no next). Starting from index `start`, follow the chain and determine whether it eventually enters a cycle. If it does, return the SMALLEST node index that belongs anywhere on the cycle -- used as a canonical, deterministic identifier for the cycle regardless of which node the chain happens to enter it at. (This is NOT necessarily the node where the chain first enters the cycle -- if a smaller-indexed node exists elsewhere on the cycle, that smaller index must be returned instead.) If there is no cycle, return -1.",
+    "function_name": "cycleCanonicalIndex",
     "test_cases": [
       {
         "input": [
@@ -2107,17 +2119,44 @@
           ]
         ],
         "expected": -1
+      },
+      {
+        "input": [
+          0,
+          [
+            4,
+            4,
+            1,
+            3,
+            2
+          ]
+        ],
+        "expected": 1
+      },
+      {
+        "input": [
+          0,
+          [
+            1,
+            5,
+            5,
+            2,
+            4,
+            3
+          ]
+        ],
+        "expected": 2
       }
     ],
-    "reference_solution": "def cycleEntryNode(start, next_nodes):\n    slow = start\n    fast = start\n    while fast != -1 and next_nodes[fast] != -1:\n        slow = next_nodes[slow]\n        fast = next_nodes[next_nodes[fast]]\n        if slow == fast:\n            ptr1 = start\n            ptr2 = slow\n            while ptr1 != ptr2:\n                ptr1 = next_nodes[ptr1]\n                ptr2 = next_nodes[ptr2]\n            return ptr1\n    return -1\n"
+    "reference_solution": "def cycleCanonicalIndex(start, next_nodes):\n    slow = start\n    fast = start\n    while fast != -1 and next_nodes[fast] != -1:\n        slow = next_nodes[slow]\n        fast = next_nodes[next_nodes[fast]]\n        if slow == fast:\n            min_idx = slow\n            cur = next_nodes[slow]\n            while cur != slow:\n                if cur < min_idx:\n                    min_idx = cur\n                cur = next_nodes[cur]\n            return min_idx\n    return -1\n"
   },
   {
     "id": "code-044",
     "difficulty": "hard",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `slidingWindowMedian(nums, k)` that returns an array containing the MEDIAN of each contiguous window of size k as it slides from left to right across nums. For even k, the median is the average of the two middle values (as a float).",
-    "function_name": "slidingWindowMedian",
+    "prompt": "Write a function `slidingWindowWeightedMedian(nums, weights, k)` where weights is a parallel array giving a positive weight to each element of nums. For every contiguous window of size k (sliding left to right across nums), compute its WEIGHTED MEDIAN: sort the window's (value, weight) pairs by value ascending, then find the smallest value v such that the cumulative weight of all window elements with value <= v is at least half of the window's TOTAL weight. Return an array containing this weighted median for each window, in order. (When every weight is 1 and k is odd, this reduces to the ordinary median; when weights differ, or when k is even, a plain unweighted median calculation will give the wrong answer.)",
+    "function_name": "slidingWindowWeightedMedian",
     "test_cases": [
       {
         "input": [
@@ -2130,6 +2169,16 @@
             3,
             6,
             7
+          ],
+          [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
           ],
           3
         ],
@@ -2145,17 +2194,88 @@
       {
         "input": [
           [
+            5,
+            1,
+            9,
+            2,
+            8
+          ],
+          [
+            1,
+            1,
+            7,
+            1,
+            1
+          ],
+          3
+        ],
+        "expected": [
+          9,
+          9,
+          9
+        ]
+      },
+      {
+        "input": [
+          [
             1,
             2,
             3,
             4
           ],
+          [
+            1,
+            1,
+            5,
+            1
+          ],
+          3
+        ],
+        "expected": [
+          3,
+          3
+        ]
+      },
+      {
+        "input": [
+          [
+            10,
+            20,
+            30,
+            40
+          ],
+          [
+            1,
+            1,
+            1,
+            5
+          ],
+          4
+        ],
+        "expected": [
+          40
+        ]
+      },
+      {
+        "input": [
+          [
+            1,
+            2,
+            3,
+            4
+          ],
+          [
+            1,
+            1,
+            1,
+            1
+          ],
           2
         ],
         "expected": [
-          1.5,
-          2.5,
-          3.5
+          1,
+          2,
+          3
         ]
       },
       {
@@ -2164,14 +2284,18 @@
             9,
             11
           ],
+          [
+            1,
+            1
+          ],
           2
         ],
         "expected": [
-          10
+          9
         ]
       }
     ],
-    "reference_solution": "function slidingWindowMedian(nums, k) { const out = []; for (let i = 0; i + k <= nums.length; i++) { const window = nums.slice(i, i + k).slice().sort((a, b) => a - b); let median; if (k % 2 === 1) { median = window[(k - 1) / 2]; } else { median = (window[k / 2 - 1] + window[k / 2]) / 2; } out.push(median); } return out; }"
+    "reference_solution": "function slidingWindowWeightedMedian(nums, weights, k) { const out = []; for (let i = 0; i + k <= nums.length; i++) { const pairs = []; let totalWeight = 0; for (let j = i; j < i + k; j++) { pairs.push([nums[j], weights[j]]); totalWeight += weights[j]; } pairs.sort((a, b) => a[0] - b[0]); const half = totalWeight / 2; let cum = 0; let median = pairs[pairs.length - 1][0]; for (const [value, weight] of pairs) { cum += weight; if (cum >= half) { median = value; break; } } out.push(median); } return out; }"
   },
   {
     "id": "code-045",
