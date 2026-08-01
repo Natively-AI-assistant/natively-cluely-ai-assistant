@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import type { DefenceSettings, Evidence, IndexManifest, StructuredAnswer } from './types';
 import type { DefenceConfig } from './config';
 import { detectLanguage } from './questionDetector';
@@ -36,19 +38,37 @@ function requestedLanguage(settings: DefenceSettings, detected: 'zh' | 'en' | 'm
   return settings.outputLanguage;
 }
 
+function cbaOutputSafe(value: Partial<StructuredAnswer>): boolean {
+  const text = String(value.spokenAnswer || '');
+  if (/0\.0667|12\s+(?:positive|positives|正例)/i.test(text)) return false;
+  if (/0\.1731/.test(text) && !/prior|subgroup|过往|历史 CBA/i.test(text)) return false;
+  if (/(?:guarantees?|definitely predicts?|断言|保证).{0,24}(?:sign|签约|加盟)/i.test(text)) return false;
+  const baselineP20 = text.match(/baseline.{0,50}Precision\s*@?\s*20.{0,16}(0?\.\d+)/i)?.[1];
+  if (baselineP20 && !['0.0464'].includes(baselineP20)) return false;
+  return true;
+}
+
 export class AnswerEngine {
   private llm: LlmProvider; private search: SearchProvider;
   constructor(private config: DefenceConfig) { this.llm = new LlmProvider(config.llm); this.search = new SearchProvider(config.search); }
+  private cbaGroundingRules(): string {
+    if (this.config.projectId !== 'cba-import-candidate-ranking') return '';
+    try {
+      const document = JSON.parse(fs.readFileSync(path.join(this.config.indexPath, 'verified_project_facts.json'), 'utf8'));
+      const verified = (Array.isArray(document.facts) ? document.facts : []).filter((fact: any) => fact.status === 'VERIFIED').map((fact: any) => ({ claimId: fact.claimId, value: fact.value }));
+      return `Project positioning: Top-K scouting shortlist decision support, never a deterministic signing prediction. Use only these VERIFIED facts for numeric claims: ${JSON.stringify(verified)}. Never use historical 0.0667 or the conflicting Dashboard 12-positive claim. Precision@20=0.1731 is prior-subgroup-only.`;
+    } catch { return 'Project positioning: Top-K scouting shortlist decision support, never a deterministic signing prediction. Do not state unverified metrics.'; }
+  }
   async answer(question: string, manifest: IndexManifest, settings: DefenceSettings): Promise<StructuredAnswer> {
     const retrievalStarted = performance.now();
     const detected = detectLanguage(question); const classification = classifyQuestion(question);
     const retrievalQuestion = this.config.projectId === 'cba-import-candidate-ranking' && /predict|what exactly|到底|预测|签约|一定会/i.test(question)
       ? `${question} README.md Top-K ranking scouting shortlist decision support not deterministic signing prediction`
       : question;
-    let evidence = new HybridRetriever(manifest.chunks).searchMultilingual(retrievalQuestion);
+    let evidence = new HybridRetriever(manifest.chunks).searchMultilingual(retrievalQuestion, this.config.retrievalTopK);
     if (this.config.projectId === 'cba-import-candidate-ranking' && /predict|what exactly|到底|预测|签约|一定会/i.test(question)) {
       const overview = manifest.chunks.find(chunk => chunk.path === 'README.md');
-      if (overview) evidence = [overview, ...evidence.filter(item => item.path !== overview.path || item.lineStart !== overview.lineStart)].slice(0, 5);
+      if (overview) evidence = [overview, ...evidence.filter(item => item.path !== overview.path || item.lineStart !== overview.lineStart)].slice(0, this.config.retrievalTopK);
     }
     const allowExternal = settings.searchMode === 'on' || (settings.searchMode === 'auto' && classification.needsCurrentExternalInfo && !classification.projectInternal && evidence.length === 0);
     let externalSources: Evidence[] = [];
@@ -56,11 +76,12 @@ export class AnswerEngine {
     const retrievalMs = Math.round(performance.now() - retrievalStarted);
     const output = requestedLanguage(settings, detected);
     let generated = fallbackAnswer(question, evidence, detected, settings, this.config.projectId);
-    let llmFirstResponseMs: number | undefined; let llmTotalMs: number | undefined; let schemaValid = true;
+    let llmFirstResponseMs: number | undefined; let llmTotalMs: number | undefined; let llmStatus: number | undefined; let llmRetries: number | undefined; let llmRequestId: string | undefined; let schemaValid = true;
     if (this.llm.available()) {
       try {
-        const result = await this.llm.answerWithMetrics(question, evidence, externalSources, output, settings.answerDepth);
-        generated = result.value; llmFirstResponseMs = result.timing.dnsConnectMs; llmTotalMs = result.timing.totalMs;
+        const result = await this.llm.answerWithMetrics(question, evidence, externalSources, output, settings.answerDepth, this.cbaGroundingRules());
+        generated = result.value; llmFirstResponseMs = result.timing.dnsConnectMs; llmTotalMs = result.timing.totalMs; llmStatus = result.timing.status; llmRetries = result.timing.retries; llmRequestId = result.timing.requestId;
+        if (this.config.projectId === 'cba-import-candidate-ranking' && !cbaOutputSafe(generated)) { generated = fallbackAnswer(question, evidence, detected, settings, this.config.projectId); schemaValid = false; }
       } catch { schemaValid = false; /* deterministic grounded fallback keeps local retrieval usable */ }
     }
     const noEvidence = evidence.length === 0 && (classification.projectInternal || externalSources.length === 0);
@@ -75,7 +96,7 @@ export class AnswerEngine {
       missingInformation: generated.missingInformation,
       searchedSourceTypes: ['source code', 'project documentation', 'test evidence', ...(allowExternal ? ['external sources'] : [])],
       provider: this.llm.available() ? this.config.llm.provider : 'local-grounded-fallback',
-      diagnostics: { retrievalMs, candidateCount: evidence.length, evidenceCount: evidence.length, llmFirstResponseMs, llmTotalMs, schemaValid },
+      diagnostics: { retrievalMs, candidateCount: evidence.length, evidenceCount: evidence.length, llmFirstResponseMs, llmTotalMs, llmStatus, llmRetries, llmRequestId, schemaValid },
     };
   }
 }

@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { WebSocket } from 'ws';
-import { DefenceServer, isAdminRequestAllowed } from '../../../dist-electron/electron/defence/server.js';
+import { createDefenceRuntime, DefenceServer, isAdminRequestAllowed } from '../../../dist-electron/electron/defence/server.js';
 
 const providerNone={provider:'none',apiKey:'',baseUrl:'',model:'',timeoutMs:1000,maxRetries:0};
 const wsSession=(url,token)=>new Promise((resolve,reject)=>{const socket=new WebSocket(`${url.replace('http','ws')}/api/defence/live?token=${encodeURIComponent(token)}`);const timer=setTimeout(()=>{socket.terminate();reject(Error('websocket timeout'))},2000);socket.once('message',raw=>{clearTimeout(timer);resolve({socket,message:JSON.parse(raw.toString())})});socket.once('error',error=>{clearTimeout(timer);reject(error)})});
@@ -34,4 +35,16 @@ test('high-entropy pairing is one-time; invalid and revoked sessions are rejecte
   assert.equal((await fetch(base+'/api/defence/session/'+auth.sessionId,{method:'DELETE',headers})).status,200);
   assert.equal((await fetch(base+'/api/defence/session/'+auth.sessionId,{headers})).status,401);
   assert.equal((await fetch(base+'/manifest.webmanifest')).status,200);
+});
+
+test('companion-only proxy exposes PWA and authenticated session routes but never admin or project APIs',async t=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'defence-companion-'));await fs.writeFile(path.join(root,'README.md'),'# CBA\nTop-K scouting shortlist decision support.\n');
+  const baseConfig={host:'127.0.0.1',port:0,publicMode:'companion-only',companionHost:'127.0.0.1',companionPort:0,companionPublicUrl:'https://companion.example.test',adminLocalOnly:true,tls:{enabled:false,certPath:'',keyPath:''},projectId:'cba-import-candidate-ranking',projectDisplayName:'CBA',projectsConfigPath:path.join(root,'projects.json'),projectSourcePath:root,indexPath:path.join(root,'.index'),retrievalTopK:3,retrievalTopKAdjusted:false,stt:{...providerNone,language:'auto'},llm:{...providerNone,thinking:false},search:{provider:'none',apiKey:'',baseUrl:''},pairingTtlMs:300000,sessionRetentionDays:7,storeAudio:false,storeTranscripts:true,maxUploadBytes:1024*1024,maxAudioBytes:1024*1024,maxAudioDurationMs:5000};
+  const runtime=createDefenceRuntime(),admin=new DefenceServer(baseConfig,'full',runtime),companion=new DefenceServer(baseConfig,'companion',runtime);const adminInfo=await admin.listen(),companionInfo=await companion.listen();
+  const proxy=http.createServer((req,res)=>{const upstream=http.request({host:'127.0.0.1',port:companionInfo.port,path:req.url,method:req.method,headers:{...req.headers,'x-forwarded-for':'203.0.113.44'}},response=>{res.writeHead(response.statusCode||502,response.headers);response.pipe(res)});req.pipe(upstream)});await new Promise(resolve=>proxy.listen(0,'127.0.0.1',resolve));const proxyPort=proxy.address().port,publicBase=`http://127.0.0.1:${proxyPort}`,adminBase=adminInfo.urls[0],companionBase=companionInfo.urls[0];
+  t.after(async()=>{await Promise.all([admin.close(),companion.close(),new Promise(resolve=>proxy.close(resolve))]);await fs.rm(root,{recursive:true,force:true})});
+  assert.equal((await fetch(publicBase+'/')).status,200);const publicHealth=await fetch(publicBase+'/api/health').then(r=>r.json());assert.equal(publicHealth.config.adminNotExposed,true);assert.equal(JSON.stringify(publicHealth).includes(root),false);assert.equal((await fetch(publicBase+'/admin')).status,404);assert.equal((await fetch(publicBase+'/api/project/index',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,404);assert.equal((await fetch(publicBase+'/api/project/sources')).status,404);assert.equal((await fetch(publicBase+'/api/projects')).status,404);
+  await assert.rejects(()=>wsSession(companionBase,'unpaired-token'));
+  const pairing=await fetch(adminBase+'/api/pairing/create',{method:'POST'}).then(r=>r.json());assert.match(pairing.pairUrl,/^https:\/\/companion\.example\.test\//);const verify=await fetch(publicBase+'/api/pairing/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:pairing.id,secret:pairing.secret})});assert.equal(verify.status,200);const auth=await verify.json();
+  const headers={Authorization:`Bearer ${auth.token}`};assert.equal((await fetch(publicBase+'/api/defence/session/'+auth.sessionId,{headers})).status,200);assert.equal((await fetch(publicBase+'/api/defence/session/'+auth.sessionId,{method:'DELETE',headers})).status,200);await assert.rejects(()=>wsSession(companionBase,auth.token));
 });

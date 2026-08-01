@@ -7,7 +7,7 @@ export class ProviderError extends Error {
   constructor(public code: ProviderErrorCode, message: string, public status?: number, public retries = 0) { super(message); this.name = 'ProviderError'; }
 }
 
-export interface ProviderTiming { dnsConnectMs: number; totalMs: number; status: number; retries: number }
+export interface ProviderTiming { dnsConnectMs: number; totalMs: number; status: number; retries: number; requestId?: string }
 export interface ProviderResult<T> { value: T; timing: ProviderTiming }
 
 function redact(message: string): string {
@@ -32,7 +32,7 @@ async function requestWithRetry(url: string, init: RequestInit, timeoutMs: numbe
     const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(url, { ...init, signal: controller.signal }); const headersAt = performance.now(); clearTimeout(timer);
-      if (response.ok) return { value: response, timing: { dnsConnectMs: Math.round(headersAt - started), totalMs: 0, status: response.status, retries } };
+      if (response.ok) return { value: response, timing: { dnsConnectMs: Math.round(headersAt - started), totalMs: 0, status: response.status, retries, requestId: response.headers.get('x-request-id') || response.headers.get('x-groq-request-id') || undefined } };
       if ((response.status === 429 || response.status >= 500) && retries < maxRetries) { retries++; await new Promise(resolve => setTimeout(resolve, Math.min(1000, 150 * 2 ** retries))); continue; }
       throw classify(new Error('provider response rejected'), response.status, retries);
     } catch (error) {
@@ -56,6 +56,7 @@ export class SttProvider {
     const started = performance.now(); const result = await requestWithRetry(`${this.config.baseUrl.replace(/\/$/, '')}/audio/transcriptions`, { method: 'POST', headers: { Authorization: `Bearer ${this.config.apiKey}` }, body: form }, this.config.timeoutMs, this.config.maxRetries);
     let json: any; try { json = await result.value.json(); } catch { throw new ProviderError('INVALID_PROVIDER_RESPONSE', 'STT provider returned invalid JSON.', result.timing.status, result.timing.retries); }
     const text = String(json.text || '').trim(); if (!text) throw new ProviderError('INVALID_PROVIDER_RESPONSE', 'STT provider returned an empty transcript.', result.timing.status, result.timing.retries);
+    result.timing.requestId ||= typeof json.x_groq?.id === 'string' ? json.x_groq.id : undefined;
     result.timing.totalMs = Math.round(performance.now() - started); return { value: text, timing: result.timing };
   }
 }
@@ -81,15 +82,26 @@ function validateStructured(value: any): Partial<StructuredAnswer> {
 export class LlmProvider {
   constructor(private config: DefenceConfig['llm']) {}
   available(): boolean { return this.config.provider !== 'none' && !!this.config.baseUrl && !!this.config.model && (!!this.config.apiKey || this.config.provider === 'ollama'); }
-  async answer(question: string, evidence: Evidence[], external: Evidence[], language: string, depth: string): Promise<Partial<StructuredAnswer>> { return (await this.answerWithMetrics(question, evidence, external, language, depth)).value; }
-  async answerWithMetrics(question: string, evidence: Evidence[], external: Evidence[], language: string, depth: string): Promise<ProviderResult<Partial<StructuredAnswer>>> {
+  async answer(question: string, evidence: Evidence[], external: Evidence[], language: string, depth: string, groundingRules = ''): Promise<Partial<StructuredAnswer>> { return (await this.answerWithMetrics(question, evidence, external, language, depth, groundingRules)).value; }
+  async answerWithMetrics(question: string, evidence: Evidence[], external: Evidence[], language: string, depth: string, groundingRules = ''): Promise<ProviderResult<Partial<StructuredAnswer>>> {
     if (!this.available()) throw new ProviderError('AUTHENTICATION_FAILED', 'LLM configuration is incomplete.');
     const evidencePayload = [...evidence, ...external].map((item, index) => ({ id: index + 1, ...item }));
-    const prompt = `You are a project defence speaking copilot. Answer only from PROJECT_EVIDENCE for project facts. EXTERNAL_SOURCES never prove project implementation. Never invent files, symbols, metrics, incidents, or status. If evidence is insufficient set noEvidence=true. Preserve code names. Output strict JSON with keys: questionExplanation, keywords, spokenAnswer, alternateLanguageAnswer, followUps, noEvidence, missingInformation. Requested output=${language}, depth=${depth}.\nQUESTION:\n${question}\nEVIDENCE:\n${JSON.stringify(evidencePayload)}`;
-    const body = { model: this.config.model, messages: [{ role: 'system', content: 'Return valid JSON only.' }, { role: 'user', content: prompt }], temperature: 0.2, response_format: { type: 'json_object' } };
-    const started = performance.now(); const result = await requestWithRetry(`${this.config.baseUrl.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(this.config.apiKey ? { Authorization: `Bearer ${this.config.apiKey}` } : {}) }, body: JSON.stringify(body) }, this.config.timeoutMs, this.config.maxRetries);
-    let json: any; try { json = await result.value.json(); } catch { throw new ProviderError('INVALID_PROVIDER_RESPONSE', 'LLM provider returned invalid JSON.', result.timing.status, result.timing.retries); }
-    const content = json.choices?.[0]?.message?.content; let parsed: any; try { parsed = JSON.parse(String(content || '').replace(/^```json\s*|\s*```$/g, '')); } catch { throw new ProviderError('INVALID_STRUCTURED_OUTPUT', 'LLM response was not valid structured JSON.', result.timing.status, result.timing.retries); }
-    result.timing.totalMs = Math.round(performance.now() - started); return { value: validateStructured(parsed), timing: result.timing };
+    const prompt = `You are a project defence speaking copilot. Answer only from PROJECT_EVIDENCE for project facts. EXTERNAL_SOURCES never prove project implementation. Never invent files, symbols, metrics, incidents, or status. Keep every cited evidence ID unchanged. If evidence is insufficient set noEvidence=true. Preserve code names. Output a JSON object with keys: questionExplanation, keywords, spokenAnswer, alternateLanguageAnswer, followUps, noEvidence, missingInformation. Example JSON: {"spokenAnswer":"...","noEvidence":false,"keywords":[],"followUps":[]}. Requested output=${language}, depth=${depth}.\nGROUNDING_RULES:\n${groundingRules || 'Use only the supplied project evidence.'}\nQUESTION:\n${question}\nPROJECT_EVIDENCE:\n${JSON.stringify(evidencePayload)}`;
+    const started = performance.now(); let lastInvalid: ProviderError | undefined;
+    for (let structuredAttempt = 0; structuredAttempt < 2; structuredAttempt++) {
+      const body = { model: this.config.model, messages: [{ role: 'system', content: structuredAttempt ? 'Repair the prior formatting failure. Return one valid JSON object only, using exactly the supplied PROJECT_EVIDENCE IDs.' : 'Return one valid JSON object only. JSON output is mandatory.' }, { role: 'user', content: prompt }], temperature: 0.2, response_format: { type: 'json_object' }, thinking: { type: this.config.thinking ? 'enabled' : 'disabled' } };
+      const result = await requestWithRetry(`${this.config.baseUrl.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(this.config.apiKey ? { Authorization: `Bearer ${this.config.apiKey}` } : {}) }, body: JSON.stringify(body) }, this.config.timeoutMs, this.config.maxRetries);
+      let json: any; try { json = await result.value.json(); } catch { throw new ProviderError('INVALID_PROVIDER_RESPONSE', 'LLM provider returned invalid JSON.', result.timing.status, result.timing.retries); }
+      result.timing.requestId ||= typeof json.id === 'string' ? json.id : undefined;
+      try {
+        const content = json.choices?.[0]?.message?.content;
+        const parsed = JSON.parse(String(content || '').replace(/^```json\s*|\s*```$/g, ''));
+        result.timing.retries += structuredAttempt; result.timing.totalMs = Math.round(performance.now() - started);
+        return { value: validateStructured(parsed), timing: result.timing };
+      } catch (error) {
+        lastInvalid = error instanceof ProviderError ? error : new ProviderError('INVALID_STRUCTURED_OUTPUT', 'LLM response was not valid structured JSON.', result.timing.status, result.timing.retries + structuredAttempt);
+      }
+    }
+    throw lastInvalid || new ProviderError('INVALID_STRUCTURED_OUTPUT', 'LLM response was not valid structured JSON.');
   }
 }

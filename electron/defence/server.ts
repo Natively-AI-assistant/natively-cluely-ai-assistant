@@ -21,9 +21,12 @@ const DEFAULT_SETTINGS: DefenceSettings = { inputLanguage: 'auto', outputLanguag
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 interface Pairing { id: string; codeHash: string; secretHash: string; expiresAt: number; used: boolean; failedAttempts: number }
-interface SessionDiagnostics { lastAudioBytes?: number; lastAudioMime?: string; lastSttLatencyMs?: number; partialCount: number; finalCount: number; lastErrorCode?: string; retrievalMs?: number; candidateCount?: number; evidenceCount?: number; llmFirstResponseMs?: number; llmTotalMs?: number; schemaValid?: boolean }
+interface SessionDiagnostics { lastAudioBytes?: number; lastAudioMime?: string; lastSttLatencyMs?: number; sttStatus?: number; sttRetries?: number; sttRequestId?: string; partialCount: number; finalCount: number; lastErrorCode?: string; retrievalMs?: number; candidateCount?: number; evidenceCount?: number; llmFirstResponseMs?: number; llmTotalMs?: number; llmStatus?: number; llmRetries?: number; llmRequestId?: string; schemaValid?: boolean }
 interface Session { id: string; tokenHash: string; createdAt: number; settings: DefenceSettings; detector: QuestionDetector; audio: AudioChunkTracker; transcript: string; answers: StructuredAnswer[]; diagnostics: SessionDiagnostics; questionCounter: number; lastQuestionId?: string; revision: number; abort?: AbortController }
 interface ProjectRegistryEntry { projectId: string; displayName: string; sourcePath: string; indexPath: string; personaPath?: string; verifiedFactsPath?: string }
+type ServerMode = 'full' | 'companion';
+interface DefenceRuntime { pairings: Map<string, Pairing>; sessions: Map<string, Session> }
+export function createDefenceRuntime(): DefenceRuntime { return { pairings: new Map(), sessions: new Map() }; }
 
 function token(): string { return crypto.randomBytes(24).toString('base64url'); }
 function hash(value: string): string { return crypto.createHash('sha256').update(value).digest('hex'); }
@@ -44,9 +47,10 @@ function contentType(file: string): string {
 export class DefenceServer {
   private server: http.Server | https.Server; private wss: WebSocketServer; private listeningPort = 0;
   private indexer: ProjectIndexer; private engine: AnswerEngine; private stt: SttProvider;
-  private pairings = new Map<string, Pairing>(); private sessions = new Map<string, Session>();
+  private pairings: Map<string, Pairing>; private sessions: Map<string, Session>;
   private requestBuckets = new Map<string, { count: number; reset: number }>();
-  constructor(private config: DefenceConfig) {
+  constructor(private config: DefenceConfig, private mode: ServerMode = 'full', runtime: DefenceRuntime = createDefenceRuntime()) {
+    this.pairings = runtime.pairings; this.sessions = runtime.sessions;
     this.wss = new WebSocketServer({ noServer: true, maxPayload: Math.max(10 * 1024 * 1024, Math.ceil(config.maxAudioBytes * 4 / 3) + 64 * 1024) });
     this.indexer = new ProjectIndexer(config.projectSourcePath, config.indexPath); this.engine = new AnswerEngine(config); this.stt = new SttProvider(config.stt);
     const handler = (req: http.IncomingMessage, res: http.ServerResponse): void => { void this.handle(req, res); };
@@ -92,6 +96,7 @@ export class DefenceServer {
     } catch { return { projects: [] }; }
   }
   private async staticFile(url: URL, req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    if (this.mode === 'companion' && !['/', '/app.js', '/styles.css', '/manifest.webmanifest', '/service-worker.js'].includes(url.pathname)) return this.json(res, 404, { error: 'not_found' });
     if (url.pathname === '/admin' && !isAdminRequestAllowed(req.socket.remoteAddress, this.config.adminLocalOnly)) return this.json(res, 403, { error: 'admin_loopback_required' });
     const requested = url.pathname === '/' ? 'index.html' : url.pathname === '/admin' ? 'admin.html' : url.pathname.slice(1);
     const root = this.publicDir(); const file = path.resolve(root, requested);
@@ -105,7 +110,13 @@ export class DefenceServer {
       if (!this.rate(req.socket.remoteAddress)) return this.json(res, 429, { error: 'rate_limited' });
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`); const method = req.method || 'GET';
       if (!url.pathname.startsWith('/api/')) return await this.staticFile(url, req, res);
-      if (method === 'GET' && url.pathname === '/api/health') return this.json(res, 200, { ok: true, config: publicConfig(this.config) });
+      if (this.mode === 'companion') {
+        const allowed = (method === 'GET' && url.pathname === '/api/health')
+          || (method === 'POST' && url.pathname === '/api/pairing/verify')
+          || /^\/api\/defence\/(?:session(?:\/[^/]+)?|answer|retry|history(?:\/\d+)?)$/.test(url.pathname);
+        if (!allowed) return this.json(res, 404, { error: 'not_found' });
+      }
+      if (method === 'GET' && url.pathname === '/api/health') return this.json(res, 200, { ok: true, config: { ...publicConfig(this.config), adminNotExposed: this.mode === 'companion' } });
       const isLocal = loopback(req.socket.remoteAddress);
       const adminAllowed = isAdminRequestAllowed(req.socket.remoteAddress, this.config.adminLocalOnly);
       if (url.pathname === '/api/projects' && method === 'GET') {
@@ -124,7 +135,10 @@ export class DefenceServer {
         const id = crypto.randomUUID(); const code = String(crypto.randomInt(100000, 1000000)); const secret = token();
         const pairing = { id, codeHash: hash(code), secretHash: hash(secret), expiresAt: Date.now() + this.config.pairingTtlMs, used: false, failedAttempts: 0 };
         this.pairings.set(id, pairing); const protocol = this.config.tls.enabled ? 'https' : 'http'; const hosts = this.config.host === '0.0.0.0' ? lanAddresses() : [this.config.host];
-        const urls = hosts.map(ip => `${protocol}://${ip}:${this.listeningPort || this.config.port}`); const pairUrl = urls[0] ? `${urls[0]}/?pairingId=${encodeURIComponent(id)}&pairingSecret=${encodeURIComponent(secret)}` : '';
+        const urls = this.config.publicMode === 'companion-only'
+          ? [this.config.companionPublicUrl || `${protocol}://${this.config.companionHost}:${this.config.companionPort}`]
+          : hosts.map(ip => `${protocol}://${ip}:${this.listeningPort || this.config.port}`);
+        const pairUrl = urls[0] ? `${urls[0]}/?pairingId=${encodeURIComponent(id)}&pairingSecret=${encodeURIComponent(secret)}` : '';
         const qrDataUrl = pairUrl ? await QRCode.toDataURL(pairUrl, { errorCorrectionLevel: 'M', margin: 1, width: 280 }) : null;
         return this.json(res, 201, { id, code, secret, pairUrl, qrDataUrl, expiresAt: new Date(pairing.expiresAt).toISOString(), urls });
       }
@@ -176,7 +190,7 @@ export class DefenceServer {
         if (message.type === 'audio') {
           const decision = session.audio.accept(message, this.config, session.id); if (decision.action === 'duplicate') return this.send(ws, { type: 'audio-ack', sequence: message.sequence, duplicate: true, nextAudioSequence: decision.expectedSequence });
           session.diagnostics.lastAudioBytes = decision.bytes.length; session.diagnostics.lastAudioMime = decision.metadata.mimeType; const started = performance.now();
-          const result = await this.stt.transcribeWithMetrics(decision.bytes, decision.metadata.mimeType); session.diagnostics.lastSttLatencyMs = Math.round(performance.now() - started);
+          const result = await this.stt.transcribeWithMetrics(decision.bytes, decision.metadata.mimeType); session.diagnostics.lastSttLatencyMs = Math.round(performance.now() - started); session.diagnostics.sttStatus = result.timing.status; session.diagnostics.sttRetries = result.timing.retries; session.diagnostics.sttRequestId = result.timing.requestId;
           this.send(ws, { type: 'audio-ack', sequence: decision.metadata.sequence, duplicate: false, nextAudioSequence: session.audio.nextSequence });
           return await this.onTranscript(ws, session, result.value, true, decision.metadata.finalChunk ? 1000 : 0);
         }

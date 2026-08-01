@@ -90,6 +90,9 @@ export interface StructuredAnswer {
     evidenceCount: number;
     llmFirstResponseMs?: number;
     llmTotalMs?: number;
+    llmStatus?: number;
+    llmRetries?: number;
+    llmRequestId?: string;
     schemaValid: boolean;
   };
 }

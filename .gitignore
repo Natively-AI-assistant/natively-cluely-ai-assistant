@@ -460,4 +460,5 @@ tools/
 docs/*
 !docs/VISION_MODEL_BENCHMARK.md
 !docs/PROJECT_DEFENCE_COPILOT.md
+!docs/CBA_IPHONE_LIVE_TEST.md
 benchmark-results/
