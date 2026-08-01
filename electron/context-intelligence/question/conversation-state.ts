@@ -223,7 +223,26 @@ export function advance(prev: ConversationState | null, input: AdvanceInput): Co
 // to a person and must never resolve to a technology topic; the untyped union
 // is how "she" became Kubernetes.
 const PERSONAL_PRONOUN_RE = /\b(she|he|her|him|his|hers)\b/i;
-const NONPERSON_PRONOUN_RE = /\b(it|that|this|those|these|they|them|the (?:same|latter|former)|there)\b/i;
+// `its` added 2026-08-02: "What is its worst-case complexity?" is the canonical
+// short follow-up, and the possessive was simply missing — the turn passed
+// through unresolved and was answered as a fresh question.
+const NONPERSON_PRONOUN_RE = /\b(it|its|that|this|those|these|they|them|the (?:same|latter|former)|there)\b/i;
+
+/**
+ * A pronoun licenses state resolution only in a SHORT turn (2026-08-02).
+ *
+ * A genuine follow-up is short because its subject lives elsewhere — the same
+ * insight FOLLOW_UP_MAX_WORDS encodes in the classifier. A long turn containing
+ * "this/that/it" almost always binds the pronoun to its own antecedent: "I paid
+ * for the subscription yesterday, but the application still shows the free
+ * plan. Please fix this immediately." is fully self-contained, and resolving
+ * its "this" against state glued "(referring to: Array)" onto it — the previous
+ * turn was a multiple-choice answer — rewriting a support request into
+ * nonsense (measured, 2026-08-01). Twelve words is deliberately generous: it
+ * admits every measured real follow-up ("Can you explain it generally
+ * instead?") while excluding any turn long enough to state its own subject.
+ */
+const PRONOUN_RESOLUTION_MAX_WORDS = 12;
 
 export interface ResolvedReference {
   resolved: string;
@@ -241,7 +260,8 @@ export interface ResolvedReference {
     | 'RESOLVED_TO_ACTIVE_TOPIC'
     | 'REPHRASE_ANCHORED_TO_PREVIOUS_QUESTION'
     | 'ANCHORED_TO_PREVIOUS_QUESTION'
-    | 'PERSONAL_PRONOUN_NO_KNOWN_PERSON';
+    | 'PERSONAL_PRONOUN_NO_KNOWN_PERSON'
+    | 'CURRENT_TURN_SELF_CONTAINED';
 }
 
 /**
@@ -265,11 +285,21 @@ export function resolveReference(question: string, state: ConversationState | nu
   const q = question.trim();
   if (!state) return { resolved: q, usedState: false, reason: 'NO_CONVERSATION_STATE' };
 
-  const personal = PERSONAL_PRONOUN_RE.test(q);
-  const pronoun = personal || NONPERSON_PRONOUN_RE.test(q);
+  const pronounAnywhere = PERSONAL_PRONOUN_RE.test(q) || NONPERSON_PRONOUN_RE.test(q);
+  const shortTurn = q.split(/\s+/).filter(Boolean).length <= PRONOUN_RESOLUTION_MAX_WORDS;
+  const personal = PERSONAL_PRONOUN_RE.test(q) && shortTurn;
+  const pronoun = pronounAnywhere && shortTurn;
   const bare = isBareFollowUp(q);
   const rephrase = isResponseRequest(q);
-  if (!pronoun && !bare && !rephrase) return { resolved: q, usedState: false, reason: 'NO_REFERENT_TRIGGER' };
+  if (!pronoun && !bare && !rephrase) {
+    return {
+      resolved: q, usedState: false,
+      // Distinguish "no trigger at all" from "a pronoun exists but the turn is
+      // long enough to bind it internally" — the second is the contamination
+      // class this gate closes, and telemetry needs to see it as a decision.
+      reason: pronounAnywhere ? 'CURRENT_TURN_SELF_CONTAINED' : 'NO_REFERENT_TRIGGER',
+    };
+  }
 
   // SELF-CONTAINED questions get no referent (deep-test D9): "How many
   // students used CampusMesh?" is five words starting with "how", so the bare

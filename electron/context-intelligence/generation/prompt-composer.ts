@@ -236,6 +236,14 @@ function noEvidenceNotice(d: Readonly<TurnDecision>, attachedSourceCount?: numbe
         : 'the uploaded material does not cover this';
 
   if (!d.retrievalPlan.shouldRetrieve) {
+    // Only when the turn actually CARRIES a private claim (2026-08-02). This
+    // branch exists for the unsupported-in-mode case — a meeting question in a
+    // mode with no transcript — but it also fired for claim-less AMBIGUOUS
+    // turns ("I paid for the subscription… please fix this"), instructing the
+    // model to refuse over a source problem that does not exist. A turn with
+    // no private claim has nothing a source could have evidenced; it gets no
+    // evidence narrative at all.
+    if (!d.claimRequirements.some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED')) return '';
     return '# Evidence\nThis question requires a source the active mode does not authorize, so no evidence could be '
       + 'gathered. Say plainly that it cannot be answered from the available material — do not answer it from general '
       + 'knowledge, and do not describe it as missing from a document when no document was consulted.';

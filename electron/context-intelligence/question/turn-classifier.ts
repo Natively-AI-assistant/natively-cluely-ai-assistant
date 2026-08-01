@@ -99,6 +99,45 @@ const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me a
 // impersonal; TECH_SELF_TALK_RE suppresses debugging/design self-talk.
 const FIRST_PERSON_RE = /(?<!\b(?:how|where|when)\s)\b(?:do|does|am|are|have|has|did|would|should|could|can|will) i\b|\bi (?:have|had|meet|qualify|lack|miss|built|build|created|developed|worked|interned|studied|graduated|know|list|use)\b|\bi'?m\b/;
 const TECH_SELF_TALK_RE = /\b(segfault|error|exception|crash\w*|bug\b|bugs\b|stack ?trace|compil\w*|syntax|debug\w*|hash ?map|hashmap|bst\b|big-?o\b|time complexity|runtime|refactor\w*|this (code|function|query|test|snippet|approach))\b/;
+
+// ── Everyday-device troubleshooting (2026-08-02) ─────────────────────────────
+//
+// "My laptop becomes very hot… What should I check first?" and "How do I stop
+// an application from opening automatically when I start my Mac?" carry the
+// grammar PERSONAL_RE reads as work history ("my", "I") — but the possessive
+// marks OWNERSHIP of a device, not a claim about the user's past, and no résumé
+// can evidence a fan noise. Both were measured routing USER_EMPLOYMENT →
+// RESUME+PROFILE_FACT → answerability NONE → "the résumé does not mention this"
+// for a hardware question (live logs, 2026-08-01).
+//
+// Two halves, both required, so neither over-triggers alone: an ARTIFACT the
+// user physically operates, plus a SYMPTOM/ACTION about operating it. "My
+// laptop project at Google" names an artifact but no symptom and keeps its
+// personal claims; "what should I check first" names a symptom shape but no
+// artifact and contributes nothing without one. Tested on the WHOLE question,
+// like the techTask gate at the fallback layer — clause splitting separates
+// "My laptop gets hot" from "What should I check first?", and each half may
+// live in a different clause.
+const DEVICE_ARTIFACT_RE = /\b(laptops?|desktops?|computers?|macbook|imac|iphone|ipad|phones?|tablets?|browsers?|chrome|safari|firefox|wi-?fi|bluetooth|battery|charger|printers?|routers?|monitors?|keyboards?|mouse|trackpad|(?:an?|this|my|the) app(?:lication)?s?\b|login items?|(?:start ?up|startup) (?:items?|programs?|apps?)|my (?:mac|pc)\b)\b/;
+const DEVICE_SYMPTOM_RE = /\b(overheat\w*|(?:gets?|getting|becomes?|becoming|is|are|runs?|running) (?:very |too |really |so )?(?:hot|slow|loud|sluggish)|fans? (?:run|runs|running|spin\w*)|freez\w*|frozen|lags?\b|lagging|drain\w*|won'?t (?:open|start|charge|connect|turn|boot)|not (?:working|responding|charging|connecting|booting)|keeps? (?:crashing|freezing|restarting|disconnecting|opening|popping)|open(?:s|ing)? automatically|start(?:s|ing)? automatically|launch(?:es|ing)? (?:automatically|at (?:startup|login))|pop-?ups?|uninstall\w*|reinstall\w*|factory reset|what should i (?:check|do|try)|how (?:do|can) i (?:stop|disable|turn off|remove|fix|speed up))\b/;
+
+// ── Self-contained arithmetic (2026-08-02) ───────────────────────────────────
+//
+// "A product costs 2,400 rupees after a 20% discount. What was the original
+// price?" SUPPLIES its own operands and asks to derive a value from them —
+// there is nothing to retrieve. Measured: the digits made it entity-specific,
+// "what was the original price" read as a definite value lookup, and the
+// primary-source fallback claimed USER_PROJECT — the résumé was searched for a
+// percentage exercise and the answer disclosed DOCUMENT_FACT_NOT_FOUND.
+//
+// Both halves required: an OPERAND (a number bound to %, currency, a unit rate
+// or an arithmetic operator) and a DERIVATION ask. A permission question ("Can
+// I offer a 20% discount?") has the operand but not the ask; a document count
+// ("How many participants were involved?") has the ask but not the operand.
+// The caller additionally rejects any question naming a capitalised entity or
+// pointing at a document — those keep their grounded route.
+const MATH_OPERAND_RE = /\d[\d,.]*\s*(?:%|percent)|[$€£₹]\s?\d|\d[\d,.]*\s*(?:rupees|dollars|euros|pounds|cents)\b|\d\s*(?:\+|−|\*|×|\/|÷)\s*\d|\b\d[\d,.]*\s+(?:per|each|apiece)\b/i;
+const MATH_ASK_RE = /\bwhat (?:is|was|will|would)(?: be)? the (?:[\w-]+ )?(?:price|cost|amount|value|total|percentage|interest|profit|loss|average|difference|change)\b|\bhow (?:much|many)\b|\bcalculate\b|\bcompute\b|\bwhat is \d/i;
 const PROJECT_RE = /\b(project|built|build|shipped|implemented|designed|architect(ed|ure) of your)\b/;
 // Matches BOTH orderings, because interviewers use both interchangeably:
 //   "experience WITH Kubernetes"   (preposition-led)
@@ -200,7 +239,20 @@ const SCREEN_RE = /\b(this (code|function|error|screen|stack ?trace)|on (my|the)
 // General technical/CS concepts. Deliberately conservative: matching a general
 // pattern makes us SKIP retrieval, so a false positive is the expensive
 // direction and the list stays narrow.
-const GENERAL_TECH_RE = /\b(what is|what are|explain|define|difference between|how does .* work|pros and cons|when (should|would) (you|i) use)\b/;
+//
+// `which <concept-category>` added 2026-08-02: "Which data structure normally
+// provides average O(1) lookup?" is a textbook concept-choice question, but it
+// matched nothing general, so the primary-source fallback claimed the résumé
+// for it. The category noun keeps it safe — "which candidate…", "which
+// project…" never match.
+//
+// `why does/do/is/are <bare noun>` added 2026-08-02: "Why does ice float on
+// water?" is world physics, but with no general match it fell through to the
+// last-resort document claim in every SOURCE_FIRST mode and the answer opened
+// with "the material does not cover this". The negative lookahead keeps
+// definite instances grounded: "why does the deploy fail every night?" points
+// at the user's own system and must keep its document route.
+const GENERAL_TECH_RE = /\b(what is|what are|explain|define|difference between|how does .* work|pros and cons|when (should|would) (you|i) use|which (data structures?|algorithms?|approach(es)?|patterns?|methods?|techniques?)\b|why (does|do|is|are) (?!(the|this|that|my|our|your|its)\b))\b/;
 
 // A measured quantity OF A DEFINITE SUBJECT is never a concept question.
 //
@@ -356,6 +408,19 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // impossible state that licensed fabrication.
   const looksFactualQ = /\b(what|which|how (many|much|long|often|large|big|fast)|when|who|where|summari[sz]e|list|compare|difference)\b/.test(q);
 
+  // Whole-question signals (2026-08-02) — each half of the pattern may live in
+  // a different clause ("My laptop gets hot" / "What should I check first?"),
+  // so these cannot be judged per clause. Both are OPEN-KNOWLEDGE shapes that
+  // first-person grammar or bare digits previously routed at private sources.
+  const deviceTroubleshoot = DEVICE_ARTIFACT_RE.test(q) && DEVICE_SYMPTOM_RE.test(q);
+  const selfContainedMath = MATH_OPERAND_RE.test(q) && MATH_ASK_RE.test(q)
+    // A named entity or a document pointer means the values may live in a
+    // source after all — "What was the original price listed in the sales
+    // document?" keeps its document claim. Checked against the CAPS/identifier
+    // signal only: every arithmetic question contains digits, so the bare-digit
+    // entity rule would make this gate self-defeating.
+    && !hasCapsOrIdentifierEntity(input.resolvedQuestion) && !DOCUMENT_RE.test(q);
+
   for (const clause of splitClauses(q)) {
     // ── deep-run 2 guards (2026-08-01) ──────────────────────────────────────
     // "Why did YOU refuse?" is about the ASSISTANT's own behaviour, not the
@@ -447,7 +512,12 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     // this with dynamic programming" is about the problem, not the person, and
     // a USER_EMPLOYMENT claim here demands résumé evidence for an algorithm
     // question (review finding, 2026-07-31).
-    if (personal && !namedAnAspect
+    // …and never for device troubleshooting (2026-08-02): "My laptop becomes
+    // very hot" is ownership grammar over an artifact, not work history — this
+    // exact catch-all is what planned the résumé for a fan question. Whole-
+    // question signal, because the artifact and the ask usually sit in
+    // different clauses.
+    if (personal && !namedAnAspect && !deviceTroubleshoot
         && !CODING_TASK_RE.test(clause) && !SYSTEM_DESIGN_RE.test(clause) && !TECH_SELF_TALK_RE.test(clause)) {
       types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause);
     }
@@ -648,7 +718,12 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // fallback then claimed a debugging question as USER_PROJECT in
   // technical-interview (whose primary source is RESUME). Same gate as the
   // personal branches (review finding, 2026-07-31).
-  const techTask = TECH_SELF_TALK_RE.test(q) || CODING_TASK_RE.test(q) || SYSTEM_DESIGN_RE.test(q);
+  // Device troubleshooting and self-contained arithmetic join the gate
+  // (2026-08-02): both are questions no private source can improve, and both
+  // were measured reaching the primary-source fallback — the fan question via
+  // "what should I check" and the discount exercise via its own digits.
+  const techTask = TECH_SELF_TALK_RE.test(q) || CODING_TASK_RE.test(q) || SYSTEM_DESIGN_RE.test(q)
+    || deviceTroubleshoot || selfContainedMath;
 
   // ── Definite value lookup (deep-test D2/D3, 2026-08-01) ────────────────────
   //
@@ -710,6 +785,16 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   if (modeHoldsDocuments && formulaDoc && looksFactualQ
       && /\b(threshold\w*|frequenc\w*|rates?|formulas?|calculat\w*|weights?|coefficients?|detect\w*)\b/.test(q)) {
     types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+  }
+  // A technical/computational turn that produced NO claim at all is a
+  // general-knowledge turn, and must SAY so (2026-08-02). Left claimless it
+  // classified AMBIGUOUS → grounded-without-retrieval → answerability NONE,
+  // and the composer then narrated a source problem that does not exist
+  // ("requires a source the mode does not authorize") over a fan-noise or
+  // percentage question. A GENERAL_TECHNICAL claim carries none of the private
+  // authority machinery — it only makes answerability report FULL honestly.
+  if (claims.size === 0 && techTask && !isBareFollowUp(q)) {
+    types.add('GENERAL_TECHNICAL'); noteWholeQ('GENERAL_TECHNICAL');
   }
   const hasPrivateClaim = [...claims].some((c) => (CLAIM_AUTHORITY[c]?.authoritative ?? []).length > 0);
   const conceptOnly = claims.has('GENERAL_TECHNICAL') && !definiteValueLookup;
@@ -805,6 +890,26 @@ const GENERIC_TECH_CAPS = new Set([
   'webrtc', 'websocket', 'websockets', 'grpcweb', 'ssr', 'csr', 'spa', 'pwa',
   'i', 'a', 'the', 'what', 'how', 'why', 'when', 'where', 'who', 'which', 'is', 'do',
   'does', 'can', 'could', 'would', 'should', 'explain', 'tell', 'describe', 'give',
+
+  // ── Mainstream product names (2026-08-02) ─────────────────────────────────
+  //
+  // English capitalises product names; that capital is not a reference to a
+  // private document. "Implement a TypeScript function…" was measured planning
+  // PROJECT_FILE+CODING_SAMPLE retrieval, and "…when I start my Mac?" read as
+  // entity-specific, purely because these tokens were absent here. The list is
+  // deliberately mainstream-only — languages, OSes, browsers, ubiquitous dev
+  // tools — where the name is world knowledge. Niche vendor/product names stay
+  // entity-specific, which errs toward retrieval, the cheap direction.
+  'typescript', 'javascript', 'python', 'java', 'kotlin', 'swift', 'rust', 'golang',
+  'ruby', 'php', 'scala', 'haskell', 'perl', 'matlab', 'julia', 'dart', 'elixir',
+  'clojure', 'node', 'nodejs', 'deno', 'react', 'angular', 'vue', 'nextjs', 'django',
+  'flask', 'rails', 'spring', 'dotnet', 'csharp', 'cpp',
+  'mac', 'macos', 'macbook', 'imac', 'iphone', 'ipad', 'ios', 'ipados', 'android',
+  'windows', 'linux', 'unix', 'ubuntu', 'debian', 'chromeos',
+  'chrome', 'safari', 'firefox', 'edge', 'excel', 'powerpoint', 'outlook', 'gmail',
+  'git', 'github', 'gitlab', 'npm', 'yarn', 'pip', 'bash', 'zsh', 'powershell',
+  'docker', 'kubernetes', 'postgres', 'postgresql', 'mysql', 'sqlite', 'mongodb',
+  'redis', 'kafka',
 ]);
 
 /**
@@ -815,6 +920,20 @@ const GENERIC_TECH_CAPS = new Set([
  * knowledge — which is the failure this whole system exists to prevent.
  */
 function hasNonGenericProperNoun(text: string): boolean {
+  if (hasCapsOrIdentifierEntity(text)) return true;
+  // A bare numeric/currency lookup is also entity-specific.
+  return /\$\s?\d|\b\d{2,}\b/.test(String(text));
+}
+
+/**
+ * The NAME-shaped half of the entity signal: a non-generic capitalised token or
+ * a letter–digit identifier (p99, R-7, L4, 110M). Split out 2026-08-02 because
+ * the bare-digit rule above needs different treatment downstream: a number can
+ * be a value being LOOKED UP ("the 110M checkpoint") or the question's own
+ * OPERAND ("a 20% discount", "a 12-year-old") — and only a name-shaped signal
+ * is unambiguous.
+ */
+function hasCapsOrIdentifierEntity(text: string): boolean {
   for (const m of String(text).matchAll(/\b([A-Z][A-Za-z0-9-]{1,})\b/g)) {
     const token = m[1];
     const idx = m.index ?? 0;
@@ -826,9 +945,7 @@ function hasNonGenericProperNoun(text: string): boolean {
   // A token mixing letters and digits is an IDENTIFIER, not a concept — p99,
   // R-7, L4, 110M. Model knowledge cannot supply the value of a named metric or
   // record id, so these are entity-specific even in lower case.
-  if (/\b([a-z]+-?\d+|\d+[a-z]+)\b/i.test(String(text))) return true;
-  // A bare numeric/currency lookup is also entity-specific.
-  return /\$\s?\d|\b\d{2,}\b/.test(String(text));
+  return /\b([a-z]+-?\d+|\d+[a-z]+)\b/i.test(String(text));
 }
 
 // NOTE: this must stay consistent with CLAIM_AUTHORITY in
@@ -900,12 +1017,26 @@ export function classifyTurn(input: ClassificationInput): Classification {
   // therefore treated as a private-source signal.
   const specificEntity = hasNonGenericProperNoun(input.resolvedQuestion);
 
+  // Bare digits are an entity signal only for LOOKUPS (2026-08-02). "Explain
+  // why the sky appears blue to a 12-year-old" and "a 20% discount…" both
+  // carry numbers, but the number is the question's own operand, not a value
+  // some document holds — and the \b\d{2,}\b rule alone was measured dragging
+  // both through retrieval in every SOURCE_FIRST mode. When the turn produced
+  // ONLY general-knowledge claims (concept, coding, math — nothing any private
+  // source is authoritative for), a digit-only entity signal is ignored.
+  // Name-shaped signals (capitalised tokens, p99-style identifiers) always
+  // block the fast path, exactly as before.
+  const digitsOnlyEntity = specificEntity && !hasCapsOrIdentifierEntity(input.resolvedQuestion);
+  const onlyGeneralClaims = claims.length > 0
+    && claims.every((c) => (CLAIM_AUTHORITY[c]?.authoritative ?? []).length === 0);
+  const entityBlocksFastPath = specificEntity && !(digitsOnlyEntity && onlyGeneralClaims);
+
   const isPurelyGeneral =
     requiredSourceTypes.length === 0 &&
     unsupportedInMode.length === 0 &&      // needed a source; the mode just forbids it
     !types.includes('MIXED') &&
     !types.includes('AMBIGUOUS') &&
-    !specificEntity;
+    !entityBlocksFastPath;
 
   // A follow-up may reference grounded content by pronoun alone, so it never
   // takes the fast path even when its own text looks general.
