@@ -1,0 +1,247 @@
+[
+  {
+    "id": "sales-001",
+    "category": "sales",
+    "context": "Prospect (VP Ops, mid-market logistics company): 'Your pricing is 30% higher than Competitor Z's. We're a cost-conscious org and that's a hard sell internally.' Deal context: prospect has been in evaluation for 6 weeks, decision expected this month, our product has a materially better uptime SLA (99.99% vs their claimed 99.9%) and includes dedicated support that Competitor Z charges extra for.",
+    "question": "How do I handle this pricing objection right now on the call?",
+    "rubric_notes": "Must reframe on value, not just defend price: reference the SLA difference (99.99% vs 99.9%) and the bundled dedicated support Competitor Z charges extra for, translating those into cost-of-downtime or total-cost-of-ownership terms rather than just asserting 'we're worth it.' Should not simply concede a discount without first making the value case, and should acknowledge the prospect's cost-consciousness rather than dismissing it."
+  },
+  {
+    "id": "sales-002",
+    "category": "sales",
+    "context": "Discovery call, prospect (Head of IT, 200-person company): 'We're currently using an internal spreadsheet-based process for this, so honestly this isn't a top priority right now.'",
+    "question": "How do I create urgency without being pushy?",
+    "rubric_notes": "Should suggest a discovery-based approach: ask questions to surface the hidden cost of the spreadsheet process (time spent, error rate, scaling pain as headcount grows) rather than asserting urgency artificially. Should not recommend high-pressure tactics or fabricated scarcity; the goal is to get the prospect to articulate their own pain."
+  },
+  {
+    "id": "sales-003",
+    "category": "sales",
+    "context": "Call scenario: prospect just said 'We're also evaluating Salesforce and HubSpot for this.' Our product is a smaller, more specialized CRM add-on focused specifically on outbound call analytics, not a general CRM replacement.",
+    "question": "How should I position against these two much bigger competitors?",
+    "rubric_notes": "Must correctly note the category mismatch — we're a specialized add-on for call analytics, not a general CRM, so the right move is to reposition as complementary (works alongside Salesforce/HubSpot) rather than competing head-on as a replacement. Should ask a clarifying question to confirm whether the prospect is looking to replace their CRM entirely or add capability on top of it."
+  },
+  {
+    "id": "sales-004",
+    "category": "sales",
+    "context": "Prospect (procurement lead): 'Can you get me to $8,000/year? Your quote came in at $11,500.' Rep context: standard discount authority caps at 15% without manager approval; this deal is a 1-year contract for a 25-seat team.",
+    "question": "How do I respond to this discount ask in the moment?",
+    "rubric_notes": "Should note $8,000 is roughly a 30% discount, well beyond the rep's 15% standard authority, so the answer should NOT just agree to the number. Should suggest either countering within authority (up to ~$9,775 at 15% off) or trading the discount for something (multi-year commitment, case study rights, referral) rather than capitulating outright, and flag that anything beyond 15% needs manager approval."
+  },
+  {
+    "id": "sales-005",
+    "category": "sales",
+    "context": "Call scenario: prospect mentions 'We had a really bad experience with a vendor before that overpromised on integration timelines and it took us 4 months instead of the promised 2 weeks.'",
+    "question": "How do I address this trust concern without sounding defensive?",
+    "rubric_notes": "Should acknowledge the prior bad experience directly and empathetically rather than deflecting, then differentiate concretely (e.g., offer a realistic, specific integration timeline with named milestones, reference implementation support/resources available, possibly offer to connect them with a reference customer who did a similar integration) rather than just repeating 'we're different, trust us.'"
+  },
+  {
+    "id": "sales-006",
+    "category": "sales",
+    "context": "Prospect on a demo call: 'This looks fine but I'm not the final decision-maker — my boss would need to sign off, and she's been skeptical of new tools lately.'",
+    "question": "What should I do to move this deal forward given this is a multi-threaded decision?",
+    "rubric_notes": "Should recommend multi-threading the deal: propose getting the skeptical decision-maker directly involved (a follow-up call, tailored materials addressing likely objections, or asking the current contact what specifically has made her skeptical of past tools so it can be preemptively addressed). Should not recommend just pushing forward with only the non-decision-maker contact."
+  },
+  {
+    "id": "sales-007",
+    "category": "sales",
+    "context": "Prospect: 'Honestly, we already have a solution for this that mostly works — we're not actively looking to switch.'",
+    "question": "How do I handle a 'happy with status quo' objection?",
+    "rubric_notes": "Should suggest probing for specific gaps in the current solution rather than attacking it directly ('what does mostly working mean — what's the 10% that doesn't?'), and focus on cost of inaction / opportunity cost framing rather than aggressive competitive positioning. Should not recommend disparaging their current vendor by name without knowing who it is."
+  },
+  {
+    "id": "sales-008",
+    "category": "sales",
+    "context": "Deal context: enterprise prospect, 500+ seats, security team just flagged that our SOC 2 report is Type I, not Type II, and their policy requires Type II for vendors handling customer data. Our Type II report is in progress, expected in 3 months.",
+    "question": "How do I respond to the security team's objection on the call?",
+    "rubric_notes": "Must not overstate our compliance status — should accurately state we currently have Type I with Type II in progress (3 months out), and propose a path forward: interim compensating controls (e.g., signed DPA, penetration test results, architecture review), a contractual commitment to deliver Type II by a certain date, or a phased rollout starting with non-sensitive data. Should not claim Type II already exists."
+  },
+  {
+    "id": "sales-009",
+    "category": "sales",
+    "context": "Call scenario: prospect mentions 'We tried a competitor's free trial last month and it was really buggy, crashed twice during setup.'",
+    "question": "How should I use this in the conversation without directly trash-talking the competitor?",
+    "rubric_notes": "Should suggest a professional approach: acknowledge the frustration, avoid gloating or aggressively bashing the named competitor, and instead pivot to demonstrating our own reliability concretely (uptime stats, offer a live demo of setup to show it working smoothly, or offer a proof-of-concept). Should not recommend disparaging remarks about the competitor."
+  },
+  {
+    "id": "sales-010",
+    "category": "sales",
+    "context": "Negotiation call: prospect wants a month-to-month contract; our standard terms are annual with a 20% discount for annual commitment. Prospect: 'We just don't want to be locked in given some budget uncertainty next year.'",
+    "question": "How do I navigate this term-length pushback?",
+    "rubric_notes": "Should acknowledge the budget uncertainty concern as legitimate, then propose middle-ground options: a shorter initial term (e.g., 6-month or quarterly) with an easy renewal path, an opt-out clause after a certain point, or quantify the cost difference (20% discount value) so the prospect can make an informed tradeoff rather than just capitulating to month-to-month at full price."
+  },
+  {
+    "id": "sales-011",
+    "category": "sales",
+    "context": "Prospect (small business owner): 'I looked at your website and honestly I don't fully understand what this product does differently from a basic spreadsheet.'",
+    "question": "How do I explain our value prop simply here?",
+    "rubric_notes": "Should recommend simplifying language, avoiding jargon, and grounding the explanation in a concrete before/after scenario relevant to a small business owner (time saved, error reduction, or a specific task automated) rather than repeating marketing language. Should not talk down to the prospect."
+  },
+  {
+    "id": "sales-012",
+    "category": "sales",
+    "context": "Deal context: champion (mid-level manager) is enthusiastic but mentioned 'Our CFO froze all new software spend this quarter due to budget cuts.'",
+    "question": "What's the right next step given this budget freeze?",
+    "rubric_notes": "Should not push for an immediate close given the explicit budget freeze — instead suggest keeping the champion engaged (continued value delivery, staying top of mind), understanding the freeze's exact end date/conditions, and possibly exploring a start date aligned with the next budget cycle or a lower-commitment pilot if any flexibility exists. Should not recommend high-pressure closing tactics against an explicit budget freeze."
+  },
+  {
+    "id": "sales-013",
+    "category": "sales",
+    "context": "Prospect: 'What happens if we sign up and it doesn't deliver the ROI you're projecting?'",
+    "question": "How do I answer this risk-reversal question confidently?",
+    "rubric_notes": "Should suggest concrete risk-reversal mechanisms if available in the deal context (e.g., pilot period, success metrics agreed upfront, money-back guarantee, or a phased rollout with checkpoints) rather than vague reassurance. Should not overpromise guaranteed ROI figures without qualification."
+  },
+  {
+    "id": "sales-014",
+    "category": "sales",
+    "context": "Call scenario: prospect goes quiet for a long pause after hearing the price, then says 'Let me think about it and get back to you.'",
+    "question": "How do I respond to this classic stall without being pushy?",
+    "rubric_notes": "Should suggest gently probing for the real objection behind 'let me think about it' (price, need to consult someone else, genuine uncertainty about fit) rather than accepting the stall at face value or pressuring for an immediate yes. Should propose a concrete next step (specific follow-up date, offer to address any lingering question now) rather than leaving it open-ended."
+  },
+  {
+    "id": "sales-015",
+    "category": "sales",
+    "context": "Prospect (existing customer on a renewal call): 'We've been using this for a year and honestly usage has dropped off — only 3 of our original 10 licensed users are still active.'",
+    "question": "How do I handle this low-adoption signal on a renewal call?",
+    "rubric_notes": "Must treat this as a churn-risk signal requiring investigation, not just a renewal-close opportunity: ask why usage dropped (onboarding gaps, feature fit issues, team turnover), consider proposing a reduced seat count reflecting actual usage rather than pushing a full renewal, and propose a re-engagement/training plan. Should not ignore the adoption drop and push straight to closing a full renewal."
+  },
+  {
+    "id": "sales-016",
+    "category": "sales",
+    "context": "Prospect: 'Your competitor is offering a similar product for 40% less. Why should I pay more?'",
+    "question": "How do I differentiate on value against a much cheaper competitor?",
+    "rubric_notes": "Should recommend understanding what's actually included in the competitor's cheaper offer first (feature parity check) before responding, then articulate concrete differentiators (support quality, reliability, integration depth, total cost of ownership including implementation/support costs) rather than a blanket 'we're just better' claim. Should avoid disparaging the competitor without factual basis."
+  },
+  {
+    "id": "sales-017",
+    "category": "sales",
+    "context": "Call context: prospect is a technical evaluator (not economic buyer) asking deep API/integration questions; economic buyer (CFO) hasn't been on any calls yet, deal is 8 weeks old.",
+    "question": "How do I make sure this deal doesn't stall with only the technical evaluator engaged?",
+    "rubric_notes": "Should flag the single-threading risk explicitly (8 weeks in, no economic buyer engagement) and recommend proactively asking the technical evaluator to help get time with the CFO/economic buyer, possibly proposing a business-value-focused session separate from the technical deep dive. Should not suggest just continuing indefinitely with only the technical contact."
+  },
+  {
+    "id": "sales-018",
+    "category": "sales",
+    "context": "Prospect: 'We need this to integrate with our custom-built internal ERP system. Can you guarantee that will work?'",
+    "question": "How do I answer a technical guarantee question I'm not fully certain about?",
+    "rubric_notes": "Should coach honesty: don't guarantee compatibility with an unknown custom system without verification; instead propose a concrete next step (technical discovery call with engineering, API documentation review, or a scoped proof-of-concept) to validate integration feasibility before making commitments. Should not fabricate a guarantee."
+  },
+  {
+    "id": "sales-019",
+    "category": "sales",
+    "context": "Prospect (marketing director): 'I love this, but I need to see it work with our actual data before I can convince my team.'",
+    "question": "What should I propose next?",
+    "rubric_notes": "Should propose a proof-of-concept or pilot using the prospect's actual data as the logical next step, along with defining clear success criteria upfront so the pilot has a defined path to a decision, rather than just scheduling another generic demo."
+  },
+  {
+    "id": "sales-020",
+    "category": "sales",
+    "context": "Late-stage deal, prospect: 'Legal flagged a liability clause in the MSA that caps our damages recovery too low for a tool handling this much of our data.'",
+    "question": "How do I handle this legal/contract objection in the moment?",
+    "rubric_notes": "Should not attempt to resolve contract legal terms unilaterally on the call; should acknowledge the concern as valid and route it appropriately (loop in legal/deal desk, offer to have the contracts team follow up directly with their legal team) while keeping the deal moving on other fronts. Should not promise a specific liability cap change without authority to do so."
+  },
+  {
+    "id": "sales-021",
+    "category": "sales",
+    "context": "Prospect: 'Everyone I talk to on your team says something slightly different about what's included in the Enterprise plan. It's confusing.'",
+    "question": "How do I rebuild confidence given this consistency issue?",
+    "rubric_notes": "Should acknowledge the inconsistency directly rather than deflecting, and propose a concrete fix: send a single authoritative written summary of exactly what's included in the Enterprise plan for this prospect, so there's one clear source of truth going forward. Should not minimize the prospect's frustration."
+  },
+  {
+    "id": "sales-022",
+    "category": "sales",
+    "context": "Cold outbound call, prospect answers and says: 'I have literally two minutes, what is this about?'",
+    "question": "How do I use this short window effectively?",
+    "rubric_notes": "Should recommend a tight, benefit-led opener (not a feature list) that quickly states who we are and the specific problem we solve, then asks a qualifying question or requests a longer follow-up slot rather than trying to cram a full pitch into two minutes. Should respect the stated time constraint."
+  },
+  {
+    "id": "sales-023",
+    "category": "sales",
+    "context": "Prospect: 'We had a bad experience with your company two years ago — a rep overpromised and support was unresponsive when we had an issue.'",
+    "question": "How do I address this history without being defensive?",
+    "rubric_notes": "Should acknowledge the past issue directly and take it seriously rather than dismissing it as 'a different team now,' express genuine acknowledgment, and if true, point to concrete changes made since then (org changes, process improvements) with specifics if available in context, rather than vague reassurance."
+  },
+  {
+    "id": "sales-024",
+    "category": "sales",
+    "context": "Deal context: prospect wants a custom feature built before they'll sign; feature is technically feasible but would take 2 engineering sprints and isn't on the current roadmap.",
+    "question": "How do I handle this custom feature request without overcommitting?",
+    "rubric_notes": "Should not unilaterally promise a 2-sprint custom build without product/engineering sign-off; should propose looping in product management to assess feasibility and timeline realistically, and explore whether a workaround or phased approach (sign now, feature delivered by an agreed date with contractual commitment if the business justifies it) could unblock the deal. Should not overcommit engineering resources without authority."
+  },
+  {
+    "id": "sales-025",
+    "category": "sales",
+    "context": "Prospect on a call: 'Can you walk me through how this compares to what we're currently paying $15K/year for with Vendor A? We're at 40 seats.'",
+    "question": "Help me structure a comparison response.",
+    "rubric_notes": "Should recommend first clarifying what's included in the current $15K/year Vendor A spend (per-seat cost is $375/seat/year) before comparing, then articulate differentiation (feature gaps in Vendor A's offering, better support, etc.) grounded in actual gathered needs rather than assuming what Vendor A lacks. Should ask clarifying questions rather than guessing at Vendor A's feature set."
+  },
+  {
+    "id": "sales-026",
+    "category": "sales",
+    "context": "Prospect: 'Your onboarding process sounds like a lot of work on our end. We don't have a dedicated person to manage this rollout.'",
+    "question": "How do I address this implementation-resourcing concern?",
+    "rubric_notes": "Should acknowledge the resourcing concern as valid, then explain what support is available to reduce their burden (dedicated onboarding specialist, implementation templates, phased rollout to reduce peak effort) rather than minimizing the actual work involved. Should not overstate how effortless onboarding will be if it genuinely requires customer effort."
+  },
+  {
+    "id": "sales-027",
+    "category": "sales",
+    "context": "Deal context: prospect asked for references; we have 2 customers in their exact industry (healthcare) willing to speak, both went live in the last 6 months.",
+    "question": "How do I position these references to build confidence?",
+    "rubric_notes": "Should recommend using the two healthcare-industry references specifically (industry relevance matters a lot for credibility) and being transparent that they're recent (last 6 months) rather than long-tenured, which is itself useful context for the prospect to know. Should not fabricate additional references not in context."
+  },
+  {
+    "id": "sales-028",
+    "category": "sales",
+    "context": "Prospect: 'Our board wants to see a case for why this is a build-vs-buy decision in our favor to buy, not build in-house.'",
+    "question": "How do I help make the build-vs-buy case?",
+    "rubric_notes": "Should suggest structuring around total cost of ownership (in-house engineering time/opportunity cost, maintenance burden over time vs subscription cost), time-to-value (buy is typically faster to deploy than build), and ongoing innovation/support that a vendor provides vs an internal team having to maintain it indefinitely. Should recommend asking what specifically the board is weighing so the case can be tailored."
+  },
+  {
+    "id": "sales-029",
+    "category": "sales",
+    "context": "Call scenario: prospect says 'We're a nonprofit, does that change pricing?' Deal context: rep knows there's a nonprofit discount program but doesn't know the exact percentage off the top of their head.",
+    "question": "How do I handle this pricing question I'm not 100% sure about?",
+    "rubric_notes": "Should coach honesty: acknowledge a nonprofit discount program exists but avoid stating a specific percentage if uncertain, and commit to confirming the exact number and following up promptly rather than guessing or making up a figure."
+  },
+  {
+    "id": "sales-030",
+    "category": "sales",
+    "context": "Prospect: 'We signed with a competitor 8 months ago and locked into a 2-year contract. We're not able to switch right now.'",
+    "question": "What's the right move given this is a genuinely closed door for now?",
+    "rubric_notes": "Should recommend not pushing for an immediate deal given the explicit contractual lock-in, and instead nurture the relationship for the future (note the contract end date ~16 months out, set a follow-up reminder, stay in touch with relevant content) rather than continuing high-pressure selling against a stated hard blocker."
+  },
+  {
+    "id": "sales-031",
+    "category": "sales",
+    "context": "Prospect: 'I really like this, but I need three other stakeholders to sign off, and honestly getting all of us in a room is really hard.'",
+    "question": "How do I help move this multi-stakeholder deal forward?",
+    "rubric_notes": "Should propose practical facilitation: offering to help schedule/run a joint session, providing tailored materials each stakeholder can review async if a joint meeting is truly hard to arrange, and asking what each stakeholder specifically cares about so materials can be prepared in advance. Should not just wait passively."
+  },
+  {
+    "id": "sales-032",
+    "category": "sales",
+    "context": "Deal context: prospect is comparing our product to building the solution in-house with their own engineering team; they estimate 3 months of internal build time.",
+    "question": "How do I position against a build-in-house alternative?",
+    "rubric_notes": "Should address the build-in-house comparison directly: the visible 3-month estimate often excludes ongoing maintenance, opportunity cost of engineering time spent elsewhere, and feature parity gaps that would take even longer to reach. Should ask about their actual engineering capacity/priorities rather than assuming, and avoid dismissively claiming in-house builds always fail."
+  },
+  {
+    "id": "sales-033",
+    "category": "sales",
+    "context": "Prospect (long silence, then): 'Can you be honest with me — is this actually going to work for a company our size, or are we too small for this?' Company size: 12 employees.",
+    "question": "How do I answer this fit-concern honestly?",
+    "rubric_notes": "Should coach an honest assessment based on the given company size (12 employees) — if the product genuinely fits smaller teams, explain why concretely; if there's real uncertainty, be transparent about it rather than overselling fit just to close the deal. Should not give a blanket reassurance without addressing the specific size concern raised."
+  },
+  {
+    "id": "sales-034",
+    "category": "sales",
+    "context": "Call scenario: prospect mentions offhand 'Our current tool's contract renews automatically in 45 days unless we cancel with 30 days notice.'",
+    "question": "What should I do with this timing information?",
+    "rubric_notes": "Should flag this as a critical timeline detail: with 45 days to renewal and a 30-day cancellation notice window, there's effectively only about 15 days before the cancellation deadline passes, so the deal needs to be evaluated and potentially closed on an accelerated timeline if switching is the goal. Should recommend surfacing this urgency to the prospect and internal deal team rather than letting the deadline pass unnoticed."
+  },
+  {
+    "id": "sales-035",
+    "category": "sales",
+    "context": "Prospect just verbally agreed to move forward: 'Okay, let's do it, send over the contract.' Deal is a $45K annual deal, prospect is the final decision-maker.",
+    "question": "What should happen next to make sure this doesn't stall?",
+    "rubric_notes": "Should recommend prompt, concrete next steps: send the contract quickly while momentum is high, confirm who needs to sign and any internal approval steps on their side, set a specific target signature date, and avoid letting the deal go quiet after verbal agreement (a common way deals stall)."
+  }
+]
