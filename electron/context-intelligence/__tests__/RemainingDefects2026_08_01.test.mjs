@@ -19,6 +19,7 @@ const { MODE_POLICIES } = await load('policies/mode-policy-registry.js');
 const { CLAIM_AUTHORITY } = await load('policies/source-authority-policy.js');
 const { decide, evaluateAnswerability, evidenceSupportsClaim, propertyQualifierTerms } = await load('orchestration/orchestrator.js');
 const { createLegacyRetrievalPort } = await load('retrieval/legacy-retrieval-port.js');
+const { composePrompt } = await load('generation/prompt-composer.js');
 
 const classify = (q, modeId, over = {}) =>
   classifyTurn({ resolvedQuestion: q, policy: MODE_POLICIES[modeId], isFollowUp: false, ...over });
@@ -267,6 +268,78 @@ describe('issue 7: qualified value heads', () => {
       { acceptedFor: ['DOCUMENT_FACT'], content: 'Frameworks: React, FastAPI' },
       'DOCUMENT_FACT', 'What backend framework is explicitly documented?',
     ), true);
+  });
+});
+
+// ── Issue 8: explicit decoy/secondary-entity lookup ─────────────────────────
+
+describe('issue 8: explicit secondary/decoy source lookup without contamination', () => {
+  test('"Identify the decoy candidate ID." plans the reference side too', () => {
+    // The decoy file is deliberately NOT typed CANDIDATE_FILE (isolation);
+    // planned CANDIDATE_FILE-only made it structurally unreachable.
+    const r = classify('Identify the decoy candidate ID.', 'recruiting');
+    assert.ok(r.requiredSourceTypes.includes('REFERENCE_FILE'),
+      `decoy file unreachable: ${JSON.stringify(r.requiredSourceTypes)} (${r.reason})`);
+    assert.ok(r.requiredSourceTypes.includes('CANDIDATE_FILE'), JSON.stringify(r.requiredSourceTypes));
+  });
+
+  test('NON-REGRESSION: plain candidate questions do not plan a decoy hunt', () => {
+    const r = classify("What is Leena's CGPA?", 'recruiting');
+    assert.ok(!r.questionTypes.includes('DOCUMENT_FACT') || !/decoy/.test(r.reason), r.reason);
+  });
+
+  const registry = {
+    sourceTypes: new Map([['cand', 'CANDIDATE_FILE'], ['decoy', 'REFERENCE_FILE']]),
+    activeVersions: new Map([['cand', 'v1'], ['decoy', 'v1']]),
+    chunkVersions: new Map([['cand', 'v1'], ['decoy', 'v1']]),
+    sourceScopes: new Map([['cand', { userId: 'u' }], ['decoy', { userId: 'u' }]]),
+  };
+  const chunks = [
+    { sourceId: 'cand', fileName: '01_candidate_resume.md', text: 'Candidate Resume - Leena Joseph. Candidate ID: CAND-LEENA-2026. CGPA: 8.91/10', chunkIndex: 0, score: 0.9 },
+    { sourceId: 'decoy', fileName: '06_unrelated_candidate_decoy.md', text: 'This file is a deliberate contamination probe. Decoy candidate ID: CAND-DECOY-0000.', chunkIndex: 0, score: 0.3 },
+  ];
+  const mkDecision = (q) => decide({
+    requestId: 'p', requestSequence: 1, surface: 'manual_chat', modeId: 'recruiting',
+    scope: { userId: 'u', modeId: 'recruiting' }, sessionId: 's', manualQuestion: q,
+  });
+
+  test('end-to-end: the decoy file is retrieved and named-file targeting ranks it first', async () => {
+    const port = createLegacyRetrievalPort({ registry, retrieve: async () => chunks });
+    const d = mkDecision('Identify the decoy candidate ID.');
+    const { evidence } = await port.retrieve({ decision: d });
+    assert.ok(evidence.some((e) => e.sourceId === 'decoy'),
+      `decoy evidence missing: ${evidence.map((e) => e.sourceId).join(',')}`);
+    assert.equal(evidence[0].sourceId, 'decoy',
+      'the explicitly named file must outrank the higher-scoring primary candidate');
+  });
+
+  test('isolation both ways: primary values cannot satisfy decoy-qualified requests and vice versa', () => {
+    const q = 'Identify the decoy candidate ID.';
+    assert.equal(evidenceSupportsClaim(
+      { acceptedFor: ['DOCUMENT_FACT'], content: 'Candidate ID: CAND-LEENA-2026', documentTitle: '01_candidate_resume.md' },
+      'DOCUMENT_FACT', q,
+    ), false, "the PRIMARY candidate's ID must not satisfy a decoy lookup");
+    assert.equal(evidenceSupportsClaim(
+      { acceptedFor: ['DOCUMENT_FACT'], content: 'Decoy candidate ID: CAND-DECOY-0000', documentTitle: '06_unrelated_candidate_decoy.md' },
+      'DOCUMENT_FACT', q,
+    ), true);
+    // …and the reverse: the decoy's CGPA can never answer a Leena question.
+    assert.equal(evidenceSupportsClaim(
+      { acceptedFor: ['USER_EDUCATION'], content: 'Unrelated candidate CGPA: 9.99/10', documentTitle: '06_unrelated_candidate_decoy.md' },
+      'USER_EDUCATION', "What is Leena's CGPA?",
+    ), false, "decoy facts must not merge into the active candidate");
+  });
+
+  test('composer instructs source-identity separation for decoy requests only', () => {
+    const d = mkDecision('Identify the decoy candidate ID.');
+    const composed = composePrompt({ decision: d, policy: MODE_POLICIES.recruiting, evidence: [] });
+    assert.ok(composed.sections.includes('secondary_source'), composed.sections.join(','));
+    assert.match(composed.system, /secondary or decoy source/i);
+    const plain = composePrompt({
+      decision: mkDecision("What is Leena's CGPA?"),
+      policy: MODE_POLICIES.recruiting, evidence: [],
+    });
+    assert.ok(!plain.sections.includes('secondary_source'));
   });
 });
 

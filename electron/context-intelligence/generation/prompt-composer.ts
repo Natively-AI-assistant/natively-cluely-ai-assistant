@@ -321,6 +321,26 @@ function weakEvidenceGuidance(
 }
 
 /**
+ * Explicit secondary/decoy source separation (deep-run 2, issue 8). Rendered
+ * only when the question names a secondary entity/document. The retrieval side
+ * may legitimately return BOTH the active subject's evidence and the named
+ * secondary source — generation must keep their identities separate: name the
+ * source each fact came from, and never merge decoy facts into the active
+ * subject (or vice versa).
+ */
+function secondarySourceGuidance(d: Readonly<TurnDecision>): string {
+  let SECONDARY_DOC_RE: RegExp | undefined;
+  try {
+    ({ SECONDARY_DOC_RE } = require('../question/turn-classifier'));
+  } catch { /* shared definition unavailable — skip the section */ }
+  if (!SECONDARY_DOC_RE?.test(d.resolvedQuestion)) return '';
+  return '# Source identity\nThe question asks about a SECONDARY or decoy source, distinct from the active '
+    + 'subject. Answer that part ONLY from evidence whose source_name/status matches the request, and NAME '
+    + 'that source explicitly. Never attribute the secondary source\'s facts to the active person or '
+    + 'document, and never fill gaps in one from the other.';
+}
+
+/**
  * Follow-up handling the verdict alone can drive (Defect D, 2026-08-01).
  *
  * CLARIFICATION: the referent could not be resolved — answering as if the
@@ -414,6 +434,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
     push('follow_up', followUpGuidance(d, input.fallbackUsed, Boolean(input.conversationSummary))),
     push('absence_contract', absenceContract(evidence, input.withheldScopes)),
     push('precedence_contract', precedenceContract(evidence)),
+    push('secondary_source', secondarySourceGuidance(d)),
     push('evidence_coverage', weakEvidenceGuidance(d, input.fallbackUsed, Boolean(packed.evidenceBlock))),
     push('capabilities', `# Capabilities\n${capabilityLines(policy)}`),
   ].filter((s) => s.trim()).join('\n\n');

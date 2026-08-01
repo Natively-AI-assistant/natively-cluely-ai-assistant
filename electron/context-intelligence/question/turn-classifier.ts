@@ -272,6 +272,12 @@ const VALUE_LOOKUP_RE =
 const METRIC_LOOKUP_RE =
   /\b(volume|throughput|latency|uptime|capacity|bandwidth|qps|tps|rps|p\d{2,3}|rate)\s+(?:of|for)\s+(?:the|our|your|its|this|that)\b/;
 
+/** Explicit reference to a SECONDARY document/entity — the decoy candidate,
+ *  another candidate, a named fixture — as opposed to the active subject
+ *  (deep-run 2, issue 8). Exported for the composer's identity-separation
+ *  directive so detection and instruction share one definition. */
+export const SECONDARY_DOC_RE = /\b(decoys?|other candidates?|another candidate|second(ary)? candidate|unrelated (candidate|file|document))\b/i;
+
 const CODING_TASK_RE = /\b(reverse a|implement (a|an)|write (a|the) (code|function|program|query)|solve|algorithm for|time complexity|leetcode|binary search|linked list|sort(ing)? algorithm|dynamic programming)\b/;
 
 const SYSTEM_DESIGN_RE = /\b(design a|scale (a|the|to)|system design|architecture for|how would you (build|design)|throughput|sharding|load balanc|(would|will|can|does) (it|that|this) scale)\b/;
@@ -456,6 +462,19 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
         }
       }
     }
+    // EXPLICIT secondary/decoy document lookup (deep-run 2, issue 8): the
+    // decoy candidate file is deliberately NOT typed CANDIDATE_FILE (that
+    // isolation is what stops contamination), so "Identify the decoy candidate
+    // ID" — whose claims planned CANDIDATE_FILE only — could never see it.
+    // Explicitly naming a secondary entity/document claims the reference side;
+    // isolation is preserved because qualified-property matching stops the
+    // PRIMARY candidate's values satisfying decoy-qualified requests and vice
+    // versa, and the composer instructs source-identity separation.
+    if (SECONDARY_DOC_RE.test(clause)
+        && input.policy.allowedSourceTypes.includes('REFERENCE_FILE')) {
+      types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
+    }
+
     // Tailored interview material (deep-run 2, issue 1): "Give one tailored
     // distributed-systems interview question" produced ZERO claims — an
     // imperative with no factual cue — so the turn reported FULL with no

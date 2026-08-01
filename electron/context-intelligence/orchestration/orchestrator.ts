@@ -437,7 +437,7 @@ export function evidenceSupportsClaim(
 /** Countable/config-like value nouns where sibling values abound and a bare
  *  head match is meaningless without its qualifier. Generic vocabulary — not
  *  fixture-derived. */
-const VALUE_HEAD_RE = /^(canar\w*|limits?|prices?|pricing|costs?|ids?|keys?|tokens?|thresholds?|weights?|counts?|sizes?|rates?|seats?|quotas?|budgets?|versions?|values?|numbers?|totals?)$/;
+const VALUE_HEAD_RE = /^(canar\w*|limits?|prices?|pricing|costs?|ids?|keys?|tokens?|thresholds?|weights?|counts?|sizes?|rates?|seats?|quotas?|budgets?|versions?|values?|numbers?|totals?|c?gpas?|scores?)$/;
 
 /** Temporal/deictic modifiers are not distinguishing qualifiers. */
 const NON_QUALIFIER = new Set(['current', 'activ', 'latest', 'default', 'exact', 'effectiv', 'today', 'new', 'the']);

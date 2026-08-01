@@ -117,8 +117,29 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
         const s = (e.metadata as Record<string, unknown> | undefined)?.documentStatus;
         return typeof s === 'string' && RETIRED.has(s) ? 1 : 0;
       };
+
+      // EXPLICITLY-NAMED document targeting (deep-run 2, issue 8): when the
+      // question names a specific attachment ("the DECOY candidate ID",
+      // "the formula sheet"), chunks from files whose NAME shares a
+      // distinctive question token outrank everything else. Generic filename
+      // matching — no fixture vocabulary; inert when no title matches.
+      const qTokens = new Set(
+        decision.resolvedQuestion.toLowerCase().replace(/[^a-z0-9\s_-]/g, ' ').split(/\s+/)
+          .filter((w) => w.length > 3),
+      );
+      // COUNT of distinctive shared tokens, not a boolean: "the decoy
+      // candidate ID" shares one token with the primary résumé's filename
+      // ("candidate") but two with the decoy's ("candidate", "decoy") — the
+      // more specifically named file wins.
+      const titleMatchCount = (e: EvidenceItem): number => {
+        const title = (e.documentTitle ?? '').toLowerCase();
+        if (!title) return 0;
+        return new Set(title.split(/[^a-z0-9]+/).filter((t) => t.length > 3 && qTokens.has(t))).size;
+      };
       const sorted = evidence.sort((a, b) =>
-        statusClass(a) - statusClass(b) || b.finalScore - a.finalScore);
+        titleMatchCount(b) - titleMatchCount(a)
+        || statusClass(a) - statusClass(b)
+        || b.finalScore - a.finalScore);
 
       // PER-TYPE DIVERSITY (deep-run 2, issue 5): a flooded pool (résumé
       // chunks on a project question) consumed every accepted slot. Round-robin
