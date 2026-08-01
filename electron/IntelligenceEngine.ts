@@ -1180,6 +1180,29 @@ export class IntelligenceEngine extends EventEmitter {
                 } catch (e) { console.warn('[TRACE:LONGCTX] question_extracted logging failed', e); }
             }
 
+            // GOVERNED-INPUT CONTRACT (deep-run 2 / Pattern I, 2026-08-01): a
+            // What-to-Answer press with no transcript, no screen/DOM/image
+            // capture and no typed question used to proceed through planning,
+            // retrieval and a full provider round-trip with an EMPTY question —
+            // V3 refuses empty input and opts out, so the governed layer never
+            // saw the turn, and the user got a deadline-timeout message seconds
+            // later, a hallucinated answer to no question, or a raw internal
+            // error. The derivation chain is transcript → screen/DOM/image →
+            // last interviewer turn; when ALL of it is empty, answer instantly
+            // and deterministically (mirrors the runBrainstorm guard).
+            // Speculative runs return silently, per the speculative contract.
+            const _wtaHasVisualContext = (imagePaths?.length ?? 0) > 0
+                || Boolean(options?.screenContext) || Boolean(options?.domContext);
+            if (!question?.trim() && !extractedQuestion.latestQuestion && !lastInterviewerTurn
+                && !preparedTranscript.trim() && !_wtaHasVisualContext) {
+                if (isSpeculative) return null;
+                this.setMode('idle');
+                const noContextMsg = "I don't have anything to answer yet — no conversation, screen capture, or question has come in. Ask something or start the meeting audio, then press again.";
+                this.session.addAssistantMessage(noContextMsg, undefined, 'what_to_answer');
+                this.emit('suggested_answer', noContextMsg, 'inferred', 1.0, generationId);
+                return noContextMsg;
+            }
+
             // LIVE TRANSCRIPT BRAIN (Phase 6 wiring, SHADOW/PARITY behind live_transcript_brain_enabled):
             // the WTA path already builds the hot window inline (getContext(180) + interim
             // injection above) and extracts the question — exactly what LiveTranscriptBrain

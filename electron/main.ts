@@ -5733,7 +5733,8 @@ export class AppState {
 
         // 3. Snapshot transcript + persist placeholder + queue title/summary LLM.
         //    intelligenceManager.stopMeeting itself runs LLM in background.
-        const meetingId = await this.intelligenceManager.stopMeeting();
+        const stopResult = await this.intelligenceManager.stopMeeting();
+        const meetingId = stopResult?.meetingId ?? null;
 
         // 5. RAG cleanup — same logic as before, just inside the BG IIFE.
         if (meetingId) {
@@ -5741,7 +5742,15 @@ export class AppState {
             await ragManager.stopLiveIndexing();
             console.log('[Main] Live RAG indexing stopped.');
           }
-          await this.processCompletedMeetingForRAG(meetingId);
+          // Zero-eligible sessions (manual chat only — deep-run 2 issue 11)
+          // skip RAG entirely: the transcript re-read below has no provenance
+          // columns, so chat/assistant text would be chunked and embedded as
+          // meeting content.
+          if ((stopResult?.memoryEligibleCount ?? 1) > 0) {
+            await this.processCompletedMeetingForRAG(meetingId);
+          } else {
+            console.log('[Main] No memory-eligible transcript — skipping meeting RAG processing.');
+          }
           if (ragManager && !this.isMeetingActive) {
             ragManager.deleteMeetingData('live-meeting-current');
             console.log('[Main] JIT RAG provisional chunks cleaned up.');

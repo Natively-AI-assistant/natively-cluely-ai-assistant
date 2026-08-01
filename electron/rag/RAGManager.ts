@@ -619,6 +619,11 @@ export class RAGManager {
      */
     async dispose(): Promise<void> {
         this.cancelPendingReindex();
+        // Stop the embedding drain loop BEFORE the shared DB handle is closed
+        // (main.ts disposes RAG, then closes the DB): an in-flight embed that
+        // resumed after close used to throw into queueMeeting's catch, and on
+        // the emergency-close path its write raced an uncheckpointed database.
+        try { this.embeddingPipeline.stop(); } catch { /* non-fatal */ }
         try { await this.vectorStore.destroy(); } catch (e) {
             console.warn('[RAGManager] dispose: vectorStore.destroy failed (non-fatal):', e);
         }

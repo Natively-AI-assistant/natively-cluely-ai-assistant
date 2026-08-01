@@ -647,11 +647,13 @@ export async function orchestrate(
   // effectiveReq, which the rewrite below may have already changed — logging
   // that as "original" hid every resolver decision from the telemetry.
   const originalQuestion = (req.manualQuestion ?? req.transcriptQuestion ?? '').trim();
+  let priorDecision: import('../contracts/types').PriorTurnDecision | undefined;
   try {
     const { resolveAgainstSession, getConversationState } = require('../question/conversation-state-store');
     const rawQ = originalQuestion;
     if (rawQ) {
       const priorState = getConversationState(req.sessionId);
+      priorDecision = priorState?.previousDecision;
       const ref = resolveAgainstSession(req.sessionId, rawQ);
       referentResolution = {
         applied: Boolean(ref.usedState && ref.resolved !== rawQ),
@@ -670,7 +672,20 @@ export async function orchestrate(
     }
   } catch { /* continuity must never break a turn */ }
 
-  const decision = decide(effectiveReq);
+  let decision = decide(effectiveReq);
+
+  // Precedence follow-up (live turns 18/92, 2026-08-01): "Why did you ignore
+  // the other values?" / "Why are the lower values not current?" ask about the
+  // PREVIOUS turn's source decision, which this turn's own retrieval cannot
+  // reproduce — one live answer confabulated a rationale, the other refused.
+  // Deterministic detection, no LLM: a why/explain shape naming displaced
+  // values or the precedence mechanism itself, gated on a recorded decision
+  // actually existing for this session. The record is attached for the
+  // COMPOSER to render; routing and retrieval are unchanged by it.
+  const PRECEDENCE_WHY_RE = /\b(?:why\b[\s\S]*\b(?:ignor\w+|other|lower|higher|old(?:er)?|previous|earlier|retired|archived|superseded|legacy|outdated|not\s+current)\b|source[-\s]?precedence)\b/i;
+  if (priorDecision && PRECEDENCE_WHY_RE.test(originalQuestion)) {
+    decision = Object.freeze({ ...decision, precedenceHistory: priorDecision });
+  }
 
   let evidence: EvidenceItem[] = [];
   let attempts: RetrievalAttemptTrace[] = [];
@@ -804,6 +819,54 @@ export async function orchestrate(
   // summary after the stream completes (recordAnswerSummary).
   try {
     const { advanceConversationState } = require('../question/conversation-state-store');
+
+    // Record this turn's source-precedence outcome (Pattern F). Derived from
+    // NON-debug-gated inputs only — evidence metadata and the port's rejection
+    // records — never from the debug collector, whose inputs are level-gated
+    // and must not influence answers. Only turns that actually retrieved
+    // produce a record; FAST turns preserve the previous one.
+    let turnDecision: import('../contracts/types').PriorTurnDecision | undefined;
+    if (evidence.length > 0 || attempts.some((a) => (a.rejections?.length ?? 0) > 0)) {
+      const statusOf = (m: unknown) => {
+        const s = (m as Record<string, unknown> | undefined)?.documentStatus;
+        return typeof s === 'string' ? s : undefined;
+      };
+      const selected = new Map<string, import('../contracts/types').PriorSourceDecision>();
+      for (const e of evidence) {
+        if (selected.has(e.sourceId)) continue;
+        selected.set(e.sourceId, {
+          sourceId: e.sourceId,
+          ...(e.documentTitle ? { sourceName: e.documentTitle } : {}),
+          ...(statusOf(e.metadata) ? { status: statusOf(e.metadata) } : {}),
+        });
+      }
+      const ignored = new Map<string, import('../contracts/types').PriorSourceDecision>();
+      for (const a of attempts) {
+        for (const r of a.rejections ?? []) {
+          if (selected.has(r.sourceId) || ignored.has(r.sourceId)) continue;
+          ignored.set(r.sourceId, {
+            sourceId: r.sourceId,
+            ...(r.documentTitle ? { sourceName: r.documentTitle } : {}),
+            ...(r.documentStatus ? { status: r.documentStatus } : {}),
+            reason: r.reason,
+          });
+        }
+      }
+      const RETIRED_CLASS = new Set(['retired', 'deprecated', 'archived', 'superseded', 'legacy', 'obsolete']);
+      const selectedRetired = [...selected.values()].some((s) => s.status && RETIRED_CLASS.has(s.status));
+      const ignoredRetired = [...ignored.values()].some((s) => s.status && RETIRED_CLASS.has(s.status));
+      turnDecision = {
+        question: originalQuestion || decision.resolvedQuestion,
+        selectedSources: [...selected.values()],
+        ignoredSources: [...ignored.values()],
+        ...(ignoredRetired && !selectedRetired
+          ? { precedenceReason: 'RETIRED_SOURCES_RANKED_BELOW_CURRENT' }
+          : selectedRetired
+            ? { precedenceReason: 'HISTORICAL_SOURCE_EXPLICITLY_REQUESTED' }
+            : {}),
+      };
+    }
+
     advanceConversationState({
       sessionId: req.sessionId,
       scope: decision.scope,
@@ -814,6 +877,7 @@ export async function orchestrate(
       question: originalQuestion || decision.resolvedQuestion,
       evidenceIds: evidence.map((e) => e.evidenceId),
       sourceIds: [...new Set(evidence.map((e) => e.sourceId))],
+      decision: turnDecision,
     });
   } catch { /* continuity must never break a turn */ }
 

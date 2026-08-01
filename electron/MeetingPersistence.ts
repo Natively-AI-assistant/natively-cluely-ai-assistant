@@ -31,7 +31,7 @@ export class MeetingPersistence {
      * Stops the meeting immediately, snapshots data, and triggers background processing.
      * Returns immediately so UI can switch.
      */
-    public async stopMeeting(): Promise<string | null> {
+    public async stopMeeting(): Promise<{ meetingId: string; memoryEligibleCount: number } | null> {
         console.log('[MeetingPersistence] Stopping meeting and queueing save...');
 
         // 0. Force-save any pending interim transcript
@@ -74,12 +74,34 @@ export class MeetingPersistence {
             return null;
         }
 
+        // ZERO-ELIGIBLE COUNT (deep-run 2 issue 11, 2026-08-01): computed HERE,
+        // at the snapshot, because this is the last place segment provenance
+        // exists — DatabaseManager.saveMeeting persists (speaker, content,
+        // timestamp) only, so origin/confidence cannot be re-derived from the
+        // DB read that the RAG step and recovery paths perform. A session whose
+        // transcript contains no memory-eligible segments (manual chat +
+        // assistant answers only — e.g. audio capture off) must not run the
+        // summary LLM, mode auto-detect, meeting-memory extraction, Hindsight
+        // retention, or RAG chunking/embedding.
+        let memoryEligibleCount = 0;
+        try {
+            const { isMemoryEligibleSegment } = require('./intelligence/MeetingMemoryService');
+            memoryEligibleCount = this.session.getFullTranscript()
+                .filter((seg: any) => isMemoryEligibleSegment(seg)).length;
+        } catch (err) {
+            // Fail OPEN to the legacy behavior (process everything): a broken
+            // eligibility import must not silently discard real meetings.
+            console.warn('[MeetingPersistence] eligibility check unavailable — processing normally:', err);
+            memoryEligibleCount = this.session.getFullTranscript().length;
+        }
+
         const snapshot = {
             transcript: [...this.session.getFullTranscript()],
             usage: [...this.session.getFullUsage()],
             startTime: this.session.getSessionStartTime(),
             durationMs: durationMs,
-            context: this.session.getFullSessionContext()
+            context: this.session.getFullSessionContext(),
+            memoryEligibleCount,
         };
 
         // BUG-04 fix: snapshot metadata BEFORE reset() clears it so the
@@ -137,14 +159,17 @@ export class MeetingPersistence {
             console.error('[MeetingPersistence] Background processing failed:', err);
         });
 
-        return meetingId;
+        // memoryEligibleCount rides along so the caller (main.ts) can skip the
+        // RAG chunk/embed step for zero-eligible sessions — the DB re-read that
+        // step performs has no provenance columns to decide with.
+        return { meetingId, memoryEligibleCount };
     }
 
     /**
      * Heavy lifting: LLM Title, Summary, and DB Write
      */
     private async processAndSaveMeeting(
-        data: { transcript: TranscriptSegment[], usage: any[], startTime: number, durationMs: number, context: string },
+        data: { transcript: TranscriptSegment[], usage: any[], startTime: number, durationMs: number, context: string, memoryEligibleCount?: number },
         meetingId: string,
         // BUG-04 fix: accept metadata snapshot so calendar info is not lost after session.reset()
         metadata?: { title?: string; calendarEventId?: string; source?: 'manual' | 'calendar' } | null,
@@ -175,6 +200,56 @@ export class MeetingPersistence {
                 },
             });
         } catch { /* non-fatal */ }
+
+        // ZERO-ELIGIBLE EARLY EXIT (deep-run 2 issue 11, 2026-08-01). A live
+        // run showed a no-audio session ("Meeting starting WITHOUT audio
+        // capture") still invoking generateMeetingSummary on 3,297 chars of
+        // manual chat and queueing 30 chunks for embedding — wasted cost AND a
+        // provenance leak: chat and assistant answers minted meeting
+        // "evidence". Manual chat is referent-only; it stays in the persisted
+        // transcript for display but must not produce a summary, meeting
+        // memory, or Hindsight retention. The transcript-count gates further
+        // down (`transcript.length > 2`) cannot catch this — chat segments
+        // count toward length.
+        if ((data.memoryEligibleCount ?? data.transcript.length) === 0) {
+            const mins = Math.floor(data.durationMs / 60000);
+            const secs = ((data.durationMs % 60000) / 1000).toFixed(0);
+            const finalMeeting: Meeting = {
+                id: meetingId,
+                title: metadata?.title || 'Chat session',
+                date: new Date().toISOString(),
+                duration: `${mins}:${Number(secs) < 10 ? '0' : ''}${secs}`,
+                summary: '',
+                detailedSummary: { actionItems: [], keyPoints: [] },
+                transcript: data.transcript,
+                usage: data.usage,
+                isProcessed: true,
+                summaryStatus: 'completed',
+            };
+            try {
+                DatabaseManager.getInstance().saveMeeting(finalMeeting, data.startTime, data.durationMs);
+                const wins = require('electron').BrowserWindow.getAllWindows();
+                wins.forEach((w: any) => w.webContents.send('meetings-updated'));
+            } catch (e) {
+                console.error('[MeetingPersistence] Failed to persist zero-eligible meeting:', e);
+            }
+            try {
+                telemetryService.track({
+                    name: 'post_call_summary_skipped',
+                    modeId: modeSnapshot?.id,
+                    properties: {
+                        reason: 'NO_MEMORY_ELIGIBLE_TRANSCRIPT',
+                        transcriptSegmentCount: data.transcript.length,
+                        meetingSummaryCalls: 0,
+                        ragChunks: 0,
+                        embeddings: 0,
+                        hindsightQueued: false,
+                    },
+                });
+            } catch { /* non-fatal */ }
+            console.log('[MeetingPersistence] No memory-eligible transcript — skipped title/summary/memory/Hindsight for this session.');
+            return;
+        }
 
         // Use passed-in metadata snapshot (NOT this.session.getMeetingMetadata() which is already cleared)
         let calendarEventId: string | undefined;

@@ -62,7 +62,7 @@ export interface RetrievalAttemptTrace {
    * pass in the second case for the entire mission. Reasons make the difference
    * observable — in this trace and in production telemetry.
    */
-  rejections?: Array<{ sourceId: string; reason: string }>;
+  rejections?: Array<{ sourceId: string; reason: string; documentTitle?: string; documentStatus?: string }>;
   durationMs: number;
   failed?: string;
 }

@@ -14,7 +14,7 @@
 //   2. Prior assistant output is a REFERENT, never evidence. It can tell you what
 //      "it" refers to; it can never support a factual claim.
 
-import type { EvidenceScope } from '../contracts/types';
+import type { EvidenceScope, PriorTurnDecision } from '../contracts/types';
 import { scopeKey } from '../contracts/types';
 import { isBareFollowUp, isResponseRequest } from './turn-classifier';
 
@@ -43,6 +43,15 @@ export interface ConversationState {
   previousAnswerSummary?: string;
   previousEvidenceIds: string[];
   previousSourceIds: string[];
+  /**
+   * The last RETRIEVAL turn's source-precedence outcome (selected vs ignored
+   * sources, with their declared statuses). A "why did you ignore X" follow-up
+   * answers from this record. Preserved across intervening FAST turns — a
+   * definition question between the price answer and the why must not erase
+   * the decision being asked about — and reset with the rest of the state on
+   * scope change.
+   */
+  previousDecision?: PriorTurnDecision;
   unresolvedReferences: string[];
   updatedAt: number;
 }
@@ -158,8 +167,21 @@ export interface AdvanceInput {
   answerSummary?: string;
   evidenceIds?: string[];
   sourceIds?: string[];
+  /** This turn's source decision, when it retrieved. Absent ⇒ the previous
+   *  decision is PRESERVED, not cleared. */
+  decision?: PriorTurnDecision;
   at?: number;
 }
+
+/** Bounded copy: state is size-capped by contract, and a pathological source
+ *  list must not grow it without limit. */
+const MAX_DECISION_SOURCES = 8;
+const boundDecision = (d: PriorTurnDecision): PriorTurnDecision => ({
+  question: d.question.slice(0, MAX_SUMMARY_CHARS),
+  selectedSources: d.selectedSources.slice(0, MAX_DECISION_SOURCES),
+  ignoredSources: d.ignoredSources.slice(0, MAX_DECISION_SOURCES),
+  ...(d.precedenceReason ? { precedenceReason: d.precedenceReason } : {}),
+});
 
 /**
  * Advance the state after a turn.
@@ -191,6 +213,7 @@ export function advance(prev: ConversationState | null, input: AdvanceInput): Co
       : undefined,
     previousEvidenceIds: input.evidenceIds ?? [],
     previousSourceIds: input.sourceIds ?? [],
+    previousDecision: input.decision ? boundDecision(input.decision) : base.previousDecision,
     unresolvedReferences: [],
     updatedAt: input.at ?? 0,
   };

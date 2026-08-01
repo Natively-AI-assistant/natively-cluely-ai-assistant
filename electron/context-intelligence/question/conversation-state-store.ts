@@ -47,6 +47,7 @@ export interface AdvanceTurnInput {
   question: string;
   evidenceIds?: string[];
   sourceIds?: string[];
+  decision?: import('../contracts/types').PriorTurnDecision;
 }
 
 /** Advance after a decided turn. Called by orchestrate(); scope changes reset. */
@@ -57,6 +58,7 @@ export function advanceConversationState(input: AdvanceTurnInput): ConversationS
     question: input.question,
     evidenceIds: input.evidenceIds,
     sourceIds: input.sourceIds,
+    decision: input.decision,
     at: 0,
   });
   s.delete(input.sessionId);           // re-insert to refresh LRU position

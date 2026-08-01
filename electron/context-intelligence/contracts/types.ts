@@ -214,6 +214,28 @@ export interface RetrievalPlan {
 
 // ── The turn decision ───────────────────────────────────────────────────────
 
+/**
+ * The prior turn's source-precedence outcome, persisted so a follow-up like
+ * "Why did you ignore the other values?" answers from the RECORDED decision
+ * instead of confabulating one (live turns 18/92, 2026-08-01: one answer
+ * invented a rationale, the other refused with "no access to source material"
+ * — both because the precedence decision existed only inside the turn that
+ * made it).
+ */
+export interface PriorSourceDecision {
+  sourceId: string;
+  sourceName?: string;
+  status?: string;
+  reason?: string;
+}
+
+export interface PriorTurnDecision {
+  question: string;
+  selectedSources: PriorSourceDecision[];
+  ignoredSources: PriorSourceDecision[];
+  precedenceReason?: string;
+}
+
 export interface TurnDecision {
   requestId: string;
   requestSequence: number;
@@ -245,6 +267,10 @@ export interface TurnDecision {
 
   retrievalPlan: RetrievalPlan;
   createdAt: number;
+
+  /** Attached by the orchestrator (never by decide()) when the question is a
+   *  precedence follow-up and the session recorded a prior source decision. */
+  precedenceHistory?: PriorTurnDecision;
 }
 
 /**
