@@ -11,6 +11,7 @@ describe('callDeepseek', () => {
             assert.equal(req.model, 'deepseek-v4-flash');
             assert.equal(req.messages[0].role, 'system');
             assert.equal(req.messages[1].content, 'hello');
+            assert.equal(req.max_tokens, 8192);
             return {
               choices: [{ message: { content: 'hi there' } }],
               usage: { prompt_tokens: 12, completion_tokens: 3 },
@@ -63,6 +64,7 @@ describe('callGemini', () => {
         generateContent: async (req) => {
           assert.equal(req.model, 'gemini-3.6-flash');
           assert.equal(req.config.systemInstruction.parts[0].text, 'be terse');
+          assert.equal(req.config.maxOutputTokens, 2048);
           return {
             text: 'gemini says hi',
             usageMetadata: { promptTokenCount: 20, candidatesTokenCount: 5 },

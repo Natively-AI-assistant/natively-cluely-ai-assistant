@@ -115,7 +115,11 @@ async function main() {
 
   const tasks = pending.map(({ promptId, modelId }) => async () => {
     const problem = byId.get(promptId);
-    const userPrompt = `${problem.prompt}\n\nWrite the function named exactly "${problem.function_name || 'solve'}".`;
+    const languageLabel = problem.language === 'javascript' ? 'JavaScript'
+      : problem.language === 'typescript' ? 'TypeScript'
+      : problem.language === 'python' ? 'Python'
+      : problem.language;
+    const userPrompt = `${problem.prompt}\n\nWrite the function named exactly "${problem.function_name || 'solve'}" in ${languageLabel}. Do not use any other programming language.`;
     const call = modelId === 'deepseek-v4-flash'
       ? await callDeepseek(deepseekClient, { model: modelId, systemPrompt: SYSTEM_PROMPT, userPrompt })
       : await callGemini(geminiClient, { model: modelId, systemPrompt: SYSTEM_PROMPT, userPrompt });
