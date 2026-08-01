@@ -7,7 +7,13 @@ performance-audit-report.md
 FIXES.md
 /.env
 /.defence-index/
+/.defence-data/
 /.defence-certs/
+certs/
+local-certs/
+provider-smoke-output/
+real-audio-fixtures/
+diagnostic-reports/
 *.pem
 *.key
 *.p12

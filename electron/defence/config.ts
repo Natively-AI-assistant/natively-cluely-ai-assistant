@@ -5,6 +5,9 @@ export interface DefenceConfig {
   port: number;
   projectSourcePath: string;
   indexPath: string;
+  projectId: string;
+  projectDisplayName: string;
+  projectsConfigPath: string;
   adminLocalOnly: boolean;
   tls: { enabled: boolean; certPath: string; keyPath: string };
   stt: { provider: string; apiKey: string; baseUrl: string; model: string; language: string; timeoutMs: number; maxRetries: number };
@@ -37,6 +40,9 @@ export function loadDefenceConfig(env: NodeJS.ProcessEnv = process.env): Defence
     },
     projectSourcePath,
     indexPath: path.resolve(env.PROJECT_INDEX_PATH || path.join(projectSourcePath, '.defence-index')),
+    projectId: env.PROJECT_ID || 'default',
+    projectDisplayName: env.PROJECT_DISPLAY_NAME || path.basename(projectSourcePath),
+    projectsConfigPath: path.resolve(env.PROJECTS_CONFIG_PATH || '.defence-data/projects.json'),
     stt: {
       provider: env.STT_PROVIDER || 'none', apiKey: env.STT_API_KEY || '',
       baseUrl: env.STT_BASE_URL || 'https://api.groq.com/openai/v1',
@@ -65,6 +71,7 @@ export function loadDefenceConfig(env: NodeJS.ProcessEnv = process.env): Defence
 export function publicConfig(config: DefenceConfig) {
   return {
     host: config.host, port: config.port, storeAudio: config.storeAudio,
+    projectId: config.projectId, projectDisplayName: config.projectDisplayName,
     secure: config.tls.enabled, adminLocalOnly: config.adminLocalOnly,
     capabilities: {
       stt: config.stt.provider !== 'none' && !!config.stt.apiKey,

@@ -84,6 +84,22 @@ npm.cmd run defence:audio-fixture-test
 
 Provider smoke returns `BLOCKED_MISSING_PROVIDER_CONFIG` when STT or LLM configuration is absent. That is distinct from implementation-test failure. The PWA's folded diagnostic panel generates a sanitized real-device report without keys, tokens, absolute server paths, or raw audio.
 
+## CBA project-defence knowledge pack
+
+The CBA pack is project-specific and does not change the generic iPhone, HTTPS, STT, LLM, Search, pairing, question-detection, or answer-schema layers. By default it reads `E:\Project cba` and writes only to `.defence-data/projects/cba-import-candidate-ranking`. The source repository is treated as read-only: indexing compares its Git status before and after and fails if it changes.
+
+```powershell
+npm.cmd run defence:cba-index
+npm.cmd run defence:cba-eval
+npm.cmd run defence:cba-answer-smoke
+```
+
+Override the source only when necessary with `CBA_PROJECT_SOURCE_PATH`. `PROJECT_ID`, `PROJECT_DISPLAY_NAME`, and `PROJECTS_CONFIG_PATH` control the registered-project identity and registry location. The generated registry lets the loopback-only admin page switch the active source/index to the CBA project without copying source files.
+
+The pack produces a source manifest, verified-fact ledger, persona, 17 defence knowledge cards, retrieval cases/results, and bilingual answer-smoke results. The 42,127-row core CSV is profiled once as a structured summary; its raw rows are never inserted into the retrieval vector index. Large generated CSV outputs, raw/external data, build environments, Git metadata, draft extracts, and other noisy or sensitive paths are excluded.
+
+Verified facts use `VERIFIED`, `CONFLICTING`, or `NOT_FOUND`. Production answers may quote only verified metrics and must describe the system as Top-K candidate ranking and scouting-shortlist decision support, never as a deterministic signing predictor. Experimental learning-to-rank results remain separate from the stable rule-based baseline, and missing private-market variables are stated as limitations.
+
 ## Known limitations
 
 - Live cloud-provider validation needs real user keys and was not asserted by automated tests.

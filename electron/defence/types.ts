@@ -10,7 +10,7 @@ export interface DefenceSettings {
   searchMode: SearchMode;
 }
 
-export type ImplementationStatus = 'IMPLEMENTED' | 'TESTED_ONLY' | 'PLANNED' | 'DEPRECATED' | 'UNKNOWN';
+export type ImplementationStatus = 'IMPLEMENTED' | 'TESTED_ONLY' | 'EXPERIMENTAL' | 'PLANNED' | 'DEPRECATED' | 'UNKNOWN';
 
 export interface Evidence {
   sourceType: 'project' | 'external';

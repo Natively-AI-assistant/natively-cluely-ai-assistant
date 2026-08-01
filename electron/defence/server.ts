@@ -23,6 +23,7 @@ const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 interface Pairing { id: string; codeHash: string; secretHash: string; expiresAt: number; used: boolean; failedAttempts: number }
 interface SessionDiagnostics { lastAudioBytes?: number; lastAudioMime?: string; lastSttLatencyMs?: number; partialCount: number; finalCount: number; lastErrorCode?: string; retrievalMs?: number; candidateCount?: number; evidenceCount?: number; llmFirstResponseMs?: number; llmTotalMs?: number; schemaValid?: boolean }
 interface Session { id: string; tokenHash: string; createdAt: number; settings: DefenceSettings; detector: QuestionDetector; audio: AudioChunkTracker; transcript: string; answers: StructuredAnswer[]; diagnostics: SessionDiagnostics; questionCounter: number; lastQuestionId?: string; revision: number; abort?: AbortController }
+interface ProjectRegistryEntry { projectId: string; displayName: string; sourcePath: string; indexPath: string; personaPath?: string; verifiedFactsPath?: string }
 
 function token(): string { return crypto.randomBytes(24).toString('base64url'); }
 function hash(value: string): string { return crypto.createHash('sha256').update(value).digest('hex'); }
@@ -84,6 +85,12 @@ export class DefenceServer {
     const source = path.resolve(process.cwd(), 'electron/defence/public');
     return fs.existsSync(source) ? source : path.resolve(__dirname, '../../../electron/defence/public');
   }
+  private projectRegistry(): { activeProjectId?: string; projects: ProjectRegistryEntry[] } {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(this.config.projectsConfigPath, 'utf8'));
+      return { activeProjectId: String(parsed.activeProjectId || ''), projects: Array.isArray(parsed.projects) ? parsed.projects : [] };
+    } catch { return { projects: [] }; }
+  }
   private async staticFile(url: URL, req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     if (url.pathname === '/admin' && !isAdminRequestAllowed(req.socket.remoteAddress, this.config.adminLocalOnly)) return this.json(res, 403, { error: 'admin_loopback_required' });
     const requested = url.pathname === '/' ? 'index.html' : url.pathname === '/admin' ? 'admin.html' : url.pathname.slice(1);
@@ -101,6 +108,17 @@ export class DefenceServer {
       if (method === 'GET' && url.pathname === '/api/health') return this.json(res, 200, { ok: true, config: publicConfig(this.config) });
       const isLocal = loopback(req.socket.remoteAddress);
       const adminAllowed = isAdminRequestAllowed(req.socket.remoteAddress, this.config.adminLocalOnly);
+      if (url.pathname === '/api/projects' && method === 'GET') {
+        if (!adminAllowed) return this.json(res, 403, { error: 'admin_loopback_required' });
+        const registry = this.projectRegistry(); return this.json(res, 200, { activeProjectId: this.config.projectId, projects: registry.projects.map(project => ({ projectId: project.projectId, displayName: project.displayName, sourcePath: project.sourcePath, selected: project.projectId === this.config.projectId })) });
+      }
+      if (url.pathname === '/api/projects/select' && method === 'POST') {
+        if (!adminAllowed) return this.json(res, 403, { error: 'admin_loopback_required' }); const data = await this.body(req); const registry = this.projectRegistry(); const selected = registry.projects.find(project => project.projectId === String(data.projectId || ''));
+        if (!selected) return this.json(res, 404, { error: 'project_not_registered' });
+        const source = path.resolve(selected.sourcePath); const index = path.resolve(selected.indexPath); if (!(await fs.promises.stat(source)).isDirectory()) return this.json(res, 400, { error: 'project_source_not_directory' });
+        this.config.projectId = selected.projectId; this.config.projectDisplayName = selected.displayName; this.config.projectSourcePath = source; this.config.indexPath = index; this.indexer = new ProjectIndexer(source, index); this.engine = new AnswerEngine(this.config);
+        return this.json(res, 200, { ok: true, projectId: selected.projectId, displayName: selected.displayName, sourcePath: source, indexPath: index, indexed: fs.existsSync(path.join(index, 'manifest.json')) });
+      }
       if (url.pathname === '/api/pairing/create' && method === 'POST') {
         if (!adminAllowed) return this.json(res, 403, { error: 'admin_loopback_required' });
         const id = crypto.randomUUID(); const code = String(crypto.randomInt(100000, 1000000)); const secret = token();

@@ -11,7 +11,7 @@ function keywords(question: string): string[] {
   return [...new Set(question.match(/[A-Za-z][\w.+#-]{2,}|[\u3400-\u9fff]{2,6}/g) || [])].slice(0, 8);
 }
 
-function fallbackAnswer(question: string, evidence: Evidence[], language: 'zh' | 'en' | 'mixed', settings: DefenceSettings): Partial<StructuredAnswer> {
+function fallbackAnswer(question: string, evidence: Evidence[], language: 'zh' | 'en' | 'mixed', settings: DefenceSettings, projectId = ''): Partial<StructuredAnswer> {
   if (!evidence.length) return {
     spokenAnswer: language === 'en' ? NO_EVIDENCE_EN : NO_EVIDENCE_ZH, noEvidence: true,
     missingInformation: language === 'en' ? ['Relevant implementation, documentation, or test evidence'] : ['相关实现、文档或测试证据'],
@@ -19,6 +19,12 @@ function fallbackAnswer(question: string, evidence: Evidence[], language: 'zh' |
   };
   const count = settings.answerDepth === 'brief' ? 1 : settings.answerDepth === 'deep' ? 4 : 2;
   const facts = evidence.slice(0, count).map(item => item.excerpt.replace(/\s+/g, ' ').slice(0, settings.answerDepth === 'brief' ? 180 : 340));
+  if (projectId === 'cba-import-candidate-ranking') {
+    const spokenAnswer = language === 'en'
+      ? `This project uses public multi-league player-season data for Top-K CBA import-candidate ranking and scouting-shortlist decision support; it does not make a deterministic signing prediction. The cited project evidence states: ${facts.join(' ')}`
+      : `这个项目使用多联盟公开 player-season 数据，对潜在 CBA 外援候选人进行 Top-K 排序，为 scouting shortlist 提供决策支持，并不作确定性签约预测。项目证据显示：${facts.join('；')}`;
+    return { spokenAnswer, noEvidence: false, followUps: language === 'en' ? ['Would you like the code path or metric interpretation?'] : ['你希望我展开代码调用链还是指标解释？'] };
+  }
   const spokenAnswer = language === 'en'
     ? `The project evidence shows the following: ${facts.join(' ')} These points come directly from the cited project files.`
     : `根据项目证据，可以直接确认：${facts.join('；')}。以上内容来自下方列出的项目文件。`;
@@ -36,13 +42,20 @@ export class AnswerEngine {
   async answer(question: string, manifest: IndexManifest, settings: DefenceSettings): Promise<StructuredAnswer> {
     const retrievalStarted = performance.now();
     const detected = detectLanguage(question); const classification = classifyQuestion(question);
-    const evidence = new HybridRetriever(manifest.chunks).searchMultilingual(question);
+    const retrievalQuestion = this.config.projectId === 'cba-import-candidate-ranking' && /predict|what exactly|到底|预测|签约|一定会/i.test(question)
+      ? `${question} README.md Top-K ranking scouting shortlist decision support not deterministic signing prediction`
+      : question;
+    let evidence = new HybridRetriever(manifest.chunks).searchMultilingual(retrievalQuestion);
+    if (this.config.projectId === 'cba-import-candidate-ranking' && /predict|what exactly|到底|预测|签约|一定会/i.test(question)) {
+      const overview = manifest.chunks.find(chunk => chunk.path === 'README.md');
+      if (overview) evidence = [overview, ...evidence.filter(item => item.path !== overview.path || item.lineStart !== overview.lineStart)].slice(0, 5);
+    }
     const allowExternal = settings.searchMode === 'on' || (settings.searchMode === 'auto' && classification.needsCurrentExternalInfo && !classification.projectInternal && evidence.length === 0);
     let externalSources: Evidence[] = [];
     if (allowExternal && this.search.available()) externalSources = await this.search.search(question).catch((): Evidence[] => []);
     const retrievalMs = Math.round(performance.now() - retrievalStarted);
     const output = requestedLanguage(settings, detected);
-    let generated = fallbackAnswer(question, evidence, detected, settings);
+    let generated = fallbackAnswer(question, evidence, detected, settings, this.config.projectId);
     let llmFirstResponseMs: number | undefined; let llmTotalMs: number | undefined; let schemaValid = true;
     if (this.llm.available()) {
       try {
