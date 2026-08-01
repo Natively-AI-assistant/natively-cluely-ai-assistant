@@ -11058,6 +11058,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       const file = await ingestModeReferenceFile({
         modeId,
         filePath: selectedPath,
+        onIndexStatus: (status, fileId) => {
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId, fileId, phase: status });
+          });
+        },
       });
       return { success: true, file };
     } catch (error: any) {

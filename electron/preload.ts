@@ -978,6 +978,7 @@ interface ElectronAPI {
   modesGetReferenceFileStatus: (
     modeId: string,
   ) => Promise<{ success: boolean; statuses?: Array<{ fileId: string; fileName: string; status: string; chunkCount: number }>; error?: string }>;
+  onModeFileIndexStatus: (callback: (data: { modeId: string; fileId: string; phase: 'indexing' | 'done' }) => void) => () => void;
   onKnowledgeIndexProgress: (callback: (data: { fileId: string; status: string; startedAt?: number; finishedAt?: number; error?: string }) => void) => () => void;
   knowledgeListPacks: (modeId: string) => Promise<{ success: boolean; packs: Array<{ id: string; sourceId: string; fileName: string; cardCount: number; entityCount: number; relationCount: number; packVersion: number; updatedAt: string }>; error?: string }>;
   knowledgeGetPack: (fileId: string) => Promise<{ success: boolean; pack: any | null; error?: string }>;
@@ -2548,6 +2549,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   modesDeleteReferenceFile: (id: string) => ipcRenderer.invoke('modes:delete-reference-file', id),
   modesGetReferenceFileStatus: (modeId: string) =>
     ipcRenderer.invoke('modes:get-reference-file-status', modeId),
+  onModeFileIndexStatus: (callback: (data: { modeId: string; fileId: string; phase: 'indexing' | 'done' }) => void) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('mode-file-index-status', subscription);
+    return () => {
+      ipcRenderer.removeListener('mode-file-index-status', subscription);
+    };
+  },
   knowledgeListPacks: (modeId: string) => ipcRenderer.invoke('knowledge:list-packs', modeId),
   knowledgeGetPack: (fileId: string) => ipcRenderer.invoke('knowledge:get-pack', fileId),
   knowledgeRegeneratePack: (params: { fileId: string; modeId: string; fileName: string }) =>
