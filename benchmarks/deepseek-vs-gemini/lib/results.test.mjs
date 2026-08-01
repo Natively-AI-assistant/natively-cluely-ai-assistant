@@ -73,4 +73,28 @@ describe('upsertResult', () => {
     assert.equal(results[0].error, undefined);
     assert.equal(results[0].latencyMs, 640);
   });
+
+  test('coding harness shape: a successful retry keyed on problemId replaces the prior errored record', () => {
+    // run-coding-harness.mjs records use problemId instead of promptId, so it
+    // calls upsertResult(results, record, 'problemId'). Simulates the same
+    // error-then-retry sequence as the promptId test above, but for that shape.
+    let results = [
+      { problemId: 'code-001', modelId: 'deepseek-v4-flash', language: 'javascript', execution: true, error: 'timeout', passCount: null, totalCount: null },
+    ];
+
+    const retrySuccessRecord = {
+      problemId: 'code-001',
+      modelId: 'deepseek-v4-flash',
+      language: 'javascript',
+      execution: true,
+      passCount: 3,
+      totalCount: 3,
+      error: null,
+    };
+    results = upsertResult(results, retrySuccessRecord, 'problemId');
+
+    assert.equal(results.length, 1, 'exactly one record should remain for the pair');
+    assert.equal(results[0].error, null);
+    assert.equal(results[0].passCount, 3);
+  });
 });
