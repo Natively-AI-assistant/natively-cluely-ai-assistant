@@ -6,6 +6,7 @@ left.md
 performance-audit-report.md
 FIXES.md
 /.env
+/.defence-index/
 python-installer.pkg
 Sales20260405-60-494j8t.csv
 /Sales20260405-60-494j8t.csv
@@ -445,5 +446,5 @@ tools/
 !docs/
 docs/*
 !docs/VISION_MODEL_BENCHMARK.md
+!docs/PROJECT_DEFENCE_COPILOT.md
 benchmark-results/
-

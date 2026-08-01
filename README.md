@@ -490,6 +490,8 @@ You explicitly control:
 
 ## Installation (Developers & Contributors)
 
+> Building the iPhone project-defence companion? See [Project Defence Copilot](docs/PROJECT_DEFENCE_COPILOT.md) for local indexing, one-time pairing, provider configuration, iPhone HTTPS setup, and privacy defaults.
+
 > [!NOTE]
 > **macOS Users (Both Apple Silicon & Intel Macs supported):**
 >
