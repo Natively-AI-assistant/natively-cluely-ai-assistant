@@ -7280,8 +7280,16 @@ Provide only the answer, nothing else.`;
     if (!window.electronAPI?.modelSelectorCloseIfOpen) return;
     const onMouseDown = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target?.closest?.('[data-model-selector-toggle="true"]')) return;
-      window.electronAPI.modelSelectorCloseIfOpen().catch(() => {});
+      if (!target?.closest?.('[data-model-selector-toggle="true"]')) {
+        window.electronAPI.modelSelectorCloseIfOpen().catch(() => {});
+      }
+      // Same treatment for the settings dropdown: any overlay-body mousedown
+      // that isn't on the settings toggle itself closes it (guarded so the
+      // toggle's own open/close logic doesn't race). Clicks OUTSIDE the
+      // overlay entirely are handled by the main-process click-catcher.
+      if (!target?.closest?.('[data-settings-toggle="true"]')) {
+        window.electronAPI?.dismissOverlayPopovers?.({ settings: true, model: false }).catch(() => {});
+      }
     };
     document.addEventListener('mousedown', onMouseDown, true); // capture phase
     return () => document.removeEventListener('mousedown', onMouseDown, true);
@@ -8570,6 +8578,7 @@ Provide only the answer, nothing else.`;
 
                     <div className="relative">
                       <button
+                        data-settings-toggle="true"
                         onClick={(e) => {
                           if (isSettingsOpen) {
                             // If open, just close it (toggle will handle logic but we can be explicit or just toggle)

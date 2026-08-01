@@ -55,6 +55,7 @@ export interface ElectronAPI {
   onOverlayUiAction?: (callback: (action: { type: string }) => void) => () => void
   sendOverlayToggleAnchor?: (payload: { panelRight: number }) => Promise<void>
   setOverlayHoverInteractive?: (interactive: boolean) => Promise<void>
+  dismissOverlayPopovers?: (opts?: { settings?: boolean; model?: boolean }) => Promise<void>
   onToggleExpand: (callback: () => void) => () => void
   getRecognitionLanguages: () => Promise<Record<string, any>>
   getScreenshots: () => Promise<Array<{ path: string; preview: string }>>

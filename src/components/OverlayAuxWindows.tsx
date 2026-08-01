@@ -62,10 +62,25 @@ const sendAction = (type: string) => {
   window.electronAPI?.sendOverlayUiAction?.({ type }).catch(() => {});
 };
 
+// Clicking the pill or toggle counts as "outside the dropdowns" — dismiss any
+// open settings/model-selector popover, exactly like a click on the overlay
+// body would (these are separate windows, so the overlay's own mousedown
+// handler can't see clicks here).
+function useDismissPopoversOnMouseDown() {
+  useEffect(() => {
+    const onMouseDown = () => {
+      window.electronAPI?.dismissOverlayPopovers?.().catch(() => {});
+    };
+    window.addEventListener('mousedown', onMouseDown, true);
+    return () => window.removeEventListener('mousedown', onMouseDown, true);
+  }, []);
+}
+
 export function OverlayPillWindow() {
   const state = useOverlayUiState();
   const appearance = useOverlayAuxAppearance(state);
   const rootRef = useRef<HTMLDivElement>(null);
+  useDismissPopoversOnMouseDown();
 
   // Report the pill's w-fit size so the main process can size + re-center the
   // OS window (same 'update-content-dimensions' channel every window uses;
@@ -121,6 +136,7 @@ export function OverlayToggleWindow() {
   const state = useOverlayUiState();
   const appearance = useOverlayAuxAppearance(state);
   const themeAttr = state.interfaceTheme ?? 'default';
+  useDismissPopoversOnMouseDown();
 
   // The 28px button centered in the TOGGLE_WINDOW_SIZE (36px) window: 4px of
   // margin on every side absorbs the hover scale (×1.06) without clipping.

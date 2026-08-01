@@ -71,6 +71,18 @@ export class WindowHelper {
   // state): true (default, safe) = window interactive; false = pointer is
   // over a transparent margin → click-through. See syncOverlayInteractionPolicy.
   private overlayHoverInteractive = true;
+  // ── Overlay popover (settings / model-selector dropdown) coordination ───
+  // Which overlay-anchored popovers are currently open. Non-empty → the
+  // click-catcher window is shown so a click ANYWHERE outside Natively's
+  // windows dismisses them (the app's did-resign-active close path is dead in
+  // overlay mode: the nonactivating NSPanel never makes the app active, so it
+  // can never resign it).
+  private overlayPopoversOpen = new Set<'settings' | 'model'>();
+  // Full-display transparent window shown just BELOW the Natively windows
+  // while a popover is open. Any mousedown on it (i.e. outside Natively's
+  // painted windows) dismisses the popovers — standard menu semantics (the
+  // dismissing click is consumed). Lazily created.
+  private popoverCatcher: BrowserWindow | null = null;
   // Last UI state broadcast by the overlay renderer, replayed to an aux
   // window when it (re)loads after the broadcast happened.
   private lastOverlayUiState: unknown = null;
@@ -166,7 +178,13 @@ export class WindowHelper {
   }
 
   private applyContentProtection(enable: boolean): void {
-    const windows = [this.launcherWindow, this.overlayWindow, this.pillWindow, this.toggleWindow];
+    const windows = [
+      this.launcherWindow,
+      this.overlayWindow,
+      this.pillWindow,
+      this.toggleWindow,
+      this.popoverCatcher,
+    ];
     windows.forEach((win) => {
       if (win && !win.isDestroyed()) {
         win.setContentProtection(enable);
@@ -1090,6 +1108,152 @@ export class WindowHelper {
     if (clamped === this.togglePanelRight) return;
     this.togglePanelRight = clamped;
     this.positionToggleWindow();
+    // The panel's left margin moved too (symmetric growth) — any open
+    // settings/model-selector dropdown is anchored to the PANEL, so it rides
+    // the width spring exactly like the toggle does.
+    this.repositionOverlayPopovers();
+  }
+
+  // The panel's live LEFT margin inside the fixed window: (732 - panelW)/2,
+  // derived from the streamed togglePanelRight = (732 + panelW)/2. Popover
+  // anchors are stored relative to the panel, not the window, so they follow
+  // the symmetric width spring.
+  public getOverlayPanelLeftMargin(): number {
+    return Math.max(0, WindowHelper.OVERLAY_DEFAULT_WIDTH - this.togglePanelRight);
+  }
+
+  // Re-anchor any open overlay popovers (settings / model-selector) to the
+  // overlay's current bounds + live panel margin. Called on overlay
+  // move/resize and on every panel-width anchor update.
+  private repositionOverlayPopovers(): void {
+    if (this.overlayPopoversOpen.size === 0) return;
+    const overlay = this.overlayWindow;
+    if (!overlay || overlay.isDestroyed()) return;
+    const bounds = overlay.getBounds();
+    const margin = this.getOverlayPanelLeftMargin();
+    this.appState.settingsWindowHelper?.repositionForOverlay?.(bounds, margin);
+    this.appState.modelSelectorWindowHelper?.repositionForOverlay?.(bounds, margin);
+    // Keep the catcher covering the display the overlay lives on (drag across
+    // displays while a popover is open).
+    this.syncPopoverCatcher();
+  }
+
+  // Called by SettingsWindowHelper / ModelSelectorWindowHelper whenever an
+  // overlay-anchored popover opens or closes. Drives the click-catcher.
+  public notifyOverlayPopover(kind: 'settings' | 'model', open: boolean): void {
+    const before = this.overlayPopoversOpen.size;
+    if (open) this.overlayPopoversOpen.add(kind);
+    else this.overlayPopoversOpen.delete(kind);
+    if (this.overlayPopoversOpen.size !== before || open) this.syncPopoverCatcher();
+  }
+
+  // Close both dropdowns (catcher click, aux-window click, overlay hide).
+  public dismissOverlayPopovers(opts?: { settings?: boolean; model?: boolean }): void {
+    const closeSettings = opts?.settings !== false;
+    const closeModel = opts?.model !== false;
+    if (closeSettings) {
+      const w = this.appState.settingsWindowHelper?.getSettingsWindow();
+      if (w && !w.isDestroyed() && w.isVisible()) this.appState.settingsWindowHelper.closeWindow();
+    }
+    if (closeModel) {
+      const w = this.appState.modelSelectorWindowHelper?.getWindow();
+      if (w && !w.isDestroyed() && w.isVisible()) this.appState.modelSelectorWindowHelper.hideWindow();
+    }
+  }
+
+  public getPopoverCatcherWindow(): BrowserWindow | null {
+    return this.popoverCatcher;
+  }
+
+  private syncPopoverCatcher(): void {
+    const overlay = this.overlayWindow;
+    const overlayVisible = !!overlay && !overlay.isDestroyed() && overlay.isVisible();
+    const want = overlayVisible && this.overlayPopoversOpen.size > 0;
+
+    if (!want) {
+      if (this.popoverCatcher && !this.popoverCatcher.isDestroyed() && this.popoverCatcher.isVisible()) {
+        this.popoverCatcher.hide();
+      }
+      return;
+    }
+
+    if (!this.popoverCatcher || this.popoverCatcher.isDestroyed()) {
+      this.createPopoverCatcher();
+    }
+    const catcher = this.popoverCatcher;
+    if (!catcher || catcher.isDestroyed()) return;
+
+    // Cover the FULL bounds of the display the overlay sits on (not just the
+    // work area — a click on the Dock strip should also dismiss).
+    const display = screen.getDisplayMatching(overlay!.getBounds());
+    catcher.setBounds(display.bounds);
+    if (!catcher.isVisible()) catcher.showInactive();
+    // Same-level windows stack by recency — re-assert the Natively windows
+    // above the catcher (macOS already orders it below via relativeLevel -1;
+    // this covers Windows and any level fallback).
+    for (const w of [
+      this.overlayWindow,
+      this.pillWindow,
+      this.toggleWindow,
+      this.appState.settingsWindowHelper?.getSettingsWindow?.(),
+      this.appState.modelSelectorWindowHelper?.getWindow?.(),
+    ]) {
+      if (w && !w.isDestroyed() && w.isVisible()) {
+        try {
+          w.moveTop();
+        } catch {
+          /* moveTop can throw on wayland; ordering is cosmetic there */
+        }
+      }
+    }
+  }
+
+  private createPopoverCatcher(): void {
+    const isMac = process.platform === 'darwin';
+    this.popoverCatcher = new BrowserWindow({
+      width: 100,
+      height: 100,
+      show: false,
+      frame: false,
+      transparent: true,
+      backgroundColor: '#00000000',
+      alwaysOnTop: true,
+      // Never focusable: it must consume exactly one dismissing click without
+      // stealing focus from the user's foreground app.
+      focusable: false,
+      resizable: false,
+      movable: false,
+      skipTaskbar: true,
+      hasShadow: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.js'),
+      },
+      ...(isMac ? { type: 'panel' as const } : {}),
+    });
+    this.popoverCatcher.setContentProtection(this.contentProtection);
+    if (isMac) {
+      this.popoverCatcher.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      this.popoverCatcher.setHiddenInMissionControl(true);
+      // relativeLevel -1: below the other 'floating' Natively windows, above
+      // normal app windows — clicks on Natively still hit Natively; clicks
+      // anywhere else hit the catcher.
+      this.popoverCatcher.setAlwaysOnTop(true, 'floating', -1);
+    }
+    // Minimal self-contained page: one capture-phase mousedown → dismiss IPC.
+    // The app preload runs on data: URLs, so window.electronAPI is available.
+    const page =
+      '<!doctype html><html><body style="margin:0;width:100vw;height:100vh;background:transparent">' +
+      '<script>window.addEventListener("mousedown",function(){' +
+      'window.electronAPI&&window.electronAPI.dismissOverlayPopovers&&window.electronAPI.dismissOverlayPopovers()' +
+      '},true)</script></body></html>';
+    this.popoverCatcher
+      .loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(page))
+      .catch((e) => console.error('[WindowHelper] popover catcher load failed:', e));
+    this.popoverCatcher.on('closed', () => {
+      this.popoverCatcher = null;
+    });
   }
 
   // ── Overlay auxiliary windows (pill + resize toggle) ──────────────────────
@@ -1183,9 +1347,11 @@ export class WindowHelper {
     // Group sync — see the coordination model comment above.
     this.overlayWindow.on('move', () => {
       if (!this.auxSyncing) this.positionOverlayAuxWindows();
+      this.repositionOverlayPopovers();
     });
     this.overlayWindow.on('resize', () => {
       if (!this.auxSyncing) this.positionOverlayAuxWindows();
+      this.repositionOverlayPopovers();
     });
     this.overlayWindow.on('show', () => {
       // Safe default on every show: interactive until the renderer's hover
@@ -1194,7 +1360,13 @@ export class WindowHelper {
       this.syncOverlayInteractionPolicy(true);
       this.syncOverlayAuxVisibility();
     });
-    this.overlayWindow.on('hide', () => this.syncOverlayAuxVisibility());
+    this.overlayWindow.on('hide', () => {
+      this.syncOverlayAuxVisibility();
+      // A hidden overlay must not leave orphaned dropdowns (or the click
+      // catcher) floating over the desktop.
+      this.dismissOverlayPopovers();
+      this.syncPopoverCatcher();
+    });
     // Renderer (re)load resets the hover-gate handshake: the fresh renderer's
     // hit-test resends its verdict on mount, but until then the safe state is
     // interactive — a latched non-interactive state from a crashed renderer

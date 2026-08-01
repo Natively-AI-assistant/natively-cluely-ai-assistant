@@ -670,6 +670,29 @@ export function initializeIpcHandlers(appState: AppState): void {
     appState.getWindowHelper().setOverlayHoverInteractive(!!interactive);
   });
 
+  // Any Natively window → main: dismiss the overlay dropdowns (settings /
+  // model selector). Fired by the click-catcher window (a click landed
+  // OUTSIDE every Natively window), the aux pill/toggle windows, and the
+  // overlay renderer's own mousedown handler (with per-kind guards for the
+  // toggle buttons). Sender must be a known Natively window.
+  safeHandle(
+    'overlay-popovers:dismiss',
+    async (event, opts?: { settings?: boolean; model?: boolean }) => {
+      const helper = appState.getWindowHelper();
+      const knownSenders = [
+        helper.getOverlayWindow(),
+        helper.getPillWindow(),
+        helper.getToggleWindow(),
+        helper.getPopoverCatcherWindow(),
+      ];
+      const fromKnown = knownSenders.some(
+        (w) => w && !w.isDestroyed() && w.webContents.id === event.sender.id,
+      );
+      if (!fromKnown) return;
+      helper.dismissOverlayPopovers(opts);
+    },
+  );
+
   // Aux windows → overlay renderer: user actions (toggle-width / end-meeting /
   // toggle-expand). Only the pill/toggle windows may send.
   safeHandle('overlay-ui-action', async (event, action: { type?: string }) => {

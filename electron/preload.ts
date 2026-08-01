@@ -21,6 +21,7 @@ interface ElectronAPI {
   onOverlayUiState: (callback: (state: Record<string, unknown>) => void) => () => void;
   sendOverlayToggleAnchor: (payload: { panelRight: number }) => Promise<void>;
   setOverlayHoverInteractive: (interactive: boolean) => Promise<void>;
+  dismissOverlayPopovers: (opts?: { settings?: boolean; model?: boolean }) => Promise<void>;
   sendOverlayUiAction: (action: { type: string }) => Promise<void>;
   onOverlayUiAction: (callback: (action: { type: string }) => void) => () => void;
   getRecognitionLanguages: () => Promise<Record<string, any>>;
@@ -1106,6 +1107,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Overlay renderer → main: hover hit-test (margins click-through gate).
   setOverlayHoverInteractive: (interactive: boolean) =>
     ipcRenderer.invoke('overlay-hover-interactive', interactive),
+  // Any Natively window → main: dismiss the overlay dropdowns (settings /
+  // model selector). Used by the click-catcher, the aux windows, and the
+  // overlay renderer's click-outside handler.
+  dismissOverlayPopovers: (opts?: { settings?: boolean; model?: boolean }) =>
+    ipcRenderer.invoke('overlay-popovers:dismiss', opts),
   // Aux windows → main → overlay renderer: user actions.
   sendOverlayUiAction: (action: { type: string }) =>
     ipcRenderer.invoke('overlay-ui-action', action),

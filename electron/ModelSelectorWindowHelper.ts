@@ -22,6 +22,13 @@ export class ModelSelectorWindowHelper {
 
     private windowHelper: WindowHelper | null = null;
 
+    // When opened from the MEETING OVERLAY: anchor stored relative to the
+    // PANEL's left edge (the panel animates 600↔732 centered inside the
+    // fixed overlay window) and the overlay's bottom edge, so the dropdown
+    // follows drags, content-height growth, and the width spring. Driven by
+    // WindowHelper.repositionOverlayPopovers().
+    private overlayAnchor: { offsetXFromPanel: number; offsetY: number } | null = null;
+
     public setWindowHelper(wh: WindowHelper): void {
         this.windowHelper = wh;
     }
@@ -69,6 +76,20 @@ export class ModelSelectorWindowHelper {
         this.window.setPosition(Math.round(x), Math.round(y))
         this.ensureVisibleOnScreen();
 
+        // Overlay-anchored open: remember the panel-relative offset (see field
+        // comment) and arm the click-outside catcher.
+        if (isOverlay && mainWin && !mainWin.isDestroyed()) {
+            const bounds = mainWin.getBounds();
+            const margin = this.windowHelper?.getOverlayPanelLeftMargin?.() ?? 0;
+            this.overlayAnchor = {
+                offsetXFromPanel: x - bounds.x - margin,
+                offsetY: y - (bounds.y + bounds.height),
+            };
+        } else {
+            this.overlayAnchor = null;
+        }
+        this.windowHelper?.notifyOverlayPopover?.('model', this.overlayAnchor !== null);
+
         if (process.platform === 'win32' && this.contentProtection) {
             this.window.setOpacity(0);
             if (activate) this.window.show(); else this.window.showInactive();
@@ -96,6 +117,18 @@ export class ModelSelectorWindowHelper {
             // Explicitly focusing the main window steals OS focus from whatever the user
             // had active (Zoom, browser, etc.) before opening the selector.
         }
+        this.windowHelper?.notifyOverlayPopover?.('model', false);
+    }
+
+    // Overlay-anchored variant of positioning: x tracks the PANEL's left edge
+    // (overlay.x + live margin), y tracks the overlay's bottom edge.
+    public repositionForOverlay(overlayBounds: Electron.Rectangle, panelLeftMargin: number): void {
+        if (!this.overlayAnchor) return;
+        if (!this.window || this.window.isDestroyed() || !this.window.isVisible()) return;
+        this.window.setPosition(
+            Math.round(overlayBounds.x + panelLeftMargin + this.overlayAnchor.offsetXFromPanel),
+            Math.round(overlayBounds.y + overlayBounds.height + this.overlayAnchor.offsetY),
+        );
     }
 
     public toggleWindow(x: number, y: number, options: WindowActivationOptions = {}): void {
