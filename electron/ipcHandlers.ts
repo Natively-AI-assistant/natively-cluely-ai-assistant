@@ -5796,6 +5796,67 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // Whether a LOCAL VISION model is actually installed — not merely whether
+  // Ollama has any model at all.
+  //
+  // The Privacy panel used to answer this with `ollamaModels.length > 0`, which
+  // counts `llama3` and `nomic-embed-text`. Enforcement asks a strictly narrower
+  // question (`checkOllamaAvailable(needsVision)` -> `getModelCapabilities(id,
+  // true).supportsImages`, LLMHelper.ts:1387), so a text-only install made the
+  // UI suppress its own "no local vision model" warning and show an "On-device"
+  // pill for screenshots that would then fail or be dropped.
+  //
+  // This handler exists so the indicator and the gate share ONE predicate. Do
+  // not reimplement the capability test in the renderer: `ollamaSupportsImages`
+  // lives in the main process (electron/llm/modelCapabilities.ts), and a second
+  // copy is exactly how the two drifted apart the first time.
+  //
+  // Deliberately Ollama-only, matching `isLocalVisionProvider()` in
+  // electron/llm/visionPolicy.ts. NOT `anyLocalVisionProviderConfigured()`,
+  // which counts a configured Codex CLI as "local" even though Codex routes to
+  // chatgpt.com — claiming that as on-device would restate the very lie the
+  // "Cloud vision is never called" copy is being corrected for.
+  // The Settings pane polls this every 3s while it is open. Each probe costs an
+  // Ollama GET /api/tags plus a POST /api/show, so the naive shape — two awaited
+  // probes per call — was four SERIAL round trips every three seconds, able to
+  // outrun the interval on a slow daemon. Coalesced below: the two probes run
+  // concurrently, and a short TTL collapses the poll to at most one probe pair
+  // per window. The TTL is deliberately well under the poll interval so the
+  // indicator still reflects a provider switch made in this same window.
+  let localFallbackCache: { at: number; value: { text: boolean; vision: boolean } } | null = null;
+  let localFallbackInFlight: Promise<{ text: boolean; vision: boolean }> | null = null;
+  const LOCAL_FALLBACK_TTL_MS = 2000;
+
+  safeHandle('get-local-fallback-status', async () => {
+    const now = Date.now();
+    if (localFallbackCache && now - localFallbackCache.at < LOCAL_FALLBACK_TTL_MS) {
+      return localFallbackCache.value;
+    }
+    // Single-flight: overlapping polls share one probe instead of stacking.
+    if (localFallbackInFlight) return localFallbackInFlight;
+
+    localFallbackInFlight = (async () => {
+      try {
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        const [text, vision] = await Promise.all([
+          llmHelper.scopeFallbackAvailable(false),
+          llmHelper.scopeFallbackAvailable(true),
+        ]);
+        const value = { text, vision };
+        localFallbackCache = { at: Date.now(), value };
+        return value;
+      } catch {
+        // Fail CLOSED for a privacy indicator: if we cannot establish that a
+        // local fallback exists, we must not claim on-device handling. Not
+        // cached — a transient daemon blip should not pin the badge to false.
+        return { text: false, vision: false };
+      } finally {
+        localFallbackInFlight = null;
+      }
+    })();
+    return localFallbackInFlight;
+  });
+
   // Liveness probe distinct from get-available-ollama-models. Lets callers tell
   // "Ollama daemon is down" apart from "Ollama is up but has no models pulled"
   // so they don't destructively restart a healthy daemon (see ModelSelectorWindow).

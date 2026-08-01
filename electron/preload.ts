@@ -70,6 +70,10 @@ interface ElectronAPI {
     isOllama: boolean;
   }>;
   getAvailableOllamaModels: () => Promise<string[]>;
+  /** Whether a denied data scope would ACTUALLY be handled on-device, split by
+   *  whether the turn needs vision. Shares the enforcement predicate — see the
+   *  handler comment in ipcHandlers.ts. */
+  getLocalFallbackStatus: () => Promise<{ text: boolean; vision: boolean }>;
   getProviderStatuses: () => Promise<any[]>;
   getProviderStatus: (id: string) => Promise<any | null>;
   onProviderStatusChanged: (callback: (status: any) => void) => () => void;
@@ -1320,6 +1324,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // LLM Model Management
   getCurrentLlmConfig: () => ipcRenderer.invoke('get-current-llm-config'),
   getAvailableOllamaModels: () => ipcRenderer.invoke('get-available-ollama-models'),
+  getLocalFallbackStatus: () => ipcRenderer.invoke('get-local-fallback-status'),
   getProviderStatuses: () => ipcRenderer.invoke('get-provider-statuses'),
   getProviderStatus: (id: string) => ipcRenderer.invoke('get-provider-status', id),
   onProviderStatusChanged: (callback: (status: any) => void) => {
