@@ -364,3 +364,80 @@ describe('issue 9: glossary and formula routing', () => {
     assert.equal(r.path, 'FAST', r.reason);
   });
 });
+
+// ── Audit follow-ups (2026-08-01 post-commit review) ────────────────────────
+// Two HIGH findings from the read-only audit of commits a1bc7152/9a5b9ab2:
+// (1) the named-file sort tier sat above status precedence and re-inverted
+//     the issue-4 fix on any incidental filename-token match;
+// (2) the aboutAssistant speech verbs swallowed behavioral interview
+//     questions, which address the CANDIDATE as "you".
+
+describe('audit: named-file targeting cannot re-invert status precedence', () => {
+  const registry = {
+    sourceTypes: new Map([['cur', 'REFERENCE_FILE'], ['old', 'REFERENCE_FILE']]),
+    activeVersions: new Map([['cur', 'v1'], ['old', 'v1']]),
+    chunkVersions: new Map([['cur', 'v1'], ['old', 'v1']]),
+    sourceScopes: new Map([['cur', { userId: 'u' }], ['old', { userId: 'u' }]]),
+  };
+  // The archived file shares ONE incidental token ("pricing") with the
+  // question; the current document's name shares none. That must not be
+  // an "explicit file reference".
+  const chunks = [
+    { sourceId: 'old', fileName: 'pricing-archive-2023.pdf', text: 'Team plan costs $299 per month.', chunkIndex: 0, score: 0.5, metadata: { documentStatus: 'archived' } },
+    { sourceId: 'cur', fileName: 'Q3 Plan.pdf', text: 'Team plan costs $499 per month.', chunkIndex: 0, score: 0.9, metadata: { documentStatus: 'current' } },
+  ];
+  const decisionFor = (q) => decide({
+    requestId: 'p', requestSequence: 1, surface: 'manual_chat', modeId: 'sales',
+    scope: { userId: 'u', modeId: 'sales' }, sessionId: 's', manualQuestion: q,
+  });
+
+  test('a single incidental filename token cannot resurrect a retired document', async () => {
+    const port = createLegacyRetrievalPort({ registry, retrieve: async () => chunks });
+    const { evidence } = await port.retrieve({ decision: decisionFor('What is our pricing?') });
+    assert.ok(evidence.length >= 2, evidence.map((e) => e.sourceId).join(','));
+    assert.equal(evidence[0].sourceId, 'cur',
+      `archived file outranked current via filename: ${evidence.map((e) => e.sourceId).join(',')}`);
+  });
+
+  test('NON-REGRESSION: a genuinely named file (>=2 distinctive tokens) still leads', async () => {
+    const port = createLegacyRetrievalPort({ registry, retrieve: async () => chunks });
+    const { evidence } = await port.retrieve({ decision: decisionFor('What price is in the pricing archive?') });
+    assert.equal(evidence[0].sourceId, 'old', evidence.map((e) => e.sourceId).join(','));
+  });
+});
+
+describe('audit: behavioral interview questions are candidate questions', () => {
+  test('"Tell me about a time you said no to a stakeholder." grounds in candidate history', () => {
+    const r = classify('Tell me about a time you said no to a stakeholder.', 'technical-interview');
+    assert.ok(!r.claimTypes.includes('GENERAL_TECHNICAL') || r.requiredSourceTypes.includes('RESUME'),
+      `behavioral question read as assistant meta: ${JSON.stringify(r.claimTypes)} (${r.reason})`);
+    assert.ok(r.requiredSourceTypes.includes('RESUME'), JSON.stringify(r.requiredSourceTypes));
+  });
+
+  test('"Tell me about a time you refused a request from your manager." is not assistant meta', () => {
+    const r = classify('Tell me about a time you refused a request from your manager.', 'technical-interview');
+    assert.ok(r.requiredSourceTypes.includes('RESUME'), JSON.stringify(r.requiredSourceTypes));
+  });
+
+  test('"Why did you say you left Google?" keeps its motivation claim', () => {
+    const r = classify('Why did you say you left Google?', 'looking-for-work');
+    assert.ok(r.claimTypes.includes('USER_MOTIVATION'), JSON.stringify(r.claimTypes));
+  });
+
+  test('NON-REGRESSION: bare assistant meta stays meta', () => {
+    for (const [mode, q] of [
+      ['lecture', 'Why did you refuse?'],
+      ['general', 'Why did you refuse to answer my question?'],
+      ['general', 'You answered that wrong.'],
+    ]) {
+      const r = classify(q, mode);
+      assert.ok(!r.claimTypes.some((c) => c.startsWith('USER_')),
+        `"${q}" → ${JSON.stringify(r.claimTypes)}`);
+    }
+  });
+
+  test('"What did you just say?" is assistant meta, not an employment lookup', () => {
+    const r = classify('What did you just say?', 'technical-interview');
+    assert.ok(!r.claimTypes.includes('USER_EMPLOYMENT'), JSON.stringify(r.claimTypes));
+  });
+});

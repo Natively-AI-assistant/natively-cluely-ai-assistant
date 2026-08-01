@@ -365,7 +365,21 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     // Scoped to ASSISTANT-BEHAVIOUR verbs only: "did you refuse/ignore/say" is
     // about the assistant; "did you build PriceX" is about the candidate and
     // must keep its personal classification.
-    const aboutAssistant = /\byou (?:refus\w*|ignor\w*|answered|said|replied|responded)\b|\bwhy (?:did|do) you (?:refuse|ignore|say|answer|respond|reply)\b|\byour (?:answer|refusal|response|reasoning)\b/.test(clause);
+    //
+    // Behavioral-interview framing addresses the CANDIDATE as "you" (the
+    // interviewer-perspective contract): "tell me about a time you said no to
+    // a stakeholder" is a work-history question, never assistant meta-talk —
+    // bare speech verbs swallowed it (audit 2026-08-01, HIGH).
+    const behavioralFraming = /\b(?:tell (?:me|us) about a time|describe a (?:time|situation)|give (?:me|us) an example of (?:a time|when)|walk (?:me|us) through a (?:time|situation))\b/.test(clause);
+    // Speech verbs are assistant-meta ONLY with a deictic or empty complement:
+    // "what did you just say?" / "you answered that wrong" are about the
+    // assistant; "you said no to a stakeholder" / "you said you left Google"
+    // report the candidate's own speech and stay personal.
+    const aboutAssistant = !behavioralFraming && (
+      /\byou (?:refus\w*|ignor\w*)\b/.test(clause)
+      || /\byou (?:just |even )?(?:say|said|answer(?:ed)?|repl(?:y|ied)|respond(?:ed)?)(?: (?:that|this|it|so|earlier|before|previously))?(?: (?:wrong(?:ly)?|incorrectly|differently|earlier|before|previously))?\s*(?:[?!.,;:]|$)/.test(clause)
+      || /\byour (?:answer|refusal|response|reasoning)\b/.test(clause)
+    );
     // "Can I promise zero hallucinations?" is a question about what the
     // MATERIAL authorizes the user to say — first-person grammar made it a
     // USER_EMPLOYMENT claim, which Sales cannot source, so a purely
@@ -377,6 +391,11 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       // Conversational meta-question: answered from the exchange itself plus
       // general knowledge of this mode's policy — never a private-source claim.
       types.add('GENERAL_TECHNICAL'); noteClaim('GENERAL_TECHNICAL', clause);
+    }
+    if (behavioralFraming && /\byou\b/.test(clause)) {
+      // A second-person behavioral ask is answered from the candidate's work
+      // history (STAR framing needs real roles and situations to draw on).
+      types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause);
     }
     if (salesClaimCue && anyDocSource) {
       types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);

@@ -131,10 +131,18 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
       // candidate ID" shares one token with the primary résumé's filename
       // ("candidate") but two with the decoy's ("candidate", "decoy") — the
       // more specifically named file wins.
+      //
+      // A count below 2 is NOT an explicit file reference and scores 0: one
+      // incidental token ("pricing" in pricing-archive-2023.pdf) placed this
+      // tier above status precedence and re-inverted the retired-below-current
+      // ordering one commit after it was fixed (audit 2026-08-01). Two shared
+      // distinctive tokens is the threshold at which the question is naming
+      // the file rather than sharing its vocabulary.
       const titleMatchCount = (e: EvidenceItem): number => {
         const title = (e.documentTitle ?? '').toLowerCase();
         if (!title) return 0;
-        return new Set(title.split(/[^a-z0-9]+/).filter((t) => t.length > 3 && qTokens.has(t))).size;
+        const n = new Set(title.split(/[^a-z0-9]+/).filter((t) => t.length > 3 && qTokens.has(t))).size;
+        return n >= 2 ? n : 0;
       };
       const sorted = evidence.sort((a, b) =>
         titleMatchCount(b) - titleMatchCount(a)
