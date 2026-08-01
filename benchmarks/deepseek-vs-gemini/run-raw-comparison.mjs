@@ -17,6 +17,7 @@ import { estimateRunCost, costFor } from './lib/pricing.mjs';
 import { pendingWork } from './lib/resumability.mjs';
 import { runWithConcurrency } from './lib/concurrency.mjs';
 import { createDeepseekClient, createGeminiClient, callDeepseek, callGemini } from './lib/clients.mjs';
+import { upsertResult } from './lib/results.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = path.join(__dirname, 'fixtures');
@@ -70,7 +71,7 @@ async function main() {
   const deepseekClient = createDeepseekClient(process.env.DEEPSEEK_API_KEY);
   const geminiClient = createGeminiClient(process.env.GEMINI_API_KEY);
 
-  const results = existing.slice();
+  let results = existing.slice();
   const tasks = pending.map(({ promptId, modelId }) => async () => {
     const fixture = byId.get(promptId);
     const userPrompt = `Context:\n${fixture.context}\n\nQuestion: ${fixture.question}`;
@@ -79,7 +80,7 @@ async function main() {
       : await callGemini(geminiClient, { model: modelId, systemPrompt: SYSTEM_PROMPT, userPrompt });
     const costUsd = call.error ? 0 : costFor(modelId, call.inputTokens, call.outputTokens);
     const record = { promptId, category: fixture.category, modelId, ...call, costUsd };
-    results.push(record);
+    results = upsertResult(results, record);
     fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2));
     console.log(`[${modelId}] ${promptId}: ${call.error ? `ERROR ${call.error}` : `${call.latencyMs}ms, $${costUsd.toFixed(6)}`}`);
     return record;
