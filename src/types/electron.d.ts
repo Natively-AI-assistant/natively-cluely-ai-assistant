@@ -329,6 +329,8 @@ export interface ElectronAPI {
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string; code?: string }>
   endMeeting: () => Promise<{ success: boolean; error?: string }>
+  debugInjectTranscript: (segments: Array<{ speaker?: string; text: string; timestamp?: number; confidence?: number }>)
+    => Promise<{ success: boolean; injected?: number; error?: string }>
   finalizeMicSTT: () => Promise<void>
   getRecentMeetings: () => Promise<Array<{ id: string; title: string; date: string; duration: string; summary: string }>>
   getMeetingDetails: (id: string) => Promise<any>

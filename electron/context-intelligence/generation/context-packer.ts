@@ -74,6 +74,10 @@ function renderEvidence(e: EvidenceItem): string {
     // own declared status. Without these the model saw two conflicting values
     // with no way to explain WHY one wins, and invented a rationale.
     e.documentTitle ? `source_name="${esc(e.documentTitle)}"` : '',
+    // Physical origin of the text (issue 10 / Pattern D): lets the model say
+    // "the reference brief proposes X" vs "the meeting decided X" from the
+    // attribute instead of inferring provenance from a filename.
+    e.provenance ? `provenance="${e.provenance}"` : '',
     typeof (e.metadata as Record<string, unknown> | undefined)?.documentStatus === 'string'
       ? `status="${esc(String((e.metadata as Record<string, unknown>).documentStatus))}"` : '',
     `authority="${e.authorityFor.join(',')}"`,

@@ -78,7 +78,15 @@ export function isMemoryEligibleSegment(
   seg: { speaker?: string; confidence?: number; origin?: string } | null | undefined,
 ): boolean {
   if (!seg || typeof seg !== 'object') return false;
-  if (typeof seg.origin === 'string' && seg.origin.length > 0) return seg.origin === 'stt';
+  if (typeof seg.origin === 'string' && seg.origin.length > 0) {
+    if (seg.origin === 'stt') return true;
+    // APPROVED test transcripts (deep-run 2 issue 10): segments injected by the
+    // dev-only test harness carry origin 'test' and count as meeting evidence
+    // ONLY under the same explicit env opt-in that enables injection at all.
+    // Without the env, 'test' stays ineligible — production behavior unchanged.
+    if (seg.origin === 'test' && process.env.NATIVELY_TEST_TRANSCRIPT_INJECTION === '1') return true;
+    return false;
+  }
   const speaker = String(seg.speaker || '').trim().toLowerCase();
   if (speaker === 'assistant' || speaker === 'ai' || speaker === 'model') return false;
   return typeof seg.confidence === 'number' && Number.isFinite(seg.confidence) && seg.confidence < 1;

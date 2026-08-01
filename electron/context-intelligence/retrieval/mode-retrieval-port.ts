@@ -236,6 +236,11 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
           score: c.score as number | undefined,
           ftsScore: c.ftsScore as number | undefined,
           vectorScore: c.vectorScore as number | undefined,
+          // Provenance (issue 10 / Pattern D): everything this port reads is a
+          // file the user attached to the MODE — whatever its name or content
+          // claims to be. A reference file named like a transcript stays
+          // MODE_REFERENCE_FILE provenance forever.
+          provenance: 'MODE_REFERENCE_FILE',
           // Provenance the precedence answer needs (deep-test D8): the file's
           // own declared status, carried as port metadata so the composer can
           // render current-vs-retired instead of letting the model invent why

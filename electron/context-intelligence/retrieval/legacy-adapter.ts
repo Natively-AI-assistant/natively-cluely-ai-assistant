@@ -21,7 +21,7 @@
 //     away before any consumer can see it. Carrying them through is free: the
 //     values already exist at the return site.
 
-import type { EvidenceItem, ClaimType, SourceType, EvidenceScope } from '../contracts/types';
+import type { EvidenceItem, ClaimType, SourceType, EvidenceScope, EvidenceProvenance } from '../contracts/types';
 import { scopeKey } from '../contracts/types';
 import { authorityOf } from '../policies/source-authority-policy';
 
@@ -41,6 +41,9 @@ export interface LegacyChunk {
   answerabilityScore?: number;
   section?: string;
   headingPath?: string[];
+  /** Port-declared provenance (see EvidenceProvenance). Passed through only
+   *  when it is a known value — the adapter never guesses. */
+  provenance?: string;
   /** Structured flags a port declares about its own chunk (e.g. the profile
    *  port's `completeInventory`). Carried through verbatim — the adapter never
    *  invents metadata, and consumers must treat it as the PORT's claim. */
@@ -137,6 +140,12 @@ export function scopeAdmits(turn: EvidenceScope, source: EvidenceScope): boolean
  * legacy path does the opposite — it passes text through and lets the prompt
  * sort it out, which is how a superseded resume reaches the model.
  */
+const KNOWN_PROVENANCE = new Set<string>([
+  'PROFILE_RESUME', 'PROFILE_JOB_DESCRIPTION', 'PROFILE_FACT', 'MODE_REFERENCE_FILE',
+  'LIVE_STT', 'IMPORTED_TRANSCRIPT', 'TEST_TRANSCRIPT', 'MEETING_NOTE',
+  'MANUAL_CHAT', 'PRIOR_ASSISTANT_MESSAGE',
+]);
+
 export function adaptLegacyChunks(chunks: LegacyChunk[], opts: AdaptOptions): AdaptResult {
   const sid = scopeKey(opts.scope);
   const evidence: EvidenceItem[] = [];
@@ -186,6 +195,9 @@ export function adaptLegacyChunks(chunks: LegacyChunk[], opts: AdaptOptions): Ad
       headingPath: c.headingPath,
       chunkIndex: c.chunkIndex,
       content: c.text,
+      ...(c.provenance && KNOWN_PROVENANCE.has(c.provenance)
+        ? { provenance: c.provenance as EvidenceProvenance }
+        : {}),
 
       semanticScore: c.vectorScore,
       keywordScore: c.ftsScore,

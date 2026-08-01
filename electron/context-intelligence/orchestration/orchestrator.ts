@@ -377,12 +377,27 @@ function evidenceTopicallyRelated(
   return false;
 }
 
+/** Provenance classes that may prove what was actually SAID in a meeting. */
+const TRANSCRIPT_PROVENANCE = new Set(['LIVE_STT', 'IMPORTED_TRANSCRIPT', 'TEST_TRANSCRIPT']);
+
 export function evidenceSupportsClaim(
-  evidence: { acceptedFor: string[]; content: string; metadata?: Record<string, unknown> },
+  evidence: { acceptedFor: string[]; content: string; metadata?: Record<string, unknown>; provenance?: string },
   claimType: string,
   question: string,
 ): boolean {
   if (!evidence.acceptedFor.includes(claimType)) return false;
+  // PROVENANCE GATE (issue 10 / Pattern D, 2026-08-01): a meeting claim may
+  // only be proven by text that physically came from a transcript. Source-TYPE
+  // authority already blocks reference files (MEETING_* is authoritative for
+  // MEETING_TRANSCRIPT only); this adds defense in depth for any future port
+  // that mints MEETING_TRANSCRIPT from a non-transcript store. GUARDED on the
+  // stamp being present — unstamped legacy evidence is unchanged, so this can
+  // never be an inert filter measured as a pass.
+  if ((claimType === 'MEETING_STATEMENT' || claimType === 'MEETING_DECISION' || claimType === 'MEETING_FACT')
+      && typeof evidence.provenance === 'string'
+      && !TRANSCRIPT_PROVENANCE.has(evidence.provenance)) {
+    return false;
+  }
   // AUTHORITATIVE ABSENCE: an item its port declares to be the COMPLETE
   // extracted record of a category (the whole skills inventory, the whole
   // employment list) supports the MATCHING claim class, term overlap or not —

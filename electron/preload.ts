@@ -426,6 +426,11 @@ interface ElectronAPI {
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>;
   endMeeting: () => Promise<{ success: boolean; error?: string }>;
+  /** Test-only (deep-run 2 issue 10): inject transcript segments with origin
+   *  'test'. No-ops unless NATIVELY_TEST_TRANSCRIPT_INJECTION=1 AND the build
+   *  is unpackaged — the gate lives in the main-process handler. */
+  debugInjectTranscript: (segments: Array<{ speaker?: string; text: string; timestamp?: number; confidence?: number }>)
+    => Promise<{ success: boolean; injected?: number; error?: string }>;
   finalizeMicSTT: () => Promise<void>;
   getRecentMeetings: () => Promise<
     Array<{ id: string; title: string; date: string; duration: string; summary: string }>
@@ -1699,6 +1704,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => ipcRenderer.invoke('start-meeting', metadata),
   endMeeting: () => ipcRenderer.invoke('end-meeting'),
+  debugInjectTranscript: (segments: Array<{ speaker?: string; text: string; timestamp?: number; confidence?: number }>) =>
+    ipcRenderer.invoke('debug-inject-transcript', segments),
   finalizeMicSTT: () => ipcRenderer.invoke('finalize-mic-stt'),
   getRecentMeetings: () => ipcRenderer.invoke('get-recent-meetings'),
   getMeetingDetails: (id: string) => ipcRenderer.invoke('get-meeting-details', id),

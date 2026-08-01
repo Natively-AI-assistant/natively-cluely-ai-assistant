@@ -8536,6 +8536,51 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // TEST-TRANSCRIPT INJECTION (deep-run 2 issue 10, 2026-08-01). The all-files
+  // stress run could never score a single team-meet transcript question: with
+  // no live audio there is NO way to get spoken turns into a session, so every
+  // "what did we decide?" turn correctly refused and the meeting pipeline had
+  // nothing to persist. This handler injects transcript segments for test runs
+  // ONLY, under two independent gates that must BOTH hold:
+  //
+  //   1. env NATIVELY_TEST_TRANSCRIPT_INJECTION=1 — an explicit, per-run opt-in;
+  //   2. !app.isPackaged — structurally unreachable in any shipped build.
+  //
+  // Injected segments are stamped origin 'test', NEVER 'stt' — provenance must
+  // stay truthful end-to-end. isMemoryEligibleSegment treats 'test' as eligible
+  // only under the same env gate, so meeting memory/summary/RAG behave as they
+  // would for real speech in a test run while production remains airtight.
+  safeHandle('debug-inject-transcript', async (_event, segments: unknown) => {
+    const { app } = require('electron');
+    if (process.env.NATIVELY_TEST_TRANSCRIPT_INJECTION !== '1' || app.isPackaged) {
+      return { success: false, error: 'injection_disabled' };
+    }
+    if (!Array.isArray(segments) || segments.length === 0 || segments.length > 500) {
+      return { success: false, error: 'invalid_segments' };
+    }
+    const im = appState.getIntelligenceManager();
+    if (!im) return { success: false, error: 'no_session' };
+    let injected = 0;
+    for (const raw of segments) {
+      const s = raw as { speaker?: unknown; text?: unknown; timestamp?: unknown; confidence?: unknown };
+      const text = String(s?.text ?? '').slice(0, 4000).trim();
+      if (!text) continue;
+      im.addTranscript({
+        speaker: String(s?.speaker ?? 'Speaker'),
+        text,
+        timestamp: typeof s?.timestamp === 'number' ? s.timestamp : Date.now(),
+        final: true,
+        // Real STT confidence is always < 1; injected segments mimic that so
+        // legacy consumers behave identically, but origin is what gates them.
+        confidence: typeof s?.confidence === 'number' ? s.confidence : 0.95,
+        origin: 'test',
+      }, true);
+      injected++;
+    }
+    console.log(`[TestInjection] Injected ${injected} transcript segment(s) with origin 'test'.`);
+    return { success: true, injected };
+  });
+
   safeHandle('get-recent-meetings', async () => {
     // Fetch from SQLite (limit 50)
     return DatabaseManager.getInstance().getRecentMeetings(50);

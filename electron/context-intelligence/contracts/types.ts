@@ -107,6 +107,28 @@ export type EvidenceRejectionReason =
   | 'DUPLICATE'
   | 'CONTRADICTED';
 
+/**
+ * WHERE evidence text physically came from (deep-run 2 issue 10 / Pattern D).
+ * Distinct from SourceType (what KIND of source the mode sees): a reference
+ * file named "standup-transcript.md" is MODE_REFERENCE_FILE provenance no
+ * matter what its name implies, and an injected test transcript is
+ * TEST_TRANSCRIPT, never LIVE_STT. Stamped by each retrieval PORT — the one
+ * layer that knows which store it read — and never inferred from filename,
+ * title, content, or model output. Optional because legacy stores predate it;
+ * enforcement must therefore only ever fire on evidence that carries it.
+ */
+export type EvidenceProvenance =
+  | 'PROFILE_RESUME'
+  | 'PROFILE_JOB_DESCRIPTION'
+  | 'PROFILE_FACT'
+  | 'MODE_REFERENCE_FILE'
+  | 'LIVE_STT'
+  | 'IMPORTED_TRANSCRIPT'
+  | 'TEST_TRANSCRIPT'
+  | 'MEETING_NOTE'
+  | 'MANUAL_CHAT'
+  | 'PRIOR_ASSISTANT_MESSAGE';
+
 export interface RetrievalCandidate {
   evidenceId: string;
   sourceType: SourceType;
@@ -132,6 +154,9 @@ export interface RetrievalCandidate {
   chunkIndex?: number;
 
   content: string;
+
+  /** See EvidenceProvenance. Port-stamped; absent on legacy stores. */
+  provenance?: EvidenceProvenance;
 
   semanticScore?: number;
   keywordScore?: number;

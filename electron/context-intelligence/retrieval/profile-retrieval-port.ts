@@ -490,6 +490,12 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
           text: c.text,
           chunkIndex: c.chunkIndex,
           score,
+          // Provenance (issue 10 / Pattern D): derived from the registry role
+          // this port itself declared for the document — never from content.
+          provenance: sourceTypes.get(c.sourceId) === 'JOB_DESCRIPTION'
+            ? 'PROFILE_JOB_DESCRIPTION'
+            : sourceTypes.get(c.sourceId) === 'RESUME'
+              ? 'PROFILE_RESUME' : 'PROFILE_FACT',
           // Carried through the adapter so evidenceSupportsClaim can treat a
           // checked COMPLETE inventory as grounded support for absence answers
           // — category-matched, so the shortcut only fires for the claim class

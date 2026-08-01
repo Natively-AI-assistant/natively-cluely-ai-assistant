@@ -109,6 +109,15 @@ export function createMeetingRetrievalPort(input: MeetingPortInput): RetrievalPo
           chunkIndex: Number((c as Record<string, unknown>).chunkIndex ?? 0),
           score: similarity,
           vectorScore: similarity,
+          // Provenance (issue 10 / Pattern D): meeting-RAG chunks are built
+          // from spoken transcript (zero-eligible sessions no longer reach RAG
+          // at all). Under the explicit test-injection env every session may
+          // contain injected turns, so the whole run is stamped
+          // TEST_TRANSCRIPT — never LIVE_STT — keeping provenance truthful in
+          // test runs. Per-chunk origin fidelity requires persisting origin
+          // into the chunk store (documented follow-up).
+          provenance: process.env.NATIVELY_TEST_TRANSCRIPT_INJECTION === '1'
+            ? 'TEST_TRANSCRIPT' : 'LIVE_STT',
         });
       }
       return out;
