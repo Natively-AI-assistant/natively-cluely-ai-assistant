@@ -18,10 +18,12 @@ import {
 } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, LayoutGroup, useReducedMotion } from 'framer-motion';
 import { AccordionSection, Disclosure } from '../ui/AccordionSection';
+import { InteractiveCard } from '../ui/InteractiveCard';
 import { FreeTrialModal } from '../trial/FreeTrialModal';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
+import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
 // Painted as a CSS mask, not rendered as an <img>: the asset is a white
 // monochrome glyph, so on the light theme's pale plaque an <img> would be
 // invisible. See `.natively-key-mark` in index.css.
@@ -55,13 +57,63 @@ const PLAN_MAX_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM7JElX4Af6LNV
 const PLAN_ULTRA_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM7rC2kAb69TFKsZnUU';
 const MASKED_NATIVELY_KEY = '•'.repeat(24);
 
-// Module-level, not component state: SettingsOverlay unmounts this component
-// every time the user switches away from the Plans & Billing tab, so React
-// state alone can't survive a re-visit. This survives remounts for the life
-// of the renderer process, so the Usage card can show last-known numbers
-// instantly on re-entry instead of a blank/loading state, while a silent
-// background revalidation swaps in fresh numbers a moment later.
-let usageCache: UsageData | null = null;
+// Last-known usage, remembered across tab switches AND app restarts.
+//
+// SettingsOverlay unmounts this component every time the user switches away
+// from Plans & Billing, so React state alone can't survive a re-visit; a
+// module-level variable covers that but dies with the renderer process, so the
+// first open after every app launch was a blank/loading state again. Persisting
+// it means the Usage card paints last-known numbers immediately and a silent
+// background revalidation swaps in fresh ones a moment later.
+//
+// Numbers shown from here are always stale by definition. That is acceptable
+// because they are replaced within a second and are never used for enforcement
+// — the server owns the real quota. The one case where stale is actively
+// WRONG rather than merely old is a cache written before the billing period
+// rolled over: those bars would show last period's consumption against this
+// period's allowance. `resets_at` makes that detectable, so an expired entry is
+// dropped rather than displayed.
+const USAGE_STORAGE_KEY = 'natively_api_usage_v1';
+
+function readUsageCache(): UsageData | null {
+  try {
+    const raw = localStorage.getItem(USAGE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Shape-check before trusting: a partial write would otherwise throw inside
+    // the render path when QuotaBar reads `.used`/`.limit`.
+    if (!parsed?.quota?.transcription || !parsed.quota.ai || !parsed.quota.search) return null;
+    const resets = Date.parse(parsed.quota.resets_at);
+    if (Number.isFinite(resets) && resets < Date.now()) return null;
+    return parsed as UsageData;
+  } catch {
+    return null;
+  }
+}
+
+let usageCache: UsageData | null = readUsageCache();
+
+function setUsageCache(next: UsageData | null): void {
+  usageCache = next;
+  try {
+    if (next) localStorage.setItem(USAGE_STORAGE_KEY, JSON.stringify(next));
+    else localStorage.removeItem(USAGE_STORAGE_KEY);
+  } catch {
+    // Storage unavailable or full — in-memory caching still works for this
+    // session, only the cross-restart benefit is lost.
+  }
+}
+
+// Cursor-tracked spotlight colour per tier, so the API card blooms in its OWN
+// hue on hover exactly as the Pro purchase cards do. Values are the tier fills'
+// hues at low alpha; a neutral grey glow here would still have read as a
+// different control from the Pro cards.
+const TIER_GLOW = {
+  Standard: 'rgba(60, 107, 105, 0.34)',
+  Pro: 'rgba(17, 89, 153, 0.34)',
+  Max: 'rgba(102, 60, 104, 0.34)',
+  Ultra: 'rgba(111, 37, 66, 0.34)',
+} as const;
 
 const PLANS = [
   {
@@ -330,13 +382,37 @@ function Price({ amount, period }: { amount: string; period: string }) {
 // ─── Component ───────────────────────────────────────────────
 interface NativelyApiSettingsProps {
   initialIsSaved?: boolean;
+  /**
+   * Rendered between the Natively key card and the plan chooser. A slot exists
+   * because that seam is INSIDE this component, so a parent cannot reach it by
+   * reordering siblings. Used by PlansSettings to place the "Pro License
+   * Active" receipt directly under the credential box it relates to, rather
+   * than above the whole section or stranded below the pricing.
+   */
+  afterKeySection?: React.ReactNode;
 }
 
-export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initialIsSaved = false }) => {
+export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initialIsSaved = false, afterKeySection }) => {
+  const prefersReducedMotion = useReducedMotion();
   const t = useT();
-  const [apiKey, setApiKey] = useState(() => (initialIsSaved ? MASKED_NATIVELY_KEY : ''));
-  const [isSaved, setIsSaved] = useState(initialIsSaved);
-  const [isLoading, setIsLoading] = useState(!initialIsSaved);
+  // `initialIsSaved` arrives ASYNCHRONOUSLY. SettingsOverlay seeds its own
+  // `hasNativelyKey` to false and only flips it after `getStoredCredentials()`
+  // resolves, so on every open of this tab the first render says "no key" even
+  // for a subscriber. That is what made the Usage section flash: `usageData`
+  // was correctly restored from `usageCache` on the very first render, but the
+  // card is gated on `isSaved && usageData`, so it stayed hidden until the
+  // credentials round-trip landed and then popped in. The plan chooser
+  // (`!isSaved && PlansCard`) flashed the other way for the same reason.
+  //
+  // A populated `usageCache` is itself proof a key was saved: it is only ever
+  // written from a successful quota fetch, and it is nulled on BOTH removal
+  // paths (`handleClear`, and the credentials effect when no key comes back).
+  // So seeding these three from the cache is sound, and it makes the first
+  // paint of a revisit identical to the last paint of the previous visit.
+  const cachedKeyKnown = !!usageCache;
+  const [apiKey, setApiKey] = useState(() => (initialIsSaved || cachedKeyKnown ? MASKED_NATIVELY_KEY : ''));
+  const [isSaved, setIsSaved] = useState(initialIsSaved || cachedKeyKnown);
+  const [isLoading, setIsLoading] = useState(!(initialIsSaved || cachedKeyKnown));
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
@@ -419,11 +495,19 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         } else {
           setApiKey('');
           setIsSaved(false);
-          usageCache = null;
+          setUsageCache(null);
           setUsageData(null);
         }
       } catch (e) {
         console.error('[NativelyApi]', e);
+        // Unknown is not saved. `isSaved` now starts optimistically true when a
+        // persisted usage entry exists, so without this a keychain read failure
+        // would leave a masked key in the field with no way out: `handleSave`
+        // refuses any value containing '•', so the Activate button would
+        // silently no-op. Falling back to the empty state keeps the input
+        // usable.
+        setApiKey('');
+        setIsSaved(false);
       } finally {
         setIsLoading(false);
       }
@@ -444,7 +528,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     try {
       const r = await window.electronAPI.getNativelyUsage(force);
       if (r.ok && r.quota) {
-        usageCache = r as UsageData;
+        setUsageCache(r as UsageData);
         setUsageData(r as UsageData);
       }
     } catch {
@@ -676,13 +760,68 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     }
   };
 
-  const handleClear = () => {
+  // The Usage card is the one region that CANNOT be put on a fixed schedule:
+  // its data comes from the network, so on activation `isSaved` flips, the plan
+  // chooser starts leaving, `fetchUsage` fires, and the quota lands some
+  // variable time later. A plain delay would fire before the data exists on a
+  // cold fetch and the card would then pop in with no animation at all.
+  //
+  // So the layout sequence stays driven by `isSaved`, and this card spends
+  // whatever is LEFT of its scheduled slot when its data actually arrives:
+  //   * warm `usageCache` (persisted across restarts) — elapsed ≈ 0, so it takes
+  //     the full 140ms and lands in its choreographed slot, crossing the
+  //     chooser's collapse exactly as designed;
+  //   * cold fetch at 800ms — the slot is long gone, delay clamps to 0, and it
+  //     animates in the instant the numbers land, which reads as "the data just
+  //     arrived" because that is what happened;
+  //   * fetch fails — nothing appears, per the existing decision at the render
+  //     gate below that a saved-but-planless key is an expected state.
+  // Same curve and duration in every case, so a slow network degrades to a late
+  // animation, never to a cut.
+  const usageArmedAtRef = useRef<number | null>(null);
+  if (isSaved) { if (usageArmedAtRef.current === null) usageArmedAtRef.current = performance.now(); }
+  else usageArmedAtRef.current = null;
+
+  const usageDelay = (slot: number) =>
+    usageArmedAtRef.current === null
+      ? 0
+      : Math.max(0, slot - (performance.now() - usageArmedAtRef.current) / 1000);
+
+  const clearingRef = useRef(false);
+
+  const handleClear = async () => {
+    if (clearingRef.current) return;
+    clearingRef.current = true;
+    const prevKey = apiKey;
+    // Optimistic ON PURPOSE, and it needs no spinner: unlike Deactivate — whose
+    // only visible effect was a card vanishing after an await, so the wait was
+    // dead air — this immediately moves four regions of the page. That layout
+    // change IS the feedback, and a spinner would only delay it.
+    //
+    // What was actually wrong here is that failure was unobservable. This call
+    // also revokes the bundled Pro licence (ipcHandlers.ts:6380), and it used to
+    // be fired un-awaited into `.catch(() => {})`. If it rejected, the key was
+    // still saved in main, Pro was still active, and the user was looking at a
+    // UI that had animated a removal which never happened.
+    //
+    // `usageData` is deliberately NOT cleared here — see the Usage card's
+    // AnimatePresence below, which cannot play an exit for a child whose data
+    // has already gone.
     setApiKey('');
     setIsSaved(false);
     setError(null);
-    usageCache = null;
-    setUsageData(null);
-    window.electronAPI.setNativelyApiKey('').catch(() => {});
+    setUsageCache(null);
+    try {
+      await window.electronAPI.setNativelyApiKey('');
+    } catch (e: any) {
+      // The entrance/exit are declarative on `isSaved`, so the rollback animates
+      // back in on the same curves without any extra work.
+      setApiKey(prevKey);
+      setIsSaved(true);
+      setError(e?.message || 'Could not remove the key — it is still saved.');
+    } finally {
+      clearingRef.current = false;
+    }
   };
 
   const openExternal = (url: string) => {
@@ -810,12 +949,20 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             id="natively-api-tabpanel"
             aria-labelledby={`natively-api-tab-${plan.id}`}
           >
-            <div 
-              className={`natively-api-detail-card h-full w-full relative overflow-hidden natively-api-detail-card-${plan.name.toLowerCase()}`} 
+            <InteractiveCard
+              className={`natively-api-detail-card group h-full w-full relative overflow-hidden natively-api-detail-card-${plan.name.toLowerCase()}`}
+              glowColor={TIER_GLOW[plan.name as keyof typeof TIER_GLOW]}
               data-active={isActive ? "true" : "false"}
-              style={{
-                transition: 'background 280ms cubic-bezier(0.23, 1, 0.32, 1), border-color 280ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 280ms cubic-bezier(0.23, 1, 0.32, 1)'
-              }}
+              // No inline `transition` here on purpose. index.css already
+              // declares `transition: transform/box-shadow/border-color 180ms`
+              // with `!important` on `.natively-api-detail-card`, and an author
+              // !important declaration outranks a style-attribute one, so any
+              // inline transition string on this element is dead weight. It
+              // silently was for a long time: a 280ms value sat here doing
+              // nothing while the 180ms from CSS is what actually ran.
+              // Note `background` is NOT in that list, so the tier-fill swap is
+              // instantaneous; the crossfade you see comes from the
+              // AnimatePresence child below, which is a different element.
             >
               <AnimatePresence custom={direction}>
                 <motion.div
@@ -916,7 +1063,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                   </div>
                 </motion.div>
               </AnimatePresence>
-            </div>
+            </InteractiveCard>
           </div>
         );
       })()}
@@ -925,6 +1072,9 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   );
 
   return (
+    // LayoutGroup so the three regions below share one layout pass. See
+    // ../../lib/plansMotion for why this whole tab is FLIP rather than resizing.
+    <LayoutGroup>
     <div className="space-y-6 animated fadeIn" data-interface-theme={interfaceTheme}>
       {/* Page title intentionally omitted here — PlansSettings.tsx (the parent
           tab wrapper) already renders "Plans & Billing" as the section header.
@@ -1084,11 +1234,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           Natively key
         </SectionLabel>
 
-        {/* `natively-key-card` turns the flat neutral box into the same
-            material as the rest of this tab: layered fill, specular top
-            hairline, 24px blueprint grid, raised floor shadow. See the
-            "tactile credential plaque" block in index.css for why it stays
-            neutral instead of becoming a third saturated slab. */}
+        {/* `natively-key-card` gives the flat box the same MATERIAL as the
+            rest of this tab — layered fill, specular top hairline, 24px
+            blueprint grid, raised floor shadow — without its COLOUR. The
+            plaque and its well are achromatic; the Activate button is the only
+            saturated thing in the section, and only once it has something to
+            act on. See the "tactile credential plaque" block in index.css. */}
         <Card className="natively-key-card">
           <div className="px-4 py-4 space-y-3">
             {/* Says the quiet part out loud: one box, EITHER credential. The
@@ -1111,7 +1262,15 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
 
             {/* The input is the subject of this card. It's now a pressed-in
                 well rather than a hairline box — same inset vocabulary as the
-                jelly controls, and it gives the credential somewhere to sit. */}
+                jelly controls, and it gives the credential somewhere to sit.
+
+                The placeholder names the two credential types instead of
+                showing the raw `natively_sk_` prefix. That prefix is real —
+                handleSave routes on it — but it is an implementation detail
+                the user has no reason to recognise, and pairing a literal
+                token against the plain-English "or your Pro license key" made
+                the two halves read as different KINDS of thing rather than as
+                two options for the same box. */}
             <input
               type="text"
               value={apiKey}
@@ -1121,7 +1280,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                 setError(null);
               }}
               onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-              placeholder="natively_sk_… or your Pro license key"
+              placeholder="Natively API key or Natively Pro license"
               spellCheck={false}
               autoComplete="off"
               data-invalid={error ? 'true' : 'false'}
@@ -1198,16 +1357,91 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         </p>
       </div>
 
-      {/* ── Plans ────────────────────────────────────────── */}
-      {!isSaved && PlansCard}
+      {afterKeySection}
+
+      {/* ── Plans ──────────────────────────────────────────
+          Leads the arrival sequence on key removal: it takes over the region
+          the Usage card and the "Change plan" accordion just vacated, so it is
+          the thing that answers "what replaced what I removed".
+          `y: -8` — it descends from the key card above that caused the change. */}
+      <AnimatePresence mode="popLayout" initial={false}>
+        {!isSaved && (
+          <motion.div
+            key="api-plans"
+            layout="position"
+            // width:100% is REQUIRED, not cosmetic: mode="popLayout" sets
+            // position:absolute on the exiting child, and without an explicit
+            // width it collapses to content width the instant it pops — a
+            // visible horizontal snap before the fade.
+            // `contain: layout` (never `paint` — these cards' 12-32px shadows
+            // paint outside their box and would be clipped) confines the
+            // invalidation of the two commit-pass layouts.
+            style={{ width: '100%', contain: 'layout' }}
+            // No `y` and no `height`. FLIP owns every pixel of vertical motion;
+            // a `y` on top of it composites a second translation, and a `height`
+            // is what made this choppy in the first place.
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, scale: 0.985 }}
+            transition={
+              prefersReducedMotion
+                ? { duration: INK.in, delay: BEAT }
+                : {
+                  // `layout` defaults to a SPRING — name it or the house curves
+                  // are silently discarded.
+                  layout: { duration: SETTLE.activate, ease: EASE_ENTER },
+                  opacity: { duration: INK.in, ease: EASE_ENTER, delay: BEAT },
+                  default: { duration: INK.out, ease: EASE_LEAVE },
+                }
+            }
+          >
+            {PlansCard}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Usage card — only for a Natively API key with a confirmed  ── */}
       {/* valid plan (usageData populated by a successful quota fetch). */}
       {/* isSaved alone isn't enough: a saved-but-invalid/inactive key   */}
       {/* has nothing usage-shaped to show, so the section stays hidden */}
       {/* entirely rather than surfacing a card with an error in it.    */}
+      {/* Presence is gated on `isSaved` ALONE, and `usageData` is cleared from
+          this wrapper's onExitComplete rather than in handleClear. AnimatePresence
+          cannot play an exit for a child whose data has already vanished — nulling
+          both in the same tick made this unmount instantly no matter what it was
+          wrapped in. The inner guard keeps the null-safety for the case where a
+          saved key simply has no valid plan. */}
+      <AnimatePresence mode="popLayout" initial={false} onExitComplete={() => setUsageData(null)}>
       {isSaved && usageData && (
-        <div>
+        <motion.div
+          key="api-usage"
+          layout="position"
+          // width:100% is REQUIRED, not cosmetic: mode="popLayout" sets
+          // position:absolute on the exiting child, and without an explicit
+          // width it collapses to content width the instant it pops — a
+          // visible horizontal snap before the fade.
+          // `contain: layout` (never `paint` — these cards' 12-32px shadows
+          // paint outside their box and would be clipped) confines the
+          // invalidation of the two commit-pass layouts.
+          style={{ width: '100%', contain: 'layout' }}
+          // No `y` and no `height`. FLIP owns every pixel of vertical motion;
+          // a `y` on top of it composites a second translation, and a `height`
+          // is what made this choppy in the first place.
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, scale: 0.985 }}
+          transition={
+            prefersReducedMotion
+              ? { duration: INK.in, delay: usageDelay(BEAT) }
+              : {
+                // `layout` defaults to a SPRING — name it or the house curves
+                // are silently discarded.
+                layout: { duration: SETTLE.activate, ease: EASE_ENTER },
+                opacity: { duration: INK.in, ease: EASE_ENTER, delay: usageDelay(BEAT) },
+                default: { duration: INK.out, ease: EASE_LEAVE },
+              }
+          }
+        >
           <SectionLabel
             aside={
               <span className="flex items-center gap-2 shrink-0">
@@ -1242,23 +1476,57 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
               <QuotaBar label="Web searches" icon={Search} bucket={usageData.quota.search} />
             </div>
           </Card>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* ── Plans — already-subscribed users have already chosen a plan; ── */}
       {/* collapse the chooser behind "Change plan" instead of always showing */}
       {/* the full pricing selector at equal weight to Usage above it.        */}
-      {isSaved && (
-        <AccordionSection
-          title="Change plan"
-          className="bg-bg-item-surface rounded-2xl border-border-subtle !mb-0"
-        >
-          {PlansCard}
-        </AccordionSection>
-      )}
+      <AnimatePresence mode="popLayout" initial={false}>
+        {isSaved && (
+          <motion.div
+            key="api-change-plan"
+            layout="position"
+            // width:100% is REQUIRED, not cosmetic: mode="popLayout" sets
+            // position:absolute on the exiting child, and without an explicit
+            // width it collapses to content width the instant it pops — a
+            // visible horizontal snap before the fade.
+            // `contain: layout` (never `paint` — these cards' 12-32px shadows
+            // paint outside their box and would be clipped) confines the
+            // invalidation of the two commit-pass layouts.
+            style={{ width: '100%', contain: 'layout' }}
+            // No `y` and no `height`. FLIP owns every pixel of vertical motion;
+            // a `y` on top of it composites a second translation, and a `height`
+            // is what made this choppy in the first place.
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, scale: 0.985 }}
+            transition={
+              prefersReducedMotion
+                ? { duration: INK.in, delay: BEAT }
+                : {
+                  // `layout` defaults to a SPRING — name it or the house curves
+                  // are silently discarded.
+                  layout: { duration: SETTLE.activate, ease: EASE_ENTER },
+                  opacity: { duration: INK.in, ease: EASE_ENTER, delay: BEAT },
+                  default: { duration: INK.out, ease: EASE_LEAVE },
+                }
+            }
+          >
+            <AccordionSection
+              title="Change plan"
+              className="bg-bg-item-surface rounded-2xl border-border-subtle !mb-0"
+            >
+              {PlansCard}
+            </AccordionSection>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── How it works + Refund Policy — collapsed by default, this is ── */}
       {/* reference material, not something read on every settings visit.  */}
     </div>
+    </LayoutGroup>
   );
 };

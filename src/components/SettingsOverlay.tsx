@@ -1614,7 +1614,15 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                         </div>
 
                         {/* Content */}
-                        <div className="flex-1 bg-bg-main overflow-y-auto p-8 relative">
+                        {/* `overflow-anchor: none` — scroll anchoring defaults to
+                            `auto` on a scroll container, so when content above the
+                            viewport changes height Chromium silently adjusts
+                            scrollTop to compensate. Mid-animation it does that
+                            repeatedly, producing micro-jumps that read as choppy
+                            and are independent of frame rate. Plans & Billing
+                            animates whole regions in and out; this stops the
+                            browser fighting it. */}
+                        <div className="flex-1 bg-bg-main overflow-y-auto p-8 relative" style={{ overflowAnchor: 'none' }}>
                             {activeTab === 'general' && (
                                 <div className="space-y-6 animated fadeIn">
                                     <div className="space-y-3.5">

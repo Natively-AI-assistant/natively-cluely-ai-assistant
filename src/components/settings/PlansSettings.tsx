@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
 import { NativelyApiSettings } from './NativelyApiSettings';
 import { NativelyProSettings } from './NativelyProSettings';
 import { HowItWorksRefund } from './HowItWorksRefund';
+import { getLicenseSnapshot, setLicenseSnapshot } from '../../lib/licenseCache';
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-motion';
+import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
 
 // ─── Thin container ─────────────────────────────────────────
 // Natively API (managed AI/STT/search usage) and Natively Pro (a device
@@ -28,17 +31,142 @@ export const PlansSettings: React.FC<PlansSettingsProps> = ({
     initialHasNativelyKey = false,
 }) => {
     const t = useT();
+    const reduceMotion = useReducedMotion();
     // NativelyProSettings independently re-derives isPremium (and provider,
     // for its own status-card copy) for its own rendering — this copy exists
     // only to decide whether to collapse the app-only-license section below.
     // Never a source of truth for the child's own render.
-    const [licenseDetails, setLicenseDetails] = useState<{ isPremium: boolean } | null>(null);
+    // Seeded from the same process-level snapshot NativelyProSettings uses, so
+    // the two cannot disagree on the first paint of a revisit. They previously
+    // ran two independent async reads that both started from "unknown", which
+    // is what made this section appear and then collapse on open.
+    const [licenseDetails, setLicenseDetails] = useState<{ isPremium: boolean } | null>(
+        () => { const s = getLicenseSnapshot(); return s ? { isPremium: s.isPremium } : null; },
+    );
 
-    useEffect(() => {
+    // Mirror of the state above, so the async handler below can compare against
+    // the CURRENT value instead of whatever its closure captured.
+    const licenseDetailsRef = useRef(licenseDetails);
+    licenseDetailsRef.current = licenseDetails;
+
+    // Set for one beat when Pro is gained, so the child can tell a fresh
+    // activation from an ordinary visit. It cannot work that out for itself:
+    // gaining Pro moves the section to the other slot, so the child MOUNTS with
+    // isPremium already true and has no way to see it was ever false.
+    const [justActivated, setJustActivated] = useState(false);
+    const holdRef = useRef<number | null>(null);
+    const celebrateRef = useRef<number | null>(null);
+
+    const applyPremium = useCallback((next: boolean) => {
+        const wasPremium = !!licenseDetailsRef.current?.isPremium;
+        if (wasPremium === next) { setLicenseDetails({ isPremium: next }); return; }
+
+        if (!next) {
+            // Losing Pro relocates this section between two DOM slots, which
+            // DESTROYS the outgoing tree — so a card that wants to animate out
+            // must be allowed to finish first.
+            //
+            // But only ONE cause of losing Pro has a card on screen to animate:
+            // the user pressing Deactivate. Clearing the API key also revokes
+            // the bundled licence (ipcHandlers.ts:6380), and in that case this
+            // section was rendering `null`, so there is nothing to wait for.
+            // Deferring anyway is what stranded the Pro purchase cards above the
+            // API pricing until the backstop expired.
+            //
+            // The test is therefore a CLAIM from the child rather than an
+            // inference from `provider` here. Only the component playing an exit
+            // knows it is playing one, and this keeps `provider` out of the
+            // parent (see the note further down about deliberately not checking
+            // it). It also fails toward a cut rather than a freeze: no claim
+            // means immediate commit, i.e. the old behaviour, never a stall.
+            if (!exitClaimedRef.current) { setLicenseDetails({ isPremium: false }); return; }
+            // The commit is driven by onExitComplete, with a backstop armed in
+            // handleDeactivatePhase when the exit actually starts.
+            return;
+        }
+
+        // GAINING Pro needs no hold — the incoming card owns its own entrance.
+        setLicenseDetails({ isPremium: true });
+        setJustActivated(true);
+        if (celebrateRef.current) window.clearTimeout(celebrateRef.current);
+        celebrateRef.current = window.setTimeout(() => setJustActivated(false), 1200);
+    }, []);
+
+    // True while the child has an exit in flight. Set from the child's phase
+    // reports, which begin at the click — i.e. BEFORE the IPC round trip and
+    // therefore before the `license-status-changed` event that main sends from
+    // inside its handler. That ordering is what makes the gate reliable.
+    const exitClaimedRef = useRef(false);
+
+    // The per-flow arrival delay that used to live here is GONE. It existed
+    // because the old height-based sequence gave each region its own slot, and
+    // removal's slot (AT.license) stacked badly on top of the deactivate exit
+    // that had already played. Under FLIP there is no per-region schedule to
+    // stack: the leaver pops out of flow and the enterer claims its space in the
+    // same commit, so every displaced element has exactly one net delta.
+
+    const handleDeactivatePhase = useCallback((phase: 'idle' | 'pending' | 'exiting') => {
+        exitClaimedRef.current = phase !== 'idle';
+        if (phase === 'exiting') {
+            // Armed HERE, not when the event arrived. Previously it had to cover
+            // the IPC round trip as well as the animation, which is why it
+            // needed 1200ms. Sized against the 380ms exit alone it can be much
+            // tighter, and it is a pure backstop — onExitComplete normally beats
+            // it by a wide margin.
+            if (holdRef.current) window.clearTimeout(holdRef.current);
+            holdRef.current = window.setTimeout(() => setLicenseDetails({ isPremium: false }), 900);
+        }
+        if (phase === 'idle' && holdRef.current) {
+            // Deactivation failed and the card is staying. Release the hold, or
+            // it would demote a licence that is still active.
+            window.clearTimeout(holdRef.current);
+            holdRef.current = null;
+        }
+    }, []);
+
+    useEffect(() => () => {
+        if (holdRef.current) window.clearTimeout(holdRef.current);
+        if (celebrateRef.current) window.clearTimeout(celebrateRef.current);
+    }, []);
+
+    // Commit the demotion the moment the card reports its exit is done, and
+    // cancel the backstop. Idempotent: the backstop firing first sets the same
+    // state, and React bails on an identical value.
+    const handleProExitComplete = useCallback(() => {
+        if (holdRef.current) { window.clearTimeout(holdRef.current); holdRef.current = null; }
+        exitClaimedRef.current = false;
+        setLicenseDetails({ isPremium: false });
+    }, []);
+
+    const readLicense = useCallback(() => {
         window.electronAPI?.licenseGetDetails?.()
-            .then((details) => setLicenseDetails(details ? { isPremium: !!details.isPremium } : null))
+            .then((details) => {
+                // Only reachable if the preload bridge is missing — the main
+                // handler returns `{isPremium: false}` for a no-license user
+                // and its own catch returns the same. Clear rather than keep
+                // the persisted hint: a cold (flickering) next start is the
+                // right failure mode, a permanently stale "you have Pro" is not.
+                if (!details) { setLicenseDetails(null); setLicenseSnapshot(null); return; }
+                applyPremium(!!details.isPremium);
+                setLicenseSnapshot({ isPremium: !!details.isPremium, provider: (details as any).provider });
+            })
             .catch(() => {});
-    }, [initialHasNativelyKey]);
+    }, [applyPremium]);
+
+    useEffect(() => { readLicense(); }, [initialHasNativelyKey, readLicense]);
+
+    // `isPremium` now decides WHERE the Pro section renders, not just whether
+    // it collapses, so a mount-time read alone is no longer enough: activating
+    // a standalone licence happens inside NativelyApiSettings (the shared key
+    // box routes a non-`natively_sk_` value to activation), which does not
+    // change `initialHasNativelyKey` and so never re-ran the effect above. The
+    // child re-derived its own state from this event and would flip to the
+    // receipt card, but it would flip in the LOWER slot and stay there until
+    // the tab was reopened. Same event, same source of truth, so the two
+    // cannot disagree about position.
+    useEffect(() => {
+        return window.electronAPI?.onLicenseStatusChanged?.(() => readLicense());
+    }, [readLicense]);
 
     const isPremium = !!licenseDetails?.isPremium;
     // Natively API is the primary/default-visible path (it's the managed
@@ -72,10 +200,18 @@ export const PlansSettings: React.FC<PlansSettingsProps> = ({
         <NativelyProSettings
             initialIsPremium={initialIsPremium}
             collapsePricing={collapseProSection}
+            justActivated={justActivated}
+            onExitComplete={handleProExitComplete}
+            parentIsPremium={isPremium}
+            onDeactivatePhase={handleDeactivatePhase}
         />
     );
 
     return (
+        // LayoutGroup so every `layout="position"` child below measures against
+        // the SAME layout pass. Without it each region FLIPs independently and
+        // they can disagree about where they are mid-transition.
+        <LayoutGroup>
         <div className="space-y-6 animated fadeIn">
             <header>
                 <h2 className="text-[17px] font-semibold text-text-primary tracking-[-0.015em]">{t('Plans & Billing')}</h2>
@@ -84,7 +220,30 @@ export const PlansSettings: React.FC<PlansSettingsProps> = ({
                 </p>
             </header>
 
-            <NativelyApiSettings initialIsSaved={initialHasNativelyKey} />
+            {/* Position flips on entitlement. With no licence the app-only
+                option is an alternative to subscribing, so it belongs after the
+                plans as the "or" — it is competing for the same decision. Once
+                owned it is no longer an offer but a receipt, and a receipt
+                belongs next to the credential box it describes, not stranded
+                below a wall of pricing that no longer applies to it.
+                That target seam sits INSIDE NativelyApiSettings (between its
+                key card and its plan chooser), which is why this goes through a
+                slot prop rather than sibling ordering here.
+                `isPremium` alone is the right test even though this only
+                concerns STANDALONE Pro: a user who got Pro bundled with an API
+                plan makes NativelyProSettings return null, so it renders
+                nothing in either position and the choice is moot. Checking
+                provider here would mean a second reason to care about it and
+                two places to keep in sync. */}
+            {/* Shifts rather than appears, so it needs `layout="position"` or it
+                jumps when the Pro section changes size. Every element that should
+                slide needs this prop; anything without it snaps. */}
+            <motion.div layout="position" transition={{ layout: { duration: SETTLE.remove, ease: EASE_ENTER } }}>
+                <NativelyApiSettings
+                    initialIsSaved={initialHasNativelyKey}
+                    afterKeySection={isPremium ? proSection : null}
+                />
+            </motion.div>
 
             {/* "Included with your Natively API plan" used to render as its own
                 banner here, immediately above the Pro status card below, which
@@ -96,13 +255,55 @@ export const PlansSettings: React.FC<PlansSettingsProps> = ({
                 independently and asynchronously, so a banner rendered here could
                 briefly disagree with the card rendered there mid-fetch. */}
 
-            {proSection}
+            {/* Second in the arrival sequence when the API key is removed: the
+                app-only licence becomes relevant again the moment the
+                subscription that bundled it is gone. One BEAT after the plan
+                chooser above, so the two read as a sequence rather than as one
+                simultaneous reflow. */}
+            <AnimatePresence mode="popLayout" initial={false}>
+                {!isPremium && (
+                    <motion.div
+                        key="pro-section"
+                        layout="position"
+                        style={{ width: '100%', contain: 'layout' }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0, scale: 0.985 }}
+                        transition={
+                            reduceMotion
+                                ? { duration: INK.in, delay: BEAT }
+                                : {
+                                    layout: { duration: SETTLE.remove, ease: EASE_ENTER },
+                                    opacity: { duration: INK.in, ease: EASE_ENTER, delay: BEAT },
+                                    default: { duration: INK.out, ease: EASE_LEAVE },
+                                }
+                        }
+                    >
+                        {proSection}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Renders last, below the app-only-license section. It used to live
                 at the tail of NativelyApiSettings, which pinned it *above* the
                 Pro section (a sibling here), so it was extracted into its own
-                component purely to make this ordering possible. */}
-            <HowItWorksRefund />
+                component purely to make this ordering possible.
+                Last in the sequence, and the only region animated with opacity
+                and y but NO height: it is not appearing, it is being pushed down
+                by what appeared above it. Animating a height it always had would
+                misstate what changed. */}
+            <motion.div
+                // `layout="position"` and nothing else. This region never
+                // appears or disappears — it only SHIFTS as things above it
+                // change. FLIP translates it from its old box to its new one;
+                // giving it an entrance would animate an arrival that isn't
+                // happening. Without this prop it would simply jump.
+                layout="position"
+                transition={{ layout: { duration: SETTLE.remove, ease: EASE_ENTER } }}
+            >
+                <HowItWorksRefund />
+            </motion.div>
         </div>
+        </LayoutGroup>
     );
 };

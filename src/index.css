@@ -123,6 +123,7 @@
   --overlay-pill-blur: calc(1px + (var(--overlay-opacity) * 12px));
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 6px);
 
+
   /* Primary Action Button Defaults (Dark) — promoted to orchid (Phase 2) */
   --btn-primary-bg: var(--orchid-300);
   --btn-primary-hover: #E4BCEF; /* not a canonical scale step — dedicated lighter dark-mode hover tint */
@@ -266,6 +267,7 @@
   --overlay-pill-blur:       calc(2px + (var(--overlay-opacity) * 12px));
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 5px);
 
+
   /* Primary Action Button (Light) — promoted to orchid (Phase 2) */
   --btn-primary-bg: var(--orchid-600);
   --btn-primary-hover: var(--orchid-700);
@@ -388,6 +390,7 @@
   --overlay-pill-shadow:        rgba(0, 0, 0, 0.20);
   --overlay-shell-blur:         48px;
   --overlay-pill-blur:          28px;
+
 }
 
 /* Glass shell — pure CSS liquid-glass.
@@ -1318,6 +1321,7 @@
      selector — never applied to Launcher/Settings/ModelSelector windows
      (App.tsx wrappers carry no data-interface-theme). */
   --accent-primary: #8FB4F7;
+
 }
 
 /* Modern shell — DARK_GLASS gradient + multi-layer shadow.
@@ -2025,6 +2029,7 @@ body {
   overflow: hidden;
 }
 
+
 .overlay-shell-surface {
   background: var(--overlay-panel-bg);
   border-color: var(--overlay-border);
@@ -2150,14 +2155,18 @@ body {
 
 .aurora-focus:hover {
   transform: translateY(-0.5px) translateZ(0);
-  will-change: transform, box-shadow;
+  /* `box-shadow` is not a compositable property, so listing it here
+     bought a permanent extra layer and no acceleration. */
+  will-change: transform;
 }
 
 .aurora-focus:focus {
   animation: aurora 900ms cubic-bezier(0.22, 1, 0.36, 1);
   outline: none;
   transform: translateY(-0.5px) translateZ(0);
-  will-change: transform, box-shadow;
+  /* `box-shadow` is not a compositable property, so listing it here
+     bought a permanent extra layer and no acceleration. */
+  will-change: transform;
 }
 
 [data-interface-theme="liquid-glass"] .aurora-focus:focus {
@@ -2743,9 +2752,26 @@ html[data-platform="linux"] body {
   border: 1.5px solid transparent !important;
   position: relative !important;
   overflow: hidden !important;
-  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
-              box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
-              border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  /* `transform` is deliberately NOT transitioned here. InteractiveCard writes
+     transform: scale(...) inline from a spring on every frame; a CSS transition
+     on the same property re-smooths each of those writes, so the press spring
+     arrives late and mushy. Framer owns transform, CSS owns the material.
+     (The .pricing-card-* rules keep transform in their lists — those cards are
+     not wrapped in InteractiveCard.)
+
+     THIS LIST IS THE LEAVE HALF. A transition declared on the base rule runs
+     when :hover stops matching; the one on the :hover rule runs on enter. That
+     is how the asymmetry below is achieved without JS.
+     The curve changed, not just the clock, and that is the point:
+     cubic-bezier(0.23, 1, 0.32, 1) puts ~83% of the travel in the first 30% of
+     the duration, so at 180ms all perceptible motion was over in ~54ms — it was
+     animating and still reading as instant. Raising the duration on that curve
+     only lengthens an invisible tail. easeOutCubic spreads the travel out.
+     Leave is the SLOWER half here, which inverts the usual "exit fast" rule
+     because nothing is exiting: this is ambient light on a surface that stays
+     put, and light that snaps off is exactly what reads as un-animated. */
+  transition: box-shadow 420ms cubic-bezier(0.33, 1, 0.68, 1),
+              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1) !important;
 }
 
 /* Glass shine gloss highlight on liquid glass detail cards */
@@ -2761,6 +2787,45 @@ html[data-platform="linux"] body {
   z-index: 2 !important;
 }
 
+/* ── The cursor-tracked glow, masked off the rim ──────────────────────────
+   The overlay is `absolute inset-0` inside a card with `overflow: hidden`, so a
+   radial gradient whose CENTRE approaches an edge gets terminated against the
+   border at near-full alpha. Concretely: the wrapper is 234px tall and the
+   gradient reaches zero at 180px, so with the pointer 20px below the top edge
+   the alpha AT the border is still ~85% of peak — a hard-edged bright band
+   running along the rim, sliding as the cursor slides. That is a border
+   highlight, and an animated one.
+   No radius or alpha value fixes this: a radial is brightest at its centre and
+   the centre can sit anywhere, including 5px from an edge. The only correct fix
+   is to force the overlay's alpha to zero at the perimeter regardless of where
+   the cursor is. These two linear masks intersect to do exactly that.
+   32px horizontal / 24px vertical because the card is wide and short — a band
+   as wide vertically as horizontally would start eating the middle. At 24px the
+   ramp is already at 50% by 12px in, well clear of the 1.5px border and the rim
+   hairline inside it. The bands are static, so this is one alpha multiply per
+   raster, not per-frame work. */
+.natively-interactive-glow {
+  border-radius: inherit;
+  -webkit-mask-image:
+    linear-gradient(to right,  transparent 0, #000 32px, #000 calc(100% - 32px), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+          mask-image:
+    linear-gradient(to right,  transparent 0, #000 32px, #000 calc(100% - 32px), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+  -webkit-mask-composite: source-in;
+          mask-composite: intersect;
+
+  /* Leave half — see the card's base transition for why the slower side is the
+     exit rather than the entrance. */
+  transition: opacity 420ms cubic-bezier(0.33, 1, 0.68, 1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .group:hover > .natively-interactive-glow {
+    transition: opacity 260ms cubic-bezier(0.32, 0.72, 0, 1) !important;
+  }
+}
+
 /* Blueprint tech grid overlay on detail cards */
 [data-interface-theme="liquid-glass"] .natively-api-detail-card::after,
 [data-interface-theme="modern"] .natively-api-detail-card::after {
@@ -2769,8 +2834,8 @@ html[data-platform="linux"] body {
   inset: 0 !important;
   border-radius: inherit !important;
   background-image: 
-    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px) !important;
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px) !important;
   background-size: 24px 24px !important;
   pointer-events: none !important;
   z-index: 1 !important;
@@ -2778,11 +2843,13 @@ html[data-platform="linux"] body {
   transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .natively-api-detail-card:hover::after {
-    opacity: 0.8 !important;
-  }
-}
+/* The grid's 0.55 -> 0.8 hover bump was removed. Its first hairline lands at
+   x=0/y=0 of the padding box, flush inside the tier border, so brightening it
+   on hover was a third channel drawing attention to the edge — and it ran on
+   its own 180ms opacity clock, separate from the shadow. It was already dead
+   in light theme (a later [data-theme='light'] rule pins the grid to 0.22), so
+   deleting it also makes the two themes behave alike. The spotlight is the
+   hover light now. */
 
 /* Card Specific variations (Liquid Glass) — FOUR HUES, ONE DEPTH LADDER.
    These `background` declarations are superseded by the committed-fill block
@@ -2796,11 +2863,11 @@ html[data-platform="linux"] body {
     radial-gradient(circle at 100% 100%, rgba(103, 164, 162, 0.20), transparent 60%),
     linear-gradient(135deg, rgba(103, 164, 162, 0.12) 0%, rgba(36, 63, 62, 0.40) 100%) !important;
   border-color: rgba(145, 197, 195, 0.28) !important;
-  box-shadow:
-    inset 0 2.5px 0 rgba(255, 255, 255, 0.42),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.20),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
-    0 12px 30px rgba(0, 0, 0, 0.15) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-detail-card-pro {
@@ -2809,12 +2876,11 @@ html[data-platform="linux"] body {
     radial-gradient(circle at 100% 100%, rgba(59, 141, 213, 0.30) 0%, transparent 60%),
     linear-gradient(135deg, rgba(15, 74, 127, 0.50) 0%, rgba(7, 46, 80, 0.65) 100%) !important;
   border-color: rgba(140, 193, 239, 0.34) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(162, 205, 244, 0.50),
-    inset 0 2.5px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.30),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
-    0 6px 18px rgba(0, 0, 0, 0.22) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-detail-card-max {
@@ -2823,12 +2889,11 @@ html[data-platform="linux"] body {
     radial-gradient(circle at 100% 100%, rgba(155, 97, 157, 0.32) 0%, transparent 60%),
     linear-gradient(135deg, rgba(82, 48, 84, 0.50) 0%, rgba(49, 28, 49, 0.65) 100%) !important;
   border-color: rgba(196, 165, 197, 0.40) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(206, 179, 207, 0.50),
-    inset 0 2.5px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.30),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
-    0 6px 18px rgba(0, 0, 0, 0.22) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-detail-card-ultra {
@@ -2837,12 +2902,11 @@ html[data-platform="linux"] body {
     radial-gradient(circle at 100% 100%, rgba(162, 64, 103, 0.34) 0%, transparent 60%),
     linear-gradient(135deg, rgba(82, 30, 51, 0.50) 0%, rgba(45, 16, 28, 0.65) 100%) !important;
   border-color: rgba(199, 149, 169, 0.46) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(209, 162, 181, 0.50),
-    inset 0 2.5px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.30),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
-    0 6px 18px rgba(0, 0, 0, 0.22) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
 /* Active State overrides. Each tier's OWN hue, one step brighter, so the
@@ -2851,47 +2915,52 @@ html[data-platform="linux"] body {
   border-color: rgba(165, 209, 207, 0.60) !important;
   box-shadow:
     inset 0 1px 0 rgba(165, 209, 207, 0.72),
-    inset 0 2px 6px rgba(255, 255, 255, 0.35),
     inset 0 -3px 8px rgba(0, 0, 0, 0.6),
-    0 4px 12px rgba(0, 0, 0, 0.40) !important;
+    0 4px 12px rgba(0, 0, 0, 0.40),
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-detail-card-pro[data-active="true"] {
   border-color: rgba(151, 199, 241, 0.66) !important;
   box-shadow:
     inset 0 1px 0 rgba(151, 199, 241, 0.78),
-    inset 0 2px 6px rgba(255, 255, 255, 0.35),
     inset 0 -3px 8px rgba(0, 0, 0, 0.6),
-    0 4px 12px rgba(0, 0, 0, 0.40) !important;
+    0 4px 12px rgba(0, 0, 0, 0.40),
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-detail-card-max[data-active="true"] {
   border-color: rgba(203, 175, 204, 0.72) !important;
   box-shadow:
     inset 0 1px 0 rgba(203, 175, 204, 0.84),
-    inset 0 2px 6px rgba(255, 255, 255, 0.35),
     inset 0 -3px 8px rgba(0, 0, 0, 0.6),
-    0 4px 12px rgba(0, 0, 0, 0.40) !important;
+    0 4px 12px rgba(0, 0, 0, 0.40),
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-detail-card-ultra[data-active="true"] {
   border-color: rgba(207, 160, 179, 0.78) !important;
   box-shadow:
     inset 0 1px 0 rgba(207, 160, 179, 0.90),
-    inset 0 2px 6px rgba(255, 255, 255, 0.35),
     inset 0 -3px 8px rgba(0, 0, 0, 0.6),
-    0 4px 12px rgba(0, 0, 0, 0.40) !important;
+    0 4px 12px rgba(0, 0, 0, 0.40),
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
-/* Hover effect on detail cards */
-@media (hover: hover) and (pointer: fine) {
-  [data-interface-theme="liquid-glass"] .natively-api-detail-card:hover {
-    box-shadow:
-      inset 0 2.5px 0 rgba(255, 255, 255, 0.45),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.20),
-      0 20px 45px rgba(0, 0, 0, 0.35) !important;
-  }
-}
+/* NO border brighten on hover for the API detail card. It used to brighten its
+   edge to rgba(255,255,255,0.30) here, mirroring .pricing-card-yearly:hover —
+   but on a card that is already a saturated fill with a lit rim, the edge
+   flicking brighter under the pointer read as the card being selected rather
+   than merely pointed at, which the active-state border is what actually means.
+   Hover feedback is now the cursor-tracked spotlight (InteractiveCard) plus the
+   per-tier bloom near the end of this file — both of which change the card's
+   LIGHT, not its outline.
+   The rule that lived here declared `border-color` and a `box-shadow`; only
+   the border was ever live, since the per-tier bloom is later in source at
+   equal specificity and every detail card carries both classes (see
+   NativelyApiSettings.tsx:896). Deleted whole rather than trimmed, so nothing
+   is left implying the shadow here does something. Same for the `modern`
+   twin that used to sit near the features panel. */
 
 /* ──── Premium Graphics & Specular Upgrades (Liquid Glass Theme) ──── */
 
@@ -2973,9 +3042,12 @@ html[data-platform="linux"] body {
   font-size: 13px !important;
   font-weight: 600 !important;
   text-align: center !important;
-  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1), 
-              box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1), 
-              background-color 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  /* Leave half, matching the card's asymmetry one notch quicker so the button
+     still settles slightly ahead of the surface it sits on. Enter is declared
+     on the :hover rule further down. */
+  transition: transform 320ms cubic-bezier(0.33, 1, 0.68, 1),
+              box-shadow 320ms cubic-bezier(0.33, 1, 0.68, 1),
+              background-color 320ms cubic-bezier(0.33, 1, 0.68, 1) !important;
   cursor: pointer !important;
   display: flex !important;
   align-items: center !important;
@@ -3296,9 +3368,26 @@ html[data-platform="linux"] body {
   border: 1.5px solid transparent !important;
   position: relative !important;
   overflow: hidden !important;
-  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
-              box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
-              border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  /* `transform` is deliberately NOT transitioned here. InteractiveCard writes
+     transform: scale(...) inline from a spring on every frame; a CSS transition
+     on the same property re-smooths each of those writes, so the press spring
+     arrives late and mushy. Framer owns transform, CSS owns the material.
+     (The .pricing-card-* rules keep transform in their lists — those cards are
+     not wrapped in InteractiveCard.)
+
+     THIS LIST IS THE LEAVE HALF. A transition declared on the base rule runs
+     when :hover stops matching; the one on the :hover rule runs on enter. That
+     is how the asymmetry below is achieved without JS.
+     The curve changed, not just the clock, and that is the point:
+     cubic-bezier(0.23, 1, 0.32, 1) puts ~83% of the travel in the first 30% of
+     the duration, so at 180ms all perceptible motion was over in ~54ms — it was
+     animating and still reading as instant. Raising the duration on that curve
+     only lengthens an invisible tail. easeOutCubic spreads the travel out.
+     Leave is the SLOWER half here, which inverts the usual "exit fast" rule
+     because nothing is exiting: this is ambient light on a surface that stays
+     put, and light that snaps off is exactly what reads as un-animated. */
+  transition: box-shadow 420ms cubic-bezier(0.33, 1, 0.68, 1),
+              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1) !important;
 }
 
 /* Card Specific variations (Modern) — same four hues, same depth ladder as
@@ -3309,10 +3398,11 @@ html[data-platform="linux"] body {
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.16), transparent 50%),
     linear-gradient(160deg, rgba(85, 135, 133, 0.65) 0%, rgba(54, 93, 91, 0.75) 50%, rgba(34, 60, 60, 0.85) 100%) !important;
   border-color: rgba(145, 197, 195, 0.28) !important;
-  box-shadow:
-    inset 0 2px 3px rgba(255, 255, 255, 0.25),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.30),
-    0 12px 32px rgba(0, 0, 0, 0.35) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
 [data-interface-theme="modern"] .natively-api-detail-card-pro {
@@ -3320,11 +3410,11 @@ html[data-platform="linux"] body {
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.22), transparent 50%),
     linear-gradient(160deg, rgba(44, 116, 180, 0.65) 0%, rgba(23, 79, 128, 0.75) 50%, rgba(13, 50, 83, 0.85) 100%) !important;
   border-color: rgba(140, 193, 239, 0.34) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(162, 205, 244, 0.45),
-    inset 0 2px 3px rgba(255, 255, 255, 0.28),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.35),
-    0 16px 36px rgba(0, 0, 0, 0.35) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
 [data-interface-theme="modern"] .natively-api-detail-card-max {
@@ -3332,11 +3422,11 @@ html[data-platform="linux"] body {
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.18), transparent 50%),
     linear-gradient(160deg, rgba(125, 83, 126, 0.65) 0%, rgba(86, 54, 87, 0.75) 50%, rgba(55, 33, 56, 0.85) 100%) !important;
   border-color: rgba(196, 165, 197, 0.40) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(206, 179, 207, 0.45),
-    inset 0 2px 3px rgba(255, 255, 255, 0.25),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.32),
-    0 16px 36px rgba(0, 0, 0, 0.35) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
 [data-interface-theme="modern"] .natively-api-detail-card-ultra {
@@ -3344,11 +3434,11 @@ html[data-platform="linux"] body {
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.22), transparent 50%),
     linear-gradient(160deg, rgba(131, 57, 87, 0.65) 0%, rgba(88, 36, 57, 0.75) 50%, rgba(54, 20, 33, 0.85) 100%) !important;
   border-color: rgba(199, 149, 169, 0.46) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(209, 162, 181, 0.45),
-    inset 0 2px 3px rgba(255, 255, 255, 0.28),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.35),
-    0 16px 36px rgba(0, 0, 0, 0.35) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
 /* Active State overrides (Modern). Each tier's own hue, one step brighter. */
@@ -3356,47 +3446,40 @@ html[data-platform="linux"] body {
   border-color: rgba(165, 209, 207, 0.60) !important;
   box-shadow:
     inset 0 1px 0 rgba(165, 209, 207, 0.72),
-    inset 0 2px 3px rgba(255, 255, 255, 0.25),
     inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-    0 16px 36px rgba(0, 0, 0, 0.55) !important;
+    0 16px 36px rgba(0, 0, 0, 0.55),
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
 [data-interface-theme="modern"] .natively-api-detail-card-pro[data-active="true"] {
   border-color: rgba(151, 199, 241, 0.66) !important;
   box-shadow:
     inset 0 1px 0 rgba(151, 199, 241, 0.78),
-    inset 0 2px 3px rgba(255, 255, 255, 0.25),
     inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-    0 16px 36px rgba(0, 0, 0, 0.55) !important;
+    0 16px 36px rgba(0, 0, 0, 0.55),
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
 [data-interface-theme="modern"] .natively-api-detail-card-max[data-active="true"] {
   border-color: rgba(203, 175, 204, 0.72) !important;
   box-shadow:
     inset 0 1px 0 rgba(203, 175, 204, 0.84),
-    inset 0 2px 3px rgba(255, 255, 255, 0.25),
     inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-    0 16px 36px rgba(0, 0, 0, 0.55) !important;
+    0 16px 36px rgba(0, 0, 0, 0.55),
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
 [data-interface-theme="modern"] .natively-api-detail-card-ultra[data-active="true"] {
   border-color: rgba(207, 160, 179, 0.78) !important;
   box-shadow:
     inset 0 1px 0 rgba(207, 160, 179, 0.90),
-    inset 0 2px 3px rgba(255, 255, 255, 0.25),
     inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-    0 16px 36px rgba(0, 0, 0, 0.55) !important;
+    0 16px 36px rgba(0, 0, 0, 0.55),
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
-/* Hover effect on detail cards (Modern) */
-@media (hover: hover) and (pointer: fine) {
-  [data-interface-theme="modern"] .natively-api-detail-card:hover {
-    box-shadow:
-      inset 0 2px 3px rgba(255, 255, 255, 0.25),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.30),
-      0 20px 45px rgba(0, 0, 0, 0.50) !important;
-  }
-}
+/* The `modern` hover border brighten was removed with its liquid-glass twin —
+   see the note where that one used to be, above the tier-fill variations. */
 
 /* Premium Features Glass Panel (Modern) */
 [data-interface-theme="modern"] .natively-api-features-panel {
@@ -3427,9 +3510,12 @@ html[data-platform="linux"] body {
   font-size: 13px !important;
   font-weight: 600 !important;
   text-align: center !important;
-  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1), 
-              box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1), 
-              background-color 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  /* Leave half, matching the card's asymmetry one notch quicker so the button
+     still settles slightly ahead of the surface it sits on. Enter is declared
+     on the :hover rule further down. */
+  transition: transform 320ms cubic-bezier(0.33, 1, 0.68, 1),
+              box-shadow 320ms cubic-bezier(0.33, 1, 0.68, 1),
+              background-color 320ms cubic-bezier(0.33, 1, 0.68, 1) !important;
   cursor: pointer !important;
   display: flex !important;
   align-items: center !important;
@@ -3764,24 +3850,69 @@ html[data-platform="linux"] body {
    background gradient over the top half is exactly what drops white ink under
    4.5:1 through the RECOMMENDED badge and price band. */
 
+/* ┌─ FOUR-SLOT SHADOW CONTRACT ────────────────────────────────────────────┐
+   │ Every box-shadow on this card — rest, hover, active, active+hover, both │
+   │ themes — MUST be exactly these four shadows in this order:              │
+   │                                                                         │
+   │   1  inset rim      top hairline                                        │
+   │   2  inset floor    bottom darkening                                    │
+   │   3  outer ambient  the broad lift                                      │
+   │   4  outer contact  the tight grounding shadow                          │
+   │                                                                         │
+   │ WHY IT IS A CONTRACT, NOT A STYLE PREFERENCE. box-shadow interpolates   │
+   │ as a LIST: the shorter side is padded with transparent shadows and each │
+   │ index is animated pairwise — but if any index pair disagrees on `inset` │
+   │ the entire list becomes non-interpolable and the browser falls back to  │
+   │ DISCRETE interpolation, i.e. it hard-flips at 50% of the duration.      │
+   │ Rest used to be [inset, outer] and hover [inset, inset, inset, outer,   │
+   │ outer]; index 1 was outer-vs-inset, so three of the four theme/active   │
+   │ combinations snapped instead of animating. That was the reported "no    │
+   │ animation between hover and no-hover".                                  │
+   │                                                                         │
+   │ SLOT 1 IS FROZEN ACROSS HOVER. It is a 1px white line sitting directly  │
+   │ inside the 1.5px tier border, so brightening it on hover (0.17 → 0.30   │
+   │ dark; 1px/0.60 → 1.5px/0.85 light, which also animated the WIDTH) read  │
+   │ as the border highlighting even after the literal `border-color` hover  │
+   │ was removed. Hover may move slots 2-4 only. The only thing that ever    │
+   │ changes this card's outline is [data-active="true"].                    │
+   └─────────────────────────────────────────────────────────────────────────┘ */
 [data-interface-theme] .natively-api-detail-card-standard {
   background: linear-gradient(180deg, #325957 0%, #3C6B69 100%) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.28),
+    /* Resting outer shadow. Without it the :hover shadow materialised from
+       nothing, which is a different motion from the Pro cards (they deepen a
+       shadow they already carry at rest). */
+    0 4px 16px rgba(0, 0, 0, 0.20),
+    0 1px 3px rgba(0, 0, 0, 0.18) !important;
 }
 
 [data-interface-theme] .natively-api-detail-card-pro {
   background: linear-gradient(180deg, #0E487C 0%, #115999 100%) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.17) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.17),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.28),
+    0 4px 16px rgba(0, 0, 0, 0.20),
+    0 1px 3px rgba(0, 0, 0, 0.18) !important;
 }
 
 [data-interface-theme] .natively-api-detail-card-max {
   background: linear-gradient(180deg, #512F52 0%, #663C68 100%) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.28),
+    0 4px 16px rgba(0, 0, 0, 0.20),
+    0 1px 3px rgba(0, 0, 0, 0.18) !important;
 }
 
 [data-interface-theme] .natively-api-detail-card-ultra {
   background: linear-gradient(180deg, #551C33 0%, #6F2542 100%) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.20) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.20),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.28),
+    0 4px 16px rgba(0, 0, 0, 0.20),
+    0 1px 3px rgba(0, 0, 0, 0.18) !important;
 }
 
 /* Light theme: the same ladder in the same order, one band up. Standard is
@@ -3791,22 +3922,38 @@ html[data-platform="linux"] body {
    (that caps Ultra at about L* 70; it sits at 73). */
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard {
   background: linear-gradient(180deg, #DEF0EF 0%, #CAE7E6 100%) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
+    0 4px 16px rgba(15, 23, 42, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro {
   background: linear-gradient(180deg, #C4E2FD 0%, #ACD7FC 100%) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.60) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.60),
+    inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
+    0 4px 16px rgba(15, 23, 42, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card-max {
   background: linear-gradient(180deg, #DFCAE0 0%, #D5BAD6 100%) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
+    0 4px 16px rgba(15, 23, 42, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
 }
 
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra {
   background: linear-gradient(180deg, #DEB8C7 0%, #D6A7BA 100%) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.70) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.70),
+    inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
+    0 4px 16px rgba(15, 23, 42, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
 }
 
 /* ── Ink on the fill ─────────────────────────────────────────────────────── */
@@ -3970,12 +4117,32 @@ html[data-platform="linux"] body {
     0 4px 14px rgba(0, 0, 0, 0.26) !important;
 }
 
+/* ENTER half for the CTA. `transition` only, so it never competes with any
+   tier's box-shadow values. */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .natively-api-detail-card .natively-api-pricing-cta:hover {
+    transition: transform 220ms cubic-bezier(0.32, 0.72, 0, 1),
+                box-shadow 220ms cubic-bezier(0.32, 0.72, 0, 1),
+                background-color 220ms cubic-bezier(0.32, 0.72, 0, 1) !important;
+  }
+}
+
+/* THE RING IS FROZEN, for the same reason the card's rim is.
+   `0 0 0 Npx` is spread-only: it has no offset and no blur, so it paints a
+   hard-edged ring that is visually indistinguishable from a border. This one
+   grew 3px -> 4px AND brightened 0.16 -> 0.22 on hover, i.e. an animated
+   border-width plus an animated border-colour, on a white pill sitting on a
+   saturated blue field — the highest-contrast edge event in the panel. It only
+   exists on `-pro`, the tier selected by default, so it is on screen the
+   instant the section opens. Freezing the card's outline while leaving this
+   animating is why "border highlighting" survived that fix.
+   Hover now lives entirely in the ambient shadow (slot 3). */
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme] .natively-api-detail-card-pro .natively-api-pricing-cta:hover {
     box-shadow:
       inset 0 -1px 0 rgba(16, 22, 43, 0.10),
-      0 0 0 4px rgba(255, 255, 255, 0.22),
-      0 6px 18px rgba(0, 0, 0, 0.30) !important;
+      0 0 0 3px rgba(255, 255, 255, 0.16),
+      0 8px 22px rgba(0, 0, 0, 0.32) !important;
   }
 }
 
@@ -3987,21 +4154,24 @@ html[data-platform="linux"] body {
 }
 
 @media (hover: hover) and (pointer: fine) {
+  /* Ring frozen — see the dark rule above. */
   [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro .natively-api-pricing-cta:hover {
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.14),
-      0 0 0 4px rgba(16, 22, 43, 0.20),
-      0 6px 18px rgba(0, 0, 0, 0.24) !important;
+      0 0 0 3px rgba(16, 22, 43, 0.14),
+      0 8px 22px rgba(0, 0, 0, 0.26) !important;
   }
 }
 
 /* The gloss veil and blueprint grid both read as film over a committed colour
    surface. Suppressed in both themes (light restyles ::after further down the
    file and would otherwise win on source order). */
+/* Only the gloss veil (::before) stays suppressed. The blueprint grid (::after)
+   is the crosshatch backdrop and is wanted — it was collateral damage from a
+   rule that killed both pseudos to remove the veil. Its own opacity (0.55, and
+   0.8 on hover) is declared with the grid above. */
 [data-interface-theme] .natively-api-detail-card::before,
-[data-interface-theme] .natively-api-detail-card::after,
-[data-theme='light'] [data-interface-theme] .natively-api-detail-card::before,
-[data-theme='light'] [data-interface-theme] .natively-api-detail-card::after {
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card::before {
   opacity: 0 !important;
 }
 
@@ -5536,11 +5706,9 @@ html[data-platform="linux"] body {
 }
 
 /* 4. Light Mode Detail Card Backgrounds & Specular reflections */
-[data-theme='light'] .natively-api-detail-card {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.8),
-    inset 0 -2px 5px rgba(0, 0, 0, 0.02) !important;
-}
+/* The light base-card box-shadow that used to sit here was dead: every render
+   of this card carries a tier class (NativelyApiSettings.tsx:896), and the
+   per-tier light fills are (0,3,0) against this rule's (0,2,0). */
 
 [data-theme='light'] .natively-api-detail-card::before {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, transparent 60%) !important;
@@ -5595,7 +5763,8 @@ html[data-platform="linux"] body {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     inset 0 -2px 5px rgba(0, 0, 0, 0.02),
-    0 6px 14px rgba(0, 0, 0, 0.05) !important;
+    0 6px 14px rgba(0, 0, 0, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
 }
 
 [data-theme='light'] .natively-api-detail-card-pro[data-active="true"] {
@@ -5603,7 +5772,8 @@ html[data-platform="linux"] body {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     inset 0 -2px 5px rgba(0, 0, 0, 0.02),
-    0 6px 14px rgba(0, 0, 0, 0.05) !important;
+    0 6px 14px rgba(0, 0, 0, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
 }
 
 [data-theme='light'] .natively-api-detail-card-max[data-active="true"] {
@@ -5611,7 +5781,8 @@ html[data-platform="linux"] body {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     inset 0 -2px 5px rgba(0, 0, 0, 0.02),
-    0 6px 14px rgba(0, 0, 0, 0.05) !important;
+    0 6px 14px rgba(0, 0, 0, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
 }
 
 [data-theme='light'] .natively-api-detail-card-ultra[data-active="true"] {
@@ -5619,7 +5790,8 @@ html[data-platform="linux"] body {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     inset 0 -2px 5px rgba(0, 0, 0, 0.02),
-    0 6px 14px rgba(0, 0, 0, 0.05) !important;
+    0 6px 14px rgba(0, 0, 0, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
 }
 
 /* 6. Light Mode Features Columns & Scope Panels */
@@ -6680,34 +6852,111 @@ html[data-platform="linux"] body {
     0 6px 16px rgba(109, 40, 217, 0.28) !important;
 }
 
-/* 7. Poster SVGs - Theme Responsive Styles */
-.pricing-poster-stroke-subtle-line { stroke: rgba(255, 255, 255, 0.12) !important; }
-.pricing-poster-node-bg { fill: rgba(15, 23, 42, 0.85) !important; }
-.pricing-poster-glass-node-border { stroke: rgba(255, 255, 255, 0.15) !important; }
-.pricing-poster-stroke-bright { stroke: rgba(255, 255, 255, 0.6) !important; }
-.pricing-poster-text-muted { fill: rgba(255, 255, 255, 0.4) !important; }
-.pricing-poster-text-bright { fill: rgba(255, 255, 255, 0.7) !important; }
-.pricing-poster-central-ai-text { fill: #e0e7ff !important; }
-.pricing-poster-avatar-bg { fill: rgba(255, 255, 255, 0.18) !important; }
-.pricing-poster-rect-light { fill: rgba(255, 255, 255, 0.25) !important; }
-.pricing-poster-rect-subtle { fill: rgba(255, 255, 255, 0.15) !important; }
-.pricing-poster-check3-bg { fill: rgba(255, 255, 255, 0.08) !important; }
-.pricing-poster-check3-border { stroke: rgba(255, 255, 255, 0.2) !important; }
+/* 7. Poster SVG — theme-responsive paint
+   ─────────────────────────────────────────────────────────────────────────
+   Paint for `ProOverlayPoster` in NativelyProSettings.tsx, which draws ONE
+   overlay illustration on BOTH pricing cards in two scenes: `live` on Yearly,
+   and `grounded` on Lifetime, which is the same scene plus a column of the
+   sources one answer is drawn from. See that component's header for why two
+   scenes do not assert a capability gap.
 
-[data-theme='light'] .pricing-poster-stroke-subtle-line { stroke: rgba(15, 23, 42, 0.12) !important; }
-[data-theme='light'] .pricing-poster-node-bg { fill: #ffffff !important; }
-[data-theme='light'] .pricing-poster-glass-node-border { stroke: rgba(15, 23, 42, 0.16) !important; }
-[data-theme='light'] .pricing-poster-stroke-bright { stroke: rgba(15, 23, 42, 0.60) !important; }
-[data-theme='light'] .pricing-poster-text-muted { fill: rgba(15, 23, 42, 0.48) !important; }
-[data-theme='light'] .pricing-poster-text-bright { fill: rgba(15, 23, 42, 0.75) !important; }
-[data-theme='light'] .pricing-poster-central-ai-text { fill: #1e3a8a !important; }
-[data-theme='light'] .pricing-poster-avatar-bg { fill: rgba(15, 23, 42, 0.14) !important; }
-[data-theme='light'] .pricing-poster-rect-light { fill: rgba(15, 23, 42, 0.18) !important; }
-[data-theme='light'] .pricing-poster-rect-subtle { fill: rgba(15, 23, 42, 0.10) !important; }
-[data-theme='light'] .pricing-poster-check3-bg { fill: rgba(15, 23, 42, 0.05) !important; }
-[data-theme='light'] .pricing-poster-check3-border { stroke: rgba(15, 23, 42, 0.16) !important; }
-[data-theme='light'] .pricing-poster-badge-text-purple { fill: #5b21b6 !important; }
-[data-theme='light'] .pricing-poster-badge-text-blue { fill: #1d4ed8 !important; }
+   WHAT FORKS PER CARD AND WHAT DOES NOT. Only the `-accent-*` and `-glow-*`
+   pairs fork by plan (blue on Yearly, violet on Lifetime), and they are
+   selected by prop in the TSX rather than by a descendant selector here, so
+   the two cards cannot pick up each other's hue through the cascade. Every
+   other rule below — plate, panel, specular crown, bars, source cards — is
+   shared verbatim by both scenes. There is one palette, not two.
+
+   `.pricing-poster-panel-border` IS LOAD-BEARING AND MUST EXIST IN BOTH
+   THEMES. It was once referenced by the TSX while missing from this file,
+   which does not error: the panel simply rendered with no border at all, so
+   the glass body dissolved into the card fill and the whole drawing lost its
+   edge. If you are pruning this block, that rule is the one to keep.
+
+   Everything here is `!important` for the same reason as the blocks above it:
+   these elements also carry Tailwind utility classes, and this paint has to
+   win regardless of stylesheet source order.
+
+   The palettes for two earlier generations of this art are gone with the
+   drawings they painted: the `ProIncludes` feature-list plaque
+   (`.pricing-includes*`, `.pricing-feature-*`, `@keyframes pricing-feature-in`)
+   that briefly replaced the illustration, and before that the node-graph /
+   match-diagram pair (`-node-bg`, `-rect-light`, `-check3-*`, `-text-*`, and
+   the two orphaned light-only `-badge-text-*` rules left behind when the
+   "94% MATCH" badge was deleted). Nothing else in the app referenced any of
+   them; verified by grep across src/ and electron/ before removal.
+
+   LIGHT MODE IS NOT A TINT INVERSION. The panel body stays WHITE in both
+   themes — on the light cards it is white glass on a pale blue/violet wash,
+   which is exactly how the real overlay looks on a light desktop — while the
+   bars, plate and source cards flip to slate ink so they still read against
+   it. Both `data-interface-theme` values (`liquid-glass`, `modern`) paint
+   from these same rules: nothing here is scoped under that attribute, so the
+   two interface themes cannot diverge. */
+
+/* ── Ambient bloom, per card ─────────────────────────────────────────────── */
+.pricing-poster-glow-yearly { stop-color: rgba(59, 130, 246, 0.42) !important; }
+.pricing-poster-glow-lifetime { stop-color: rgba(139, 92, 246, 0.45) !important; }
+
+/* ── The plate behind (the call/doc the overlay is sitting on top of) ────── */
+.pricing-poster-plate-fill { fill: rgba(255, 255, 255, 0.05) !important; }
+.pricing-poster-plate-stroke { stroke: rgba(255, 255, 255, 0.10) !important; }
+.pricing-poster-plate-bar { fill: rgba(255, 255, 255, 0.14) !important; }
+.pricing-poster-plate-bar-dim { fill: rgba(255, 255, 255, 0.08) !important; }
+
+/* ── The overlay panel in front ──────────────────────────────────────────── */
+.pricing-poster-glass-top { stop-color: rgba(255, 255, 255, 0.20) !important; }
+.pricing-poster-glass-bottom { stop-color: rgba(255, 255, 255, 0.05) !important; }
+.pricing-poster-panel-border { stroke: rgba(255, 255, 255, 0.24) !important; }
+.pricing-poster-panel-specular { stroke: rgba(255, 255, 255, 0.40) !important; }
+/* Not `!important`: no utility class sets `filter` on this element, and a
+   `drop-shadow()` has to stay overridable by anything that later wants to
+   flatten the poster (print, a static export). */
+.pricing-poster-panel-shadow { filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.30)); }
+
+/* ── The content inside it: heard question (weak) vs answer (strong) ─────── */
+.pricing-poster-bar-strong { fill: rgba(255, 255, 255, 0.52) !important; }
+.pricing-poster-bar-weak { fill: rgba(255, 255, 255, 0.22) !important; }
+
+/* ── The source cards (grounded scene only) ──────────────────────────────────
+   A shade brighter than the plate behind the panel and a shade dimmer than
+   the answer runs: they are objects sitting ON the panel, so they have to
+   lift off it without competing with the answer, which is the subject. The
+   inner line lands between `-bar-weak` and `-bar-strong` for the same
+   reason. The accent PIP inside each card is not painted here — it reuses
+   the card's own `-accent-*` fill, so a source pip can never end up a
+   different hue from the meter beside it. */
+.pricing-poster-source-fill { fill: rgba(255, 255, 255, 0.11) !important; }
+.pricing-poster-source-stroke { stroke: rgba(255, 255, 255, 0.20) !important; }
+.pricing-poster-source-line { fill: rgba(255, 255, 255, 0.34) !important; }
+
+/* ── The live accent: level meter, source pips, streaming caret, per card ── */
+.pricing-poster-accent-yearly { fill: #8CBBFF !important; }
+.pricing-poster-accent-lifetime { fill: #C3AEFF !important; }
+
+[data-theme='light'] .pricing-poster-glow-yearly { stop-color: rgba(59, 130, 246, 0.20) !important; }
+[data-theme='light'] .pricing-poster-glow-lifetime { stop-color: rgba(139, 92, 246, 0.22) !important; }
+
+[data-theme='light'] .pricing-poster-plate-fill { fill: rgba(255, 255, 255, 0.50) !important; }
+[data-theme='light'] .pricing-poster-plate-stroke { stroke: rgba(15, 23, 42, 0.12) !important; }
+[data-theme='light'] .pricing-poster-plate-bar { fill: rgba(15, 23, 42, 0.16) !important; }
+[data-theme='light'] .pricing-poster-plate-bar-dim { fill: rgba(15, 23, 42, 0.09) !important; }
+
+[data-theme='light'] .pricing-poster-glass-top { stop-color: rgba(255, 255, 255, 0.95) !important; }
+[data-theme='light'] .pricing-poster-glass-bottom { stop-color: rgba(255, 255, 255, 0.72) !important; }
+[data-theme='light'] .pricing-poster-panel-border { stroke: rgba(15, 23, 42, 0.14) !important; }
+[data-theme='light'] .pricing-poster-panel-specular { stroke: rgba(255, 255, 255, 0.95) !important; }
+[data-theme='light'] .pricing-poster-panel-shadow { filter: drop-shadow(0 3px 7px rgba(15, 23, 42, 0.13)); }
+
+[data-theme='light'] .pricing-poster-bar-strong { fill: rgba(15, 23, 42, 0.44) !important; }
+[data-theme='light'] .pricing-poster-bar-weak { fill: rgba(15, 23, 42, 0.18) !important; }
+
+[data-theme='light'] .pricing-poster-source-fill { fill: rgba(15, 23, 42, 0.055) !important; }
+[data-theme='light'] .pricing-poster-source-stroke { stroke: rgba(15, 23, 42, 0.15) !important; }
+[data-theme='light'] .pricing-poster-source-line { fill: rgba(15, 23, 42, 0.28) !important; }
+
+[data-theme='light'] .pricing-poster-accent-yearly { fill: #2563EB !important; }
+[data-theme='light'] .pricing-poster-accent-lifetime { fill: #6D28D9 !important; }
 
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -6762,32 +7011,39 @@ html[data-platform="linux"] body {
    order. ────────────────────────────────────────────────────────────────── */
 
 /* ── 1. The plaque ─────────────────────────────────────────────────────────
-   A periwinkle-tinted two-stop gradient, roughly the luminance band of
-   --bg-item-surface (#27272A) pulled toward the tier cards' indigo, plus a
-   specular top hairline and a soft floor shadow: raised, not printed on.
-   The shadow is tinted indigo rather than black so the plaque sits in the
-   same light as the cards below it. */
+   NEUTRAL, deliberately. This was a periwinkle-tinted gradient so the card
+   would read as part of the same set as the tier cards below it, but tinting
+   the whole surface made the accent ambient: everything in the section was
+   coloured, so nothing was. The colour now lives on the Activate button alone,
+   which is the one thing here worth pointing at.
+   What survives the de-tinting is the CRAFT, not the hue — a two-stop
+   gradient in the luminance band of --bg-item-surface (#27272A), a specular
+   top hairline and a soft floor shadow. Those are what stopped this card
+   feeling flat and out of place next to the pricing surfaces; the tint was
+   never doing that work. Shadows are black now rather than indigo, since a
+   tinted shadow under an untinted card reads as a colour cast. */
 .natively-key-card {
-  background: linear-gradient(180deg, #313349 0%, #1F2029 100%) !important;
-  border: 1px solid rgba(174, 183, 255, 0.16) !important;
+  background: linear-gradient(180deg, #313134 0%, #232326 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
   border-radius: 22px !important;
   position: relative !important;
   overflow: hidden !important;
   box-shadow:
-    inset 0 1px 0 rgba(196, 203, 255, 0.16),
-    inset 0 -16px 30px rgba(10, 12, 32, 0.22),
-    0 6px 20px rgba(12, 14, 38, 0.30) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -16px 30px rgba(0, 0, 0, 0.20),
+    0 6px 20px rgba(0, 0, 0, 0.28) !important;
 }
 
-/* The same 24px blueprint grid the pricing surfaces carry. Individually
-   invisible; it is one of the things that makes them read as a set. */
+/* The same 24px blueprint grid the pricing surfaces carry, in neutral ink.
+   Individually invisible; it is one of the things that makes them read as a
+   set, and it costs no colour to keep. */
 .natively-key-card::before {
   content: '' !important;
   position: absolute !important;
   inset: 0 !important;
   background-image:
-    linear-gradient(rgba(206, 212, 255, 0.022) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(206, 212, 255, 0.022) 1px, transparent 1px) !important;
+    linear-gradient(rgba(255, 255, 255, 0.020) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.020) 1px, transparent 1px) !important;
   background-size: 24px 24px !important;
   pointer-events: none !important;
   z-index: 0 !important;
@@ -6798,22 +7054,22 @@ html[data-platform="linux"] body {
   z-index: 1 !important;
 }
 
-/* Light: the same tint one luminance band up, echoing the light tier card
-   (#D2D6FA → #BCC2F5) without matching its saturation. The top stop stays
-   near-white so the supporting copy on it still clears AA. */
+/* Light: same construction, no hue. Bottom stop lands on --bg-item-surface
+   (#EAECEF) so the plaque resolves into the section's own card colour instead
+   of a tint of it; the top stays near-white to keep the vertical lift. */
 [data-theme='light'] .natively-key-card {
-  background: linear-gradient(180deg, #FCFCFE 0%, #E1E5F6 100%) !important;
-  border: 1px solid rgba(69, 79, 184, 0.16) !important;
+  background: linear-gradient(180deg, #FDFDFD 0%, #EAECEF 100%) !important;
+  border: 1px solid rgba(0, 0, 0, 0.09) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -14px 26px rgba(69, 79, 184, 0.05),
-    0 6px 18px rgba(49, 56, 130, 0.09) !important;
+    inset 0 -14px 26px rgba(0, 0, 0, 0.035),
+    0 6px 18px rgba(0, 0, 0, 0.07) !important;
 }
 
 [data-theme='light'] .natively-key-card::before {
   background-image:
-    linear-gradient(rgba(69, 79, 184, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(69, 79, 184, 0.03) 1px, transparent 1px) !important;
+    linear-gradient(rgba(0, 0, 0, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.028) 1px, transparent 1px) !important;
 }
 
 /* ── 2. The input, as a pressed-in well ───────────────────────────────────
@@ -6821,38 +7077,44 @@ html[data-platform="linux"] body {
    surface. Sinking it gives the plaque somewhere for the credential to go,
    and it is the same inset-shadow vocabulary as the jelly controls. */
 .natively-key-input {
-  background: linear-gradient(180deg, #15161F 0%, #1B1C27 100%) !important;
-  border: 1px solid rgba(6, 7, 20, 0.55) !important;
+  background: linear-gradient(180deg, #161618 0%, #1C1C1F 100%) !important;
+  border: 1px solid rgba(0, 0, 0, 0.55) !important;
   border-radius: 14px !important;
   box-shadow:
-    inset 0 2px 5px rgba(4, 5, 16, 0.50),
-    inset 0 -1px 0 rgba(196, 203, 255, 0.06) !important;
+    inset 0 2px 5px rgba(0, 0, 0, 0.50),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05) !important;
   transition: border-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
               box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
 
-/* Focus follows the card's own hue now, not the global accent token. */
+/* Focus is neutral too — the accent belongs to the Activate button alone, and
+   a violet halo blooming under the cursor was the loudest thing in the section
+   at exactly the moment attention is already on the field.
+   It is still clearly marked, just achromatically: the well's edge brightens
+   and a soft light ring replaces the coloured one. Removing the indicator
+   outright is not an option — this is a text field, and keyboard users need to
+   see where focus landed. */
 .natively-key-input:focus {
   outline: none !important;
-  border-color: rgba(124, 134, 240, 0.75) !important;
+  border-color: rgba(255, 255, 255, 0.30) !important;
   box-shadow:
-    inset 0 2px 5px rgba(4, 5, 16, 0.50),
-    0 0 0 2px rgba(92, 101, 219, 0.45) !important;
+    inset 0 2px 5px rgba(0, 0, 0, 0.50),
+    0 0 0 2px rgba(255, 255, 255, 0.10) !important;
 }
 
 [data-theme='light'] .natively-key-input {
-  background: linear-gradient(180deg, #EDEFFA 0%, #FCFCFE 100%) !important;
-  border: 1px solid rgba(69, 79, 184, 0.22) !important;
+  background: linear-gradient(180deg, #EFEFF1 0%, #FDFDFD 100%) !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
   box-shadow:
-    inset 0 2px 4px rgba(69, 79, 184, 0.10),
+    inset 0 2px 4px rgba(0, 0, 0, 0.06),
     inset 0 -1px 0 rgba(255, 255, 255, 0.9) !important;
 }
 
 [data-theme='light'] .natively-key-input:focus {
-  border-color: rgba(69, 79, 184, 0.85) !important;
+  border-color: rgba(0, 0, 0, 0.34) !important;
   box-shadow:
-    inset 0 2px 4px rgba(69, 79, 184, 0.10),
-    0 0 0 2px rgba(69, 79, 184, 0.30) !important;
+    inset 0 2px 4px rgba(0, 0, 0, 0.06),
+    0 0 0 2px rgba(0, 0, 0, 0.09) !important;
 }
 
 /* Last, and at (0,3,0): the per-theme rules above use the `border` shorthand,
@@ -6957,66 +7219,86 @@ html[data-platform="linux"] body {
 /* IDLE / SAVING — an unpressable control must not be the loudest element on
    the card, and `idle` is this card's RESTING look (both empty and
    already-saved), so it recedes to a ghost that still reads as a button:
-   a faint fill, a visible edge, and a top hairline so it keeps its shape. */
+   a faint fill, a visible edge, and a top hairline so it keeps its shape.
+   Achromatic, and for a reason beyond matching the de-tinted plaque: `idle`
+   is the state the card sits in most of the time, so a periwinkle ghost meant
+   the accent was always faintly present and therefore signalled nothing. With
+   this neutral, colour arrives exactly when `ready` does — when there is
+   actually something to press. */
 .natively-key-cta[data-state='idle'],
 .natively-key-cta[data-state='saving'] {
-  background: rgba(196, 203, 255, 0.07) !important;
-  border-color: rgba(196, 203, 255, 0.13) !important;
-  color: rgba(226, 229, 255, 0.50) !important;
-  box-shadow: inset 0 1px 0 rgba(196, 203, 255, 0.07) !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+  color: rgba(255, 255, 255, 0.50) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
 }
 
 .natively-key-cta[data-state='saving'] {
-  color: rgba(232, 234, 255, 0.78) !important;
+  color: rgba(255, 255, 255, 0.78) !important;
 }
 
-/* DONE — "Saved" / "Pro activated". Emerald text on the old flat input fill
-   was an untested pair; this is a proper tinted success chip. */
+/* DONE — "Saved" / "Pro activated". The SAME jelly clay as `ready` above, just
+   in emerald: this is one control changing state, so it should not also change
+   material. It used to be a 0.14-alpha frosted chip, which made the moment of
+   success the flattest the button ever looked.
+   #047857 (emerald-700) rather than a brighter green because the label is
+   13px: white on emerald-600 (#059669) measures 3.77:1 and misses AA, while
+   this measures 5.48:1. Dark enough to hold white ink under both themes, so it
+   needs no light-theme counterpart — the override that used to sit further
+   down was deleted with this change. */
 .natively-key-cta[data-state='done'] {
-  background: rgba(52, 211, 153, 0.14) !important;
-  border-color: rgba(52, 211, 153, 0.30) !important;
-  color: #6EE7B7 !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.16) 100%),
+    #047857 !important;
+  color: #FFFFFF !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.38),
+    inset 0 -2px 5px rgba(0, 30, 20, 0.30),
+    0 4px 14px rgba(4, 120, 87, 0.40) !important;
 }
 
 [data-theme='light'] .natively-key-cta[data-state='idle'],
 [data-theme='light'] .natively-key-cta[data-state='saving'] {
-  background: rgba(69, 79, 184, 0.07) !important;
-  border-color: rgba(69, 79, 184, 0.18) !important;
-  color: rgba(38, 44, 96, 0.50) !important;
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.14) !important;
+  color: rgba(0, 0, 0, 0.45) !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
 }
 
 [data-theme='light'] .natively-key-cta[data-state='saving'] {
-  color: rgba(30, 35, 82, 0.72) !important;
+  color: rgba(0, 0, 0, 0.68) !important;
 }
 
-[data-theme='light'] .natively-key-cta[data-state='done'] {
-  background: rgba(5, 150, 105, 0.11) !important;
-  border-color: rgba(5, 150, 105, 0.26) !important;
-  color: #046C4E !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
-}
+/* No light-theme override for `done` any more: the solid #047857 chip above
+   clears AA on both, so a second declaration would only be a second thing to
+   keep in sync. The specular top hairline is dropped with it — that highlight
+   is what made the chip read as a lit glass surface. */
 
 /* ── 4. Supporting copy ───────────────────────────────────────────────────
-   Ink chosen for the surface it sits on rather than inherited from the global
-   text tokens, the same reason `.natively-api-on-fill-dim` exists on the tier
-   cards: --text-secondary (#6B7280) on a periwinkle-tinted light plaque
-   measures ~4.0:1, under AA. These are measured against the gradient at the
-   copy's actual position. */
+   These used to override the global text tokens because a tinted plaque
+   shifted the effective contrast: --text-secondary (#6B7280) on the old
+   periwinkle light surface measured ~4.0:1, under AA. With the plaque neutral
+   that reason is gone — the light bottom stop IS --bg-item-surface (#EAECEF),
+   where #6B7280 measures 4.61:1, so the token can be used directly and will
+   track any future change to it.
+   Dark keeps an explicit alpha rather than the token: white at 0.74 over the
+   #313134 top stop resolves to ~#CACACA for 8.9:1, comfortably clear, and an
+   alpha ink stays correct across the gradient in a way a fixed hex would not. */
 .natively-key-sub {
   color: rgba(255, 255, 255, 0.74) !important;
 }
 
 [data-theme='light'] .natively-key-sub {
-  color: #4A5168 !important;
+  color: var(--text-secondary) !important;
 }
 
 /* ── 5. The Natively mark ─────────────────────────────────────────────────
    src/assets/logo.webp is a WHITE monochrome glyph on transparency, so on the
    pale light plaque an <img> would be invisible. It is painted as a MASK
-   instead, which lets the mark take the plaque's own ink per theme: white on
-   the dark plaque, tier-card periwinkle on the light one.
+   instead, which lets the mark take the plaque's own ink per theme. Both inks
+   are now achromatic: it was tier-card periwinkle in light theme, which made
+   the mark a second coloured element competing with the Activate button.
 
    No squircle, no tinted well, no boxed header — just the mark, set on the
    supporting-copy line. The URL arrives as a custom property set from the
@@ -7037,7 +7319,171 @@ html[data-platform="linux"] body {
 }
 
 [data-theme='light'] .natively-key-mark {
-  background-color: #3A44A8 !important;
+  background-color: #4B5563 !important;
+}
+
+/* ══ Pro License Active — the receipt, in the pricing cards' material ══════
+   Built from the two treatments already in this tab rather than a third
+   invention: the SLAB is the .pricing-card-* recipe (hue radial from the top
+   edge, diagonal base, specular crown, floor shadow) and the BUTTON is the
+   Activate CTA's jelly clay (hue fill under a darkening foot gradient, bright
+   inset crown, coloured drop shadow, lift on hover, compress on press).
+
+   Emerald rather than the Pro tier's periwinkle for one reason: this card sits
+   directly under the Natively key plaque, whose Activate button is periwinkle
+   jelly. Two saturated periwinkle objects stacked would read as one region.
+   Emerald also happens to be what a confirmation wants.
+
+   OPAQUE base, unlike .pricing-card-yearly's alpha slab. That card is only
+   ever shown in dark contexts; this one renders in both themes, and white ink
+   over the alpha version composited to 2.9:1 against a light card — under AA.
+   The fixed base measures 6.3:1 at the radial's brightest point. */
+.pro-active-card {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.28) 0%, transparent 62%),
+    linear-gradient(135deg, #14503F 0%, #0B2B22 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 18px !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow:
+    inset 0 1px 0 rgba(16, 185, 129, 0.5),
+    inset 0 2px 4px rgba(255, 255, 255, 0.18),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Specular crown, matching .pricing-card-*::before. Radius is 1px under the
+   card's own so it tucks inside the border rather than overprinting it. */
+.pro-active-card::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 1px !important;
+  height: 45% !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 100%) !important;
+  border-radius: 17px 17px 0 0 !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+}
+
+/* Ink is fixed, not tokenised: --text-primary inverts per theme and would go
+   near-black on this slab in light mode. */
+.pro-active-card .pro-active-ink {
+  color: #FFFFFF !important;
+  position: relative !important;
+  z-index: 3 !important;
+}
+
+/* 0.84 rather than the 0.78 used elsewhere on tinted fills: at 0.78 this
+   composites to exactly 4.50:1 over the radial's brightest point, i.e. sitting
+   on the AA line with no margin. 0.84 gives 4.94:1. */
+.pro-active-card .pro-active-sub {
+  color: rgba(255, 255, 255, 0.84) !important;
+  position: relative !important;
+  z-index: 3 !important;
+}
+
+.pro-active-card .pro-active-check {
+  color: #6EE7B7 !important;
+  position: relative !important;
+  z-index: 3 !important;
+}
+
+/* Jelly clay, same construction as .natively-key-cta[data-state='ready'] but
+   in near-black: on a saturated slab the pricing cards make their CTA the one
+   near-neutral object, and a green button on a green card would have no edge.
+   Rest is neutral for the reason it always was — a destructive control should
+   not outrank the state it is attached to — and the danger colour arrives as
+   a full jelly fill on hover, so the warning still reads at a glance. */
+.pro-deactivate-cta {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(3, 22, 17, 0.55) !important;
+  color: #FFFFFF !important;
+  border: 1px solid rgba(255, 255, 255, 0.20) !important;
+  border-radius: 9999px !important;
+  position: relative !important;
+  z-index: 3 !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.26),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.34),
+    0 4px 12px rgba(0, 0, 0, 0.28) !important;
+  /* "Deactivating…" plus a spinner is the wider label. Pinning the width stops
+     the pill resizing under the pointer at the exact moment it is pressed. */
+  min-width: 124px !important;
+  /* Leave half of the house asymmetric pair; the enter half is on :hover. */
+  transition: background-color 320ms cubic-bezier(0.33, 1, 0.68, 1),
+              box-shadow      320ms cubic-bezier(0.33, 1, 0.68, 1),
+              border-color    320ms cubic-bezier(0.33, 1, 0.68, 1),
+              transform       320ms cubic-bezier(0.33, 1, 0.68, 1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  /* White on #DC2626 measures 4.83:1, so the label stays AA-legible at the
+     moment the button turns into a warning. */
+  .pro-deactivate-cta:hover {
+    transition: background-color 220ms cubic-bezier(0.32, 0.72, 0, 1),
+                box-shadow      220ms cubic-bezier(0.32, 0.72, 0, 1),
+                border-color    220ms cubic-bezier(0.32, 0.72, 0, 1),
+                transform       220ms cubic-bezier(0.32, 0.72, 0, 1) !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.14) 100%),
+      #DC2626 !important;
+    border-color: rgba(255, 255, 255, 0.28) !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+      inset 0 2.5px 3px rgba(255, 255, 255, 0.40),
+      inset 0 -2px 5px rgba(60, 6, 6, 0.30),
+      0 7px 18px rgba(220, 38, 38, 0.45) !important;
+  }
+}
+
+.pro-deactivate-cta:active {
+  transform: translateY(0) scale(0.97) !important;
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.42),
+    0 2px 6px rgba(0, 0, 0, 0.24) !important;
+}
+
+/* PENDING — the licence-server round trip. Holds the committed red rather than
+   reverting to neutral: the button turned red to warn, and it must look like it
+   is doing the warned-about thing. No lift (the pointer's relationship to the
+   button is over) and no press response.
+   Full opacity ON PURPOSE. The reflexive `disabled:opacity-50` would drop white
+   on #DC2626 from 4.83:1 to about 2.4:1 — an unreadable busy state — and a
+   greyed-out red button reads as permanently unavailable rather than working. */
+.pro-deactivate-cta[data-phase='pending'] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.14) 100%),
+    #DC2626 !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  transform: none !important;
+  cursor: default !important;
+  opacity: 1 !important;
+  box-shadow:
+    inset 0 2.5px 3px rgba(255, 255, 255, 0.40),
+    inset 0 -2px 5px rgba(60, 6, 6, 0.30),
+    0 4px 12px rgba(220, 38, 38, 0.30) !important;
+}
+
+.pro-deactivate-cta[data-phase='pending']:active {
+  transform: none !important;
+}
+
+.pro-deactivate-spinner {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #ffffff;
+  border-radius: 9999px;
+  /* Fast on purpose. A quicker spinner makes the same wait feel shorter; the
+     conventional 1s rotation reads as stalled. */
+  animation: pro-deactivate-spin 620ms linear infinite;
+}
+
+@keyframes pro-deactivate-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ── 6. Reduced motion ────────────────────────────────────────────────────
@@ -7046,6 +7492,19 @@ html[data-platform="linux"] body {
    crossfades are kept (they aid comprehension); the lift and the press
    compression are movement and go away. */
 @media (prefers-reduced-motion: reduce) {
+  .pro-deactivate-cta {
+    transition: none !important;
+  }
+
+  .pro-deactivate-cta:hover,
+  .pro-deactivate-cta:active {
+    transform: none !important;
+  }
+
+  .pro-deactivate-spinner {
+    animation-duration: 1100ms !important;
+  }
+
   .natively-key-input,
   .natively-key-cta {
     transition: none !important;
@@ -7054,5 +7513,176 @@ html[data-platform="linux"] body {
   .natively-key-cta[data-state='ready']:hover,
   .natively-key-cta[data-state='ready']:active {
     transform: none !important;
+  }
+}
+
+
+
+
+/* The generic light-theme hover that used to sit here is GONE, and the comment
+   with it claimed its box-shadow was live. It was not: at (0,4,0) it ties the
+   per-tier light hovers below, which come later in source, and every render of
+   this card carries a tier class (NativelyApiSettings.tsx:896). Nothing it
+   declared ever painted. */
+
+
+/* The ENTER half of the card's asymmetric hover. Declares `transition` and
+   nothing else: no box-shadow, so it cannot participate in (or violate) the
+   four-slot contract, and at (0,3,0) it outranks the base rule's leave timing
+   from anywhere in the file.
+   cubic-bezier(0.32, 0.72, 0, 1) moves immediately — no ease-in sluggishness —
+   but spreads the travel across the middle (~55% at the 30% mark, against the
+   old curve's 83%), which is what makes the arrival legible rather than instant. */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .natively-api-detail-card:hover {
+    transition: box-shadow 260ms cubic-bezier(0.32, 0.72, 0, 1),
+                border-color 260ms cubic-bezier(0.32, 0.72, 0, 1) !important;
+  }
+}
+
+
+/* Per-tier hover bloom. The Pro purchase cards glow in their OWN hue on hover
+   (.pricing-card-yearly:hover uses its blue, lifetime its violet); a neutral
+   grey glow here read as a different control. Deepens the resting shadow the
+   committed-fill block already carries rather than introducing one.
+   Obeys the four-slot contract above the committed fills: slot 1 repeats each
+   tier's RESTING rim byte-for-byte, so the hairline against the border does not
+   move; hover lives entirely in the floor (slot 2), the tier-hued ambient
+   bloom (slot 3) and the contact shadow (slot 4). */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .natively-api-detail-card-standard:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
+      0 12px 32px rgba(60, 107, 105, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+  [data-interface-theme] .natively-api-detail-card-pro:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.17),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
+      0 12px 32px rgba(17, 89, 153, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+  [data-interface-theme] .natively-api-detail-card-max:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
+      0 12px 32px rgba(102, 60, 104, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+  [data-interface-theme] .natively-api-detail-card-ultra:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.20),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
+      0 12px 32px rgba(111, 37, 66, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+}
+
+
+/* Active + hover. Without these the per-tier bloom above — (0,3,0), later in
+   source than every [data-active="true"] rule — would win on the CURRENT plan's
+   card and replace its tier-hued rim with the generic one, i.e. the active
+   card's outline would change on hover. That is exactly the border-highlight
+   behaviour being removed, and it also breaks the four-slot contract's promise
+   that slot 1 never moves. These sit at (0,4,0) so they outrank it, repeat the
+   active rim verbatim, and let hover act only on slots 2-4. */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .natively-api-detail-card-standard[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(165, 209, 207, 0.72),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
+      0 12px 32px rgba(60, 107, 105, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+  [data-interface-theme] .natively-api-detail-card-pro[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(151, 199, 241, 0.78),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
+      0 12px 32px rgba(17, 89, 153, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+  [data-interface-theme] .natively-api-detail-card-max[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(203, 175, 204, 0.84),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
+      0 12px 32px rgba(102, 60, 104, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+  [data-interface-theme] .natively-api-detail-card-ultra[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(207, 160, 179, 0.90),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
+      0 12px 32px rgba(111, 37, 66, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+}
+
+
+/* Light-theme per-tier hover bloom (mirrors the dark rules above and the
+   Pro cards' own light hovers). */
+@media (hover: hover) and (pointer: fine) {
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.55),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
+      0 12px 28px rgba(60, 107, 105, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.60),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
+      0 12px 28px rgba(17, 89, 153, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-max:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.65),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
+      0 12px 28px rgba(102, 60, 104, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.70),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
+      0 12px 28px rgba(111, 37, 66, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+}
+
+
+/* Light active + hover — (0,5,0), outranking the light per-tier bloom (0,4,0)
+   for the same reason as the dark pair above. */
+@media (hover: hover) and (pointer: fine) {
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
+      0 12px 28px rgba(60, 107, 105, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
+      0 12px 28px rgba(17, 89, 153, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-max[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
+      0 12px 28px rgba(102, 60, 104, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
+      0 12px 28px rgba(111, 37, 66, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
   }
 }
