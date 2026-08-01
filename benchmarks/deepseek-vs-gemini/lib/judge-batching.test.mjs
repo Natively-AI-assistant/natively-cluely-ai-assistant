@@ -43,6 +43,42 @@ describe('buildJudgeBatches', () => {
     assert.ok(item.label);
     assert.notEqual(item.label, item.modelId);
   });
+
+  test('varies the label->model permutation per prompt within the same batch (anti-positional-bias)', () => {
+    const answersByPrompt = {};
+    for (let n = 1; n <= 8; n++) {
+      answersByPrompt[`p${n}`] = { A: 'deepseek-v4-flash', B: 'gemini-3.6-flash', C: 'gemini-3.1-flash-lite' };
+    }
+    // batchSize >= number of prompts so all 8 land in a single batch.
+    const batches = buildJudgeBatches(answersByPrompt, 8, 1);
+    assert.equal(batches.length, 1);
+
+    const permutationByPrompt = batches[0].promptIds.map((promptId) => {
+      const itemsForPrompt = batches[0].anonymizedItems.filter((it) => it.promptId === promptId);
+      const mapping = {};
+      for (const it of itemsForPrompt) mapping[it.modelId] = it.label;
+      return mapping;
+    });
+
+    const first = JSON.stringify(permutationByPrompt[0]);
+    const allIdentical = permutationByPrompt.every((p) => JSON.stringify(p) === first);
+    assert.equal(
+      allIdentical,
+      false,
+      'expected label->model assignment to vary across prompts in the same batch, not stay fixed for the whole batch'
+    );
+  });
+
+  test('is deterministic: same seed produces the same batches/assignments', () => {
+    const answersByPrompt = {
+      p1: { A: 'deepseek-v4-flash', B: 'gemini-3.6-flash', C: 'gemini-3.1-flash-lite' },
+      p2: { A: 'deepseek-v4-flash', B: 'gemini-3.6-flash', C: 'gemini-3.1-flash-lite' },
+      p3: { A: 'deepseek-v4-flash', B: 'gemini-3.6-flash', C: 'gemini-3.1-flash-lite' },
+    };
+    const batchesA = buildJudgeBatches(answersByPrompt, 3, 7);
+    const batchesB = buildJudgeBatches(answersByPrompt, 3, 7);
+    assert.deepEqual(batchesA, batchesB);
+  });
 });
 
 describe('flagContested', () => {

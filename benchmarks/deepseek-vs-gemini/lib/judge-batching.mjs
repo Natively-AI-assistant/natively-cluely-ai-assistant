@@ -27,13 +27,15 @@ export function buildJudgeBatches(answersByPrompt, batchSize, seed = 1) {
   for (let i = 0; i < promptIds.length; i += batchSize) {
     const chunk = promptIds.slice(i, i + batchSize);
     const anonymizedItems = [];
-    for (const promptId of chunk) {
+    chunk.forEach((promptId, chunkIdx) => {
+      const promptIndex = i + chunkIdx; // stable per-prompt index across the FULL promptIds list,
+      // not just per-batch — this is what makes the shuffle vary within a batch.
       const modelKeys = Object.keys(answersByPrompt[promptId]); // e.g. ['A','B','C']
-      const shuffledLabels = seededShuffle(LABELS.slice(0, modelKeys.length), seed + i);
+      const shuffledLabels = seededShuffle(LABELS.slice(0, modelKeys.length), seed + promptIndex);
       modelKeys.forEach((key, idx) => {
         anonymizedItems.push({ promptId, label: shuffledLabels[idx], modelId: answersByPrompt[promptId][key] });
       });
-    }
+    });
     batches.push({ promptIds: chunk, anonymizedItems });
   }
   return batches;
