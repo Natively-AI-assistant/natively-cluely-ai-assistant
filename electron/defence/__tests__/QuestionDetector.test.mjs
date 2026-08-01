@@ -24,3 +24,7 @@ test('language detection supports Chinese, English and mixed terminology', () =>
   assert.equal(detectLanguage('How does retrieval work?'), 'en');
   assert.equal(detectLanguage('你在 retrieval pipeline 里怎么处理 no evidence？'), 'mixed');
 });
+
+test('streaming revisions, background context and two distinct questions generate once each',()=>{const detector=new QuestionDetector();const partials=['先介绍一下背景','先介绍一下背景，我们使用本地索引','先介绍一下背景，我们使用本地索引，为什么选择混合检索？'];for(const text of partials.slice(0,-1))assert.notEqual(detector.push(text,{final:false}).state,'complete');const first=detector.push(partials.at(-1),{final:true,silenceMs:1000});assert.equal(first.state,'complete');assert.equal(detector.push(partials.at(-1),{final:true,silenceMs:1000}).state,'duplicate');assert.equal(detector.push('还有延迟限制吗？',{final:true,silenceMs:1000}).state,'complete');const second=detector.push('How do you test retrieval quality?',{final:true,silenceMs:1000});assert.equal(second.state,'complete');assert.notEqual(second.question,first.question)});
+
+test('manual force completes a candidate without waiting for silence',()=>{const detector=new QuestionDetector();const result=detector.push('请解释证据控制',{force:true});assert.equal(result.state,'complete')});

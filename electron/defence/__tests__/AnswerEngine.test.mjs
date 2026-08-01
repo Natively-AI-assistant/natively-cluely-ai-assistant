@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { AnswerEngine } from '../../../dist-electron/electron/defence/answerEngine.js';
 import { tokenize, vectorize } from '../../../dist-electron/electron/defence/projectIndexer.js';
 
-const config = { host:'127.0.0.1',port:0,projectSourcePath:'.',indexPath:'.',stt:{provider:'none',apiKey:'',baseUrl:'',model:'',language:'auto'},llm:{provider:'none',apiKey:'',baseUrl:'',model:''},search:{provider:'none',apiKey:'',baseUrl:''},pairingTtlMs:300000,sessionRetentionDays:7,storeAudio:false,storeTranscripts:true,maxUploadBytes:1024,maxAudioBytes:1024 };
+const config = { host:'127.0.0.1',port:0,adminLocalOnly:true,tls:{enabled:false,certPath:'',keyPath:''},projectSourcePath:'.',indexPath:'.',stt:{provider:'none',apiKey:'',baseUrl:'',model:'',language:'auto',timeoutMs:1000,maxRetries:0},llm:{provider:'none',apiKey:'',baseUrl:'',model:'',timeoutMs:1000,maxRetries:0},search:{provider:'none',apiKey:'',baseUrl:''},pairingTtlMs:300000,sessionRetentionDays:7,storeAudio:false,storeTranscripts:true,maxUploadBytes:1024,maxAudioBytes:1024,maxAudioDurationMs:5000 };
 const text='The retrieval pipeline uses hybrid keyword and vector search. Tests verify source file paths and line ranges.';
 const tokens=tokenize(text);
 const manifest={version:1,projectRoot:'.',files:{'retrieval.md':{hash:'x',chunkIds:['1'],indexedAt:'now'}},chunks:[{id:'1',sourceType:'project',path:'retrieval.md',title:'Retrieval',lineStart:1,lineEnd:2,excerpt:text,content:text,status:'IMPLEMENTED',score:0,fileHash:'x',indexedAt:'now',tokens,vector:vectorize(tokens)}]};

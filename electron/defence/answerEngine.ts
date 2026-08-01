@@ -34,16 +34,21 @@ export class AnswerEngine {
   private llm: LlmProvider; private search: SearchProvider;
   constructor(private config: DefenceConfig) { this.llm = new LlmProvider(config.llm); this.search = new SearchProvider(config.search); }
   async answer(question: string, manifest: IndexManifest, settings: DefenceSettings): Promise<StructuredAnswer> {
+    const retrievalStarted = performance.now();
     const detected = detectLanguage(question); const classification = classifyQuestion(question);
-    const evidence = new HybridRetriever(manifest.chunks).search(question);
+    const evidence = new HybridRetriever(manifest.chunks).searchMultilingual(question);
     const allowExternal = settings.searchMode === 'on' || (settings.searchMode === 'auto' && classification.needsCurrentExternalInfo && !classification.projectInternal && evidence.length === 0);
     let externalSources: Evidence[] = [];
     if (allowExternal && this.search.available()) externalSources = await this.search.search(question).catch((): Evidence[] => []);
+    const retrievalMs = Math.round(performance.now() - retrievalStarted);
     const output = requestedLanguage(settings, detected);
     let generated = fallbackAnswer(question, evidence, detected, settings);
+    let llmFirstResponseMs: number | undefined; let llmTotalMs: number | undefined; let schemaValid = true;
     if (this.llm.available()) {
-      try { generated = await this.llm.answer(question, evidence, externalSources, output, settings.answerDepth); }
-      catch { /* deterministic grounded fallback keeps local retrieval usable */ }
+      try {
+        const result = await this.llm.answerWithMetrics(question, evidence, externalSources, output, settings.answerDepth);
+        generated = result.value; llmFirstResponseMs = result.timing.dnsConnectMs; llmTotalMs = result.timing.totalMs;
+      } catch { schemaValid = false; /* deterministic grounded fallback keeps local retrieval usable */ }
     }
     const noEvidence = evidence.length === 0 && (classification.projectInternal || externalSources.length === 0);
     if (noEvidence) generated = { ...generated, spokenAnswer: detected === 'en' ? NO_EVIDENCE_EN : NO_EVIDENCE_ZH, noEvidence: true };
@@ -57,6 +62,7 @@ export class AnswerEngine {
       missingInformation: generated.missingInformation,
       searchedSourceTypes: ['source code', 'project documentation', 'test evidence', ...(allowExternal ? ['external sources'] : [])],
       provider: this.llm.available() ? this.config.llm.provider : 'local-grounded-fallback',
+      diagnostics: { retrievalMs, candidateCount: evidence.length, evidenceCount: evidence.length, llmFirstResponseMs, llmTotalMs, schemaValid },
     };
   }
 }

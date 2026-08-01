@@ -36,6 +36,21 @@ defence.example.test {
 
 Use a private DNS name and a certificate trusted on the device. Do not expose the HTTP service directly to the public internet. The service has one-time pairing, hashed session tokens, request/payload limits, same-origin delivery, WebSocket authentication, loopback-only index management, and no wildcard CORS; TLS remains the deployment operator's responsibility.
 
+### Windows trusted development certificate
+
+One supported local path is [`mkcert`](https://github.com/FiloSottile/mkcert). Install it separately, create a development CA, and generate a certificate containing the computer's private DNS name and LAN IP. Store all generated files outside the repository (or under ignored `.defence-certs/`). Configure:
+
+```dotenv
+DEFENCE_HOST=0.0.0.0
+DEFENCE_TLS_ENABLED=true
+DEFENCE_TLS_CERT_PATH=C:\private\defence-cert.pem
+DEFENCE_TLS_KEY_PATH=C:\private\defence-key.pem
+```
+
+The iPhone must trust the same development CA through Settings → General → VPN & Device Management and Certificate Trust Settings. A publicly trusted HTTPS reverse proxy is preferable when available. Never commit the CA or private key. Run `npm.cmd run defence:doctor` before scanning the pairing QR; it checks readability and certificate SAN coverage without printing secrets.
+
+The admin HTML and project-management APIs default to loopback-only (`DEFENCE_ADMIN_LOCAL_ONLY=true`). The QR carries a 192-bit, single-use, hashed-at-rest pairing secret; the six-digit code is a rate-limited fallback. Companion sessions receive only relative evidence paths and relevant excerpts, never full project files.
+
 ## Providers
 
 - STT: an OpenAI-compatible transcription endpoint such as Groq Whisper (`STT_*`). Browser speech recognition is used when Safari exposes it.
@@ -54,6 +69,20 @@ iPhone microphone -> browser/STT provider -> stable transcript
 ```
 
 The index stores file hashes and chunk metadata under `PROJECT_INDEX_PATH`. Unchanged files are retained, changed files are replaced, deleted files are removed, and a full rebuild is available from the admin page. Evidence sent to the phone is limited to answer-relevant excerpts.
+
+Index accounting uses mutually exclusive file-object metrics. `discoveredTotal = excludedTotal + eligibleTotal`, while `eligibleTotal = indexedNew + indexedUpdated + skippedUnchanged + failedTotal`. `directoryCount` is reported separately and is not part of `discoveredTotal`; excluded directories such as `.git` and `node_modules` are not recursively enumerated.
+
+## Live validation commands
+
+```powershell
+npm.cmd run defence:doctor
+npm.cmd run defence:provider-smoke
+npm.cmd run defence:index-smoke
+npm.cmd run defence:retrieval-eval
+npm.cmd run defence:audio-fixture-test
+```
+
+Provider smoke returns `BLOCKED_MISSING_PROVIDER_CONFIG` when STT or LLM configuration is absent. That is distinct from implementation-test failure. The PWA's folded diagnostic panel generates a sanitized real-device report without keys, tokens, absolute server paths, or raw audio.
 
 ## Known limitations
 

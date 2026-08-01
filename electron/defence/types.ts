@@ -48,18 +48,29 @@ export interface IndexManifest {
 
 export interface IndexProgress {
   running: boolean;
-  scanned: number;
-  added: number;
-  updated: number;
-  skipped: number;
-  deleted: number;
-  excluded: number;
+  discoveredTotal: number;
+  excludedTotal: number;
+  eligibleTotal: number;
+  indexedNew: number;
+  indexedUpdated: number;
+  skippedUnchanged: number;
+  deletedFromIndex: number;
+  failedTotal: number;
+  directoryCount: number;
+  symlinkExcluded: number;
+  oversizedExcluded: number;
+  secretExcluded: number;
+  ignoredByGit: number;
+  unsupportedTypeExcluded: number;
   failed: Array<{ path: string; reason: string }>;
   startedAt?: string;
   completedAt?: string;
 }
 
 export interface StructuredAnswer {
+  questionId?: string;
+  revision?: number;
+  generationId?: string;
   question: string;
   questionExplanation?: string;
   language: 'zh' | 'en' | 'mixed';
@@ -73,4 +84,12 @@ export interface StructuredAnswer {
   missingInformation?: string[];
   searchedSourceTypes: string[];
   provider: string;
+  diagnostics?: {
+    retrievalMs: number;
+    candidateCount: number;
+    evidenceCount: number;
+    llmFirstResponseMs?: number;
+    llmTotalMs?: number;
+    schemaValid: boolean;
+  };
 }

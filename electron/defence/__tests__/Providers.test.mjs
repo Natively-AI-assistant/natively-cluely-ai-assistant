@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import { LlmProvider, ProviderError, SttProvider } from '../../../dist-electron/electron/defence/providers.js';
+
+async function mockServer(handler){const server=http.createServer(handler);await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const port=server.address().port;return{url:`http://127.0.0.1:${port}/v1`,close:()=>new Promise(resolve=>server.close(resolve))}}
+test('mock STT multipart and LLM structured response pass schema validation',async t=>{const mock=await mockServer((req,res)=>{if(req.url.endsWith('/audio/transcriptions')){let size=0;req.on('data',chunk=>size+=chunk.length);req.on('end',()=>{assert.ok(size>20);res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({text:'How does retrieval work?'}))})}else{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({spokenAnswer:'Ready.',noEvidence:true,keywords:[],followUps:[]})}}]}))}});t.after(()=>mock.close());
+  const stt=new SttProvider({provider:'mock',apiKey:'TEST',baseUrl:mock.url,model:'mock-stt',language:'auto',timeoutMs:2000,maxRetries:0});const sttResult=await stt.transcribeWithMetrics(Buffer.from('RIFF fixture wave bytes'),'audio/wav');assert.match(sttResult.value,/retrieval/);assert.equal(sttResult.timing.status,200);
+  const llm=new LlmProvider({provider:'mock',apiKey:'TEST',baseUrl:mock.url,model:'mock-llm',timeoutMs:2000,maxRetries:0});const llmResult=await llm.answerWithMetrics('question',[],[],'en','brief');assert.equal(llmResult.value.spokenAnswer,'Ready.');assert.equal(llmResult.value.noEvidence,true);
+});
+test('provider authentication errors are classified without leaking response bodies',async t=>{const mock=await mockServer((_req,res)=>{res.writeHead(401,{'Content-Type':'text/plain'});res.end('secret internal provider details')});t.after(()=>mock.close());const stt=new SttProvider({provider:'mock',apiKey:'TEST',baseUrl:mock.url,model:'mock',language:'auto',timeoutMs:1000,maxRetries:0});await assert.rejects(()=>stt.transcribe(Buffer.from('audio'),'audio/wav'),error=>error instanceof ProviderError&&error.code==='AUTHENTICATION_FAILED'&&!error.message.includes('internal provider'))});
