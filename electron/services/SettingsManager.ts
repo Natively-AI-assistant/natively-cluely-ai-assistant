@@ -9,6 +9,11 @@ export interface AppSettings {
     isUndetectable?: boolean;
     disguiseMode?: 'terminal' | 'settings' | 'activity' | 'none';
     verboseLogging?: boolean;
+    // Context Intelligence debug logging level (Developer settings). The env
+    // var NATIVELY_CONTEXT_DEBUG overrides this — precedence is owned by
+    // context-intelligence/debug/debug-config.ts, which reads this value
+    // through the bound reader; this store only persists the UI choice.
+    contextDebugLevel?: 'off' | 'standard' | 'verbose';
     // Lets the user summon the overlay as a standalone AI chatbox (no audio
     // capture, no STT, no meeting record) via the toggle-visibility hotkey
     // while idle. Off by default — the hotkey's existing behavior is unchanged
@@ -158,6 +163,9 @@ export interface AppSettings {
     sttAllowDualStream?: boolean;
 }
 
+export const VALID_CONTEXT_DEBUG_LEVELS = ['off', 'standard', 'verbose'] as const;
+export type ContextDebugLevelSetting = typeof VALID_CONTEXT_DEBUG_LEVELS[number];
+
 export const VALID_SCREEN_UNDERSTANDING_MODES = ['vision_first', 'vision_only', 'private_vision'] as const;
 export type ScreenUnderstandingMode = typeof VALID_SCREEN_UNDERSTANDING_MODES[number];
 
@@ -234,6 +242,21 @@ export class SettingsManager {
             return stored;
         }
         return 'vision_first';
+    }
+
+    /** Persisted UI choice only — env-var precedence lives in debug-config. */
+    public getContextDebugLevel(): ContextDebugLevelSetting {
+        const stored = this.settings.contextDebugLevel;
+        if (stored && (VALID_CONTEXT_DEBUG_LEVELS as readonly string[]).includes(stored)) return stored;
+        return 'off';
+    }
+
+    public setContextDebugLevel(level: ContextDebugLevelSetting): void {
+        if (!(VALID_CONTEXT_DEBUG_LEVELS as readonly string[]).includes(level)) {
+            throw new Error(`[SettingsManager] Invalid contextDebugLevel: ${level}`);
+        }
+        this.settings.contextDebugLevel = level;
+        this.saveSettings();
     }
 
     public setScreenUnderstandingMode(mode: ScreenUnderstandingMode): void {

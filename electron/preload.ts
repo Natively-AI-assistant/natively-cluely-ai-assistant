@@ -345,7 +345,7 @@ interface ElectronAPI {
   getSttLanguage: () => Promise<string>;
   getAiResponseLanguage: () => Promise<string>;
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void;
-  onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void;
+  onSystemAudioPermissionDenied: (callback: (message: string, titleKey?: string) => void) => () => void;
   getSystemAudioPermissionWarning: () => Promise<string | null>;
   onDeviceSelectionApplied: (
     callback: (payload: {
@@ -364,6 +364,7 @@ interface ElectronAPI {
       maxAttempts: number;
       terminal?: boolean;
       stuck?: boolean;
+      titleKey?: string;
     }) => void,
   ) => () => void;
 
@@ -432,6 +433,11 @@ interface ElectronAPI {
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>;
   getIntelligenceFlags: () => Promise<Array<{ key: string; enabled: boolean; setting: string; env: string; default: boolean }>>;
   setIntelligenceFlag: (key: string, value: boolean | null) => Promise<{ success: boolean; enabled?: boolean; error?: string }>;
+  getContextDebugConfig: () => Promise<{ level: 'off' | 'standard' | 'verbose'; levelSource: 'environment' | 'setting' | 'default'; contentInclusion: boolean; storedLevel?: 'off' | 'standard' | 'verbose'; logDirectory?: string | null; currentFile?: string | null; error?: string }>;
+  setContextDebugLevel: (level: 'off' | 'standard' | 'verbose') => Promise<{ ok: boolean; error?: string }>;
+  openContextDebugFolder: () => Promise<{ ok: boolean; error?: string }>;
+  clearContextDebugLogs: () => Promise<{ ok: boolean; removed?: number; error?: string }>;
+  exportContextDebugSession: () => Promise<{ ok: boolean; path?: string; error?: string }>;
   getHindsightConfig: () => Promise<{ baseUrl: string; hasApiKey: boolean; autoStart: boolean; serverCommand: string; llmProvider: string; available: boolean; mode: 'local' | 'cloud'; synthetic: boolean; explicitlyDisabled: boolean; authFailed: boolean }>;
   setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => Promise<{ success: boolean; healthy?: boolean; error?: string }>;
   testHindsightConnection: () => Promise<{ healthy: boolean; error?: string }>;
@@ -1573,8 +1579,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('stt-language-auto-detected', subscription);
     };
   },
-  onSystemAudioPermissionDenied: (callback: (message: string) => void) => {
-    const subscription = (_: any, message: string) => callback(message);
+  onSystemAudioPermissionDenied: (callback: (message: string, titleKey?: string) => void) => {
+    // `titleKey` is the i18n key for the banner heading (main.ts
+    // permissionTitleKey). Optional second argument — older main-process
+    // emitters send only `message`, in which case the renderer falls back to
+    // a generic title.
+    const subscription = (_: any, message: string, titleKey?: string) => callback(message, titleKey);
     ipcRenderer.on('system-audio-permission-denied', subscription);
     return () => {
       ipcRenderer.removeListener('system-audio-permission-denied', subscription);
@@ -1604,6 +1614,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       maxAttempts: number;
       terminal?: boolean;
       stuck?: boolean;
+      titleKey?: string;
     }) => void,
   ) => {
     const subscription = (_: any, payload: any) => callback(payload);
@@ -1691,6 +1702,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateDiagram: (text?: string) => ipcRenderer.invoke('diagram:generate', { text }),
   getIntelligenceFlags: () => ipcRenderer.invoke('intelligence-flags:get'),
   setIntelligenceFlag: (key: string, value: boolean | null) => ipcRenderer.invoke('intelligence-flags:set', { key, value }),
+  getContextDebugConfig: () => ipcRenderer.invoke('context-debug:get-config'),
+  setContextDebugLevel: (level: 'off' | 'standard' | 'verbose') => ipcRenderer.invoke('context-debug:set-level', { level }),
+  openContextDebugFolder: () => ipcRenderer.invoke('context-debug:open-folder'),
+  clearContextDebugLogs: () => ipcRenderer.invoke('context-debug:clear'),
+  exportContextDebugSession: () => ipcRenderer.invoke('context-debug:export'),
   getHindsightConfig: () => ipcRenderer.invoke('hindsight-config:get'),
   setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => ipcRenderer.invoke('hindsight-config:set', cfg),
   testHindsightConnection: () => ipcRenderer.invoke('hindsight-config:test'),

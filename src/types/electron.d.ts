@@ -249,9 +249,13 @@ export interface ElectronAPI {
   getSttLanguage: () => Promise<string>
   getAiResponseLanguage: () => Promise<string>
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void
-  onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
+  // `titleKey` is the i18n key for the warning banner's heading (main.ts
+  // permissionTitleKey). Optional: emitters that predate it, and the in-app
+  // TCC-repair result path, send no title and the banner falls back to a
+  // generic one.
+  onSystemAudioPermissionDenied: (callback: (message: string, titleKey?: string) => void) => () => void
   onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => () => void
-  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean }) => void) => () => void
+  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean; titleKey?: string }) => void) => () => void
 
   // STT Status Events
   onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
@@ -331,6 +335,11 @@ export interface ElectronAPI {
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>
   getIntelligenceFlags: () => Promise<Array<{ key: string; enabled: boolean; setting: string; env: string; default: boolean }>>
   setIntelligenceFlag: (key: string, value: boolean | null) => Promise<{ success: boolean; enabled?: boolean; error?: string }>
+  getContextDebugConfig: () => Promise<{ level: 'off' | 'standard' | 'verbose'; levelSource: 'environment' | 'setting' | 'default'; contentInclusion: boolean; storedLevel?: 'off' | 'standard' | 'verbose'; logDirectory?: string | null; currentFile?: string | null; error?: string }>
+  setContextDebugLevel: (level: 'off' | 'standard' | 'verbose') => Promise<{ ok: boolean; error?: string }>
+  openContextDebugFolder: () => Promise<{ ok: boolean; error?: string }>
+  clearContextDebugLogs: () => Promise<{ ok: boolean; removed?: number; error?: string }>
+  exportContextDebugSession: () => Promise<{ ok: boolean; path?: string; error?: string }>
   getHindsightConfig: () => Promise<{ baseUrl: string; hasApiKey: boolean; autoStart: boolean; serverCommand: string; llmProvider: string; available: boolean; mode: 'local' | 'cloud'; synthetic: boolean; explicitlyDisabled: boolean; authFailed: boolean }>
   setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => Promise<{ success: boolean; healthy?: boolean; error?: string }>
   testHindsightConnection: () => Promise<{ healthy: boolean; error?: string }>
