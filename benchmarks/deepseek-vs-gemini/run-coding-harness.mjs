@@ -140,7 +140,13 @@ async function main() {
     }
     const record = {
       problemId: promptId, modelId, difficulty: problem.difficulty, language: problem.language,
-      execution: problem.execution, rawText: call.text, ...scored,
+      execution: problem.execution, rawText: call.text,
+      // streaming perf metrics from the call itself (scored.error may override
+      // call.error below, so these are spread BEFORE ...scored deliberately)
+      ttftMs: call.ttftMs, latencyMs: call.latencyMs,
+      throughputTps: call.throughputTps, genTps: call.genTps,
+      inputTokens: call.inputTokens, outputTokens: call.outputTokens,
+      ...scored,
     };
     results = upsertResult(results, record, 'problemId');
     fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2));
