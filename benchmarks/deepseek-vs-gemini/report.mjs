@@ -1,7 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { aggregateQuality, aggregateCoding, aggregateLatencyCost, renderMarkdownReport } from './lib/aggregate.mjs';
+import {
+  aggregateQuality,
+  aggregateCoding,
+  aggregateLatencyCost,
+  detectFailedModels,
+  renderMarkdownReport,
+} from './lib/aggregate.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RESULTS_DIR = path.join(__dirname, 'results');
@@ -28,11 +34,18 @@ function main() {
   const judged = loadJson('judged-latest.json', { perPrompt: [], contested: [] });
 
   const categoryByPrompt = categoryByPromptFromFixtures();
-  const quality = aggregateQuality(judged.perPrompt, categoryByPrompt);
+  const quality = aggregateQuality(judged.perPrompt ?? [], categoryByPrompt);
   const codingAgg = aggregateCoding(coding);
   const latencyCost = aggregateLatencyCost(raw);
+  const failedModels = detectFailedModels(raw);
 
-  const md = renderMarkdownReport({ quality, coding: codingAgg, latencyCost, contested: judged.contested });
+  const md = renderMarkdownReport({
+    quality,
+    coding: codingAgg,
+    latencyCost,
+    contested: judged.contested ?? [],
+    failedModels,
+  });
   const outPath = path.join(RESULTS_DIR, 'report-latest.md');
   fs.writeFileSync(outPath, md);
   console.log(`Wrote report to ${outPath}`);

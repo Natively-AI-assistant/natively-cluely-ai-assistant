@@ -11,10 +11,12 @@ export function aggregateQuality(perPrompt, categoryByPrompt) {
       buckets.set(key, bucket);
     }
   }
-  return [...buckets.entries()].map(([key, { sum, count }]) => {
-    const [modelId, category] = key.split('::');
-    return { modelId, category, meanScore: sum / count, promptCount: count };
-  });
+  return [...buckets.entries()]
+    .map(([key, { sum, count }]) => {
+      const [modelId, category] = key.split('::');
+      return { modelId, category, meanScore: sum / count, promptCount: count };
+    })
+    .sort((a, b) => a.modelId.localeCompare(b.modelId) || a.category.localeCompare(b.category));
 }
 
 export function aggregateCoding(codingResults) {
@@ -27,10 +29,12 @@ export function aggregateCoding(codingResults) {
     bucket.count += 1;
     buckets.set(key, bucket);
   }
-  return [...buckets.entries()].map(([key, { passSum, totalSum, count }]) => {
-    const [modelId, difficulty] = key.split('::');
-    return { modelId, difficulty, passRate: totalSum === 0 ? 0 : passSum / totalSum, problemCount: count };
-  });
+  return [...buckets.entries()]
+    .map(([key, { passSum, totalSum, count }]) => {
+      const [modelId, difficulty] = key.split('::');
+      return { modelId, difficulty, passRate: totalSum === 0 ? 0 : passSum / totalSum, problemCount: count };
+    })
+    .sort((a, b) => a.modelId.localeCompare(b.modelId) || a.difficulty.localeCompare(b.difficulty));
 }
 
 function percentile(sorted, p) {
@@ -45,22 +49,70 @@ export function aggregateLatencyCost(raw) {
     if (!byModel.has(r.modelId)) byModel.set(r.modelId, []);
     byModel.get(r.modelId).push(r);
   }
-  return [...byModel.entries()].map(([modelId, rows]) => {
-    const latencies = rows.map((r) => r.latencyMs).sort((a, b) => a - b);
-    const totalCostUsd = rows.reduce((s, r) => s + (r.costUsd || 0), 0);
-    return {
-      modelId,
-      p50LatencyMs: percentile(latencies, 50),
-      p95LatencyMs: percentile(latencies, 95),
-      totalCostUsd,
-      avgCostPerCall: totalCostUsd / rows.length,
-    };
-  });
+  return [...byModel.entries()]
+    .map(([modelId, rows]) => {
+      const latencies = rows.map((r) => r.latencyMs).sort((a, b) => a - b);
+      const totalCostUsd = rows.reduce((s, r) => s + (r.costUsd || 0), 0);
+      return {
+        modelId,
+        p50LatencyMs: percentile(latencies, 50),
+        p95LatencyMs: percentile(latencies, 95),
+        totalCostUsd,
+        avgCostPerCall: totalCostUsd / rows.length,
+      };
+    })
+    .sort((a, b) => a.modelId.localeCompare(b.modelId));
 }
 
-export function renderMarkdownReport({ quality, coding, latencyCost, contested }) {
+/**
+ * Detect models that appear in `raw` but have zero successful (non-error) records.
+ * Uses the same success predicate as `aggregateLatencyCost` (`!r.error`) so the two
+ * never disagree about which models "exist" in a run.
+ *
+ * Returns an array of { modelId, failureCount, sampleError }, sorted by modelId.
+ */
+export function detectFailedModels(raw) {
+  const allModelIds = new Set();
+  const successModelIds = new Set();
+  const failuresByModel = new Map(); // modelId -> { count, sampleError }
+
+  for (const r of raw) {
+    allModelIds.add(r.modelId);
+    if (!r.error) {
+      successModelIds.add(r.modelId);
+    } else {
+      const entry = failuresByModel.get(r.modelId) || { count: 0, sampleError: r.error };
+      entry.count += 1;
+      failuresByModel.set(r.modelId, entry);
+    }
+  }
+
+  const failedModels = [];
+  for (const modelId of allModelIds) {
+    if (successModelIds.has(modelId)) continue;
+    const { count, sampleError } = failuresByModel.get(modelId) || { count: 0, sampleError: null };
+    failedModels.push({ modelId, failureCount: count, sampleError });
+  }
+
+  return failedModels.sort((a, b) => a.modelId.localeCompare(b.modelId));
+}
+
+export function renderMarkdownReport({ quality, coding, latencyCost, contested = [], failedModels = [] }) {
   const lines = [];
   lines.push('# DeepSeek vs Gemini Raw-Model Benchmark Report\n');
+
+  if (failedModels.length > 0) {
+    lines.push('## Models with no successful calls\n');
+    lines.push(
+      'The following models are EXCLUDED from every table below because every call to them failed — this is NOT the same as "not tested."\n'
+    );
+    lines.push('| Model | Failed calls | Sample error |');
+    lines.push('|---|---|---|');
+    for (const f of failedModels) {
+      lines.push(`| ${f.modelId} | ${f.failureCount} | ${f.sampleError ?? '(no error message)'} |`);
+    }
+    lines.push('');
+  }
 
   lines.push('## Quality by category (mean of correctness+completeness+actionability, max 15)\n');
   lines.push('| Model | Category | Mean Score | Prompts |');
