@@ -4,660 +4,2579 @@
     "difficulty": "easy",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `isPalindrome(s)` that returns true if the string s reads the same forwards and backwards, ignoring case and non-alphanumeric characters.",
-    "function_name": "isPalindrome",
+    "prompt": "Write a function `isValidGateCode(code)` that checks a parking-gate access code. First strip any trailing 'x' or 'X' padding characters from the end of the string. Then, treating the remainder case-insensitively, return true if it reads the same forwards and backwards (an empty remainder counts as valid).",
+    "function_name": "isValidGateCode",
     "test_cases": [
-      { "input": ["A man, a plan, a canal: Panama"], "expected": true },
-      { "input": ["race a car"], "expected": false },
-      { "input": [""], "expected": true }
+      {
+        "input": [
+          "AbXX"
+        ],
+        "expected": false
+      },
+      {
+        "input": [
+          "AbbAxx"
+        ],
+        "expected": true
+      },
+      {
+        "input": [
+          ""
+        ],
+        "expected": true
+      },
+      {
+        "input": [
+          "xXxX"
+        ],
+        "expected": true
+      },
+      {
+        "input": [
+          "AbA"
+        ],
+        "expected": true
+      },
+      {
+        "input": [
+          "AbcX"
+        ],
+        "expected": false
+      }
     ],
-    "reference_solution": "function isPalindrome(s) { const clean = s.toLowerCase().replace(/[^a-z0-9]/g, ''); return clean === clean.split('').reverse().join(''); }"
+    "reference_solution": "function isValidGateCode(code) { let end = code.length; while (end > 0 && (code[end - 1] === 'x' || code[end - 1] === 'X')) end--; const core = code.slice(0, end).toLowerCase(); for (let i = 0, j = core.length - 1; i < j; i++, j--) { if (core[i] !== core[j]) return false; } return true; }"
   },
   {
     "id": "code-002",
     "difficulty": "easy",
     "language": "typescript",
     "execution": true,
-    "prompt": "Write a function `sumDigits(n: number): number` that returns the sum of the digits of a non-negative integer n.",
-    "function_name": "sumDigits",
+    "prompt": "Write a function `weightedDigitSum(n: number): number` that computes a position-weighted digit sum of a non-negative integer n: the units digit contributes 1x its value, the tens digit 2x, the hundreds digit 3x, and so on (weight = 1-based position counted from the rightmost digit).",
+    "function_name": "weightedDigitSum",
     "test_cases": [
-      { "input": [0], "expected": 0 },
-      { "input": [1234], "expected": 10 },
-      { "input": [999], "expected": 27 }
+      {
+        "input": [
+          0
+        ],
+        "expected": 0
+      },
+      {
+        "input": [
+          123
+        ],
+        "expected": 10
+      },
+      {
+        "input": [
+          999
+        ],
+        "expected": 54
+      },
+      {
+        "input": [
+          10
+        ],
+        "expected": 2
+      }
     ],
-    "reference_solution": "function sumDigits(n) { let s = 0; let x = Math.abs(n); while (x > 0) { s += x % 10; x = Math.floor(x / 10); } return s; }"
+    "reference_solution": "function weightedDigitSum(n) { let s = 0; let x = Math.abs(n); let pos = 1; while (x > 0) { s += (x % 10) * pos; x = Math.floor(x / 10); pos++; } return s; }"
   },
   {
     "id": "code-003",
     "difficulty": "easy",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `reverseString(s)` that returns the reversal of string s.",
-    "function_name": "reverseString",
+    "prompt": "Write a function `reverseWithinWords(s)` that reverses the characters inside each single-space-separated word of s, while keeping the words themselves in their original order (e.g. 'hello world' -> 'olleh dlrow').",
+    "function_name": "reverseWithinWords",
     "test_cases": [
-      { "input": ["hello"], "expected": "olleh" },
-      { "input": [""], "expected": "" },
-      { "input": ["a"], "expected": "a" }
+      {
+        "input": [
+          "hello"
+        ],
+        "expected": "olleh"
+      },
+      {
+        "input": [
+          ""
+        ],
+        "expected": ""
+      },
+      {
+        "input": [
+          "hello world"
+        ],
+        "expected": "olleh dlrow"
+      },
+      {
+        "input": [
+          "a bb ccc"
+        ],
+        "expected": "a bb ccc"
+      }
     ],
-    "reference_solution": "def reverseString(s):\n    return s[::-1]\n"
+    "reference_solution": "def reverseWithinWords(s):\n    return ' '.join(w[::-1] for w in s.split(' '))\n"
   },
   {
     "id": "code-004",
     "difficulty": "easy",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `isPrime(n)` that returns true if n is a prime number (n is a positive integer), false otherwise.",
-    "function_name": "isPrime",
+    "prompt": "Write a function `isPrimeGap(n, gap)` that returns true only if BOTH n and (n - gap) are prime numbers (using the standard definition: primes are >= 2). Return false if either value is not prime, including when n - gap is negative or less than 2.",
+    "function_name": "isPrimeGap",
     "test_cases": [
-      { "input": [2], "expected": true },
-      { "input": [1], "expected": false },
-      { "input": [17], "expected": true },
-      { "input": [18], "expected": false }
+      {
+        "input": [
+          5,
+          2
+        ],
+        "expected": true
+      },
+      {
+        "input": [
+          17,
+          4
+        ],
+        "expected": true
+      },
+      {
+        "input": [
+          9,
+          2
+        ],
+        "expected": false
+      },
+      {
+        "input": [
+          7,
+          6
+        ],
+        "expected": false
+      },
+      {
+        "input": [
+          2,
+          0
+        ],
+        "expected": true
+      }
     ],
-    "reference_solution": "function isPrime(n) { if (n < 2) return false; for (let i = 2; i * i <= n; i++) { if (n % i === 0) return false; } return true; }"
+    "reference_solution": "function isPrimeGap(n, gap) { function isP(x) { if (x < 2) return false; for (let i = 2; i * i <= x; i++) if (x % i === 0) return false; return true; } return isP(n) && isP(n - gap); }"
   },
   {
     "id": "code-005",
     "difficulty": "easy",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `countVowels(s)` that returns the number of vowels (a, e, i, o, u, case-insensitive) in string s.",
-    "function_name": "countVowels",
+    "prompt": "Write a function `countVowelsBeforeConsonant(s, ch)` that counts how many vowels (a, e, i, o, u) in string s are immediately followed by the character ch. Comparisons are case-insensitive.",
+    "function_name": "countVowelsBeforeConsonant",
     "test_cases": [
-      { "input": ["Hello World"], "expected": 3 },
-      { "input": ["xyz"], "expected": 0 },
-      { "input": ["AEIOUaeiou"], "expected": 10 }
+      {
+        "input": [
+          "Hello World",
+          "l"
+        ],
+        "expected": 1
+      },
+      {
+        "input": [
+          "aeiou",
+          "z"
+        ],
+        "expected": 0
+      },
+      {
+        "input": [
+          "balloon",
+          "l"
+        ],
+        "expected": 1
+      },
+      {
+        "input": [
+          "",
+          "x"
+        ],
+        "expected": 0
+      }
     ],
-    "reference_solution": "def countVowels(s):\n    return sum(1 for c in s.lower() if c in 'aeiou')\n"
+    "reference_solution": "def countVowelsBeforeConsonant(s, ch):\n    vowels = set('aeiou')\n    ch = ch.lower()\n    s_low = s.lower()\n    count = 0\n    for i in range(len(s_low) - 1):\n        if s_low[i] in vowels and s_low[i + 1] == ch:\n            count += 1\n    return count\n"
   },
   {
     "id": "code-006",
     "difficulty": "easy",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `maxOfArray(arr)` that returns the maximum number in a non-empty array of numbers.",
-    "function_name": "maxOfArray",
+    "prompt": "Write a function `maxAfterRemovingOutlier(arr)` that removes exactly one occurrence of the array's current maximum value, then returns the maximum of what remains. Return null if arr is empty or becomes empty after the removal (i.e. arr had only one element).",
+    "function_name": "maxAfterRemovingOutlier",
     "test_cases": [
-      { "input": [[1, 5, 3]], "expected": 5 },
-      { "input": [[-1, -5, -3]], "expected": -1 },
-      { "input": [[7]], "expected": 7 }
+      {
+        "input": [
+          [
+            1,
+            5,
+            3
+          ]
+        ],
+        "expected": 3
+      },
+      {
+        "input": [
+          [
+            -1,
+            -5,
+            -3
+          ]
+        ],
+        "expected": -3
+      },
+      {
+        "input": [
+          [
+            7
+          ]
+        ],
+        "expected": null
+      },
+      {
+        "input": [
+          [
+            5,
+            5,
+            3
+          ]
+        ],
+        "expected": 5
+      }
     ],
-    "reference_solution": "function maxOfArray(arr) { return Math.max(...arr); }"
+    "reference_solution": "function maxAfterRemovingOutlier(arr) { if (arr.length === 0) return null; const maxVal = Math.max(...arr); const idx = arr.indexOf(maxVal); const rest = arr.slice(0, idx).concat(arr.slice(idx + 1)); if (rest.length === 0) return null; return Math.max(...rest); }"
   },
   {
     "id": "code-007",
     "difficulty": "easy",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `factorial(n)` that returns n! for a non-negative integer n (factorial(0) = 1).",
-    "function_name": "factorial",
+    "prompt": "Write a function `factorialDigitSum(n)` that computes n! for a non-negative integer n and then returns the sum of the decimal digits of that factorial.",
+    "function_name": "factorialDigitSum",
     "test_cases": [
-      { "input": [0], "expected": 1 },
-      { "input": [5], "expected": 120 },
-      { "input": [10], "expected": 3628800 }
+      {
+        "input": [
+          0
+        ],
+        "expected": 1
+      },
+      {
+        "input": [
+          5
+        ],
+        "expected": 3
+      },
+      {
+        "input": [
+          10
+        ],
+        "expected": 27
+      }
     ],
-    "reference_solution": "def factorial(n):\n    result = 1\n    for i in range(2, n + 1):\n        result *= i\n    return result\n"
+    "reference_solution": "def factorialDigitSum(n):\n    result = 1\n    for i in range(2, n + 1):\n        result *= i\n    return sum(int(d) for d in str(result))\n"
   },
   {
     "id": "code-008",
     "difficulty": "easy",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `isAnagram(a, b)` that returns true if strings a and b are anagrams of each other (same characters, same counts, ignoring case), false otherwise.",
-    "function_name": "isAnagram",
+    "prompt": "Write a function `isAnagramIgnoringOneChar(a, b)` that returns true if a and b are exact anagrams of each other (same length, same character multiset, case-insensitive), OR if their lengths differ by exactly 1 and removing exactly one character from the longer string's multiset would make it match the shorter string's multiset. Return false otherwise (including when lengths differ by more than 1).",
+    "function_name": "isAnagramIgnoringOneChar",
     "test_cases": [
-      { "input": ["listen", "silent"], "expected": true },
-      { "input": ["hello", "world"], "expected": false },
-      { "input": ["", ""], "expected": true }
+      {
+        "input": [
+          "listen",
+          "silent"
+        ],
+        "expected": true
+      },
+      {
+        "input": [
+          "listen",
+          "silentx"
+        ],
+        "expected": true
+      },
+      {
+        "input": [
+          "hello",
+          "world"
+        ],
+        "expected": false
+      },
+      {
+        "input": [
+          "a",
+          "abc"
+        ],
+        "expected": false
+      }
     ],
-    "reference_solution": "function isAnagram(a, b) { const norm = s => s.toLowerCase().split('').sort().join(''); return norm(a) === norm(b); }"
+    "reference_solution": "function isAnagramIgnoringOneChar(a, b) { function counts(s) { const m = new Map(); for (const c of s.toLowerCase()) m.set(c, (m.get(c) || 0) + 1); return m; } if (a.length === b.length) { const ca = counts(a), cb = counts(b); if (ca.size !== cb.size) return false; for (const [k, v] of ca) if (cb.get(k) !== v) return false; return true; } if (Math.abs(a.length - b.length) !== 1) return false; const longer = a.length > b.length ? a : b; const shorter = a.length > b.length ? b : a; const cl = counts(longer), cs = counts(shorter); let diffFound = false; for (const [k, v] of cl) { const sv = cs.get(k) || 0; const diff = v - sv; if (diff === 0) continue; if (diff === 1 && !diffFound) { diffFound = true; continue; } return false; } return true; }"
   },
   {
     "id": "code-009",
     "difficulty": "easy",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `capitalizeWords(s)` that capitalizes the first letter of every word in a space-separated string s, leaving all other characters unchanged.",
-    "function_name": "capitalizeWords",
+    "prompt": "Write a function `capitalizeAlternateWords(s)` operating on a single-space-separated string s. For words at even indices (0, 2, 4, ...) capitalize the first letter and lowercase the rest; words at odd indices are left completely unchanged.",
+    "function_name": "capitalizeAlternateWords",
     "test_cases": [
-      { "input": ["hello world"], "expected": "Hello World" },
-      { "input": ["already Capitalized"], "expected": "Already Capitalized" },
-      { "input": [""], "expected": "" }
+      {
+        "input": [
+          "hello world"
+        ],
+        "expected": "Hello world"
+      },
+      {
+        "input": [
+          "ALREADY loud HERE now"
+        ],
+        "expected": "Already loud Here now"
+      },
+      {
+        "input": [
+          ""
+        ],
+        "expected": ""
+      }
     ],
-    "reference_solution": "def capitalizeWords(s):\n    return ' '.join(w[:1].upper() + w[1:] if w else w for w in s.split(' '))\n"
+    "reference_solution": "def capitalizeAlternateWords(s):\n    words = s.split(' ')\n    result = []\n    for i, w in enumerate(words):\n        if i % 2 == 0 and w:\n            result.append(w[0].upper() + w[1:].lower())\n        else:\n            result.append(w)\n    return ' '.join(result)\n"
   },
   {
     "id": "code-010",
     "difficulty": "easy",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `flattenArray(arr)` that flattens an arbitrarily nested array of numbers into a single flat array of numbers, preserving order.",
-    "function_name": "flattenArray",
+    "prompt": "Write a function `flattenArrayDepthLimited(arr, maxDepth)` that flattens a nested array, but only descends up to maxDepth levels of nesting; any array still nested beyond that depth is left in place as a sub-array element rather than being flattened further.",
+    "function_name": "flattenArrayDepthLimited",
     "test_cases": [
-      { "input": [[1, [2, 3], [4, [5, 6]]]], "expected": [1, 2, 3, 4, 5, 6] },
-      { "input": [[[1, 2], [3, 4]]], "expected": [1, 2, 3, 4] },
-      { "input": [[[]]], "expected": [] }
+      {
+        "input": [
+          [
+            1,
+            [
+              2,
+              3
+            ],
+            [
+              4,
+              [
+                5,
+                6
+              ]
+            ]
+          ],
+          1
+        ],
+        "expected": [
+          1,
+          2,
+          3,
+          4,
+          [
+            5,
+            6
+          ]
+        ]
+      },
+      {
+        "input": [
+          [
+            1,
+            [
+              2,
+              3
+            ],
+            [
+              4,
+              [
+                5,
+                6
+              ]
+            ]
+          ],
+          2
+        ],
+        "expected": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      {
+        "input": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              3,
+              4
+            ]
+          ],
+          1
+        ],
+        "expected": [
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      {
+        "input": [
+          [
+            []
+          ],
+          0
+        ],
+        "expected": [
+          []
+        ]
+      }
     ],
-    "reference_solution": "function flattenArray(arr) { return arr.reduce((acc, el) => acc.concat(Array.isArray(el) ? flattenArray(el) : el), []); }"
+    "reference_solution": "function flattenArrayDepthLimited(arr, maxDepth) { function helper(a, depth) { return a.reduce((acc, el) => { if (Array.isArray(el) && depth < maxDepth) { acc.push(...helper(el, depth + 1)); } else { acc.push(el); } return acc; }, []); } return helper(arr, 0); }"
   },
   {
     "id": "code-011",
     "difficulty": "easy",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `removeDuplicates(arr)` that returns a new list with duplicate values removed, preserving the order of first occurrence.",
-    "function_name": "removeDuplicates",
+    "prompt": "Write a function `removeDuplicatesKeepLast(arr)` that removes duplicate values from arr, keeping only each value's LAST occurrence, and orders the result by the position of that last occurrence (ascending).",
+    "function_name": "removeDuplicatesKeepLast",
     "test_cases": [
-      { "input": [[1, 2, 2, 3, 1]], "expected": [1, 2, 3] },
-      { "input": [[]], "expected": [] },
-      { "input": [[5, 5, 5]], "expected": [5] }
+      {
+        "input": [
+          [
+            1,
+            2,
+            2,
+            3,
+            1
+          ]
+        ],
+        "expected": [
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "input": [
+          []
+        ],
+        "expected": []
+      },
+      {
+        "input": [
+          [
+            5,
+            5,
+            5
+          ]
+        ],
+        "expected": [
+          5
+        ]
+      },
+      {
+        "input": [
+          [
+            3,
+            1,
+            3,
+            2,
+            1
+          ]
+        ],
+        "expected": [
+          3,
+          2,
+          1
+        ]
+      }
     ],
-    "reference_solution": "def removeDuplicates(arr):\n    seen = set()\n    out = []\n    for x in arr:\n        if x not in seen:\n            seen.add(x)\n            out.append(x)\n    return out\n"
+    "reference_solution": "def removeDuplicatesKeepLast(arr):\n    last_idx = {}\n    for i, x in enumerate(arr):\n        last_idx[x] = i\n    return [x for x, i in sorted(last_idx.items(), key=lambda kv: kv[1])]\n"
   },
   {
     "id": "code-012",
     "difficulty": "easy",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `celsiusToFahrenheit(c)` that converts a Celsius temperature to Fahrenheit using F = C * 9/5 + 32.",
-    "function_name": "celsiusToFahrenheit",
+    "prompt": "Write a function `celsiusToFahrenheitRounded(c, mode)` that converts a Celsius temperature to Fahrenheit (F = C * 9/5 + 32) and then rounds the result according to mode: 'up' rounds toward positive infinity (ceiling), 'down' rounds toward negative infinity (floor), and any other value rounds to the nearest integer (ties round up, matching Math.round).",
+    "function_name": "celsiusToFahrenheitRounded",
     "test_cases": [
-      { "input": [0], "expected": 32 },
-      { "input": [100], "expected": 212 },
-      { "input": [-40], "expected": -40 }
+      {
+        "input": [
+          0,
+          "nearest"
+        ],
+        "expected": 32
+      },
+      {
+        "input": [
+          37,
+          "up"
+        ],
+        "expected": 99
+      },
+      {
+        "input": [
+          37,
+          "down"
+        ],
+        "expected": 98
+      },
+      {
+        "input": [
+          -40,
+          "nearest"
+        ],
+        "expected": -40
+      }
     ],
-    "reference_solution": "function celsiusToFahrenheit(c) { return c * 9 / 5 + 32; }"
+    "reference_solution": "function celsiusToFahrenheitRounded(c, mode) { const f = c * 9 / 5 + 32; if (mode === 'up') return Math.ceil(f); if (mode === 'down') return Math.floor(f); return Math.round(f); }"
   },
   {
     "id": "code-013",
     "difficulty": "easy",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `countOccurrences(s, ch)` that returns the number of times character ch appears in string s.",
-    "function_name": "countOccurrences",
+    "prompt": "Write a function `countRunsOfChar(s, ch)` that counts the number of MAXIMAL contiguous runs of character ch within s (not the total count of ch — adjacent occurrences of ch count as a single run).",
+    "function_name": "countRunsOfChar",
     "test_cases": [
-      { "input": ["banana", "a"], "expected": 3 },
-      { "input": ["hello", "z"], "expected": 0 },
-      { "input": ["", "x"], "expected": 0 }
+      {
+        "input": [
+          "banana",
+          "a"
+        ],
+        "expected": 3
+      },
+      {
+        "input": [
+          "aabaa",
+          "a"
+        ],
+        "expected": 2
+      },
+      {
+        "input": [
+          "hello",
+          "z"
+        ],
+        "expected": 0
+      },
+      {
+        "input": [
+          "",
+          "x"
+        ],
+        "expected": 0
+      }
     ],
-    "reference_solution": "def countOccurrences(s, ch):\n    return s.count(ch)\n"
+    "reference_solution": "def countRunsOfChar(s, ch):\n    count = 0\n    prev = None\n    for c in s:\n        if c == ch and prev != ch:\n            count += 1\n        prev = c\n    return count\n"
   },
   {
     "id": "code-014",
     "difficulty": "easy",
     "language": "sql",
     "execution": false,
-    "prompt": "Write a SQL query that returns the category and the count of products in each category from a `products(id, name, category, price)` table, ordered by category ascending.",
-    "reference_answer": "SELECT category, COUNT(*) AS product_count FROM products GROUP BY category ORDER BY category ASC; -- must GROUP BY category, use COUNT(*), and ORDER BY category ascending."
+    "prompt": "Write a SQL query that returns, for each category, the name of the single CHEAPEST product in that category and its price, from a `products(id, name, category, price)` table. If a category has a tie for cheapest price, return the product with the lexicographically smallest name. Order the results by category ascending.",
+    "reference_answer": "A correct answer uses a window function such as ROW_NUMBER() OVER (PARTITION BY category ORDER BY price ASC, name ASC) in a CTE or subquery, then filters the outer query WHERE rn = 1, and finally ORDER BY category ASC. The explicit `, name ASC` secondary sort key inside the window is required to satisfy the lexicographic tie-break — a query ordering only by price would return an arbitrary product among ties."
   },
   {
     "id": "code-015",
     "difficulty": "easy",
     "language": "go",
     "execution": false,
-    "prompt": "Write a Go function `func ReverseInts(nums []int)` that reverses a slice of integers in place (no return value, mutate the input slice).",
-    "reference_answer": "A correct answer swaps elements from both ends toward the middle using two index pointers (i := 0, j := len(nums)-1), incrementing i and decrementing j until i >= j, without allocating a new slice."
+    "prompt": "Write a Go function `func ReverseFirstHalf(nums []int)` that reverses, in place, only the FIRST half of the slice (elements at indices 0 through len(nums)/2 - 1, using integer division). If the length is odd, the middle element and the entire second half must be left completely untouched, in their original positions.",
+    "reference_answer": "A correct answer computes half := len(nums) / 2, then swaps elements using two index pointers i := 0 and j := half - 1, incrementing i and decrementing j while i < j, so only indices [0, half) are touched — indices >= half (including any middle element on odd-length slices) are never read or written."
   },
   {
     "id": "code-016",
     "difficulty": "easy",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `titleCase(s)` that converts a string to title case: the first letter of each word capitalized, all other letters lowercase. Words are separated by single spaces.",
-    "function_name": "titleCase",
+    "prompt": "Write a function `titleCaseSkippingShortWords(s, minLen)` operating on a single-space-separated string s. Words whose length is >= minLen are title-cased (first letter upper, rest lower); words shorter than minLen are instead fully lowercased.",
+    "function_name": "titleCaseSkippingShortWords",
     "test_cases": [
-      { "input": ["HELLO WORLD"], "expected": "Hello World" },
-      { "input": ["mIxEd CaSe text"], "expected": "Mixed Case Text" },
-      { "input": [""], "expected": "" }
+      {
+        "input": [
+          "HELLO WORLD",
+          3
+        ],
+        "expected": "Hello World"
+      },
+      {
+        "input": [
+          "a big DOG",
+          3
+        ],
+        "expected": "a Big Dog"
+      },
+      {
+        "input": [
+          "",
+          3
+        ],
+        "expected": ""
+      }
     ],
-    "reference_solution": "function titleCase(s) { return s.split(' ').map(w => w.length ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w).join(' '); }"
+    "reference_solution": "function titleCaseSkippingShortWords(s, minLen) { return s.split(' ').map(w => { if (w.length === 0) return w; if (w.length < minLen) return w.toLowerCase(); return w[0].toUpperCase() + w.slice(1).toLowerCase(); }).join(' '); }"
   },
   {
     "id": "code-017",
     "difficulty": "easy",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `gcd(a, b)` that returns the greatest common divisor of two non-negative integers a and b using the Euclidean algorithm.",
-    "function_name": "gcd",
+    "prompt": "Write a function `gcdOfList(nums)` that returns the greatest common divisor of every number in a non-empty list nums (extend the two-argument Euclidean algorithm to reduce across the whole list).",
+    "function_name": "gcdOfList",
     "test_cases": [
-      { "input": [48, 18], "expected": 6 },
-      { "input": [0, 5], "expected": 5 },
-      { "input": [7, 13], "expected": 1 }
+      {
+        "input": [
+          [
+            48,
+            18,
+            6
+          ]
+        ],
+        "expected": 6
+      },
+      {
+        "input": [
+          [
+            0,
+            5
+          ]
+        ],
+        "expected": 5
+      },
+      {
+        "input": [
+          [
+            7,
+            13,
+            5
+          ]
+        ],
+        "expected": 1
+      },
+      {
+        "input": [
+          [
+            9
+          ]
+        ],
+        "expected": 9
+      }
     ],
-    "reference_solution": "def gcd(a, b):\n    while b:\n        a, b = b, a % b\n    return a\n"
+    "reference_solution": "def gcdOfList(nums):\n    def gcd2(a, b):\n        while b:\n            a, b = b, a % b\n        return a\n    result = 0\n    for n in nums:\n        result = gcd2(result, n)\n    return result\n"
   },
   {
     "id": "code-018",
     "difficulty": "medium",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `twoSum(nums, target)` that returns the indices [i, j] (i < j) of the two numbers in nums that add up to target. Assume exactly one solution exists.",
-    "function_name": "twoSum",
+    "prompt": "A vending kiosk sells snacks. Each snack is given as [price, satisfaction]. Write a function `bestSnackPair(snacks, budget)` that finds two DISTINCT snacks (returned as sorted indices [i, j] with i < j) whose combined price is as LARGE as possible without exceeding budget. If multiple pairs tie on combined price, prefer the pair with the higher combined satisfaction. Return [-1, -1] if no valid pair exists (fewer than 2 snacks, or every pair exceeds budget).",
+    "function_name": "bestSnackPair",
     "test_cases": [
-      { "input": [[2, 7, 11, 15], 9], "expected": [0, 1] },
-      { "input": [[3, 2, 4], 6], "expected": [1, 2] },
-      { "input": [[3, 3], 6], "expected": [0, 1] }
+      {
+        "input": [
+          [
+            [
+              3,
+              5
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              1,
+              9
+            ],
+            [
+              4,
+              2
+            ]
+          ],
+          5
+        ],
+        "expected": [
+          2,
+          3
+        ]
+      },
+      {
+        "input": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              3,
+              1
+            ]
+          ],
+          10
+        ],
+        "expected": [
+          1,
+          2
+        ]
+      },
+      {
+        "input": [
+          [
+            [
+              5,
+              1
+            ]
+          ],
+          10
+        ],
+        "expected": [
+          -1,
+          -1
+        ]
+      },
+      {
+        "input": [
+          [
+            [
+              10,
+              1
+            ],
+            [
+              20,
+              1
+            ]
+          ],
+          5
+        ],
+        "expected": [
+          -1,
+          -1
+        ]
+      }
     ],
-    "reference_solution": "function twoSum(nums, target) { const map = new Map(); for (let i = 0; i < nums.length; i++) { const need = target - nums[i]; if (map.has(need)) return [map.get(need), i]; map.set(nums[i], i); } return []; }"
+    "reference_solution": "function bestSnackPair(snacks, budget) { let bestSum = -1, bestSat = -1, bestI = -1, bestJ = -1; for (let i = 0; i < snacks.length; i++) { for (let j = i + 1; j < snacks.length; j++) { const priceSum = snacks[i][0] + snacks[j][0]; if (priceSum > budget) continue; const sat = snacks[i][1] + snacks[j][1]; if (priceSum > bestSum || (priceSum === bestSum && sat > bestSat)) { bestSum = priceSum; bestSat = sat; bestI = i; bestJ = j; } } } return [bestI, bestJ]; }"
   },
   {
     "id": "code-019",
     "difficulty": "medium",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `isValid(s)` that returns true if the string s, containing only the characters '(', ')', '{', '}', '[', ']', has valid matching and properly nested brackets.",
-    "function_name": "isValid",
+    "prompt": "Write a function `isValidNestedWithBudget(s, maxDepth)` where s contains only '(' and ')' characters. Return True if the parentheses are validly matched AND the maximum nesting depth reached anywhere in s does not exceed maxDepth. Any character other than '(' or ')' makes the string invalid.",
+    "function_name": "isValidNestedWithBudget",
     "test_cases": [
-      { "input": ["()[]{}"], "expected": true },
-      { "input": ["(]"], "expected": false },
-      { "input": ["([)]"], "expected": false },
-      { "input": ["{[]}"], "expected": true }
+      {
+        "input": [
+          "()()",
+          1
+        ],
+        "expected": true
+      },
+      {
+        "input": [
+          "(())",
+          1
+        ],
+        "expected": false
+      },
+      {
+        "input": [
+          "(())",
+          2
+        ],
+        "expected": true
+      },
+      {
+        "input": [
+          "(()",
+          2
+        ],
+        "expected": false
+      },
+      {
+        "input": [
+          "",
+          0
+        ],
+        "expected": true
+      }
     ],
-    "reference_solution": "def isValid(s):\n    pairs = {')': '(', ']': '[', '}': '{'}\n    stack = []\n    for c in s:\n        if c in '([{':\n            stack.append(c)\n        elif c in pairs:\n            if not stack or stack.pop() != pairs[c]:\n                return False\n    return len(stack) == 0\n"
+    "reference_solution": "def isValidNestedWithBudget(s, maxDepth):\n    depth = 0\n    max_seen = 0\n    for c in s:\n        if c == '(':\n            depth += 1\n            max_seen = max(max_seen, depth)\n        elif c == ')':\n            depth -= 1\n            if depth < 0:\n                return False\n        else:\n            return False\n    if depth != 0:\n        return False\n    return max_seen <= maxDepth\n"
   },
   {
     "id": "code-020",
     "difficulty": "medium",
     "language": "typescript",
     "execution": true,
-    "prompt": "Write a function `binarySearch(arr, target)` that returns the index of target in the sorted ascending array arr, or -1 if not found.",
-    "function_name": "binarySearch",
+    "prompt": "A set of jobs (each with a duration) must be assigned to machines. Jobs are assigned in the given order, each to whichever machine currently has the least total assigned duration (ties go to the lowest machine index). Write a function `minMachinesForDeadline(jobDurations, deadline)` that returns the minimum number of machines needed so that, under this assignment rule, no machine's total duration exceeds deadline. Return -1 if some single job's duration alone exceeds deadline (impossible regardless of machine count), and 0 for an empty job list. Use binary search over the candidate machine count, since feasibility is monotonic in the number of machines.",
+    "function_name": "minMachinesForDeadline",
     "test_cases": [
-      { "input": [[1, 3, 5, 7, 9], 7], "expected": 3 },
-      { "input": [[1, 3, 5, 7, 9], 4], "expected": -1 },
-      { "input": [[], 5], "expected": -1 }
+      {
+        "input": [
+          [
+            5,
+            5,
+            5,
+            5
+          ],
+          10
+        ],
+        "expected": 2
+      },
+      {
+        "input": [
+          [
+            9,
+            1,
+            1,
+            1
+          ],
+          10
+        ],
+        "expected": 2
+      },
+      {
+        "input": [
+          [
+            6,
+            6,
+            6
+          ],
+          6
+        ],
+        "expected": 3
+      },
+      {
+        "input": [
+          [
+            15
+          ],
+          10
+        ],
+        "expected": -1
+      },
+      {
+        "input": [
+          [],
+          10
+        ],
+        "expected": 0
+      }
     ],
-    "reference_solution": "function binarySearch(arr, target) { let lo = 0, hi = arr.length - 1; while (lo <= hi) { const mid = Math.floor((lo + hi) / 2); if (arr[mid] === target) return mid; if (arr[mid] < target) lo = mid + 1; else hi = mid - 1; } return -1; }"
+    "reference_solution": "function minMachinesForDeadline(jobDurations, deadline) { if (jobDurations.length === 0) return 0; if (jobDurations.some(d => d > deadline)) return -1; function feasible(m) { const loads = new Array(m).fill(0); for (const d of jobDurations) { let minIdx = 0; for (let k = 1; k < m; k++) if (loads[k] < loads[minIdx]) minIdx = k; loads[minIdx] += d; if (loads[minIdx] > deadline) return false; } return true; } let lo = 1, hi = jobDurations.length; while (lo < hi) { const mid = Math.floor((lo + hi) / 2); if (feasible(mid)) hi = mid; else lo = mid + 1; } return lo; }"
   },
   {
     "id": "code-021",
     "difficulty": "medium",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `mergeSorted(a, b)` that merges two sorted (ascending) lists a and b into a single sorted list.",
-    "function_name": "mergeSorted",
+    "prompt": "Write a function `mergeSortedCapped(a, b, cap)` that merges two ascending-sorted lists a and b (like a standard merge step), but stops as soon as the output has collected `cap` elements, returning just that sorted prefix.",
+    "function_name": "mergeSortedCapped",
     "test_cases": [
-      { "input": [[1, 3, 5], [2, 4, 6]], "expected": [1, 2, 3, 4, 5, 6] },
-      { "input": [[], [1, 2]], "expected": [1, 2] },
-      { "input": [[1, 1, 1], [1, 1]], "expected": [1, 1, 1, 1, 1] }
+      {
+        "input": [
+          [
+            1,
+            3,
+            5
+          ],
+          [
+            2,
+            4,
+            6
+          ],
+          4
+        ],
+        "expected": [
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      {
+        "input": [
+          [],
+          [
+            1,
+            2
+          ],
+          5
+        ],
+        "expected": [
+          1,
+          2
+        ]
+      },
+      {
+        "input": [
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ],
+          2
+        ],
+        "expected": [
+          1,
+          1
+        ]
+      }
     ],
-    "reference_solution": "def mergeSorted(a, b):\n    i, j = 0, 0\n    out = []\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            out.append(a[i]); i += 1\n        else:\n            out.append(b[j]); j += 1\n    out.extend(a[i:])\n    out.extend(b[j:])\n    return out\n"
+    "reference_solution": "def mergeSortedCapped(a, b, cap):\n    i, j = 0, 0\n    out = []\n    while i < len(a) and j < len(b) and len(out) < cap:\n        if a[i] <= b[j]:\n            out.append(a[i]); i += 1\n        else:\n            out.append(b[j]); j += 1\n    while i < len(a) and len(out) < cap:\n        out.append(a[i]); i += 1\n    while j < len(b) and len(out) < cap:\n        out.append(b[j]); j += 1\n    return out\n"
   },
   {
     "id": "code-022",
     "difficulty": "medium",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `groupAnagrams(words)` that groups the strings in words into arrays of anagrams. Return the groups as an array of arrays; groups must be ordered by the group's sorted-letters key in ascending alphabetical order, and within each group elements keep their original relative order.",
-    "function_name": "groupAnagrams",
+    "prompt": "Write a function `groupByConsonantSkeleton(words)` that groups strings in `words` by their 'consonant skeleton' — the string with all vowels (a, e, i, o, u, case-insensitive) removed, lowercased. Return the groups as an array of arrays ordered by the skeleton key ascending (alphabetically); within each group, preserve original relative order.",
+    "function_name": "groupByConsonantSkeleton",
     "test_cases": [
-      { "input": [["eat", "tea", "tan", "ate", "nat", "bat"]], "expected": [["bat"], ["eat", "tea", "ate"], ["tan", "nat"]] },
-      { "input": [["abc"]], "expected": [["abc"]] },
-      { "input": [[]], "expected": [] }
+      {
+        "input": [
+          [
+            "cat",
+            "cot",
+            "dog",
+            "cute"
+          ]
+        ],
+        "expected": [
+          [
+            "cat",
+            "cot",
+            "cute"
+          ],
+          [
+            "dog"
+          ]
+        ]
+      },
+      {
+        "input": [
+          [
+            "abc"
+          ]
+        ],
+        "expected": [
+          [
+            "abc"
+          ]
+        ]
+      },
+      {
+        "input": [
+          []
+        ],
+        "expected": []
+      }
     ],
-    "reference_solution": "function groupAnagrams(words) { const map = new Map(); for (const w of words) { const key = w.split('').sort().join(''); if (!map.has(key)) map.set(key, []); map.get(key).push(w); } const keys = [...map.keys()].sort(); return keys.map(k => map.get(k)); }"
+    "reference_solution": "function groupByConsonantSkeleton(words) { const vowels = new Set(['a', 'e', 'i', 'o', 'u']); const map = new Map(); for (const w of words) { const key = w.toLowerCase().split('').filter(c => !vowels.has(c)).join(''); if (!map.has(key)) map.set(key, []); map.get(key).push(w); } const keys = [...map.keys()].sort(); return keys.map(k => map.get(k)); }"
   },
   {
     "id": "code-023",
     "difficulty": "medium",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `longestCommonPrefix(strs)` that returns the longest common prefix string among an array of strings. Return \"\" if there is none or the array is empty.",
-    "function_name": "longestCommonPrefix",
+    "prompt": "Write a function `longestCommonSuffix(strs)` that returns the longest common suffix shared by all strings in strs, comparing case-insensitively but returning the matching substring using the exact casing from strs[0]. Return '' if strs is empty or there is no common suffix.",
+    "function_name": "longestCommonSuffix",
     "test_cases": [
-      { "input": [["flower", "flow", "flight"]], "expected": "fl" },
-      { "input": [["dog", "racecar", "car"]], "expected": "" },
-      { "input": [[]], "expected": "" }
+      {
+        "input": [
+          [
+            "running",
+            "gunning",
+            "stunning"
+          ]
+        ],
+        "expected": "unning"
+      },
+      {
+        "input": [
+          [
+            "RUNNING",
+            "gunning",
+            "Stunning"
+          ]
+        ],
+        "expected": "UNNING"
+      },
+      {
+        "input": [
+          [
+            "dog",
+            "racecar",
+            "car"
+          ]
+        ],
+        "expected": ""
+      },
+      {
+        "input": [
+          []
+        ],
+        "expected": ""
+      }
     ],
-    "reference_solution": "def longestCommonPrefix(strs):\n    if not strs:\n        return ''\n    prefix = strs[0]\n    for s in strs[1:]:\n        while not s.startswith(prefix):\n            prefix = prefix[:-1]\n            if not prefix:\n                return ''\n    return prefix\n"
+    "reference_solution": "def longestCommonSuffix(strs):\n    if not strs:\n        return ''\n    suffix = strs[0]\n    for s in strs[1:]:\n        while not s.lower().endswith(suffix.lower()):\n            suffix = suffix[1:]\n            if not suffix:\n                return ''\n    return suffix\n"
   },
   {
     "id": "code-024",
     "difficulty": "medium",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `rotateArray(arr, k)` that rotates array arr to the right by k steps and returns the new array (k can be larger than arr.length).",
-    "function_name": "rotateArray",
+    "prompt": "Write a function `rotateArrayVariableSteps(arr, steps)` where steps is an array of right-rotation amounts. Apply each rotation in `steps`, in order, to the array (each rotation acts on the result of the previous one), and return the final array.",
+    "function_name": "rotateArrayVariableSteps",
     "test_cases": [
-      { "input": [[1, 2, 3, 4, 5], 2], "expected": [4, 5, 1, 2, 3] },
-      { "input": [[1, 2, 3], 4], "expected": [3, 1, 2] },
-      { "input": [[], 3], "expected": [] }
+      {
+        "input": [
+          [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          [
+            2,
+            1
+          ]
+        ],
+        "expected": [
+          3,
+          4,
+          5,
+          1,
+          2
+        ]
+      },
+      {
+        "input": [
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            4
+          ]
+        ],
+        "expected": [
+          3,
+          1,
+          2
+        ]
+      },
+      {
+        "input": [
+          [],
+          [
+            3
+          ]
+        ],
+        "expected": []
+      }
     ],
-    "reference_solution": "function rotateArray(arr, k) { const n = arr.length; if (n === 0) return []; const shift = k % n; return arr.slice(n - shift).concat(arr.slice(0, n - shift)); }"
+    "reference_solution": "function rotateArrayVariableSteps(arr, steps) { let result = arr.slice(); const n = result.length; if (n === 0) return result; for (const k of steps) { const shift = ((k % n) + n) % n; result = result.slice(n - shift).concat(result.slice(0, n - shift)); } return result; }"
   },
   {
     "id": "code-025",
     "difficulty": "medium",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `kthLargest(nums, k)` that returns the kth largest element in the list nums (k=1 means the largest).",
-    "function_name": "kthLargest",
+    "prompt": "Write a function `kthLargestUnique(nums, k)` that returns the kth largest DISTINCT value among nums (duplicates count only once). Return None if there are fewer than k distinct values.",
+    "function_name": "kthLargestUnique",
     "test_cases": [
-      { "input": [[3, 2, 1, 5, 6, 4], 2], "expected": 5 },
-      { "input": [[3, 2, 3, 1, 2, 4, 5, 5, 6], 4], "expected": 4 },
-      { "input": [[1], 1], "expected": 1 }
+      {
+        "input": [
+          [
+            3,
+            2,
+            1,
+            5,
+            6,
+            4
+          ],
+          2
+        ],
+        "expected": 5
+      },
+      {
+        "input": [
+          [
+            3,
+            3,
+            3,
+            3
+          ],
+          1
+        ],
+        "expected": 3
+      },
+      {
+        "input": [
+          [
+            3,
+            3,
+            3,
+            3
+          ],
+          2
+        ],
+        "expected": null
+      }
     ],
-    "reference_solution": "def kthLargest(nums, k):\n    return sorted(nums, reverse=True)[k - 1]\n"
+    "reference_solution": "def kthLargestUnique(nums, k):\n    distinct = sorted(set(nums), reverse=True)\n    if k > len(distinct):\n        return None\n    return distinct[k - 1]\n"
   },
   {
     "id": "code-026",
     "difficulty": "medium",
     "language": "go",
     "execution": false,
-    "prompt": "Write a Go function `func FirstNonRepeating(s string) byte` that returns the first non-repeating character (byte) in string s, or the zero byte 0 if every character repeats or s is empty.",
-    "reference_answer": "A correct answer counts character frequencies in one pass (e.g. a [256]int array or map[byte]int), then scans s a second time in original order and returns the first byte whose count is exactly 1; returns 0 if none found."
+    "prompt": "Write a Go function `func FirstRepeatingPairDistance(s string) int` that returns the minimum distance (difference in index) between any two occurrences of the SAME character anywhere in string s, or -1 if no character repeats.",
+    "reference_answer": "A correct answer makes a single pass over s tracking the last-seen index of each character (e.g. a map[byte]int or a [256]int array initialized to -1). For each position i, if the character was seen before at lastSeen[c], compute i - lastSeen[c] and keep a running minimum across all characters; always update lastSeen[c] = i afterward. Return the running minimum, or -1 if it was never updated. Should be O(n) time, O(alphabet size) space."
   },
   {
     "id": "code-027",
     "difficulty": "medium",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `transpose(matrix)` that returns the transpose of a 2D list matrix (rows become columns).",
-    "function_name": "transpose",
+    "prompt": "Write a function `antiTranspose(matrix)` that returns the anti-transpose of a (possibly non-square) 2D list: reflecting across the anti-diagonal rather than the main diagonal, i.e. result[j'][i'] = matrix[i][j] where i' = n-1-i and j' = m-1-j (n = number of rows, m = number of columns of matrix; the result has dimensions m x n).",
+    "function_name": "antiTranspose",
     "test_cases": [
-      { "input": [[[1, 2, 3], [4, 5, 6]]], "expected": [[1, 4], [2, 5], [3, 6]] },
-      { "input": [[[1]]], "expected": [[1]] },
-      { "input": [[[1, 2], [3, 4]]], "expected": [[1, 3], [2, 4]] }
+      {
+        "input": [
+          [
+            [
+              1,
+              2,
+              3
+            ],
+            [
+              4,
+              5,
+              6
+            ]
+          ]
+        ],
+        "expected": [
+          [
+            6,
+            3
+          ],
+          [
+            5,
+            2
+          ],
+          [
+            4,
+            1
+          ]
+        ]
+      },
+      {
+        "input": [
+          [
+            [
+              1
+            ]
+          ]
+        ],
+        "expected": [
+          [
+            1
+          ]
+        ]
+      },
+      {
+        "input": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              3,
+              4
+            ]
+          ]
+        ],
+        "expected": [
+          [
+            4,
+            2
+          ],
+          [
+            3,
+            1
+          ]
+        ]
+      }
     ],
-    "reference_solution": "def transpose(matrix):\n    return [list(row) for row in zip(*matrix)]\n"
+    "reference_solution": "def antiTranspose(matrix):\n    n = len(matrix)\n    m = len(matrix[0]) if n else 0\n    result = [[None] * n for _ in range(m)]\n    for i in range(n):\n        for j in range(m):\n            result[m - 1 - j][n - 1 - i] = matrix[i][j]\n    return result\n"
   },
   {
     "id": "code-028",
     "difficulty": "medium",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `runLengthEncode(s)` that returns the run-length encoding of string s, where each run of consecutive identical characters is replaced with the character followed by its count (e.g. 'aaabbbcc' -> 'a3b3c2'). Return '' for an empty string.",
-    "function_name": "runLengthEncode",
+    "prompt": "Write a function `runLengthEncodeMinLen(s, minRun)` that run-length-encodes string s, but only compresses a run of identical characters (into char+count form) if its length is >= minRun; shorter runs are left as their literal repeated characters, uncompressed.",
+    "function_name": "runLengthEncodeMinLen",
     "test_cases": [
-      { "input": ["aaabbbcc"], "expected": "a3b3c2" },
-      { "input": ["abcd"], "expected": "a1b1c1d1" },
-      { "input": [""], "expected": "" }
+      {
+        "input": [
+          "aaabbbcc",
+          3
+        ],
+        "expected": "a3b3cc"
+      },
+      {
+        "input": [
+          "abcd",
+          2
+        ],
+        "expected": "abcd"
+      },
+      {
+        "input": [
+          "",
+          3
+        ],
+        "expected": ""
+      }
     ],
-    "reference_solution": "function runLengthEncode(s) { if (s.length === 0) return ''; let out = ''; let count = 1; for (let i = 1; i <= s.length; i++) { if (s[i] === s[i - 1]) { count++; } else { out += s[i - 1] + count; count = 1; } } return out; }"
+    "reference_solution": "function runLengthEncodeMinLen(s, minRun) { if (s.length === 0) return ''; let out = ''; let i = 0; while (i < s.length) { let j = i; while (j < s.length && s[j] === s[i]) j++; const runLen = j - i; if (runLen >= minRun) { out += s[i] + runLen; } else { out += s[i].repeat(runLen); } i = j; } return out; }"
   },
   {
     "id": "code-029",
     "difficulty": "medium",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `findMissing(nums)` that, given a list containing n distinct numbers from 1 to n+1 with exactly one missing, returns the missing number.",
-    "function_name": "findMissing",
+    "prompt": "Write a function `findMissingInRange(nums, lo, hi)` that, given a list of distinct integers which should form the complete inclusive range [lo, hi] except for exactly one missing value, returns that missing value.",
+    "function_name": "findMissingInRange",
     "test_cases": [
-      { "input": [[1, 2, 4, 5]], "expected": 3 },
-      { "input": [[2, 3, 4, 5]], "expected": 1 },
-      { "input": [[1]], "expected": 2 }
+      {
+        "input": [
+          [
+            1,
+            2,
+            4,
+            5
+          ],
+          1,
+          5
+        ],
+        "expected": 3
+      },
+      {
+        "input": [
+          [
+            10,
+            12,
+            13
+          ],
+          10,
+          13
+        ],
+        "expected": 11
+      },
+      {
+        "input": [
+          [
+            5,
+            7
+          ],
+          5,
+          7
+        ],
+        "expected": 6
+      }
     ],
-    "reference_solution": "def findMissing(nums):\n    n = len(nums) + 1\n    total = n * (n + 1) // 2\n    return total - sum(nums)\n"
+    "reference_solution": "def findMissingInRange(nums, lo, hi):\n    total = (hi - lo + 1) * (lo + hi) // 2\n    return total - sum(nums)\n"
   },
   {
     "id": "code-030",
     "difficulty": "medium",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `mode(nums)` that returns the most frequently occurring number in the array nums. If there is a tie, return the smallest such number.",
-    "function_name": "mode",
+    "prompt": "Write a function `modeWithinWindow(nums, windowSize)` that returns an array where entry i is the mode (most frequent value, ties broken by the smaller value) of the contiguous subarray nums[i .. i+windowSize-1], for every valid starting index i.",
+    "function_name": "modeWithinWindow",
     "test_cases": [
-      { "input": [[1, 2, 2, 3, 3]], "expected": 2 },
-      { "input": [[5, 5, 5, 1, 1]], "expected": 5 },
-      { "input": [[7]], "expected": 7 }
+      {
+        "input": [
+          [
+            1,
+            2,
+            2,
+            3,
+            3
+          ],
+          3
+        ],
+        "expected": [
+          2,
+          2,
+          3
+        ]
+      },
+      {
+        "input": [
+          [
+            5,
+            5,
+            5,
+            1,
+            1
+          ],
+          2
+        ],
+        "expected": [
+          5,
+          5,
+          1,
+          1
+        ]
+      },
+      {
+        "input": [
+          [
+            7
+          ],
+          1
+        ],
+        "expected": [
+          7
+        ]
+      }
     ],
-    "reference_solution": "function mode(nums) { const counts = new Map(); for (const n of nums) counts.set(n, (counts.get(n) || 0) + 1); let best = null, bestCount = -1; for (const [n, c] of counts) { if (c > bestCount || (c === bestCount && n < best)) { best = n; bestCount = c; } } return best; }"
+    "reference_solution": "function modeWithinWindow(nums, windowSize) { const out = []; for (let i = 0; i + windowSize <= nums.length; i++) { const counts = new Map(); for (let k = i; k < i + windowSize; k++) counts.set(nums[k], (counts.get(nums[k]) || 0) + 1); let best = null, bestCount = -1; for (const [n, c] of counts) { if (c > bestCount || (c === bestCount && n < best)) { best = n; bestCount = c; } } out.push(best); } return out; }"
   },
   {
     "id": "code-031",
     "difficulty": "medium",
     "language": "sql",
     "execution": false,
-    "prompt": "Write a SQL query that returns the second highest salary from an `Employee(id, name, salary)` table. If there is no second highest salary, return NULL.",
-    "reference_answer": "SELECT MAX(salary) AS SecondHighestSalary FROM Employee WHERE salary < (SELECT MAX(salary) FROM Employee); -- using MAX on a filtered subquery naturally returns NULL when no second-highest value exists, avoiding an OFFSET/LIMIT approach that could error on too few rows."
+    "prompt": "Write a SQL query that returns the second-highest DISTINCT salary among employees who have been with the company for more than 2 years, from an `Employee(id, name, salary, department, hire_date)` table (treat 'more than 2 years' as hire_date <= CURRENT_DATE - INTERVAL '2 years'). Return NULL if fewer than two such employees have distinct salaries.",
+    "reference_answer": "SELECT MAX(salary) AS SecondHighestSalary FROM Employee WHERE hire_date <= CURRENT_DATE - INTERVAL '2 years' AND salary < (SELECT MAX(salary) FROM Employee WHERE hire_date <= CURRENT_DATE - INTERVAL '2 years'); -- the tenure filter must be applied consistently in BOTH the outer query and the inner MAX subquery, otherwise the 'second highest' would be computed relative to the wrong population (e.g. beaten by a newer, higher-paid hire who shouldn't be considered). Using MAX on a filtered, salary-bounded subquery naturally returns NULL when no qualifying second-highest value exists."
   },
   {
     "id": "code-032",
     "difficulty": "medium",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `maxSubArraySum(nums)` that returns the maximum sum of any contiguous, non-empty subarray of nums (Kadane's algorithm).",
-    "function_name": "maxSubArraySum",
+    "prompt": "Write a function `maxSubArraySumEvenLength(nums)` that returns the maximum sum of a contiguous subarray of nums whose LENGTH is even (length must be at least 2). Return null if nums has fewer than 2 elements (no even-length subarray exists).",
+    "function_name": "maxSubArraySumEvenLength",
     "test_cases": [
-      { "input": [[-2, 1, -3, 4, -1, 2, 1, -5, 4]], "expected": 6 },
-      { "input": [[1]], "expected": 1 },
-      { "input": [[-1, -2, -3]], "expected": -1 }
+      {
+        "input": [
+          [
+            1,
+            -2,
+            3,
+            4,
+            -5,
+            8
+          ]
+        ],
+        "expected": 9
+      },
+      {
+        "input": [
+          [
+            5,
+            5
+          ]
+        ],
+        "expected": 10
+      },
+      {
+        "input": [
+          [
+            1
+          ]
+        ],
+        "expected": null
+      },
+      {
+        "input": [
+          [
+            -1,
+            -2,
+            -3,
+            -4
+          ]
+        ],
+        "expected": -3
+      }
     ],
-    "reference_solution": "function maxSubArraySum(nums) { let best = nums[0]; let cur = nums[0]; for (let i = 1; i < nums.length; i++) { cur = Math.max(nums[i], cur + nums[i]); best = Math.max(best, cur); } return best; }"
+    "reference_solution": "function maxSubArraySumEvenLength(nums) { const n = nums.length; let bestEven = -Infinity; let bestOdd = -Infinity; let ans = -Infinity; for (let i = 0; i < n; i++) { const newOdd = (bestEven !== -Infinity ? bestEven + nums[i] : nums[i]); const newEven = (bestOdd !== -Infinity ? bestOdd + nums[i] : -Infinity); bestOdd = newOdd; bestEven = newEven; if (bestEven !== -Infinity) ans = Math.max(ans, bestEven); } return ans === -Infinity ? null : ans; }"
   },
   {
     "id": "code-033",
     "difficulty": "medium",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `integerSqrt(n)` that returns the floor of the square root of a non-negative integer n, without using floating point square root functions.",
-    "function_name": "integerSqrt",
+    "prompt": "Write a function `integerNthRoot(n, k)` that returns floor(n^(1/k)) for a non-negative integer n and a positive integer k, computed via integer binary search (no floating-point power/root functions).",
+    "function_name": "integerNthRoot",
     "test_cases": [
-      { "input": [0], "expected": 0 },
-      { "input": [16], "expected": 4 },
-      { "input": [17], "expected": 4 },
-      { "input": [1], "expected": 1 }
+      {
+        "input": [
+          16,
+          2
+        ],
+        "expected": 4
+      },
+      {
+        "input": [
+          27,
+          3
+        ],
+        "expected": 3
+      },
+      {
+        "input": [
+          10,
+          3
+        ],
+        "expected": 2
+      },
+      {
+        "input": [
+          1,
+          5
+        ],
+        "expected": 1
+      },
+      {
+        "input": [
+          0,
+          4
+        ],
+        "expected": 0
+      }
     ],
-    "reference_solution": "def integerSqrt(n):\n    if n < 2:\n        return n\n    lo, hi = 1, n\n    ans = 1\n    while lo <= hi:\n        mid = (lo + hi) // 2\n        if mid * mid <= n:\n            ans = mid\n            lo = mid + 1\n        else:\n            hi = mid - 1\n    return ans\n"
+    "reference_solution": "def integerNthRoot(n, k):\n    if n < 2:\n        return n\n    lo, hi = 1, n\n    ans = 1\n    while lo <= hi:\n        mid = (lo + hi) // 2\n        val = mid ** k\n        if val <= n:\n            ans = mid\n            lo = mid + 1\n        else:\n            hi = mid - 1\n    return ans\n"
   },
   {
     "id": "code-034",
     "difficulty": "hard",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `mergeIntervals(intervals)` that merges all overlapping intervals (each interval is [start, end], inclusive) and returns the merged intervals sorted by start ascending.",
-    "function_name": "mergeIntervals",
+    "prompt": "Write a function `mergeIntervalsWithGapTolerance(intervals, gap)` that merges intervals (each [start, end], inclusive) that either overlap OR are separated by a gap of at most `gap` (i.e. merge when next.start - current.end <= gap). Return the merged intervals sorted by start ascending.",
+    "function_name": "mergeIntervalsWithGapTolerance",
     "test_cases": [
-      { "input": [[[1, 3], [2, 6], [8, 10], [15, 18]]], "expected": [[1, 6], [8, 10], [15, 18]] },
-      { "input": [[[1, 4], [4, 5]]], "expected": [[1, 5]] },
-      { "input": [[[1, 4], [2, 3]]], "expected": [[1, 4]] }
+      {
+        "input": [
+          [
+            [
+              1,
+              3
+            ],
+            [
+              6,
+              8
+            ],
+            [
+              9,
+              10
+            ]
+          ],
+          2
+        ],
+        "expected": [
+          [
+            1,
+            3
+          ],
+          [
+            6,
+            10
+          ]
+        ]
+      },
+      {
+        "input": [
+          [
+            [
+              1,
+              3
+            ],
+            [
+              6,
+              8
+            ],
+            [
+              9,
+              10
+            ]
+          ],
+          5
+        ],
+        "expected": [
+          [
+            1,
+            10
+          ]
+        ]
+      },
+      {
+        "input": [
+          [
+            [
+              1,
+              4
+            ],
+            [
+              2,
+              3
+            ]
+          ],
+          0
+        ],
+        "expected": [
+          [
+            1,
+            4
+          ]
+        ]
+      },
+      {
+        "input": [
+          [],
+          3
+        ],
+        "expected": []
+      }
     ],
-    "reference_solution": "function mergeIntervals(intervals) { if (intervals.length === 0) return []; const sorted = [...intervals].sort((a, b) => a[0] - b[0]); const out = [sorted[0].slice()]; for (let i = 1; i < sorted.length; i++) { const last = out[out.length - 1]; const cur = sorted[i]; if (cur[0] <= last[1]) { last[1] = Math.max(last[1], cur[1]); } else { out.push(cur.slice()); } } return out; }"
+    "reference_solution": "function mergeIntervalsWithGapTolerance(intervals, gap) { if (intervals.length === 0) return []; const sorted = [...intervals].sort((a, b) => a[0] - b[0]); const out = [sorted[0].slice()]; for (let i = 1; i < sorted.length; i++) { const last = out[out.length - 1]; const cur = sorted[i]; if (cur[0] - last[1] <= gap) { last[1] = Math.max(last[1], cur[1]); } else { out.push(cur.slice()); } } return out; }"
   },
   {
     "id": "code-035",
     "difficulty": "hard",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `lengthOfLIS(nums)` that returns the length of the longest strictly increasing subsequence in nums.",
-    "function_name": "lengthOfLIS",
+    "prompt": "Write a function `longestIncreasingSubsequenceWithMaxGap(nums, maxGap)` that returns the length of the longest strictly increasing subsequence of nums, with the extra constraint that any two consecutive chosen elements' VALUES must differ by at most maxGap.",
+    "function_name": "longestIncreasingSubsequenceWithMaxGap",
     "test_cases": [
-      { "input": [[10, 9, 2, 5, 3, 7, 101, 18]], "expected": 4 },
-      { "input": [[0, 1, 0, 3, 2, 3]], "expected": 4 },
-      { "input": [[7, 7, 7, 7]], "expected": 1 }
+      {
+        "input": [
+          [
+            10,
+            9,
+            2,
+            5,
+            3,
+            7,
+            101,
+            18
+          ],
+          100
+        ],
+        "expected": 4
+      },
+      {
+        "input": [
+          [
+            10,
+            9,
+            2,
+            5,
+            3,
+            7,
+            101,
+            18
+          ],
+          3
+        ],
+        "expected": 3
+      },
+      {
+        "input": [
+          [
+            10,
+            9,
+            2,
+            5,
+            3,
+            7,
+            101,
+            18
+          ],
+          1
+        ],
+        "expected": 2
+      },
+      {
+        "input": [
+          [
+            1,
+            2,
+            3,
+            4
+          ],
+          1
+        ],
+        "expected": 4
+      },
+      {
+        "input": [
+          [],
+          5
+        ],
+        "expected": 0
+      }
     ],
-    "reference_solution": "def lengthOfLIS(nums):\n    if not nums:\n        return 0\n    tails = []\n    for x in nums:\n        lo, hi = 0, len(tails)\n        while lo < hi:\n            mid = (lo + hi) // 2\n            if tails[mid] < x:\n                lo = mid + 1\n            else:\n                hi = mid\n        if lo == len(tails):\n            tails.append(x)\n        else:\n            tails[lo] = x\n    return len(tails)\n"
+    "reference_solution": "def longestIncreasingSubsequenceWithMaxGap(nums, maxGap):\n    n = len(nums)\n    if n == 0:\n        return 0\n    dp = [1] * n\n    for i in range(n):\n        for j in range(i):\n            if nums[j] < nums[i] and nums[i] - nums[j] <= maxGap:\n                dp[i] = max(dp[i], dp[j] + 1)\n    return max(dp)\n"
   },
   {
     "id": "code-036",
     "difficulty": "hard",
     "language": "typescript",
     "execution": true,
-    "prompt": "Write a function `wordBreak(s, wordDict)` that returns true if s can be segmented into a space-separated sequence of one or more dictionary words from wordDict (words may be reused).",
-    "function_name": "wordBreak",
+    "prompt": "Write a function `wordBreakMinPieces(s, wordDict)` that returns the MINIMUM number of dictionary words from wordDict needed to segment s completely (words may be reused), or -1 if s cannot be segmented at all.",
+    "function_name": "wordBreakMinPieces",
     "test_cases": [
-      { "input": ["leetcode", ["leet", "code"]], "expected": true },
-      { "input": ["applepenapple", ["apple", "pen"]], "expected": true },
-      { "input": ["catsandog", ["cats", "dog", "sand", "and", "cat"]], "expected": false }
+      {
+        "input": [
+          "leetcode",
+          [
+            "leet",
+            "code"
+          ]
+        ],
+        "expected": 2
+      },
+      {
+        "input": [
+          "applepenapple",
+          [
+            "apple",
+            "pen"
+          ]
+        ],
+        "expected": 3
+      },
+      {
+        "input": [
+          "catsandog",
+          [
+            "cats",
+            "dog",
+            "sand",
+            "and",
+            "cat"
+          ]
+        ],
+        "expected": -1
+      },
+      {
+        "input": [
+          "aaaaaa",
+          [
+            "a",
+            "aaa"
+          ]
+        ],
+        "expected": 2
+      }
     ],
-    "reference_solution": "function wordBreak(s, wordDict) { const words = new Set(wordDict); const n = s.length; const dp = new Array(n + 1).fill(false); dp[0] = true; for (let i = 1; i <= n; i++) { for (let j = 0; j < i; j++) { if (dp[j] && words.has(s.slice(j, i))) { dp[i] = true; break; } } } return dp[n]; }"
+    "reference_solution": "function wordBreakMinPieces(s, wordDict) { const words = new Set(wordDict); const n = s.length; const dp = new Array(n + 1).fill(Infinity); dp[0] = 0; for (let i = 1; i <= n; i++) { for (let j = 0; j < i; j++) { if (dp[j] !== Infinity && words.has(s.slice(j, i))) { dp[i] = Math.min(dp[i], dp[j] + 1); } } } return dp[n] === Infinity ? -1 : dp[n]; }"
   },
   {
     "id": "code-037",
     "difficulty": "hard",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `canFinish(numCourses, prerequisites)` that returns true if it's possible to finish all numCourses courses given a list of prerequisite pairs [a, b] meaning course a requires course b first (returns false if there is a cycle).",
-    "function_name": "canFinish",
+    "prompt": "Write a function `minSemestersToFinish(numCourses, prerequisites)`. Each prerequisite pair [a, b] means course a requires course b first. In each semester you may take any number of courses whose prerequisites are already satisfied. Return the minimum number of semesters needed to complete all numCourses courses, or -1 if it's impossible due to a cycle.",
+    "function_name": "minSemestersToFinish",
     "test_cases": [
-      { "input": [2, [[1, 0]]], "expected": true },
-      { "input": [2, [[1, 0], [0, 1]]], "expected": false },
-      { "input": [3, []], "expected": true }
+      {
+        "input": [
+          2,
+          [
+            [
+              1,
+              0
+            ]
+          ]
+        ],
+        "expected": 2
+      },
+      {
+        "input": [
+          2,
+          [
+            [
+              1,
+              0
+            ],
+            [
+              0,
+              1
+            ]
+          ]
+        ],
+        "expected": -1
+      },
+      {
+        "input": [
+          3,
+          []
+        ],
+        "expected": 1
+      },
+      {
+        "input": [
+          4,
+          [
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              3,
+              2
+            ]
+          ]
+        ],
+        "expected": 3
+      }
     ],
-    "reference_solution": "def canFinish(numCourses, prerequisites):\n    graph = {i: [] for i in range(numCourses)}\n    for a, b in prerequisites:\n        graph[a].append(b)\n    state = [0] * numCourses\n    def dfs(node):\n        if state[node] == 1:\n            return False\n        if state[node] == 2:\n            return True\n        state[node] = 1\n        for nxt in graph[node]:\n            if not dfs(nxt):\n                return False\n        state[node] = 2\n        return True\n    for i in range(numCourses):\n        if not dfs(i):\n            return False\n    return True\n"
+    "reference_solution": "def minSemestersToFinish(numCourses, prerequisites):\n    from collections import deque\n    graph = {i: [] for i in range(numCourses)}\n    indegree = [0] * numCourses\n    for a, b in prerequisites:\n        graph[b].append(a)\n        indegree[a] += 1\n    queue = deque([i for i in range(numCourses) if indegree[i] == 0])\n    taken = 0\n    semesters = 0\n    while queue:\n        semesters += 1\n        for _ in range(len(queue)):\n            node = queue.popleft()\n            taken += 1\n            for nxt in graph[node]:\n                indegree[nxt] -= 1\n                if indegree[nxt] == 0:\n                    queue.append(nxt)\n    return semesters if taken == numCourses else -1\n"
   },
   {
     "id": "code-038",
     "difficulty": "hard",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `editDistance(a, b)` that returns the minimum number of single-character insertions, deletions, or substitutions required to transform string a into string b (Levenshtein distance).",
-    "function_name": "editDistance",
+    "prompt": "Write a function `editDistanceWeighted(a, b, insCost, delCost, subCost)` that returns the minimum total cost to transform string a into string b, where each insertion costs insCost, each deletion costs delCost, and each substitution costs subCost (matching characters cost nothing).",
+    "function_name": "editDistanceWeighted",
     "test_cases": [
-      { "input": ["horse", "ros"], "expected": 3 },
-      { "input": ["intention", "execution"], "expected": 5 },
-      { "input": ["", "abc"], "expected": 3 }
+      {
+        "input": [
+          "horse",
+          "ros",
+          1,
+          1,
+          1
+        ],
+        "expected": 3
+      },
+      {
+        "input": [
+          "horse",
+          "ros",
+          1,
+          1,
+          100
+        ],
+        "expected": 4
+      },
+      {
+        "input": [
+          "",
+          "abc",
+          2,
+          1,
+          1
+        ],
+        "expected": 6
+      },
+      {
+        "input": [
+          "abc",
+          "",
+          1,
+          3,
+          1
+        ],
+        "expected": 9
+      }
     ],
-    "reference_solution": "function editDistance(a, b) { const m = a.length, n = b.length; const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0)); for (let i = 0; i <= m; i++) dp[i][0] = i; for (let j = 0; j <= n; j++) dp[0][j] = j; for (let i = 1; i <= m; i++) { for (let j = 1; j <= n; j++) { if (a[i - 1] === b[j - 1]) { dp[i][j] = dp[i - 1][j - 1]; } else { dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]); } } } return dp[m][n]; }"
+    "reference_solution": "function editDistanceWeighted(a, b, insCost, delCost, subCost) { const m = a.length, n = b.length; const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0)); for (let i = 0; i <= m; i++) dp[i][0] = i * delCost; for (let j = 0; j <= n; j++) dp[0][j] = j * insCost; for (let i = 1; i <= m; i++) { for (let j = 1; j <= n; j++) { if (a[i - 1] === b[j - 1]) { dp[i][j] = dp[i - 1][j - 1]; } else { dp[i][j] = Math.min(dp[i - 1][j] + delCost, dp[i][j - 1] + insCost, dp[i - 1][j - 1] + subCost); } } } return dp[m][n]; }"
   },
   {
     "id": "code-039",
     "difficulty": "hard",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `knapsack(weights, values, capacity)` that returns the maximum total value achievable by selecting a subset of items (each used at most once) with the given weights and values, without exceeding capacity (0/1 knapsack).",
-    "function_name": "knapsack",
+    "prompt": "Write a function `knapsackWithGroupLimit(weights, values, capacity, groups, maxPerGroup)`: a 0/1 knapsack where item i belongs to group groups[i], and at most maxPerGroup items may be selected from any single group, in addition to the usual total-weight <= capacity constraint. Return the maximum achievable total value.",
+    "function_name": "knapsackWithGroupLimit",
     "test_cases": [
-      { "input": [[1, 3, 4, 5], [1, 4, 5, 7], 7], "expected": 9 },
-      { "input": [[2, 2, 3], [3, 4, 5], 5], "expected": 9 },
-      { "input": [[5], [10], 0], "expected": 0 }
+      {
+        "input": [
+          [
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            5,
+            5,
+            1,
+            1
+          ],
+          4,
+          [
+            0,
+            0,
+            1,
+            1
+          ],
+          1
+        ],
+        "expected": 6
+      },
+      {
+        "input": [
+          [
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            5,
+            5,
+            1,
+            1
+          ],
+          2,
+          [
+            0,
+            0,
+            1,
+            1
+          ],
+          1
+        ],
+        "expected": 5
+      },
+      {
+        "input": [
+          [
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            5,
+            5,
+            1,
+            1
+          ],
+          4,
+          [
+            0,
+            0,
+            1,
+            1
+          ],
+          2
+        ],
+        "expected": 10
+      }
     ],
-    "reference_solution": "def knapsack(weights, values, capacity):\n    n = len(weights)\n    dp = [[0] * (capacity + 1) for _ in range(n + 1)]\n    for i in range(1, n + 1):\n        w, v = weights[i - 1], values[i - 1]\n        for c in range(capacity + 1):\n            dp[i][c] = dp[i - 1][c]\n            if w <= c:\n                dp[i][c] = max(dp[i][c], dp[i - 1][c - w] + v)\n    return dp[n][capacity]\n"
+    "reference_solution": "from functools import lru_cache\ndef knapsackWithGroupLimit(weights, values, capacity, groups, maxPerGroup):\n    n = len(weights)\n    group_ids = sorted(set(groups))\n    gindex = {g: i for i, g in enumerate(group_ids)}\n    ngroups = len(group_ids)\n\n    @lru_cache(maxsize=None)\n    def rec(i, cap, counts):\n        if i == n:\n            return 0\n        best = rec(i + 1, cap, counts)\n        w, v, g = weights[i], values[i], groups[i]\n        gi = gindex[g]\n        if w <= cap and counts[gi] < maxPerGroup:\n            new_counts = list(counts)\n            new_counts[gi] += 1\n            best = max(best, v + rec(i + 1, cap - w, tuple(new_counts)))\n        return best\n    result = rec(0, capacity, tuple([0] * ngroups))\n    rec.cache_clear()\n    return result\n"
   },
   {
     "id": "code-040",
     "difficulty": "hard",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `numIslands(grid)` that returns the number of islands in a 2D grid of '1' (land) and '0' (water) strings, where an island is formed by connecting adjacent lands horizontally or vertically.",
-    "function_name": "numIslands",
+    "prompt": "Write a function `numIslandsDiagonal(grid)` that counts islands in a 2D grid of '1' (land) / '0' (water) strings, where land cells are considered connected if they are adjacent horizontally, vertically, OR DIAGONALLY (8-directional connectivity).",
+    "function_name": "numIslandsDiagonal",
     "test_cases": [
-      { "input": [[["1", "1", "1", "1", "0"], ["1", "1", "0", "1", "0"], ["1", "1", "0", "0", "0"], ["0", "0", "0", "0", "0"]]], "expected": 1 },
-      { "input": [[["1", "1", "0", "0", "0"], ["1", "1", "0", "0", "0"], ["0", "0", "1", "0", "0"], ["0", "0", "0", "1", "1"]]], "expected": 3 },
-      { "input": [[["0"]]], "expected": 0 }
+      {
+        "input": [
+          [
+            [
+              "1",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "1",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "1"
+            ]
+          ]
+        ],
+        "expected": 1
+      },
+      {
+        "input": [
+          [
+            [
+              "1",
+              "1",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "1",
+              "1"
+            ]
+          ]
+        ],
+        "expected": 2
+      },
+      {
+        "input": [
+          [
+            [
+              "0"
+            ]
+          ]
+        ],
+        "expected": 0
+      }
     ],
-    "reference_solution": "function numIslands(grid) { const rows = grid.length; if (rows === 0) return 0; const cols = grid[0].length; const visited = Array.from({ length: rows }, () => new Array(cols).fill(false)); let count = 0; function dfs(r, c) { if (r < 0 || r >= rows || c < 0 || c >= cols || visited[r][c] || grid[r][c] === '0') return; visited[r][c] = true; dfs(r + 1, c); dfs(r - 1, c); dfs(r, c + 1); dfs(r, c - 1); } for (let r = 0; r < rows; r++) { for (let c = 0; c < cols; c++) { if (grid[r][c] === '1' && !visited[r][c]) { count++; dfs(r, c); } } } return count; }"
+    "reference_solution": "function numIslandsDiagonal(grid) { const rows = grid.length; if (rows === 0) return 0; const cols = grid[0].length; const visited = Array.from({ length: rows }, () => new Array(cols).fill(false)); let count = 0; const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]; function dfs(r, c) { if (r < 0 || r >= rows || c < 0 || c >= cols || visited[r][c] || grid[r][c] === '0') return; visited[r][c] = true; for (const [dr, dc] of dirs) dfs(r + dr, c + dc); } for (let r = 0; r < rows; r++) { for (let c = 0; c < cols; c++) { if (grid[r][c] === '1' && !visited[r][c]) { count++; dfs(r, c); } } } return count; }"
   },
   {
     "id": "code-041",
     "difficulty": "hard",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `longestPalindrome(s)` that returns the longest palindromic substring of s. If there are multiple with the same maximum length, return the one that starts earliest in s.",
-    "function_name": "longestPalindrome",
+    "prompt": "Write a function `longestPalindromicSubsequenceLength(s)` that considers only the characters of s at EVEN indices (0, 2, 4, ...), and returns the length of the longest palindromic SUBSEQUENCE (not necessarily contiguous) that can be formed from just those characters.",
+    "function_name": "longestPalindromicSubsequenceLength",
     "test_cases": [
-      { "input": ["babad"], "expected": "bab" },
-      { "input": ["cbbd"], "expected": "bb" },
-      { "input": ["a"], "expected": "a" }
+      {
+        "input": [
+          "babad"
+        ],
+        "expected": 2
+      },
+      {
+        "input": [
+          "cbbd"
+        ],
+        "expected": 1
+      },
+      {
+        "input": [
+          "a"
+        ],
+        "expected": 1
+      },
+      {
+        "input": [
+          "aaaaa"
+        ],
+        "expected": 3
+      }
     ],
-    "reference_solution": "def longestPalindrome(s):\n    if not s:\n        return ''\n    start, best_len = 0, 1\n    def expand(l, r):\n        while l >= 0 and r < len(s) and s[l] == s[r]:\n            l -= 1\n            r += 1\n        return l + 1, r - l - 1\n    for i in range(len(s)):\n        l1, len1 = expand(i, i)\n        l2, len2 = expand(i, i + 1)\n        if len1 > best_len:\n            start, best_len = l1, len1\n        if len2 > best_len:\n            start, best_len = l2, len2\n    return s[start:start + best_len]\n"
+    "reference_solution": "def longestPalindromicSubsequenceLength(s):\n    t = s[0::2]\n    n = len(t)\n    if n == 0:\n        return 0\n    dp = [[0] * n for _ in range(n)]\n    for i in range(n - 1, -1, -1):\n        dp[i][i] = 1\n        for j in range(i + 1, n):\n            if t[i] == t[j]:\n                dp[i][j] = dp[i + 1][j - 1] + 2 if j > i + 1 else 2\n            else:\n                dp[i][j] = max(dp[i + 1][j], dp[i][j - 1])\n    return dp[0][n - 1]\n"
   },
   {
     "id": "code-042",
     "difficulty": "hard",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `coinChange(coins, amount)` that returns the minimum number of coins needed to make up amount using the given coin denominations (unlimited supply of each), or -1 if it is not possible.",
-    "function_name": "coinChange",
+    "prompt": "Write a function `coinChangeLimitedSupply(coins, counts, amount)` where coins[i] has only counts[i] units available (a limited, not unlimited, supply of each denomination). Return the minimum number of coins needed to make exactly amount, or -1 if impossible given the supply limits.",
+    "function_name": "coinChangeLimitedSupply",
     "test_cases": [
-      { "input": [[1, 2, 5], 11], "expected": 3 },
-      { "input": [[2], 3], "expected": -1 },
-      { "input": [[1], 0], "expected": 0 }
+      {
+        "input": [
+          [
+            1,
+            2,
+            5
+          ],
+          [
+            5,
+            5,
+            5
+          ],
+          11
+        ],
+        "expected": 3
+      },
+      {
+        "input": [
+          [
+            5
+          ],
+          [
+            1
+          ],
+          11
+        ],
+        "expected": -1
+      },
+      {
+        "input": [
+          [
+            1,
+            2
+          ],
+          [
+            5,
+            1
+          ],
+          7
+        ],
+        "expected": 6
+      }
     ],
-    "reference_solution": "function coinChange(coins, amount) { const dp = new Array(amount + 1).fill(Infinity); dp[0] = 0; for (let a = 1; a <= amount; a++) { for (const c of coins) { if (c <= a && dp[a - c] + 1 < dp[a]) { dp[a] = dp[a - c] + 1; } } } return dp[amount] === Infinity ? -1 : dp[amount]; }"
+    "reference_solution": "function coinChangeLimitedSupply(coins, counts, amount) { const dp = new Array(amount + 1).fill(Infinity); dp[0] = 0; for (let i = 0; i < coins.length; i++) { const c = coins[i]; const remaining = counts[i]; for (let use = 0; use < remaining; use++) { for (let a = amount; a >= c; a--) { if (dp[a - c] + 1 < dp[a]) dp[a] = dp[a - c] + 1; } } } return dp[amount] === Infinity ? -1 : dp[amount]; }"
   },
   {
     "id": "code-043",
     "difficulty": "hard",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `hasCycle(start, next_nodes)` that models a singly linked list where next_nodes[i] is the index of the node after node i, or -1 if node i is the last node. Given the index of the start node, return true if the list contains a cycle.",
-    "function_name": "hasCycle",
+    "prompt": "Write a function `cycleEntryNode(start, next_nodes)` modeling a singly linked list where next_nodes[i] is the index of the node after node i, or -1 for the last node. Given the start node's index, return the index of the node where a cycle BEGINS (using Floyd's algorithm), or -1 if there is no cycle.",
+    "function_name": "cycleEntryNode",
     "test_cases": [
-      { "input": [0, [1, 2, -1]], "expected": false },
-      { "input": [0, [1, 2, 0]], "expected": true },
-      { "input": [0, [-1]], "expected": false }
+      {
+        "input": [
+          0,
+          [
+            1,
+            2,
+            0
+          ]
+        ],
+        "expected": 0
+      },
+      {
+        "input": [
+          0,
+          [
+            1,
+            2,
+            3,
+            1
+          ]
+        ],
+        "expected": 1
+      },
+      {
+        "input": [
+          0,
+          [
+            1,
+            2,
+            -1
+          ]
+        ],
+        "expected": -1
+      }
     ],
-    "reference_solution": "def hasCycle(start, next_nodes):\n    slow = start\n    fast = start\n    while fast != -1 and next_nodes[fast] != -1:\n        slow = next_nodes[slow]\n        fast = next_nodes[next_nodes[fast]]\n        if slow == fast:\n            return True\n    return False\n"
+    "reference_solution": "def cycleEntryNode(start, next_nodes):\n    slow = start\n    fast = start\n    while fast != -1 and next_nodes[fast] != -1:\n        slow = next_nodes[slow]\n        fast = next_nodes[next_nodes[fast]]\n        if slow == fast:\n            ptr1 = start\n            ptr2 = slow\n            while ptr1 != ptr2:\n                ptr1 = next_nodes[ptr1]\n                ptr2 = next_nodes[ptr2]\n            return ptr1\n    return -1\n"
   },
   {
     "id": "code-044",
     "difficulty": "hard",
     "language": "javascript",
     "execution": true,
-    "prompt": "Write a function `maxSlidingWindow(nums, k)` that returns an array containing the maximum value in each contiguous window of size k as it slides from left to right across nums.",
-    "function_name": "maxSlidingWindow",
+    "prompt": "Write a function `slidingWindowMedian(nums, k)` that returns an array containing the MEDIAN of each contiguous window of size k as it slides from left to right across nums. For even k, the median is the average of the two middle values (as a float).",
+    "function_name": "slidingWindowMedian",
     "test_cases": [
-      { "input": [[1, 3, -1, -3, 5, 3, 6, 7], 3], "expected": [3, 3, 5, 5, 6, 7] },
-      { "input": [[1], 1], "expected": [1] },
-      { "input": [[9, 11], 2], "expected": [11] }
+      {
+        "input": [
+          [
+            1,
+            3,
+            -1,
+            -3,
+            5,
+            3,
+            6,
+            7
+          ],
+          3
+        ],
+        "expected": [
+          1,
+          -1,
+          -1,
+          3,
+          5,
+          6
+        ]
+      },
+      {
+        "input": [
+          [
+            1,
+            2,
+            3,
+            4
+          ],
+          2
+        ],
+        "expected": [
+          1.5,
+          2.5,
+          3.5
+        ]
+      },
+      {
+        "input": [
+          [
+            9,
+            11
+          ],
+          2
+        ],
+        "expected": [
+          10
+        ]
+      }
     ],
-    "reference_solution": "function maxSlidingWindow(nums, k) { const deque = []; const out = []; for (let i = 0; i < nums.length; i++) { while (deque.length && deque[0] <= i - k) deque.shift(); while (deque.length && nums[deque[deque.length - 1]] < nums[i]) deque.pop(); deque.push(i); if (i >= k - 1) out.push(nums[deque[0]]); } return out; }"
+    "reference_solution": "function slidingWindowMedian(nums, k) { const out = []; for (let i = 0; i + k <= nums.length; i++) { const window = nums.slice(i, i + k).slice().sort((a, b) => a - b); let median; if (k % 2 === 1) { median = window[(k - 1) / 2]; } else { median = (window[k / 2 - 1] + window[k / 2]) / 2; } out.push(median); } return out; }"
   },
   {
     "id": "code-045",
     "difficulty": "hard",
     "language": "go",
     "execution": false,
-    "prompt": "Implement a thread-safe LRU cache in Go with Get(key) and Put(key, value) operations in O(1) time, supporting concurrent access from multiple goroutines.",
-    "reference_answer": "A correct answer uses a doubly-linked list + hash map for O(1) get/put, protects shared state with a sync.Mutex (or sync.RWMutex read-optimized variant), and moves accessed nodes to the front on both Get and Put. Should discuss eviction of the least-recently-used entry when at capacity."
+    "prompt": "Implement a thread-safe cache in Go with Get(key) and Put(key, value) methods, safe for concurrent use by multiple goroutines, that evicts using a combined recency+frequency score rather than plain LRU: score = accessCount / (1 + secondsSinceLastAccess). When at capacity, evict the entry with the LOWEST score; break ties by evicting whichever of the tied entries was inserted least recently.",
+    "reference_answer": "A correct answer stores, per key, an entry struct with value, accessCount, lastAccessTime, and insertionOrder, all protected by a sync.Mutex (or RWMutex for the read path). Get and Put both increment accessCount and refresh lastAccessTime on every access. Because the eviction score changes continuously with elapsed time (not just on access, unlike a classic doubly-linked-list LRU), a plain O(1) recency list cannot directly support it — the answer should recognize this and either scan all entries to find the minimum score at eviction time (O(n) per eviction) or maintain a lazily-updated min-heap keyed by a recomputed score. Should explicitly call out that a doubly-linked list alone is insufficient here, unlike standard LRU."
   },
   {
     "id": "code-046",
     "difficulty": "hard",
     "language": "sql",
     "execution": false,
-    "prompt": "Write a SQL query using window functions that returns, for each department, the names and salaries of the top 3 highest-paid employees, given an `Employee(id, name, department, salary)` table.",
-    "reference_answer": "A correct answer uses a window function such as DENSE_RANK() or ROW_NUMBER() OVER (PARTITION BY department ORDER BY salary DESC) in a CTE or subquery, then filters the outer query WHERE rank <= 3. Should note the tradeoff between RANK/DENSE_RANK (ties share rank, can return more or fewer than 3 per department) and ROW_NUMBER (always exactly 3, arbitrary tie-break)."
+    "prompt": "Write a SQL query using window functions that returns, for each department, every employee whose salary is within 10% of that department's highest salary (i.e. salary >= 0.9 * department_max_salary), from an `Employee(id, name, department, salary)` table. Order results by department ascending, then salary descending.",
+    "reference_answer": "A correct answer computes a per-department maximum via a window function, e.g. MAX(salary) OVER (PARTITION BY department) AS dept_max, inside a CTE or subquery, then filters the outer query WHERE salary >= 0.9 * dept_max, and finally ORDER BY department ASC, salary DESC. Should note this is a threshold/ratio filter against the partition max, not a fixed top-N rank — RANK()/DENSE_RANK()/ROW_NUMBER() alone (with a hardcoded `<= 3` filter) would answer a different question and can return the wrong number of rows per department depending on salary distribution."
   },
   {
     "id": "code-047",
     "difficulty": "hard",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `lruCacheOps(capacity, operations)` that simulates an LRU cache of the given capacity. `operations` is a list of [op, ...args] where op is 'put' (args: key, value) or 'get' (args: key). Return a list with one entry per operation: null for 'put', and for 'get' the cached value or -1 if the key is not present (or was evicted).",
-    "function_name": "lruCacheOps",
+    "prompt": "Write a function `categoryScopedCacheOps(categoryCapacities, operations)` that simulates MULTIPLE independent LRU caches, one per category, each with its own capacity taken from the dict categoryCapacities (category -> capacity). `operations` is a list of ['put', category, key, value] or ['get', category, key]. Return a list with one entry per operation: None for 'put', and for 'get' the cached value or -1 if absent/evicted from that category's cache. Categories never share capacity or evict each other's entries.",
+    "function_name": "categoryScopedCacheOps",
     "test_cases": [
-      { "input": [2, [["put", 1, 1], ["put", 2, 2], ["get", 1], ["put", 3, 3], ["get", 2], ["put", 4, 4], ["get", 1], ["get", 3], ["get", 4]]], "expected": [null, null, 1, null, -1, null, -1, 3, 4] },
-      { "input": [1, [["put", 1, 10], ["get", 1], ["get", 2]]], "expected": [null, 10, -1] },
-      { "input": [1, [["put", 1, 1], ["put", 2, 2], ["get", 1]]], "expected": [null, null, -1] }
+      {
+        "input": [
+          {
+            "fruit": 2,
+            "veg": 1
+          },
+          [
+            [
+              "put",
+              "fruit",
+              "apple",
+              1
+            ],
+            [
+              "put",
+              "fruit",
+              "banana",
+              2
+            ],
+            [
+              "put",
+              "veg",
+              "carrot",
+              9
+            ],
+            [
+              "get",
+              "fruit",
+              "apple"
+            ],
+            [
+              "put",
+              "fruit",
+              "cherry",
+              3
+            ],
+            [
+              "get",
+              "fruit",
+              "banana"
+            ],
+            [
+              "get",
+              "fruit",
+              "cherry"
+            ],
+            [
+              "get",
+              "veg",
+              "carrot"
+            ]
+          ]
+        ],
+        "expected": [
+          null,
+          null,
+          null,
+          1,
+          null,
+          -1,
+          3,
+          9
+        ]
+      },
+      {
+        "input": [
+          {
+            "a": 1
+          },
+          [
+            [
+              "put",
+              "a",
+              "x",
+              1
+            ],
+            [
+              "put",
+              "a",
+              "y",
+              2
+            ],
+            [
+              "get",
+              "a",
+              "x"
+            ],
+            [
+              "get",
+              "a",
+              "y"
+            ]
+          ]
+        ],
+        "expected": [
+          null,
+          null,
+          -1,
+          2
+        ]
+      }
     ],
-    "reference_solution": "from collections import OrderedDict\ndef lruCacheOps(capacity, operations):\n    cache = OrderedDict()\n    out = []\n    for op in operations:\n        if op[0] == 'put':\n            key, value = op[1], op[2]\n            if key in cache:\n                cache.move_to_end(key)\n            cache[key] = value\n            if len(cache) > capacity:\n                cache.popitem(last=False)\n            out.append(None)\n        else:\n            key = op[1]\n            if key in cache:\n                cache.move_to_end(key)\n                out.append(cache[key])\n            else:\n                out.append(-1)\n    return out\n"
+    "reference_solution": "def categoryScopedCacheOps(categoryCapacities, operations):\n    from collections import OrderedDict\n    caches = {cat: OrderedDict() for cat in categoryCapacities}\n    out = []\n    for op in operations:\n        kind, cat = op[0], op[1]\n        cache = caches[cat]\n        cap = categoryCapacities[cat]\n        if kind == 'put':\n            key, value = op[2], op[3]\n            if key in cache:\n                cache.move_to_end(key)\n            cache[key] = value\n            if len(cache) > cap:\n                cache.popitem(last=False)\n            out.append(None)\n        else:\n            key = op[2]\n            if key in cache:\n                cache.move_to_end(key)\n                out.append(cache[key])\n            else:\n                out.append(-1)\n    return out\n"
   },
   {
     "id": "code-048",
     "difficulty": "hard",
     "language": "typescript",
     "execution": true,
-    "prompt": "Write a function `isValidSudoku(board)` that returns true if a 9x9 Sudoku board (board[r][c] is a single-digit string '1'-'9' or '.' for empty) is valid: each row, column, and 3x3 sub-box contains no duplicate digits (empty cells are ignored, the board need not be fully solved).",
-    "function_name": "isValidSudoku",
+    "prompt": "Write a function `isValidSudokuVariant(board, boxRows, boxCols)` that generalizes Sudoku validity checking to an arbitrary N x N board (N = board.length) divided into boxRows x boxCols sub-boxes (instead of the fixed 9x9 / 3x3 case). board[r][c] is a single-character string or '.' for empty. Return true if no row, column, or sub-box contains a duplicate non-'.' value.",
+    "function_name": "isValidSudokuVariant",
     "test_cases": [
-      { "input": [[["5", "3", ".", ".", "7", ".", ".", ".", "."], ["6", ".", ".", "1", "9", "5", ".", ".", "."], [".", "9", "8", ".", ".", ".", ".", "6", "."], ["8", ".", ".", ".", "6", ".", ".", ".", "3"], ["4", ".", ".", "8", ".", "3", ".", ".", "1"], ["7", ".", ".", ".", "2", ".", ".", ".", "6"], [".", "6", ".", ".", ".", ".", "2", "8", "."], [".", ".", ".", "4", "1", "9", ".", ".", "5"], [".", ".", ".", ".", "8", ".", ".", "7", "9"]]], "expected": true },
-      { "input": [[["8", "3", ".", ".", "7", ".", ".", ".", "."], ["6", ".", ".", "1", "9", "5", ".", ".", "."], [".", "9", "8", ".", ".", ".", ".", "6", "."], ["8", ".", ".", ".", "6", ".", ".", ".", "3"], ["4", ".", ".", "8", ".", "3", ".", ".", "1"], ["7", ".", ".", ".", "2", ".", ".", ".", "6"], [".", "6", ".", ".", ".", ".", "2", "8", "."], [".", ".", ".", "4", "1", "9", ".", ".", "5"], [".", ".", ".", ".", "8", ".", ".", "7", "9"]]], "expected": false },
-      { "input": [[[".", ".", ".", ".", ".", ".", ".", ".", "."], [".", ".", ".", ".", ".", ".", ".", ".", "."], [".", ".", ".", ".", ".", ".", ".", ".", "."], [".", ".", ".", ".", ".", ".", ".", ".", "."], [".", ".", ".", ".", ".", ".", ".", ".", "."], [".", ".", ".", ".", ".", ".", ".", ".", "."], [".", ".", ".", ".", ".", ".", ".", ".", "."], [".", ".", ".", ".", ".", ".", ".", ".", "."], [".", ".", ".", ".", ".", ".", ".", ".", "."]]], "expected": true }
+      {
+        "input": [
+          [
+            [
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            [
+              "3",
+              "4",
+              "1",
+              "2"
+            ],
+            [
+              "2",
+              "1",
+              "4",
+              "3"
+            ],
+            [
+              "4",
+              "3",
+              "2",
+              "1"
+            ]
+          ],
+          2,
+          2
+        ],
+        "expected": true
+      },
+      {
+        "input": [
+          [
+            [
+              "1",
+              "4",
+              "1",
+              "2"
+            ],
+            [
+              "3",
+              "4",
+              "1",
+              "2"
+            ],
+            [
+              "2",
+              "1",
+              "4",
+              "3"
+            ],
+            [
+              "4",
+              "3",
+              "2",
+              "1"
+            ]
+          ],
+          2,
+          2
+        ],
+        "expected": false
+      },
+      {
+        "input": [
+          [
+            [
+              "1",
+              ".",
+              ".",
+              ".",
+              ".",
+              "."
+            ],
+            [
+              ".",
+              ".",
+              "1",
+              ".",
+              ".",
+              "."
+            ],
+            [
+              ".",
+              ".",
+              ".",
+              ".",
+              ".",
+              "."
+            ],
+            [
+              ".",
+              ".",
+              ".",
+              ".",
+              ".",
+              "."
+            ],
+            [
+              ".",
+              ".",
+              ".",
+              ".",
+              ".",
+              "."
+            ],
+            [
+              ".",
+              ".",
+              ".",
+              ".",
+              ".",
+              "."
+            ]
+          ],
+          2,
+          3
+        ],
+        "expected": false
+      },
+      {
+        "input": [
+          [
+            [
+              "1",
+              ".",
+              ".",
+              ".",
+              ".",
+              "."
+            ],
+            [
+              ".",
+              ".",
+              ".",
+              "1",
+              ".",
+              "."
+            ],
+            [
+              ".",
+              ".",
+              ".",
+              ".",
+              ".",
+              "."
+            ],
+            [
+              ".",
+              ".",
+              ".",
+              ".",
+              ".",
+              "."
+            ],
+            [
+              ".",
+              ".",
+              ".",
+              ".",
+              ".",
+              "."
+            ],
+            [
+              ".",
+              ".",
+              ".",
+              ".",
+              ".",
+              "."
+            ]
+          ],
+          2,
+          3
+        ],
+        "expected": true
+      }
     ],
-    "reference_solution": "function isValidSudoku(board) { const rows = Array.from({ length: 9 }, () => new Set()); const cols = Array.from({ length: 9 }, () => new Set()); const boxes = Array.from({ length: 9 }, () => new Set()); for (let r = 0; r < 9; r++) { for (let c = 0; c < 9; c++) { const v = board[r][c]; if (v === '.') continue; const b = Math.floor(r / 3) * 3 + Math.floor(c / 3); if (rows[r].has(v) || cols[c].has(v) || boxes[b].has(v)) return false; rows[r].add(v); cols[c].add(v); boxes[b].add(v); } } return true; }"
+    "reference_solution": "function isValidSudokuVariant(board, boxRows, boxCols) { const n = board.length; const rows = Array.from({ length: n }, () => new Set()); const cols = Array.from({ length: n }, () => new Set()); const boxes = Array.from({ length: n }, () => new Set()); const boxesAcross = n / boxCols; for (let r = 0; r < n; r++) { for (let c = 0; c < n; c++) { const v = board[r][c]; if (v === '.') continue; const boxRow = Math.floor(r / boxRows); const boxCol = Math.floor(c / boxCols); const b = boxRow * boxesAcross + boxCol; if (rows[r].has(v) || cols[c].has(v) || boxes[b].has(v)) return false; rows[r].add(v); cols[c].add(v); boxes[b].add(v); } } return true; }"
   },
   {
     "id": "code-049",
     "difficulty": "hard",
     "language": "python",
     "execution": true,
-    "prompt": "Write a function `topKFrequent(nums, k)` that returns the k most frequent elements in nums as a list, ordered by frequency descending; break ties by the element's numeric value ascending.",
-    "function_name": "topKFrequent",
+    "prompt": "Write a function `topKFrequentWeighted(nums, weights, k)` where weights is a parallel array giving a weight for each occurrence in nums. Return the k elements whose TOTAL WEIGHT (sum of weights across all their occurrences) is highest, ordered by total weight descending; break ties by the element's own numeric value ascending.",
+    "function_name": "topKFrequentWeighted",
     "test_cases": [
-      { "input": [[1, 1, 1, 2, 2, 3], 2], "expected": [1, 2] },
-      { "input": [[4, 4, 4, 6, 6, 7, 7], 2], "expected": [4, 6] },
-      { "input": [[1, 2, 3], 1], "expected": [1] }
+      {
+        "input": [
+          [
+            1,
+            1,
+            2,
+            2,
+            3
+          ],
+          [
+            1,
+            1,
+            5,
+            5,
+            2
+          ],
+          2
+        ],
+        "expected": [
+          2,
+          1
+        ]
+      },
+      {
+        "input": [
+          [
+            4,
+            4,
+            4,
+            6,
+            6,
+            7,
+            7
+          ],
+          [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          2
+        ],
+        "expected": [
+          4,
+          6
+        ]
+      },
+      {
+        "input": [
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            5,
+            5,
+            5
+          ],
+          1
+        ],
+        "expected": [
+          1
+        ]
+      }
     ],
-    "reference_solution": "def topKFrequent(nums, k):\n    from collections import Counter\n    counts = Counter(nums)\n    items = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))\n    return [x[0] for x in items[:k]]\n"
+    "reference_solution": "def topKFrequentWeighted(nums, weights, k):\n    from collections import defaultdict\n    total = defaultdict(float)\n    for n, w in zip(nums, weights):\n        total[n] += w\n    items = sorted(total.items(), key=lambda kv: (-kv[1], kv[0]))\n    return [x[0] for x in items[:k]]\n"
   },
   {
     "id": "code-050",
     "difficulty": "hard",
     "language": "go",
     "execution": false,
-    "prompt": "Implement a rate limiter in Go using the token bucket algorithm as a type safe for concurrent use by multiple goroutines, with an `Allow() bool` method that returns whether a request is currently permitted.",
-    "reference_answer": "A correct answer maintains a token count and last-refill timestamp protected by a sync.Mutex, refills tokens based on elapsed time times refill rate (capped at bucket capacity) on each Allow() call, and atomically decrements a token and returns true if at least one token is available, false otherwise. Should avoid a background goroutine ticking forever (lazy refill-on-check is preferred) and discuss capacity vs. refill-rate as the two tunable parameters."
+    "prompt": "Implement a Go type, safe for concurrent use by multiple goroutines, that rate-limits using the SLIDING WINDOW LOG algorithm (not token bucket): it must track individual request timestamps within a rolling `windowDuration`, exposing `Allow() bool` that returns true only if the number of requests recorded within the last `windowDuration` (measured from now) is below `maxRequests` — and if allowed, records the new request's timestamp.",
+    "reference_answer": "A correct answer maintains a slice (or a container/list-based deque) of past request timestamps in monotonically increasing order, protected by a sync.Mutex. On each Allow() call it first prunes timestamps older than now - windowDuration from the front (cheap because they're already time-ordered — a simple index scan or two-pointer trim, not a full re-scan), then checks whether the remaining count is < maxRequests; if so it appends now and returns true, otherwise returns false. Should discuss the O(window size) memory cost of storing every timestamp, in contrast to token bucket's O(1) memory, as the tradeoff for exact sliding-window accuracy."
   }
 ]
