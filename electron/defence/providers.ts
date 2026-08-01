@@ -2,7 +2,7 @@ import type { DefenceConfig } from './config';
 import type { Evidence, StructuredAnswer } from './types';
 import { audioExtension } from './audioProtocol';
 
-export type ProviderErrorCode = 'AUTHENTICATION_FAILED' | 'RATE_LIMITED' | 'NETWORK_UNREACHABLE' | 'TIMEOUT' | 'UNSUPPORTED_AUDIO_FORMAT' | 'INVALID_PROVIDER_RESPONSE' | 'INVALID_STRUCTURED_OUTPUT' | 'MODEL_NOT_FOUND' | 'PROVIDER_INTERNAL_ERROR';
+export type ProviderErrorCode = 'AUTHENTICATION_FAILED' | 'PAYMENT_OR_BALANCE_REQUIRED' | 'RATE_LIMITED' | 'NETWORK_UNREACHABLE' | 'TIMEOUT' | 'UNSUPPORTED_AUDIO_FORMAT' | 'INVALID_PROVIDER_RESPONSE' | 'INVALID_STRUCTURED_OUTPUT' | 'MODEL_NOT_FOUND' | 'PROVIDER_INTERNAL_ERROR';
 export class ProviderError extends Error {
   constructor(public code: ProviderErrorCode, message: string, public status?: number, public retries = 0) { super(message); this.name = 'ProviderError'; }
 }
@@ -18,6 +18,7 @@ function classify(error: unknown, status?: number, retries = 0): ProviderError {
   if (error instanceof ProviderError) return error;
   const message = redact(error instanceof Error ? error.message : String(error));
   if (status === 401 || status === 403) return new ProviderError('AUTHENTICATION_FAILED', 'Provider authentication failed. Check the configured API key.', status, retries);
+  if (status === 402) return new ProviderError('PAYMENT_OR_BALANCE_REQUIRED', 'Provider payment or account balance is required.', status, retries);
   if (status === 404) return new ProviderError('MODEL_NOT_FOUND', 'The configured provider endpoint or model was not found.', status, retries);
   if (status === 415 || status === 422) return new ProviderError('UNSUPPORTED_AUDIO_FORMAT', 'The provider rejected the selected audio format.', status, retries);
   if (status === 429) return new ProviderError('RATE_LIMITED', 'The provider rate limit was reached. Try again later.', status, retries);

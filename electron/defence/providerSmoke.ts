@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { loadDefenceConfig } from './config';
 import { LlmProvider, ProviderError, SttProvider } from './providers';
 
@@ -9,14 +10,19 @@ function wavTone(durationMs = 450): Buffer {
 
 async function main(): Promise<void> {
   const config = loadDefenceConfig(); const stt = new SttProvider(config.stt); const llm = new LlmProvider(config.llm);
-  const report: any = { status: 'LIVE_PROVIDER_SMOKE', stt: {}, llm: {} };
-  if (!stt.available() || !llm.available()) {
-    report.status = 'BLOCKED_MISSING_PROVIDER_CONFIG'; report.stt = { configured: stt.available() }; report.llm = { configured: llm.available() }; console.log(JSON.stringify(report, null, 2)); return;
+  const report: any = { status: 'RUNNING', stt: { configured: stt.available() }, llm: { configured: llm.available() } };
+  if (stt.available()) {
+    const audio = wavTone();
+    try { const result = await stt.transcribeWithMetrics(audio, 'audio/wav'); report.stt = { configured: true, testType: 'SYNTHETIC_AUDIO_PROVIDER_TEST', ok: !!result.value, transcriptNonEmpty: !!result.value, ...result.timing }; }
+    catch (error) { const safe = error instanceof ProviderError ? error : new ProviderError('PROVIDER_INTERNAL_ERROR', 'STT smoke failed.'); report.stt = { configured: true, testType: 'SYNTHETIC_AUDIO_PROVIDER_TEST', ok: false, errorCode: safe.code, status: safe.status, retries: safe.retries }; }
+    finally { audio.fill(0); }
   }
-  try { const result = await stt.transcribeWithMetrics(wavTone(), 'audio/wav'); report.stt = { ok: !!result.value, transcriptNonEmpty: !!result.value, ...result.timing }; }
-  catch (error) { const safe = error instanceof ProviderError ? error : new ProviderError('PROVIDER_INTERNAL_ERROR', 'STT smoke failed.'); report.stt = { ok: false, errorCode: safe.code, status: safe.status, retries: safe.retries }; }
-  try { const result = await llm.answerWithMetrics('Return a short readiness statement. This contains no project data.', [], [], 'en', 'brief'); report.llm = { ok: !!result.value.spokenAnswer, schemaValid: true, firstResponseMs: result.timing.dnsConnectMs, ...result.timing }; }
-  catch (error) { const safe = error instanceof ProviderError ? error : new ProviderError('PROVIDER_INTERNAL_ERROR', 'LLM smoke failed.'); report.llm = { ok: false, errorCode: safe.code, status: safe.status, retries: safe.retries }; }
-  report.status = report.stt.ok && report.llm.ok ? 'SUCCESS' : 'PROVIDER_SMOKE_FAILED'; console.log(JSON.stringify(report, null, 2));
+  if (llm.available()) {
+    try { const result = await llm.answerWithMetrics('Return a short readiness statement. This contains no project data.', [], [], 'en', 'brief'); report.llm = { configured: true, ok: !!result.value.spokenAnswer, schemaValid: true, firstResponseMs: result.timing.dnsConnectMs, ...result.timing }; }
+    catch (error) { const safe = error instanceof ProviderError ? error : new ProviderError('PROVIDER_INTERNAL_ERROR', 'LLM smoke failed.'); report.llm = { configured: true, ok: false, errorCode: safe.code, status: safe.status, retries: safe.retries }; }
+  }
+  report.liveStt = !stt.available() ? 'BLOCKED_MISSING_CONFIG' : report.stt.ok ? 'SUCCESS' : report.stt.errorCode || 'INVALID_RESPONSE';
+  report.liveLlm = !llm.available() ? 'BLOCKED_MISSING_CONFIG' : report.llm.ok ? 'SUCCESS' : report.llm.errorCode || 'INVALID_RESPONSE';
+  report.status = report.liveStt === 'SUCCESS' && report.liveLlm === 'SUCCESS' ? 'SUCCESS' : report.liveStt === 'SUCCESS' || report.liveLlm === 'SUCCESS' ? 'PARTIAL_SUCCESS' : 'BLOCKED'; console.log(JSON.stringify(report, null, 2));
 }
 main().catch(() => { console.log(JSON.stringify({ status: 'PROVIDER_SMOKE_FAILED', errorCode: 'PROVIDER_INTERNAL_ERROR' })); });
