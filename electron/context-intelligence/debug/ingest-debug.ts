@@ -32,13 +32,20 @@ export function emitModeFileIngestDebug(snapshot: ModeFileIngestSnapshot): void 
   try {
     if (getContextDebugLevel() === 'off') return;
 
+    // OCR_REQUIRED beats every other verdict: a placeholder-only document has
+    // no searchable content, and "PARTIAL" would still read as searchable
+    // (measured misreport on the first live run). Zero parsed pages with pages
+    // expected is the same condition arriving via the extractor's counters.
+    const ocrRequired = snapshot.indexState === 'ocr_required'
+      || (snapshot.expectedPages !== undefined && snapshot.expectedPages > 0 && snapshot.parsedPages === 0);
     const fullyEmbedded = snapshot.embeddedChunkCount >= snapshot.chunkCount && snapshot.chunkCount > 0;
     const pagesComplete = snapshot.expectedPages === undefined || snapshot.parsedPages === undefined
       || snapshot.parsedPages >= snapshot.expectedPages;
     const status: ContextDebugIngest['status'] =
-      snapshot.indexState === 'failed' ? 'FAILED'
-        : fullyEmbedded && pagesComplete ? 'READY'
-          : 'PARTIAL';
+      ocrRequired ? 'OCR_REQUIRED'
+        : snapshot.indexState === 'failed' ? 'FAILED'
+          : fullyEmbedded && pagesComplete ? 'READY'
+            : 'PARTIAL';
 
     const record: ContextDebugIngest = {
       schemaVersion: CONTEXT_DEBUG_SCHEMA_VERSION,
@@ -58,8 +65,8 @@ export function emitModeFileIngestDebug(snapshot: ModeFileIngestSnapshot): void 
         chunkCount: snapshot.chunkCount,
       },
       indexes: {
-        lexicalReady: snapshot.chunkCount > 0,
-        vectorReady: fullyEmbedded,
+        lexicalReady: snapshot.chunkCount > 0 && !ocrRequired,
+        vectorReady: fullyEmbedded && !ocrRequired,
         embeddedChunkCount: snapshot.embeddedChunkCount,
         ...(snapshot.embeddingSpace !== undefined ? { embeddingSpace: snapshot.embeddingSpace } : {}),
         indexState: snapshot.indexState,

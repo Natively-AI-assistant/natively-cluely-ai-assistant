@@ -18,7 +18,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dist = (p) => pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron', p)).href;
 
 const { wordsOf } = await import(dist('services/modes/lexicalTokens.js'));
-const { ModeHybridRetriever } = await import(dist('services/modes/ModeHybridRetriever.js'));
+const { ModeHybridRetriever, isPlaceholderOnlyContent } = await import(dist('services/modes/ModeHybridRetriever.js'));
+
+describe('image-only PDF detection (live-run regression)', () => {
+  test('page-marker-only content is placeholder-only', () => {
+    assert.equal(isPlaceholderOnlyContent('[Page 1]\n\n[Page 2]'), true);
+    assert.equal(isPlaceholderOnlyContent('[Page 1]\n \n[Page 2]\n  '), true);
+  });
+  test('real documents are not', () => {
+    assert.equal(isPlaceholderOnlyContent('[Page 1]\nThe recovery objective for a single-region failure is 12 minutes and the system uses Kafka.'), false);
+    assert.equal(isPlaceholderOnlyContent('# QueueForge Architecture\n- API: FastAPI'), false);
+    assert.equal(isPlaceholderOnlyContent(''), false);
+  });
+});
 
 describe('D2: hyphenated identifiers emit their sub-tokens (additive)', () => {
   test('a hyphenated canary yields both the full identifier and its parts', () => {

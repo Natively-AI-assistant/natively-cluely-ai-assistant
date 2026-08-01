@@ -264,7 +264,9 @@ export interface ContextDebugIngest {
     embeddingMs?: number;
   };
 
-  status: 'READY' | 'PARTIAL' | 'FAILED';
+  /** OCR_REQUIRED: no searchable text was extracted (image-only/scanned PDF)
+   *  — the document is NOT searchable and must never read as READY/PARTIAL. */
+  status: 'READY' | 'PARTIAL' | 'FAILED' | 'OCR_REQUIRED';
   errors: ContextDebugError[];
 }
 

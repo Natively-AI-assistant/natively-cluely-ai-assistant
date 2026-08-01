@@ -139,6 +139,25 @@ describe('redaction', () => {
     assert.ok(!JSON.stringify(out).includes('abcd1234efgh'));
     assert.equal(out.keep, 42);
   });
+
+  test('LIVE-RUN REGRESSION: UUID fragments are never redacted as phone numbers', () => {
+    // Measured on lastrun.md: "ref_97c15601-6127-4c15-…" logged as
+    // "ref_97c[REDACTED_PHONE]b-…", breaking source-ID stability.
+    const ids = [
+      'ref_97c15601-6127-4c15-902b-453b8b0caa75',
+      'ref_47015601-6127-4c15-9022-94269509195e',
+      'mode_5bb27d51-45c5-4159-aeb7-49f46f06694a',
+      'df86b33f-1db7-4b3c-8fcd-42a88bbc1fe0',
+      'psrc_a1b2c3d4e5f60718',
+    ];
+    for (const id of ids) {
+      assert.equal(redactPii(`"id": "${id}"`), `"id": "${id}"`, `mangled: ${id}`);
+    }
+    // …while a real phone number in the same string is still masked.
+    const mixed = redactPii('call +91 98765 43210 about ref_97c15601-6127-4c15-902b-453b8b0caa75');
+    assert.ok(mixed.includes('ref_97c15601-6127-4c15-902b-453b8b0caa75'), mixed);
+    assert.ok(!mixed.includes('98765'), mixed);
+  });
 });
 
 // ── 11-13. JSONL writer ─────────────────────────────────────────────────────
@@ -558,6 +577,21 @@ describe('ingest events', () => {
     const rec = readJsonl(dir).find((x) => x.event === 'context_ingest_complete' && x.document.id === 'ref_3');
     assert.equal(rec.status, 'FAILED');
     assert.match(rec.errors[0].message, /429/);
+  });
+
+  test('LIVE-RUN REGRESSION: placeholder-only scanned PDF is OCR_REQUIRED, never searchable', async () => {
+    // Measured on lastrun.md: "[Page 1] [Page 2]" (19 chars) reported
+    // "lexical=ready vector=ready (1/1 embedded), Status: PARTIAL".
+    emitModeFileIngestDebug({
+      fileId: 'ref_scan', fileName: '06_scanned_appendix.pdf',
+      characters: 19, expectedPages: 2, parsedPages: 0,
+      chunkCount: 1, embeddedChunkCount: 0, indexState: 'ocr_required',
+    });
+    await flushContextDebugWriter();
+    const rec = readJsonl(dir).find((x) => x.event === 'context_ingest_complete' && x.document.id === 'ref_scan');
+    assert.equal(rec.status, 'OCR_REQUIRED');
+    assert.equal(rec.indexes.lexicalReady, false);
+    assert.equal(rec.indexes.vectorReady, false);
   });
 
   test('off level emits nothing', async () => {

@@ -83,7 +83,22 @@ export interface ModeReferenceIndexState {
     embeddingSpace: string | null;
 }
 
-export type ModeReferenceIndexStatus = 'pending' | 'indexing' | 'ready' | 'failed' | 'lexical_only';
+export type ModeReferenceIndexStatus = 'pending' | 'indexing' | 'ready' | 'failed' | 'lexical_only' | 'ocr_required';
+
+/**
+ * TRUE when extracted document text is nothing but page markers/whitespace —
+ * the image-only-PDF signature (measured on the first live debug run: a
+ * scanned appendix extracted as "[Page 1] [Page 2]", 19 chars, was chunked,
+ * EMBEDDED, and reported lexical=ready/vector=ready — a placeholder presented
+ * as a searchable document). Such content must not be embedded and the file
+ * must be marked OCR_REQUIRED, never READY/PARTIAL.
+ */
+export function isPlaceholderOnlyContent(content: string): boolean {
+  const s = String(content ?? '');
+  if (!/\[Page \d+\]/.test(s)) return false;
+  const stripped = s.replace(/\[Page \d+\]/g, '').replace(/\s+/g, '');
+  return stripped.length < 40;
+}
 
 const DEFAULT_TOKEN_BUDGET = 1800;
 const DEFAULT_TOP_K = 6;
@@ -403,6 +418,11 @@ export class ModeHybridRetriever {
         if (state && state.status === 'ready' && state.fileHash === contentHash && state.embeddingSpace === activeSpace) {
             return; // up to date
         }
+        // OCR_REQUIRED is terminal for this content hash — re-running cannot
+        // conjure text out of an image-only PDF, and prewarm must not loop on it.
+        if (state && state.status === 'ocr_required' && state.fileHash === contentHash) {
+            return;
+        }
 
         const chunks = this.chunkText(content);
         if (chunks.length === 0) return;
@@ -430,6 +450,20 @@ export class ModeHybridRetriever {
                 });
             } catch { /* debug logging must never affect indexing */ }
         };
+
+        // Image-only / unparsed PDF: the "text" is page markers only. Embedding
+        // it manufactures a fake searchable document (measured, lastrun.md);
+        // mark OCR_REQUIRED instead and skip embedding entirely. Retrieval may
+        // still surface the placeholder lexically, where the property gate
+        // already grades it unsupporting — but no vectors, no READY, and the
+        // ingest event says exactly why the file cannot answer anything.
+        if (isPlaceholderOnlyContent(content)) {
+            this.persistChunks(file.id, chunks, null, null);
+            this.updateIndexState(file.id, contentHash, chunks.length, 'ocr_required', null);
+            console.warn(`[ModeHybridRetriever] "${file.fileName}": no searchable text extracted (image-only PDF?) — marked OCR_REQUIRED; the file cannot be searched until it has text.`);
+            emitIngestDebug('ocr_required', 0, 'no searchable text extracted — image-only or scanned PDF');
+            return;
+        }
 
         if (!this.isEmbeddingAvailable() || !activeSpace) {
             // No embedder: persist chunk TEXT (lexical retrieval still wins a
