@@ -33,6 +33,11 @@ function setMsg(text: string, kind: 'ok' | 'err' | 'warn' | ''): void {
   msg.className = 'msg' + (kind ? ` ${kind}` : '');
 }
 
+/** "https://www.youtube.com/*" -> "www.youtube.com" (display only). */
+function hostOf(origin: string): string {
+  return String(origin || '').replace(/^[a-z]+:\/\//i, '').replace(/\/\*$/, '');
+}
+
 function describe(outcome: DomPostOutcome): { text: string; kind: 'ok' | 'err' | 'warn' } {
   switch (outcome.kind) {
     case 'success':
@@ -51,6 +56,8 @@ function describe(outcome: DomPostOutcome): { text: string; kind: 'ok' | 'err' |
       return { text: 'Desktop rejected the request.', kind: 'err' };
     case 'http-error':
       return { text: `Unexpected response (${outcome.status}).`, kind: 'err' };
+    case 'needs-host-permission':
+      return { text: `Chrome needs permission for ${hostOf(outcome.origin)}.`, kind: 'warn' };
     case 'error':
       return { text: outcome.message, kind: 'err' };
   }
@@ -141,7 +148,23 @@ pairBtn.addEventListener('click', async () => {
 captureBtn.addEventListener('click', async () => {
   captureBtn.disabled = true;
   setMsg('Capturing…', '');
-  const report = await send<CaptureReport>({ type: 'capture' });
+  let report = await send<CaptureReport>({ type: 'capture' });
+
+  // This click is a user gesture, and chrome.permissions.request requires one.
+  // A site outside the coding registry (a ChatGPT thread, a YouTube page, an
+  // internal wiki) has no granted host, so ask for exactly this origin — never
+  // a wildcard — and retry once. Denial just falls through to the normal
+  // message; nothing else changes.
+  if (report.outcome.kind === 'needs-host-permission') {
+    const origin = report.outcome.origin;
+    setMsg(`Requesting access to ${hostOf(origin)}…`, '');
+    const grant = await send<{ granted: boolean }>({ type: 'grant-host', value: origin });
+    if (grant?.granted) {
+      setMsg('Permission granted — capturing…', '');
+      report = await send<CaptureReport>({ type: 'capture' });
+    }
+  }
+
   captureBtn.disabled = false;
   const d = describe(report.outcome);
   const suffix = report.outcome.kind === 'success' && report.chars ? ` (${report.chars} chars)` : '';

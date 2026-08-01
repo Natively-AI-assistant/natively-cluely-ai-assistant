@@ -1721,6 +1721,7 @@ export class AppState {
           // asleep, Phone Mirror off — fall back to a screenshot automatically so
           // the gesture always does something. See natively-browser/README.md.
           let captured = false;
+          let domFailureReason = '';
           try {
             const svc = PhoneMirrorService.getInstance();
             // MV3 race fix: the extension's service worker may have been idle-killed
@@ -1739,14 +1740,39 @@ export class AppState {
                 // "Page context" pill and uses it on the next answer).
                 console.log('[Main] DOM capture delivered to overlay');
               } else {
+                domFailureReason = String(result.reason || 'unknown');
                 console.log('[Main] DOM capture unavailable (', result.reason, ') — falling back to screenshot');
               }
+            } else {
+              domFailureReason = 'browser extension not connected';
             }
           } catch (e: any) {
+            domFailureReason = String(e?.message || e);
             console.warn('[Main] DOM capture error — falling back to screenshot:', e?.message || e);
           }
           if (!captured) {
-            await this.captureScreenAndProcess();
+            // Both legs of this fallback can fail, and the screenshot's throw used
+            // to propagate to the outer handler and mask the DOM reason entirely —
+            // the user saw an unrelated "Failed to capture screen" (or, since that
+            // handler only logs, nothing at all). Report BOTH causes together, and
+            // name the actionable one: a host that was never granted is fixed by
+            // one click in the extension popup, not by screen-recording settings.
+            try {
+              await this.captureScreenAndProcess();
+            } catch (shotErr: any) {
+              const needsHost = /must request permission to access this host|Cannot access contents of/i.test(domFailureReason);
+              console.error(
+                '[Main] Capture failed on BOTH paths.\n' +
+                  `  • Page context: ${domFailureReason || 'unavailable'}\n` +
+                  `  • Screenshot:   ${shotErr?.message || shotErr}\n` +
+                  (needsHost
+                    ? '  → Chrome has not granted this site to the extension. Click the Natively\n' +
+                      '    extension icon and press Capture once to grant it (one site, one click).\n'
+                    : '') +
+                  '  → Screenshot capture additionally requires Screen Recording permission\n' +
+                  '    (System Settings › Privacy & Security › Screen Recording).',
+              );
+            }
           }
 
         // --- STEALTH SHORTCUTS: no focus, no show, pure IPC dispatch ---

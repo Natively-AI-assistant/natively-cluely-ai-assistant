@@ -53,6 +53,43 @@ export async function requestCodingHostPermissions(
   }
 }
 
+export { originPatternFromUrl } from './originPattern';
+
+/**
+ * Request access to a SINGLE origin, on demand, for the site the user is
+ * actually looking at (2026-08-02).
+ *
+ * Why this exists: the optional-permission list above is the coding
+ * auto-capture registry — ~44 fixed hosts. Any other site (a ChatGPT thread, a
+ * YouTube page, an internal wiki) could never be captured by the desktop pull,
+ * because nothing anywhere requested its origin. The popup's Capture button
+ * appeared to work on those sites only because Chrome's `activeTab` grants
+ * one-shot access after a click on the extension action — a grant the desktop
+ * hotkey path cannot obtain, since it has no browser-side user gesture.
+ *
+ * MUST be called from a user gesture (the popup's click handler). Denial is not
+ * an error: the caller reports it and everything else keeps working.
+ */
+export async function requestOriginPermission(
+  api: PermissionsApi,
+  origin: string,
+): Promise<PermissionResult> {
+  if (!origin) return { granted: false, alreadyHad: false, reason: 'no origin' };
+  const origins = [origin];
+  try {
+    const already = await api.contains({ origins });
+    if (already) return { granted: true, alreadyHad: true };
+    const granted = await api.request({ origins });
+    return {
+      granted,
+      alreadyHad: false,
+      reason: granted ? undefined : 'user denied host permission',
+    };
+  } catch {
+    return { granted: false, alreadyHad: false, reason: 'permission request failed' };
+  }
+}
+
 /** True if the coding host permissions are currently granted. */
 export async function hasCodingHostPermissions(
   api: PermissionsApi,
