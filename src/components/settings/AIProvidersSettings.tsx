@@ -32,13 +32,36 @@ import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 /* ═══════════════════════════════════════════════════════════════════════════
    AI Providers design system — a locally-scoped token block, PI-style.
 
-   WHY NOT THE TAILWIND SEMANTIC TOKENS: this panel's card grammar needs a
-   translucent compositing hairline. In dark mode `--border-subtle` is literally
-   `transparent` (src/index.css:84) and the only visible border token is
-   `--border-muted` (#333, opaque, far heavier than a hairline). So every card
-   here rendered as a fill-only slab with no edge, and nested `bg-bg-input`
-   surfaces were DARKER than their parent — the stack read inverted. No Tailwind
-   token pair produces the look, hence `--aip-*`.
+   WHAT IS AND IS NOT PANEL-LOCAL (revised — the CONTAINER LAYER now aliases
+   the app-wide tokens):
+
+     The CARD is `--bg-item-surface` behind a `--border-subtle` edge, in both
+     themes. That is the exact pair every card in this panel carried at
+     3e8ea9fa, and it is theme-invariant as an EXPRESSION — the split lives in
+     the token (#27272A dark / #EAECEF light; transparent dark / 7% black
+     light), so it is declared once and cannot drift per theme.
+
+     A previous pass aliased the card to General's dark container instead
+     (`bg-transparent`). That is only survivable on General because every
+     General card holds a SINGLE ROW: the row's own content is the object, so
+     the container may be notional. These cards are multi-row structured
+     objects — header + key field + action row + a nested disclosure — and
+     without a fill they degraded into hollow outlines with no surface. The
+     card here must be a real surface; General's dark transparency is not a
+     portable rule.
+
+     The WELL — the layer BELOW a card — is a black wash rather than a flat
+     token, because it has to read as recessed against THREE different parents:
+     a card, the page canvas, and (for the cURL examples) another well. A flat
+     value can only be correct against one of them; an alpha compounds down the
+     stack automatically. See the note above ".aip-well".
+
+     Everything BELOW the container — buttons, inputs, the field shell, chips,
+     badges, the switch, text roles — stays `--aip-*`. Those need a translucent
+     compositing hairline that no Tailwind pair produces: in dark
+     `--border-subtle` is literally `transparent` (src/index.css:84) and the
+     only visible border token is `--border-muted` (#333, opaque, far heavier
+     than a hairline), so a control built on them is either edgeless or heavy.
 
    `--border-subtle` is NOT changed globally: dozens of other components were
    built against a transparent value.
@@ -74,11 +97,36 @@ const AIP_CSS = `
     --aip-border-strong: rgba(255,255,255,0.12);
     --aip-divider:       rgba(255,255,255,0.05);
 
-    --aip-card-bg:       rgba(255,255,255,0.015);
+    /* Container layer. Both of these are theme-invariant EXPRESSIONS over
+       theme-split tokens, so they are declared once here and deliberately NOT
+       repeated in the light block — see the block comment above.
+       Card fill: #27272A dark / #EAECEF light, i.e. a real surface that carries
+       the object, rather than an outline around empty canvas.
+       Card edge: transparent dark / rgba(0,0,0,0.07) light. In dark the fill
+       alone draws the card — a 9-step lift off the #1E1E21 canvas across a 12px
+       radius — and stacking a white hairline on top of that would double-encode
+       the same edge and re-introduce the bevel this panel was reskinned to
+       lose. In light the canvas is #fafafa and the fill lands 16 steps DOWN
+       from it, so the hairline is doing separate work and stays. */
+    --aip-card-bg:       var(--bg-item-surface);
+    --aip-card-border:   var(--border-subtle);
+    /* Declared but not consumed by any rule; kept as a tint (not a flat colour)
+       so it stays correct over the fill above. Wiring it up would be a
+       behaviour change, not a surface fix. */
     --aip-card-bg-hover: rgba(255,255,255,0.028);
-    --aip-card-lift:     inset 0 1px 0 rgba(255,255,255,0.04);
-    --aip-card-shadow:   none;
-    --aip-well-bg:       rgba(255,255,255,0.03);
+    /* The recessed surface BELOW a card (model well, cURL plaque, tab track).
+       A wash, not a flat token: the card is now #27272A, so any flat value that
+       reads against the #1E1E21 canvas would collide with the card, and vice
+       versa. 22% black composites DOWN whatever it lands on:
+         on a card   #27272A -> #1E1E21   (recessed, gentler than the #1A1A1A
+                                           this well was at 3e8ea9fa)
+         on canvas   #1E1E21 -> #17171A   (keeps ".aip-tablist" readable, which
+                                           sits on the canvas, not in a card)
+         well-in-well        -> #18181A   (the two cURL plaques inside the
+                                           Configuration Guide well) */
+    --aip-well-bg:       rgba(0,0,0,0.22);
+    /* Translucent on purpose: a code chip must stay lighter than whatever it
+       sits on, and it sits on BOTH a card and a well. */
     --aip-code-bg:       rgba(255,255,255,0.04);
 
     --aip-btn-bg:             rgba(255,255,255,0.06);
@@ -88,8 +136,6 @@ const AIP_CSS = `
     --aip-item-active:        rgba(255,255,255,0.10);
     --aip-input-bg:           transparent;
     --aip-input-border:       rgba(255,255,255,0.10);
-    --aip-input-bg-focus:     color-mix(in srgb, var(--aip-accent) 4%, transparent);
-    --aip-input-border-focus: color-mix(in srgb, var(--aip-accent) 40%, transparent);
     --aip-switch-off:         rgba(255,255,255,0.14);
     --aip-pill-bg:            var(--aip-item-active);
     --aip-pill-border:        var(--aip-border-strong);
@@ -109,6 +155,18 @@ const AIP_CSS = `
     --aip-danger:        var(--text-danger);
     --aip-danger-bg:     rgba(239,68,68,0.12);
     --aip-danger-border: rgba(239,68,68,0.24);
+
+    /* Card geometry. Theme-invariant, so declared once here and deliberately NOT
+       duplicated into the [data-theme='light'] block. --aip-h-ctl is THE control
+       height inside a provider card: field, Save segment, trash, models trigger.
+       One height means a row of peers reads as a row, not a staircase.
+       --aip-card-pad is 16px, not the old 14px, so a provider card's interior
+       gutter is General's row gutter ("px-4"). Every hand-written p-5 (20px) on
+       a card in this panel came down to p-4 for the same reason. */
+    --aip-card-pad: 14px;
+    --aip-h-ctl:    32px;
+    --aip-gap-row:   8px;
+    --aip-gap-col:  12px;
 
     --aip-r-xs: 4px;  --aip-r-sm: 6px;  --aip-r-md: 10px;
     --aip-r-lg: 12px; --aip-r-xl: 16px; --aip-r-pill: 9999px;
@@ -133,12 +191,34 @@ const AIP_CSS = `
     --aip-border-strong: rgba(0,0,0,0.13);
     --aip-divider:       rgba(0,0,0,0.06);
 
-    --aip-card-bg:       #ffffff;
-    --aip-card-bg-hover: #ffffff;
-    --aip-card-lift:     none;
-    --aip-card-shadow:   0 1px 1px rgba(0,0,0,0.03);
-    --aip-well-bg:       #f7f8fa;
-    --aip-code-bg:       #f3f4f6;
+    /* --aip-card-bg and --aip-card-border are NOT redeclared here. Both are
+       expressions over tokens that already split by theme, so the single
+       declaration in ".aip-root" resolves to #EAECEF behind a rgba(0,0,0,0.07)
+       hairline here. Re-stating them would only create somewhere to drift.
+       #FFFFFF was considered and rejected: this panel renders on --bg-main
+       (#fafafa) inside a --bg-elevated (#FFFFFF) modal frame, so a white card
+       separates from its canvas by 5 steps and from the frame by 0 — it would
+       be carried entirely by the 7% hairline, which is the same skeleton
+       failure the dark side had. #EAECEF separates by 16. */
+    /* Unconsumed, as in dark. Held EQUAL to the card fill, which is what it has
+       always meant here: cards in this panel have no light hover state. */
+    --aip-card-bg-hover: var(--bg-item-surface);
+    /* Same wash as dark, same direction, much smaller alpha because light
+       surfaces are compressed near white:
+         on a card   #EAECEF -> #DCDEE1   (recessed)
+         on canvas   #fafafa -> #EBEBEB   (".aip-tablist" track, ~ the #EAECEF
+                                           it used to be, so unchanged on sight)
+         well-in-well        -> #CFD1D4
+       A WHITE wash was tried first, to reproduce the lighter-than-card wells of
+       3e8ea9fa (#F9FAFB / #FFFFFF). It fails on the canvas: 70% white over
+       #fafafa is #FEFEFE, a 4-step delta, and the tab track disappears. Keeping
+       the wash black also preserves the CURRENT polarity — wells recessed, not
+       raised — which is the part of this panel the owner asked to keep. */
+    --aip-well-bg:       rgba(0,0,0,0.06);
+    /* Unchanged. A tint, so it composites correctly at any depth: #DCDEE1 on a
+       card, #CFD1D4 inside a well. A flat #f3f4f6 chip would be LIGHTER than
+       both surfaces it is meant to be marked against. */
+    --aip-code-bg:       rgba(0,0,0,0.06);
 
     --aip-btn-bg:       rgba(0,0,0,0.04);
     --aip-btn-bg-hover: rgba(0,0,0,0.075);
@@ -178,21 +258,75 @@ const AIP_CSS = `
 .aip-skeleton   { background: var(--aip-btn-bg); border-radius: var(--aip-r-sm);
                   animation: aip-shimmer 1.4s ease-in-out infinite; }
 
-/* ── Surfaces. Definition comes from the EDGE; elevation from translucency
-      compositing against the backdrop. ─────────────────────────────────── */
+/* ── Surfaces. The container is rounded-xl + --bg-item-surface +
+      --border-subtle, which is the pair every card in this panel carried at
+      3e8ea9fa, restored verbatim.
+
+      It is NOT General's dark container. General's is bg-transparent +
+      border-transparent, and a pass that copied that here produced hollow
+      outlines: General can drop both the fill AND the edge because every one of
+      its cards holds a single row, so the row IS the object and the container
+      is free to be notional. A provider card is a heading row plus a credential
+      row plus an action row plus a nested models disclosure. Four rows with
+      nothing behind them do not read as one object — they read as a skeleton,
+      and two adjacent skeletons merge into an undifferentiated block. The fill
+      is what makes a multi-row card a card; it is not optional here.
+
+      The edge then goes back to --border-subtle, i.e. transparent in dark. With
+      the fill restored, a white hairline would encode the same boundary twice
+      over a 9-step lift and a 12px radius. In light, --border-subtle is a real
+      7% black and does separate work, because the light fill sits BELOW its
+      canvas rather than above it. One token, correct in both, by construction.
+
+      Note what General's dark divider really computes to: the
+      "divide-border-subtle/20" it asks for emits NO CSS at all (Tailwind 3
+      cannot recompute alpha on a bare var() colour — same trap documented at
+      src/index.css:63 and tailwind.config.js:23), so its separators fall back
+      to preflight's #e5e7eb. Deliberately not reproduced: an authored
+      near-white hairline on a #1E1E21 canvas is a bug to inherit, not a
+      grammar to match. Dividers here use --aip-divider.
+
+      No box-shadow. General has none in either theme, and the pair this rule
+      used to carry never rendered anyway: "box-shadow" is "none | <shadow>#",
+      so both "inset 0 1px 0 rgba(...), none" (dark) and "none, 0 1px 1px
+      rgba(...)" (light) were invalid declarations and were dropped whole.
+      ─────────────────────────────────────────────────────────────────────── */
 .aip-card {
-    border: 1px solid var(--aip-border);
+    border: 1px solid var(--aip-card-border);
     border-radius: var(--aip-r-lg);
     background: var(--aip-card-bg);
-    box-shadow: var(--aip-card-lift), var(--aip-card-shadow);
     transition: border-color var(--aip-dur-travel) var(--aip-ease-out),
                 background   var(--aip-dur-travel) var(--aip-ease-out);
 }
-.aip-card + .aip-card { margin-top: 10px; }
+/* NOTE: do not re-add a ".aip-card + .aip-card { margin-top }" rule. Every card stack
+   in this file also carries a Tailwind "space-y-*", whose
+   "> :not([hidden]) ~ :not([hidden])" selector is specificity (0,3,0) — :not() inherits
+   its argument's specificity — so it always wins over a (0,2,0) class pair regardless of
+   load order. The gap is owned by space-y-*.
+   (No backticks in this file's CSS: AIP_CSS is a template literal.) */
 /* .aip-card's "border" SHORTHAND also sets border-style, and this sheet loads
    after Tailwind's, so a Tailwind "border-dashed" on the same element would be
-   overridden back to solid. Hence an explicit modifier. */
-.aip-card-dashed { border-style: dashed; }
+   overridden back to solid. Hence an explicit modifier.
+   It re-states border-COLOUR too: an empty state IS its border, and dashing a
+   6% hairline leaves almost nothing on screen. --aip-border-strong is the value
+   ".aip-chip" already uses for its dashed off-state, so this is the existing
+   dashed weight rather than a fourth number. */
+.aip-card-dashed { border-style: dashed; border-color: var(--aip-border-strong); }
+
+/* ── Divided list. A card whose children are General-style setting rows —
+      label + description on the left, one control on the right, separated by a
+      hairline instead of by whitespace and boxed once instead of four times.
+      Geometry is General's verbatim: px-4 py-3 rows inside a rounded-xl
+      container.
+
+      "> * + *" rather than Tailwind's "divide-y divide-*": the colour half of
+      that pair is what silently compiles to nothing (see .aip-card above), and
+      the width half alone inherits preflight's #e5e7eb. One shorthand here
+      sets width, style and colour together and cannot half-apply.
+
+      Declared AFTER .aip-card and at equal specificity (0,1,0), which is what
+      lets the border-color override land — every consumer carries BOTH classes.
+      ────────────────────────────────────────────────────────────────────── */
 
 .aip-well { background: var(--aip-well-bg); border: 1px solid var(--aip-border);
             border-radius: var(--aip-r-md); overflow: hidden; }
@@ -202,11 +336,13 @@ const AIP_CSS = `
    "overflow-y-auto" on the same element and kill the scroll. */
 .aip-scroll-y { overflow-y: auto; overflow-x: hidden; }
 .aip-scroll-x { overflow-x: auto; overflow-y: hidden; }
-.aip-div  { height:1px; background: var(--aip-divider); border:0; margin:0; }
 
-/* A floating menu needs an OPAQUE surface — --aip-well-bg is translucent by
-   design, so content underneath would bleed through the list. The spec has no
-   float token because its answer is "no floating layers, use .aip-select".
+/* A floating menu needs the ELEVATED surface, not the recessed one.
+   (--aip-well-bg is a black wash, so painting a menu in it would darken it
+   into whatever it floats over — a well is the layer BELOW a card and a menu
+   floats ABOVE it, so well grey would read as a hole rather than a layer.)
+   The spec has no float token because its answer is
+   "no floating layers, use .aip-select".
    The two menus still floating here (Active Model, AI Response Language) are
    pre-existing and out of scope for stages 0-2, so they borrow --bg-elevated,
    which is theme-split for exactly this purpose ("Modal outer frame &
@@ -261,15 +397,14 @@ const AIP_CSS = `
     color: var(--aip-warn); font-size:11px; line-height:1.45;
     word-break: break-word;
 }
-.aip-inline-note {
-    padding:8px 10px; border-radius: var(--aip-r-md);
-    background: var(--aip-well-bg); border:1px solid var(--aip-border);
-    color: var(--aip-secondary); font-size:11px; line-height:1.45;
-}
 
 /* ── Switch. 34x20 track / 14px thumb / 14px travel (border-box: 34 - 2px
       border - 4px padding - 14px thumb = 14). The thumb is the ONE control
       with a physical metaphor, so it gets travel + spring. ─────────────── */
+/* Hit target: the visible track is 34x20, under the 24px WCAG 2.5.8 minimum on the
+   vertical axis. A transparent ::after grows the target into the surrounding padding
+   without changing layout or the visual size. */
+.aip-switch::after { content:''; position:absolute; inset:-3px -2px; }
 .aip-switch {
     position:relative; box-sizing:border-box; width:34px; height:20px; flex-shrink:0;
     padding:2px; border-radius:9999px; border:1px solid transparent;
@@ -321,29 +456,137 @@ const AIP_CSS = `
 
 /* ── Chips: DUAL encoding — dashed border off / solid + tinted on — so the
       state survives colour-blindness and greyscale. ───────────────────── */
-/* ── Model allow-list. Summary row + in-flow disclosure; see AipModelList. ── */
-.aip-models-summary {
-    display:flex; align-items:center; gap:10px; width:100%;
-    height:34px; padding:0 10px; border-radius: var(--aip-r-md);
-    background: var(--aip-btn-bg); border:1px solid var(--aip-btn-border);
-    color: var(--aip-primary); cursor:pointer; font-family:inherit; text-align:left;
+/* ── Provider card ───────────────────────────────────────────────────────────
+   Container query, NOT a viewport breakpoint: the content column is 576px at full
+   modal width and 384px at a 768px viewport, so md: fires the wide layout into the
+   narrow column. This lives on the card STACK, never on .aip-card — container-type
+   establishes containment on the element it is set on, and an element cannot query
+   its own container. */
+.aip-cq { container-type: inline-size; container-name: aipcards; }
+
+.aip-provider       { padding: var(--aip-card-pad); display:flex; flex-direction:column;
+                      gap: var(--aip-gap-row); }
+.aip-provider-head  { display:flex; align-items:center; gap:8px; min-height:26px; }
+.aip-provider-row   { display:flex; flex-wrap:wrap; align-items:center;
+                      column-gap: var(--aip-gap-col); row-gap: var(--aip-gap-row); }
+/* flex-basis, not flex-1: both groups need real intrinsic widths so the row wraps on
+   its own when narrow, and so the models trigger never crushes its default-model
+   label to nothing. */
+.aip-provider-field { display:flex; align-items:center; gap:8px; flex:1 1 280px;
+                      min-width:0; }
+.aip-provider-note  { margin-top: var(--aip-gap-row); }
+
+/* The credential shell: one 32px box holding glyph + input + Save. overflow:hidden is
+   what clips the Save segment's outer corners to the shell radius — which is also why
+   focus rings inside it are inset or hoisted onto the shell. */
+.aip-field {
+    display:flex; align-items:center; box-sizing:border-box;
+    flex:1 1 auto; min-width:0; height: var(--aip-h-ctl); overflow:hidden;
+    border:1px solid var(--aip-input-border); border-radius: var(--aip-r-md);
+    background: var(--aip-input-bg);
+    transition: border-color var(--aip-dur-state) var(--aip-ease-out),
+                background   var(--aip-dur-state) var(--aip-ease-out);
 }
-.aip-models-summary:hover { background: var(--aip-btn-bg-hover); }
-/* max-height, never height: at n=3 the well is short, at n=70 it scrolls. */
-.aip-models-well { max-height:216px; padding:4px; }
-.aip-model-row {
-    display:flex; align-items:center; gap:8px; width:100%;
-    min-height:34px; padding:0 8px; border-radius: var(--aip-r-sm);
-    background:transparent; border:0; cursor:pointer; font-family:inherit;
-    text-align:left; color: var(--aip-secondary);
+.aip-field:hover:not(:focus-within) { border-color: var(--aip-border-strong); }
+/* Neutral focus, no accent. The orchid treatment (a 40%-accent border plus a 2px
+   solid accent outline) read as an alarm around a field you had merely clicked into
+   — and :focus-visible matches pointer focus on text inputs, so it fired on every
+   click, not just keyboard nav. A brightened border carries the same information
+   without the hue. --aip-primary is rgba(255,255,255,.86) in dark and #374151 in
+   light, so it clears 3:1 against the card in both themes (SC 1.4.11). */
+.aip-field:focus-within { border-color: var(--aip-primary); }
+.aip-field-icon { flex-shrink:0; margin-left:10px; color: var(--aip-tertiary); }
+.aip-field > .aip-input {
+    height:100%; border:0; border-radius:0; background:transparent;
+    padding:0 10px; flex:1 1 auto; min-width:0;
+}
+/* The input has no ring of its own: the shell's border IS the focus indicator (see
+   :focus-within above). Suppressing it here avoids a second, clipped rectangle drawn
+   inside the shell's overflow:hidden. */
+.aip-root .aip-field > .aip-input:focus-visible { outline:none; }
+
+/* Save, as an inset segment. No transform on :active — a scaling child inside an
+   overflow:hidden parent reveals the shell edge. */
+.aip-field-seg {
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    box-sizing:border-box; height:100%; min-width:88px; padding:0 12px; flex-shrink:0;
+    border:0; border-left:1px solid var(--aip-input-border); border-radius:0;
+    background: var(--aip-btn-bg); color: var(--aip-primary);
+    font-family:inherit; font-size:12px; font-weight:500; line-height:1;
+    white-space:nowrap; cursor:pointer;
     transition: background var(--aip-dur-state) var(--aip-ease-out),
+                color      var(--aip-dur-state) var(--aip-ease-out);
+}
+.aip-field-seg:hover:not(:disabled)  { background: var(--aip-btn-bg-hover); }
+.aip-field-seg:active:not(:disabled) { background: var(--aip-item-active); }
+.aip-field-seg:disabled { opacity:0.5; cursor:not-allowed; }
+.aip-field-seg[data-tone='ok'] { color: var(--aip-ok); background: var(--aip-ok-bg); }
+/* 0,3,0 to beat ".aip-root :focus-visible" (0,2,0). Precedent: .aip-tab. */
+.aip-root .aip-field .aip-field-seg:focus-visible { outline-offset:-2px; }
+
+/* 520 splits the two real widths (576 full, 384 at a 768px viewport). Below it the
+   credential group and the models trigger each take a full line: narrow gets taller,
+   which is the correct trade. */
+@container aipcards (max-width: 519px) {
+    .aip-provider-field, .aip-models-summary { flex-basis: 100%; }
+}
+@container aipcards (min-width: 640px) {
+    .aip-provider-field { flex: 2 1 340px; }
+}
+
+/* ── Model allow-list. Summary row + in-flow disclosure; see AipModelList. ── */
+/* 34px to match .aip-btn[data-size='row'] on either side — the action row is three
+   peer controls and they share one height. Uses the existing row token rather than a
+   fourth number. No width:100%: it is always a flex child with flex-1, and a fixed
+   100% basis fights that. */
+/* Thinner than a button, deliberately. It shares a row with the credential field —
+   the primary object — and a filled surface made the two compete for the same weight.
+   Transparent with a hairline reads as a disclosure; the fill arrives on hover, when
+   it is the thing being pointed at. Height is --aip-h-ctl so it sits level with the
+   field beside it (it was 34px against a 32px field, a visible 2px staircase). */
+.aip-models-summary {
+    box-sizing:border-box; display:flex; align-items:center; gap:8px;
+    flex: 1 1 240px; min-width:0;
+    height: var(--aip-h-ctl); padding:0 10px; border-radius: var(--aip-r-md);
+    background: transparent; border:1px solid var(--aip-border);
+    color: var(--aip-secondary); cursor:pointer; font-family:inherit; text-align:left;
+    transition: background var(--aip-dur-state) var(--aip-ease-out),
+                border-color var(--aip-dur-state) var(--aip-ease-out),
                 color var(--aip-dur-state) var(--aip-ease-out);
 }
-.aip-model-row:hover { background: var(--aip-item-hover); color: var(--aip-primary); }
-.aip-model-row:active { transform: scale(0.975); }
-.aip-model-row[aria-pressed='true'] { color: var(--aip-primary); }
-.aip-model-row[aria-disabled='true'] { cursor:default; }
-.aip-model-row[aria-disabled='true']:active { transform:none; }
+.aip-models-summary:hover {
+    background: var(--aip-item-hover); border-color: var(--aip-border-strong);
+    color: var(--aip-primary);
+}
+/* Open, it is the active object on the row, so it borrows the well's surface to tie
+   itself to the panel it just revealed. */
+.aip-models-summary[aria-expanded='true'] {
+    background: var(--aip-well-bg); border-color: var(--aip-border-strong);
+    color: var(--aip-primary);
+}
+/* max-height, never height: at n=3 the well is short, at n=70 it scrolls. */
+.aip-models-well { max-height:216px; padding:4px; }
+/* The row is a container, not a button: it holds the membership toggle AND the
+   "Set default" action, and a <button> may not contain a <button>. */
+.aip-model-row {
+    display:flex; align-items:center; gap:6px; width:100%;
+    min-height:34px; padding:0 6px 0 8px; border-radius: var(--aip-r-sm);
+    transition: background var(--aip-dur-state) var(--aip-ease-out);
+}
+.aip-model-row:hover { background: var(--aip-item-hover); }
+.aip-model-toggle {
+    display:flex; align-items:center; gap:8px; flex:1; min-width:0;
+    background:transparent; border:0; padding:0; cursor:pointer;
+    font-family:inherit; text-align:left; color: var(--aip-secondary);
+    transition: color var(--aip-dur-state) var(--aip-ease-out),
+                transform var(--aip-dur-press) var(--aip-ease-out);
+}
+.aip-model-row:hover .aip-model-toggle { color: var(--aip-primary); }
+.aip-model-toggle:active { transform: scale(0.975); }
+.aip-model-toggle[aria-pressed='true'] { color: var(--aip-primary); }
+.aip-model-toggle[aria-disabled='true'] { cursor:default; }
+.aip-model-toggle[aria-disabled='true']:active { transform:none; }
+.aip-btn-sm { height:22px; padding:0 8px; font-size:10.5px; }
 /* Always rendered, never conditionally: a conditional check changes the row's
    intrinsic width and shifts the label as you toggle down a list. */
 .aip-model-check {
@@ -351,7 +594,7 @@ const AIP_CSS = `
     transition: opacity var(--aip-dur-state) var(--aip-ease-out),
                 transform var(--aip-dur-state) var(--aip-ease-out);
 }
-.aip-model-row[aria-pressed='true'] .aip-model-check { opacity:1; transform: scale(1); }
+.aip-model-toggle[aria-pressed='true'] .aip-model-check { opacity:1; transform: scale(1); }
 .aip-model-name { font-size:12px; min-width:0; }
 /* --aip-secondary, never --aip-tertiary: tertiary is 2.6:1 in dark and is
    reserved for decorative glyphs and disabled states. */
@@ -380,32 +623,86 @@ const AIP_CSS = `
       collapse. The visibility delay is what keeps collapsed inputs out of
       the tab order. NOT a height animation — this panel lives in an
       overflow-y:auto scroller where those clip and jank. ──────────────── */
+/* ASYMMETRIC. Opening is the user's request and gets --dur-travel; closing is the
+   system acknowledging and gets --dur-state — the panel should be out of the way
+   before you have finished thinking about it. A transition is read from the state
+   being transitioned TO, so [data-open='true'] carries the OPEN timing and the base
+   rule carries the CLOSE timing.
+   This also changes AipSelect's listbox (the other consumer of this class) from a
+   220ms to a 160ms collapse — deliberate. The timing has to live on the shared class
+   because the visibility delay below must stay pinned to the collapse duration. */
 .aip-reveal { display:grid; grid-template-rows:0fr;
+              transition: grid-template-rows var(--aip-dur-state) var(--aip-ease-out); }
+.aip-reveal[data-open='true'] {
+              grid-template-rows:1fr;
               transition: grid-template-rows var(--aip-dur-travel) var(--aip-ease-out); }
-.aip-reveal[data-open='true'] { grid-template-rows:1fr; }
+/* Tokenised — was a hardcoded 220ms that silently duplicated --aip-dur-travel. This
+   delay exists only to hold the tab order open until the box has finished closing,
+   so it tracks the COLLAPSE duration and must change with it. */
 .aip-reveal > div { overflow:hidden; min-height:0;
-                    visibility:hidden; transition: visibility 0s linear 220ms; }
+                    visibility:hidden; transition: visibility 0s linear var(--aip-dur-state); }
 .aip-reveal[data-open='true'] > div { visibility:visible; transition-delay:0s; }
+
+/* Content motion, scoped to the model list — AipSelect's listbox is a menu and keeps
+   the bare clip. The transform CANNOT go on ".aip-reveal > div": that element carries
+   the overflow:hidden, so transforming it would move the clip box with the content and
+   the panel would overlap the trigger. It goes on its single child, inside the clip.
+   -4px means the content settles DOWNWARD, travelling with the clip edge rather than
+   against it — the panel hangs below the trigger, so it should read as drawn out of it.
+   Open: box starts, content follows 60ms later, both land at 220ms — one arrival, not
+   two events. Close: content leads and is gone at 110ms, so the descending edge never
+   chops through solid rows. */
+.aip-reveal--models > div > * {
+    opacity:0; transform: translateY(-4px);
+    transition: opacity   var(--aip-dur-press) var(--aip-ease-out),
+                transform var(--aip-dur-press) var(--aip-ease-out);
+}
+.aip-reveal--models[data-open='true'] > div > * {
+    opacity:1; transform:none;
+    transition: opacity   var(--aip-dur-state) var(--aip-ease-out) 60ms,
+                transform var(--aip-dur-state) var(--aip-ease-out) 60ms;
+}
 
 /* ── Monogram tile. Not a logo: no provider marks ship in this repo and
       lucide has none, so a two-letter mono monogram on a brand-tinted tile
       is both distinctive and trademark-safe. ──────────────────────────── */
-/* Selectable option row (screen-understanding modes). The dot is the second
-   and last consumer of --aip-ease-spring; everything else uses ease-out. */
-.aip-option { border:1px solid var(--aip-border); background: var(--aip-well-bg);
-              border-radius: var(--aip-r-md); cursor:pointer;
-              transition: border-color var(--aip-dur-state) var(--aip-ease-out),
-                          background var(--aip-dur-state) var(--aip-ease-out); }
-.aip-option:hover { border-color: var(--aip-border-strong); }
-.aip-option[aria-checked='true'] { border-color: var(--aip-accent-border); background: var(--aip-accent-subtle); }
-.aip-option-dot { box-sizing:border-box; width:16px; height:16px; border-radius:9999px;
-                  border:2px solid var(--aip-border-strong); flex-shrink:0;
-                  transition: border-color var(--aip-dur-state) var(--aip-ease-out),
-                              background var(--aip-dur-travel) var(--aip-ease-spring); }
-.aip-option[aria-checked='true'] .aip-option-dot { border-color: var(--aip-accent); background: var(--aip-accent); }
 
 /* Row actions: never opacity:0 — that hides them from keyboard and touch
    entirely. Half-visible at rest, full on hover OR focus-within. */
+/* ── The default marker.
+      This is not a two-state toggle on one element: it is a single exclusive
+      property MOVING between rows. Two rows change at once, arbitrarily far apart,
+      and either may be scrolled out of a 216px well.
+
+      So only the ARRIVING badge animates. Three reasons:
+        - The row you clicked is the one you are looking at; it is the only place
+          feedback is legible.
+        - The departing row is frequently off-screen, and animating something
+          invisible buys nothing. By the time you scroll to it the animation is
+          long over, so it would only ever be seen having already finished.
+        - A row quietly GAINING a "Set default" ghost is not something you did.
+          Animating it would claim an event that never happened.
+
+      No shared-element "the badge slid across" illusion: that needs FLIP, which
+      needs measurement and JS, and the two rows are usually not both on screen —
+      it would animate a trip through blank space or off the edge entirely.
+      ────────────────────────────────────────────────────────────────────────── */
+.aip-default-slot {
+    display:flex; justify-content:flex-end; align-items:center;
+    min-width:82px;   /* holds "Set default" (the wider of the two) without reflow */
+}
+/* Lands rather than appears. Scale from 0.94, not from 0 — nothing in the real
+   world arrives from nothing — and ease-out rather than the spring, whose
+   two-consumer budget is already spent. */
+@keyframes aip-default-in { from { opacity:0; transform:scale(0.94); } to { opacity:1; transform:none; } }
+.aip-default-mark { animation: aip-default-in var(--aip-dur-state) var(--aip-ease-out) both; }
+/* KNOWN LIMITATION: on an IPC failure handleSetDefaultModel rolls the default back,
+   which re-mounts the badge on the original row and replays this animation — reading
+   as a second user action rather than an undo. Suppressing it would mean threading a
+   "this change was a rollback" flag down from the parent. Left as-is because the
+   summary row simultaneously shows a danger "Not saved" badge, which is the thing
+   that actually explains the reversal. */
+
 .aip-row-actions { opacity: 0.5; transition: opacity var(--aip-dur-state) var(--aip-ease-out); }
 .aip-row:hover .aip-row-actions,
 .aip-row:focus-within .aip-row-actions { opacity: 1; }
@@ -444,7 +741,10 @@ const AIP_CSS = `
                 background var(--aip-dur-state) var(--aip-ease-out);
 }
 .aip-input::placeholder { color: var(--aip-tertiary); }
-.aip-input:focus { background: var(--aip-input-bg-focus); border-color: var(--aip-input-border-focus); }
+/* Same neutral focus as .aip-field — every input in the panel brightens its border
+   rather than taking an accent tint. Accent is reserved for things that are selected
+   or active, not for things that merely have the caret. */
+.aip-input:focus { border-color: var(--aip-primary); }
 .aip-input[data-mono='true'] { font-family: var(--aip-mono); font-size:11.5px; }
 textarea.aip-input { height:auto; padding:10px; line-height:1.5; resize:none; }
 select.aip-input { cursor:pointer; }
@@ -471,6 +771,11 @@ select.aip-input { cursor:pointer; }
 .aip-select-chevron { color: var(--aip-secondary); flex-shrink:0;
                       transition: transform var(--aip-dur-state) var(--aip-ease-out); }
 .aip-select-trigger[aria-expanded='true'] .aip-select-chevron { transform: rotate(180deg); }
+/* The models trigger is not an .aip-select-trigger, so it never matched the rule
+   above. It was passing an "is-open" class that has no rule anywhere — the chevron
+   has never rotated. Use the ARIA state already on the button.
+   (No backticks in this CSS: AIP_CSS is a template literal.) */
+.aip-models-summary[aria-expanded='true'] .aip-select-chevron { transform: rotate(180deg); }
 .aip-select-list { max-height:216px; overflow-y:auto; padding:4px; margin-top:6px; }
 .aip-select-option {
     display:flex; align-items:center; justify-content:space-between; gap:8px;
@@ -512,10 +817,15 @@ select.aip-input { cursor:pointer; }
 .aip-ok-fg     { color: var(--aip-ok); }
 .aip-info-fg   { color: var(--aip-info); }
 .aip-accent-fg { color: var(--aip-accent); }
+/* 18px/700 is General's panel heading ("text-lg font-bold text-text-primary");
+   14px/700 is its row title ("text-sm font-bold"). Both were a step down and a
+   weight light, which is a second way the panel read as a different product.
+   .aip-subtitle is already 12px = General's "text-xs", and --aip-secondary
+   already resolves to the same colour as --text-secondary in both themes
+   (#6B7280 light; rgba(255,255,255,0.56) over the dark canvas ≈ #A0A0A0), so
+   the description role needs no change. */
 .aip-title     { font-size:15px; font-weight:600; letter-spacing:-0.012em; color: var(--aip-hero); }
 .aip-subtitle  { font-size:12px; font-weight:400; color: var(--aip-secondary); }
-.aip-eyebrow   { font-size:11px; font-weight:600; text-transform:uppercase;
-                 letter-spacing:0.06em; color: var(--aip-secondary); }
 .aip-card-title{ font-size:13px; font-weight:600; letter-spacing:-0.008em; color: var(--aip-hero); }
 .aip-meta      { font-size:11px; font-weight:400; line-height:1.45; color: var(--aip-secondary); }
 .aip-label     { font-size:10px; font-weight:600; text-transform:uppercase;
@@ -534,6 +844,13 @@ select.aip-input { cursor:pointer; }
         animation-delay: 0ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
+        /* Closes the gap that let .aip-reveal keep its full visibility delay after the
+           collapse had been squashed to 0.01ms — content stayed visible and tabbable
+           after the box was gone. Also load-bearing for two delays a transition-delay
+           grep will NOT find, because both sit inside shorthands: the visibility hold,
+           and the models content's 60ms lead-in. An !important longhand beats a
+           non-important shorthand regardless of specificity, so one line covers all. */
+        transition-delay: 0ms !important;
     }
     /* Spinners are EXEMPT — freezing one mid-rotation is worse than motion.
        Rotation is replaced by a pulse rather than removed. */
@@ -542,6 +859,9 @@ select.aip-input { cursor:pointer; }
     .aip-root .aip-btn:active,
     .aip-root .aip-chip:active,
     .aip-root .aip-tab:active { transform: none; }
+    /* Remove the 4px displacement outright rather than trusting a 0.01ms transition
+       to land it. Opacity is left alone: it aids comprehension and carries no motion. */
+    .aip-root .aip-reveal--models > div > * { transform: none !important; }
     .aip-root .aip-skeleton { animation: none; opacity: 0.55; }
 }
 `;
@@ -648,6 +968,21 @@ export const AipSwitch: React.FC<AipSwitchProps> = ({
 );
 
 /** Per-provider brand hues for the monogram tile. */
+/**
+ * The five cloud providers, in render order. One table drives all five cards — they
+ * were 28 near-identical props copy-pasted five times, so a new prop meant five edits
+ * and a missed one was invisible.
+ */
+export const CLOUD_PROVIDERS = [
+    { id: 'gemini'   as const, name: 'Gemini',   placeholder: 'AIzaSy...',  url: 'https://aistudio.google.com/app/apikey' },
+    { id: 'groq'     as const, name: 'Groq',     placeholder: 'gsk_...',    url: 'https://console.groq.com/keys' },
+    { id: 'openai'   as const, name: 'OpenAI',   placeholder: 'sk-...',     url: 'https://platform.openai.com/api-keys' },
+    { id: 'claude'   as const, name: 'Claude',   placeholder: 'sk-ant-...', url: 'https://console.anthropic.com/settings/keys' },
+    // Text-only; intentionally NOT part of the screenshot/vision fallback chain.
+    { id: 'deepseek' as const, name: 'DeepSeek', placeholder: 'sk-...',     url: 'https://platform.deepseek.com/api_keys' },
+];
+export type CloudProviderId = (typeof CLOUD_PROVIDERS)[number]['id'];
+
 export const AIP_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }> = {
     gemini:   { mono: 'GE', brand: '#7C9CF5' },
     groq:     { mono: 'GQ', brand: '#F2755C' },
@@ -751,7 +1086,6 @@ export const AipProviderMark: React.FC<AipProviderMarkProps> = ({ provider, name
     );
 };
 
-
 export interface AipModelEntry { id: string; label: string }
 
 interface AipModelListProps {
@@ -762,12 +1096,24 @@ interface AipModelListProps {
     onToggle: (modelId: string) => void;
     /** Clears the allow-list back to "all". */
     onReset: () => void;
-    /** Shown in the collapsed summary so the resting state names the active model. */
-    defaultLabel?: string;
+    /** This provider's default model id. Rendered as a badge; movable per row. */
+    defaultId?: string;
+    /** Promote a model to this provider's default. Must also allow-list it. */
+    onSetDefault?: (modelId: string) => void;
     /** Ids present in `enabled` that the provider no longer offers. */
     staleIds?: string[];
     /** Set while a write is in flight so the header can report a failure. */
     error?: string | null;
+    /** Re-run discovery against the provider API. */
+    onRefresh?: () => void;
+    /** Discovery in flight. */
+    refreshing?: boolean;
+    /**
+     * Called once, the first time the panel is expanded with no catalog yet.
+     * Expanding this list IS the intent to browse models, so discovery belongs
+     * here rather than behind a separate button elsewhere in the card.
+     */
+    onFirstOpen?: () => void;
 }
 
 /** Above this many models, a filter field and the Previews toggle appear. */
@@ -792,13 +1138,15 @@ const AIP_PREVIEW_RE = /preview|exp(erimental)?\b|-latest$|-\d{4}-\d{2}-\d{2}$|-
  * between aim and click.
  */
 export const AipModelList: React.FC<AipModelListProps> = ({
-    models, enabled, onToggle, onReset, defaultLabel, staleIds = [], error,
+    models, enabled, onToggle, onReset, defaultId, onSetDefault, staleIds = [], error,
+    onRefresh, refreshing, onFirstOpen,
 }) => {
     const t = useT();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [hidePreviews, setHidePreviews] = useState(models.length > AIP_MODEL_FILTER_THRESHOLD);
     const [activeIndex, setActiveIndex] = useState(0);
+    const firstOpenFired = useRef(false);
     const listRef = useRef<HTMLDivElement>(null);
     const summaryRef = useRef<HTMLButtonElement>(null);
     const idRef = useRef(`aip-models-${Math.random().toString(36).slice(2, 9)}`);
@@ -857,32 +1205,46 @@ export const AipModelList: React.FC<AipModelListProps> = ({
     const soleEnabled = enabled.length === 1 ? enabled[0] : null;
 
     return (
-        <div className="mt-1 pt-3 border-t" style={{ borderColor: 'var(--aip-divider)' }}>
+        <>
             <button
                 ref={summaryRef}
                 type="button"
-                onClick={() => { setOpen(o => !o); if (open) setQuery(''); }}
+                onClick={() => {
+                    const next = !open;
+                    setOpen(next);
+                    if (!next) setQuery('');
+                    // Once only: a failed or empty discovery must not re-fire on every
+                    // expand, and the user can still refresh explicitly below.
+                    if (next && !firstOpenFired.current) {
+                        firstOpenFired.current = true;
+                        onFirstOpen?.();
+                    }
+                }}
                 aria-expanded={open}
                 aria-controls={panelId}
-                className="aip-models-summary aip-press"
+                className="aip-models-summary aip-press order-2"
             >
                 <span className="aip-label shrink-0">{t('Models')}</span>
                 <span className="aip-meta truncate min-w-0 flex-1 text-right">
-                    {defaultLabel ? `${defaultLabel} · ${t('default')}` : ''}
+                    {defaultId ? `${models.find(m => m.id === defaultId)?.label ?? defaultId} · ${t('default')}` : ''}
                 </span>
                 {error
                     ? <AipBadge tone="danger" label={t('Not saved')} />
                     : <span className="aip-count shrink-0" aria-live="polite">
                         {enabled.length === 0 ? `${t('All')} ${models.length}` : `${enabledCount} / ${models.length}`}
                       </span>}
-                <ChevronDown size={13} strokeWidth={1.75} className={`aip-select-chevron ${open ? 'is-open' : ''}`} aria-hidden="true" />
+                <ChevronDown size={13} strokeWidth={1.75} className="aip-select-chevron" aria-hidden="true" />
             </button>
 
-            <div className="aip-reveal" data-open={open ? 'true' : 'false'}>
+            {/* basis-full forces this onto its own line inside the action row;
+                order-4 keeps it visually last while DOM order keeps it directly
+                after the trigger it belongs to. */}
+            <div className="aip-reveal aip-reveal--models w-full basis-full order-4" data-open={open ? 'true' : 'false'}>
                 <div>
                     <div id={panelId} role="group" aria-label={t('Models shown in the picker')} className="pt-2" onKeyDown={onListKeyDown}>
+                        <div className="flex items-center gap-2 mb-2">
                         {showFilterBar && (
-                            <div className="flex items-center gap-2 mb-2">
+                            <>
                                 <input
                                     type="search"
                                     value={query}
@@ -903,12 +1265,25 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                     {t('Previews')}
                                 </button>
                                 {enabled.length > 0 && (
-                                    <button type="button" onClick={onReset} className="aip-btn shrink-0" title={t('Show all models again')}>
+                                    <button type="button" onClick={onReset} className="aip-btn aip-btn-sm shrink-0" title={t('Show all models again')}>
                                         {t('Reset')}
                                     </button>
                                 )}
-                            </div>
+                            </>
                         )}
+                        {onRefresh && (
+                            <button
+                                type="button"
+                                onClick={onRefresh}
+                                disabled={refreshing}
+                                className={`aip-btn aip-btn-sm shrink-0 ${showFilterBar ? '' : 'ml-auto'}`}
+                                title={t('Re-read the model list from this provider')}
+                            >
+                                <RefreshCw size={11} strokeWidth={1.75} className={refreshing ? 'aip-spinner' : ''} />
+                                {refreshing ? t('Fetching...') : showFilterBar ? t('Refresh') : t('Fetch all models')}
+                            </button>
+                        )}
+                        </div>
 
                         <div ref={listRef} className="aip-well aip-scroll-y custom-scrollbar aip-models-well">
                             {visible.length === 0 ? (
@@ -917,39 +1292,63 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                 const on = isOn(m.id);
                                 const inert = soleEnabled === m.id;
                                 const stale = staleIds.includes(m.id);
+                                const isDefault = defaultId === m.id;
                                 return (
-                                    <button
-                                        key={m.id}
-                                        type="button"
-                                        data-index={i}
-                                        tabIndex={i === activeIndex ? 0 : -1}
-                                        aria-pressed={on}
-                                        aria-disabled={inert || undefined}
-                                        onClick={() => { if (!inert) onToggle(m.id); }}
-                                        onFocus={() => setActiveIndex(i)}
-                                        title={inert
-                                            ? t('At least one model must stay on. Turn the provider off to hide it entirely.')
-                                            : m.id}
-                                        className="aip-model-row"
-                                    >
-                                        <Check size={11} strokeWidth={2.5} className="aip-model-check" aria-hidden="true" />
-                                        <span className="aip-model-name truncate">{m.label}</span>
-                                        {m.label !== m.id && (
-                                            <span className="aip-model-id aip-mono truncate">{m.id}</span>
-                                        )}
+                                    <div key={m.id} className="aip-model-row aip-row">
+                                        <button
+                                            type="button"
+                                            data-index={i}
+                                            tabIndex={i === activeIndex ? 0 : -1}
+                                            aria-pressed={on}
+                                            aria-disabled={inert || undefined}
+                                            onClick={() => { if (!inert) onToggle(m.id); }}
+                                            onFocus={() => setActiveIndex(i)}
+                                            title={inert
+                                                ? t('At least one model must stay on. Turn the provider off to hide it entirely.')
+                                                : m.id}
+                                            className="aip-model-toggle"
+                                        >
+                                            <Check size={11} strokeWidth={2.5} className="aip-model-check" aria-hidden="true" />
+                                            <span className="aip-model-name truncate">{m.label}</span>
+                                            {m.label !== m.id && (
+                                                <span className="aip-model-id aip-mono truncate">{m.id}</span>
+                                            )}
+                                        </button>
                                         {stale && <AipBadge tone="warn" label={t('Not offered')} />}
-                                    </button>
+                                        {/* One fixed-width slot for both states. The badge is an
+                                            18px pill and the button is a wider 22px control, so
+                                            without a reserved slot every row's right edge would
+                                            shift as the default moves between rows. */}
+                                        <div className="aip-default-slot shrink-0">
+                                            {isDefault ? (
+                                                <AipBadge tone="neutral" label={t('Default')} className="aip-default-mark" />
+                                            ) : onSetDefault && (
+                                                // 0.5 opacity at rest, not 0: an action that is invisible
+                                                // until hover is unreachable by keyboard and touch.
+                                                <div className="aip-row-actions">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => onSetDefault(m.id)}
+                                                        className="aip-btn aip-btn-sm"
+                                                        title={t('Use this model by default for this provider')}
+                                                    >
+                                                        {t('Set default')}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 );
                             })}
                         </div>
 
                         {models.length <= AIP_MODEL_FILTER_THRESHOLD && (
-                            <p className="aip-meta mt-2">{t('Showing built-in models. Fetch to see everything your key can reach.')}</p>
+                            <p className="aip-meta mt-2">{t('Showing built-in models only.')}</p>
                         )}
                     </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 };
 
@@ -1339,6 +1738,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [claudeApiKey, setClaudeApiKey] = useState('');
     const [deepseekApiKey, setDeepseekApiKey] = useState('');
 
+    // Binds the five key fields to the CLOUD_PROVIDERS table. The useState calls stay
+    // separate (they are read individually elsewhere); this is only the lookup the
+    // render map needs, so adding a provider is a table row plus one line here.
+    const keyFields: Record<CloudProviderId, [string, (v: string) => void]> = {
+        gemini: [apiKey, setApiKey],
+        groq: [groqApiKey, setGroqApiKey],
+        openai: [openaiApiKey, setOpenaiApiKey],
+        claude: [claudeApiKey, setClaudeApiKey],
+        deepseek: [deepseekApiKey, setDeepseekApiKey],
+    };
+
     // --- LiteLLM proxy (OpenAI-compatible gateway: baseURL + optional virtual key) ---
     const [litellmBaseURL, setLitellmBaseURL] = useState('');
     const [litellmApiKey, setLitellmApiKey] = useState('');
@@ -1378,6 +1788,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
     // --- Local (Ollama) ---
     const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+    // Whether a denied scope would ACTUALLY be handled on-device — answered by the
+    // main process (LLMHelper.scopeFallbackAvailable) so this shares the enforcement
+    // predicate instead of re-deriving it. Split because the gate passes
+    // needsVision=true only for screenshots. Starts false/false so the privacy UI
+    // never promises on-device handling before it knows.
+    const [localFallback, setLocalFallback] = useState<{ text: boolean; vision: boolean }>({ text: false, vision: false });
     const [ollamaStatus, setOllamaStatus] = useState<'checking' | 'detected' | 'not-found' | 'fixing'>('checking');
     const [ollamaRestarted, setOllamaRestarted] = useState(false);
     const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
@@ -1461,16 +1877,54 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const visionLocalOnly = screenUnderstandingMode === 'private_vision';
     const visionRequired = screenUnderstandingMode === 'vision_only' || visionLocalOnly;
 
+    // Three enum values, two switches — so 'private_vision' cannot represent what
+    // the "Require" switch was set to before local-only was turned on. Deriving it
+    // (`visionRequired` above is true whenever local-only is) meant turning
+    // local-only back OFF resolved `required` as true and landed on 'vision_only',
+    // never 'vision_first'. A switch the user never touched silently latched ON and
+    // there was no UI path back to the default. Remembering the pre-local-only
+    // value restores the round-trip WITHIN A MOUNT — this is a ref, not persisted
+    // state, so closing Settings between the two toggles loses it and leaving
+    // local-only lands on 'vision_first'. That is the safe direction (the old bug
+    // latched "Require" ON with no way back); persisting it would need a second
+    // stored field, which the enum deliberately does not have.
+    const requiredBeforeLocalOnly = useRef<boolean | null>(null);
+
     const applyVisionMode = (localOnly: boolean, required: boolean) => {
-        const mode = localOnly ? 'private_vision' : (required ? 'vision_only' : 'vision_first');
+        let effectiveRequired = required;
+        if (localOnly && !visionLocalOnly) {
+            // Entering local-only: stash what "Require" really was, since the
+            // enum is about to stop being able to express it.
+            requiredBeforeLocalOnly.current = screenUnderstandingMode === 'vision_only';
+        } else if (!localOnly && visionLocalOnly) {
+            // Leaving local-only: restore it rather than reading it back off the
+            // derived value, which is unconditionally true while local-only is on.
+            effectiveRequired = requiredBeforeLocalOnly.current ?? false;
+            requiredBeforeLocalOnly.current = null;
+        }
+        const mode = localOnly ? 'private_vision' : (effectiveRequired ? 'vision_only' : 'vision_first');
         setScreenUnderstandingMode(mode);
         window.electronAPI?.setScreenUnderstandingMode?.(mode);
     };
 
-    // Where a disabled scope's data actually goes. LLMHelper reroutes it to Ollama
-    // when a local model exists and OMITS it from context when one does not — see
-    // logScopeFallback(). Only the console ever knew which of those happened.
-    const localFallbackAvailable = ollamaModels.length > 0;
+    // Where a disabled scope's data actually goes. Must match ENFORCEMENT
+    // (LLMHelper.scopeFallbackAvailable), not `ollamaModels.length > 0` — which
+    // counted `nomic-embed-text` as a vision fallback AND ignored that the gate
+    // only fires when Ollama is the selected provider.
+    // The gate computes needsVision ONCE PER TURN, as
+    // `deniedOutboundScopes.includes('screenshots')` — not per scope. So when
+    // Screenshots is also denied, a turn carrying an image resolves the local
+    // fallback for EVERY denied scope against the vision-capable predicate.
+    // Keying each row on its own scope in isolation over-promised: with
+    // Transcripts+Screenshots off and a text-only Ollama, the Transcripts row
+    // claimed "On-device" while the real gate refused the turn.
+    const localFallbackFor = (key: string) =>
+        (key === 'screenshots' || providerDataScopes.screenshots === false)
+            ? localFallback.vision
+            : localFallback.text;
+    // Card-level shorthand: the Screenshots card is about images, so it asks the
+    // vision question.
+    const localFallbackAvailable = localFallback.vision;
     const disabledScopeCount = SCOPE_ROWS.filter(r => providerDataScopes[r.key] === false).length;
 
     // Load Initial Data
@@ -1730,6 +2184,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         const normalised = (nextList.length === 0 || nextList.length === universe.length) ? [] : nextList;
         const prev = cloudEnabledModels;
         setCloudEnabledModelsState(p => ({ ...p, [provider]: normalised }));
+
+        // If the model just un-checked was this provider's default, move the default
+        // rather than leaving it pointing outside the picker. `normalised === []` means
+        // "all", so the default is still valid there and needs no move.
+        const currentDefault = preferredModels[provider as keyof typeof preferredModels];
+        if (currentDefault === modelId && normalised.length > 0) {
+            const moved = normalised[0];
+            setPreferredModels(p => ({ ...p, [provider]: moved }));
+            window.electronAPI?.setProviderPreferredModel?.(provider as any, moved)
+                .catch((e: unknown) => console.error('Failed to move default model:', e));
+        }
         try {
             const res = await window.electronAPI?.setCloudEnabledModels?.(provider, normalised);
             if (res && res.success === false) throw new Error(res.error || 'save failed');
@@ -1738,6 +2203,46 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             // does not have is worse than the write failing visibly.
             console.error('Failed to persist enabled models:', e);
             setCloudEnabledModelsState(prev);
+            setModelSaveError(p => ({ ...p, [provider]: true }));
+            setTimeout(() => setModelSaveError(p => ({ ...p, [provider]: false })), 4000);
+        }
+    };
+
+    /**
+     * Promote a model to this provider's default.
+     *
+     * Invariant: the default is ALWAYS allow-listed. Otherwise the provider defaults
+     * to a model the picker refuses to show — the exact incoherence merging the two
+     * controls exists to abolish.
+     *
+     * That makes this TWO writes when the model is not yet allow-listed, so the order
+     * and the rollback matter. Allow-list first: "allow-listed but not default" is a
+     * perfectly coherent resting state, while "default but not allow-listed" is the
+     * state being abolished. If the process dies between the writes, we land on the
+     * harmless one.
+     */
+    const handleSetDefaultModel = async (provider: string, modelId: string) => {
+        const prevEnabled = cloudEnabledModels;
+        const prevPreferred = preferredModels;
+        const current = cloudEnabledModels[provider] || [];
+        // An empty allow-list already means "all", so nothing to add in that case.
+        const needsAllow = current.length > 0 && !current.includes(modelId);
+        const nextList = needsAllow ? [...current, modelId] : current;
+
+        if (needsAllow) setCloudEnabledModelsState(p => ({ ...p, [provider]: nextList }));
+        setPreferredModels(p => ({ ...p, [provider]: modelId }));
+
+        try {
+            if (needsAllow) {
+                const r = await window.electronAPI?.setCloudEnabledModels?.(provider, nextList);
+                if (r && r.success === false) throw new Error(r.error || 'allow-list write failed');
+            }
+            await window.electronAPI?.setProviderPreferredModel?.(provider as any, modelId);
+        } catch (e) {
+            // Roll BOTH back — a half-applied merge is worse than no change.
+            console.error('Failed to set default model:', e);
+            setCloudEnabledModelsState(prevEnabled);
+            setPreferredModels(prevPreferred);
             setModelSaveError(p => ({ ...p, [provider]: true }));
             setTimeout(() => setModelSaveError(p => ({ ...p, [provider]: false })), 4000);
         }
@@ -1898,9 +2403,35 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         }
     };
 
+    // The poll below runs every 3s and each pass makes real HTTP calls to the
+    // Ollama daemon. Without a guard, a slow daemon lets passes stack up.
+    const checkOllamaInFlight = useRef(false);
+
     const checkOllama = async (_isInitial = true) => {
         // Don't override 'checking' if we are already in smart-start mode
-        // if (isInitial) setOllamaStatus('checking'); 
+        // if (isInitial) setOllamaStatus('checking');
+        if (checkOllamaInFlight.current) return;
+        checkOllamaInFlight.current = true;
+        try {
+            await checkOllamaInner();
+        } finally {
+            checkOllamaInFlight.current = false;
+        }
+    };
+
+    const checkOllamaInner = async () => {
+
+        // Refreshed OUTSIDE the models try/catch on purpose. "Ollama has models
+        // installed" and "a denied scope would actually be served locally" are
+        // different questions — the gate also requires Ollama to be the SELECTED
+        // provider, which the user can change from this very screen. If this rode
+        // along inside the block below, a getAvailableOllamaModels() throw (Ollama
+        // stopped mid-session) would skip it and leave the Privacy card showing a
+        // stale "On-device" for content that is now being dropped. Fail closed.
+        try {
+            const st = await window.electronAPI?.getLocalFallbackStatus?.();
+            setLocalFallback({ text: Boolean(st?.text), vision: Boolean(st?.vision) });
+        } catch { setLocalFallback({ text: false, vision: false }); }
 
         try {
             // @ts-ignore
@@ -2199,18 +2730,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         }
     };
 
-    const openKeyUrl = (provider: string) => {
-        const urls: Record<string, string> = {
-            gemini: 'https://aistudio.google.com/app/apikey',
-            groq: 'https://console.groq.com/keys',
-            openai: 'https://platform.openai.com/api-keys',
-            claude: 'https://console.anthropic.com/settings/keys'
-        };
-        // @ts-ignore
-        window.electronAPI?.openExternal(urls[provider]);
-    };
-
-
     // --- Custom Provider Handlers ---
 
     const handleEditProvider = (provider: CustomProvider) => {
@@ -2355,18 +2874,19 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 />
             )}
             <header>
+                {/* mb-1 / mb-2, General's exact header rhythm — was mb-1 / mb-5,
+                    which stacked 20px onto the 20px the aip-root space-y already
+                    contributes and pushed the first control 40px down the panel. */}
                 <h3 className="aip-title mb-1">{t('AI Providers')}</h3>
-                <p className="aip-subtitle mb-5">
+                <p className="aip-subtitle mb-2">
                     {t('Pick a default model and connect the cloud, local, or custom providers you want available.')}
                 </p>
             </header>
 
-            {/* Default Model for Chat */}
-            <div className="space-y-5">
-                <div className="aip-card p-5 flex items-center justify-between gap-4">
+            <div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Active Model')}</label>
-                        <p className="text-[10px] aip-muted">{t('Applies to new chats instantly.')}</p>
+                        <p className="text-[10px] aip-muted mt-0.5">{t('Applies to new chats instantly.')}</p>
                     </div>
                     <ModelSelect
                         value={defaultModel}
@@ -2379,71 +2899,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     />
                 </div>
 
-                {/* Fast Response Mode */}
-                <div
-                    className={`aip-card p-5 flex items-center justify-between gap-4 ${!canUseFastMode ? 'opacity-50 grayscale' : ''}`}
-                    title={!canUseFastMode ? t("Requires Groq, Natively API, or Codex CLI to be configured") : ""}
-                >
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                            <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Response Mode')}</label>
-                            <AipBadge tone="info" label={t('New')} />
-                            {!canUseFastMode && <AipBadge tone="warn" label={t('Needs Groq')} />}
-                        </div>
-                        <p className="text-[10px] aip-muted mt-0.5">{t('Uses the fastest available provider instead of your selected model.')}</p>
-                        {!canUseFastMode && (
-                            <p className="text-[10px] aip-warn-fg mt-0.5 font-medium">{t('Requires Groq, Natively API, or Codex CLI to be configured.')}</p>
-                        )}
-                    </div>
-                    {/* aria-disabled, not disabled: the onClick guard below is the
-                        only thing that explains WHY the toggle is unavailable, and
-                        Stage 3 owns replacing that alert() with an inline hint.
-                        Hard-disabling here would make it unreachable dead code. */}
-                    <AipSwitch
-                        checked={fastResponseMode}
-                        disabled={!canUseFastMode}
-                        label={t('Fast Response Mode')}
-                        onChange={async () => {
-                            if (!canUseFastMode) {
-                                alert(t("Please configure Groq, Natively API, or Codex CLI first to enable Fast Response Mode."));
-                                return;
-                            }
-                            const newState = !fastResponseMode;
-                            setFastResponseMode(newState);
-                            localStorage.setItem('natively_groq_fast_text', String(newState));
-                            // @ts-ignore
-                            await window.electronAPI?.setGroqFastTextMode(newState);
-                        }}
-                    />
-                </div>
-
-                {/* Capture quality. NOT privacy — an image-resolution profile, which is
-                    why it does not live in the Privacy tab. It sits with the other global
-                    defaults (active model, response language) because that is what it is:
-                    a default applied to every screenshot, independent of
-                    screenUnderstandingMode's routing strategy. */}
-                <div className="aip-card p-5 flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('High-resolution capture for code')}</label>
-                        <p className="text-[10px] aip-muted mt-0.5">{t('Keeps small code text legible in screenshots. Costs more tokens per screenshot.')}</p>
-                    </div>
-                    <AipSwitch
-                        checked={technicalInterviewVisionFirst}
-                        label={t('High-resolution capture for code')}
-                        onChange={(next) => {
-                            setTechnicalInterviewVisionFirst(next);
-                            const api: any = window.electronAPI;
-                            if (api?.setTechnicalInterviewVisionFirst) {
-                                api.setTechnicalInterviewVisionFirst(next);
-                            } else {
-                                window.electronAPI?.setTechnicalInterviewDirectVision?.(next);
-                            }
-                        }}
-                    />
-                </div>
-
-                {/* AI Response Language */}
-                <div className="aip-card p-5 flex items-center justify-between gap-4">
+<div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('AI Response Language')}</label>
                         <p className="text-[10px] aip-muted mt-0.5">
@@ -2490,7 +2946,43 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         )}
                     </div>
                 </div>
-            </div>
+
+<div
+                    className={`aip-card p-5 flex items-center justify-between gap-4 ${!canUseFastMode ? 'opacity-50 grayscale' : ''}`}
+                    title={!canUseFastMode ? t("Requires Groq, Natively API, or Codex CLI to be configured") : ""}
+                >
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                            <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Response Mode')}</label>
+                            <AipBadge tone="info" label={t('New')} />
+                            {!canUseFastMode && <AipBadge tone="warn" label={t('Needs Groq')} />}
+                        </div>
+                        <p className="text-[10px] aip-muted mt-0.5">{t('Uses the fastest available provider instead of your selected model.')}</p>
+                        {!canUseFastMode && (
+                            <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Requires Groq, Natively API, or Codex CLI to be configured.')}</p>
+                        )}
+                    </div>
+                    {/* aria-disabled, not disabled: the onClick guard below is the
+                        only thing that explains WHY the toggle is unavailable, and
+                        Stage 3 owns replacing that alert() with an inline hint.
+                        Hard-disabling here would make it unreachable dead code. */}
+                    <AipSwitch
+                        checked={fastResponseMode}
+                        disabled={!canUseFastMode}
+                        label={t('Fast Response Mode')}
+                        onChange={async () => {
+                            if (!canUseFastMode) {
+                                alert(t("Please configure Groq, Natively API, or Codex CLI first to enable Fast Response Mode."));
+                                return;
+                            }
+                            const newState = !fastResponseMode;
+                            setFastResponseMode(newState);
+                            localStorage.setItem('natively_groq_fast_text', String(newState));
+                            // @ts-ignore
+                            await window.electronAPI?.setGroqFastTextMode(newState);
+                        }}
+                    />
+                </div>
 
             {/* Provider groups. Splits the sections below into three views instead
                 of one long scroll. Each tab now carries id + aria-controls, each
@@ -2565,142 +3057,41 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     <p className="text-xs aip-muted mb-2">{t('Add API keys to unlock cloud AI models.')}</p>
                 </div>
 
-                <div className="space-y-4">
+                <div className="aip-cq space-y-4">
 
-                    {/* Gemini */}
-                    <ProviderCard
-                        providerId="gemini"
-                        isDisabled={disabledProviders.includes('gemini')}
-                        onToggleDisabled={(enabled) => handleToggleProvider('gemini', enabled)}
-                        selectableModels={effectiveModels('gemini')}
-                        enabledModels={cloudEnabledModels['gemini']}
-                        onToggleModel={(modelId) => handleToggleModel('gemini', modelId)}
-                        onResetModels={() => handleResetModels('gemini')}
-                        modelSaveError={!!modelSaveError['gemini']}
-                        providerName="Gemini"
-                        apiKey={apiKey}
-                        preferredModel={preferredModels.gemini}
-                        hasStoredKey={!!hasStoredKey.gemini}
-                        onKeyChange={setApiKey}
-                        onSaveKey={async () => { await handleSaveKey('gemini', apiKey, setApiKey); }}
-                        onRemoveKey={() => handleRemoveKey('gemini', setApiKey)}
-                        onTestConnection={() => handleTestConnection('gemini', apiKey)}
-                        testStatus={testStatus.gemini || 'idle'}
-                        testError={testError.gemini}
-                        savingStatus={!!savingStatus.gemini}
-                        savedStatus={!!savedStatus.gemini}
-                        keyPlaceholder="AIzaSy..."
-                        keyUrl="https://aistudio.google.com/app/apikey"
-                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, gemini: model }))}
-                    />
-
-                    {/* Groq */}
-                    <ProviderCard
-                        providerId="groq"
-                        isDisabled={disabledProviders.includes('groq')}
-                        onToggleDisabled={(enabled) => handleToggleProvider('groq', enabled)}
-                        selectableModels={effectiveModels('groq')}
-                        enabledModels={cloudEnabledModels['groq']}
-                        onToggleModel={(modelId) => handleToggleModel('groq', modelId)}
-                        onResetModels={() => handleResetModels('groq')}
-                        modelSaveError={!!modelSaveError['groq']}
-                        providerName="Groq"
-                        apiKey={groqApiKey}
-                        preferredModel={preferredModels.groq}
-                        hasStoredKey={!!hasStoredKey.groq}
-                        onKeyChange={setGroqApiKey}
-                        onSaveKey={async () => { await handleSaveKey('groq', groqApiKey, setGroqApiKey); }}
-                        onRemoveKey={() => handleRemoveKey('groq', setGroqApiKey)}
-                        onTestConnection={() => handleTestConnection('groq', groqApiKey)}
-                        testStatus={testStatus.groq || 'idle'}
-                        testError={testError.groq}
-                        savingStatus={!!savingStatus.groq}
-                        savedStatus={!!savedStatus.groq}
-                        keyPlaceholder="gsk_..."
-                        keyUrl="https://console.groq.com/keys"
-                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, groq: model }))}
-                    />
-
-                    {/* OpenAI */}
-                    <ProviderCard
-                        providerId="openai"
-                        isDisabled={disabledProviders.includes('openai')}
-                        onToggleDisabled={(enabled) => handleToggleProvider('openai', enabled)}
-                        selectableModels={effectiveModels('openai')}
-                        enabledModels={cloudEnabledModels['openai']}
-                        onToggleModel={(modelId) => handleToggleModel('openai', modelId)}
-                        onResetModels={() => handleResetModels('openai')}
-                        modelSaveError={!!modelSaveError['openai']}
-                        providerName="OpenAI"
-                        apiKey={openaiApiKey}
-                        preferredModel={preferredModels.openai}
-                        hasStoredKey={!!hasStoredKey.openai}
-                        onKeyChange={setOpenaiApiKey}
-                        onSaveKey={async () => { await handleSaveKey('openai', openaiApiKey, setOpenaiApiKey); }}
-                        onRemoveKey={() => handleRemoveKey('openai', setOpenaiApiKey)}
-                        onTestConnection={() => handleTestConnection('openai', openaiApiKey)}
-                        testStatus={testStatus.openai || 'idle'}
-                        testError={testError.openai}
-                        savingStatus={!!savingStatus.openai}
-                        savedStatus={!!savedStatus.openai}
-                        keyPlaceholder="sk-..."
-                        keyUrl="https://platform.openai.com/api-keys"
-                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, openai: model }))}
-                    />
-
-                    {/* Claude */}
-                    <ProviderCard
-                        providerId="claude"
-                        isDisabled={disabledProviders.includes('claude')}
-                        onToggleDisabled={(enabled) => handleToggleProvider('claude', enabled)}
-                        selectableModels={effectiveModels('claude')}
-                        enabledModels={cloudEnabledModels['claude']}
-                        onToggleModel={(modelId) => handleToggleModel('claude', modelId)}
-                        onResetModels={() => handleResetModels('claude')}
-                        modelSaveError={!!modelSaveError['claude']}
-                        providerName="Claude"
-                        apiKey={claudeApiKey}
-                        preferredModel={preferredModels.claude}
-                        hasStoredKey={!!hasStoredKey.claude}
-                        onKeyChange={setClaudeApiKey}
-                        onSaveKey={async () => { await handleSaveKey('claude', claudeApiKey, setClaudeApiKey); }}
-                        onRemoveKey={() => handleRemoveKey('claude', setClaudeApiKey)}
-                        onTestConnection={() => handleTestConnection('claude', claudeApiKey)}
-                        testStatus={testStatus.claude || 'idle'}
-                        testError={testError.claude}
-                        savingStatus={!!savingStatus.claude}
-                        savedStatus={!!savedStatus.claude}
-                        keyPlaceholder="sk-ant-..."
-                        keyUrl="https://console.anthropic.com/settings/keys"
-                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, claude: model }))}
-                    />
-
-                    {/* DeepSeek — text-only; intentionally not part of the screenshot/vision fallback chain. */}
-                    <ProviderCard
-                        providerId="deepseek"
-                        isDisabled={disabledProviders.includes('deepseek')}
-                        onToggleDisabled={(enabled) => handleToggleProvider('deepseek', enabled)}
-                        selectableModels={effectiveModels('deepseek')}
-                        enabledModels={cloudEnabledModels['deepseek']}
-                        onToggleModel={(modelId) => handleToggleModel('deepseek', modelId)}
-                        onResetModels={() => handleResetModels('deepseek')}
-                        modelSaveError={!!modelSaveError['deepseek']}
-                        providerName="DeepSeek"
-                        apiKey={deepseekApiKey}
-                        preferredModel={preferredModels.deepseek}
-                        hasStoredKey={!!hasStoredKey.deepseek}
-                        onKeyChange={setDeepseekApiKey}
-                        onSaveKey={async () => { await handleSaveKey('deepseek', deepseekApiKey, setDeepseekApiKey); }}
-                        onRemoveKey={() => handleRemoveKey('deepseek', setDeepseekApiKey)}
-                        onTestConnection={() => handleTestConnection('deepseek', deepseekApiKey)}
-                        testStatus={testStatus.deepseek || 'idle'}
-                        testError={testError.deepseek}
-                        savingStatus={!!savingStatus.deepseek}
-                        savedStatus={!!savedStatus.deepseek}
-                        keyPlaceholder="sk-..."
-                        keyUrl="https://platform.deepseek.com/api_keys"
-                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, deepseek: model }))}
-                    />
+                    {CLOUD_PROVIDERS.map(({ id, name, placeholder, url }) => {
+                        const [keyValue, setKeyValue] = keyFields[id];
+                        return (
+                            <ProviderCard
+                                key={id}
+                                providerId={id}
+                                providerName={name}
+                                keyPlaceholder={placeholder}
+                                keyUrl={url}
+                                apiKey={keyValue}
+                                onKeyChange={setKeyValue}
+                                hasStoredKey={!!hasStoredKey[id]}
+                                preferredModel={preferredModels[id]}
+                                isDisabled={disabledProviders.includes(id)}
+                                onToggleDisabled={(enabled) => handleToggleProvider(id, enabled)}
+                                selectableModels={effectiveModels(id)}
+                                enabledModels={cloudEnabledModels[id]}
+                                onToggleModel={(modelId) => handleToggleModel(id, modelId)}
+                                onResetModels={() => handleResetModels(id)}
+                                onSetDefaultModel={(modelId) => handleSetDefaultModel(id, modelId)}
+                                hasCatalog={(cloudFetchedModels[id]?.length ?? 0) > 0}
+                                modelSaveError={!!modelSaveError[id]}
+                                onSaveKey={async () => { await handleSaveKey(id, keyValue, setKeyValue); }}
+                                onRemoveKey={() => handleRemoveKey(id, setKeyValue)}
+                                onTestConnection={() => handleTestConnection(id, keyValue)}
+                                testStatus={testStatus[id] || 'idle'}
+                                testError={testError[id]}
+                                savingStatus={!!savingStatus[id]}
+                                savedStatus={!!savedStatus[id]}
+                                onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, [id]: model }))}
+                            />
+                        );
+                    })}
 
                 </div>
             </div>
@@ -2728,7 +3119,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     <div className="flex items-center justify-between gap-3 mb-2">
                         <label className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide aip-hero">
                             {t('ChatGPT Account')}
-                            {codexOauthStatus.signedIn && <AipBadge tone="ok" label={t('Connected')} />}
                         </label>
                         {codexOauthStatus.signedIn ? (
                             <div className="flex items-center gap-2 shrink-0">
@@ -2885,7 +3275,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                     {codexCliStatus === 'testing' ? (
                                         <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing…')}</>
                                     ) : codexCliStatus === 'success' ? (
-                                        <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Connected')}</>
+                                        <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
                                     ) : codexCliStatus === 'error' ? (
                                         <><AlertCircle size={12} strokeWidth={1.75} /> {t('Failed')}</>
                                     ) : (
@@ -2897,7 +3287,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     )}
                 </div>
             </div>
-
 
             </div>
             )}
@@ -3393,7 +3782,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     <h3 className="text-sm font-bold aip-hero mb-1">{t('Screenshots')}</h3>
                     <p className="text-xs aip-muted mb-2">{t('Controls where screenshots of your screen are processed.')}</p>
                 </div>
-                <div className="aip-card p-4 flex flex-col gap-3">
+                <div className="aip-card p-5 flex flex-col gap-3">
                     <div className="flex items-center justify-between gap-3">
                         <div className="flex flex-col min-w-0">
                             <span className="text-xs aip-hero font-semibold">{t('Keep screenshots on this device')}</span>
@@ -3411,7 +3800,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     {visionLocalOnly && !localFallbackAvailable && (
                         <div className="aip-inline-warn flex items-start gap-2">
                             <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
-                            <span>{t('No local vision model is installed, so screen understanding will fail. Install one under Local & Gateways.')}</span>
+                            <span>{t('No local vision model is installed. Screenshot questions will be refused rather than sent to the cloud. Install a vision-capable model under Local & Gateways.')}</span>
                         </div>
                     )}
 
@@ -3434,13 +3823,54 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         />
                     </div>
 
+
+                    {/* Capture quality, not privacy — but it is about screenshots, and
+                        this is the screenshots card, so it groups by subject rather than
+                        by which engine owns it. */}
+                    <div className="flex items-center justify-between gap-3 pt-3 border-t" style={{ borderColor: 'var(--aip-divider)' }}>
+                        <div className="flex flex-col min-w-0">
+                            <span className="text-xs aip-hero font-semibold">{t('High-resolution capture for code')}</span>
+                            {/* Scope qualifier restored. This writes
+                                `technicalInterviewVisionFirst`, whose only consumer is
+                                ScreenUnderstandingService.pickOptimizationProfile, and only
+                                when the active mode is a technical template. Copy that
+                                promised it for screenshots generally described a setting
+                                that does nothing on the hotkey/attachment capture path. */}
+                            <span className="aip-meta leading-snug mt-0.5">{t('In technical interview and coding modes, captures at the highest-resolution profile so small code text stays legible. Costs more tokens per screenshot.')}</span>
+                        </div>
+                        <AipSwitch
+                            checked={technicalInterviewVisionFirst}
+                            label={t('High-resolution capture for code')}
+                            onChange={(next) => {
+                                setTechnicalInterviewVisionFirst(next);
+                                const api: any = window.electronAPI;
+                                if (api?.setTechnicalInterviewVisionFirst) {
+                                    api.setTechnicalInterviewVisionFirst(next);
+                                } else {
+                                    window.electronAPI?.setTechnicalInterviewDirectVision?.(next);
+                                }
+                            }}
+                        />
+                    </div>
+
                     {/* The two cards answer overlapping questions and previously never
-                        referenced each other, leaving the user to reconcile them. */}
+                        referenced each other, leaving the user to reconcile them.
+
+                        The note used to assert "behaves as on-device only" with no
+                        local-model term at all. With the scope off and nothing local
+                        installed the screenshot is DROPPED and the question answered
+                        without it — the opposite of on-device processing, and the same
+                        card's own "Omitted" badge already said so. Each branch below
+                        states what actually happens, mirroring visionPolicy.ts. */}
                     {!visionLocalOnly && providerDataScopes.screenshots === false && (
                         <div className="flex items-start gap-2 pt-3 border-t" style={{ borderColor: 'var(--aip-divider)' }}>
                             <Info size={12} strokeWidth={1.75} className="aip-faint shrink-0 mt-0.5" aria-hidden="true" />
                             <p className="aip-meta leading-relaxed">
-                                {t('Screenshots are already blocked from cloud providers by the data scope below, so this behaves as on-device only.')}
+                                {localFallbackAvailable
+                                    ? t('Screenshots are already blocked from cloud providers by the data scope below, so your local vision model handles them.')
+                                    : visionRequired
+                                        ? t('Screenshots are blocked from cloud providers by the data scope below, and no local vision model is installed. Screenshot questions will be refused rather than answered without the image.')
+                                        : t('Screenshots are blocked from cloud providers by the data scope below, and no local vision model is installed — so the screenshot is discarded and the question is answered without it.')}
                             </p>
                         </div>
                     )}
@@ -3465,33 +3895,46 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         {SCOPE_ROWS.length - disabledScopeCount}/{SCOPE_ROWS.length} {t('shared')}
                     </span>
                 </div>
-                <div className="aip-card">
-                    {SCOPE_ROWS.map(({ key, labelKey, Icon }, i) => {
+                <div className="aip-card p-4 flex flex-col gap-2">
+                    {SCOPE_ROWS.map(({ key, labelKey, Icon }) => {
                         const allowed = providerDataScopes[key] !== false;
                         const label = t(labelKey);
                         return (
                             <div
                                 key={key}
-                                className="flex items-center gap-3 px-4 py-2.5"
-                                style={i > 0 ? { borderTop: '1px solid var(--aip-divider)' } : undefined}
+                                className="flex items-center gap-3"
                             >
                                 <Icon size={13} strokeWidth={1.75} className={allowed ? 'aip-faint shrink-0' : 'aip-warn-fg shrink-0'} aria-hidden="true" />
                                 <span className="text-xs aip-hero min-w-0 truncate">{label}</span>
                                 {/* A disabled scope is not inert: LLMHelper reroutes it to a local
                                     model, or DROPS it when none exists. One word each, so the row
-                                    never wraps and the card never grows. */}
-                                {!allowed && (
+                                    never wraps and the card never grows.
+
+                                    Per-row predicate: the gate passes needsVision=true only for
+                                    screenshots, so a text-only Ollama install is a real fallback
+                                    for Transcripts but NOT for Screenshots. One shared boolean
+                                    got one of those two rows wrong whichever value it took.
+
+                                    Transcripts is special-cased again below: denying it does not
+                                    merely trim context, it fails the whole request. */}
+                                {!allowed && (() => {
+                                    const rowLocal = localFallbackFor(key);
+                                    const isKillSwitch = key === 'transcript' && !rowLocal;
+                                    return (
                                     <span
                                         className="aip-badge shrink-0"
-                                        data-tone={localFallbackAvailable ? 'neutral' : 'warn'}
-                                        title={localFallbackAvailable
+                                        data-tone={rowLocal ? 'neutral' : 'warn'}
+                                        title={rowLocal
                                             ? t('Handled on-device by your local model.')
-                                            : t('Omitted from context — no local model to fall back to.')}
+                                            : isKillSwitch
+                                                ? t('Cloud requests are refused entirely — there is no local model to fall back to.')
+                                                : t('Omitted from context — no local model to fall back to.')}
                                     >
-                                        {localFallbackAvailable ? <Laptop size={9} strokeWidth={2} aria-hidden="true" /> : null}
-                                        <span className="aip-badge-label">{localFallbackAvailable ? t('On-device') : t('Omitted')}</span>
+                                        {rowLocal ? <Laptop size={9} strokeWidth={2} aria-hidden="true" /> : null}
+                                        <span className="aip-badge-label">{rowLocal ? t('On-device') : isKillSwitch ? t('Blocks cloud') : t('Omitted')}</span>
                                     </span>
-                                )}
+                                    );
+                                })()}
                                 <div className="ml-auto shrink-0">
                                     <AipSwitch
                                         checked={allowed}
@@ -3509,10 +3952,21 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 </div>
                 {/* Only when it says something the pills do not. The old version showed a
                     permanent restatement of the per-row text. */}
-                {disabledScopeCount > 0 && !localFallbackAvailable && (
+                {providerDataScopes.transcript === false && !localFallbackFor('transcript') && (
                     <div className="aip-inline-warn flex items-start gap-2" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
-                        <span>{t('Disabled types are dropped from context, not handled on-device — install a local model under Local & Gateways to keep them.')}</span>
+                        {/* Transcripts is not a context trim. Every request carries a
+                            transcript scope at the provider boundary, so denying it with
+                            no local fallback makes the whole cascade refuse and the user
+                            sees "All AI providers failed" with no stated cause. Said
+                            plainly here because nothing else in the UI says it. */}
+                        <span>{t('With Transcripts off and no local model selected, cloud requests are refused entirely — answers will fail rather than run without the transcript. Select Ollama under Local & Gateways to keep answering on-device.')}</span>
+                    </div>
+                )}
+                {disabledScopeCount > 0 && !localFallbackFor('reference_files') && providerDataScopes.transcript !== false && (
+                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                        <span>{t('Disabled types are dropped from context, not handled on-device — select a local model under Local & Gateways to keep them.')}</span>
                     </div>
                 )}
             </div>

@@ -318,6 +318,7 @@ import { getCodexCliModelDisplayName } from '../utils/modelUtils';
 import { getModifierSymbol, isMac } from '../utils/platformUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
 import GlassEffectLayer from './ui/GlassEffectLayer';
+import { OverlayBanner, OverlayBannerButton } from './ui/OverlayBanner';
 import ResizeToggle from './ui/ResizeToggle';
 import RollingTranscript from './ui/RollingTranscript';
 import TopPill from './ui/TopPill';
@@ -1528,6 +1529,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const unsub = window.electronAPI?.onModeChanged?.(
       (data: { id: string | null; name: string | null }) => {
         setActiveModeLabel(data.name);
+        // Defect G (2026-08-01): a mode switch must tear down in-flight chat
+        // UI state, not just relabel the badge — otherwise an answer planned
+        // under the old mode keeps its placeholder alive and lands visually
+        // as the NEW mode's answer. cancelActiveChatStream stops the active
+        // stream (main-side gemini-chat-stream-stop), finalizes any partial
+        // text, and drops a tokenless placeholder; committed history rows are
+        // never touched. Referencing it inside this closure (not the deps
+        // array) is deliberate: it is declared later in the component, so the
+        // deps array would evaluate it in its temporal dead zone at first
+        // render, while this IPC callback only ever runs after mount. It is a
+        // stable useCallback, so no re-subscription is needed.
+        cancelActiveChatStream();
       },
     );
     return () => unsub?.();
@@ -2064,6 +2077,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     kind: 'screen-recording-permission' | 'audio-capture-failure';
     message: string;
     channel?: 'system' | 'mic';
+    // i18n key for the banner heading, produced by main.ts `permissionTitleKey`
+    // and shipped over IPC as a KEY rather than a rendered string so titles stay
+    // localisable. Absent for emitters that predate it and for the in-app TCC
+    // repair result, which is constructed locally below.
+    titleKey?: string;
   };
   const [systemAudioWarning, setSystemAudioWarning] = useState<SystemAudioWarning | null>(null);
   // UX2: in-flight guard for the "Repair Permissions" button so a double-click
@@ -2075,12 +2093,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // process, so a real relaunch is the only reliable fix once the user has
   // granted permission in System Settings but still sees this banner.
   const [appRestarting, setAppRestarting] = useState(false);
+  // Which settings pane the user has already been sent to, keyed by the warning
+  // that sent them. The banner shows exactly ONE action plus close, so a
+  // permission warning surfaces "Open ... Settings" first and only becomes
+  // "Restart Now" once the user has actually visited the pane — macOS does not
+  // apply a fresh grant until the app relaunches, but a Restart button offered
+  // before the grant exists is an action that cannot work yet.
+  const [permissionPaneVisited, setPermissionPaneVisited] = useState<string | null>(null);
   useEffect(() => {
-    const unsub = window.electronAPI?.onSystemAudioPermissionDenied?.((message: string) => {
+    const unsub = window.electronAPI?.onSystemAudioPermissionDenied?.((message: string, titleKey?: string) => {
       // screen-recording-permission is implicitly system-channel (it's the
       // Screen Recording TCC pane). Set channel for consistency so the
       // button-resolution logic has a single source of truth.
-      setSystemAudioWarning({ kind: 'screen-recording-permission', message, channel: 'system' });
+      setSystemAudioWarning({ kind: 'screen-recording-permission', message, channel: 'system', titleKey });
       setIsExpanded(true); // Force overlay open so user sees the warning
     });
     return () => unsub?.();
@@ -2105,6 +2130,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           kind: 'audio-capture-failure',
           message: payload.message,
           channel: payload.channel,
+          titleKey: payload.titleKey,
         });
         setIsExpanded(true);
       }
@@ -4133,6 +4159,23 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     requestStartTimeRef.current = null;
     setIsProcessing(false);
     flushToken();
+    // Defect G (2026-08-01): flushToken() finalizes a placeholder that already
+    // streamed text (partial answer stays visible as committed history), but a
+    // TOKENLESS placeholder takes flushToken's early-return and keeps its refs
+    // wired. The main process now suppresses done/error for a cancelled or
+    // mode-stale stream (registry invalidation + pre-emit identity check), so
+    // nothing would ever finalize that row — it would spin forever. Drop it
+    // here. Committed rows are untouched: the filter only matches the exact
+    // in-flight row (by id) that is still streaming with no text.
+    const danglingId = streamingMsgIdRef.current;
+    if (danglingId !== null && streamingTextRef.current === '') {
+      streamingMsgIdRef.current = null;
+      streamingIntentRef.current = null;
+      streamingRenderModeRef.current = 'imperative';
+      if (streamingNodeRef.current) streamingNodeRef.current.innerHTML = '';
+      streamingNodeRef.current = null;
+      setMessages((prev) => prev.filter((m) => !(m.id === danglingId && m.isStreaming && !m.text)));
+    }
     tokenBufRef.current.intent = '';
     tokenBufRef.current.text = '';
     if (tokenBufRef.current.raf !== null) {
@@ -7567,80 +7610,169 @@ Provide only the answer, nothing else.`;
               {/*
                 System Audio / Screen Recording Warning Banner.
 
-                Stacked layout (title/message, then actions on their own row)
-                rather than a single horizontal flex row. Pre-fix the text
-                column was `flex-1 min-w-0` next to a `shrink-0` button group,
-                so with three action buttons the text collapsed to a ~150px
-                column that overflowed the banner vertically and painted over
-                the transcript behind it — `flex-wrap` never fired because
-                `min-w-0` let the text shrink instead of forcing overflow.
+                Rendered through the shared <OverlayBanner> primitive (see
+                src/components/ui/OverlayBanner.tsx) — same surface, spacing,
+                type ramp and button hierarchy as the stealth-Accessibility
+                banner further down, which used to be a hand-rolled second
+                design for the identical job.
+
+                Layout: copy on the left, actions trailing right on the SAME
+                row, matching the sibling `sttNotConfigured` banner's
+                `justify-between` shape. Pre-fix the two buttons sat on their
+                own row under a full-width paragraph, floating in the banner's
+                lower-left with the whole right half of the banner empty. The
+                primitive keeps a min-width floor on the copy column so the
+                row wraps (rather than crushing the text into a ~150px ribbon,
+                the shape that shipped the vertical-overflow bug).
               */}
-              {systemAudioWarning && (
-                <div className="flex flex-col gap-2 mx-4 mt-3 mb-1 px-3.5 py-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded-[12px] shadow-sm relative no-drag group/warning">
-                  <div className="flex flex-col gap-1 min-w-0">
-                    <div className="flex items-center gap-2 pr-8 text-[12.5px] text-yellow-600 dark:text-yellow-400/90 font-medium leading-tight">
-                      <div className="shrink-0 p-1 bg-yellow-500/20 rounded-full">
-                        <svg
-                          className="w-3.5 h-3.5 text-yellow-600 dark:text-yellow-400"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2.5}
-                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                          />
-                        </svg>
-                      </div>
-                      <span>
-                        {systemAudioWarning.kind === 'screen-recording-permission'
-                          ? t('Screen Recording Permission Denied')
-                          : t('Audio Capture Issue')}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-yellow-600/70 dark:text-yellow-400/60 leading-snug pl-[26px] break-words max-h-24 overflow-y-auto">
-                      {systemAudioWarning.message}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 pl-[26px]">
-                    {/*
-                      UX3: deep-link to the correct macOS System Settings pane
-                      based on the failure channel. Pre-fix the mic-zero-fill /
-                      mic-denied path opened Natively's internal Settings,
-                      which then required the user to read the message, alt-tab
-                      to System Settings, navigate to Privacy & Security, find
-                      Microphone, and toggle Natively. Now one click takes them
-                      directly to the right pane. Falls back to internal
-                      Settings on Windows or when channel is unknown.
-                    */}
-                    {(() => {
-                      const wantsScreenCapturePane =
-                        systemAudioWarning.kind === 'screen-recording-permission' ||
-                        systemAudioWarning.channel === 'system';
-                      const wantsMicrophonePane =
-                        systemAudioWarning.kind === 'audio-capture-failure' &&
-                        systemAudioWarning.channel === 'mic';
-                      const deepLinkUrl = !isMac
-                        ? null
-                        : wantsScreenCapturePane
-                        ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
-                        : wantsMicrophonePane
-                        ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
-                        : null;
-                      return (
-                        <>
-                          <button
+              {systemAudioWarning && (() => {
+                /*
+                  Which macOS pane actually FIXES this warning.
+
+                  Derived from `titleKey` first, then `channel`. `channel` is a
+                  TRANSPORT label ('mic' vs 'system' capture stream), not a
+                  remedy label, and the old predicate
+                    wantsScreenCapturePane = kind === 'screen-recording-permission'
+                                             || channel === 'system'
+                  read it as one — so every microphone-fault warning that
+                  arrives on the system channel (anything routed through
+                  sendSystemAudioPermissionDenied, which hard-stamps
+                  channel:'system', e.g. the mic-denied / mic-zero-fill titles)
+                  was told "Open Screen Settings" and deep-linked to Screen
+                  Recording. Same bug sent "Input and Output Are the Same
+                  Device" — a Sound-output misconfiguration with no privacy
+                  pane at all — to Screen Recording.
+
+                  `titleKey` is the reason encoded by main.ts
+                  `permissionTitleKey()`; substring-matched on the RAW key (NOT
+                  t(titleKey) — the ja/ru catalogs translate these, so matching
+                  the rendered string would silently break routing for exactly
+                  those users) so a future "Microphone …" title routes itself.
+                  Keys today: 'Screen Recording Blocked', '… (Dev Build)',
+                  'Screen Recording Restricted', 'Screen Recording Grant
+                  Expired', 'System Audio Unavailable', 'Microphone Blocked',
+                  'Microphone Is Silent', 'Input and Output Are the Same
+                  Device', 'No System Audio for 8s'.
+
+                  Warnings whose title says nothing about a pane keep their
+                  existing channel routing exactly: channel 'mic' → Microphone
+                  pane, channel 'system' → Screen Recording pane, absent
+                  channel → internal Settings (so an undefined channel must be
+                  compared with === 'system', never !== 'mic' — `channel` is
+                  optional on the type and forwarded verbatim from
+                  payload.channel).
+                */
+                const rawTitleKey = systemAudioWarning.titleKey ?? '';
+                const reasonIsMicrophone = rawTitleKey.toLowerCase().includes('microphone');
+                const reasonIsScreenRecording = rawTitleKey
+                  .toLowerCase()
+                  .includes('screen recording');
+                // Neither pane fixes a same-device input/output loop: the user
+                // has to change the OUTPUT device. No verified deep link for
+                // the Sound pane exists in this codebase, so this falls to the
+                // already-wired internal-Settings fallback rather than sending
+                // the user somewhere confidently wrong.
+                const reasonIsAudioDeviceConfig = rawTitleKey
+                  .toLowerCase()
+                  .includes('same device');
+                const wantsMicrophonePane =
+                  reasonIsMicrophone ||
+                  (!reasonIsScreenRecording &&
+                    !reasonIsAudioDeviceConfig &&
+                    systemAudioWarning.kind === 'audio-capture-failure' &&
+                    systemAudioWarning.channel === 'mic');
+                const wantsScreenCapturePane =
+                  !wantsMicrophonePane &&
+                  !reasonIsAudioDeviceConfig &&
+                  (reasonIsScreenRecording ||
+                    systemAudioWarning.kind === 'screen-recording-permission' ||
+                    systemAudioWarning.channel === 'system');
+                const deepLinkUrl = !isMac
+                  ? null
+                  : wantsMicrophonePane
+                  ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
+                  : wantsScreenCapturePane
+                  ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
+                  : null;
+
+                // Identity of THIS warning, so visiting a pane for one problem
+                // does not promote the button on a different problem that
+                // happens to appear next.
+                const warningIdentity = `${systemAudioWarning.kind}:${rawTitleKey}:${systemAudioWarning.channel ?? ''}`;
+                // Exactly one action renders. Restart only replaces the
+                // settings action once the user has actually been sent to the
+                // pane, and only where a restart is what applies the grant —
+                // a device-config fault (same input and output) is fixed by
+                // changing the device, so a restart there would do nothing.
+                const showRestartInstead =
+                  isMac &&
+                  !!deepLinkUrl &&
+                  permissionPaneVisited === warningIdentity;
+                return (
+                  <OverlayBanner
+                    className="mx-4 mt-3 mb-1"
+                    /*
+                      The title is an i18n KEY shipped from the main process
+                      (main.ts `permissionTitleKey`) so it stays localisable
+                      while naming the fault the body no longer repeats.
+                      Emitters that predate it fall back to the original
+                      per-kind titles.
+                    */
+                    title={
+                      systemAudioWarning.titleKey
+                        ? t(systemAudioWarning.titleKey)
+                        : systemAudioWarning.kind === 'screen-recording-permission'
+                        ? t('Screen Recording Permission Denied')
+                        : t('Audio Capture Issue')
+                    }
+                    message={systemAudioWarning.message}
+                    messageTooltip={systemAudioWarning.message}
+                    onDismiss={() => setSystemAudioWarning(null)}
+                    dismissLabel={t('Dismiss')}
+                    actions={
+                      <>
+                        {/*
+                          PRIMARY: open the pane that fixes it. This is step
+                          one of the real task (open → grant → restart), so it
+                          is the only filled button; pre-fix both buttons were
+                          the same amber tint at the same weight and nothing
+                          said which to press first.
+                        */}
+{showRestartInstead ? (
+                          <OverlayBannerButton
+                            variant="primary"
+                            onClick={async () => {
+                              if (appRestarting) return; // in-flight guard
+                              setAppRestarting(true);
+                              try {
+                                await window.electronAPI?.restartApp?.();
+                              } catch (err) {
+                                console.warn('[UI] restart-app failed:', err);
+                                setAppRestarting(false);
+                              }
+                            }}
+                            disabled={appRestarting}
+                            aria-busy={appRestarting}
+                            title={t('macOS often needs a full app restart before a fresh Screen Recording grant takes effect — restart now instead of manually quitting and reopening')}
+                          >
+                            {appRestarting ? t('Restarting…') : t('Restart Now')}
+                          </OverlayBannerButton>
+                        ) : (
+                          <OverlayBannerButton
+                            variant="primary"
                             onClick={() => {
                               if (deepLinkUrl) {
                                 window.electronAPI.openExternal(deepLinkUrl);
+                                // Sending the user to the pane is what makes a
+                                // restart meaningful, so that click is what
+                                // promotes the button.
+                                setPermissionPaneVisited(warningIdentity);
                               } else {
-                                // Windows / unknown channel: fall back to internal Settings.
+                                // Windows / unknown channel / device-config
+                                // faults: fall back to internal Settings.
                                 window.electronAPI?.toggleSettingsWindow?.();
                               }
                             }}
-                            className="px-3 py-1.5 rounded-lg bg-yellow-500/25 hover:bg-yellow-500/35 text-yellow-700 dark:text-yellow-400 text-[11px] font-semibold whitespace-nowrap transition-all active:scale-95 border border-yellow-500/30 shadow-sm"
                             title={
                               deepLinkUrl
                                 ? wantsMicrophonePane
@@ -7654,91 +7786,25 @@ Provide only the answer, nothing else.`;
                                 ? t('Open Mic Settings')
                                 : t('Open Screen Settings')
                               : t('Open Settings')}
-                          </button>
-                          {/*
-                            UX2: in-app TCC repair button. macOS only.
-                            Shows when the banner is from a TCC-related failure
-                            (any audio-capture-failure path or screen-recording
-                            permission denial). The dominant root cause of
-                            "permissions granted but no transcription" is TCC
-                            cdhash drift across rebuilds; this button gives the
-                            user a one-click recovery without having to know
-                            about tccutil or terminal commands. After reset
-                            the user must fully quit (Cmd+Q) and reopen.
-                          */}
-                          {isMac && (
-                            <button
-                              onClick={async () => {
-                                if (tccRepairing) return; // in-flight guard
-                                setTccRepairing(true);
-                                try {
-                                  const result = await window.electronAPI?.repairTccPermissions?.();
-                                  if (result) {
-                                    // Show the returned message via the existing
-                                    // banner; user can dismiss when ready.
-                                    setSystemAudioWarning({
-                                      kind: 'audio-capture-failure',
-                                      message: result.message,
-                                      channel: systemAudioWarning.channel,
-                                    });
-                                  }
-                                } catch (err) {
-                                  console.warn('[UI] repair-tcc-permissions failed:', err);
-                                } finally {
-                                  setTccRepairing(false);
-                                }
-                              }}
-                              disabled={tccRepairing}
-                              // Tertiary (ghost) weight: last-resort recovery,
-                              // not the action most users need. Three
-                              // equally-weighted solid buttons read as a wall.
-                              className="px-2.5 py-1.5 rounded-lg text-yellow-700/70 dark:text-yellow-500/70 hover:text-yellow-800 dark:hover:text-yellow-400 hover:bg-yellow-500/10 text-[11px] font-medium whitespace-nowrap transition-all active:scale-95 border border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
-                              title={t("Reset macOS permission entries for Natively (you will need to grant them again after relaunch)")}
-                            >
-                              {tccRepairing ? t('Resetting…') : t('Repair Permissions')}
-                            </button>
-                          )}
-                          {isMac && systemAudioWarning.kind === 'screen-recording-permission' && (
-                            <button
-                              onClick={async () => {
-                                if (appRestarting) return; // in-flight guard
-                                setAppRestarting(true);
-                                try {
-                                  await window.electronAPI?.restartApp?.();
-                                } catch (err) {
-                                  console.warn('[UI] restart-app failed:', err);
-                                  setAppRestarting(false);
-                                }
-                              }}
-                              disabled={appRestarting}
-                              className="px-3 py-1.5 rounded-lg bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-700 dark:text-yellow-500 text-[11px] font-medium whitespace-nowrap transition-all active:scale-95 border border-yellow-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
-                              title={t('macOS often needs a full app restart before a fresh Screen Recording grant takes effect — restart now instead of manually quitting and reopening')}
-                            >
-                              {appRestarting ? t('Restarting…') : t('Restart Now')}
-                            </button>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
-                  {/*
-                    Always visible, not `opacity-0 group-hover/warning:opacity-100`
-                    like the other banners. This banner can be up while overlay
-                    mouse passthrough is on (WindowHelper.syncOverlayInteractionPolicy
-                    → setIgnoreMouseEvents(true)), where hover never fires — a
-                    hover-revealed dismiss is unreachable and the banner stays
-                    parked over the transcript.
-                  */}
-                  <button
-                    onClick={() => setSystemAudioWarning(null)}
-                    className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-yellow-600/50 hover:text-yellow-700 dark:text-yellow-500/50 dark:hover:text-yellow-400 transition-colors absolute top-1.5 right-1.5 opacity-70 hover:opacity-100"
-                    title={t("Dismiss")}
-                    aria-label={t("Dismiss")}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
+                          </OverlayBannerButton>
+                        )}
+                        {/*
+                          SECONDARY: the follow-up step. The banner carries
+                          exactly two actions: open the right pane, then
+                          relaunch (macOS does not apply a fresh Screen
+                          Recording grant until the app restarts). The third
+                          button — "Repair Permissions", a tccutil reset — was
+                          removed here: three same-weight buttons crowded the
+                          strip, and it is a last-resort recovery rather than
+                          the step a user takes next. `repairTccPermissions`
+                          remains wired in preload/ipcHandlers; it currently
+                          has no other UI entry point.
+                        */}
+                                              </>
+                    }
+                  />
+                );
+              })()}
 
               {/* PR #173: STT Not Configured Warning Banner */}
               {sttNotConfigured && (
@@ -8288,47 +8354,55 @@ Provide only the answer, nothing else.`;
                                     Rust module ships only in the Darwin binary. Gating here
                                     is belt-and-suspenders on top of the native-side gate. */}
                 {isMac && stealthPermissionMissing && (
-                  <div
-                    className="mb-2 px-3 py-2 rounded-xl border border-amber-400/40 bg-amber-500/10 text-[11px] flex items-center gap-2"
+                  <OverlayBanner
+                    className="mb-2"
                     data-stealth-ignore="true"
-                  >
-                    <span className="overlay-text-primary flex-1">
-                      {t('Stealth typing needs Accessibility access. Grant it in System Settings, then restart Natively.')}
-                    </span>
-                    <button
-                      onClick={() => window.electronAPI.stealthTapOpenSettings()}
-                      className="px-2 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 transition-colors text-[11px] font-medium overlay-text-primary whitespace-nowrap"
-                      data-stealth-ignore="true"
-                    >
-                      {t('Open Settings')}
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (appRestarting) return; // in-flight guard
-                        setAppRestarting(true);
-                        try {
-                          await window.electronAPI?.restartApp?.();
-                        } catch (err) {
-                          console.warn('[UI] restart-app failed:', err);
-                          setAppRestarting(false);
-                        }
-                      }}
-                      disabled={appRestarting}
-                      className="px-2 py-1 rounded-md bg-amber-500/10 hover:bg-amber-500/20 transition-colors text-[11px] font-medium overlay-text-primary whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
-                      data-stealth-ignore="true"
-                      title={t('Accessibility grants often need a full app restart to take effect')}
-                    >
-                      {appRestarting ? t('Restarting…') : t('Restart Now')}
-                    </button>
-                    <button
-                      onClick={() => setStealthPermissionMissing(false)}
-                      className="px-1.5 py-1 rounded-md hover:bg-white/10 transition-colors text-[11px] overlay-text-muted"
-                      aria-label={t("Dismiss")}
-                      data-stealth-ignore="true"
-                    >
-                      ×
-                    </button>
-                  </div>
+                    /*
+                      Unified onto the same primitive as the system-audio
+                      banner above: same surface, radius, padding, type ramp,
+                      icon chip, primary/secondary button pair and inline ✕.
+                      Previously this was a second design for the same job
+                      (bare sentence + three flat amber buttons + a "×" glyph).
+                      The heading is new; the sentence below it is byte-for-byte
+                      the existing key, which has shipped ja/ru translations.
+                    */
+                    title={t('Accessibility Access Needed')}
+                    message={t('Stealth typing needs Accessibility access. Grant it in System Settings, then restart Natively.')}
+                    onDismiss={() => setStealthPermissionMissing(false)}
+                    dismissLabel={t('Dismiss')}
+                    dismissButtonProps={{ 'data-stealth-ignore': 'true' }}
+                    actions={
+                      <>
+                        <OverlayBannerButton
+                          variant="primary"
+                          onClick={() => window.electronAPI.stealthTapOpenSettings()}
+                          title={t('Open macOS Accessibility privacy settings')}
+                          data-stealth-ignore="true"
+                        >
+                          {t('Open Settings')}
+                        </OverlayBannerButton>
+                        <OverlayBannerButton
+                          variant="secondary"
+                          onClick={async () => {
+                            if (appRestarting) return; // in-flight guard
+                            setAppRestarting(true);
+                            try {
+                              await window.electronAPI?.restartApp?.();
+                            } catch (err) {
+                              console.warn('[UI] restart-app failed:', err);
+                              setAppRestarting(false);
+                            }
+                          }}
+                          disabled={appRestarting}
+                          aria-busy={appRestarting}
+                          data-stealth-ignore="true"
+                          title={t('Accessibility grants often need a full app restart to take effect')}
+                        >
+                          {appRestarting ? t('Restarting…') : t('Restart Now')}
+                        </OverlayBannerButton>
+                      </>
+                    }
+                  />
                 )}
 
                 {/* data-stealth-engage marks this subtree as
