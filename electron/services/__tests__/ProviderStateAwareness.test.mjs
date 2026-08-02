@@ -79,6 +79,34 @@ describe('Codex availability uses OAuth state, not only enabled config', () => {
     assert.match(routed, /hasCodex:\s*this\.isCodexAvailable\(\)/, 'router availability should be based on OAuth-aware helper');
   });
 
+  test('Codex CLI is NOT first in the structured-extraction ladder (2026-08-02 latency fix)', () => {
+    // generateContentStructured documents an explicit latency policy: Gemini
+    // Pro and MiniMax are excluded from document extraction *because* they are
+    // slow, leaving flash-lite -> 3.6-flash. Codex CLI then sat at Priority 0,
+    // ahead of all of them — a spawned-subprocess reasoning model measured at
+    // 18-31s PER CALL on a real profile ingest. One résumé + JD upload makes
+    // 6+ structured calls (2 extractions, 2 STAR batches, salary, company
+    // research), so a signed-in Codex user paid ~68s of wall clock for work
+    // flash-lite does in ~1-2s. That is the "file uploading is slower"
+    // report; the ordering, not Codex itself, was the defect.
+    //
+    // Codex must REMAIN in the ladder (a legitimate fallback when every cloud
+    // key is dead) — this pins position, not presence.
+    const source = read('electron/LLMHelper.ts');
+    const structured = source.slice(
+      source.indexOf('public async generateContentStructured'),
+      source.indexOf('/**\n   * Non-streaming Groq generation', source.indexOf('public async generateContentStructured')));
+
+    const codexAt = structured.indexOf('Codex CLI (${this.codexCliConfig.model})');
+    const flashLiteAt = structured.indexOf('buildGeminiProvider(GEMINI_FLASH_LITE_MODEL)');
+    const flashAt = structured.indexOf('buildGeminiProvider(GEMINI_FLASH_MODEL)');
+
+    assert.ok(codexAt > 0, 'Codex must remain available as a structured-generation fallback');
+    assert.ok(flashLiteAt > 0 && flashAt > 0, 'the flash-lite -> 3.6-flash extraction cascade must still exist');
+    assert.ok(codexAt > flashLiteAt && codexAt > flashAt,
+      'Codex CLI must be pushed onto the provider ladder AFTER the Gemini flash cascade — a document ingest must never block on it first');
+  });
+
   test('direct Codex generation throws a clean disabled/signed-out reason', () => {
     const source = read('electron/LLMHelper.ts');
     const generate = source.slice(source.indexOf('private async generateWithCodexCli'), source.indexOf('private async *streamWithCodexCli'));

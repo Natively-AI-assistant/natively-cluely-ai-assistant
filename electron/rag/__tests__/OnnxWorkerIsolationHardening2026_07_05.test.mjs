@@ -122,7 +122,17 @@ describe('worker isolation — source guards', () => {
   test('Whisper worker applies bounded session options on its ASR pipeline', () => {
     const src = read('electron/audio/whisper/whisperWorker.ts');
     assert.match(src, /getBoundedOnnxSessionOptions/);
-    assert.match(src, /session_options:\s*getBoundedOnnxSessionOptions\(\)/);
+    // The worker hoists the call into a `sessionOptions` const and passes that
+    // (it also logs it in the init diagnostics), so the old
+    // `session_options: getBoundedOnnxSessionOptions()` spelling stopped
+    // matching and this guard sat RED — a stale assertion, not a real
+    // regression: the bounded options are still computed and still passed.
+    // Assert the invariant (bounded options reach session_options) rather than
+    // one particular way of writing it.
+    assert.match(src, /const\s+sessionOptions\s*=\s*getBoundedOnnxSessionOptions\(\)/,
+      'bounded ONNX session options must be computed in the worker');
+    assert.match(src, /session_options:\s*(sessionOptions|getBoundedOnnxSessionOptions\(\))/,
+      'the bounded options must actually be passed as session_options on the pipeline');
   });
 
   test('packaging: the two new worker scripts are asar-unpacked (native ONNX addon needs a real on-disk path)', () => {
@@ -157,6 +167,53 @@ describe('worker isolation — source guards', () => {
       '@huggingface/transformers must be asar-unpacked so ESM dynamic import() from the already-unpacked worker files can resolve it on disk',
     );
     assert.ok(pkg.dependencies?.['@huggingface/transformers'], 'must remain a runtime dependency (not dev-only) so it ships in node_modules at all');
+  });
+
+  test('packaging: sharp\'s TRANSITIVE runtime deps are asar-unpacked too (2026-08-02 fix)', () => {
+    // SAME BUG CLASS AS THE TWO TESTS ABOVE, one level deeper.
+    //
+    // `sharp` was unpacked; its own runtime dependencies (detect-libc, semver,
+    // @img/colour) were NOT. Node resolution from the UNPACKED physical path
+    //   app.asar.unpacked/node_modules/sharp/lib/sharp.js
+    // walks app.asar.unpacked/node_modules -> Resources/node_modules and stops.
+    // It never re-enters app.asar, so `require('detect-libc')` threw.
+    //
+    // The failure was invisible in the main process (which resolves sharp by
+    // its asar-LOGICAL path, where the deps are present inside the archive)
+    // and fatal in every worker that loads sharp through @huggingface/
+    // transformers. Verified on the shipped 2.8.5 build:
+    //   require('<asar>/node_modules/sharp')          -> loads
+    //   require('<asar.unpacked>/node_modules/sharp') -> Cannot find module 'detect-libc'
+    // Production symptom: ModelPreloader ("Worker init failed") and
+    // IntentClassifier ("regex-only fallback") both degraded silently.
+    //
+    // Computed, not hardcoded: enumerating names is what let this drift in the
+    // first place, and it would drift again the next time sharp adds a dep.
+    const pkg = JSON.parse(read('package.json'));
+    const unpack = pkg.build?.asarUnpack ?? [];
+    const covered = (name) => unpack.some((p) =>
+      p === `**/node_modules/${name}/**` ||
+      // a scope-wide pattern (`**/node_modules/@img/**`) covers its members
+      (name.startsWith('@') && p === `**/node_modules/${name.split('/')[0]}/**`));
+
+    const req = Module.createRequire(import.meta.url);
+    const seen = new Set();
+    const walk = (name) => {
+      if (seen.has(name)) return;
+      let manifest;
+      try { manifest = req.resolve(`${name}/package.json`, { paths: [repoRoot] }); }
+      catch { return; }          // not installed on this platform — never packed
+      seen.add(name);
+      const j = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+      for (const d of Object.keys(j.dependencies ?? {})) walk(d);
+      for (const d of Object.keys(j.optionalDependencies ?? {})) walk(d);
+    };
+    walk('sharp');
+
+    assert.ok(seen.has('detect-libc'), 'probe sanity: sharp must still depend on detect-libc');
+    const missing = [...seen].filter((n) => !covered(n));
+    assert.deepEqual(missing, [],
+      `every installed package in sharp's runtime closure must be asar-unpacked, else workers loading sharp from the unpacked path throw MODULE_NOT_FOUND. Missing: ${missing.join(', ')}`);
   });
 });
 

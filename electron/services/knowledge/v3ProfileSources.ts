@@ -36,8 +36,41 @@ function rawTextForDoc(persisted: string | null | undefined, sourceUri: string |
 /** Same derivation as ProfilePackBuilder.shortId('psrc', `__profile_okf__:${kind}`)
  *  — pure sha1, no timestamp — so the port's sourceIds MATCH the knowledge_sources
  *  rows when packs exist, and stay stable when they do not (OKF flag off). */
-function canonicalProfileSourceId(kind: 'resume' | 'jd'): string {
+function canonicalProfileSourceId(kind: 'resume' | 'jd' | 'fact'): string {
   return `psrc_${crypto.createHash('sha1').update(`__profile_okf__:${kind}`).digest('hex').slice(0, 16)}`;
+}
+
+/**
+ * DERIVED profile facts (2026-08-02) — currently the résumé-based salary
+ * estimate SalaryIntelligenceEngine computes on every résumé ingest.
+ *
+ * Why this closes a real hole: the planner emits PROFILE_FACT for questions
+ * like "what is my expected salary", but the pool behind it was hardcoded
+ * empty, so the turn resolved to zero evidence and answered
+ * DOCUMENT_FACT_NOT_FOUND — about a number the app had already calculated and
+ * written to its own log. The résumé genuinely does not state an expected
+ * salary, so RESUME can never answer it; a derived fact is the correct source.
+ *
+ * Best-effort and additive: any failure yields no fact source, exactly as
+ * before. Never throws into a live answer.
+ */
+function collectDerivedFacts(orchestrator: unknown): { structured: Record<string, unknown>; versionId: string } | null {
+  try {
+    const getEstimate = (orchestrator as { getResumeSalaryEstimate?: () => unknown })?.getResumeSalaryEstimate;
+    if (typeof getEstimate !== 'function') return null;
+    const estimate = getEstimate.call(orchestrator) as Record<string, unknown> | null;
+    if (!estimate || typeof estimate !== 'object') return null;
+    if (typeof estimate.min !== 'number' || typeof estimate.max !== 'number') return null;
+
+    const structured = { salary_estimate: estimate };
+    // Version on the CONTENT of the estimate, not on wall-clock: re-deriving the
+    // same band must not invalidate evidence mid-conversation, while a genuinely
+    // new estimate (new résumé, new role) must.
+    const versionId = crypto.createHash('sha1')
+      .update(JSON.stringify([estimate.currency, estimate.min, estimate.max, estimate.confidence, estimate.role, estimate.location]))
+      .digest('hex').slice(0, 16);
+    return { structured, versionId };
+  } catch { return null; }
 }
 
 export interface CollectedProfileSources {
@@ -118,19 +151,36 @@ export function collectV3ProfileSources(orchestrator: unknown): CollectedProfile
       resolved.push({ role: 'profile_job_description', id });
     }
 
+    // DERIVED facts last: they are the lowest-precedence pool, and a document
+    // that actually STATES a fact must always outrank a computed one.
+    const facts = collectDerivedFacts(orchestrator);
+    if (facts) {
+      const id = canonicalProfileSourceId('fact');
+      docs.push({
+        kind: 'fact',
+        sourceId: id,
+        versionId: facts.versionId,
+        fileName: 'Derived profile facts (Profile Intelligence)',
+        structured: facts.structured,
+        cards: [],
+        rawText: null,
+      });
+      resolved.push({ role: 'profile_fact', id });
+    }
+
     return {
       docs,
       counts: {
         profileResume: ctx.activeResume ? 1 : 0,
         profileJd: ctx.activeJD ? 1 : 0,
-        // profile_custom_notes has no production accessor (orphaned v13→14
-        // table) — the PROFILE_FACT pool is empty until one exists. Most
-        // PROFILE_FACT-authoritative claims are also RESUME-authoritative and
-        // ride the résumé sections; the KNOWN exception is USER_MOTIVATION
-        // (RESUME is PROHIBITED for it), which therefore stays structurally
-        // unsupported — an unstated reason is disclosed as unstated, which is
-        // the correct behaviour until real profile facts exist.
-        profileFact: 0,
+        // DERIVED facts only (2026-08-02). profile_custom_notes still has no
+        // production accessor (orphaned v13→14 table), so USER_MOTIVATION —
+        // where RESUME is PROHIBITED — remains structurally unsupported and is
+        // correctly disclosed as unstated. What changed is that PROFILE_FACT is
+        // no longer unconditionally empty: the salary estimate the app already
+        // computes is now reachable, instead of the planner asking for a source
+        // that could never resolve.
+        profileFact: facts ? 1 : 0,
       },
       resolved,
     };

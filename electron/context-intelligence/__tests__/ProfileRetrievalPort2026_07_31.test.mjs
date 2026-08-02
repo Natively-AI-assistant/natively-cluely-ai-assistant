@@ -296,3 +296,215 @@ describe('review hardening: boost-only ranking', () => {
     assert.ok(Math.abs(skills.finalScore - 0.6) < 1e-9, `policy-admitted score, got ${skills.finalScore}`);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 2026-08-02: identity/contact lookups were structurally unretrievable.
+//
+// THE LIVE DEFECT (production log, packaged 2.8.5): "what is my name" in
+// Looking-for-Work and Technical Interview, with a résumé successfully ingested
+// through Profile Intelligence, logged
+//   planned:["RESUME","PROFILE_FACT"] evidence:0 retrieval:[{candidates:0}]
+//   answerability:"NONE" fallback:"DOCUMENT_FACT_NOT_FOUND"
+// and the assistant told the user it had no résumé. Attaching the SAME file as
+// a mode reference file answered it (that port is embedding-backed), which is
+// exactly the "I have to manually attach them" workaround the user reported.
+//
+// ROOT CAUSE: this port ranks by BM25 over `section + text`, and the identity
+// section held only VALUES ("Evin John. Kochi, Kerala") — the token "name"
+// appeared nowhere in the corpus, so every chunk scored 0 and the
+// `score > 0.05` cut dropped them all. Reproduced against the real shipped DB
+// before the fix; both halves of the fix are pinned below.
+// ---------------------------------------------------------------------------
+describe('identity & contact lookups (2026-08-02)', () => {
+  const CONTACT_RESUME = {
+    ...RESUME_STRUCTURED,
+    identity: {
+      name: 'Evin John', summary: 'Engineer shipping user-facing AI products.',
+      location: 'Kochi, Kerala', email: 'evin@example.com', phone: '+91 90000 11111',
+      linkedin: 'linkedin.com/in/evinjohn', github: 'github.com/evinjohn',
+    },
+  };
+  const contactPort = () => lfwPort([{ ...RESUME_DOC, structured: CONTACT_RESUME }]);
+
+  test('"what is my name" retrieves the identity section (was ZERO evidence)', async () => {
+    // Pin the LIVE path, not just the port. The production log's turn planned
+    // ["RESUME","PROFILE_FACT"]; if the real planner ever stopped emitting
+    // RESUME here, the identity chunk would be dropped by PLANNED_TYPE_FILTER
+    // downstream and this test would still pass on a turn the user never runs.
+    const decision = lfwDecision('what is my name');
+    assert.deepEqual([...decision.retrievalPlan.sourceTypes], ['RESUME', 'PROFILE_FACT'],
+      'the plan this fix depends on must match the one the production log recorded');
+
+    const r = await contactPort().retrieve({ decision });
+    const id = r.evidence.find((e) => e.section === 'Identity & summary');
+    assert.ok(id, 'the identity section must be retrievable by the question that asks for it');
+    assert.equal(id.sourceType, 'RESUME', 'must survive the planned-type filter, not merely be retrieved');
+    assert.match(id.content, /Name: Evin John/);
+  });
+
+  test('Technical Interview (plans RESUME only) resolves it too — the second mode reported', async () => {
+    const ti = resolveModePolicy('technical-interview');
+    const port = createProfileRetrievalPort({
+      docs: [{ ...RESUME_DOC, structured: CONTACT_RESUME }],
+      allowedSourceTypes: ti.allowedSourceTypes, profileSources: ti.profileSources, userId: 'local',
+    });
+    assert.ok(port, 'technical-interview must hydrate the profile at all');
+    const decision = decide({
+      requestId: 'r-ti', requestSequence: 1, surface: 'manual-chat',
+      modeId: 'technical-interview', scope: { userId: 'local' }, sessionId: 'pt-ti',
+      manualQuestion: 'whats my name',
+    });
+    assert.deepEqual([...decision.retrievalPlan.sourceTypes], ['RESUME'],
+      'matches the production log for technical-interview');
+    const r = await port.retrieve({ decision });
+    const id = r.evidence.find((e) => e.section === 'Identity & summary');
+    assert.ok(id, 'Technical Interview logged evidence:0 for this exact question');
+    assert.equal(id.sourceType, 'RESUME');
+  });
+
+  test('the identity boost does not displace substantive evidence from the cap', async () => {
+    // The port's own comment warns that flat additive boosts crowded real hits
+    // out of the 6-item cap. A boosted-but-lexically-unmatched identity chunk
+    // is admitted at <=0.35, beneath genuine matches (0.7+), so a question with
+    // real subject matter must still rank that subject matter first.
+    const port = lfwPort([{ ...RESUME_DOC, structured: CONTACT_RESUME }, JD_DOC]);
+    const r = await port.retrieve({ decision: lfwDecision('tell me about my background in Python') });
+    const idIdx = r.evidence.findIndex((e) => e.section === 'Identity & summary');
+    assert.ok(idIdx !== 0,
+      'identity must not outrank the substantive chunks for a question that has a real subject');
+  });
+
+  test('contact fields are rendered at all — they were extracted and dropped', () => {
+    const sections = renderProfileSections('resume', CONTACT_RESUME);
+    const id = sections.find((s) => s.section === 'Identity & summary');
+    assert.ok(id, 'identity section must exist');
+    for (const [label, value] of [
+      ['Email', 'evin@example.com'], ['Phone', '+91 90000 11111'],
+      ['LinkedIn', 'linkedin.com/in/evinjohn'], ['GitHub', 'github.com/evinjohn'],
+    ]) {
+      assert.match(id.text, new RegExp(`${label}: ${value.replace(/[+.*?^${}()|[\]\\]/g, '\\$&')}`),
+        `${label} is extracted by StructuredExtractor and must reach the model`);
+    }
+  });
+
+  test('"what is my email" retrieves it (previously unanswerable even when present)', async () => {
+    const r = await contactPort().retrieve({ decision: lfwDecision('what is my email') });
+    const id = r.evidence.find((e) => e.section === 'Identity & summary');
+    assert.ok(id, 'email lookups must reach the identity section');
+    assert.match(id.content, /evin@example\.com/);
+  });
+
+  test('field-free phrasings still land via the intent boost, not luck', async () => {
+    for (const q of ['who am i', 'summarize my background', 'what are my contact details']) {
+      const r = await contactPort().retrieve({ decision: lfwDecision(q) });
+      assert.ok(r.evidence.some((e) => e.section === 'Identity & summary'),
+        `"${q}" must retrieve identity`);
+    }
+  });
+
+  test('the identity section is STILL not an inventory — it must not ground absences', () => {
+    const id = renderProfileSections('resume', CONTACT_RESUME)
+      .find((s) => s.section === 'Identity & summary');
+    assert.equal(id.completeInventory, false,
+      'labelling the fields must not turn a contact blurb into an absence-licensing inventory');
+  });
+
+  test('an empty contact field renders nothing rather than an empty label', () => {
+    const sparse = { ...RESUME_STRUCTURED, identity: { name: 'Rohan Varma', email: '', phone: '', location: 'Kochi, India' } };
+    const id = renderProfileSections('resume', sparse).find((s) => s.section === 'Identity & summary');
+    assert.match(id.text, /Name: Rohan Varma/);
+    assert.doesNotMatch(id.text, /Email:/, 'an empty extraction slot must not render a dangling label');
+    assert.doesNotMatch(id.text, /Phone:/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2026-08-02: PROFILE_FACT was a planned source type with a structurally empty
+// pool. "What is my expected salary" planned [RESUME, PROFILE_FACT]; the résumé
+// is silent on the subject by nature, PROFILE_FACT resolved to nothing, and the
+// turn answered DOCUMENT_FACT_NOT_FOUND — about a figure SalaryIntelligence had
+// already computed and written to the log ("Resume-based estimate: INR
+// 350,000-650,000 (medium)"). Derived facts now hydrate that pool.
+// ---------------------------------------------------------------------------
+describe('derived profile facts (PROFILE_FACT, 2026-08-02)', () => {
+  const SALARY = { salary_estimate: {
+    role: 'Software Engineer', location: 'Kochi, India', currency: 'INR',
+    min: 350000, max: 650000, confidence: 'medium',
+    justification_factors: ['0.6 years professional experience'],
+    estimated_at: '2026-08-02T03:47:24Z' } };
+  const FACT_DOC = {
+    kind: 'fact', sourceId: 'psrc_fact_test', versionId: 'fv1',
+    fileName: 'Derived profile facts (Profile Intelligence)', structured: SALARY,
+  };
+  const factPort = () => lfwPort([FACT_DOC]);
+
+  test('"what is my expected salary" resolves (was DOCUMENT_FACT_NOT_FOUND)', async () => {
+    const decision = lfwDecision('what is my expected salary');
+    assert.ok(decision.retrievalPlan.sourceTypes.includes('PROFILE_FACT'),
+      'the planner asks for PROFILE_FACT — that is why the empty pool was a defect');
+    const r = await factPort().retrieve({ decision });
+    const fact = r.evidence.find((e) => e.sourceType === 'PROFILE_FACT');
+    assert.ok(fact, 'the computed estimate must be reachable');
+    assert.match(fact.content, /350,000/);
+    assert.equal(fact.provenance, 'PROFILE_FACT');
+  });
+
+  test('the estimate carries its own "derived, not on the résumé" qualification', async () => {
+    const r = await factPort().retrieve({ decision: lfwDecision('what is my expected salary') });
+    const fact = r.evidence.find((e) => e.sourceType === 'PROFILE_FACT');
+    // The retrieved CHUNK is what the model sees, so the qualification has to
+    // travel with the number rather than live in a prompt rule that may not be
+    // restated. Without it the model reports an estimate as a résumé line item.
+    assert.match(fact.content, /DERIVED ESTIMATE/);
+    assert.match(fact.content, /NOT stated\s+anywhere on the résumé|NOT stated anywhere on the résumé/);
+    assert.match(fact.content, /NOT an offer/);
+  });
+
+  test('a derived fact never licenses an absence claim', () => {
+    const sections = renderProfileSections('fact', SALARY);
+    assert.ok(sections.length > 0);
+    for (const s of sections) {
+      assert.equal(s.completeInventory, false,
+        'one computed figure enumerates nothing and must not ground a negative');
+    }
+  });
+
+  test('a mode that does not opt into PROFILE_FACT gets no fact source', () => {
+    const ti = resolveModePolicy('technical-interview');
+    assert.ok(!ti.profileSources.includes('PROFILE_FACT'),
+      'Technical Interview deliberately does not hydrate derived facts');
+    const port = createProfileRetrievalPort({
+      docs: [FACT_DOC], allowedSourceTypes: ti.allowedSourceTypes,
+      profileSources: ti.profileSources, userId: 'local',
+    });
+    assert.equal(port, null, 'fail closed: an unauthorized type is never registered');
+  });
+
+  test('the fact is POLICY-ADMITTED only — never lexically discovered (review find)', async () => {
+    // The disclaimer sentence inside the fact chunk ("calculated from the
+    // résumé — role, location, skills and years of experience…") is a BM25
+    // keyword magnet: before policyOnly scoring it ranked #2 on "tell me about
+    // my experience" and "what are my skills" in a real-DB probe, wasting an
+    // evidence slot and injecting salary noise into non-salary answers.
+    const port = lfwPort([RESUME_DOC, JD_DOC, FACT_DOC]);
+    for (const q of [
+      'tell me about my experience', 'what are my skills',
+      'do I meet the job requirements', 'tell me about my projects',
+    ]) {
+      const r = await port.retrieve({ decision: lfwDecision(q) });
+      assert.ok(!r.evidence.some((e) => e.sourceType === 'PROFILE_FACT'),
+        `"${q}" is not a compensation question — the derived salary fact must not consume an evidence slot`);
+    }
+    // …and the question it exists for still resolves it.
+    const salary = await port.retrieve({ decision: lfwDecision('what is my expected salary') });
+    assert.ok(salary.evidence.some((e) => e.sourceType === 'PROFILE_FACT'),
+      'policy admission must still fire on a genuine compensation question');
+  });
+
+  test('a malformed or absent estimate yields no source, never a throw', () => {
+    for (const bad of [{}, { salary_estimate: null }, { salary_estimate: { min: 1 } }, { salary_estimate: { min: 'x', max: 'y' } }]) {
+      assert.deepEqual(renderProfileSections('fact', bad), [],
+        'an incomplete estimate must render nothing rather than a half-formed number');
+    }
+  });
+});

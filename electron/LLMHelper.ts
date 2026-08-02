@@ -3220,16 +3220,6 @@ let isMultimodal = !!(imagePaths?.length);
     // depends on it (the Gemini block always leads with flash-lite).
     void opts;
 
-    // Priority 0: Codex CLI (when enabled). Structured-JSON workloads still
-    // benefit from the user's selected backend; downstream callers run their
-    // own JSON-extraction regex so prose-around-JSON is tolerated.
-    if (this.isCodexAvailable()) {
-      providers.push({
-        name: `Codex CLI (${this.codexCliConfig.model})`,
-        execute: () => this.generateWithCodexCli(message),
-      });
-    }
-
     // Priority 1: OpenAI
     if (this.openaiClient) {
       providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message) });
@@ -3273,6 +3263,29 @@ let isMultimodal = !!(imagePaths?.length);
       });
       providers.push(buildGeminiProvider(GEMINI_FLASH_LITE_MODEL));
       providers.push(buildGeminiProvider(GEMINI_FLASH_MODEL));
+    }
+
+    // Priority 5: Codex CLI (when enabled AND signed in).
+    //
+    // DELIBERATELY BELOW THE GEMINI CASCADE (2026-08-02). This block used to sit
+    // at Priority 0, ahead of everything — which directly contradicted the
+    // latency policy this same function documents above (Pro and MiniMax are
+    // excluded from extraction *because* they are slow). Codex CLI is a
+    // spawned-subprocess reasoning model: measured on a real profile ingest it
+    // took 18-31s PER CALL, and one résumé+JD upload makes 6+ structured calls
+    // (2 extractions, 2 STAR batches, salary, company research) — ~68s of
+    // wall-clock the user experiences as "file uploading got slower", while
+    // flash-lite does the same extraction in ~1-2s.
+    //
+    // It stays in the ladder (a signed-in user's own backend is a legitimate
+    // fallback when every cloud key is dead) but it must never be the FIRST
+    // thing a document ingest waits on. Codex ordering on OTHER surfaces
+    // (routeWithScopeFallback, chat) is untouched.
+    if (this.isCodexAvailable()) {
+      providers.push({
+        name: `Codex CLI (${this.codexCliConfig.model})`,
+        execute: () => this.generateWithCodexCli(message),
+      });
     }
 
     // Priority 6: Ollama (on-device fallback — last resort, no cloud dependency)

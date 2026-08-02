@@ -151,12 +151,49 @@ module.exports = async function notarizeHook(context) {
   const { stapleWithRetry } = require('./staple-with-retry');
 
   const start = Date.now();
-  try {
-    await notarize({ appPath, ...resolved.creds });
-    console.log(
-      `[notarize] Success — notarized and stapled in ${Math.round((Date.now() - start) / 1000)}s.`
-    );
-  } catch (err) {
+
+  // TRANSIENT-NETWORK RETRY (2026-08-03). The notary submission is a large,
+  // minutes-long multipart upload to Apple's S3 (observed dying at part 148
+  // with "Network.NWError error 54 - Connection reset by peer" after the
+  // ENTIRE build/sign pipeline had succeeded). One dropped TCP connection
+  // must not cost a full rebuild: re-submitting is safe — an aborted upload
+  // never became a submission, it just expires server-side. Bounded and
+  // signature-gated: only network-class failures retry; a genuine
+  // notarization REJECTION or auth failure still fails the build on the
+  // first attempt, loudly, exactly as before.
+  const TRANSIENT_NETWORK_RE =
+    /Connection reset by peer|NWError|abortedUpload|ECONNRESET|ETIMEDOUT|ENETDOWN|EPIPE|socket hang up|network connection was lost|Operation timed out|temporarily unavailable/i;
+  const MAX_SUBMIT_ATTEMPTS = 3;
+
+  let lastErr;
+  for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
+    try {
+      await notarize({ appPath, ...resolved.creds });
+      console.log(
+        `[notarize] Success — notarized and stapled in ${Math.round((Date.now() - start) / 1000)}s.`
+      );
+      return;
+    } catch (err) {
+      lastErr = err;
+      const attemptMsg = (err && err.message ? err.message : String(err)) || '';
+      // Staple-race is handled below (it is a SUCCESS of submission) — break
+      // out of the retry loop for it and for any non-transient failure.
+      const isTransient = TRANSIENT_NETWORK_RE.test(attemptMsg) && !/staple/i.test(attemptMsg);
+      if (isTransient && attempt < MAX_SUBMIT_ATTEMPTS) {
+        const delayS = 30 * attempt;
+        console.warn(
+          `[notarize] Transient network failure during submission (attempt ${attempt}/${MAX_SUBMIT_ATTEMPTS}) — ` +
+            `retrying in ${delayS}s. The upload restarts from scratch; the aborted one expires on Apple's side.`
+        );
+        await new Promise((r) => setTimeout(r, delayS * 1000));
+        continue;
+      }
+      break;
+    }
+  }
+
+  {
+    const err = lastErr;
     const msg = (err && err.message ? err.message : String(err)) || '';
     // STAPLE RACE RECOVERY: @electron/notarize submits + waits for the verdict,
     // then staples ONCE. If only the staple failed due to CDN ticket-propagation

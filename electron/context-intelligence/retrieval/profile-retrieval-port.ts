@@ -38,7 +38,20 @@ import { createLegacyRetrievalPort } from './legacy-retrieval-port';
 import type { LegacyChunk } from './legacy-adapter';
 import { Bm25Index, DEFAULT_BM25 } from './bm25';
 
-export type ProfileDocKind = 'resume' | 'jd';
+/**
+ * 'fact' (2026-08-02) carries DERIVED profile facts — things the app computed
+ * about the user that no uploaded document states. It exists because
+ * PROFILE_FACT was a planned source type with a structurally empty pool: the
+ * planner emitted [RESUME, PROFILE_FACT] for "what is my expected salary", the
+ * résumé is silent on the subject by nature, and PROFILE_FACT resolved to
+ * nothing — so the turn answered DOCUMENT_FACT_NOT_FOUND about a figure
+ * SalaryIntelligence had already computed and logged.
+ *
+ * Facts are DERIVED, not documentary. Their sections say so in the text (see
+ * renderFactSections) because the model must never restate an estimate as a
+ * line item on the résumé.
+ */
+export type ProfileDocKind = 'resume' | 'jd' | 'fact';
 
 export interface ProfileCardLike {
   id: string;
@@ -102,6 +115,7 @@ export interface ProfilePortInput {
 const TYPE_FOR_KIND: Record<ProfileDocKind, SourceType> = {
   resume: 'RESUME',
   jd: 'JOB_DESCRIPTION',
+  fact: 'PROFILE_FACT',
 };
 
 // ── deterministic section rendering ─────────────────────────────────────────
@@ -138,11 +152,41 @@ function renderResumeSections(sd: Record<string, unknown>): ProfileSection[] {
   const out: ProfileSection[] = [];
   const id = (sd.identity ?? {}) as Record<string, unknown>;
 
-  const identityBits = [str(id.name), str(id.summary), str(id.location)].filter(Boolean);
+  // FIELD-LABELLED, and contact fields included (2026-08-02 defect).
+  //
+  // Two bugs lived in the previous one-liner
+  // (`[name, summary, location].join('. ')`), both verified against the real
+  // shipped DB:
+  //
+  //  1. UNRETRIEVABLE BY ITS OWN QUESTION. This port ranks by BM25 over
+  //     `section + text`, and the text held only the VALUES ("Rohan Varma.
+  //     Kochi, India") — never the word "name". "What is my name" therefore
+  //     scored 0 on every chunk, fell under the `score > 0.05` cut, and the
+  //     turn logged `evidence:0 / answerability:NONE /
+  //     DOCUMENT_FACT_NOT_FOUND` — the assistant denying a résumé it had
+  //     successfully ingested. Labelling puts the interrogative's own noun in
+  //     the chunk, so the lookup matches lexically instead of relying on a
+  //     boost. (The boost in INTENT_RULES is the belt to this braces.)
+  //
+  //  2. DROPPED FIELDS. email / phone / linkedin / github / website are
+  //     extracted and stored, and NO renderer read them — the same
+  //     extracted-but-invisible class as the `leadership` defect above. A
+  //     résumé stating an email could never answer "what is my email".
+  //
+  // Still NOT an inventory: a contact blurb enumerates nothing, so it must
+  // never license a term-free absence claim (review finding).
+  const identityBits = [
+    str(id.name) ? `Name: ${str(id.name)}` : '',
+    str(id.email) ? `Email: ${str(id.email)}` : '',
+    str(id.phone) ? `Phone: ${str(id.phone)}` : '',
+    str(id.location) ? `Location: ${str(id.location)}` : '',
+    str(id.linkedin) ? `LinkedIn: ${str(id.linkedin)}` : '',
+    str(id.github) ? `GitHub: ${str(id.github)}` : '',
+    str(id.website) ? `Website: ${str(id.website)}` : '',
+    str(id.summary) ? `Summary: ${str(id.summary)}` : '',
+  ].filter(Boolean);
   if (identityBits.length) {
     out.push({
-      // NOT an inventory: a name/summary blurb enumerates nothing, so it must
-      // never license a term-free absence claim (review finding).
       section: 'Identity & summary', boostKey: 'identity',
       text: identityBits.join('. '), completeInventory: false,
     });
@@ -310,12 +354,68 @@ function renderJdSections(sd: Record<string, unknown>): ProfileSection[] {
   return out;
 }
 
+/**
+ * DERIVED profile facts (2026-08-02). Currently the résumé-based salary
+ * estimate; the shape is a list so further computed facts can join it.
+ *
+ * Every section states, in its own text, that the value is an ESTIMATE derived
+ * from the résumé and is neither written on the résumé nor an employer offer.
+ * That sentence is the whole safety property of this source: the retrieved
+ * chunk is what the model sees, so the qualification has to travel WITH the
+ * number, not sit in a policy the prompt might not restate.
+ *
+ * Never a completeInventory: one derived figure enumerates nothing, so it must
+ * not license "you have no other compensation expectation" style absences.
+ */
+function renderFactSections(sd: Record<string, unknown>): ProfileSection[] {
+  const out: ProfileSection[] = [];
+
+  const salary = (sd.salary_estimate ?? null) as Record<string, unknown> | null;
+  if (salary && typeof salary === 'object') {
+    const min = typeof salary.min === 'number' ? salary.min : null;
+    const max = typeof salary.max === 'number' ? salary.max : null;
+    const currency = str(salary.currency);
+    if (min !== null && max !== null && max > 0) {
+      const band = `${currency ? `${currency} ` : ''}${min.toLocaleString('en-US')}–${max.toLocaleString('en-US')}`;
+      const confidence = str(salary.confidence);
+      const role = str(salary.role);
+      const location = str(salary.location);
+      const factors = lines(salary.justification_factors);
+      out.push({
+        section: 'Expected salary (derived estimate)',
+        // OWN key, not 'compensation': the requirements intent rule spills a
+        // 0.3 boost onto 'compensation' (so the JD comp band surfaces on
+        // "do I meet the bar" questions — correct for the JD). A policy-only
+        // chunk keyed the same way would be admitted on every requirements
+        // question. derived_salary is boosted ONLY by the genuine
+        // salary/compensation rule below.
+        boostKey: 'derived_salary',
+        text: [
+          `Estimated market compensation for the candidate: ${band} per year.`,
+          role || location
+            ? `Basis: ${[role, location].filter(Boolean).join(' in ')}.`
+            : '',
+          confidence ? `Confidence: ${confidence}.` : '',
+          factors.length ? `Factors considered: ${factors.join('; ')}.` : '',
+          'IMPORTANT: this is a DERIVED ESTIMATE calculated from the résumé '
+            + '(role, location, skills and years of experience). It is NOT stated '
+            + 'anywhere on the résumé, and it is NOT an offer or a figure from the '
+            + 'job description. Present it as an estimate.',
+        ].filter(Boolean).join(' '),
+        completeInventory: false,
+      });
+    }
+  }
+
+  return out;
+}
+
 export function renderProfileSections(kind: ProfileDocKind, structured: unknown): ProfileSection[] {
   if (!structured || typeof structured !== 'object') return [];
   try {
-    return kind === 'resume'
-      ? renderResumeSections(structured as Record<string, unknown>)
-      : renderJdSections(structured as Record<string, unknown>);
+    if (kind === 'resume') return renderResumeSections(structured as Record<string, unknown>);
+    if (kind === 'fact') return renderFactSections(structured as Record<string, unknown>);
+    return renderJdSections(structured as Record<string, unknown>);
   } catch {
     return []; // a malformed extraction yields no sections, never a throw
   }
@@ -337,7 +437,7 @@ const INTENT_RULES: IntentRule[] = [
   { re: /\b(gpa|cgpa|degree|educat\w*|universit\w*|college|graduat\w*|studied|study)\b/i,
     boosts: { education: 0.45 } },
   { re: /\b(salary|compensation|pay\b|lpa\b|ctc\b|package|band\b|offer|bonus|benefits?)\b/i,
-    boosts: { compensation: 0.5, card_artifact_negotiation: 0.35 } },
+    boosts: { compensation: 0.5, card_artifact_negotiation: 0.35, derived_salary: 0.5 } },
   { re: /\b(experience|work(ed)?|intern\w*|role\b|position|company|employer|years?|tenure)\b/i,
     boosts: { experience: 0.3, identity: 0.15 } },
   { re: /\b(project|built|build|created|developed|launch\w*|portfolio)\b/i,
@@ -348,6 +448,16 @@ const INTENT_RULES: IntentRule[] = [
     boosts: { skills: 0.4, requirements: 0.25 } },
   { re: /\b(intro|introduce|elevator|pitch|tell me about (yourself|myself))\b/i,
     boosts: { identity: 0.4, card_artifact_intro: 0.35 } },
+  // IDENTITY & CONTACT LOOKUPS (2026-08-02 defect). The labelled identity
+  // section now matches "name"/"email"/"phone" lexically, but the phrasings
+  // people actually use in an interview overlay often name no field at all
+  // ("who am I", "how do they reach me", "my background"). Those still scored
+  // 0 on every chunk and produced a DOCUMENT_FACT_NOT_FOUND on an ingested
+  // résumé. Kept OFF the generic pronoun words ("my", "me") on purpose: a
+  // boost this broad would ride along on every first-person question and crowd
+  // the 6-item evidence cap.
+  { re: /\b(who am i|my name|name is|e-?mail|phone|mobile|contact (details|info\w*|number)|linkedin|github|portfolio|personal (site|website)|my (background|profile)|about me)\b/i,
+    boosts: { identity: 0.45 } },
 ];
 
 function intentBoosts(query: string): Map<string, number> {
@@ -368,6 +478,18 @@ interface PortChunk {
   boostKey: string;
   completeInventory: boolean;
   inventoryCategory?: string;
+  /**
+   * POLICY-ADMITTED ONLY (2026-08-02): the chunk is served exclusively when an
+   * intent rule targeting its boostKey fires — its BM25 score is discarded.
+   * Exists for derived facts: the salary section's own safety disclaimer
+   * ("calculated from the résumé — role, location, skills, years of
+   * experience…") is a lexical keyword magnet that ranked it #2 on "tell me
+   * about my experience" / "what are my skills" in a real-DB probe, wasting an
+   * evidence slot and injecting compensation noise into non-salary answers.
+   * A derived fact is evidence by POLICY (the question asks for this fact),
+   * never by lexical accident.
+   */
+  policyOnly?: boolean;
 }
 
 /** Squash an unbounded BM25 score into the 0..1 band the mode/meeting ports
@@ -406,7 +528,13 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
       const key = normText(text);
       if (!key || seen.has(key)) return;
       seen.add(key);
-      chunks.push({ sourceId: doc.sourceId, fileName: doc.fileName, section, text, chunkIndex: idx++, boostKey, completeInventory, inventoryCategory });
+      chunks.push({
+        sourceId: doc.sourceId, fileName: doc.fileName, section, text, chunkIndex: idx++,
+        boostKey, completeInventory, inventoryCategory,
+        // Derived facts are policy-admitted, never lexically discovered — see
+        // PortChunk.policyOnly.
+        policyOnly: doc.kind === 'fact',
+      });
     };
 
     for (const s of renderProfileSections(doc.kind, doc.structured)) {
@@ -477,7 +605,12 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
           // a level below real matches (0.7+) but above the cut line. Bounded:
           // at most one or two inventory chunks per fired intent.
           const boostOnly = c.completeInventory && boost > 0 ? 0.6 : Math.min(0.35, boost);
-          const score = lexical > 0 ? Math.min(1, lexical * 0.85 + boost) : boostOnly;
+          // policyOnly (derived facts): lexical score DISCARDED. Admitted at the
+          // inventory level (0.6 — beneath real matches, above the cut) only
+          // when an intent rule targeting the chunk's own boostKey fired.
+          const score = c.policyOnly
+            ? (boost > 0 ? 0.6 : 0)
+            : (lexical > 0 ? Math.min(1, lexical * 0.85 + boost) : boostOnly);
           return { c, score };
         })
         .filter((s) => s.score > 0.05)

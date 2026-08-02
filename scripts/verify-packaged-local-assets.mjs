@@ -62,7 +62,18 @@ const REQUIRED_ASARUNPACK_GLOBS = [
   '**/node_modules/sqlite-vec/**',
   '**/node_modules/sqlite-vec-*/**',
   '**/node_modules/sharp/**',
-  '**/node_modules/@img/sharp*/**',
+  // 2026-08-02: sharp's TRANSITIVE runtime deps must be unpacked too. sharp
+  // was unpacked but detect-libc/semver/@img/colour were not, and Node
+  // resolution from the unpacked PHYSICAL path never re-enters app.asar —
+  // workers loading sharp via @huggingface/transformers died with
+  // "Cannot find module 'detect-libc'" (ModelPreloader + IntentClassifier
+  // degraded in the shipped 2.8.5). The scope-wide @img glob replaces the
+  // narrower '@img/sharp*' one so @img/colour is covered as well; the
+  // closure-based guard in OnnxWorkerIsolationHardening2026_07_05.test.mjs
+  // recomputes sharp's real dependency tree so future dep drift is caught.
+  '**/node_modules/detect-libc/**',
+  '**/node_modules/semver/**',
+  '**/node_modules/@img/**',
 ];
 
 // Required built worker scripts (only checked after build:electron has run).
