@@ -1,6 +1,7 @@
 import { LLMHelper } from "../LLMHelper";
 import { UNIVERSAL_WHAT_TO_ANSWER_PROMPT } from "./prompts";
 import { TINY_WHAT_TO_ANSWER_PROMPT } from "./tinyPrompts";
+import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
 import { estimateTokens } from "./modelCapabilities";
 import { TemporalContext } from "./TemporalContextBuilder";
 import { IntentResult } from "./IntentClassifier";
@@ -526,13 +527,35 @@ ANSWER SHAPE: ${intentResult.answerShape}
 
             if (MEASURE) tMode = performance.now();
 
-            const basePrompt = this.llmHelper.getPromptTier() === 'tiny'
-                ? TINY_WHAT_TO_ANSWER_PROMPT
-                : UNIVERSAL_WHAT_TO_ANSWER_PROMPT;
+            // Prompt System v2 (flag promptSystemV2): the composed core+mode+action
+            // prompt already carries the active mode's contract, so the legacy
+            // ## ACTIVE MODE template suffix (23–45k chars) must NOT be appended
+            // on top — that would both duplicate the mode role and reintroduce
+            // the formatting rules v2 replaces. An active SKILL block still
+            // appends (skills are orthogonal to the mode/action contracts).
+            // Flag off → legacy constants + suffix, byte-for-byte unchanged.
+            const v2BasePrompt = resolveV2SystemPrompt({
+                action: 'what_to_say',
+                tier: v2TierForPromptTier(this.llmHelper.getPromptTier()),
+                // Pinned mode instructions ("Real-time prompt") ride the SYSTEM
+                // prompt under v2 — they are user configuration, and the v2 turn
+                // envelope below would otherwise demote them to untrusted
+                // evidence. (On the rare governed turn where the envelope does
+                // not fire they also appear via the legacy assembler — a benign
+                // duplication of config text, never of facts.)
+                customInstructions: pinnedModeInstructions || undefined,
+                // Universal coding contract: a live coding question gets the
+                // contract in ANY mode, not only technical-interview.
+                codingTask: isCodingAnswerType(answerPlan?.answerType as AnswerType),
+            });
+            const basePrompt = v2BasePrompt
+                ?? (this.llmHelper.getPromptTier() === 'tiny'
+                    ? TINY_WHAT_TO_ANSWER_PROMPT
+                    : UNIVERSAL_WHAT_TO_ANSWER_PROMPT);
 
             const finalPromptOverride = activeSkill
                 ? `${basePrompt}\n\n## ACTIVE SKILL\n${activeSkill.promptBlock}`
-                : modePromptSuffix
+                : (modePromptSuffix && !v2BasePrompt)
                     ? `${basePrompt}\n\n## ACTIVE MODE\n${modePromptSuffix}`
                     : basePrompt;
 
@@ -545,6 +568,9 @@ ANSWER SHAPE: ${intentResult.answerShape}
             let typedModeContext = modeContextBlock;
             let typedCandidateProfile = effectiveCandidateProfile;
             let transcriptForPrompt = workingTranscript;
+            // Set when the Context OS pack governs this turn (v2 turn envelope
+            // must stand down — its escaping would corrupt the rendered pack).
+            let cogGovernedTurn = false;
             try {
                 const _cog = requestSnapshot?.contextOsGeneration as import('../intelligence/context-os').ContextOsGenerationContext | undefined;
                 const { isIntelligenceFlagEnabled } = require('../intelligence/intelligenceFlags');
@@ -564,6 +590,10 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     if (!rendered) throw new Error('governed WTA EvidencePack did not render');
                     typedModeContext = rendered;
                     typedCandidateProfile = '';
+                    // The rendered pack is structured XML the final-prompt
+                    // validator checks verbatim — the v2 turn envelope must NOT
+                    // re-escape it (see the envelope gate below).
+                    cogGovernedTurn = true;
                     // A reference-file-owned WTA turn may use transcript only for
                     // retrieval pronouns; it never enters the provider packet as facts.
                     if (_cog.contract.sourceOwner === 'reference_files') transcriptForPrompt = '';
@@ -741,7 +771,45 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // cancellation, token accounting — is byte-for-byte the legacy transport,
             // which is the point: the decision layer is swapped, the delivery is not.
             const _v3p = (requestSnapshot as any)?.v3Prompt;
-            const _wtaUserMessage = _v3p?.user ?? packet.userMessage;
+            // ── PROMPT SYSTEM V2 TURN ENVELOPE (flag promptSystemV2) ─────────
+            // When the v2 system prompt drives this turn (and neither V3 nor a
+            // Context OS pack owns it), the user content is the v2 envelope the
+            // benchmark's integrated arm measured: ranked evidence first, recent
+            // transcript next, the newest turn and typed request LAST. Built
+            // from the SAME post-governance inputs the legacy assembler would
+            // consume — no new retrieval, no routing change. Screen OCR keeps
+            // the assembler's injection-redaction posture. Any missing piece
+            // (no extracted question) or any throw → legacy packet, unchanged.
+            let _v2TurnUser: string | null = null;
+            try {
+                if (v2BasePrompt && !_v3p && !cogGovernedTurn && answerPlan?.question?.trim()) {
+                    const { buildTurnContentV2 } = require('./promptSystemV2') as typeof import('./promptSystemV2');
+                    const screenText = screenContext?.ocrText || '';
+                    const screenForEnvelope = screenText
+                        ? (PromptAssembler.hasPromptInjection(escapeUserContent(screenText))
+                            ? INJECTION_REDACTION_MESSAGE
+                            : screenText)
+                        : '';
+                    const evidence = [
+                        typedCandidateProfile?.trim() ? { kind: 'profile' as const, content: typedCandidateProfile, source: 'candidate_profile' } : null,
+                        typedModeContext?.trim() ? { kind: 'reference_file' as const, content: typedModeContext, source: 'mode_reference_material' } : null,
+                        screenForEnvelope.trim() ? { kind: 'screen' as const, content: screenForEnvelope, source: 'screen_ocr' } : null,
+                        processedDomContext?.trim() ? { kind: 'browser_dom' as const, content: processedDomContext, source: 'browser' } : null,
+                        (!documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses && temporalContext.previousResponses?.length)
+                            ? { kind: 'other' as const, content: temporalContext.previousResponses.join('\n'), source: 'prior_assistant_responses' } : null,
+                    ].filter((e): e is NonNullable<typeof e> => e !== null);
+                    _v2TurnUser = buildTurnContentV2({
+                        evidence,
+                        recentTranscript: transcriptForPrompt || undefined,
+                        currentTurn: answerPlan.question,
+                        directRequest: intentContext || undefined,
+                    });
+                }
+            } catch (v2TurnErr: any) {
+                console.warn('[WhatToAnswerLLM] v2 turn envelope skipped (non-fatal):', v2TurnErr?.message);
+                _v2TurnUser = null;
+            }
+            const _wtaUserMessage = _v3p?.user ?? _v2TurnUser ?? packet.userMessage;
             const _wtaSystemPrompt = _v3p?.system ?? finalPromptOverride;
             if (_v3p) console.log('[WhatToAnswerLLM] V3 prompt in effect (Phase 6 wiring)');
             // v3Owned: when the V3 prompt is in effect, the Context OS govern
