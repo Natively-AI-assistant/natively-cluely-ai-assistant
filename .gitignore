@@ -7,7 +7,6 @@ left.md
 performance-audit-report.md
 FIXES.md
 /.env
-scripts
 python-installer.pkg
 Sales20260405-60-494j8t.csv
 /Sales20260405-60-494j8t.csv
@@ -408,6 +407,8 @@ user log/
 /dispute-evidence-*/
 /dispute-evidence-*
 /dispute_evidence/
+scripts/*evidence*.py
+scripts/combine_*_single_file.py
 # Autopilot campaign prompts — internal docs, not source
 /HANDOFF*.md
 /NATIVELY_CONTEXT_SYSTEM_SIMPLIFICATION_PROMPT.md
