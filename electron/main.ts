@@ -6459,7 +6459,7 @@ export class AppState {
     // Potential paths for tray icon
     const templatePath = path.join(resourcesPath, 'assets', 'iconTemplate.png');
     const defaultIconPath = app.isPackaged
-      ? path.join(resourcesPath, 'src/components/icon.png')
+      ? path.join(resourcesPath, 'assets', 'icon.png')
       : path.join(app.getAppPath(), 'src/components/icon.png');
 
     let iconToUse = defaultIconPath;
@@ -6989,7 +6989,7 @@ export class AppState {
             : path.join(app.getAppPath(), "assets/icons/win/icon.ico");
         } else {
           iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "icon.png")
+            ? path.join(process.resourcesPath, "assets/icon.png")
             : path.join(app.getAppPath(), "assets/icon.png");
         }
         break;

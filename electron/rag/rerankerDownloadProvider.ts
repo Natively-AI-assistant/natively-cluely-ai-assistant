@@ -83,7 +83,13 @@ function spawnWorker(): Worker {
         path.join(__dirname, 'rag', 'rerankerDownloadWorker.js'),
         path.join(__dirname, 'electron', 'rag', 'rerankerDownloadWorker.js'),
     ];
-    const workerPath = candidates.find(p => fs.existsSync(p)) ?? candidates[0];
+    let workerPath = candidates.find(p => fs.existsSync(p)) ?? candidates[0];
+    // rerankerDownloadWorker.js is in package.json's asarUnpack list, so in a
+    // packaged build it physically lives outside app.asar — rewrite to match,
+    // same as IntentClassifier.ts/LocalReranker.ts/LocalEmbeddingProvider.ts.
+    if (workerPath.includes('app.asar') && !workerPath.includes('app.asar.unpacked')) {
+        workerPath = workerPath.replace('app.asar', 'app.asar.unpacked');
+    }
     return new Worker(workerPath);
 }
 

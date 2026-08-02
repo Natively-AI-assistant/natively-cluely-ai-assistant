@@ -273,8 +273,18 @@ export class MeetingPersistence {
         try {
             // Generate Title (only if not set by calendar and summary scope allows transcript LLM use)
             if ((!metadata || !metadata.title) && postCallSummaryAllowed) {
-                const titlePrompt = `Generate a concise 3-6 word title for this meeting context. Output ONLY the title text. Do not use quotes or conversational filler.`;
-                const groqTitlePrompt = GROQ_TITLE_PROMPT;
+                // Prompt System v2 (flag promptSystemV2): one provider-neutral
+                // title contract replaces the inline literal + GROQ variant.
+                // Flag off → legacy strings, unchanged. Mode is forced to
+                // 'general' — a title is mode-neutral output.
+                let v2TitlePrompt: string | null = null;
+                try {
+                    const { resolveV2SystemPrompt } = require('./llm/promptSystemV2');
+                    v2TitlePrompt = resolveV2SystemPrompt({ action: 'title', tier: 'cloud', activeMode: null });
+                } catch { /* legacy fallback below */ }
+                const titlePrompt = v2TitlePrompt
+                    ?? `Generate a concise 3-6 word title for this meeting context. Output ONLY the title text. Do not use quotes or conversational filler.`;
+                const groqTitlePrompt = v2TitlePrompt ?? GROQ_TITLE_PROMPT;
 
                 const titleContext = data.transcript
                     .map(segment => `${segment.speaker || 'speaker'}: ${segment.text || ''}`)

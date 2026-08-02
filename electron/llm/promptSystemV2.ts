@@ -885,7 +885,7 @@ export function spokenFormatViolations(text: string): SpokenFormatViolation[] {
     // up to three spans of at most four words each. Beyond that is the legacy
     // over-bolding failure and stays a violation.
     {
-        const spans = prose.match(/\*\*([^*\n]+)\*\*/g) ?? [];
+        const spans: string[] = prose.match(/\*\*([^*\n]+)\*\*/g) ?? [];
         const tooLong = spans.filter((s) => s.replace(/\*/g, '').trim().split(/\s+/).length > 4);
         if (spans.length > 3 || tooLong.length > 0) {
             violations.push({ rule: 'markdown_bold', excerpt: excerptAround(prose, '**') });

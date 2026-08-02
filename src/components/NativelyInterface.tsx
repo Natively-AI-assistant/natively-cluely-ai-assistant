@@ -25,6 +25,7 @@ import {
   mergeRollingTranscriptPartial,
 } from '../../electron/utils/rollingTranscriptState.ts';
 import { categorizeSttError } from '../lib/sttErrorMapper';
+import { splitGistLine, splitGistLineStreaming, collapseBlockGaps } from '../lib/displayMarkup';
 
 import type { SkillSummary } from '../types/electron';
 
@@ -887,7 +888,16 @@ const MessageRow = React.memo(
         >
           <div
             className={`
-              min-w-0 ${bubbleMaxClass} text-[15px] leading-relaxed relative group whitespace-pre-wrap
+              min-w-0 ${bubbleMaxClass} text-[15px] leading-relaxed relative group ${
+                /* whitespace-pre-wrap must NOT sit on the system bubble: white-space
+                   inherits, and system messages render markdown whose renderers
+                   (react-markdown AND marked) emit literal "\n" text nodes BETWEEN
+                   block elements — under inherited pre-wrap each one paints as an
+                   extra blank line stacked on the block margins (the "two line gap"
+                   report, 2026-08-02). Sub-surfaces that need pre-wrap declare it
+                   themselves (mdComponents p, streaming divs, plain-text handoff). */
+                msg.role === 'system' ? '' : 'whitespace-pre-wrap'
+              }
               ${
                 msg.role === 'user'
                   ? isLightTheme
@@ -1697,7 +1707,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px] whitespace-pre-wrap" {...props} />
         ),
         strong: ({ node, ...props }: any) => (
-          <strong className="font-bold opacity-100 overlay-text-strong" {...props} />
+          <strong className="font-semibold overlay-hotword" {...props} />
         ),
         em: ({ node, ...props }: any) => (
           <em className="italic opacity-90 overlay-text-secondary" {...props} />
@@ -1798,10 +1808,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         ),
       },
       whatToAnswerText: {
-        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
+        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px] whitespace-pre-wrap" {...props} />,
         strong: ({ node, ...props }: any) => (
           <strong
-            className="font-bold opacity-100 overlay-text-strong"
+            className="font-semibold overlay-hotword"
             {...props}
           />
         ),
@@ -1820,7 +1830,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
       },
       recapText: {
-        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
+        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px] whitespace-pre-wrap" {...props} />,
         strong: ({ node, ...props }: any) => (
           <strong
             className="font-bold opacity-100 overlay-text-strong"
@@ -1831,7 +1841,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
       },
       followUpQuestionsText: {
-        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
+        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px] whitespace-pre-wrap" {...props} />,
         strong: ({ node, ...props }: any) => (
           <strong
             className="font-bold opacity-100 overlay-text-strong"
@@ -1843,10 +1853,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
       },
       shortenText: {
-        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
+        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px] whitespace-pre-wrap" {...props} />,
         strong: ({ node, ...props }: any) => (
           <strong
-            className="font-bold opacity-100 overlay-text-strong"
+            className="font-semibold overlay-hotword"
             {...props}
           />
         ),
@@ -3633,8 +3643,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }
     // marked.parse is sync and fast (<1ms for typical LLM chunks).
     // DOMPurify strips any script/event-handler injection.
-    const rawHtml = marked.parse(revealed, { async: false }) as string;
-    node.innerHTML = DOMPurify.sanitize(rawHtml);
+    // Teleprompter gist: a trailing [[GIST]] line (or a partial marker still
+    // streaming in) is split off the spoken body and painted as a bottom
+    // summary chip instead of literal text.
+    const { body: revealedBody, gist: revealedGist } = splitGistLineStreaming(revealed);
+    const rawHtml = collapseBlockGaps(marked.parse(revealedBody, { async: false }) as string);
+    const gistHtml = revealedGist
+      ? `<div class="overlay-gist-chip">${revealedGist
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`
+      : '';
+    node.innerHTML = DOMPurify.sanitize(rawHtml + gistHtml);
   }, []);
 
   // Mode-aware paint sink's "code" branch: same cursor-over-accumulated-text
@@ -6086,7 +6104,7 @@ Provide only the answer, nothing else.`;
           return (
             <div
               key="streaming-precode"
-              className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed"
+              className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed natively-streaming-answer"
             >
               {isThinking ? (
                 <div className="flex items-center min-h-[24px] py-0.5">
@@ -6118,7 +6136,7 @@ Provide only the answer, nothing else.`;
             <div
               key="streaming"
               ref={(el) => registerStreamingNode(msg.id, el)}
-              className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed"
+              className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed natively-streaming-answer"
             >
               {/*
                * Blinking-dot indicator INSIDE the streaming bubble. Renders
@@ -6309,13 +6327,20 @@ Provide only the answer, nothing else.`;
         );
       }
 
+      // Teleprompter gist: a trailing [[GIST]] line is display metadata, not
+      // spoken text — split it off the finalized answer and render it as a
+      // bottom summary chip on the spoken-answer surfaces below. Copy actions
+      // get the body without the marker.
+      const { body: gistBody, gist: gistLine } = splitGistLine(msg.text);
+      const gistChip = gistLine ? <div className="overlay-gist-chip">{gistLine}</div> : null;
+
       // Custom Styled Labels (Shorten, Recap, Follow-up) - also use Markdown for content
       if (msg.intent === 'shorten') {
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
             <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
               <CardCopyButton
-                text={msg.text}
+                text={gistBody}
                 onCopy={handleCopy}
                 isLightTheme={isLightTheme}
                 isModernTheme={isModernTheme}
@@ -6328,8 +6353,9 @@ Provide only the answer, nothing else.`;
                 rehypePlugins={REHYPE_PLUGINS}
                 components={mdComponents.shortenText}
               >
-                {msg.text}
+                {gistBody}
               </ReactMarkdown>
+              {gistChip}
             </div>
           </div>
         );
@@ -6340,7 +6366,7 @@ Provide only the answer, nothing else.`;
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
             <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
               <CardCopyButton
-                text={msg.text}
+                text={gistBody}
                 onCopy={handleCopy}
                 isLightTheme={isLightTheme}
                 isModernTheme={isModernTheme}
@@ -6353,8 +6379,9 @@ Provide only the answer, nothing else.`;
                 rehypePlugins={REHYPE_PLUGINS}
                 components={mdComponents.recapText}
               >
-                {msg.text}
+                {gistBody}
               </ReactMarkdown>
+              {gistChip}
             </div>
           </div>
         );
@@ -6386,14 +6413,15 @@ Provide only the answer, nothing else.`;
       }
 
       if (msg.intent === 'what_to_answer') {
-        // Split text by code blocks (Handle unclosed blocks at EOF)
-        const parts = msg.text.split(/(```[\s\S]*?(?:```|$))/g);
+        // Split text by code blocks (Handle unclosed blocks at EOF).
+        // gistBody (not msg.text): the [[GIST]] line renders as the chip below.
+        const parts = gistBody.split(/(```[\s\S]*?(?:```|$))/g);
 
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
             <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
               <CardCopyButton
-                text={msg.text}
+                text={gistBody}
                 onCopy={handleCopy}
                 isLightTheme={isLightTheme}
                 isModernTheme={isModernTheme}
@@ -6453,6 +6481,7 @@ Provide only the answer, nothing else.`;
                   </div>
                 );
               })}
+              {gistChip}
             </div>
           </div>
         );
@@ -6464,7 +6493,7 @@ Provide only the answer, nothing else.`;
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
             <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
               <CardCopyButton
-                text={msg.text}
+                text={gistBody}
                 onCopy={handleCopy}
                 isLightTheme={isLightTheme}
                 isModernTheme={isModernTheme}
@@ -6477,8 +6506,9 @@ Provide only the answer, nothing else.`;
                 rehypePlugins={REHYPE_PLUGINS}
                 components={mdComponents.standard}
               >
-                {msg.text}
+                {gistBody}
               </ReactMarkdown>
+              {gistChip}
             </div>
           </div>
         );

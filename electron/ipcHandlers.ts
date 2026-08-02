@@ -5,7 +5,6 @@ import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPref
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { pathToFileURL, fileURLToPath } from 'url';
 import { AudioDevices } from './audio/AudioDevices';
 import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
 import { AppState } from './main';
@@ -101,73 +100,6 @@ const GATE_GENERIC_TOKENS = new Set<string>([
   'architectures', 'application', 'applications', 'process', 'processes', 'design',
   'implementation', 'component', 'components', 'structure', 'technique', 'techniques',
 ]);
-
-// Module-scope: pdfjs-dist's legacy build defaults GlobalWorkerOptions.workerSrc
-// to `new URL("./pdf.worker.mjs", import.meta.url)`. Inside esbuild's bundle
-// for the electron main process, `import.meta.url` points at the bundled
-// main.js, so the runtime tries to load
-// `dist-electron/electron/pdf.worker.mjs` — a file that does not exist and
-// is not copied by scripts/build-electron.js. PDFParse then falls through to
-// the fake-worker bootstrap, which fails with
-// "Setting up fake worker failed: Cannot find module '.../pdf.worker.mjs'"
-// and the IPC surfaces that as the misleading "PDF may be corrupt /
-// password-protected" message. Pin workerSrc to the real pdfjs-dist worker
-// before the first PDFParse construction so the bundled PDFWorker resolves
-// the worker file regardless of where the bundle lives on disk. Guarded so
-// the require.resolve + file:// conversion runs at most once per process.
-//
-// REQUIRES `pdfjs-dist` (and `pdf-parse`/`mammoth`) to be listed in the
-// esbuild externals array in scripts/build-electron.js. If those packages
-// are bundled, the canvas/DOMMatrix polyfill chain in pdfjs-dist's module
-// init throws "DOMMatrix is not defined" at line 15620
-// (`const SCALE_MATRIX = new DOMMatrix();`) because esbuild's CJS bundle
-// sets `import_meta = {}`, breaking the
-// `createRequire(import.meta.url)` call that loads @napi-rs/canvas. The
-// ModeUploadHardening.test.mjs suite asserts both halves of the fix.
-//
-// The pin itself uses dynamic import() (not require()) because pdfjs-dist
-// is an ESM-only package (.mjs). Node 20 throws
-// "require() of ES Module ... not supported" when you require() an .mjs
-// file, so the function must be async and awaited at its call site.
-let pdfjsWorkerSrcPinned = false;
-async function pinPdfjsWorkerSrcOnce(): Promise<void> {
-  if (pdfjsWorkerSrcPinned) return;
-  try {
-    // pdfjs-dist is external (not bundled) so its .mjs entry point must be
-    // loaded via dynamic import() — Node 20 forbids synchronous require() of
-    // ESM modules and throws "require() of ES Module ... not supported".
-    const pdfjsLib: any = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    // The pdfjs-dist legacy build sets `GlobalWorkerOptions.workerSrc` to
-    // `"./pdf.worker.mjs"` (relative string) at class-init time. In the
-    // bundled electron main, pdfjs-dist's class init runs once, then
-    // PDFParse is built from inside `new PDFWorker(...)` — which resolves
-    // the relative string against `import.meta.url` of the bundle
-    // (dist-electron/electron/main.js) and produces a file:// URL that
-    // does not point at a real file. We check both the unset case and the
-    // "resolved to a missing file" case and pin in both situations. A
-    // previously-set working URL (e.g. from a parent app) is left alone.
-    const current = pdfjsLib?.GlobalWorkerOptions?.workerSrc;
-    let currentIsBroken = !current || current === './pdf.worker.mjs';
-    if (current && !currentIsBroken) {
-      try {
-        const candidatePath = current.startsWith('file://') ? fileURLToPath(current) : current;
-        if (!fs.existsSync(candidatePath)) currentIsBroken = true;
-      } catch {
-        currentIsBroken = true;
-      }
-    }
-    if (currentIsBroken) {
-      const workerPath = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
-      pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
-    }
-    pdfjsWorkerSrcPinned = true;
-  } catch (pinErr) {
-    // Non-fatal — if the pin fails the original fake-worker error path is
-    // still taken (and logged); the upload handler's catch block converts
-    // it to the user-facing message.
-    console.warn('[IPC] pdfjs-dist workerSrc pin failed (PDF parse may fail):', (pinErr as Error)?.message);
-  }
-}
 
 /**
  * Strip prior ASSISTANT turns from a SessionTracker formatted-context snapshot
@@ -1232,7 +1164,10 @@ export function initializeIpcHandlers(appState: AppState): void {
               // resolveManualChatBasePrompt: its legacy CHAT_MODE_PROMPT
               // fallback belongs to the legacy path — under the v2 kill-switch
               // this returns null and V3 composes exactly as it does today.
-              personaBase: ({ codingTask }) => {
+              // Param annotated inline because `buildV3Prompt` arrives via a
+              // lazy `require` (any), so the literal gets no contextual type.
+              // Mirrors BridgeInput.personaBase in engine-bridge.ts.
+              personaBase: ({ codingTask }: { codingTask: boolean }) => {
                 const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
                 return resolveV2SystemPrompt({
                   action: 'answer',
