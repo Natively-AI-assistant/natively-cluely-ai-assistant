@@ -315,7 +315,12 @@ dodopayments.llm
 ANSWER_QUALITY_FINAL_REPORT.md
 ANSWER_QUALITY_EVAL_REPORT.md
 profile.md
-electron-builder.signed.cjs
+# NOT ignored: electron-builder.signed.cjs is the production build config that
+# `npm run dist:signed` loads. It was swept into this block of scratch reports and
+# then deleted by the "remove tracked files per updated .gitignore" cleanup, which
+# broke every signed build with ENOENT. It holds NO secrets — the notarytool
+# credential lives in the macOS keychain; only the profile NAME and the (public)
+# Team ID appear in the file, and the signing identity is auto-discovered.
 REMAINING_ISSUES_FIX_REPORT.md
 LONG_SESSION_MEMORY_TEST_REPORT.md
 MANUAL_CHAT_PROFILE_FIX_REPORT.md
@@ -442,6 +447,14 @@ traces3/
 --help/
 .remember/
 fixtures/
+# ...but NOT test fixtures that suites import. The blanket `fixtures/` above swept up
+# electron/**/__tests__/fixtures/*, which the "remove tracked files per updated
+# .gitignore" cleanup then deleted — leaving 4 test files importing modules that no
+# longer existed. Both lines are required and must stay in this order: git will not
+# descend into an excluded directory, so the directory itself has to be re-included
+# before its contents can be.
+!electron/**/__tests__/fixtures/
+!electron/**/__tests__/fixtures/**
 tools/
 
 # Vision benchmark source documentation + generated reports

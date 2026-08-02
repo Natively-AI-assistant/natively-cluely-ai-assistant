@@ -1,0 +1,20 @@
+// Phase 6 Slice 4 (context-rebuild) compile-time fixture: this file
+// DELIBERATELY omits processQuestionGated's required third parameter
+// (`allowed: CanonicalTurn | AllowedSourcesProjection`) and must FAIL
+// `tsc --noEmit`. Kept with a `.ts.fixture` extension (not `.ts`) so it is
+// never picked up by electron/tsconfig.json's `**/*.ts` include glob and
+// never breaks `npm run typecheck:electron` — the test that consumes this
+// file copies it to a real `.ts` file in an isolated temp directory before
+// invoking tsc. See CompileTimeGatedParamRequired2026_07_25.test.mjs.
+
+import { processQuestionGated } from '../../knowledgeOrchestratorGate';
+
+async function callSiteThatOmitsTheRequiredParam() {
+  const orchestrator = { processQuestion: async (_q: string) => null };
+  // No suppression directive here on purpose — the whole point of this
+  // fixture is to let the raw TS2554 diagnostic surface so the test can
+  // assert on tsc's real output.
+  return processQuestionGated(orchestrator, 'some question');
+}
+
+void callSiteThatOmitsTheRequiredParam;
