@@ -1,6 +1,7 @@
 import { LLMHelper } from "../LLMHelper";
 import { CODE_HINT_PROMPT, buildCodeHintMessage } from "./prompts";
 import { TINY_CODE_HINT_PROMPT } from "./tinyPrompts";
+import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
 
 export class CodeHintLLM {
     private llmHelper: LLMHelper;
@@ -31,7 +32,8 @@ export class CodeHintLLM {
                 transcriptContext ?? null
             );
 
-            const promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_CODE_HINT_PROMPT : CODE_HINT_PROMPT;
+            const promptOverride = resolveV2SystemPrompt({ action: 'code_hint', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()) })
+                ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_CODE_HINT_PROMPT : CODE_HINT_PROMPT);
             const fittedMessage = this.llmHelper.fitContextForCurrentModel(message);
 
             yield* this.llmHelper.streamChat(

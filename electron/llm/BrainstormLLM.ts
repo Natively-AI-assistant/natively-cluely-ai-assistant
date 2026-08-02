@@ -1,6 +1,7 @@
 import { LLMHelper } from "../LLMHelper";
 import { BRAINSTORM_MODE_PROMPT } from "./prompts";
 import { TINY_BRAINSTORM_PROMPT } from "./tinyPrompts";
+import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
 
 export class BrainstormLLM {
     private llmHelper: LLMHelper;
@@ -17,7 +18,9 @@ export class BrainstormLLM {
         if (!context.trim() && !imagePaths?.length) return;
         try {
             // V3 substitution — see AssistLLM.
-        const promptOverride = v3?.system ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_BRAINSTORM_PROMPT : BRAINSTORM_MODE_PROMPT);
+        const promptOverride = v3?.system
+                ?? resolveV2SystemPrompt({ action: 'brainstorm', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()) })
+                ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_BRAINSTORM_PROMPT : BRAINSTORM_MODE_PROMPT);
             const fittedContext = v3?.user ?? (context ? this.llmHelper.fitContextForCurrentModel(context) : context);
             // ignoreKnowledgeMode=true — see ClarifyLLM.generate() for the full
             // rationale: `context` here is the problem/transcript blob passed

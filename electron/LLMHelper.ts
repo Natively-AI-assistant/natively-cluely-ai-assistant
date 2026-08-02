@@ -2502,7 +2502,16 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // matches what the live path will actually send (fix: 7B-class models were
       // being primed on the full HARD_SYSTEM_PROMPT but live requests now use
       // TINY_SYSTEM_PROMPT — mismatch wasted the warmup).
-      const staticPrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(HARD_SYSTEM_PROMPT));
+      // Prompt System v2: warm the SAME base the live path will send — the
+      // composed v2 'answer' prompt when the flag is on, HARD_SYSTEM_PROMPT
+      // otherwise. A mismatched warm prompt wastes the entire warmup.
+      const prewarmBase = (() => {
+        try {
+          const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+          return resolveV2SystemPrompt({ action: 'answer', tier: v2TierForPromptTier(this.getPromptTier()) }) ?? HARD_SYSTEM_PROMPT;
+        } catch { return HARD_SYSTEM_PROMPT; }
+      })();
+      const staticPrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(prewarmBase));
       const model = this.useOllama ? this.ollamaModel : this.currentModelId;
       const key = `${model}|${createHash('sha1').update(staticPrompt).digest('hex')}`;
       // Dedup so repeated activations are free — EXCEPT for an Ollama model that is
@@ -2709,6 +2718,27 @@ try {
 } catch { /* non-fatal */ }
 const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
 const forceDocumentGrounding = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
+// Prompt System v2 (flag promptSystemV2): default the base prompt to the
+// composed v2 'answer' prompt when the caller passed no override, and record
+// whether the base is v2-composed so the legacy MODE_* template suffix is not
+// appended on top of it (the v2 prompt already carries the mode contract).
+// Flag OFF → false, and everything below is byte-for-byte legacy.
+let v2BasePromptActive = false;
+try {
+  const { isPromptSystemV2Enabled, resolveV2SystemPrompt, isV2ComposedPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+  if (isPromptSystemV2Enabled() && !skipSystemPrompt) {
+    if (!systemPromptOverride) {
+      systemPromptOverride = resolveV2SystemPrompt({
+            action: 'answer',
+            tier: v2TierForPromptTier(this.getPromptTier()),
+            // Universal coding contract: attach when the routed answer type is
+            // coding-shaped, regardless of the active mode (2026-08-02).
+            codingTask: (() => { try { const { isCodingAnswerType } = require('./llm/AnswerPlanner'); return !!(routeOptions?.answerType && isCodingAnswerType(routeOptions.answerType)); } catch { return false; } })(),
+          }) ?? systemPromptOverride;
+    }
+    v2BasePromptActive = isV2ComposedPrompt(systemPromptOverride);
+  }
+} catch { /* non-fatal: legacy prompt selection */ }
 const isModeScopedAnswer = routeOptions?.answerType === 'sales_answer'
   || routeOptions?.answerType === 'product_candidate_mix_answer'
   || routeOptions?.answerType === 'lecture_answer';
@@ -2764,7 +2794,9 @@ if (!shouldSkipModeInjection) {
     const modePromptSuffix = modesMgr.getActiveModeSystemPromptSuffix();
     const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions)) || '';
 
-    if (modePromptSuffix) {
+    // See the streaming path: never stack the legacy mode template onto a
+    // v2-composed base — the v2 prompt already carries the mode contract.
+    if (modePromptSuffix && !v2BasePromptActive) {
       const baseForMode = systemPromptOverride || HARD_SYSTEM_PROMPT;
       systemPromptOverride = `${baseForMode}\n\n## ACTIVE MODE\n${modePromptSuffix}`;
     }
@@ -4598,15 +4630,25 @@ let isMultimodal = !!(imagePaths?.length);
       ? `CONTEXT:\n${context}\n\nUSER QUESTION:\n${message}`
       : message;
 
+    // Prompt System v2 (flag promptSystemV2): one provider-neutral base prompt
+    // replaces the four drifted per-provider personalities on this legacy
+    // entry point. Flag off → null, and every provider keeps its constant.
+    const v2StreamBase: string | null = (() => {
+      try {
+        const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+        return resolveV2SystemPrompt({ action: 'answer', tier: v2TierForPromptTier(this.getPromptTier()) });
+      } catch { return null; }
+    })();
+
     const combinedMessages = {
-      gemini: buildCombinedMessage(HARD_SYSTEM_PROMPT),
-      groq: buildCombinedMessage(GROQ_SYSTEM_PROMPT),
+      gemini: buildCombinedMessage(v2StreamBase ?? HARD_SYSTEM_PROMPT),
+      groq: buildCombinedMessage(v2StreamBase ?? GROQ_SYSTEM_PROMPT),
     };
 
     // CACHE: separate system for Groq's prefix cache (used by streamWithGroq below).
-    const groqSystemForCache = skipSystemPrompt ? undefined : this.injectLanguageInstruction(GROQ_SYSTEM_PROMPT);
+    const groqSystemForCache = skipSystemPrompt ? undefined : this.injectLanguageInstruction(v2StreamBase ?? GROQ_SYSTEM_PROMPT);
     // CACHE: separate system for Gemini's systemInstruction channel.
-    const geminiSystemForCache = skipSystemPrompt ? undefined : this.injectLanguageInstruction(HARD_SYSTEM_PROMPT);
+    const geminiSystemForCache = skipSystemPrompt ? undefined : this.injectLanguageInstruction(v2StreamBase ?? HARD_SYSTEM_PROMPT);
 
     if (this.useOllama) {
       const response = await this.callOllama(combinedMessages.gemini, imagePaths?.[0]);
@@ -4625,8 +4667,8 @@ let isMultimodal = !!(imagePaths?.length);
     const providers: ProviderAttempt[] = [];
 
     // System prompts for OpenAI/Claude (skipped if skipSystemPrompt)
-    const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(OPENAI_SYSTEM_PROMPT);
-    const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(CLAUDE_SYSTEM_PROMPT);
+    const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(v2StreamBase ?? OPENAI_SYSTEM_PROMPT);
+    const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(v2StreamBase ?? CLAUDE_SYSTEM_PROMPT);
 
     // Get auto-discovered text model IDs from ModelVersionManager
     const textOpenAI = this.modelVersionManager.getTextTieredModels(TextModelFamily.OPENAI).tier1;
@@ -5060,7 +5102,33 @@ let isMultimodal = !!(imagePaths?.length);
     // before any reassignment, so the mode-injection skip decision reflects
     // the caller's TRUE original intent regardless of what happens to
     // `systemPromptOverride` in between.
-    const callerOriginallyPassedUniversalOverride = !!systemPromptOverride && (
+    // ── PROMPT SYSTEM V2 (flag promptSystemV2, default OFF) ──────────────────
+    // When the flag is ON and the caller passed no override, the composed v2
+    // 'answer' prompt becomes the base — every downstream `systemPromptOverride
+    // || <PROVIDER>_SYSTEM_PROMPT` default then collapses to the one provider-
+    // neutral prompt. A v2-composed prompt already CONTAINS the active mode's
+    // contract, so it is treated exactly like a universal override below (no
+    // 23–45k ## ACTIVE MODE template suffix on top) — except that custom-mode
+    // pinned instructions and mode context retrieval still apply unchanged.
+    // Flag OFF → callerPassedV2Prompt stays false and nothing here runs.
+    let callerPassedV2Prompt = false;
+    try {
+      const { isPromptSystemV2Enabled, resolveV2SystemPrompt, isV2ComposedPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+      if (isPromptSystemV2Enabled()) {
+        if (!systemPromptOverride) {
+          systemPromptOverride = resolveV2SystemPrompt({
+            action: 'answer',
+            tier: v2TierForPromptTier(this.getPromptTier()),
+            // Universal coding contract: attach when the routed answer type is
+            // coding-shaped, regardless of the active mode (2026-08-02).
+            codingTask: (() => { try { const { isCodingAnswerType } = require('./llm/AnswerPlanner'); return !!(routeOptions?.answerType && isCodingAnswerType(routeOptions.answerType)); } catch { return false; } })(),
+          }) ?? systemPromptOverride;
+        }
+        callerPassedV2Prompt = isV2ComposedPrompt(systemPromptOverride);
+      }
+    } catch { /* non-fatal: legacy prompt selection */ }
+
+    const callerOriginallyPassedUniversalOverride = callerPassedV2Prompt || (!!systemPromptOverride && (
       systemPromptOverride === UNIVERSAL_SYSTEM_PROMPT ||
       systemPromptOverride === UNIVERSAL_ANSWER_PROMPT ||
       systemPromptOverride === UNIVERSAL_WHAT_TO_ANSWER_PROMPT ||
@@ -5070,7 +5138,7 @@ let isMultimodal = !!(imagePaths?.length);
       systemPromptOverride === UNIVERSAL_ASSIST_PROMPT ||
       systemPromptOverride === CHAT_MODE_PROMPT ||
       TINY_PROMPTS_SET.has(systemPromptOverride)
-    );
+    ));
 
     // Stage timer (gated): isolates pre-stream work (knowledge intercept,
     // cache create) from provider TTFT. Set MEASURE_LATENCY=true to see it.
@@ -5594,7 +5662,13 @@ let isMultimodal = !!(imagePaths?.length);
         // Sensitivity-scoped by answer type inside the accessor.
         const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions), routeOptions?.pinnedModeId ?? undefined) || '';
 
-        if (modePromptSuffix) {
+        // Prompt System v2: a v2-composed base already carries the active
+        // mode's contract — appending the legacy MODE_* template on top would
+        // duplicate the role and reintroduce the exact formatting rules v2
+        // replaces (mandatory bold, dash bullets, canned admissions). Pinned
+        // custom instructions below still apply — they are user config, not a
+        // competing mode template.
+        if (modePromptSuffix && !callerPassedV2Prompt) {
           const baseForMode = systemPromptOverride || HARD_SYSTEM_PROMPT;
           systemPromptOverride = `${baseForMode}\n\n## ACTIVE MODE\n${modePromptSuffix}`;
         }
@@ -6000,9 +6074,42 @@ let isMultimodal = !!(imagePaths?.length);
           : message;
       }
     } else {
-      userContent = combinedContext
+      // ── PROMPT SYSTEM V2 TURN ENVELOPE (flag promptSystemV2) ──────────────
+      // The plain (ungoverned, non-doc-grounded) branch only. When the LIVE
+      // system prompt for this turn is a v2 composition — checked here, not at
+      // entry, because the knowledge intercept may have replaced the prompt —
+      // the user content uses the v2 ordering: assembled context first
+      // (VERBATIM — it was sanitized upstream), then the tagged newest turn,
+      // then the task LAST. Gates:
+      //   • combinedContext non-empty — callers that pass their whole blob AS
+      //     the message (Recap/Clarify/FUQ/Brainstorm) must not have that blob
+      //     mislabeled as the newest turn;
+      //   • not a coding answer type — coding user content carries its own
+      //     contract machinery;
+      //   • message not already enveloped (WTA/FollowUp pre-compose).
+      // Any failure falls through to the legacy CONTEXT: shape.
+      let v2Turn: string | null = null;
+      try {
+        const { isV2ComposedPrompt, buildAssembledTurnContentV2, hasV2TurnEnvelope } = require('./llm/promptSystemV2');
+        const { isCodingAnswerType } = require('./llm/AnswerPlanner');
+        if (combinedContext
+            && isV2ComposedPrompt(systemPromptOverride)
+            && !hasV2TurnEnvelope(message)
+            && !(routeOptions?.answerType && isCodingAnswerType(routeOptions.answerType))) {
+          v2Turn = buildAssembledTurnContentV2({ assembledContext: combinedContext, currentTurn: message });
+        }
+      } catch { v2Turn = null; }
+      userContent = v2Turn ?? (combinedContext
         ? `CONTEXT:\n${combinedContext}\n\nUSER QUESTION:\n${message}`
-        : message;
+        : message);
+      // Same transport normalization the governed path performs below: legacy
+      // transports that build from message/context (Ollama/custom) must see
+      // the SAME enveloped payload, never a competing raw channel.
+      if (v2Turn) {
+        message = userContent;
+        context = undefined;
+        combinedContext = '';
+      }
     }
 
     // Some legacy transports construct their request from `message`/`context`
@@ -8111,6 +8218,19 @@ let isMultimodal = !!(imagePaths?.length);
   public resolveLocalSystemPrompt(systemPrompt?: string): string {
     if (!this.useOllama) return systemPrompt ?? HARD_SYSTEM_PROMPT;
     const tier = selectPromptTier(this.getCurrentModel(), true);
+    // Prompt System v2: a v2-composed cloud prompt downgrades to the v2 LOCAL
+    // composition of the SAME mode+action (small core, same contracts) instead
+    // of being concatenated onto TINY_SYSTEM_PROMPT — which would stack two
+    // competing cores. Never throws; falls through to legacy on any error.
+    try {
+      const { getV2PromptDescriptor, buildSystemPromptV2 } = require('./llm/promptSystemV2');
+      const desc = systemPrompt ? getV2PromptDescriptor(systemPrompt) : null;
+      if (desc) {
+        return tier === 'tiny'
+          ? buildSystemPromptV2({ ...desc, tier: 'local' })
+          : systemPrompt as string;
+      }
+    } catch { /* legacy resolution below */ }
     const base = tier === 'tiny' ? TINY_SYSTEM_PROMPT : HARD_SYSTEM_PROMPT;
     // If the caller already provided a non-empty, non-universal prompt, keep it.
     // This preserves explicit mode/custom-mode/policy injections — the previous

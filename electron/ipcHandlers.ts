@@ -39,6 +39,34 @@ import { recordAttribution, hindsightModeFor, type AttributionInput } from './in
 import { routeContext, isBackwardLookingQuery } from './intelligence/ContextRouter';
 import { SearchOrchestrator, type SearchCandidate } from './intelligence/SearchOrchestrator';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
+
+// Prompt System v2 (flag promptSystemV2): the manual-chat base prompt. When
+// the flag is ON this is the composed core+mode+answer prompt (which LLMHelper
+// recognizes as a universal override, so the legacy MODE_* template suffix is
+// not stacked on top); when OFF (or on any error) it is CHAT_MODE_PROMPT,
+// byte-for-byte the legacy behavior.
+function resolveManualChatBasePrompt(
+  llmHelper?: { getPromptTier?: () => string } | null,
+  opts?: { codingTask?: boolean },
+): string {
+  try {
+    const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+    const v2 = resolveV2SystemPrompt({
+      action: 'answer',
+      tier: v2TierForPromptTier(llmHelper?.getPromptTier?.()),
+      // Semantic coding activation: a coding turn gets the coding contract in
+      // ANY mode (universal coding-answer contract, 2026-08-02).
+      codingTask: opts?.codingTask,
+      // This is the TYPED chat panel — the one surface where the user reads
+      // the answer instead of speaking it. Attaches the scannable chat layout
+      // (lead sentence → labeled sections → quotable close); every live and
+      // spoken surface leaves this unset and keeps the spoken shape.
+      chatSurface: true,
+    });
+    if (v2) return v2;
+  } catch { /* legacy fallback */ }
+  return CHAT_MODE_PROMPT;
+}
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
 import { buildManualProfileEvidenceRoute } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
@@ -1194,6 +1222,26 @@ export function initializeIpcHandlers(appState: AppState): void {
                 ...(v3MeetingId ? { meetingId: v3MeetingId } : {}),
               },
               retrieval: port,
+              // Natively persona + typed-chat layout for the V3-owned surface
+              // (2026-08-02). V3's own composition is governance-only (rules,
+              // authority, grounding) — it never carried an identity or voice
+              // contract, so manual-chat answers read like a default AI
+              // assistant. The v2 base supplies the copilot identity, voice
+              // laws, glance layer, chat layout, and (via codingTask from the
+              // V3 decision) the coding contract. Deliberately NOT
+              // resolveManualChatBasePrompt: its legacy CHAT_MODE_PROMPT
+              // fallback belongs to the legacy path — under the v2 kill-switch
+              // this returns null and V3 composes exactly as it does today.
+              personaBase: ({ codingTask }) => {
+                const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+                return resolveV2SystemPrompt({
+                  action: 'answer',
+                  tier: v2TierForPromptTier(llmHelper?.getPromptTier?.()),
+                  activeMode: modeInfo,
+                  codingTask,
+                  chatSurface: true,
+                });
+              },
             });
             // Null with the flag on = the bridge caught an error and ALREADY
             // counted/logged the fallback. Fall through to legacy without
@@ -3084,7 +3132,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // docs/answer-pipeline-rebuild/02_STATUS.md Phase 4 for the full writeup.
         const systemPromptOverride: string | undefined = options?.skipSystemPrompt
           ? ''
-          : CHAT_MODE_PROMPT;
+          : resolveManualChatBasePrompt(llmHelper, { codingTask: isCodingChat });
         // NOTE (audit 2026-06-28): the document-grounded greeting-suppression +
         // question-first restructuring now lives INSIDE LLMHelper._streamChatInner
         // (shapeDocumentGroundedSystemPrompt + buildDocumentGroundedUserContent),
@@ -3247,20 +3295,40 @@ export function initializeIpcHandlers(appState: AppState): void {
           const PAINT_SNIFF_CHARS = 48;
           let deferFirstPaint = deferFirstPaintEligible;
           let deferredBuffer = '';
+          // PROMPT SYSTEM V2 NO-ACTION SENTINEL HOLD (2026-08-01): every manual
+          // chat stream holds its first ~13 chars until the buffer can no longer
+          // be the exact `[[NO_ACTION]]` sentinel — the sentinel must NEVER
+          // paint, not even for one frame. A normal answer diverges on the very
+          // first token, so this adds no perceptible latency. If the model
+          // misfires with "[[NO_ACTION]] real text…", the leading sentinel is
+          // stripped before painting. Cheap prefix checks; helpers never throw.
+          const { couldBecomeNoActionSentinel: _couldBeNoAction, stripLeadingNoActionSentinel: _stripNoAction } =
+            require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+          let sentinelHold = true;
           // sendChunkGated: routes tokens through the defer buffer while deferring,
           // flushing to the real sendChunk once we've decided the first pass is a
           // genuine (non-refusal) answer. When still deferring at stream end, the
           // buffered text is NOT sent here — the post-stream validator decides.
           const sendChunkGated = (chunk: string) => {
-            if (!deferFirstPaint) { sendChunk(chunk); return; }
+            if (!deferFirstPaint && !sentinelHold) { sendChunk(chunk); return; }
             deferredBuffer += chunk;
+            if (sentinelHold) {
+              if (_couldBeNoAction(deferredBuffer)) return; // still a possible/confirmed sentinel — keep holding
+              sentinelHold = false;
+            }
+            if (!deferFirstPaint) {
+              const toFlush = _stripNoAction(deferredBuffer);
+              deferredBuffer = '';
+              if (toFlush) sendChunk(toFlush);
+              return;
+            }
             if (deferredBuffer.length >= PAINT_SNIFF_CHARS) {
               if (!REFUSAL_SNIFF_RE.test(deferredBuffer.trimStart())) {
                 // Confident it's a real answer — flush and resume live streaming.
                 deferFirstPaint = false;
-                const toFlush = deferredBuffer;
+                const toFlush = _stripNoAction(deferredBuffer);
                 deferredBuffer = '';
-                sendChunk(toFlush);
+                if (toFlush) sendChunk(toFlush);
               }
               // else: looks like a refusal — keep buffering silently.
             }
@@ -3357,6 +3425,11 @@ export function initializeIpcHandlers(appState: AppState): void {
           const rawResponseForVerify = fullResponse;
           const { stripVerificationSpec: _stripSpec } = require('./llm/codingContract') as typeof import('./llm/codingContract');
           if (isCodingChat) fullResponse = _stripSpec(fullResponse);
+          // A misfired "[[NO_ACTION]] real text…" keeps its real text (the
+          // display path already stripped the prefix — keep the persisted copy
+          // in sync). An EXACT sentinel response is handled after validation,
+          // where it is substituted and marked do-not-store.
+          if (!isCodingChat) fullResponse = _stripNoAction(fullResponse) || fullResponse;
 
           // Safety net: validate the STREAMED coding answer; only when repair
           // actually changes it do we hand the renderer a corrective finalText.
@@ -4548,9 +4621,13 @@ export function initializeIpcHandlers(appState: AppState): void {
                     const { appendCustomModeSystemPromptLayer } = require('./llm/documentGroundedPrompt');
                     const { ModesManager: _MMRegen } = require('./services/ModesManager');
                     const _mm = _MMRegen.getInstance();
+                    // Prompt System v2: a v2 base already carries the mode
+                    // contract — don't stack the legacy template suffix on it.
+                    const _regenBase = resolveManualChatBasePrompt(llmHelper);
+                    const _regenBaseIsV2 = _regenBase !== CHAT_MODE_PROMPT;
                     regenSystemPrompt = appendCustomModeSystemPromptLayer({
-                      baseSystemPrompt: CHAT_MODE_PROMPT,
-                      modePromptSuffix: _mm.getActiveModeSystemPromptSuffix?.(manualActiveMode?.id ?? undefined),
+                      baseSystemPrompt: _regenBase,
+                      modePromptSuffix: _regenBaseIsV2 ? undefined : _mm.getActiveModeSystemPromptSuffix?.(manualActiveMode?.id ?? undefined),
                       pinnedInstructions: _mm.getActiveModePinnedInstructions?.(answerPlan.answerType, manualActiveMode?.id ?? undefined),
                       isActiveCustomMode: manualActiveMode?.isCustom === true || _mm.isCustomMode?.(manualActiveMode),
                     });
@@ -4731,6 +4808,31 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
           }
 
+          // PROMPT SYSTEM V2 NO-ACTION SENTINEL (2026-08-01): an exact
+          // [[NO_ACTION]] must never display, persist, embed, or re-enter
+          // history. Manual chat always carries a direct typed request, so a
+          // sentinel here is a model misfire — substitute the honest
+          // insufficient-context line (the same contract as the WTA manual
+          // press: explicit user intent must always see SOMETHING) and mark the
+          // turn do-not-store so the fallback never becomes conversational
+          // memory. The streaming sentinel-hold above guarantees nothing was
+          // painted, so the substitute is the first thing the user sees.
+          try {
+            const { shouldSuppressModelOutput: _isNoActionOut } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+            if (_isNoActionOut(rawResponseForVerify) || _isNoActionOut(fullResponse)) {
+              const fb = "I don't have enough context from the conversation to answer that yet.";
+              fullResponse = fb;
+              finalText = fb;
+              finalGenerationMode = 'provider_error_no_answer';
+              sessionWriteDecision = decideSessionWritePolicy({
+                finalGenerationMode,
+                validationOk: false,
+                criticalViolations: ['no_action_sentinel_suppressed'],
+              });
+              chatTrace.mark('fallback_answer_used' as any, { answerType: answerPlan.answerType, finalGenerationMode, reason: 'no_action_sentinel' });
+            }
+          } catch { /* non-fatal — sentinel guard must never break chat */ }
+
           // DEFERRED FIRST-PAINT flush (2026-07-02): if we held the first pass
           // buffered (it looked like a refusal) and NO repair fired (finalText
           // unset), those buffered tokens were never painted — send the answer
@@ -4739,7 +4841,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           // discarded (the refusal never reaches the screen). Nothing to do when
           // we weren't deferring (buffer already streamed live) or the buffer is
           // empty (deferred flag stayed true but no tokens arrived).
-          if (deferFirstPaint && deferredBuffer.length > 0 && !finalText) {
+          // The v2 sentinel-hold shares the buffer: a residual held fragment that
+          // never resolved (stream died mid-sentinel) flushes the same way.
+          if ((deferFirstPaint || sentinelHold) && deferredBuffer.length > 0 && !finalText) {
             finalText = fullResponse;
           }
 
@@ -9771,9 +9875,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Build the context string from input
       const contextString = buildFollowUpEmailPromptInput(input);
 
+      // Prompt System v2 (flag promptSystemV2): one provider-neutral email
+      // contract replaces the Gemini/Groq prompt pair. The transport shape is
+      // unchanged (instructions concatenated into the user message with
+      // skipSystemPrompt=true). Flag off → legacy constants, unchanged.
+      let v2EmailPrompt: string | null = null;
+      try {
+        const { resolveV2SystemPrompt } = require('./llm/promptSystemV2');
+        v2EmailPrompt = resolveV2SystemPrompt({ action: 'followup_email', tier: 'cloud', activeMode: null });
+      } catch { /* legacy fallback below */ }
+
       // Build prompts
-      const geminiPrompt = `${FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
-      const groqPrompt = `${GROQ_FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
+      const geminiPrompt = `${v2EmailPrompt ?? FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
+      const groqPrompt = `${v2EmailPrompt ?? GROQ_FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
 
       // Use chatWithGemini with alternateGroqMessage for fallback
       const emailBody = await llmHelper.chatWithGemini(
@@ -12137,7 +12251,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           // Best-effort — never break the phone path on the ownership check.
           if (isIntelligenceFlagEnabled('trace')) console.warn('[SOURCE-GUARD] phone ownership check skipped (non-fatal):', pOwnErr?.message);
         }
-        const stream = llmHelper.streamChat(message, undefined, context, CHAT_MODE_PROMPT, false, false, [], phoneController.signal, undefined, phoneRouteOptions);
+        const stream = llmHelper.streamChat(message, undefined, context, resolveManualChatBasePrompt(llmHelper, { codingTask: !!(phoneRouteOptions?.answerType && isCodingAnswerType(phoneRouteOptions.answerType as any)) }), false, false, [], phoneController.signal, undefined, phoneRouteOptions);
         let full = '';
         let phoneSuperseded = false;
         // Deadline-guarded (Issue 1) — this is a live streaming surface too: a hung

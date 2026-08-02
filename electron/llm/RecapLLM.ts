@@ -1,6 +1,7 @@
 import { LLMHelper } from "../LLMHelper";
 import { UNIVERSAL_RECAP_PROMPT } from "./prompts";
 import { TINY_RECAP_PROMPT } from "./tinyPrompts";
+import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
 
 export class RecapLLM {
     private llmHelper: LLMHelper;
@@ -15,7 +16,8 @@ export class RecapLLM {
     async generate(context: string): Promise<string> {
         if (!context.trim()) return "";
         try {
-            const promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_RECAP_PROMPT : UNIVERSAL_RECAP_PROMPT;
+            const promptOverride = resolveV2SystemPrompt({ action: 'recap', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()) })
+                ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_RECAP_PROMPT : UNIVERSAL_RECAP_PROMPT);
             const fittedContext = this.llmHelper.fitContextForCurrentModel(context);
             // ignoreKnowledgeMode=true — see ClarifyLLM.generate() for the full
             // rationale: `context` is a conversation-context blob, not a real
@@ -37,7 +39,8 @@ export class RecapLLM {
     async *generateStream(context: string, options?: { contractRule?: string }): AsyncGenerator<string> {
         if (!context.trim()) return;
         try {
-            let promptOverride = this.llmHelper.getPromptTier() === 'tiny' ? TINY_RECAP_PROMPT : UNIVERSAL_RECAP_PROMPT;
+            let promptOverride = resolveV2SystemPrompt({ action: 'recap', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()) })
+                ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_RECAP_PROMPT : UNIVERSAL_RECAP_PROMPT);
             // CONTEXT OS (Phase 11): the caller may pass a source-contract rule
             // (built from the active mode's TurnContextContract) so the recap is
             // no longer mode-blind — e.g. "summarize the transcript only; do not

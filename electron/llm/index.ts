@@ -58,6 +58,35 @@ export { AnswerDiversityGuard, cleanAnswerArtifacts, isLeakedSchemaStub, isLeake
 export type { RepetitionVerdict, RepetitionReason, DiversityCheckOpts } from "./answerPolish";
 export type { AnswerPlan, AnswerSource, AnswerType, ContextLayer, OutputPerspective, SpeakerPerspective } from "./AnswerPlanner";
 export { applyModeFallback, MODE_CONTEXT_PROFILES } from "./modeProfiles";
+
+// Prompt System v2 — provider-neutral composer (flag: promptSystemV2).
+export {
+    NO_ACTION_SENTINEL,
+    shouldSuppressModelOutput,
+    couldBecomeNoActionSentinel,
+    stripLeadingNoActionSentinel,
+    GIST_MARKER,
+    splitGistLine,
+    stripDisplayMarkup,
+    buildSystemPromptV2,
+    buildTurnContentV2,
+    buildAssembledTurnContentV2,
+    hasV2TurnEnvelope,
+    recommendedGenerationProfile,
+    spokenFormatViolations,
+    isPromptSystemV2Enabled,
+    resolveV2SystemPrompt,
+    isV2ComposedPrompt,
+    getV2PromptDescriptor,
+    v2ModeForActiveMode,
+    v2TierForPromptTier,
+    CUSTOM_INSTRUCTIONS_MAX_CHARS,
+    type PromptSystemV2Mode,
+    type PromptSystemV2Action,
+    type PromptTierV2,
+    type EvidenceBlockV2,
+    type GenerationProfileV2,
+} from "./promptSystemV2";
 export type { ActiveModeInfo, ModeContextProfile, ModeTemplateType } from "./modeProfiles";
 export { resolveFollowUp, resolveFollowUpOrClarify, isBareFollowUp, isRefinementFollowUp, isSameSessionFollowUp, buildContextFreeClarification } from "./FollowUpResolver";
 export { classifyProviderError, isClarificationStall, isPermanentKeyError } from "./providerErrorClassifier";

@@ -129,6 +129,8 @@ const EXPECTED_KEYS = [
   // 2026-07-28) — dev/test-only.
   'contextOsImpossibleStateGateShadow',
   'contextOsImpossibleStateGateEnforceForbidden',
+  // Prompt System v2 (2026-08-01) — default OFF everywhere.
+  'promptSystemV2',
 ];
 
 // All NATIVELY_* env vars these flags read — cleared before/after so a leaked env from the
@@ -161,6 +163,9 @@ const DEFAULT_ON_KEYS = new Set([
   'contextOsRecapFollowupEnabled',
   'contextOsEvidencePackEnabled',
   'contextOsMemorySafetyEnabled',
+  // Prompt System v2 — promoted to production default-ON (2026-08-02) after the
+  // 8-run benchmark campaign (see the intelligenceFlags.ts promotion comment).
+  'promptSystemV2',
 ]);
 
 const ALL_ENV_VARS = [

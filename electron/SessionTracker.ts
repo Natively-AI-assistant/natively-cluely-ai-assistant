@@ -384,6 +384,19 @@ export class SessionTracker {
         // Natively-style filtering
         if (!text) return false;
 
+        // Prompt System v2 no-action sentinel (2026-08-01): [[NO_ACTION]] is a
+        // machine signal, never a message. It must not enter contextItems,
+        // fullTranscript (and therefore epoch summaries, DB transcripts, or
+        // meeting persistence), lastAssistantMessage, or response history —
+        // regardless of which of the ~23 call sites forgot to gate it.
+        try {
+            const { shouldSuppressModelOutput } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+            if (shouldSuppressModelOutput(text)) {
+                console.warn(`[SessionTracker] Suppressed no-action sentinel (never stored)`);
+                return false;
+            }
+        } catch { /* non-fatal — fall through to normal filtering */ }
+
         const cleanText = text.trim();
         if (cleanText.length < 10) {
             console.warn(`[SessionTracker] Ignored short message (<10 chars)`);

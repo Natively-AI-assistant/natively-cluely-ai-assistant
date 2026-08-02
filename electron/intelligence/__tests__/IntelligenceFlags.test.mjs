@@ -48,6 +48,8 @@ const ENV_KEYS = [
   // 2026-07-28) — dev/test-only, same pattern.
   'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_SHADOW',
   'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_ENFORCE_FORBIDDEN',
+  // Prompt System v2 (2026-08-01) — default OFF everywhere (including dev/test).
+  'NATIVELY_PROMPT_SYSTEM_V2',
 ];
 
 // The full flag set — Meeting Notes V3 product flags intentionally ship default ON;
@@ -95,6 +97,9 @@ const ALL_FLAG_KEYS = [
   // 2026-07-28) — dev/test-only, same pattern.
   'contextOsImpossibleStateGateShadow',
   'contextOsImpossibleStateGateEnforceForbidden',
+  // Prompt System v2 (2026-08-01) — default OFF everywhere (including dev/test):
+  // the legacy prompt suite must keep passing byte-for-byte until deliberate rollout.
+  'promptSystemV2',
 ];
 
 const DEFAULT_ON_KEYS = new Set([
@@ -123,6 +128,9 @@ const DEFAULT_ON_KEYS = new Set([
   'contextOsRecapFollowupEnabled',
   'contextOsEvidencePackEnabled',
   'contextOsMemorySafetyEnabled',
+  // Prompt System v2 — promoted to production default-ON (2026-08-02) after the
+  // 8-run benchmark campaign (see the intelligenceFlags.ts promotion comment).
+  'promptSystemV2',
 ]);
 
 const expectedDefault = (key) => DEFAULT_ON_KEYS.has(key) ? true : false;

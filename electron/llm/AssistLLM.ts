@@ -6,6 +6,7 @@
 import { LLMHelper } from "../LLMHelper";
 import { UNIVERSAL_ASSIST_PROMPT } from "./prompts";
 import { TINY_ASSIST_PROMPT } from "./tinyPrompts";
+import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
 
 export class AssistLLM {
     private llmHelper: LLMHelper;
@@ -34,7 +35,12 @@ export class AssistLLM {
             // — the V3 user prompt becomes the MESSAGE (this class's arg0 is an
             // instruction, not the context) and the raw context blob is NOT
             // sent at all. Absent → legacy unchanged.
-            const promptOverride = v3?.system ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_ASSIST_PROMPT : UNIVERSAL_ASSIST_PROMPT);
+            // Prompt System v2 (flag promptSystemV2): one composed core+mode+action
+            // prompt replaces the legacy constant. V3 still wins when present;
+            // flag off → legacy constant, unchanged.
+            const promptOverride = v3?.system
+                ?? resolveV2SystemPrompt({ action: 'assist', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()) })
+                ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_ASSIST_PROMPT : UNIVERSAL_ASSIST_PROMPT);
             const fittedContext = v3 ? undefined : this.llmHelper.fitContextForCurrentModel(context);
             const message = v3?.user ?? instruction;
             let result = "";

@@ -272,6 +272,15 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     private static isNonAnswerSentinel(answer: string): boolean {
+        // Prompt System v2 (2026-08-01): the machine sentinel [[NO_ACTION]]
+        // replaces the visible "Nothing actionable right now." escape hatch
+        // when the promptSystemV2 flag is on. Both are recognized here so the
+        // existing speculative-discard / manual-press-substitution branches
+        // apply identically to either prompt generation. Never throws.
+        try {
+            const { shouldSuppressModelOutput } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+            if (shouldSuppressModelOutput(answer)) return true;
+        } catch { /* legacy detection below */ }
         const normalized = answer.trim().toLowerCase().replace(/[.!?]+$/g, '');
         return normalized === 'nothing actionable right now'
             || normalized === 'nothing to capture right now';
@@ -2613,7 +2622,15 @@ export class IntelligenceEngine extends EventEmitter {
                         streamingTokenBuffer += token;
                         if (streamingTokenBuffer.length >= STREAMING_SAFE_PREFIX_CHARS
                             && !IntelligenceEngine.isNonAnswerSentinel(streamingTokenBuffer)) {
-                            emitChunk(streamingTokenBuffer);
+                            // Prompt System v2: a misfired "[[NO_ACTION]] real
+                            // text…" keeps its real text but the sentinel token
+                            // itself must never paint.
+                            let visiblePrefix = streamingTokenBuffer;
+                            try {
+                                const { stripLeadingNoActionSentinel } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+                                visiblePrefix = stripLeadingNoActionSentinel(visiblePrefix) || visiblePrefix;
+                            } catch { /* emit unmodified */ }
+                            emitChunk(visiblePrefix);
                             streamingTokenBuffer = '';
                         }
                     }

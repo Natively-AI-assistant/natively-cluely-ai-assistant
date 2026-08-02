@@ -342,7 +342,18 @@ export type IntelligenceFlagKey =
   // ONLY the forbidden-direction violation code by name. See that filter's
   // own comment in ipcHandlers.ts before ever widening it.
   // Pattern 1 (dev/test-only default).
-  | 'contextOsImpossibleStateGateEnforceForbidden';
+  | 'contextOsImpossibleStateGateEnforceForbidden'
+  // ── Prompt System v2 (2026-08-01) ─────────────────────────────────────────
+  // One provider-neutral composer (electron/llm/promptSystemV2.ts) replaces the
+  // legacy UNIVERSAL_*/TINY_*/GROQ_*/OPENAI_*/CLAUDE_* constants and the
+  // ## ACTIVE MODE template suffix on every legacy-prompt surface (the
+  // Context-Intelligence-V3-null fallback plus the surfaces V3 never adopted:
+  // followup, follow-up questions, recap, code hint, title, summary JSON,
+  // follow-up email). Default OFF everywhere — flag-off behavior is
+  // byte-for-byte the legacy constants. Rollout: enable per the mode-by-mode
+  // order in the migration notes; the legacy constants are removable only
+  // after this flag has been default-ON through a full release cycle.
+  | 'promptSystemV2';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -551,6 +562,19 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   modePolicyShadowObservation: { env: 'NATIVELY_MODE_POLICY_SHADOW_OBSERVATION', setting: 'modePolicyShadowObservationEnabled', default: isInternalDevTestContext },
   contextOsImpossibleStateGateShadow: { env: 'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_SHADOW', setting: 'contextOsImpossibleStateGateShadowEnabled', default: isInternalDevTestContext },
   contextOsImpossibleStateGateEnforceForbidden: { env: 'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_ENFORCE_FORBIDDEN', setting: 'contextOsImpossibleStateGateEnforceForbiddenEnabled', default: isInternalDevTestContext },
+  // Prompt System v2 — PROMOTED TO DEFAULT ON (2026-08-02) after the full
+  // benchmark campaign: 8 runs × 600 scenarios vs the frozen legacy prompts
+  // (benchmarks/prompt-v2-vs-legacy/results/COMPLETE-WIN.md). Final warm-cache
+  // run: 31/32 categories won — every mode, every judge dimension, hard
+  // violations 299 vs 341, confidential leaks 1 vs 8, correct silence 12/32 vs
+  // 2/32, every format rule, every latency statistic, −61% input tokens. The
+  // sole residual (trailing_offer, 2 responses in 600) is noise-floor.
+  // Unconditional `true` (not isInternalDevTestContext) for flag parity with
+  // production — the 2026-07-14 flag-parity incident is why dev/test must
+  // exercise what ships. Kill-switch: NATIVELY_PROMPT_SYSTEM_V2=0 or the
+  // promptSystemV2Enabled setting reverts to the legacy constants everywhere
+  // (every call site is `resolveV2SystemPrompt(...) ?? legacy`).
+  promptSystemV2: { env: 'NATIVELY_PROMPT_SYSTEM_V2', setting: 'promptSystemV2Enabled', default: true },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);
