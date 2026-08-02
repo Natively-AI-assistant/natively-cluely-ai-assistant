@@ -1,10 +1,13 @@
 /**
- * SettingsOrchidPortalScopeGuard.test.mjs
+ * SettingsPeriwinklePortalScopeGuard.test.mjs
  *
- * Regression guard for the Soft Orchid Settings rebrand (2026-07).
+ * Regression guard for the accent-scoped Settings tokens. Written for the Soft
+ * Orchid rebrand (2026-07); the accent was re-hued to Periwinkle (2026-08) and
+ * this file moved with it. The risk it pins is structural, not chromatic, so
+ * nothing about it changed with the hue.
  *
- * THE RISK THIS PINS: the orchid accent is delivered by scoping CSS custom
- * properties to a DOM subtree — `[data-settings-theme="orchid"]` on the main
+ * THE RISK THIS PINS: the accent is delivered by scoping CSS custom
+ * properties to a DOM subtree — `[data-settings-theme="periwinkle"]` on the main
  * Settings modal root, `.pi-root` for Profile Intelligence, `.modes-manager-root`
  * for the Modes Manager. Custom-property resolution follows normal DOM
  * ancestry, so any element rendered via `createPortal(..., document.body)`
@@ -18,7 +21,7 @@
  * forcing whoever adds one to either propagate the scope attribute onto the
  * portal container or consciously update this guard.
  *
- * Run: `node --test src/components/__tests__/SettingsOrchidPortalScopeGuard.test.mjs`
+ * Run: `node --test src/components/__tests__/SettingsPeriwinklePortalScopeGuard.test.mjs`
  * (no build step required — pure source-text scan)
  */
 
@@ -31,8 +34,8 @@ import { dirname, resolve, join } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '../../..');
 
-// Every file whose DOM subtree relies on one of the orchid-scoped selectors
-// ([data-settings-theme="orchid"], .pi-root, .modes-manager-root) resolving
+// Every file whose DOM subtree relies on one of the accent-scoped selectors
+// ([data-settings-theme="periwinkle"], .pi-root, .modes-manager-root) resolving
 // its CSS custom properties via normal ancestry.
 const GUARDED_FILES = [
   'src/components/SettingsOverlay.tsx',
@@ -76,9 +79,9 @@ function stripComments(source) {
     .replace(/\/\/.*$/gm, '');
 }
 
-describe('Soft Orchid Settings — portal scope guard', () => {
+describe('Periwinkle Settings — portal scope guard', () => {
   for (const relPath of GUARDED_FILES) {
-    test(`${relPath} has no portal-rendered content escaping its orchid scope`, () => {
+    test(`${relPath} has no portal-rendered content escaping its accent scope`, () => {
       let source;
       try {
         source = readFileSync(resolve(REPO_ROOT, relPath), 'utf8');
@@ -98,7 +101,7 @@ describe('Soft Orchid Settings — portal scope guard', () => {
           false,
           `${relPath} matches portal signature ${sig} — if you've added a ` +
           `portal-rendered element (createPortal, or a Radix primitive that ` +
-          `portals by default), it will render OUTSIDE this file's orchid ` +
+          `portals by default), it will render OUTSIDE this file's accent ` +
           `scope and silently fall back to blue. Propagate the scope ` +
           `attribute/class onto the portal container, then update this guard.`
         );
@@ -120,7 +123,7 @@ describe('Soft Orchid Settings — portal scope guard', () => {
       guarded,
       'A file was added to or removed from src/components/settings/ without ' +
       'updating GUARDED_FILES above — every Settings-tab component consumes ' +
-      'the orchid-scoped tokens and needs portal coverage.'
+      'the accent-scoped tokens and needs portal coverage.'
     );
   });
 });

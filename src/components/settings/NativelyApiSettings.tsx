@@ -1301,7 +1301,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                 which made a control you cannot press the loudest element on
                 the card. It now recedes until there's something to submit.
                 The four states are unchanged — they're just projected onto a
-                `data-state` attribute so the paint (jelly clay on the orchid
+                `data-state` attribute so the paint (jelly clay on the accent
                 accent when ready, ghost when not, tinted chip on success)
                 lives in index.css next to the rest of the tab's material. */}
             <button

@@ -67,7 +67,7 @@ const colorFor = (key: string) => {
 };
 
 /**
- * "Link your calendar to see upcoming events" hero card — soft-orchid-tinted
+ * "Link your calendar to see upcoming events" hero card — accent-tinted
  * calendar backdrop, connect CTA when disconnected, stacked peek of the
  * next few meetings once connected. Pixel-matched to the Launcher card,
  * but self-contained so it can be dropped anywhere real meeting data needs
@@ -93,14 +93,14 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
 
     return (
         <div className={`rounded-xl overflow-hidden bg-bg-elevated relative flex flex-col shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] ${className}`}>
-            {/* Backdrop image with soft-orchid tint mask */}
+            {/* Backdrop image with accent tint mask */}
             <div className="absolute inset-0">
                 <img
                     src={calender}
                     alt=""
                     className="w-full h-full object-cover scale-105 translate-y-[1px]"
                 />
-                {/* Soft orchid tint mask — only when connected, washes the calendar image into the brand orchid */}
+                {/* Accent tint mask — only when connected, washes the calendar image into the brand accent */}
                 {isConnected && (
                     <>
                         <div className="absolute inset-0 bg-[#6b4574]/55 mix-blend-multiply" />

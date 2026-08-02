@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useT } from '../../i18n';
 import { Trash2, AlertCircle, ExternalLink, Loader2, Check, KeyRound } from 'lucide-react';
 // Primitives live in AIProvidersSettings.tsx, not in their own module:
-// SettingsOrchidPortalScopeGuard.test.mjs asserts that the *.tsx files on disk in
+// SettingsPeriwinklePortalScopeGuard.test.mjs asserts that the *.tsx files on disk in
 // src/components/settings/ EXACTLY equal its GUARDED_FILES list, so adding a file
 // here fails that suite. The resulting import cycle is safe — every reference
 // below is inside a render function, never at module-evaluation time.
