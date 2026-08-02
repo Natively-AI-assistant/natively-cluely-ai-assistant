@@ -61,7 +61,18 @@ function resolveDeveloperIdIdentity() {
 function notarytoolArgs() {
   const e = process.env;
   if (e.APPLE_API_KEY && e.APPLE_API_KEY_ID && e.APPLE_API_ISSUER) {
-    return ['--key', e.APPLE_API_KEY, '--key-id', e.APPLE_API_KEY_ID, '--issuer', e.APPLE_API_ISSUER];
+    // Skip (loudly) when the .p8 path no longer resolves, so a stale export cannot
+    // shadow a working APPLE_KEYCHAIN_PROFILE. Kept in lockstep with the identical
+    // guard in scripts/notarize.js — see that file's resolveCredentials() for the
+    // full rationale. Without it the dead path reaches notarytool and kills the DMG
+    // notarization step AFTER the .app has already been notarized and stapled.
+    if (fs.existsSync(e.APPLE_API_KEY)) {
+      return ['--key', e.APPLE_API_KEY, '--key-id', e.APPLE_API_KEY_ID, '--issuer', e.APPLE_API_ISSUER];
+    }
+    console.warn(
+      `[dmg-notarize] APPLE_API_KEY points at a file that does not exist: ${e.APPLE_API_KEY} — ` +
+        'ignoring the api-key strategy and falling through (apple-id, then keychain-profile).'
+    );
   }
   if (e.APPLE_ID && e.APPLE_APP_SPECIFIC_PASSWORD && e.APPLE_TEAM_ID) {
     return ['--apple-id', e.APPLE_ID, '--password', e.APPLE_APP_SPECIFIC_PASSWORD, '--team-id', e.APPLE_TEAM_ID];
