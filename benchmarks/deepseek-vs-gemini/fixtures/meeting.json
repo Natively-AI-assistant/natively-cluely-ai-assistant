@@ -1,0 +1,247 @@
+[
+  {
+    "id": "meeting-001",
+    "category": "meeting",
+    "context": "Alex: We need someone to own the migration to the new billing API before end of quarter.\nSam: I can take that, but I'll need help from Priya on the webhook side.\nAlex: Priya, are you free next week to pair on that?\nPriya: Yes, Tuesday works.",
+    "question": "What are the action items from this exchange, and who owns each one?",
+    "rubric_notes": "Must correctly attribute the billing migration to Sam and the webhook pairing session to Sam+Priya on Tuesday; should not invent owners not mentioned."
+  },
+  {
+    "id": "meeting-002",
+    "category": "meeting",
+    "context": "Dana: Before we wrap, quick recap — we're going with the vendor proposal from Northwind over Ashgrove, mainly because of their SLA terms.\nMiguel: Right, and we agreed to sign a 12-month contract, not the 24-month option.\nDana: Correct. I'll send the redlines to legal by Friday.",
+    "question": "What decision was made in this meeting, and what's the rationale behind it?",
+    "rubric_notes": "Answer must state Northwind was chosen over Ashgrove because of SLA terms, and that a 12-month (not 24-month) contract was agreed. Should mention Dana sending redlines to legal by Friday as the follow-up."
+  },
+  {
+    "id": "meeting-003",
+    "category": "meeting",
+    "context": "Jordan: The client mentioned twice that the dashboard load time is 'unacceptable' and they're evaluating other vendors.\nTeam: [silence]\nJordan: I think we need to flag this as a churn risk to leadership today, not next sprint.",
+    "question": "Is there a risk signal in this conversation? Summarize it for a leadership update.",
+    "rubric_notes": "Must identify churn risk tied to dashboard performance complaints (client called it 'unacceptable' and is evaluating other vendors), and note Jordan's urgency (flag today, not next sprint)."
+  },
+  {
+    "id": "meeting-004",
+    "category": "meeting",
+    "context": "Lin: Can we push the design review to Thursday? I'm still waiting on the accessibility audit.\nRaj: Thursday works for me. Omar, does that work on your end?\nOmar: Yeah, Thursday is fine, just send the updated invite.",
+    "question": "What's the new meeting time everyone agreed to, and what's still outstanding?",
+    "rubric_notes": "Should state the design review moved to Thursday (all three attendees agreed) and that the accessibility audit is the pending blocker Lin is waiting on."
+  },
+  {
+    "id": "meeting-005",
+    "category": "meeting",
+    "context": "Priya: Our churn number this month was 4.2%, up from 3.1% last month.\nSam: Do we know why?\nPriya: Support tickets tagged 'pricing confusion' tripled. I think the new tiering page is the culprit.\nSam: Let's get someone from design to look at that page this week.",
+    "question": "Summarize the churn discussion, including the numbers and the proposed next step.",
+    "rubric_notes": "Must cite both churn figures (4.2% up from 3.1%), the tripling of 'pricing confusion' tickets as the likely cause, Priya's hypothesis about the tiering page, and the next step of design reviewing the page this week."
+  },
+  {
+    "id": "meeting-006",
+    "category": "meeting",
+    "context": "Marcus: I don't think we should ship the notification changes without a feature flag. Too risky.\nElena: I hear you, but we're already two weeks behind. Can we compromise — flag it for enterprise accounts only at launch?\nMarcus: That works for me.",
+    "question": "What was the disagreement here, and how was it resolved?",
+    "rubric_notes": "Must capture Marcus's concern about shipping notification changes without a feature flag, Elena's schedule pressure, and the compromise: flagging for enterprise accounts only at launch."
+  },
+  {
+    "id": "meeting-007",
+    "category": "meeting",
+    "context": "Tara: Quick one — who's presenting the roadmap to the board next Tuesday?\nBen: I assumed it was you since you own the Q3 plan.\nTara: I can do it, but I need the updated slides from marketing by Friday at the latest.",
+    "question": "Who is presenting to the board, and what do they need before then?",
+    "rubric_notes": "Answer should identify Tara as the presenter (since she owns the Q3 plan) and that she needs updated slides from marketing by Friday."
+  },
+  {
+    "id": "meeting-008",
+    "category": "meeting",
+    "context": "Nina: We've had three candidates decline offers this month citing compensation.\nHector: Are we below market on the senior IC levels specifically?\nNina: Yes, based on the Levels.fyi data I pulled, we're about 15% under for L5 and L6.\nHector: Let's loop in comp & benefits before we lose anyone else.",
+    "question": "What compensation issue is being discussed, and what data supports it?",
+    "rubric_notes": "Must reference three declined offers citing compensation, the ~15% gap below market for L5/L6 based on Levels.fyi data, and the next step of looping in comp & benefits."
+  },
+  {
+    "id": "meeting-009",
+    "category": "meeting",
+    "context": "Owen: The migration script failed on staging twice last night.\nAyesha: Same error both times?\nOwen: Yeah, a foreign key constraint violation on the orders table.\nAyesha: I'll take a look this morning before the 10am deploy window.",
+    "question": "What's the technical issue, and who is handling it, by when?",
+    "rubric_notes": "Should mention the foreign key constraint violation on the orders table causing two staging failures, and that Ayesha will investigate before the 10am deploy window."
+  },
+  {
+    "id": "meeting-010",
+    "category": "meeting",
+    "context": "Client (Fatima): We love the product, but honestly the onboarding took our team almost three weeks. That's too long.\nAM (Chris): That's helpful feedback, thank you. Can I follow up with a proposal for a dedicated onboarding specialist?\nFatima: Sure, send something over.",
+    "question": "Draft a one-sentence follow-up email opening line based on this exchange.",
+    "rubric_notes": "Should reference the three-week onboarding pain point and Chris's offer to propose a dedicated onboarding specialist; tone should be professional and acknowledge the feedback without being defensive."
+  },
+  {
+    "id": "meeting-011",
+    "category": "meeting",
+    "context": "Team stand-up:\nKevin: Blocked on the API key from the payments team, been waiting two days.\nLisa: I can escalate that, I know their EM.\nKevin: That'd help, thanks.\nGreg: No blockers on my end, finishing the cart redesign today.",
+    "question": "Who has a blocker, and who's helping resolve it?",
+    "rubric_notes": "Must identify Kevin as blocked (waiting two days on a payments team API key) and Lisa offering to escalate via her contact with the payments EM. Greg has no blocker and should not be conflated."
+  },
+  {
+    "id": "meeting-012",
+    "category": "meeting",
+    "context": "Amara: I want to table the pricing discussion — we're not aligned and I don't want to rush a decision.\nDevesh: Agreed, let's revisit next week with actual competitor data instead of guesses.\nAmara: I'll pull that data by Monday.",
+    "question": "Was a decision made about pricing? What happens next?",
+    "rubric_notes": "Must clarify that NO pricing decision was made (explicitly tabled due to lack of alignment); next step is Amara pulling competitor data by Monday and revisiting next week. Should not fabricate a pricing decision."
+  },
+  {
+    "id": "meeting-013",
+    "category": "meeting",
+    "context": "Yusuf: Sentiment on the call was rough — the customer said 'we're actively looking at Competitor X' twice.\nRenee: Did they give a timeline?\nYusuf: Contract renewal is in six weeks.\nRenee: We need an exec sponsor on this account immediately.",
+    "question": "Flag any risk in this account and summarize the urgency.",
+    "rubric_notes": "Must flag churn/competitive risk (customer mentioned Competitor X twice), note the six-week renewal timeline, and Renee's call for an exec sponsor immediately."
+  },
+  {
+    "id": "meeting-014",
+    "category": "meeting",
+    "context": "Petra: Who's writing the postmortem for the outage last night?\nSaid: I can draft it, but I need the incident timeline from Wei since she was on call.\nWei: I'll send my notes by end of day.\nPetra: Great, let's aim to publish by Wednesday.",
+    "question": "List the action items with owners and deadlines.",
+    "rubric_notes": "Must list: Said drafts the postmortem (needs Wei's timeline), Wei sends incident notes by end of day, target publish date Wednesday. Should attribute correctly — Said writes, Wei supplies data."
+  },
+  {
+    "id": "meeting-015",
+    "category": "meeting",
+    "context": "Board member (Ted): What's our runway at current burn?\nCFO (Ines): About 14 months at the current rate, 18 if we execute the hiring freeze we discussed.\nTed: I'd recommend the freeze then, given market conditions.",
+    "question": "What are the two runway scenarios discussed, and what did Ted recommend?",
+    "rubric_notes": "Must state 14 months current runway vs 18 months with a hiring freeze, and that Ted recommended proceeding with the freeze given market conditions."
+  },
+  {
+    "id": "meeting-016",
+    "category": "meeting",
+    "context": "Halima: Just so it's on record — I disagree with launching before the security review is complete.\nDario: Noted. We're launching Friday regardless due to the marketing commitment already made.\nHalima: Understood, please document my objection.",
+    "question": "Summarize this exchange in a way that preserves the dissent for the record.",
+    "rubric_notes": "Must clearly attribute the objection to Halima (security review not complete) and note that the team is proceeding with a Friday launch anyway due to a prior marketing commitment. Dissent should not be dropped or softened."
+  },
+  {
+    "id": "meeting-017",
+    "category": "meeting",
+    "context": "Client kickoff:\nPM (Noah): Our target go-live is March 15th.\nClient (Grace): That's tight given we still need to finalize the SSO integration requirements.\nNoah: Let's timebox SSO requirements gathering to one week, ending this Friday.",
+    "question": "What's the go-live date, and what's the immediate blocker/timeline for it?",
+    "rubric_notes": "Should state target go-live March 15th, the SSO integration requirements as the open item, and the one-week timebox ending Friday."
+  },
+  {
+    "id": "meeting-018",
+    "category": "meeting",
+    "context": "Retro:\nSofia: What went well — we shipped two weeks early.\nBrent: What didn't — QA was rushed, we found 3 sev-2 bugs post-launch.\nSofia: For next time, let's add a full regression pass before any early ship.",
+    "question": "Summarize this retro: what went well, what didn't, and the proposed improvement.",
+    "rubric_notes": "Must cover all three retro elements: shipped two weeks early (positive), rushed QA causing 3 sev-2 bugs post-launch (negative), and the proposed fix of a full regression pass before early ships."
+  },
+  {
+    "id": "meeting-019",
+    "category": "meeting",
+    "context": "Vendor call:\nRep (Colin): We can offer a 10% discount if you commit to a 3-year term instead of annual.\nBuyer (Aditi): We'd need finance approval for a multi-year commitment. Can you hold that offer for two weeks?\nColin: Yes, I can hold it until the 15th.",
+    "question": "What offer was made, and what's the deadline to respond?",
+    "rubric_notes": "Must state the 10% discount tied to a 3-year term (vs annual), Aditi's need for finance approval, and the hold deadline of the 15th."
+  },
+  {
+    "id": "meeting-020",
+    "category": "meeting",
+    "context": "Interviewer debrief:\nPanel 1 (Julia): Strong on system design, weak on communicating tradeoffs clearly.\nPanel 2 (Tomas): I agree, but their coding round was excellent — clean, tested code.\nJulia: Net, I'd lean hire but flag the communication gap for the hiring manager.",
+    "question": "What's the overall hiring signal from this debrief?",
+    "rubric_notes": "Must synthesize: strong system design and coding (clean, tested), weak communication of tradeoffs, and Julia's lean-hire recommendation with the communication flag for the hiring manager."
+  },
+  {
+    "id": "meeting-021",
+    "category": "meeting",
+    "context": "Ops sync:\nFarah: The new fulfillment center in Ohio goes live next Monday.\nGabriel: Are we fully staffed there?\nFarah: 80% staffed, we're still interviewing for the remaining 20%, mostly warehouse leads.\nGabriel: Let's have a contingency plan in case staffing isn't at 100% by launch.",
+    "question": "What's the status of the Ohio fulfillment center launch, and what risk was raised?",
+    "rubric_notes": "Should state Monday go-live, 80% staffing (remaining 20% are warehouse leads still being interviewed), and Gabriel's ask for a staffing contingency plan."
+  },
+  {
+    "id": "meeting-022",
+    "category": "meeting",
+    "context": "Marketing sync:\nLeo: The webinar had 340 registrants but only 95 attended live.\nMia: That's a 28% show rate, lower than our usual 40%.\nLeo: I think the Tuesday 8am slot was the issue — let's test Thursday afternoons next time.",
+    "question": "What were the webinar results, and what change is being proposed?",
+    "rubric_notes": "Must include 340 registrants, 95 live attendees (~28% show rate vs usual ~40%), and the proposal to test a Thursday afternoon slot instead of Tuesday 8am."
+  },
+  {
+    "id": "meeting-023",
+    "category": "meeting",
+    "context": "Legal review call:\nCounsel (Ravi): The indemnification clause in section 8 is too broad — it exposes us to unlimited liability.\nBiz dev (Tanya): Can we cap it at contract value?\nRavi: Yes, that's standard. I'll redline it and send back to the counterparty tomorrow.",
+    "question": "What legal concern was raised, and how is it being addressed?",
+    "rubric_notes": "Must name the section 8 indemnification clause exposing unlimited liability, Tanya's proposed cap at contract value, and Ravi's plan to redline and send tomorrow."
+  },
+  {
+    "id": "meeting-024",
+    "category": "meeting",
+    "context": "Eng planning:\nZara: We have capacity for either the search revamp or the notifications rewrite this quarter, not both.\nPatrick: Search revamp has more revenue impact per the last analysis — $200K ARR estimated.\nZara: Let's go with search then, push notifications to next quarter.",
+    "question": "What tradeoff decision was made, and what was the deciding factor?",
+    "rubric_notes": "Must state search revamp was chosen over notifications rewrite due to the ~$200K ARR estimated impact, with notifications pushed to next quarter."
+  },
+  {
+    "id": "meeting-025",
+    "category": "meeting",
+    "context": "Fatal error report meeting:\nTeam lead (Isaac): Root cause was a race condition in the cache invalidation logic, introduced in last Tuesday's deploy.\nDev (Chiara): I can have a fix and tests ready by end of day tomorrow.\nIsaac: Let's also add a canary deploy step so this doesn't happen again.",
+    "question": "What caused the incident, who's fixing it, and what process change was proposed?",
+    "rubric_notes": "Must name the race condition in cache invalidation logic from last Tuesday's deploy as root cause, Chiara's fix ETA (end of day tomorrow), and the proposed canary deploy step as a process improvement."
+  },
+  {
+    "id": "meeting-026",
+    "category": "meeting",
+    "context": "1:1:\nManager (Diego): How are you feeling about the promotion timeline?\nReport (Wren): Honestly a bit anxious — I don't feel like I have enough visible cross-team impact yet.\nDiego: Let's identify one cross-team project this quarter you can lead visibly.",
+    "question": "What concern did the report raise, and what did the manager propose?",
+    "rubric_notes": "Must capture Wren's anxiety about lacking visible cross-team impact for promotion, and Diego's proposal to identify one cross-team project this quarter for Wren to lead."
+  },
+  {
+    "id": "meeting-027",
+    "category": "meeting",
+    "context": "Customer success weekly:\nPaolo: Account Nimbus Corp hasn't logged in for 21 days.\nSelin: That's unusual, they were our most active account last quarter.\nPaolo: I'll reach out to their admin today to check in before it becomes a real risk.",
+    "question": "What's the concerning signal here, and what's the plan?",
+    "rubric_notes": "Should flag the 21-day login gap for Nimbus Corp as unusual given prior high activity, and Paolo's plan to reach out to their admin today."
+  },
+  {
+    "id": "meeting-028",
+    "category": "meeting",
+    "context": "Finance review:\nCarmen: Q3 marketing spend was $180K against a $150K budget.\nJake: What drove the overage?\nCarmen: Mostly an unplanned $25K spend on the trade show booth, plus some overage on paid social.\nJake: Let's cap trade show spend explicitly in the Q4 budget.",
+    "question": "Summarize the budget variance and its drivers.",
+    "rubric_notes": "Must state $180K actual vs $150K budgeted Q3 marketing spend, with the $25K unplanned trade show booth as the main driver plus paid social overage, and Jake's proposal to cap trade show spend in Q4."
+  },
+  {
+    "id": "meeting-029",
+    "category": "meeting",
+    "context": "Sam: Did we ever decide who's covering on-call over the holidays?\nPriya: I don't think that was finalized last time.\nSam: Let's not leave that open — can you draft a rotation and send it by Wednesday?\nPriya: Will do.",
+    "question": "Was the on-call holiday coverage decided? What's the follow-up?",
+    "rubric_notes": "Must state it was NOT previously finalized, and the new action is Priya drafting a rotation by Wednesday. Should not claim a rotation already exists."
+  },
+  {
+    "id": "meeting-030",
+    "category": "meeting",
+    "context": "Alex: Sam, following up from earlier — did Priya confirm Tuesday for the pairing session?\nSam: Yes, and she also said she'd bring the webhook logs from the last failed migration attempt.\nAlex: Perfect, that'll save us time.",
+    "question": "This is a follow-up to an earlier conversation about the billing migration. What's new here?",
+    "rubric_notes": "This tests cross-turn synthesis: must recognize this references the earlier billing migration/webhook pairing thread, and add the new detail — Priya will bring webhook logs from the last failed migration attempt."
+  },
+  {
+    "id": "meeting-031",
+    "category": "meeting",
+    "context": "Exec staff meeting:\nCEO (Naomi): I want a clear owner for the international expansion initiative. Who's raising their hand?\nCOO (Baxter): I'll own it, but I need a dedicated PM — currently I don't have bandwidth to run point day-to-day.\nNaomi: Let's get a req open for that PM role this week.",
+    "question": "Who owns international expansion, and what resourcing gap was identified?",
+    "rubric_notes": "Must state Baxter owns international expansion, but flagged a bandwidth gap requiring a dedicated PM, with the next step being opening a req this week."
+  },
+  {
+    "id": "meeting-032",
+    "category": "meeting",
+    "context": "Support escalation call:\nCustomer (Deshawn): This is the third time I've reported this bug and it's still not fixed.\nSupport lead (Yara): I sincerely apologize for that. I'm escalating this directly to engineering with priority today, and I'll personally follow up with you by tomorrow morning.\nDeshawn: Okay, I'll give it until tomorrow.",
+    "question": "What's the customer's sentiment, and what commitment was made to them?",
+    "rubric_notes": "Must reflect the customer's frustration (third report of the same unresolved bug) and Yara's specific commitments: escalate to engineering today with priority, personal follow-up by tomorrow morning."
+  },
+  {
+    "id": "meeting-033",
+    "category": "meeting",
+    "context": "Product strategy:\nElla: Our NPS dropped from 42 to 31 this quarter.\nVik: Any pattern in the detractor comments?\nElla: Yes, 60% mention the mobile app being slow to load.\nVik: Let's make mobile performance the top engineering priority next sprint.",
+    "question": "Summarize the NPS trend and the proposed response.",
+    "rubric_notes": "Must include the NPS drop from 42 to 31, the 60% of detractor comments citing slow mobile app load times, and Vik's decision to prioritize mobile performance next sprint."
+  },
+  {
+    "id": "meeting-034",
+    "category": "meeting",
+    "context": "Partnership call:\nOur side (Malik): We'd want exclusivity in the healthcare vertical for at least 12 months.\nPartner (Simone): We can agree to 6 months exclusivity, 12 feels too long for us given other conversations we're having.\nMalik: Let's take 6 months back to our team and see if that's workable.",
+    "question": "What was proposed and countered in this negotiation, and what's the next step?",
+    "rubric_notes": "Must capture Malik's ask for 12-month healthcare exclusivity, Simone's counter of 6 months, and Malik taking the 6-month counter back to his team — should not state a final agreement was reached."
+  },
+  {
+    "id": "meeting-035",
+    "category": "meeting",
+    "context": "All-hands Q&A:\nEmployee (anonymous, read by moderator): 'Why did the Denver office layoffs happen without more notice?'\nCEO (Naomi): That's fair feedback. The timing was driven by a board deadline we couldn't move, but I own that communication could have been better, and we're building a comms plan for any future changes.\nModerator: Thank you, next question.",
+    "question": "What question was raised, and how did the CEO respond?",
+    "rubric_notes": "Must state the employee question was about the Denver layoffs happening with insufficient notice, and the CEO's response: acknowledges the board deadline drove timing, admits communication could have been better, commits to a future comms plan."
+  }
+]

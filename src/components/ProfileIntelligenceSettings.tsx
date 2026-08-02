@@ -28,19 +28,19 @@ const PI_CSS = `
         --pi-input-border: rgba(255,255,255,0.10);
         --pi-danger: #ef4444;
         --pi-danger-bg: rgba(239,68,68,0.12);
-        --pi-accent: var(--orchid-300);
-        --pi-on-accent: var(--orchid-on-accent-dark);
-        --pi-accent-subtle: color-mix(in srgb, var(--orchid-300) 8%, transparent);
-        --pi-accent-border: color-mix(in srgb, var(--orchid-300) 20%, transparent);
-        --pi-accent-icon: var(--orchid-400);
+        --pi-accent: var(--periwinkle-300);
+        --pi-on-accent: var(--periwinkle-on-accent-dark);
+        --pi-accent-subtle: color-mix(in srgb, var(--periwinkle-300) 8%, transparent);
+        --pi-accent-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
+        --pi-accent-icon: var(--periwinkle-400);
         --pi-badge-text: var(--pi-accent);
         --pi-badge-border: var(--pi-accent-border);
-        --pi-cta-accent-text: var(--orchid-400);
-        --pi-cta-accent-border: color-mix(in srgb, var(--orchid-300) 30%, transparent);
+        --pi-cta-accent-text: var(--periwinkle-400);
+        --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-300) 30%, transparent);
         --pi-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
         --pi-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-        --pi-input-border-focus: color-mix(in srgb, var(--orchid-300) 40%, transparent);
-        --pi-input-bg-focus: color-mix(in srgb, var(--orchid-300) 4%, transparent);
+        --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-300) 40%, transparent);
+        --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-300) 4%, transparent);
         --pi-cta-bg: #ffffff;
         --pi-cta-text: #141414;
         --pi-cta-ring: rgba(0,0,0,0.08);
@@ -67,17 +67,17 @@ const PI_CSS = `
         --pi-item-hover: rgba(0,0,0,0.03);
         --pi-item-active: rgba(0,0,0,0.06);
         --pi-input-border: rgba(0,0,0,0.10);
-        --pi-accent: var(--orchid-600);
-        --pi-on-accent: var(--orchid-on-accent-light);
-        --pi-accent-subtle: color-mix(in srgb, var(--orchid-600) 8%, transparent);
-        --pi-accent-border: color-mix(in srgb, var(--orchid-600) 16%, transparent);
-        --pi-accent-icon: var(--orchid-700);
+        --pi-accent: var(--periwinkle-600);
+        --pi-on-accent: var(--periwinkle-on-accent-light);
+        --pi-accent-subtle: color-mix(in srgb, var(--periwinkle-600) 8%, transparent);
+        --pi-accent-border: color-mix(in srgb, var(--periwinkle-600) 16%, transparent);
+        --pi-accent-icon: var(--periwinkle-700);
         --pi-badge-text: var(--pi-accent);
         --pi-badge-border: var(--pi-accent-border);
-        --pi-cta-accent-text: var(--orchid-700);
-        --pi-cta-accent-border: color-mix(in srgb, var(--orchid-600) 24%, transparent);
-        --pi-input-border-focus: color-mix(in srgb, var(--orchid-600) 40%, transparent);
-        --pi-input-bg-focus: color-mix(in srgb, var(--orchid-600) 4%, transparent);
+        --pi-cta-accent-text: var(--periwinkle-700);
+        --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
+        --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
+        --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-600) 4%, transparent);
         --pi-cta-bg: #000000;
         --pi-cta-text: #ffffff;
         --pi-cta-ring: rgba(255,255,255,0.10);
@@ -188,10 +188,10 @@ const PI_CSS = `
     .pi-content-box:focus-within {
         border-color: var(--pi-input-border-focus);
         background: var(--pi-input-bg-focus);
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--orchid-300) 12%, transparent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--periwinkle-300) 12%, transparent);
     }
     .pi-root[data-theme='light'] .pi-content-box:focus-within {
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--orchid-600) 12%, transparent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--periwinkle-600) 12%, transparent);
     }
 
     /* ── Textarea / Input ── */
@@ -1200,12 +1200,25 @@ export function ProfileIntelligenceSettings({
     // Section renderers
     // ─────────────────────────────────────────────────────────────────────────
 
+    // Context Intelligence V3: source authority replaces the Persona Engine
+    // global override (§6) — same gate SettingsPopup applies to Profile Mode.
+    // Under V3 this toggle changed nothing on the wired surfaces; a control
+    // that implies control it doesn't have is worse than none.
+    const [ciV3Enabled, setCiV3Enabled] = React.useState(false);
+    React.useEffect(() => {
+        (window.electronAPI as any)?.answerPolicyGet?.({ templateType: 'general' })
+            .then((st: any) => setCiV3Enabled(Boolean(st?.v3Enabled)))
+            .catch(() => setCiV3Enabled(false));
+    }, []);
+
     const renderIdentity = () => {
         const isActive = profileStatus.profileMode && hasProfileAccess;
         const isDisabled = !profileStatus.hasProfile || !hasProfileAccess;
         return (
         <>
-            {/* Persona Engine toggle card */}
+            {/* Persona Engine toggle card — hidden under Context Intelligence
+                V3 (source authority replaces the global override, §6). */}
+            {!ciV3Enabled && (
             <div
                 className="pi-toggle-card"
                 data-on={isActive ? 'true' : 'false'}
@@ -1235,6 +1248,7 @@ export function ProfileIntelligenceSettings({
                     <div className="pi-toggle-thumb" />
                 </div>
             </div>
+            )}
 
             {/* Resume */}
             <h3 className="pi-section-label">Resume</h3>

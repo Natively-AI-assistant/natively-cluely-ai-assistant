@@ -1,0 +1,1214 @@
+{
+  "runAt": "2026-07-30T20:21:28.127Z",
+  "mode": "LIVE retrieval stack",
+  "groups": {
+    "base": {
+      "files": 12,
+      "chunks": 406,
+      "superseded": 0
+    },
+    "versioned": {
+      "files": 4,
+      "chunks": 20,
+      "superseded": 1
+    }
+  },
+  "questions": 42,
+  "fullyPassing": 39,
+  "perCheck": {
+    "noProhibitedSourceInEvidence": 42,
+    "evidenceCarriesProvenance": 42,
+    "promptLabelsEvidenceUntrusted": 42,
+    "noStaleVersionAccepted": 42,
+    "retrievalPath": 42,
+    "noForeignScopeAccepted": 42,
+    "answerabilityMatchesExpected": 39
+  },
+  "supersededRevisionsIndexed": 1,
+  "staleRejectionsObserved": 7,
+  "scopeRejectionsObserved": 10,
+  "latencyMs": {
+    "p50": 19,
+    "p95": 21,
+    "p99": 36
+  },
+  "totalMs": 639,
+  "rows": [
+    {
+      "id": "A-01",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 1,
+      "retrievedRaw": 1,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-02",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 1,
+      "retrievedRaw": 2,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-03",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "NONE",
+      "evidence": 0,
+      "retrievedRaw": 1,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": false
+      },
+      "failed": [
+        "answerabilityMatchesExpected"
+      ]
+    },
+    {
+      "id": "A-04",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 1,
+      "retrievedRaw": 11,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-05",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 1,
+      "retrievedRaw": 20,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-06",
+      "category": "A",
+      "modeId": "looking-for-work",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "NONE",
+      "evidence": 1,
+      "retrievedRaw": 9,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": false
+      },
+      "failed": [
+        "answerabilityMatchesExpected"
+      ]
+    },
+    {
+      "id": "A-07",
+      "category": "A",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 8,
+      "retrievedRaw": 14,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-08",
+      "category": "A",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 8,
+      "retrievedRaw": 15,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-01",
+      "category": "F",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 8,
+      "retrievedRaw": 20,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-02",
+      "category": "F",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 8,
+      "retrievedRaw": 19,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-03",
+      "category": "F",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 8,
+      "retrievedRaw": 20,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-04",
+      "category": "F",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 8,
+      "retrievedRaw": 20,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "B-01",
+      "category": "B",
+      "modeId": "general",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "FAST",
+      "answerability": "FULL",
+      "evidence": 0,
+      "retrievedRaw": 0,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "B-02",
+      "category": "B",
+      "modeId": "general",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "FAST",
+      "answerability": "FULL",
+      "evidence": 0,
+      "retrievedRaw": 0,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "B-03",
+      "category": "B",
+      "modeId": "general",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "FAST",
+      "answerability": "FULL",
+      "evidence": 0,
+      "retrievedRaw": 0,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "C-01",
+      "category": "C",
+      "modeId": "looking-for-work",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "NONE",
+      "evidence": 0,
+      "retrievedRaw": 8,
+      "rejectedByScope": 1,
+      "rejections": [
+        {
+          "sourceId": "ref_045ba146-1163-466b-9fbf-a2c5165fb09d",
+          "reason": "OUT_OF_SCOPE"
+        }
+      ],
+      "staleRejected": 0,
+      "expectedAnswerability": "NONE",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "C-02",
+      "category": "C",
+      "modeId": "looking-for-work",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "NONE",
+      "evidence": 1,
+      "retrievedRaw": 6,
+      "rejectedByScope": 2,
+      "rejections": [
+        {
+          "sourceId": "ref_045ba146-1163-466b-9fbf-a2c5165fb09d",
+          "reason": "OUT_OF_SCOPE"
+        },
+        {
+          "sourceId": "ref_045ba146-1163-466b-9fbf-a2c5165fb09d",
+          "reason": "OUT_OF_SCOPE"
+        }
+      ],
+      "staleRejected": 0,
+      "expectedAnswerability": "NONE",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "C-03",
+      "category": "C",
+      "modeId": "looking-for-work",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "NONE",
+      "evidence": 0,
+      "retrievedRaw": 1,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "NONE",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "D-01",
+      "category": "D",
+      "modeId": "looking-for-work",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 1,
+      "retrievedRaw": 3,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "G-01",
+      "category": "G",
+      "modeId": "looking-for-work",
+      "group": "versioned",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 1,
+      "retrievedRaw": 2,
+      "rejectedByScope": 1,
+      "rejections": [
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        }
+      ],
+      "staleRejected": 1,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "G-02",
+      "category": "G",
+      "modeId": "looking-for-work",
+      "group": "versioned",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 4,
+      "retrievedRaw": 9,
+      "rejectedByScope": 5,
+      "rejections": [
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        },
+        {
+          "sourceId": "ref_45cd9aaa-3c9d-407e-b3f3-f476dd603e98",
+          "reason": "OUT_OF_SCOPE"
+        },
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        },
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        },
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        }
+      ],
+      "staleRejected": 4,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "G-03",
+      "category": "G",
+      "modeId": "looking-for-work",
+      "group": "versioned",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 3,
+      "retrievedRaw": 6,
+      "rejectedByScope": 3,
+      "rejections": [
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        },
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        },
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        }
+      ],
+      "staleRejected": 3,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "H-01",
+      "category": "H",
+      "modeId": "team-meet",
+      "group": "versioned",
+      "scopeId": "u:local|m:m-sept",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 2,
+      "retrievedRaw": 9,
+      "rejectedByScope": 4,
+      "rejections": [
+        {
+          "sourceId": "ref_45cd9aaa-3c9d-407e-b3f3-f476dd603e98",
+          "reason": "OUT_OF_SCOPE"
+        },
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        },
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        },
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        }
+      ],
+      "staleRejected": 3,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "H-02",
+      "category": "H",
+      "modeId": "team-meet",
+      "group": "versioned",
+      "scopeId": "u:local|m:m-sept",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 2,
+      "retrievedRaw": 5,
+      "rejectedByScope": 2,
+      "rejections": [
+        {
+          "sourceId": "ref_45cd9aaa-3c9d-407e-b3f3-f476dd603e98",
+          "reason": "OUT_OF_SCOPE"
+        },
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        }
+      ],
+      "staleRejected": 1,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "H-03",
+      "category": "H",
+      "modeId": "team-meet",
+      "group": "versioned",
+      "scopeId": "u:local|m:m-sept",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 3,
+      "retrievedRaw": 11,
+      "rejectedByScope": 4,
+      "rejections": [
+        {
+          "sourceId": "ref_45cd9aaa-3c9d-407e-b3f3-f476dd603e98",
+          "reason": "OUT_OF_SCOPE"
+        },
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        },
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        },
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        }
+      ],
+      "staleRejected": 3,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "H-04",
+      "category": "H",
+      "modeId": "team-meet",
+      "group": "versioned",
+      "scopeId": "u:local|m:m-sept",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 2,
+      "retrievedRaw": 6,
+      "rejectedByScope": 2,
+      "rejections": [
+        {
+          "sourceId": "ref_45cd9aaa-3c9d-407e-b3f3-f476dd603e98",
+          "reason": "OUT_OF_SCOPE"
+        },
+        {
+          "sourceId": "ref_d3a5f18b-28d6-4aec-ad0e-0eb8bb04b61e",
+          "reason": "SUPERSEDED_VERSION"
+        }
+      ],
+      "staleRejected": 1,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-09",
+      "category": "A",
+      "modeId": "team-meet",
+      "group": "base",
+      "scopeId": "u:local|m:m-sept",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 2,
+      "retrievedRaw": 6,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-05",
+      "category": "F",
+      "modeId": "team-meet",
+      "group": "base",
+      "scopeId": "u:local|m:m-sept",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 6,
+      "retrievedRaw": 20,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-06",
+      "category": "F",
+      "modeId": "team-meet",
+      "group": "base",
+      "scopeId": "u:local|m:m-sept",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 3,
+      "retrievedRaw": 3,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "PARTIAL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": false
+      },
+      "failed": [
+        "answerabilityMatchesExpected"
+      ]
+    },
+    {
+      "id": "I-01",
+      "category": "I",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "NONE",
+      "evidence": 3,
+      "retrievedRaw": 4,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "NONE",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "J-01",
+      "category": "J",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 8,
+      "retrievedRaw": 24,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-10",
+      "category": "A",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 6,
+      "retrievedRaw": 7,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-11",
+      "category": "A",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 4,
+      "retrievedRaw": 5,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-12",
+      "category": "A",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 8,
+      "retrievedRaw": 14,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-07",
+      "category": "F",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 2,
+      "retrievedRaw": 2,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-08",
+      "category": "F",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 4,
+      "retrievedRaw": 4,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "F-09",
+      "category": "F",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 8,
+      "retrievedRaw": 14,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "A-13",
+      "category": "A",
+      "modeId": "seminar",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "FULL",
+      "evidence": 8,
+      "retrievedRaw": 10,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": "FULL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "H-05",
+      "category": "H",
+      "modeId": "general",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "NONE",
+      "evidence": 0,
+      "retrievedRaw": 0,
+      "rejectedByScope": 0,
+      "rejections": [],
+      "staleRejected": 0,
+      "expectedAnswerability": null,
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "C-04",
+      "category": "C",
+      "modeId": "looking-for-work",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "NONE",
+      "evidence": 0,
+      "retrievedRaw": 3,
+      "rejectedByScope": 1,
+      "rejections": [
+        {
+          "sourceId": "ref_045ba146-1163-466b-9fbf-a2c5165fb09d",
+          "reason": "OUT_OF_SCOPE"
+        }
+      ],
+      "staleRejected": 0,
+      "expectedAnswerability": "NONE",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "E-01",
+      "category": "E",
+      "modeId": "general",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "NONE",
+      "evidence": 6,
+      "retrievedRaw": 19,
+      "rejectedByScope": 1,
+      "rejections": [
+        {
+          "sourceId": "ref_045ba146-1163-466b-9fbf-a2c5165fb09d",
+          "reason": "OUT_OF_SCOPE"
+        }
+      ],
+      "staleRejected": 0,
+      "expectedAnswerability": "NONE",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    },
+    {
+      "id": "E-02",
+      "category": "E",
+      "modeId": "general",
+      "group": "base",
+      "scopeId": "u:local",
+      "path": "GROUNDED",
+      "answerability": "PARTIAL",
+      "evidence": 6,
+      "retrievedRaw": 20,
+      "rejectedByScope": 1,
+      "rejections": [
+        {
+          "sourceId": "ref_045ba146-1163-466b-9fbf-a2c5165fb09d",
+          "reason": "OUT_OF_SCOPE"
+        }
+      ],
+      "staleRejected": 0,
+      "expectedAnswerability": "PARTIAL",
+      "checks": {
+        "noProhibitedSourceInEvidence": true,
+        "evidenceCarriesProvenance": true,
+        "promptLabelsEvidenceUntrusted": true,
+        "noStaleVersionAccepted": true,
+        "retrievalPath": true,
+        "noForeignScopeAccepted": true,
+        "answerabilityMatchesExpected": true
+      },
+      "failed": []
+    }
+  ]
+}

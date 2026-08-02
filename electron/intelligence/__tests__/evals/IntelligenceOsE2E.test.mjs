@@ -89,8 +89,9 @@ describe('E2E — Meeting memory + search category', () => {
   const aliceMeeting = meetingMem.buildMeetingRecord({
     meetingId: 'alice-m1', mode: 'sales',
     segments: [
-      { speaker: 'them', text: 'Can you integrate with Redis?', timestamp: 1 },
-      { speaker: 'me', text: 'We decided to start a pilot next week.', timestamp: 2 },
+      // Defect B (2026-08-01): origin:'stt' = spoken provenance; extraction only mines these.
+      { speaker: 'them', text: 'Can you integrate with Redis?', timestamp: 1, origin: 'stt' },
+      { speaker: 'me', text: 'We decided to start a pilot next week.', timestamp: 2, origin: 'stt' },
     ],
   });
 

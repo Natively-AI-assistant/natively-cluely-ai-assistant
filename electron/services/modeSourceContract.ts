@@ -733,3 +733,24 @@ export function documentGroundedFromContract(contract: ModeSourceContract, hasRe
     || contract.sourceAuthority === 'reference_files_primary'
     || contract.sourceAuthority === 'reference_files_plus_transcript';
 }
+
+/**
+ * EXPLICIT strictness (Defect C, 2026-08-01) — see the doc comment on
+ * ActiveModeDocumentGroundingInfo.strictDocumentGroundedActive.
+ *
+ * `reference_files_only` is strict on its own: that authority is only ever
+ * reached by explicit user selection or prompt migration, never by the
+ * template seed. A reference-files-FIRST authority is strict only when the
+ * contract's origin shows a deliberate choice (not 'default_new_mode') AND a
+ * real reference file exists — attaching a file to a default mode must not
+ * flip its knowledge policy, and a default mode must not flip it by merely
+ * existing (the template seed stamps `reference_files_primary` on every
+ * non-interview mode, which is how stock Team Meet/Lecture sessions logged
+ * "Generic bypass disabled: document-grounded custom mode active").
+ */
+export function strictDocumentGroundedFromContract(contract: ModeSourceContract, hasReferenceFiles: boolean): boolean {
+  if (contract.sourceAuthority === 'reference_files_only') return true;
+  const docAuthority = contract.sourceAuthority === 'reference_files_primary'
+    || contract.sourceAuthority === 'reference_files_plus_transcript';
+  return docAuthority && contract.origin !== 'default_new_mode' && hasReferenceFiles;
+}

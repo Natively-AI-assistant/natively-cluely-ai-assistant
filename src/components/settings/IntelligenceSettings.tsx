@@ -2,6 +2,8 @@ import { AlertTriangle, Check, ChevronDown, Copy, Cpu, Loader2, Wifi, WifiOff } 
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useT } from '../../i18n';
+import { Disclosure, DisclosureChevron } from '../ui/AccordionSection';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 // Label + one-line description + group + TIER for each Intelligence OS flag. Keyed by flag
 // key; an unknown key falls back to the raw key so a newly-added flag still renders.
@@ -143,40 +145,10 @@ const Toggle: React.FC<{ on: boolean; disabled?: boolean; onClick: () => void }>
     disabled={disabled}
     onClick={onClick}
     aria-pressed={on}
-    className={`relative w-11 h-6 shrink-0 rounded-full transition-colors ${on ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'} ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+    className={`w-11 h-6 shrink-0 rounded-full p-[3px] flex items-center transition-colors ${on ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
   >
-    <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-spring motion-reduce:transition-none ${on ? 'translate-x-5' : 'translate-x-0'}`} />
+    <span className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-spring motion-reduce:transition-none ${on ? 'translate-x-5' : 'translate-x-0'}`} />
   </button>
-);
-
-// Smooth height+opacity expand/collapse for the disclosures (Set up / Customize / Developer
-// options), matching the HelpSettings AccordionSection idiom. Height-auto is measured by
-// framer-motion; under prefers-reduced-motion we drop the height/opacity tween so nothing
-// slides or reflows — the content just appears.
-const Disclosure: React.FC<{ open: boolean; children: React.ReactNode }> = ({ open, children }) => {
-  const reduce = useReducedMotion();
-  return (
-    <AnimatePresence initial={false}>
-      {open ? (
-        <motion.div
-          key="disclosure"
-          initial={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
-          animate={reduce ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
-          exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-          style={{ overflow: 'hidden' }}
-        >
-          {children}
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
-  );
-};
-
-// A chevron that rotates between collapsed (▸) and expanded (▾) instead of swapping glyphs,
-// so the disclosure indicator turns smoothly with the panel.
-const DisclosureChevron: React.FC<{ open: boolean }> = ({ open }) => (
-  <ChevronDown size={14} className={`shrink-0 transition-transform duration-200 ease-apple-ease motion-reduce:transition-none ${open ? 'rotate-0' : '-rotate-90'}`} />
 );
 
 // Inline copyable command/snippet block — same idiom as UpdateModal's CopyBlock. Used in the
@@ -207,6 +179,127 @@ const CopyBlock: React.FC<{ text: string; label?: string }> = ({ text, label }) 
         {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
         {copied ? t('Copied') : t('Copy')}
       </button>
+    </div>
+  );
+};
+
+// ── Context Intelligence debug logging (Developer options) ──────────────────
+// Records AI routing/retrieval/evidence/answers to a local JSONL file for
+// debugging. Level precedence is env var > this setting (owned by
+// debug-config.ts in the main process); when the env var is set, the selector
+// shows the effective value and disables itself.
+type CtxDebugLevel = 'off' | 'standard' | 'verbose';
+
+const ContextDebugSection: React.FC = () => {
+  const t = useT();
+  const [cfg, setCfg] = useState<{
+    level: CtxDebugLevel; levelSource: 'environment' | 'setting' | 'default';
+    contentInclusion: boolean; storedLevel?: CtxDebugLevel;
+    logDirectory?: string | null; currentFile?: string | null;
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try { setCfg(await window.electronAPI.getContextDebugConfig() as never); } catch { /* panel is best-effort */ }
+  }, []);
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  const setLevel = useCallback(async (level: CtxDebugLevel) => {
+    setBusy(true);
+    try { await window.electronAPI.setContextDebugLevel(level); await refresh(); }
+    finally { setBusy(false); }
+  }, [refresh]);
+
+  if (!cfg) return null;
+  const envForced = cfg.levelSource === 'environment';
+
+  return (
+    <div className="mt-3 rounded-lg border border-border-subtle bg-bg-main p-3 space-y-2.5">
+      <div>
+        <div className="text-xs font-semibold text-text-primary">{t('Context Debug Logging')}</div>
+        <div className="mt-0.5 text-[11px] leading-relaxed text-text-secondary">
+          {t('Records AI routing, retrieval, evidence selection, and final answers for local debugging. Verbose logs may include redacted document excerpts. Logs stay on this device unless you export them.')}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        {(['off', 'standard', 'verbose'] as const).map((lvl) => (
+          <button
+            key={lvl}
+            type="button"
+            disabled={busy || envForced}
+            onClick={() => void setLevel(lvl)}
+            aria-pressed={cfg.level === lvl}
+            className={`rounded-md border px-2.5 py-1 text-[11px] font-medium capitalize transition-colors ${
+              cfg.level === lvl
+                ? 'border-transparent bg-accent-primary text-white'
+                : 'border-border-subtle bg-bg-input text-text-secondary hover:text-text-primary'
+            } ${busy || envForced ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+          >
+            {t(lvl)}
+          </button>
+        ))}
+        {envForced ? (
+          <span className="ml-1 text-[10px] text-amber-400">
+            {t('Set by NATIVELY_CONTEXT_DEBUG — the environment variable overrides this setting.')}
+          </span>
+        ) : null}
+      </div>
+
+      {cfg.contentInclusion ? (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-300">
+          {t('Full local evidence logging is enabled (development build). Logs may contain sensitive personal data.')}
+        </div>
+      ) : null}
+
+      {cfg.level !== 'off' && (cfg.currentFile || cfg.logDirectory) ? (
+        <CopyBlock text={cfg.currentFile ?? cfg.logDirectory ?? ''} label={t('Log:')} />
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => { void window.electronAPI.openContextDebugFolder(); }}
+          className="rounded-md border border-border-subtle bg-bg-input px-2.5 py-1 text-[11px] font-medium text-text-secondary transition-colors hover:text-text-primary"
+        >
+          {t('Open Debug Log Folder')}
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            const r = await window.electronAPI.exportContextDebugSession();
+            setNotice(r.ok ? t('Revealed current session log.') : (r.error ?? t('Export failed.')));
+            setTimeout(() => setNotice(null), 3000);
+          }}
+          className="rounded-md border border-border-subtle bg-bg-input px-2.5 py-1 text-[11px] font-medium text-text-secondary transition-colors hover:text-text-primary"
+        >
+          {t('Export Context Debug Session')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirmClear(true)}
+          className="rounded-md border border-border-subtle bg-bg-input px-2.5 py-1 text-[11px] font-medium text-red-400 transition-colors hover:text-red-300"
+        >
+          {t('Clear Context Debug Logs')}
+        </button>
+        {notice ? <span className="text-[10px] text-text-tertiary">{notice}</span> : null}
+      </div>
+
+      <ConfirmDialog
+        open={confirmClear}
+        onOpenChange={setConfirmClear}
+        title={t('Clear context debug logs?')}
+        description={t('Deletes every context-debug JSONL file on this device. This cannot be undone.')}
+        confirmLabel={t('Clear logs')}
+        busy={busy}
+        onConfirm={async () => {
+          setBusy(true);
+          try { await window.electronAPI.clearContextDebugLogs(); await refresh(); }
+          finally { setBusy(false); setConfirmClear(false); }
+        }}
+      />
     </div>
   );
 };
@@ -609,7 +702,12 @@ export const IntelligenceSettings: React.FC = () => {
   // payload exposes an `envForced` field, honor it; for now toggles are always enabled.)
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    // data-settings-stagger: the 4 blocks below settle in sequence on tab
+    // entrance (rules in src/index.css). Safe here — all four direct children
+    // are plain elements, and the file's own motion (12 AnimatePresence, all
+    // `initial={false}`, plus StaggerRow inside the "Customize" disclosure)
+    // is interaction-only and lives deeper in the tree.
+    <div className="space-y-6 max-w-2xl" data-settings-stagger>
       <header>
         <h3 className="text-lg font-bold text-text-primary mb-1">{t('Intelligence')}</h3>
         <p className="text-xs text-text-secondary mb-5">
@@ -947,6 +1045,7 @@ export const IntelligenceSettings: React.FC = () => {
                       {byTier.dev.map((row) => (
                         <FlagRowView key={row.key} row={row} onToggle={onToggleFlag} />
                       ))}
+                      <ContextDebugSection />
                     </div>
                   </Disclosure>
                 </div>

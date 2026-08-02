@@ -57,7 +57,6 @@ const REQUIRED_ASARUNPACK_GLOBS = [
   '**/localRerankerWorker.js',
   '**/rerankerDownloadWorker.js',
   '**/whisperWorker.js',
-  '**/vectorSearchWorker.js',
   '**/node_modules/better-sqlite3/**',
   '**/node_modules/keytar/**',
   '**/node_modules/sqlite-vec/**',
@@ -73,7 +72,6 @@ const REQUIRED_WORKER_FILES = [
   'dist-electron/electron/rag/localRerankerWorker.js',
   'dist-electron/electron/rag/rerankerDownloadWorker.js',
   'dist-electron/electron/audio/whisper/whisperWorker.js',
-  'dist-electron/electron/rag/vectorSearchWorker.js',
 ];
 
 // Required native binaries for the packaged app (the asarUnpack globs must place

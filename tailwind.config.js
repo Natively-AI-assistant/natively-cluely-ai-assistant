@@ -37,9 +37,9 @@ module.exports = {
         },
         'on-accent': 'var(--on-accent)',
         'on-accent-surface': 'var(--on-accent-surface)',
-        // Deliberately blue, immune to the Settings orchid scope — for specific
+        // Deliberately blue, immune to the Settings accent scope — for specific
         // action buttons (Save, Fetch Models, Install, etc.) kept on the original
-        // color scheme rather than migrated to Soft Orchid.
+        // color scheme rather than migrated to the brand accent.
         'legacy-action': {
           bg: 'var(--legacy-action-bg)',
           hover: 'var(--legacy-action-hover)',

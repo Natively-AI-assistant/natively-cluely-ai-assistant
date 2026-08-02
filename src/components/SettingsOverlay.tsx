@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { useLanguage, useT } from '../i18n';
 import packageJson from '../../package.json';
 import {
@@ -9,19 +9,17 @@ import {
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
     Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones
 } from 'lucide-react';
+import { HiCreditCard } from 'react-icons/hi2';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
 import { HelpSettings } from './settings/HelpSettings';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
-import { NativelyApiSettings } from './settings/NativelyApiSettings';
-import { NativelyProSettings } from './settings/NativelyProSettings';
+import { PlansSettings } from './settings/PlansSettings';
 import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
-import { VisionModelBenchmark } from './settings/VisionModelBenchmark';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
-import nativelyLogo from '../assets/logo.webp';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { isMac } from '../utils/platformUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -379,6 +377,25 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
     );
 };
 
+/* Sidebar order, top to bottom. Drives the DIRECTION of the panel transition:
+   moving down the sidebar enters the new panel from below, moving up enters it
+   from above, so the motion stays spatially consistent with the nav. Any id not
+   in this list (deep-links from HelpSettings) falls back to the downward
+   direction rather than guessing. Keep in sync with the <nav> below. */
+const SETTINGS_NAV_ORDER = [
+    'general',
+    'plans',
+    'ai-providers',
+    'skills',
+    'calendar',
+    'audio',
+    'keybinds',
+    'phone-mirror',
+    'intelligence',
+    'help',
+    'about',
+];
+
 interface SettingsOverlayProps {
     isOpen: boolean;
     onClose: () => void;
@@ -397,17 +414,84 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const isLight = useResolvedTheme() === 'light';
     const { t, lang, setLang } = useLanguage();
     const [activeTab, setActiveTab] = useState(initialTab);
-    const [visionBenchmarkEnabled, setVisionBenchmarkEnabled] = useState(false);
 
-    useEffect(() => {
-        window.electronAPI?.visionBenchmarkInfo?.()
-            .then((result: any) => setVisionBenchmarkEnabled(result?.enabled === true))
-            .catch(() => setVisionBenchmarkEnabled(false));
-    }, []);
+    /* ---------------------------------------------------------------- */
+    /* Section transition                                                */
+    /* ---------------------------------------------------------------- */
+    const reduceMotion = useReducedMotion() ?? false;
+
+    /* 'plans' / 'natively-api' / 'natively-pro' all render the SAME
+       <PlansSettings/>. Keying the panel on activeTab would remount it (and
+       drop its internal state) when moving between them, so they collapse to
+       one key — no remount, no transition, which is correct: the content
+       didn't change. */
+    const panelKey = (activeTab === 'natively-api' || activeTab === 'natively-pro') ? 'plans' : activeTab;
+
+    /* Read the previous key during render, write it in an effect — mutating a
+       ref while rendering double-fires under StrictMode. */
+    const prevPanelKeyRef = useRef(panelKey);
+    const prevPanelIdx = SETTINGS_NAV_ORDER.indexOf(prevPanelKeyRef.current);
+    const curPanelIdx = SETTINGS_NAV_ORDER.indexOf(panelKey);
+    const panelDirection = (prevPanelIdx === -1 || curPanelIdx === -1 || curPanelIdx >= prevPanelIdx) ? 1 : -1;
+    useEffect(() => { prevPanelKeyRef.current = panelKey; }, [panelKey]);
+
+    /* The modal wrapper already springs in on open (scale 0.94→1, y 20→0).
+       Letting the panel play its own enter animation on that same frame stacks
+       two motions on the same pixels and reads as a wobble, so the panel
+       animates only on a genuine section CHANGE. `isOpen` false→true renders
+       once with this still false; the effect arms it afterwards. */
+    const settingsWasOpenRef = useRef(false);
+    useEffect(() => { settingsWasOpenRef.current = isOpen; }, [isOpen]);
+
+    /* Set by the initialTab sync effect below when Settings is deep-linked open
+       to a non-default section, and cleared once that section has rendered. */
+    const suppressPanelAnimRef = useRef(false);
+    useEffect(() => { suppressPanelAnimRef.current = false; }, [panelKey]);
+
+    const animatePanel = settingsWasOpenRef.current && isOpen && !suppressPanelAnimRef.current;
+
+    /* The scroll container outlives the section swap, so without this a tab
+       switched to from a scrolled position would open mid-page. Layout effect,
+       not effect: reset before paint or the old offset flashes. */
+    const panelScrollRef = useRef<HTMLDivElement>(null);
+    useLayoutEffect(() => {
+        if (panelScrollRef.current) panelScrollRef.current.scrollTop = 0;
+    }, [panelKey]);
+
+    /* Active state is painted by ONE shared pill that projects between items
+       (layoutId), so the item itself must not carry `bg-bg-item-active` — an
+       instant background under a moving pill cancels the movement out. */
+    const navItemClass = (active: boolean, size = 'text-sm') =>
+        `w-full text-left px-3 py-2 rounded-lg ${size} font-medium flex items-center gap-3 relative isolate transition-colors duration-150 ease-out ${active
+            ? 'text-text-primary'
+            : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`;
+
+    /* `isolate` on the button + `-z-10` here puts the pill above the button's
+       own background box but below its inline content (icon + label), so the
+       label stays readable without wrapping every child in a z-indexed span.
+       layoutId resolves GLOBALLY in framer-motion — this id must stay unique
+       across the app. `initial={false}` so it doesn't fly in from nowhere on
+       first paint. Spring matches the existing pill in MeetingDetails.tsx. */
+    const navActivePill = (
+        <motion.span
+            layoutId="settingsNavActivePill"
+            className="absolute inset-0 -z-10 rounded-lg bg-bg-item-active"
+            initial={false}
+            transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
+        />
+    );
 
     // Sync active tab when modal opens
     useEffect(() => {
         if (isOpen && initialTab) {
+            /* Deep-link open (App.tsx openSettingsExclusive('plans') and friends)
+               lands the tab switch one render AFTER the arming effect above, so
+               `animatePanel` would be true and the panel would slide-fade on top
+               of the modal's spring-in — the exact double-motion the guard exists
+               to stop. Suppress that one transition. The `!==` matters: setting
+               this on a same-tab open would never clear and would swallow the
+               user's first real tab click. */
+            if (initialTab !== activeTab) suppressPanelAnimRef.current = true;
             setActiveTab(initialTab);
 
 
@@ -1491,7 +1575,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                         // that renders via createPortal(..., document.body) will mount OUTSIDE
                         // this data-settings-theme scope and silently fall back to the blue
                         // brand accent — portals must be scoped to this subtree (or avoided).
-                        data-settings-theme="orchid"
+                        data-settings-theme="periwinkle"
                         initial={{ scale: 0.94, opacity: 0, y: 20 }}
                         animate={{ scale: 1, opacity: 1, y: 0 }}
                         exit={{ scale: 0.94, opacity: 0, y: 20 }}
@@ -1523,89 +1607,85 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 <nav className="mt-2 space-y-1">
                                     <button
                                         onClick={() => setActiveTab('general')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'general' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={navItemClass(activeTab === 'general')}
                                     >
+                                        {activeTab === 'general' && navActivePill}
                                         <Monitor size={16} /> {t('General')}
                                     </button>
                                     <button
-                                        onClick={() => setActiveTab('natively-api')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'natively-api' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        onClick={() => setActiveTab('plans')}
+                                        className={navItemClass(activeTab === 'plans' || activeTab === 'natively-api' || activeTab === 'natively-pro')}
                                     >
-                                        <img src={nativelyLogo} alt="" className={`w-4 h-4 object-contain ${activeTab === 'natively-api' ? 'opacity-100' : 'opacity-70'}`} draggable={false} />
-                                        <span>Natively API</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('natively-pro')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'natively-pro' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
-                                    >
-                                        <img src={nativelyLogo} alt="" className={`w-4 h-4 object-contain ${activeTab === 'natively-pro' ? 'opacity-100' : 'opacity-70'}`} draggable={false} />
-                                        <span>Natively Pro</span>
+                                        {(activeTab === 'plans' || activeTab === 'natively-api' || activeTab === 'natively-pro') && navActivePill}
+                                        <HiCreditCard size={16} />
+                                        <span>{t('Plans & Billing')}</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('ai-providers')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'ai-providers' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={navItemClass(activeTab === 'ai-providers')}
                                     >
+                                        {activeTab === 'ai-providers' && navActivePill}
                                         <FlaskConical size={16} /> {t('AI Providers')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('skills')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'skills' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={navItemClass(activeTab === 'skills')}
                                     >
+                                        {activeTab === 'skills' && navActivePill}
                                         <Folder size={16} /> {t('Skills')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('calendar')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'calendar' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={navItemClass(activeTab === 'calendar')}
                                     >
+                                        {activeTab === 'calendar' && navActivePill}
                                         <Calendar size={16} /> {t('Calendar')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('audio')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'audio' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={navItemClass(activeTab === 'audio')}
                                     >
+                                        {activeTab === 'audio' && navActivePill}
                                         <Mic size={16} /> {t('Audio')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('keybinds')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'keybinds' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={navItemClass(activeTab === 'keybinds')}
                                     >
+                                        {activeTab === 'keybinds' && navActivePill}
                                         <Keyboard size={16} /> {t('Keybinds')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('phone-mirror')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'phone-mirror' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={navItemClass(activeTab === 'phone-mirror')}
                                     >
+                                        {activeTab === 'phone-mirror' && navActivePill}
                                         <Smartphone size={16} /> {t('Sync')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('intelligence')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'intelligence' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={navItemClass(activeTab === 'intelligence')}
                                     >
+                                        {activeTab === 'intelligence' && navActivePill}
                                         <Cpu size={16} /> {t('Intelligence')}
                                     </button>
 
-                                    {visionBenchmarkEnabled && (
-                                        <button
-                                            onClick={() => setActiveTab('vision-benchmark')}
-                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'vision-benchmark' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
-                                        >
-                                            <FlaskConical size={16} /> Vision Benchmark
-                                        </button>
-                                    )}
 
                                     <button
                                         onClick={() => setActiveTab('help')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'help' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={navItemClass(activeTab === 'help', 'text-[13px]')}
                                     >
+                                        {activeTab === 'help' && navActivePill}
                                         <HelpCircle size={16} /> {t('Setup & Help')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('about')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 relative ${activeTab === 'about' ? "bg-bg-item-active text-text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50"}`}
+                                        className={navItemClass(activeTab === 'about')}
                                     >
+                                        {activeTab === 'about' && navActivePill}
                                         <Info size={16} /> {t('About')}
                                     </button>
                                 </nav>
@@ -1622,11 +1702,46 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                         </div>
 
                         {/* Content */}
-                        <div className="flex-1 bg-bg-main overflow-y-auto p-8 relative">
+                        {/* `overflow-anchor: none` — scroll anchoring defaults to
+                            `auto` on a scroll container, so when content above the
+                            viewport changes height Chromium silently adjusts
+                            scrollTop to compensate. Mid-animation it does that
+                            repeatedly, producing micro-jumps that read as choppy
+                            and are independent of frame rate. Plans & Billing
+                            animates whole regions in and out; this stops the
+                            browser fighting it. */}
+                        <div ref={panelScrollRef} className="flex-1 bg-bg-main overflow-y-auto p-8 relative" style={{ overflowAnchor: 'none' }}>
+                            {/* Section transition. Keyed on panelKey, so React remounts this
+                                subtree on a section change — which both replays this
+                                translate AND restarts the per-child `data-settings-stagger`
+                                CSS cascade inside each section (see src/index.css).
+
+                                The container owns the directional MOVE only; the children own
+                                the FADE. Fading here as well would put every child behind a
+                                second fade and mush the cascade into one flat block — the
+                                whole point of the stagger is that it stays legible.
+
+                                Enter-only by design: an AnimatePresence exit would either
+                                stack two full sections (layout jank in a scroll container) or
+                                run sequentially with mode="wait" (~2x the duration, which is
+                                exactly the sluggishness this is meant to remove).
+
+                                Deliberately NO height class and NO `relative`: a height would
+                                add p-8 to a full-height box and manufacture 64px of phantom
+                                scroll, and `relative` would re-parent absolutely-positioned
+                                descendants off the scroll container. */}
+                            <motion.div
+                                key={panelKey}
+                                initial={animatePanel ? { y: reduceMotion ? 0 : panelDirection * 10 } : false}
+                                animate={{ y: 0 }}
+                                transition={reduceMotion
+                                    ? { duration: 0 }
+                                    : { duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+                            >
                             {activeTab === 'general' && (
                                 <div className="space-y-6 animated fadeIn">
                                     <div className="space-y-3.5">
-                                        <div>
+                                        <div data-settings-stagger>
                                             <h3 className="text-lg font-bold text-text-primary mb-1">{t('General settings')}</h3>
                                             <p className="text-xs text-text-secondary mb-2">{t('Customize how Natively works for you')}</p>
 
@@ -1670,9 +1785,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             // Analytics: Undetectable Mode Toggle
                                                             analytics.trackModeSelected(newState ? 'undetectable' : 'overlay');
                                                         }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer shrink-0 ${isUndetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${isUndetectable ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                     >
-                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${isUndetectable ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isUndetectable ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
                                                 </div>
 
@@ -1693,9 +1808,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             setOpenOnLogin(newState);
                                                             window.electronAPI?.setOpenAtLogin(newState);
                                                         }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors ${openOnLogin ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${openOnLogin ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                     >
-                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${openOnLogin ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${openOnLogin ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
                                                 </div>
 
@@ -1716,12 +1831,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             setAmbientChatEnabled(newState);
                                                             window.electronAPI?.setAmbientChatEnabled?.(newState);
                                                         }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${ambientChatEnabled ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${ambientChatEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                         role="switch"
                                                         aria-checked={ambientChatEnabled}
                                                         aria-label={t('Ambient AI Chat')}
                                                     >
-                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${ambientChatEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${ambientChatEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
                                                 </div>
 
@@ -1742,12 +1857,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             setMeetingRetention(nextRetention);
                                                             window.electronAPI?.setMeetingRetention?.(nextRetention);
                                                         }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer shrink-0 mt-2 ${meetingRetention === 'never' ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 mt-2 ${meetingRetention === 'never' ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                         role="switch"
                                                         aria-checked={meetingRetention === 'never'}
                                                         aria-label={t("Do not save meetings")}
                                                     >
-                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${meetingRetention === 'never' ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${meetingRetention === 'never' ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
                                                 </div>
 
@@ -2004,7 +2119,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <div>
                                                                 <h3 className="text-sm font-bold text-text-primary">{t('Mouse Passthrough')}</h3>
                                                                 <p className="text-xs text-text-secondary mt-0.5">
-                                                                    {t('Overlay stays visible but lets all mouse clicks pass through to the app beneath.')}
+                                                                    {t('Pass all mouse clicks through to the app beneath.')}
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -2014,9 +2129,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 setIsMousePassthrough(newState);
                                                                 window.electronAPI?.setOverlayMousePassthrough(newState);
                                                             }}
-                                                            className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer shrink-0 ${isMousePassthrough ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${isMousePassthrough ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                         >
-                                                            <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${isMousePassthrough ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isMousePassthrough ? 'translate-x-5' : 'translate-x-0'}`} />
                                                         </div>
                                                     </div>
 
@@ -2040,9 +2155,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                     setShowVerboseToast(true);
                                                                 }
                                                             }}
-                                                            className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${verboseLogging ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${verboseLogging ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                         >
-                                                            <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${verboseLogging ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${verboseLogging ? 'translate-x-5' : 'translate-x-0'}`} />
                                                         </div>
                                                     </div>
 
@@ -2102,12 +2217,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 // other toggle-style settings also use optional chaining.
                                                                 window.electronAPI?.setCodeVerification?.(newState)?.catch?.(() => { });
                                                             }}
-                                                            className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${codeVerification ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${codeVerification ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                             role="switch"
                                                             aria-checked={codeVerification}
                                                             aria-label={t('Verify coding answers')}
                                                         >
-                                                            <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${codeVerification ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${codeVerification ? 'translate-x-5' : 'translate-x-0'}`} />
                                                         </div>
                                                     </div>
 
@@ -2129,9 +2244,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 localStorage.setItem('natively_interviewer_transcript', String(newState));
                                                                 window.dispatchEvent(new Event('storage'));
                                                             }}
-                                                            className={`w-11 h-6 rounded-full relative transition-colors ${showTranscript ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${showTranscript ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                         >
-                                                            <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${showTranscript ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${showTranscript ? 'translate-x-5' : 'translate-x-0'}`} />
                                                         </div>
                                                     </div>
                                                 </div>
@@ -2275,11 +2390,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             {activeTab === 'skills' && (
                                 <SkillsSettings />
                             )}
-                            {activeTab === 'natively-api' && (
-                                <NativelyApiSettings initialIsSaved={hasNativelyKey} />
-                            )}
-                            {activeTab === 'natively-pro' && (
-                                <NativelyProSettings initialIsPremium={initialIsPremium} />
+                            {(activeTab === 'plans' || activeTab === 'natively-api' || activeTab === 'natively-pro') && (
+                                <PlansSettings initialIsPremium={initialIsPremium} initialHasNativelyKey={hasNativelyKey} />
                             )}
                             {activeTab === 'keybinds' && (
                                 <div className="space-y-5 animated fadeIn select-text pb-4">
@@ -2297,7 +2409,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         </button>
                                     </div>
 
-                                    <div className="grid gap-6">
+                                    <div className="grid gap-6" data-settings-stagger>
                                         {/* General Category */}
                                         <div>
                                             <h4 className="text-sm font-bold text-text-primary mb-3">{t('General')}</h4>
@@ -2447,7 +2559,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             )}
 
                             {activeTab === 'audio' && (
-                                <div className="space-y-6 animated fadeIn">
+                                <div className="space-y-6 animated fadeIn" data-settings-stagger>
                                     {/* ── Speech Provider Section ── */}
                                     <div>
                                         <h3 className="text-lg font-bold text-text-primary mb-1">{t('Speech Provider')}</h3>
@@ -2788,7 +2900,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         </div>
                                     </div>
 
-                                    <div className="h-px bg-border-subtle" />
+                                    {/* Opted out of the entrance cascade: a 1px rule sliding
+                                        7px moves seven times its own height, which reads as a
+                                        glitch rather than motion. It keeps its nth-child slot,
+                                        so the block below still lands on 60ms. */}
+                                    <div className="h-px bg-border-subtle" data-stagger-skip />
 
                                     {/* ── Audio Configuration Section ── */}
                                     <div>
@@ -2945,9 +3061,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                     setUseExperimentalSck(newState);
                                                                     window.localStorage.setItem('useExperimentalSckBackend', newState ? 'true' : 'false');
                                                                 }}
-                                                                className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${useExperimentalSck ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                                className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors shrink-0 cursor-pointer ${useExperimentalSck ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                             >
-                                                                <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${useExperimentalSck ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${useExperimentalSck ? 'translate-x-5' : 'translate-x-0'}`} />
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2960,7 +3076,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
 
                             {activeTab === 'calendar' && (
-                                <div className="space-y-6 animated fadeIn h-full">
+                                <div className="space-y-6 animated fadeIn h-full" data-settings-stagger>
                                     <div>
                                         <h3 className="text-lg font-bold text-text-primary mb-2">{t('Visible Calendars')}</h3>
                                         <p className="text-xs text-text-secondary mb-4">{t('Upcoming meetings are synchronized from these calendars')}</p>
@@ -3226,9 +3342,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             {activeTab === 'intelligence' && (
                                 <IntelligenceSettings />
                             )}
-                            {visionBenchmarkEnabled && activeTab === 'vision-benchmark' && (
-                                <VisionModelBenchmark />
-                            )}
 
                             {activeTab === 'help' && (
                                 <HelpSettings onNavigate={setActiveTab} />
@@ -3237,6 +3350,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             {activeTab === 'about' && (
                                 <AboutSection />
                             )}
+                            </motion.div>
                         </div>
                     </div>
                     </motion.div>

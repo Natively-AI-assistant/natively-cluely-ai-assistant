@@ -286,7 +286,7 @@ export const PhoneMirrorSettings: React.FC = () => {
   const hiddenOptionalCount = 4;
 
   return (
-    <div className="space-y-6 animated fadeIn">
+    <div className="space-y-6 animated fadeIn" data-settings-stagger>
       <header>
         <h3 className="text-lg font-bold text-text-primary mb-1">{t('Sync')}</h3>
         <p className="text-xs text-text-secondary mb-5">
@@ -317,10 +317,10 @@ export const PhoneMirrorSettings: React.FC = () => {
             aria-checked={info.running}
             disabled={busy !== null}
             onClick={onToggleEnable}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-focus ${info.running ? 'bg-accent-primary' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''}`}
+            className={`inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-accent-focus ${info.running ? 'bg-accent-primary' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''}`}
           >
             <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${info.running ? 'translate-x-5' : 'translate-x-1'}`}
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${info.running ? 'translate-x-5' : 'translate-x-0'}`}
             />
           </button>
         </div>
@@ -449,10 +449,10 @@ export const PhoneMirrorSettings: React.FC = () => {
               aria-checked={info.exposeOnLan}
               disabled={busy !== null}
               onClick={onToggleLan}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-focus ${info.exposeOnLan ? 'bg-amber-500' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''}`}
+              className={`inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-accent-focus ${info.exposeOnLan ? 'bg-amber-500' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''}`}
             >
               <span
-                className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${info.exposeOnLan ? 'translate-x-5' : 'translate-x-1'}`}
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${info.exposeOnLan ? 'translate-x-5' : 'translate-x-0'}`}
               />
             </button>
           </div>
@@ -783,13 +783,13 @@ const CtxToggle: React.FC<{
       aria-label={label}
       disabled={comingSoon}
       onClick={comingSoon ? undefined : onChange}
-      className={`flex-shrink-0 mt-0.5 relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-focus ${
+      className={`flex-shrink-0 mt-0.5 inline-flex h-6 w-11 items-center rounded-full p-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-accent-focus ${
         comingSoon ? 'cursor-not-allowed bg-bg-item-active' : checked ? 'bg-accent-primary' : 'bg-bg-item-active'
       }`}
     >
       <span
-        className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-          !comingSoon && checked ? 'translate-x-5' : 'translate-x-0.5'
+        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+          !comingSoon && checked ? 'translate-x-5' : 'translate-x-0'
         }`}
       />
     </button>

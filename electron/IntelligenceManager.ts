@@ -54,6 +54,16 @@ export class IntelligenceManager extends EventEmitter {
     }
 
     /**
+     * Give the engine lazy access to the meeting-RAG retriever.
+     *
+     * Called from main.ts AFTER RAGManager exists — this manager is constructed
+     * first, so a provider is passed rather than the instance.
+     */
+    setRagRetrieverProvider(provider: (() => unknown) | null): void {
+        this.engine.setRagRetrieverProvider(provider);
+    }
+
+    /**
      * Forward all events from IntelligenceEngine through this facade
      * so existing listeners on IntelligenceManager continue to work.
      */
@@ -228,7 +238,7 @@ export class IntelligenceManager extends EventEmitter {
     // Meeting Lifecycle (delegates to persistence)
     // ============================================
 
-    async stopMeeting(): Promise<string | null> {
+    async stopMeeting(): Promise<{ meetingId: string; memoryEligibleCount: number } | null> {
         return this.persistence.stopMeeting();
     }
 
@@ -257,6 +267,18 @@ export class IntelligenceManager extends EventEmitter {
      */
     clearSessionContext(): void {
         this.session.clearSessionContext();
+    }
+
+    /**
+     * Supersede every in-flight live answer (2026-07-31). Called by
+     * modes:set-active: WTA supersession was generation-relative only, so a
+     * slow generation planned under mode A stayed "current" through the switch
+     * and streamed A's answer into a UI showing mode B. engine.reset() bumps
+     * currentGenerationId (breaking every active stream's guard) and aborts
+     * the WTA cancellation token.
+     */
+    supersedeLiveAnswers(): void {
+        this.engine.reset();
     }
 
     // ============================================

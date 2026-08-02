@@ -2,8 +2,73 @@ export type LLMProviderId = 'natively' | 'groq' | 'codex' | 'gemini_flash' | 'ge
 export type ProviderCapability = 'chat' | 'stream_chat' | 'structured' | 'vision';
 export type ProviderAttemptStatus = 'available' | 'unavailable';
 export type ProviderUnavailableReason = 'missing_api_key' | 'missing_config' | 'unsupported_capability' | 'disabled';
-export type ProviderDataScope = 'transcript' | 'screenshots' | 'reference_files' | 'profile_history' | 'embeddings' | 'post_call_summary';
+// ── Provider data scopes: ONE source of truth ───────────────────────────────
+//
+// These keys were hand-maintained in three places (this union, `allowedKeys` in
+// the `set-provider-data-scopes` IPC handler, and SCOPE_ROWS in
+// AIProvidersSettings.tsx) and they had already drifted: `code_execution` is
+// declared in SettingsManager and ENFORCED in llm/codeVerification/cloudRunner.ts
+// (`policy?.code_execution !== false`), but it was missing from `allowedKeys`.
+// Because that handler persisted a whole-object replacement, toggling ANY scope
+// in the UI erased a stored `code_execution: false` and silently re-enabled
+// sending model-generated code to the cloud runner.
+//
+// UI_PROVIDER_DATA_SCOPES is the subset the Privacy panel renders as rows.
+// NON_UI_PROVIDER_DATA_SCOPES are enforced but not user-visible; they must
+// still survive a write, which is the whole point of the split.
+export const UI_PROVIDER_DATA_SCOPES = [
+    'transcript',
+    'screenshots',
+    'reference_files',
+    'profile_history',
+    'embeddings',
+    'post_call_summary',
+] as const;
+
+export const NON_UI_PROVIDER_DATA_SCOPES = [
+    'code_execution',
+] as const;
+
+export const PROVIDER_DATA_SCOPES = [
+    ...UI_PROVIDER_DATA_SCOPES,
+    ...NON_UI_PROVIDER_DATA_SCOPES,
+] as const;
+
+export type ProviderDataScope = typeof PROVIDER_DATA_SCOPES[number];
 export type ProviderDataScopePolicy = Partial<Record<ProviderDataScope, boolean>>;
+
+export function isProviderDataScope(key: unknown): key is ProviderDataScope {
+    return typeof key === 'string' && (PROVIDER_DATA_SCOPES as readonly string[]).includes(key);
+}
+
+/**
+ * Fold a scope update into the stored policy.
+ *
+ * MERGE, not replace. The previous handler rebuilt the object from the incoming
+ * payload alone, so any key the sender did not repeat was deleted — which is
+ * how a persisted `code_execution: false` disappeared the first time the user
+ * touched an unrelated toggle. Merging also makes the handler correct for a
+ * future partial sender, instead of correct only because today's renderer
+ * happens to round-trip the whole object.
+ *
+ * A scope can still be turned back ON: an explicit `true` overwrites a stored
+ * `false`. The only operation merge cannot express is DELETING a key, and no
+ * caller needs that (the sole sender is the Privacy panel's per-row toggle,
+ * which always sends booleans).
+ */
+export function mergeProviderDataScopes(
+    stored: ProviderDataScopePolicy | undefined,
+    incoming: Record<string, unknown> | null | undefined,
+): ProviderDataScopePolicy {
+    const merged: ProviderDataScopePolicy = { ...(stored ?? {}) };
+    if (!incoming || typeof incoming !== 'object') return merged;
+    for (const [key, value] of Object.entries(incoming)) {
+        if (isProviderDataScope(key) && typeof value === 'boolean') {
+            merged[key] = value;
+        }
+    }
+    return merged;
+}
 
 export const DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE = "I can't answer that from the uploaded reference files because the selected provider is not allowed to receive reference-file context. Enable reference-file access for this provider or switch to a local provider, then ask again.";
 
@@ -59,6 +124,73 @@ export interface ProviderRouteOptions {
     models?: ProviderModelState;
     dataScopes?: ProviderDataScope[];
     scopePolicy?: ProviderDataScopePolicy;
+    /**
+     * Provider FAMILY ids the user switched off in Settings > AI Providers
+     * (CredentialsManager.disabledProviders). The documented contract there is
+     * "…and is never chosen as a routing fallback"; until this existed the
+     * router had no term for it at all, so a rate-limited primary cascaded
+     * straight onto a provider the user had explicitly turned off.
+     */
+    disabledProviders?: readonly string[];
+}
+
+/**
+ * Family id (as persisted, and as the renderer's isProviderEnabled() uses it)
+ * → the router provider ids it covers.
+ *
+ * The two id spaces genuinely differ, and a naive `includes(spec.provider)`
+ * silently misses the two providers most likely to be switched off: the store
+ * says 'codex-cli' where the router says 'codex', and one 'gemini' family
+ * covers BOTH gemini_flash and gemini_pro. Aliases are accepted in both
+ * directions so a caller passing router ids also works.
+ */
+export const DISABLED_PROVIDER_FAMILY_MAP: Readonly<Record<string, readonly LLMProviderId[]>> = Object.freeze({
+    natively: ['natively'],
+    groq: ['groq'],
+    'codex-cli': ['codex'],
+    codex: ['codex'],
+    gemini: ['gemini_flash', 'gemini_pro'],
+    gemini_flash: ['gemini_flash'],
+    gemini_pro: ['gemini_pro'],
+    openai: ['openai'],
+    claude: ['claude'],
+    deepseek: ['deepseek'],
+    ollama: ['ollama'],
+});
+
+export function disabledRouterProviders(disabled?: readonly string[]): Set<LLMProviderId> {
+    const out = new Set<LLMProviderId>();
+    if (!Array.isArray(disabled)) return out;
+    for (const raw of disabled) {
+        const key = String(raw ?? '').trim().toLowerCase();
+        for (const provider of DISABLED_PROVIDER_FAMILY_MAP[key] ?? []) out.add(provider);
+    }
+    return out;
+}
+
+/**
+ * True when `family` is switched off, tolerating the alias spellings above
+ * (a stored 'gemini' disables a 'gemini_flash' query and vice versa).
+ */
+export function isProviderFamilyDisabled(family: string, disabled?: readonly string[]): boolean {
+    if (!Array.isArray(disabled) || disabled.length === 0) return false;
+    const wanted = DISABLED_PROVIDER_FAMILY_MAP[String(family ?? '').trim().toLowerCase()];
+    if (!wanted) {
+        // Unknown family (a custom provider id): exact match only.
+        return disabled.some((d) => String(d ?? '').trim().toLowerCase() === String(family ?? '').trim().toLowerCase());
+    }
+    const off = disabledRouterProviders(disabled);
+    return wanted.some((p) => off.has(p));
+}
+
+/** Thrown at the last boundary when a provider the user switched off is about
+ *  to be called anyway. Distinct from ProviderScopeError so the two policies
+ *  stay separable in logs and in the cascade's error handling. */
+export class ProviderDisabledError extends Error {
+    constructor(public readonly provider: string) {
+        super(`Provider ${provider} is switched off in Settings > AI Providers`);
+        this.name = 'ProviderDisabledError';
+    }
 }
 
 export interface ProviderAttempt {
@@ -79,9 +211,16 @@ interface ProviderSpec {
     supports: ProviderCapability[];
 }
 
-function statusFor(spec: ProviderSpec, capability: ProviderCapability, deniedScopes: ProviderDataScope[] = []): Pick<ProviderAttempt, 'status' | 'unavailableReason'> {
+function statusFor(spec: ProviderSpec, capability: ProviderCapability, deniedScopes: ProviderDataScope[] = [], userDisabled: boolean = false): Pick<ProviderAttempt, 'status' | 'unavailableReason'> {
     if (!spec.supports.includes(capability)) {
         return { status: 'unavailable', unavailableReason: 'unsupported_capability' };
+    }
+    // Checked BEFORE availability so the reason reads 'disabled' rather than
+    // 'missing_api_key' — the credential is still stored, the user turned the
+    // provider off. An observable reason is the difference between "the user
+    // did this" and "the provider silently vanished".
+    if (userDisabled) {
+        return { status: 'unavailable', unavailableReason: 'disabled' };
     }
     if (deniedScopes.length > 0) {
         return { status: 'unavailable', unavailableReason: 'disabled' };
@@ -186,13 +325,23 @@ export function routeLLMProviders(options: ProviderRouteOptions): ProviderAttemp
     }
 
     const deniedScopes = getDeniedDataScopes(options.dataScopes, options.scopePolicy);
+    // No Ollama exemption: the user switched it off in the same UI as the rest.
+    // A scope denial with Ollama disabled therefore degrades to "scrubbed
+    // payload to cloud" or a clean boundary error, never to a local answer the
+    // user asked not to have.
+    const userDisabled = disabledRouterProviders(options.disabledProviders);
 
     return orderedSpecs.map(spec => ({
         provider: spec.provider,
         name: spec.name,
         capability,
         model: spec.model,
-        ...statusFor(spec, capability, spec.provider === 'ollama' && spec.available ? [] : deniedScopes),
+        ...statusFor(
+            spec,
+            capability,
+            spec.provider === 'ollama' && spec.available ? [] : deniedScopes,
+            userDisabled.has(spec.provider),
+        ),
     }));
 }
 

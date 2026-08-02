@@ -6,12 +6,15 @@ import {
   MeetingInsightExtractor,
 } from '../../../dist-electron/electron/intelligence/MeetingMemoryService.js';
 
+// Defect B (2026-08-01): fixtures now carry origin:'stt' — the provenance the real
+// main.ts STT seam stamps on spoken segments. Extraction only mines 'stt' segments
+// (see isMemoryEligibleSegment); all assertions below are unchanged.
 const SALES_CALL = [
-  { speaker: 'them', text: 'What is your pricing for the enterprise tier?', timestamp: 1000 },
-  { speaker: 'me', text: 'We will send over a detailed quote by end of day.', timestamp: 2000 },
-  { speaker: 'them', text: 'Can you integrate with Redis and Kafka?', timestamp: 3000 },
-  { speaker: 'me', text: "We agreed to start a pilot next week with the Acme Technologies team.", timestamp: 4000 },
-  { speaker: 'them', text: 'We decided to move forward with the proposal.', timestamp: 5000 },
+  { speaker: 'them', text: 'What is your pricing for the enterprise tier?', timestamp: 1000, origin: 'stt' },
+  { speaker: 'me', text: 'We will send over a detailed quote by end of day.', timestamp: 2000, origin: 'stt' },
+  { speaker: 'them', text: 'Can you integrate with Redis and Kafka?', timestamp: 3000, origin: 'stt' },
+  { speaker: 'me', text: "We agreed to start a pilot next week with the Acme Technologies team.", timestamp: 4000, origin: 'stt' },
+  { speaker: 'them', text: 'We decided to move forward with the proposal.', timestamp: 5000, origin: 'stt' },
 ];
 
 describe('MeetingInsightExtractor', () => {
@@ -75,12 +78,12 @@ describe('MeetingMemoryService.buildMeetingRecord', () => {
 
   test('sourceQuality reflects structure (a rich call scores higher than a thin one)', () => {
     const rich = svc.buildMeetingRecord({ meetingId: 'm1', segments: SALES_CALL });
-    const thin = svc.buildMeetingRecord({ meetingId: 'm2', segments: [{ speaker: 'a', text: 'hello there' }] });
+    const thin = svc.buildMeetingRecord({ meetingId: 'm2', segments: [{ speaker: 'a', text: 'hello there', origin: 'stt' }] });
     assert.ok(rich.sourceQuality > thin.sourceQuality);
   });
 
   test('clean transcript strips fillers/stutters', () => {
-    const rec = svc.buildMeetingRecord({ meetingId: 'm3', segments: [{ speaker: 'a', text: 'um um the the price is high' }] });
+    const rec = svc.buildMeetingRecord({ meetingId: 'm3', segments: [{ speaker: 'a', text: 'um um the the price is high', origin: 'stt' }] });
     assert.doesNotMatch(rec.cleanTranscript, /\bum um\b|\bthe the\b/);
   });
 

@@ -39,10 +39,16 @@ export class OllamaManager {
   private constructor() {}
 
   public static getInstance(): OllamaManager {
-    if (!OllamaManager.instance) {
-      OllamaManager.instance = new OllamaManager();
+    // Instance anchored on globalThis (15 dist bundles). `ensuringPromise`
+    // dedupe and `missingBackoffUntil` are only meaningful per PROCESS —
+    // per-bundle copies could run duplicate ensure/spawn/restart loops, the
+    // same racing texture as the logo-stuck incident this state serializes.
+    const g = globalThis as unknown as Record<string, OllamaManager | undefined>;
+    if (!g.__nativelyOllamaManagerV1__) {
+      g.__nativelyOllamaManagerV1__ = OllamaManager.instance ?? new OllamaManager();
     }
-    return OllamaManager.instance;
+    OllamaManager.instance = g.__nativelyOllamaManagerV1__;
+    return g.__nativelyOllamaManagerV1__;
   }
 
   /**

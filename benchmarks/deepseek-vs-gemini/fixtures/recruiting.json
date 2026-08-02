@@ -1,0 +1,247 @@
+[
+  {
+    "id": "recruiting-001",
+    "category": "recruiting",
+    "context": "Candidate profile: 7 years experience, currently Senior Software Engineer at a Series C startup. Resume shows 4 job changes in the last 5 years, average tenure ~14 months. Role we're screening for requires long-term ownership of a core platform team.",
+    "question": "Is the job-hopping pattern a red flag for this role, and how should I probe it in the screen?",
+    "rubric_notes": "Should note the tenure pattern (4 changes in 5 years, ~14-month average) as worth investigating given the role needs long-term ownership, but should not assume bad intent — recommend asking open, non-accusatory questions about the reasons for each move (layoffs, acquisitions, career growth vs being pushed out) before concluding it's disqualifying."
+  },
+  {
+    "id": "recruiting-002",
+    "category": "recruiting",
+    "context": "Screening call snippet:\nRecruiter: What's your current compensation?\nCandidate: I'd rather discuss target compensation for this role instead, if that's alright.\nRecruiter: Sure, what range are you looking for?\nCandidate: $150K-$170K base.",
+    "question": "How should I respond to the candidate declining to share current comp, and is their target range reasonable to note for later?",
+    "rubric_notes": "Should recognize the candidate's redirection to target comp is a legitimate and increasingly common/legally protected approach in many jurisdictions, and recommend respecting it rather than pressing for current comp. Should note the stated target range ($150K-$170K base) for comparison against the role's budgeted range."
+  },
+  {
+    "id": "recruiting-003",
+    "category": "recruiting",
+    "context": "Candidate profile: applying for a Product Manager role. Resume states 'Led cross-functional team to launch feature that increased revenue by 25%' with no further detail on company, team size, or timeframe.",
+    "question": "What screening questions should I ask to validate this claim?",
+    "rubric_notes": "Should suggest specific probing questions to validate the vague claim: which company/product, team size and composition, the actual baseline revenue the 25% was measured against, their specific role vs the team's collective effort, and how the metric was measured/attributed. Should flag that an unquantified, unattributed claim needs verification before being taken at face value."
+  },
+  {
+    "id": "recruiting-004",
+    "category": "recruiting",
+    "context": "Screening call:\nCandidate: I left my last role because my manager took credit for my work multiple times and I couldn't get any traction addressing it.\nRecruiter: [thinking about how to respond]",
+    "question": "How should I respond to this sensitive disclosure about a past manager conflict?",
+    "rubric_notes": "Should recommend a professional, empathetic acknowledgment without agreeing to a one-sided narrative or disparaging the past employer, and suggest a follow-up question to understand what the candidate tried to do about it and what they're looking for differently now, since this reveals useful signal about communication style and self-advocacy."
+  },
+  {
+    "id": "recruiting-005",
+    "category": "recruiting",
+    "context": "Candidate profile: strong technical background (8 years, relevant stack match), but during the screen mentioned they are only available to start in 4 months due to a visa transfer process. Role has an urgent start-date need (within 4-6 weeks) due to a critical project deadline.",
+    "question": "Is this candidate viable given the timeline mismatch, and what should I flag to the hiring manager?",
+    "rubric_notes": "Must flag the timeline mismatch explicitly (4-month visa-driven start vs 4-6 week urgent need) as a real constraint that needs a decision from the hiring manager — either the urgency is negotiable, the role could be filled on an interim basis, or this candidate isn't viable for this specific timeline despite strong technical fit. Should not gloss over the conflict."
+  },
+  {
+    "id": "recruiting-006",
+    "category": "recruiting",
+    "context": "Candidate profile: resume lists 'Fluent in Python, Java, C++, Go, Rust, Kotlin, Swift, and Ruby' plus 'Expert in Kubernetes, Docker, AWS, GCP, Azure, Terraform' for a candidate with 3 years of total experience.",
+    "question": "Does this list of skills raise any concerns worth exploring in the screen?",
+    "rubric_notes": "Should flag the breadth of claimed 'fluent/expert' skills as unusually high for 3 years of experience and worth probing for depth rather than dismissing outright — recommend asking the candidate to go deep on 1-2 skills they'd call themselves strongest in, since breadth claims without depth verification are a common resume-inflation pattern."
+  },
+  {
+    "id": "recruiting-007",
+    "category": "recruiting",
+    "context": "Candidate profile: applying for a remote-first role, mentioned during screen 'I actually prefer working in an office, I find remote work isolating and less productive for me personally.' Role is explicitly remote-only with no office option.",
+    "question": "How should I handle this stated preference mismatch?",
+    "rubric_notes": "Must flag this as a genuine fit concern given the role is remote-only with no office option — should recommend being transparent with the candidate about the fully-remote nature of the role and directly asking whether they could thrive in that setup long-term, rather than assuming they'll adapt or downplaying the mismatch."
+  },
+  {
+    "id": "recruiting-008",
+    "category": "recruiting",
+    "context": "Screening call:\nCandidate: What's the team's on-call rotation like? I have a chronic health condition that makes overnight on-call really difficult for me.\nRecruiter: [needs to respond]",
+    "question": "How should I respond to this disclosure, keeping in mind appropriate boundaries around health/disability topics?",
+    "rubric_notes": "Should recommend answering the factual question about the on-call rotation honestly, and note that specific accommodation discussions should be routed to HR/appropriate channels rather than the recruiter improvising commitments; should not ask probing follow-up questions about the medical condition itself, and should treat the disclosure with respect and professionalism."
+  },
+  {
+    "id": "recruiting-009",
+    "category": "recruiting",
+    "context": "Candidate profile: 5 years experience as a Data Analyst, resume shows a 14-month unexplained gap between two roles with no context given.",
+    "question": "How should I ask about this employment gap tactfully?",
+    "rubric_notes": "Should recommend a neutral, open-ended way to ask about the gap ('I noticed a gap between these two roles — can you walk me through what you were doing during that time?') rather than an accusatory framing, and note common legitimate reasons (caregiving, health, layoff plus extended job search, sabbatical, further education) without assuming any particular one."
+  },
+  {
+    "id": "recruiting-010",
+    "category": "recruiting",
+    "context": "Candidate profile: for a Sales role requiring quota attainment history. Resume states '120% of quota' but doesn't specify which year, team size, or whether it was an individual or team number.",
+    "question": "What should I ask to get a real read on this candidate's sales performance?",
+    "rubric_notes": "Should recommend probing for specifics: which specific year/period the 120% refers to, whether it's individual vs team attainment, the actual quota dollar amount (context matters — 120% of a small quota is different from 120% of a large one), and how it compares to the team/peer average that period, since an unqualified percentage alone is weak signal."
+  },
+  {
+    "id": "recruiting-011",
+    "category": "recruiting",
+    "context": "JD requirement: 'Must have 5+ years experience with React and TypeScript.' Candidate profile: 6 years total experience but only 18 months specifically with React/TypeScript, the rest in Angular and vanilla JS.",
+    "question": "Does this candidate meet the JD requirement, and how should I frame this to the hiring manager?",
+    "rubric_notes": "Must correctly identify the mismatch: candidate does NOT meet the literal '5+ years with React and TypeScript' requirement (only 18 months), despite having 6 years of general frontend experience. Should recommend flagging this clearly to the hiring manager as a gap against the stated requirement rather than rounding up to 'meets requirement,' while noting the transferable JS/Angular experience as a mitigating factor for the HM to weigh."
+  },
+  {
+    "id": "recruiting-012",
+    "category": "recruiting",
+    "context": "Screening call:\nCandidate: I have another offer on the table with a deadline of this Friday. I really like this role but need to know where things stand.\nRecruiter: [needs to respond]",
+    "question": "How should I handle this competing-offer deadline pressure?",
+    "rubric_notes": "Should recommend being honest and transparent about realistic timeline for the internal process rather than making promises that can't be kept, and suggest escalating internally (to hiring manager/team) immediately to see if the process can be expedited given the deadline, rather than either ignoring the deadline or overpromising."
+  },
+  {
+    "id": "recruiting-013",
+    "category": "recruiting",
+    "context": "Candidate profile: for a Senior Engineering Manager role requiring people management experience. Resume shows title 'Senior Engineer (Team Lead)' with no direct reports, described as 'led a team of 4' in project context, not as formal management.",
+    "question": "Does 'team lead' with no direct reports count as management experience for this role?",
+    "rubric_notes": "Should flag the distinction between informal technical leadership ('led a team of 4' on a project, no formal reports) and actual people management (hiring, performance reviews, career development, direct reports) — this is a meaningful gap against a role requiring 'people management experience' and should be probed directly with the candidate rather than assumed to satisfy the requirement."
+  },
+  {
+    "id": "recruiting-014",
+    "category": "recruiting",
+    "context": "Candidate profile: strong background, but during screen said 'I'm not really interested in a role that requires much travel.' JD states 'up to 25% travel required for client site visits.'",
+    "question": "Is this a dealbreaker, and how should I clarify it with the candidate?",
+    "rubric_notes": "Should flag the potential mismatch directly rather than glossing over it, and recommend clarifying with the candidate exactly what 'not really interested in much travel' means in relation to the specific stated 25% requirement (is 25% acceptable, or is any travel a hard no?) before moving forward, since 'not interested' is ambiguous and could still be workable."
+  },
+  {
+    "id": "recruiting-015",
+    "category": "recruiting",
+    "context": "Candidate profile: applying for a role requiring a specific certification (PMP) per the JD. Resume says 'PMP certification in progress, exam scheduled for next month.'",
+    "question": "Should this candidate be screened forward despite not yet holding the required certification?",
+    "rubric_notes": "Should note the candidate does not currently hold the required PMP certification but has a concrete, near-term path to obtaining it (exam scheduled next month) — recommend flagging this nuance to the hiring manager to decide whether 'in progress with exam scheduled' is acceptable, rather than either auto-rejecting or claiming the requirement is met."
+  },
+  {
+    "id": "recruiting-016",
+    "category": "recruiting",
+    "context": "Screening call:\nCandidate: Can you tell me more about the company's stance on return-to-office? I've seen some mixed signals online.\nRecruiter context: company recently announced a policy shift from fully remote to hybrid (3 days/week in office) starting next quarter.",
+    "question": "How should I answer this question given the upcoming policy change?",
+    "rubric_notes": "Must be transparent about the upcoming hybrid policy shift (3 days/week starting next quarter) rather than describing only the current state, since withholding this material, imminent change would be misleading to the candidate making a decision."
+  },
+  {
+    "id": "recruiting-017",
+    "category": "recruiting",
+    "context": "Candidate profile: for a Customer Success Manager role. During the call, candidate gave short, somewhat curt answers and seemed disengaged; separately mentioned they're currently interviewing at 6 other companies.",
+    "question": "What should I make of this candidate's engagement level, and is it disqualifying?",
+    "rubric_notes": "Should note the observed disengagement as a real signal worth weighing for a customer-facing role where communication style matters, but should also consider context (interviewing at 6 companies could mean interview fatigue rather than genuine disinterest in this specific role) — recommend a balanced read rather than an immediate disqualification, possibly noting it for the next-round interviewer to watch for."
+  },
+  {
+    "id": "recruiting-018",
+    "category": "recruiting",
+    "context": "Candidate profile: internal referral from a well-regarded employee. Resume shows the candidate does not meet the minimum years-of-experience bar stated in the JD (JD requires 3+ years, candidate has 1.5 years).",
+    "question": "How should the referral status factor into whether I move this candidate forward?",
+    "rubric_notes": "Should note the referral is a positive signal worth some weight but should not override a clear experience gap (1.5 years vs required 3+) without a real assessment — recommend evaluating the candidate on their actual merits/skills demonstrated rather than fast-tracking solely because of the referral, and being honest with the referring employee about the gap if the candidate isn't advanced."
+  },
+  {
+    "id": "recruiting-019",
+    "category": "recruiting",
+    "context": "Screening call:\nCandidate: I noticed the job posting has been up for over 6 months. Is there a reason it's taken this long to fill?\nRecruiter: [needs an honest answer — role was on hold for 3 months due to a budget freeze, reopened last month]",
+    "question": "How should I answer this question honestly?",
+    "rubric_notes": "Should recommend an honest, straightforward answer reflecting the actual context (posting was on hold for 3 months due to budget freeze, reopened last month) rather than a vague or evasive non-answer, since candidates often ask this exact question and appreciate transparency."
+  },
+  {
+    "id": "recruiting-020",
+    "category": "recruiting",
+    "context": "Candidate profile: for an entry-level role. Resume lists a graduate degree and 2 prior mid-level roles with titles like 'Senior Analyst' at recognizable companies.",
+    "question": "Is this candidate overqualified, and what should I probe for?",
+    "rubric_notes": "Should flag the overqualification concern (graduate degree, prior senior titles, applying to entry-level) as worth exploring rather than assuming it's a red flag automatically — recommend asking directly why they're interested in a role that appears to be a step down, since there could be valid reasons (career pivot, work-life balance change, layoff and need for immediate income) that would matter to retention risk."
+  },
+  {
+    "id": "recruiting-021",
+    "category": "recruiting",
+    "context": "Candidate profile: for a role requiring US work authorization without sponsorship per JD. During screen, candidate mentioned they are on an F-1 visa with OPT, would need H-1B sponsorship within the next year.",
+    "question": "How should I handle this authorization mismatch against the JD requirement?",
+    "rubric_notes": "Must flag this as a direct conflict with the stated JD requirement (no sponsorship) and recommend clarifying explicitly with the candidate and confirming with the hiring manager/legal whether sponsorship is truly a hard no or has any flexibility, rather than proceeding as if the candidate meets the authorization requirement."
+  },
+  {
+    "id": "recruiting-022",
+    "category": "recruiting",
+    "context": "Screening call:\nCandidate: Honestly, the main reason I'm looking is I'm burned out from my current role's hours — we regularly work 60+ hour weeks.\nRecruiter context: the role being screened for is at a startup known internally for demanding hours during launch periods.",
+    "question": "How should I handle this given the potential mismatch with our own work culture?",
+    "rubric_notes": "Should flag the potential culture-fit risk given the candidate's explicit burnout from long hours and the target role's own demanding-hours reputation, and recommend being honest with the candidate about what to expect (rather than downplaying it to get them through the pipeline) so both sides can make an informed decision."
+  },
+  {
+    "id": "recruiting-023",
+    "category": "recruiting",
+    "context": "Candidate profile: resume shows candidate was 'VP of Engineering' at a company with 8 total employees (per LinkedIn), applying for a 'Senior Engineer' individual contributor role at our 500-person company.",
+    "question": "What should I make of this title downgrade, and what should I ask about?",
+    "rubric_notes": "Should note the context matters — a VP title at an 8-person company is a very different scope than a VP at a large company, so the 'downgrade' may be less dramatic than it appears; recommend asking about actual scope of the VP role (team size managed, hands-on coding involvement) and motivation for wanting an IC role now, rather than assuming either red flag or automatic fit."
+  },
+  {
+    "id": "recruiting-024",
+    "category": "recruiting",
+    "context": "Candidate profile: for a role in a heavily regulated industry (healthcare data). Resume includes a data breach incident at a prior employer mentioned briefly: 'Managed incident response during a data security event affecting customer records.'",
+    "question": "How should I explore this incident during the screen?",
+    "rubric_notes": "Should recommend asking clarifying, non-alarmist questions about the candidate's specific role in the incident (were they responsible for the breach, or the one who responded to/mitigated it — these are very different signals), what was learned, and any process changes implemented afterward, rather than assuming fault or ignoring it as irrelevant given the regulated industry context."
+  },
+  {
+    "id": "recruiting-025",
+    "category": "recruiting",
+    "context": "Screening call:\nCandidate: What's the actual salary range for this role? I don't want to waste either of our time if it's not aligned.\nRecruiter context: budgeted range is $110K-$130K, candidate's stated target from earlier in the call was $145K.",
+    "question": "How should I handle this range mismatch transparently?",
+    "rubric_notes": "Must flag the gap explicitly ($110K-$130K budgeted vs $145K target) and recommend being upfront about the actual range with the candidate now rather than letting the process continue and having the mismatch surface later, respecting the candidate's stated preference to not waste time."
+  },
+  {
+    "id": "recruiting-026",
+    "category": "recruiting",
+    "context": "Candidate profile: for a role requiring strong written communication (technical writer). Resume and cover letter both contain several noticeable grammar and spelling errors.",
+    "question": "How much weight should this carry given the role's specific communication requirement?",
+    "rubric_notes": "Should note that grammar/spelling errors are more significant for a role explicitly requiring strong written communication than they would be for an unrelated role, and recommend weighing this more heavily here — but also consider whether English is a second language or other context might explain it, and recommend a writing sample or exercise as a more reliable signal than resume errors alone."
+  },
+  {
+    "id": "recruiting-027",
+    "category": "recruiting",
+    "context": "Screening call:\nCandidate: I want to be upfront — I'm currently 7 months pregnant and would need to take maternity leave within the first few months if I start this role.\nRecruiter: [needs to respond appropriately and legally]",
+    "question": "How should I respond to this disclosure?",
+    "rubric_notes": "Must recommend a legally and ethically appropriate response: thank the candidate for being upfront, confirm this does not factor into the hiring decision (pregnancy/family leave status is a protected characteristic in most jurisdictions and cannot be used to disqualify a candidate), and continue evaluating on merit; should not suggest asking follow-up questions probing the pregnancy or leave timing in a way that could be seen as discriminatory."
+  },
+  {
+    "id": "recruiting-028",
+    "category": "recruiting",
+    "context": "Candidate profile: for a role that's part of a hiring push to increase team diversity per a stated department OKR. Candidate is strong but not the strongest of the 3 finalists on pure technical assessment scores.",
+    "question": "How should the diversity OKR factor into this decision?",
+    "rubric_notes": "Should recommend a careful, defensible approach: evaluate all candidates against consistent, documented criteria and avoid making the final decision based on a protected characteristic in a way that could be discriminatory or create legal risk; if diversity is a legitimate consideration in the broader hiring strategy (e.g., expanding sourcing channels, structured interview panels), that should happen at the process level, not as a tiebreaker between specific final candidates based on identity. Should flag this as a sensitive area to route through HR/legal guidance rather than deciding informally."
+  },
+  {
+    "id": "recruiting-029",
+    "category": "recruiting",
+    "context": "Candidate profile: for a remote role based in a different timezone (candidate is GMT+8, team is primarily US Eastern, GMT-5). 13-hour difference.",
+    "question": "What should I probe about given this timezone gap?",
+    "rubric_notes": "Should flag the significant 13-hour timezone gap as worth exploring concretely: overlap hours available for meetings/collaboration (likely very limited or requiring one side to work unusual hours), how the team currently handles async work, and whether the candidate is genuinely willing/able to shift hours if needed, rather than assuming it'll work out."
+  },
+  {
+    "id": "recruiting-030",
+    "category": "recruiting",
+    "context": "Screening call:\nCandidate: I should mention I have a non-compete from my current employer that might restrict me from joining a direct competitor. I'm not 100% sure if your company counts.\nRecruiter context: our company and the candidate's current employer do compete in one product line, though the candidate doesn't currently work in that line.",
+    "question": "How should I handle this legal risk disclosure?",
+    "rubric_notes": "Should recommend taking this seriously and not proceeding as if it's a non-issue, given the companies do compete in one product line — recommend the candidate consult an employment attorney about the specific non-compete terms and consult internal legal before making an offer, rather than assuming it doesn't apply because the candidate 'doesn't currently work in that line.'"
+  },
+  {
+    "id": "recruiting-031",
+    "category": "recruiting",
+    "context": "Candidate profile: for a Staff Engineer role. During technical screen, candidate confidently answered several questions incorrectly (e.g., misstated Big-O complexity for a common algorithm) without acknowledging uncertainty.",
+    "question": "What should I flag about this pattern to the hiring team?",
+    "rubric_notes": "Should flag both the specific factual errors AND the pattern of confidently asserting incorrect information without hedging as a signal worth noting — for a senior/staff-level role, calibrated confidence (knowing what you don't know) is often as important as raw technical accuracy, so this combination should be surfaced explicitly rather than only noting 'some technical gaps.'"
+  },
+  {
+    "id": "recruiting-032",
+    "category": "recruiting",
+    "context": "Candidate profile: previously interviewed for a different role at our company 8 months ago and was rejected at the final round. Now applying for a different, more senior role.",
+    "question": "Should this prior rejection affect how I screen them now?",
+    "rubric_notes": "Should recommend reviewing the prior interview feedback for relevant signal (especially if concerns were role-specific vs general fit issues) but evaluate the candidate fresh against the new, more senior role's actual requirements rather than assuming the prior rejection automatically disqualifies them — many candidates improve or are simply a better fit for a different role."
+  },
+  {
+    "id": "recruiting-033",
+    "category": "recruiting",
+    "context": "Screening call:\nCandidate: Quick question — does this role have any equity component? I noticed the posting didn't mention it.\nRecruiter context: role does include equity (a standard RSU grant band for the level), but the exact number depends on final leveling determined later in the process.",
+    "question": "How should I answer this equity question given the uncertainty in exact numbers?",
+    "rubric_notes": "Should recommend being transparent that equity IS part of the offer (correcting the gap in the posting) while being honest that the exact amount depends on final leveling determined later in the process, rather than either omitting the equity mention entirely or making up a specific number prematurely."
+  },
+  {
+    "id": "recruiting-034",
+    "category": "recruiting",
+    "context": "Candidate profile: for a role requiring collaborative, team-based work. During the screen, when asked about a time they disagreed with a teammate, the candidate described three separate examples across three different jobs, all framed as 'the other person was clearly wrong and I was right.'",
+    "question": "What should I make of this pattern in the candidate's answers?",
+    "rubric_notes": "Should flag the pattern (consistently framing conflicts as one-sided across multiple jobs) as worth noting for a collaborative role, since this could indicate difficulty with self-reflection or genuine collaboration — recommend probing further with a question that specifically asks about a time they were wrong or learned something from a disagreement, to get a fuller picture before concluding."
+  },
+  {
+    "id": "recruiting-035",
+    "category": "recruiting",
+    "context": "Candidate profile: for a Marketing Manager role, resume shows strong quantified results (e.g., 'grew organic traffic 150% in 12 months') but no LinkedIn profile, no portfolio link, and declined to provide references when asked, saying 'I'd rather not involve my current employer.'",
+    "question": "How should I weigh the strong resume claims against the lack of verifiable references?",
+    "rubric_notes": "Should note the tension: strong quantified claims are appealing but currently unverified, and while declining references to protect a current job search is a common and understandable reason (not automatically a red flag), the recruiter should still find alternative verification paths (portfolio samples if any exist, deeper behavioral questions about the specific campaigns, or agreeing references will be provided later in the process before an offer) rather than either dismissing the claims or accepting them fully unverified."
+  }
+]

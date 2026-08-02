@@ -1,0 +1,21 @@
+[INTERVIEWER]: Alright, let's start. This is the Q3 platform sync, September 12th.
+[ME]: Sounds good.
+[INTERVIEWER]: First item is the checkout latency regression. Devansh, what did we find?
+[ME]: The p99 went from 180 milliseconds to 940 milliseconds after the release on the 4th. We traced it to the new fraud-scoring call being synchronous.
+[INTERVIEWER]: So the fix is to make it async?
+[ME]: Right. We'll move it behind a queue and fall back to the cached score if it doesn't respond in 50 milliseconds.
+[INTERVIEWER]: Okay. Decision: we ship the async fraud-scoring change in the September 19th release. Devansh owns it.
+[ME]: Understood.
+[INTERVIEWER]: Second item, the Cassandra migration. We agreed last quarter to move the events table, but I want to revisit.
+[ME]: The write throughput numbers came in at 42,000 writes per second on the test cluster, which is above our 30,000 target.
+[INTERVIEWER]: And cost?
+[ME]: About 18 percent higher than the current setup, mostly from the extra replica.
+[INTERVIEWER]: Decision: we proceed with the Cassandra migration, but only for the events table. We are explicitly NOT migrating the ledger. Meera owns the rollout plan, due October 3rd.
+[ME]: Noted. I'll flag that the ledger stays on PostgreSQL.
+[INTERVIEWER]: Third, headcount. We are not opening the two backend roles this quarter. That is deferred to Q4.
+[ME]: Does that change the migration timeline?
+[INTERVIEWER]: It might. Meera should assume the current team size in the rollout plan.
+[ME]: Okay.
+[INTERVIEWER]: Last thing, the incident review. The October 2nd outage post-mortem is still open. Action item: Devansh to circulate the draft by September 15th.
+[ME]: I'll send it Friday.
+[INTERVIEWER]: Great. That's everything.

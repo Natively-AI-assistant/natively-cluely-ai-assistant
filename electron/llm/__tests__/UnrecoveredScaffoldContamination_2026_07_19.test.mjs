@@ -123,4 +123,59 @@ Polite opening: I'd love to throw out a range, but I want to make sure I'm doing
     assert.equal(hasUnrecoveredScaffoldContamination('skill_experience_answer', ''), false);
     assert.equal(hasUnrecoveredScaffoldContamination('skill_experience_answer', '   '), false);
   });
+
+  // Live regression 2026-08-01: user captured a coding problem via the browser
+  // extension and pressed "What should I say?" without ever asking a question
+  // aloud (Ambient AI Chat on ⇒ no transcript). AnswerPlanner's
+  // `if (!question) answerType = 'unknown_answer'` fired, so a LEGITIMATE
+  // coding answer arrived labelled non-coding and carrying the exact
+  // fingerprint these detectors treat as proof of contamination. Both fired on
+  // correct output; the unrecovered path then replaced a validated 1375-char
+  // answer with a 115-char refusal. `unknown_answer` means "never classified",
+  // not "known not to be coding", so it is out of scope for both detectors.
+  test('unknown_answer (no question ⇒ never classified) is out of scope for both detectors', () => {
+    const raw = `## Approach
+Use a hash map to track the complement of each element as we scan once.
+
+## Technique / Data Structure / Algorithm Used
+Single-pass hash map lookup.
+
+## Code
+\`\`\`python
+def two_sum(nums, target):
+    seen = {}
+    for i, n in enumerate(nums):
+        if target - n in seen:
+            return [seen[target - n], i]
+        seen[n] = i
+\`\`\`
+
+## Complexity
+Time Complexity: O(n). Space Complexity: O(n).`;
+    // A classified non-coding type still flags this — the detector's premise
+    // holds there, and that behaviour must not regress.
+    assert.equal(
+      hasUnrecoveredScaffoldContamination('skill_experience_answer', raw),
+      true,
+      'sanity: a genuinely non-coding answer type still flags this shape',
+    );
+    // Unclassified must not, or a correct coding answer gets destroyed.
+    assert.equal(hasUnrecoveredScaffoldContamination('unknown_answer', raw), false);
+    assert.equal(detectAndExtractScaffoldMisfire('unknown_answer', raw), null);
+  });
+
+  // general_meeting_answer is a REAL classification (reached only when a
+  // question exists), so it must keep its existing detector coverage — the
+  // unclassified carve-out above must not widen to it.
+  test('general_meeting_answer keeps full detector coverage', () => {
+    const raw = `## Approach
+Frame the tradeoff before giving the recommendation.
+
+## Dry Run
+Walk the interviewer through the first two iterations.
+
+## Interviewer Follow-up Points
+- Ask about their current retry budget.`;
+    assert.equal(hasUnrecoveredScaffoldContamination('general_meeting_answer', raw), true);
+  });
 });

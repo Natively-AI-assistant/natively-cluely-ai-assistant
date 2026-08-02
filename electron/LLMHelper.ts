@@ -44,7 +44,15 @@ import {
   customProviderSupportsVision,
   customProviderIsLocal,
 } from "./llm/visionCapability"
-import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
+import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE, isProviderFamilyDisabled, ProviderDisabledError, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
+// Outbound-scope vocabulary shared with Context Intelligence V3. ONE mapping of
+// SourceType → privacy toggle: a second copy here is how the two layers would
+// drift into disagreeing about what a `<evidence source_type="RESUME">` block is.
+import { applyEnvScopeDenials, sourceTypesForScopes, dataScopeForSourceType, dataScopesForEvidenceMarkup, scopeLabels, DENY_PROVIDER_SCOPES_ENV } from "./context-intelligence/policies/provider-scope-policy"
+// Screen-understanding enforcement (private_vision / vision_only). Lives in
+// LLMHelper so EVERY screenshot-bearing path is covered, not the one IPC
+// handler that used to read the enum.
+import { resolveVisionPolicy, readScreenUnderstandingMode, isLocalVisionProvider, VisionPolicyError, PRIVATE_VISION_NO_LOCAL_MESSAGE } from "./llm/visionPolicy"
 // D1 (PROFILE_INTELLIGENCE_RESEARCH_AND_REDESIGN.md §15 R1): make the routing
 // decision authoritative at this central execution choke-point.
 import { profileInterceptAllowedByRoute, modeAnswerType, type StreamRouteOptions } from "./llm/streamContextPolicy"
@@ -257,17 +265,80 @@ const IMAGE_ANALYSIS_PROMPT = `Analyze concisely. Be direct. No markdown formatt
 ${IMAGE_TRUST_TRAILER}`
 
 export class LLMHelper {
-  private client: GoogleGenAI | null = null
-  private groqClient: Groq | null = null
-  private openaiClient: OpenAI | null = null
-  private claudeClient: Anthropic | null = null
+  // ── Provider clients ────────────────────────────────────────────────────
+  //
+  // Each client is stored in a `_`-prefixed field and read through a getter
+  // that consults the user's disabled-provider list LIVE.
+  //
+  // WHY A GETTER AND NOT A CHECK AT EACH BRANCH
+  // CredentialsManager documents "…and is never chosen as a routing fallback",
+  // but nothing enforced it: `disabledProviders` was honoured only by the model
+  // PICKER and by refreshRuntimeDefaultIfUnavailable(). The streaming cascade
+  // in _streamChatInner and the vision chain select providers by testing these
+  // client fields directly, at ~30 separate branches, so a rate-limited or 503
+  // primary fell back onto a provider the user had explicitly switched off —
+  // sending it transcript, reference-file context and screenshots. Gating the
+  // READ covers every existing branch and every future one by construction;
+  // patching 30 conditions would leave the 31st to be found later.
+  //
+  // The assignment sites are unchanged: each getter has a matching setter.
+  private _client: GoogleGenAI | null = null
+  private _groqClient: Groq | null = null
+  private _openaiClient: OpenAI | null = null
+  private _claudeClient: Anthropic | null = null
   // DeepSeek is OpenAI-compatible; reuse the OpenAI SDK with a custom baseURL.
   // Kept as a separate client so credentials/scope/telemetry stay provider-specific.
-  private deepseekClient: OpenAI | null = null
+  private _deepseekClient: OpenAI | null = null
   // LiteLLM proxy is OpenAI-compatible (AI gateway fronting 100+ providers).
   // Same pattern as DeepSeek: OpenAI SDK + custom baseURL, separate client so
   // credentials/scope/telemetry stay provider-specific.
-  private litellmClient: OpenAI | null = null
+  private _litellmClient: OpenAI | null = null
+
+  private get client(): GoogleGenAI | null { return this.isProviderDisabled('gemini') ? null : this._client }
+  private set client(v: GoogleGenAI | null) { this._client = v }
+  private get groqClient(): Groq | null { return this.isProviderDisabled('groq') ? null : this._groqClient }
+  private set groqClient(v: Groq | null) { this._groqClient = v }
+  private get openaiClient(): OpenAI | null { return this.isProviderDisabled('openai') ? null : this._openaiClient }
+  private set openaiClient(v: OpenAI | null) { this._openaiClient = v }
+  private get claudeClient(): Anthropic | null { return this.isProviderDisabled('claude') ? null : this._claudeClient }
+  private set claudeClient(v: Anthropic | null) { this._claudeClient = v }
+  private get deepseekClient(): OpenAI | null { return this.isProviderDisabled('deepseek') ? null : this._deepseekClient }
+  private set deepseekClient(v: OpenAI | null) { this._deepseekClient = v }
+  private get litellmClient(): OpenAI | null { return this.isProviderDisabled('litellm') ? null : this._litellmClient }
+  private set litellmClient(v: OpenAI | null) { this._litellmClient = v }
+
+  /**
+   * The user's switched-off providers, read LIVE on every question.
+   * NEVER cached: CredentialsManager is anchored on globalThis (one instance
+   * across all 22 bundles that inline it), so this read is the same truth the
+   * Settings window wrote, and a toggle applies to the very next answer.
+   *
+   * Fails OPEN — a credential-store failure must not brick every provider.
+   */
+  private getDisabledProviderFamilies(): readonly string[] {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const list = CredentialsManager.getInstance().getDisabledProviders?.();
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private isProviderDisabled(family: string): boolean {
+    return isProviderFamilyDisabled(family, this.getDisabledProviderFamilies());
+  }
+
+  /** Error text for "nothing left to try", which reads very differently when
+   *  the user switched the providers off than when they never added a key. */
+  private noProviderAvailableMessage(): string {
+    const off = this.getDisabledProviderFamilies();
+    if (off.length > 0) {
+      return `No AI provider is available: ${off.join(', ')} ${off.length === 1 ? 'is' : 'are'} switched off in `
+        + 'Settings > AI Providers. Switch one back on, or add another provider key.';
+    }
+    return 'No AI provider configured. Please add at least one API key in Settings.';
+  }
   private apiKey: string | null = null
   private groqApiKey: string | null = null
   private openaiApiKey: string | null = null
@@ -385,13 +456,24 @@ export class LLMHelper {
   // but 10× the cost.
   private _claudeCacheFirstHitLogged: boolean = false;
 
+  // Read LIVE on every call — never memoised. esbuild inlines this module into
+  // many entry bundles, so a cached policy would go stale in every bundle but
+  // the one that wrote it. SettingsManager is anchored on globalThis, so the
+  // read below is one truth across all of them.
   private getProviderScopePolicy(): ProviderDataScopePolicy | undefined {
+    let stored: ProviderDataScopePolicy | undefined;
     try {
       const { SettingsManager } = require('./services/SettingsManager');
-      return SettingsManager.getInstance().get('providerDataScopes');
+      stored = SettingsManager.getInstance().get('providerDataScopes');
     } catch {
-      return undefined;
+      stored = undefined;
     }
+    // Deny-only env override (NATIVELY_DENY_PROVIDER_SCOPES). It can add a
+    // denial, never grant one, so it cannot be used to weaken the user's
+    // choice — and it is what lets the enforcement path be exercised end to
+    // end without a live settings store. Same helper the V3 layer uses, so the
+    // two layers can never disagree about the effective policy.
+    return applyEnvScopeDenials(stored, process.env[DENY_PROVIDER_SCOPES_ENV]);
   }
 
   private inferContextScopes(context?: string): ProviderDataScope[] {
@@ -400,7 +482,13 @@ export class LLMHelper {
     if (/<reference_file|<active_mode_retrieved_context|mode_retrieval/i.test(context)) scopes.push('reference_files');
     if (/<meeting_history|USER-PROVIDED PERSONA CONTEXT|<user_context|<candidate_|<active_mode_custom_instructions/i.test(context)) scopes.push('profile_history');
     if (/<post_call_summary|meeting summary|silent meeting summarizer|silent meeting note-taker/i.test(context)) scopes.push('post_call_summary');
-    return scopes;
+    // Context Intelligence V3 evidence markup. The patterns above are the
+    // LEGACY tag vocabulary; V3 has been the default answer path since
+    // 2026-07-30 and packs every source as `<evidence source_type="…">`, which
+    // matched none of them — so a V3-composed payload was inferred to carry no
+    // scope at all and no toggle was enforced on the shipped default path.
+    scopes.push(...dataScopesForEvidenceMarkup(context));
+    return [...new Set(scopes)];
   }
 
   private inferEmbeddedMessageScopes(message?: string): ProviderDataScope[] {
@@ -409,7 +497,14 @@ export class LLMHelper {
     if (/<reference_file|<active_mode_retrieved_context|mode_retrieval/i.test(message)) scopes.push('reference_files');
     if (/<meeting_history|USER-PROVIDED PERSONA CONTEXT|<user_context|<candidate_|<active_mode_custom_instructions/i.test(message)) scopes.push('profile_history');
     if (/<post_call_summary/i.test(message)) scopes.push('post_call_summary');
-    return scopes;
+    // V3 evidence markup — see inferContextScopes. A V3 prompt carries its
+    // evidence in the MESSAGE (context is undefined), so this is the branch
+    // that actually fires on the default path.
+    scopes.push(...dataScopesForEvidenceMarkup(message));
+    // V3 renders prior-turn continuity as a labelled prose section rather than
+    // as evidence; it is CONVERSATION_STATE data, i.e. transcript scope.
+    if (/^# Conversation so far$/m.test(message)) scopes.push('transcript');
+    return [...new Set(scopes)];
   }
 
   private stripDeniedScopedBlocksFromMessage(message: string, deniedScopes: ProviderDataScope[]): string {
@@ -435,22 +530,301 @@ export class LLMHelper {
     if (deniedScopes.includes('post_call_summary')) {
       scrubbed = scrubbed.replace(/<post_call_summary\b[\s\S]*?<\/post_call_summary>\s*/gi, '');
     }
+    // TRANSCRIPT had NO branch at all. Enforcement for it was `context =
+    // undefined` and nothing else, so a payload carrying the transcript inside
+    // the MESSAGE (every V3 turn, and the legacy assemblers below) shipped
+    // byte-identical while `logScopeFallback(scope, 'omitting')` printed a line
+    // claiming it had been removed.
+    if (deniedScopes.includes('transcript')) {
+      scrubbed = scrubbed
+        .replace(/<transcript\b[\s\S]*?<\/transcript>\s*/gi, '')
+        .replace(/<recent_transcript\b[\s\S]*?<\/recent_transcript>\s*/gi, '')
+        // V3's prior-turn continuity section (CONVERSATION_STATE data). Runs to
+        // the next top-level section or tag, both of which the composer emits
+        // after a blank line.
+        //
+        // Start anchor is `(?:^|\n)`, NOT `(?:^|\n\n)`. Detection above is
+        // `/^# Conversation so far$/m`, whose `^` matches after ANY newline, so
+        // a heading preceded by a single `\n` was classified as transcript and
+        // then not stripped at all. `(?:^|\n)` is that same "start of line"
+        // condition written without the `/m` flag — which the flag must stay
+        // off for, because with `/m` the `$` in the lookahead below would match
+        // every line end and the lazy body would stop after the section's FIRST
+        // line: a strictly worse leak than the one being fixed.
+        //
+        // KNOWN REMAINING GAP, not an oversight: a conversation summary whose
+        // own text contains a blank line followed by `#` or `<` ends the match
+        // early and the remainder survives. The obvious fix — an alternation on
+        // the composer's known following-section literals — was rejected: those
+        // literals are not stable, and any miss silently swallows the whole
+        // `# Evidence` block on a turn where only `transcript` was denied,
+        // turning a privacy strip into a retrieval outage. This regex is a
+        // BACKSTOP; primary enforcement is engine-bridge.ts:190, which nulls
+        // convoSummary before composing, so nothing reaches here on the live
+        // path.
+        .replace(/(?:^|\n)# Conversation so far(?:\n[\s\S]*?)?(?=\n\n[#<]|$)/g, '');
+    }
+
+    // ── Context Intelligence V3 evidence blocks ─────────────────────────────
+    // The transport-layer BACKSTOP. The primary enforcement is the filter in
+    // engine-bridge, which runs before packing so the composed instructions
+    // agree with the evidence that survived. This exists for prompts that reach
+    // a transport without having been through that filter.
+    //
+    // Safe to match with a regex: context-packer's esc() XML-escapes every
+    // attribute value and all content, so no `<`/`>` from a document can forge
+    // or prematurely close an <evidence> tag.
+    const deniedSourceTypes = sourceTypesForScopes(deniedScopes);
+    if (deniedSourceTypes.size > 0 && /<evidence\b/i.test(scrubbed)) {
+      let removed = 0;
+      // The scopes that ACTUALLY removed something — not every denied scope.
+      // The notice is read by the model and quoted to the user, so naming a
+      // scope that withheld nothing would be its own small lie.
+      const removedScopes = new Set<ProviderDataScope>();
+      scrubbed = scrubbed.replace(/<evidence\b[^>]*>[\s\S]*?<\/evidence>\s*/gi, (block) => {
+        const match = /\bsource_type="([A-Za-z_]+)"/.exec(block);
+        if (match && deniedSourceTypes.has(match[1])) {
+          removed += 1;
+          const scope = dataScopeForSourceType(match[1]);
+          if (scope) removedScopes.add(scope);
+          return '';
+        }
+        return block;
+      });
+      if (removed > 0) {
+        // Never leave a prompt whose instructions describe evidence that is no
+        // longer there: an "# Evidence" heading over nothing, with a
+        // checked-absence contract still in the system prompt, is a fabrication
+        // engine. Say what happened, in the prompt, where the model can act on
+        // it.
+        const named = [...removedScopes];
+        scrubbed += `\n\n<evidence_withheld scopes="${named.join(',')}">`
+          + `${removed} piece(s) of evidence were removed from this prompt by a privacy setting in this app `
+          + `(Settings > AI Providers > Privacy — cloud data scopes: ${scopeLabels(named)}). `
+          + 'Treat NO evidence here as a complete record, never state that something is absent from a source, '
+          + 'and do not answer from general knowledge in place of the withheld material. If the question cannot '
+          + 'be answered from what remains, say plainly that a privacy setting is withholding it.'
+          + '</evidence_withheld>';
+      }
+    }
     return scrubbed.replace(/\n{3,}/g, '\n\n').trim();
   }
 
+  /**
+   * The data scopes a payload carries.
+   *
+   * `extraScopes` is what the CALLER declares — always prefer it. The
+   * transcript rule below is the LAST-BOUNDARY backstop: the ~20
+   * assertOutboundScopes() sites sit inside the individual provider methods
+   * (generateWithGroq, callNatively, …), which are reached from dozens of call
+   * paths and know nothing about the payload's provenance. Treating any
+   * non-empty payload there as transcript-bearing is deliberately conservative:
+   * it is the only thing standing between those sites and an unclassified send.
+   *
+   * The removed `&& extraScopes.length === 0` guard was NOT that conservatism —
+   * it was a hole in it. It made any OTHER detected scope suppress transcript
+   * detection entirely, so a payload with a reference-file block was checked for
+   * reference_files and silently exempted from the transcript check, while the
+   * very same payload with no detected scope WAS checked. It also desynchronised
+   * the two layers: the gate in _streamChatInner (which does have extraScopes)
+   * would clear a payload the provider-level assert then rejected, turning a
+   * "route this to Ollama" outcome into "all providers failed".
+   */
   private scopesForPayload(text: string, imagePaths?: string[], extraScopes: ProviderDataScope[] = []): ProviderDataScope[] {
     const scopes = new Set<ProviderDataScope>(extraScopes);
-    if (text.trim().length > 0 && extraScopes.length === 0) scopes.add('transcript');
+    if (text.trim().length > 0) scopes.add('transcript');
     if (imagePaths?.length) scopes.add('screenshots');
     return [...scopes];
   }
 
+  /**
+   * Provider-label → disabled-provider family.
+   *
+   * `custom_curl`/`custom_provider` map to the literal family id `'custom'`,
+   * which is what the Providers panel's "Disable custom providers (keeps them
+   * saved)" toggle writes. They were previously omitted on the rationale that
+   * "a custom provider's family id is its own opaque id, not recoverable from
+   * this label" — true of a PER-PROVIDER disable, but the toggle the UI
+   * actually ships is the family one, so the omission left the only case the
+   * user can reach uncovered. A rate-limited primary then cascaded onto
+   * `if (this.customProvider)` and sent transcript / reference-file /
+   * screenshot data to the user's own endpoint after they had switched custom
+   * providers off.
+   *
+   * STILL NOT COVERED, deliberately and unavoidably: disabling ONE individual
+   * custom provider by its opaque id. Both labels below are shared by every
+   * custom provider, so the id of the specific one being called is genuinely
+   * not recoverable at this boundary. That case is enforced upstream, where
+   * the provider object is in hand — not here.
+   */
+  private static readonly PROVIDER_LABEL_FAMILY: Readonly<Record<string, string>> = {
+    gemini: 'gemini', groq: 'groq', natively: 'natively', openai: 'openai',
+    claude: 'claude', deepseek: 'deepseek', litellm: 'litellm', codex: 'codex-cli',
+    custom_curl: 'custom', custom_provider: 'custom',
+  };
+
+  /**
+   * True when a Gemini `contents` array carries an image part.
+   *
+   * DERIVED, never passed in. `generateContent` takes no `imagePaths` — the
+   * image rides inside `contents` as an `inlineData`/`fileData` part — so an
+   * opt-in "hasImages" argument would re-open this hole the moment a future
+   * caller forgot it, which is exactly how the boundary was bypassed the first
+   * time.
+   *
+   * Handles BOTH shapes the Gemini SDK accepts. Bare parts
+   * (`[{ text }, { inlineData }]`) is what every current caller of
+   * generateContent builds — generateWithVisionFallback's two Gemini branches
+   * and runVisionRequest. Role-shaped turns
+   * (`[{ role, parts: [{ inlineData }] }]`) reach the SDK today only from
+   * generateContentStructured, which calls `client.models.generateContent`
+   * DIRECTLY and so never passes through here; that branch is therefore
+   * defensive, and deliberately so — the whole defect being fixed is a check
+   * that covered the shapes in front of it and not the shape someone added
+   * next.
+   */
+  private static geminiContentsCarryImages(contents: unknown): boolean {
+    const isImagePart = (part: any): boolean =>
+      Boolean(part) && typeof part === 'object' && (Boolean(part.inlineData) || Boolean(part.fileData));
+    for (const entry of Array.isArray(contents) ? contents : [contents]) {
+      if (!entry || typeof entry !== 'object') continue;
+      if (isImagePart(entry)) return true;
+      const parts = (entry as any).parts;
+      if (Array.isArray(parts) ? parts.some(isImagePart) : isImagePart(parts)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The screen-understanding decision for this turn, resolved LIVE.
+   *
+   * `localVisionAvailable` is probed only when the decision could depend on it,
+   * because the probe is a round trip to the local runtime.
+   */
+  private async resolveOutboundVisionDecision(
+    imagePaths: string[] | undefined,
+    screenshotsScopeAllowed: boolean,
+  ): Promise<{ decision: import('./llm/visionPolicy').VisionDecision; localAvailable: boolean }> {
+    const decision = resolveVisionPolicy({
+      hasImages: Boolean(imagePaths?.length),
+      mode: readScreenUnderstandingMode(),
+      screenshotsScopeAllowed,
+      visionProviderAvailable: this.anyVisionProviderAvailable(),
+    });
+    const localAvailable = decision.action === 'local_only'
+      ? (this.useOllama && await this.ensureOllamaModelSelected(true))
+      : false;
+    return { decision, localAvailable };
+  }
+
+  /** Live, fail-OPEN: a credential-store failure must not start refusing turns
+   *  that would otherwise have been answered. */
+  private anyVisionProviderAvailable(): boolean {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      return cm.anyVisionProviderConfigured?.() ?? true;
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * The private_vision half of the outbound boundary, split out so a call site
+   * that HAS images but no image PATHS can still enforce it — `generateContent`
+   * carries its image inside the Gemini `contents` array, so it has no
+   * `imagePaths` to hand to `assertOutboundScopes`.
+   *
+   * Every caller is a CLOUD provider (the local runtime is reached through
+   * callOllama/streamWithOllama, which do not pass through here), so under
+   * private_vision an image arriving here is exactly the send the setting
+   * promises never happens.
+   */
+  private assertOutboundImagesAllowed(provider: string, hasImages: boolean): void {
+    if (hasImages && !isLocalVisionProvider(provider)
+      && readScreenUnderstandingMode() === 'private_vision') {
+      throw new VisionPolicyError(provider, PRIVATE_VISION_NO_LOCAL_MESSAGE);
+    }
+  }
+
+  /**
+   * The last boundary before a payload leaves for a named provider.
+   *
+   * WHAT THIS IS NOT (corrected 2026-08-01): this was previously commented as
+   * holding "by construction … for any path that reaches a provider call
+   * another way", on the claim that these call sites "are already the one place
+   * every provider request passes through". That was FALSE, and an adversarial
+   * review drove a screenshot to Gemini, Groq and Claude through the gap:
+   *   • generateContent passed no imagePaths (the image is inside `contents`),
+   *     so neither the private_vision check nor the `screenshots` scope could
+   *     see it;
+   *   • generateWithClaude and generateWithGroqMultimodal did not call this at
+   *     all, despite both accepting imagePaths and building image blocks;
+   *   • generateWithCodexCli / streamWithCodexCli never reached it either —
+   *     the sharpest case, since visionPolicy.ts singles Codex out as the
+   *     provider that LOOKS local and is not.
+   * All five now call in (generateContent via assertOutboundImagesAllowed plus
+   * an explicit `screenshots` extraScope, since it has no paths to classify).
+   *
+   * The honest invariant is therefore NOT "by construction" but: this is a
+   * BACKSTOP that holds for every send path wired into it, and the wiring is
+   * checked by ProviderDataScopeOutbound / ScreenUnderstandingModeEnforcement,
+   * which enumerate the image-bearing provider methods and assert each one
+   * refuses. A NEW provider method is covered only when it is added here and to
+   * that enumeration — nothing about the shape of the code makes it automatic.
+   */
   private assertOutboundScopes(provider: string, text: string, imagePaths?: string[], extraScopes: ProviderDataScope[] = []): void {
+    this.assertOutboundImagesAllowed(provider, Boolean(imagePaths?.length) || extraScopes.includes('screenshots'));
+    // LAST-BOUNDARY disabled-provider check. The client getters stop every
+    // cascade branch from selecting a switched-off provider; this is the
+    // backstop for a path that reaches a provider call another way (the custom
+    // and Codex families have no client getter at all, so for them it is the
+    // only structural check).
+    const family = LLMHelper.PROVIDER_LABEL_FAMILY[provider];
+    if (family && this.isProviderDisabled(family)) {
+      throw new ProviderDisabledError(provider);
+    }
     assertProviderDataScopes(provider, this.scopesForPayload(text, imagePaths, extraScopes), this.getProviderScopePolicy());
   }
 
   private getDeniedOutboundScopes(text: string, imagePaths?: string[], extraScopes: ProviderDataScope[] = []): ProviderDataScope[] {
     return getDeniedDataScopes(this.scopesForPayload(text, imagePaths, extraScopes), this.getProviderScopePolicy());
+  }
+
+  /**
+   * Turn a privacy refusal into text that names the switch responsible and the
+   * action that would actually change the outcome. Returns null for anything
+   * else, so the caller falls through to its normal error handling.
+   *
+   * These refusals are DELIBERATE outcomes of a user setting, so they must not
+   * be reported like transient provider failures — "please try again" is wrong
+   * advice for a state that only Settings can change. This is also the only
+   * consumer of VisionPolicyError.userMessage, which was otherwise dead text.
+   *
+   * Name-matched on purpose: main-process modules are inlined per esbuild entry
+   * bundle, so `instanceof` fails whenever thrower and catcher are in different
+   * bundles.
+   */
+  private describePrivacyRefusal(error: any): string | null {
+    const name = error?.name;
+    if (name === 'VisionPolicyError') {
+      return error.userMessage || error.message || null;
+    }
+    if (name === 'ProviderScopeError') {
+      const denied = Array.isArray(error.deniedScopes) ? error.deniedScopes : [];
+      const labels = denied.length ? scopeLabels(denied) : 'Some data';
+      return `${labels} ${denied.length === 1 ? 'is' : 'are'} switched off for cloud providers in `
+        + `Settings > AI Providers > Privacy, and no local model is available to handle `
+        + `${denied.length === 1 ? 'it' : 'them'}. Nothing was sent. Re-enable `
+        + `${denied.length === 1 ? 'that data type' : 'those data types'}, or select a local `
+        + `model under Local & Gateways, then ask again.`;
+    }
+    if (name === 'ProviderDisabledError') {
+      return `${error.provider || 'That provider'} is switched off in Settings > AI Providers, `
+        + `and no other provider was available for this request. Switch it back on, or enable `
+        + `another provider, then ask again.`;
+    }
+    return null;
   }
 
   private logScopeFallback(scope: ProviderDataScope, action: 'routing' | 'omitting'): void {
@@ -741,6 +1115,10 @@ export class LLMHelper {
   }
 
   private hasNatively(): boolean {
+    // Switched off in Settings > AI Providers: not a fallback, not a primary.
+    // Checked before the E2E escape hatch so a test harness cannot resurrect a
+    // provider the user turned off.
+    if (this.isProviderDisabled('natively')) return false;
     // E2E: a locally-run backend with NATIVELY_LOCAL_TEST_AUTH accepts the app
     // via the x-natively-local-test header, so the natively provider is usable
     // even without a stored key. Strictly gated behind NATIVELY_E2E=1.
@@ -968,6 +1346,9 @@ export class LLMHelper {
   }
 
   private isCodexAvailable(): boolean {
+    // The store spells this family 'codex-cli'; isProviderFamilyDisabled also
+    // accepts the router's 'codex'.
+    if (this.isProviderDisabled('codex-cli')) return false;
     if (!this.codexCliConfig.enabled) return false;
     try {
       const { CodexOAuthService } = require('./services/CodexOAuthService');
@@ -1112,6 +1493,13 @@ export class LLMHelper {
 
   private async generateWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal): Promise<string> {
     if (!this.isCodexAvailable()) throw new Error('Codex CLI transport is disabled or ChatGPT is signed out.');
+    // Codex had NO boundary at all. It is the sharpest case: visionPolicy.ts
+    // keeps it out of isLocalVisionProvider precisely because it routes to
+    // chatgpt.com/backend-api, so a screenshot going out here is a cloud send
+    // that both the code and the user could mistake for a local one.
+    // The disabled-provider term is redundant with isCodexAvailable() above and
+    // stays for uniformity; the vision + scope terms are new coverage.
+    this.assertOutboundScopes('codex', userContent, imagePaths);
     const model = this.getSelectedCodexCliModel(fastMode);
     // System prompt is sent separately as `body.instructions` (the
     // Responses-API field the Codex backend uses for system content),
@@ -1135,6 +1523,10 @@ export class LLMHelper {
 
   private async *streamWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal): AsyncGenerator<string, void, unknown> {
     if (!this.isCodexAvailable()) throw new Error('Codex CLI transport is disabled or ChatGPT is signed out.');
+    // See generateWithCodexCli. This is a generator, so the check runs on the
+    // first next() rather than at call time — still strictly before any byte
+    // reaches CodexCliService.stream, which is the property that matters.
+    this.assertOutboundScopes('codex', userContent, imagePaths);
     const model = this.getSelectedCodexCliModel(fastMode);
     // See note in generateWithCodexCli — system prompt is sent
     // separately as `body.instructions`, not concatenated.
@@ -1265,31 +1657,105 @@ export class LLMHelper {
     }
   }
 
+  /**
+   * PURE. Its one caller — WhatToAnswerLLM.ts:407 — uses the answer to pick a
+   * context-assembly branch and then routes through `streamChat`, which does
+   * its own `ensureOllamaModelSelected` before dispatching. So the model
+   * repair is not needed here, and doing it would let a capability question
+   * reassign the user's runtime model.
+   */
   public async canUseLocalFallback(needsVision = false): Promise<boolean> {
     return this.checkOllamaAvailable(needsVision);
   }
 
-  private async checkOllamaAvailable(needsVision = false): Promise<boolean> {
+  /**
+   * Exactly the condition the provider-data-scope fallback gate uses, so the
+   * Privacy panel can show what will ACTUALLY happen to a denied scope.
+   *
+   * Deliberately NOT `canUseLocalFallback`: that one omits the `useOllama`
+   * term, but every scope-denial site gates on `this.useOllama &&
+   * this.ensureOllamaModelSelected(...)` (see the `ollamaAvailable` locals in
+   * `_streamChatInner` and `chatWithGemini`). "Ollama has models installed" and
+   * "Ollama is the selected provider" are different questions, and only the
+   * second one predicts the fallback. The UI previously answered with
+   * `ollamaModels.length > 0`, which is neither.
+   *
+   * PURE, and it must stay pure: this is what the Settings pane polls. It
+   * intentionally uses the non-mutating `checkOllamaAvailable` while the gates
+   * it mirrors use `ensureOllamaModelSelected` — the two return the same
+   * boolean for the same runtime state, and the only difference is the model
+   * repair, which belongs to a turn that is about to dispatch and not to a
+   * panel that is merely asking.
+   */
+  public async scopeFallbackAvailable(needsVision = false): Promise<boolean> {
+    return this.useOllama && await this.checkOllamaAvailable(needsVision);
+  }
+
+  /**
+   * One probe of the local runtime, with NO side effects.
+   *
+   * Returns the model the probe was performed against — the currently selected
+   * one when it is still installed, otherwise the first installed model. The
+   * CALLER decides whether that repair is worth writing back, which is the
+   * whole point of the split: `checkOllamaAvailable` used to perform the
+   * write itself, so anything that merely ASKED whether local fallback was
+   * possible silently reassigned the user's runtime model selection. A
+   * Settings poll doing that a few times a second is not a hypothetical.
+   */
+  private async probeOllama(needsVision: boolean): Promise<{ ok: boolean; model?: string }> {
+    // No exemption for the local provider: the user switched it off in the same
+    // Settings panel as the cloud ones. A scope-denied turn then degrades to a
+    // scrubbed cloud payload or a clean error instead of a local answer the
+    // user asked not to have.
+    if (this.isProviderDisabled('ollama')) return { ok: false };
     try {
       const availableModels = await this.getOllamaModels();
-      if (availableModels.length === 0) return false;
-      if (!this.ollamaModel || !availableModels.includes(this.ollamaModel)) {
-        this.ollamaModel = availableModels[0];
-      }
-      const capabilities = getModelCapabilities(this.ollamaModel, true);
-      if (needsVision && !capabilities.supportsImages) return false;
+      if (availableModels.length === 0) return { ok: false };
+      const model = (this.ollamaModel && availableModels.includes(this.ollamaModel))
+        ? this.ollamaModel
+        : availableModels[0];
+      const capabilities = getModelCapabilities(model, true);
+      if (needsVision && !capabilities.supportsImages) return { ok: false, model };
       const response = await fetch(`${this.ollamaUrl}/api/show`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: this.ollamaModel }),
+        body: JSON.stringify({ name: model }),
         signal: AbortSignal.timeout(10_000),
       });
-      return response.ok;
+      return { ok: response.ok, model };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn('[ScopeFallback] Ollama availability check failed:', message);
-      return false;
+      return { ok: false };
     }
+  }
+
+  /**
+   * PURE predicate — asks, never writes. Safe to poll.
+   *
+   * Callers that go on to DISPATCH to Ollama must use
+   * `ensureOllamaModelSelected` instead, or they will dispatch against a model
+   * name the runtime no longer has installed.
+   */
+  private async checkOllamaAvailable(needsVision = false): Promise<boolean> {
+    return (await this.probeOllama(needsVision)).ok;
+  }
+
+  /**
+   * Same probe, but ALSO repairs `this.ollamaModel` when the selected model is
+   * gone (uninstalled between runs, or never set). This is the auto-selection
+   * that used to hide inside `checkOllamaAvailable`; it is now explicit, and
+   * called only from the sites that then hand `this.ollamaModel` to
+   * callOllama/streamWithOllama. Costs exactly one probe, so the sites that
+   * moved here perform the same number of round trips as before.
+   */
+  private async ensureOllamaModelSelected(needsVision = false): Promise<boolean> {
+    const { ok, model } = await this.probeOllama(needsVision);
+    if (model && model !== this.ollamaModel) {
+      console.log(`[LLMHelper] Ollama model "${this.ollamaModel}" is not installed — selecting "${model}"`);
+      this.ollamaModel = model;
+    }
+    return ok;
   }
 
   private async initializeOllamaModel(): Promise<void> {
@@ -1468,7 +1934,13 @@ export class LLMHelper {
    */
   private async generateContent(contents: any[], modelIdOverride?: string): Promise<string> {
     if (!this.client) throw new Error("Gemini client not initialized")
-    this.assertOutboundScopes('gemini', JSON.stringify(contents));
+    // The image lives INSIDE `contents`, so this call site has no `imagePaths`
+    // to hand the boundary — which is precisely why a screenshot reached Gemini
+    // under private_vision. Derive it, then declare `screenshots` explicitly so
+    // BOTH switches over these bytes fire: the screen-understanding mode and
+    // the `screenshots` data scope.
+    const carriesImages = LLMHelper.geminiContentsCarryImages(contents);
+    this.assertOutboundScopes('gemini', JSON.stringify(contents), undefined, carriesImages ? ['screenshots'] : []);
 
     const targetModel = modelIdOverride || this.geminiModel;
     console.log(`[LLMHelper] Calling ${targetModel}...`)
@@ -2030,7 +2502,16 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // matches what the live path will actually send (fix: 7B-class models were
       // being primed on the full HARD_SYSTEM_PROMPT but live requests now use
       // TINY_SYSTEM_PROMPT — mismatch wasted the warmup).
-      const staticPrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(HARD_SYSTEM_PROMPT));
+      // Prompt System v2: warm the SAME base the live path will send — the
+      // composed v2 'answer' prompt when the flag is on, HARD_SYSTEM_PROMPT
+      // otherwise. A mismatched warm prompt wastes the entire warmup.
+      const prewarmBase = (() => {
+        try {
+          const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+          return resolveV2SystemPrompt({ action: 'answer', tier: v2TierForPromptTier(this.getPromptTier()) }) ?? HARD_SYSTEM_PROMPT;
+        } catch { return HARD_SYSTEM_PROMPT; }
+      })();
+      const staticPrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(prewarmBase));
       const model = this.useOllama ? this.ollamaModel : this.currentModelId;
       const key = `${model}|${createHash('sha1').update(staticPrompt).digest('hex')}`;
       // Dedup so repeated activations are free — EXCEPT for an Ollama model that is
@@ -2101,9 +2582,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.().documentGroundedCustomModeActive === true;
         } catch { return false; }
       })();
-      if (documentGroundedCustomModeActive) {
-        console.log('[LLMHelper] Generic bypass disabled: document-grounded custom mode active', {
-          genericBypassDisabledReason: 'document_grounded_custom_mode',
+      // Defect C (2026-08-01): log the EXPLICIT strictness flag — the broad
+      // flag is true for every default non-interview mode via the template
+      // seed, so this line falsely announced strictness on stock Team Meet
+      // and Lecture sessions.
+      if ((() => {
+        try {
+          const { ModesManager } = require('./services/ModesManager');
+          return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.().strictDocumentGroundedActive === true;
+        } catch { return false; }
+      })()) {
+        console.log('[LLMHelper] Generic bypass disabled: strict document-grounded mode active', {
+          genericBypassDisabledReason: 'strict_document_grounded_mode',
           retrievalRequired: true,
         });
       }
@@ -2228,6 +2718,27 @@ try {
 } catch { /* non-fatal */ }
 const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
 const forceDocumentGrounding = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
+// Prompt System v2 (flag promptSystemV2): default the base prompt to the
+// composed v2 'answer' prompt when the caller passed no override, and record
+// whether the base is v2-composed so the legacy MODE_* template suffix is not
+// appended on top of it (the v2 prompt already carries the mode contract).
+// Flag OFF → false, and everything below is byte-for-byte legacy.
+let v2BasePromptActive = false;
+try {
+  const { isPromptSystemV2Enabled, resolveV2SystemPrompt, isV2ComposedPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+  if (isPromptSystemV2Enabled() && !skipSystemPrompt) {
+    if (!systemPromptOverride) {
+      systemPromptOverride = resolveV2SystemPrompt({
+            action: 'answer',
+            tier: v2TierForPromptTier(this.getPromptTier()),
+            // Universal coding contract: attach when the routed answer type is
+            // coding-shaped, regardless of the active mode (2026-08-02).
+            codingTask: (() => { try { const { isCodingAnswerType } = require('./llm/AnswerPlanner'); return !!(routeOptions?.answerType && isCodingAnswerType(routeOptions.answerType)); } catch { return false; } })(),
+          }) ?? systemPromptOverride;
+    }
+    v2BasePromptActive = isV2ComposedPrompt(systemPromptOverride);
+  }
+} catch { /* non-fatal: legacy prompt selection */ }
 const isModeScopedAnswer = routeOptions?.answerType === 'sales_answer'
   || routeOptions?.answerType === 'product_candidate_mix_answer'
   || routeOptions?.answerType === 'lecture_answer';
@@ -2283,7 +2794,9 @@ if (!shouldSkipModeInjection) {
     const modePromptSuffix = modesMgr.getActiveModeSystemPromptSuffix();
     const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions)) || '';
 
-    if (modePromptSuffix) {
+    // See the streaming path: never stack the legacy mode template onto a
+    // v2-composed base — the v2 prompt already carries the mode contract.
+    if (modePromptSuffix && !v2BasePromptActive) {
       const baseForMode = systemPromptOverride || HARD_SYSTEM_PROMPT;
       systemPromptOverride = `${baseForMode}\n\n## ACTIVE MODE\n${modePromptSuffix}`;
     }
@@ -2314,7 +2827,10 @@ if (!shouldSkipModeInjection) {
   }
 }
 
-const isMultimodal = !!(imagePaths?.length);
+// `let`, not `const`: the screen-understanding gate below can drop the images
+// (screenshots scope denied with no local vision model), and everything
+// downstream keys off this flag.
+let isMultimodal = !!(imagePaths?.length);
 
       // Helper to build combined prompts for Groq/Gemini
       const buildMessage = (systemPrompt: string) => {
@@ -2344,6 +2860,20 @@ const isMultimodal = !!(imagePaths?.length);
       const outboundScopes = this.scopesForPayload(message, imagePaths, [...contextScopes, ...embeddedMessageScopes]);
       const scopePolicy = this.getProviderScopePolicy();
       const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, [...contextScopes, ...embeddedMessageScopes]);
+      // Screen-understanding mode, resolved BEFORE cloudImagePaths is derived
+      // from imagePaths (see the same block in _streamChatInner for the full
+      // rationale). Non-streaming twin of that gate.
+      {
+        const { decision: vd, localAvailable } =
+          await this.resolveOutboundVisionDecision(imagePaths, !deniedOutboundScopes.includes('screenshots'));
+        if (vd.action === 'block') return vd.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
+        if (vd.action === 'local_only') {
+          if (localAvailable) return await this.callOllama(combinedMessages.gemini, imagePaths, undefined);
+          if (vd.whenLocalUnavailable === 'block') return vd.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
+          imagePaths = undefined;
+          isMultimodal = false;
+        }
+      }
       const shouldOmitContext = deniedOutboundScopes.some(scope => scope === 'transcript' || scope === 'reference_files' || scope === 'profile_history' || scope === 'post_call_summary');
       const cloudContext = shouldOmitContext ? undefined : context;
       const cloudMessage = this.stripDeniedScopedBlocksFromMessage(message, deniedOutboundScopes);
@@ -2366,7 +2896,7 @@ const isMultimodal = !!(imagePaths?.length);
       };
       const cloudImagePaths = deniedOutboundScopes.includes('screenshots') ? undefined : imagePaths;
       const cloudIsMultimodal = Boolean(cloudImagePaths?.length);
-      const ollamaAvailable = this.useOllama && await this.checkOllamaAvailable(deniedOutboundScopes.includes('screenshots'));
+      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots'));
       if (deniedOutboundScopes.length > 0) {
         for (const scope of deniedOutboundScopes) {
           this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
@@ -2424,11 +2954,17 @@ const isMultimodal = !!(imagePaths?.length);
         return await this.generateWithCodexCli(cloudUserContent, openaiSystemPrompt, false, cloudImagePaths);
       }
 
-      if (this.activeCurlProvider) {
+      // `custom` is the family id the Providers panel's "Disable custom
+      // providers (keeps them saved)" toggle writes. Without this term a
+      // rate-limited primary cascaded straight onto the user's own endpoint
+      // after they switched custom providers off.
+      const customProvidersOff = this.isProviderDisabled('custom');
+
+      if (this.activeCurlProvider && !customProvidersOff) {
         return await this.chatWithCurl(cloudUserContent, skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || CUSTOM_SYSTEM_PROMPT), cloudImagePaths?.[0]);
       }
 
-      if (this.customProvider) {
+      if (this.customProvider && !customProvidersOff) {
         console.log(`[LLMHelper] Using Custom Provider: ${this.customProvider.name}`);
         // For non-streaming call — use rich CUSTOM prompts since custom providers can be cloud models.
         // Honor systemPromptOverride (set by the active-mode injection block above) so
@@ -2534,6 +3070,11 @@ const isMultimodal = !!(imagePaths?.length);
         },
         dataScopes: outboundScopes,
         scopePolicy,
+        // Live, per-turn. The client getters above already null out a disabled
+        // provider, so this is what makes the ATTEMPT REASON honest ('disabled'
+        // rather than 'missing_api_key') instead of the provider silently
+        // vanishing from the cascade.
+        disabledProviders: this.getDisabledProviderFamilies(),
       });
 
       for (const routedProvider of routedProviders) {
@@ -2582,7 +3123,7 @@ const isMultimodal = !!(imagePaths?.length);
         if (cloudIsMultimodal && this.deepseekClient) {
           return "DeepSeek is configured for text-only requests. Add a vision-capable provider like Gemini, OpenAI, Claude, Groq, or Natively to analyze images.";
         }
-        return "No AI providers configured. Please add at least one API key in Settings.";
+        return this.noProviderAvailableMessage();
       }
 
       // ============================================================
@@ -2619,6 +3160,16 @@ const isMultimodal = !!(imagePaths?.length);
 
     } catch (error: any) {
       console.error("[LLMHelper] Critical Error in chatWithGemini:", error);
+
+      // A privacy refusal is NOT a transient failure. Before this, a scope- or
+      // vision-blocked turn fell through to the generic branch below and told
+      // the user "I encountered an error: Provider codex blocked by data scope
+      // policy: transcript. Please try again." — developer text, plus advice
+      // that cannot work, since retrying does not change a settings choice.
+      // Matched on `.name`, never `instanceof`: these classes are inlined per
+      // esbuild entry bundle, so identity is unreliable across bundles.
+      const privacyMessage = this.describePrivacyRefusal(error);
+      if (privacyMessage) return privacyMessage;
 
       if (error.message.includes("503") || error.message.includes("overloaded")) {
         return "The AI service is currently overloaded. Please try again in a moment.";
@@ -2725,15 +3276,17 @@ const isMultimodal = !!(imagePaths?.length);
     }
 
     // Priority 6: Ollama (on-device fallback — last resort, no cloud dependency)
-    if (this.useOllama && await this.checkOllamaAvailable()) {
+    if (this.useOllama && await this.ensureOllamaModelSelected()) {
       providers.push({
         name: `Ollama (${this.ollamaModel})`,
         execute: () => this.callOllama(message)
       });
     }
 
-    // Priority 7: Custom / cURL providers (OpenRouter etc.)
-    if (this.customProvider) {
+    // Priority 7: Custom / cURL providers (OpenRouter etc.) — skipped entirely
+    // when the `custom` family is switched off in Settings > AI Providers.
+    const customProvidersOff = this.isProviderDisabled('custom');
+    if (this.customProvider && !customProvidersOff) {
       providers.push({
         name: `Custom Provider (${this.customProvider.name})`,
         execute: () => this.executeCustomProvider(
@@ -2744,7 +3297,7 @@ const isMultimodal = !!(imagePaths?.length);
           ''
         )
       });
-    } else if (this.activeCurlProvider) {
+    } else if (this.activeCurlProvider && !customProvidersOff) {
       providers.push({
         name: `cURL Provider (${this.activeCurlProvider.name})`,
         execute: () => this.chatWithCurl(message)
@@ -3275,6 +3828,10 @@ const isMultimodal = !!(imagePaths?.length);
   private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.claudeClient) throw new Error("Claude client not initialized");
+    // Was MISSING entirely — this method accepts imagePaths and builds base64
+    // `image` blocks, and a review drove a screenshot through it to the
+    // Anthropic SDK under private_vision. Same position as generateWithOpenai.
+    this.assertOutboundScopes('claude', userMessage, imagePaths);
 
     await this.rateLimiters.claude.acquire();
 
@@ -3565,6 +4122,9 @@ const isMultimodal = !!(imagePaths?.length);
    */
   private async generateWithGroqMultimodal(userMessage: string, imagePaths: string[], systemPrompt?: string): Promise<string> {
     if (!this.groqClient) throw new Error("Groq client not initialized");
+    // Was MISSING entirely — the multimodal Groq path base64-encodes every
+    // screenshot into `image_url` parts and shipped them under private_vision.
+    this.assertOutboundScopes('groq', userMessage, imagePaths);
 
     await this.rateLimiters.groq.acquire();
 
@@ -3612,6 +4172,45 @@ const isMultimodal = !!(imagePaths?.length);
    */
   private async generateWithVisionFallback(systemPrompt: string, userPrompt: string, imagePaths: string[] = []): Promise<string> {
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
+
+    // ── Screen-understanding mode ───────────────────────────────────────────
+    // This is the FOURTH image-dispatch chain, and it had none of the three
+    // gates the others carry (_streamChatInner, chatWithGemini,
+    // streamChatWithGemini) — so driving analyzeImageFiles() with
+    // private_vision AND the `screenshots` scope denied put the pixels on the
+    // wire to Gemini with both switches off.
+    //
+    // Its entry points (analyzeImageFiles, generateRollingScript,
+    // debugSolutionWithImages, extractProblemFromImages) are currently reached
+    // only from an unwired IPC and from ProcessingHelper.processScreenshots(),
+    // which nothing in the main process calls — so the leak was armed behind a
+    // door that is not connected. The gate lives HERE rather than at those
+    // callers so it does not depend on them staying dead.
+    const deniedForVision = this.getDeniedOutboundScopes(userPrompt, imagePaths);
+    {
+      const { decision, localAvailable } =
+        await this.resolveOutboundVisionDecision(imagePaths, !deniedForVision.includes('screenshots'));
+      if (decision.action === 'block') {
+        console.warn(`[VisionPolicy] blocked (vision fallback): ${decision.reason}`);
+        return decision.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
+      }
+      if (decision.action === 'local_only') {
+        if (localAvailable) {
+          console.warn(`[VisionPolicy] routing screenshot to local vision (vision fallback): ${decision.reason}`);
+          return await this.callOllama(`${systemPrompt}\n\n${userPrompt}`, imagePaths, undefined);
+        }
+        if (decision.whenLocalUnavailable === 'block') {
+          console.warn(`[VisionPolicy] blocked, no local vision (vision fallback): ${decision.reason}`);
+          return decision.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
+        }
+        // drop_images: the scope forbids the cloud and there is no local model.
+        // Discard the image and answer without it — the Privacy panel's
+        // "Omitted" badge describes exactly this.
+        console.warn(`[VisionPolicy] dropping screenshot, no local vision (vision fallback): ${decision.reason}`);
+        imagePaths = [];
+      }
+    }
+
     const isMultimodal = imagePaths.length > 0;
 
     // Helper: build a provider attempt for a given family + model ID
@@ -3754,7 +4353,11 @@ const isMultimodal = !!(imagePaths?.length);
     // ──────────────────────────────────────────────────────────────────
     const localProviders: ProviderAttempt[] = [];
 
-    if (this.customProvider) {
+    // See PROVIDER_LABEL_FAMILY: `custom` is the family id the Providers panel
+    // writes for "Disable custom providers (keeps them saved)".
+    const customProvidersOff = this.isProviderDisabled('custom');
+
+    if (this.customProvider && !customProvidersOff) {
       if (isMultimodal) {
         localProviders.push({
           name: `Custom Provider (${this.customProvider.name})`,
@@ -3781,7 +4384,7 @@ const isMultimodal = !!(imagePaths?.length);
       }
     }
 
-    if (this.activeCurlProvider && !this.customProvider) {
+    if (this.activeCurlProvider && !this.customProvider && !customProvidersOff) {
       localProviders.push({
         name: `cURL Provider (${this.activeCurlProvider.name})`,
         execute: () => this.chatWithCurl(userPrompt, systemPrompt, isMultimodal ? imagePaths[0] : undefined)
@@ -3812,6 +4415,11 @@ const isMultimodal = !!(imagePaths?.length);
         }
         console.warn(`[LLMHelper] ⚠️ [Codex CLI] returned empty response, falling back to cloud tiers.`);
       } catch (e: any) {
+        // Same rule as the cascade below: a policy refusal must surface, not be
+        // downgraded into "try the next cloud provider" — which for a
+        // VisionPolicyError would mean trying to send the very image the policy
+        // just refused.
+        if (e?.name === 'VisionPolicyError') return e.userMessage ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
         console.warn(`[LLMHelper] ⚠️ [Codex CLI] failed: ${e.message}. Falling back to cloud tiers.`);
       }
     }
@@ -3855,6 +4463,28 @@ const isMultimodal = !!(imagePaths?.length);
           }
           console.warn(`[LLMHelper] ⚠️ [${providerName}] returned empty response (attempt ${attempt})`);
         } catch (err: any) {
+          // A POLICY REFUSAL IS NOT A PROVIDER FAILURE.
+          //
+          // VisionPolicyError and ProviderDisabledError carry text written for
+          // the user and were, until now, caught by name NOWHERE — so they were
+          // swallowed here as "attempt failed", retried twice more, and the
+          // cascade ended in "All AI providers failed", which tells the user
+          // nothing about the setting that actually stopped the turn.
+          //
+          // Matched on `.name`, deliberately NOT `instanceof`: esbuild inlines
+          // these modules into every entry bundle, so the class identity
+          // differs across bundles and `instanceof` silently returns false.
+          if (err?.name === 'VisionPolicyError') {
+            console.warn(`[VisionPolicy] refusing rather than cascading: ${err.message}`);
+            return err.userMessage ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
+          }
+          if (err?.name === 'ProviderDisabledError' || err?.name === 'ProviderScopeError') {
+            // Retrying cannot help: the policy will not change mid-cascade.
+            // Drop this provider and let a permitted one answer.
+            console.warn(`[LLMHelper] ${providerName} refused by policy (${err.name}) — removing from chain`);
+            exhausted.add(providerName);
+            break;
+          }
           console.warn(`[LLMHelper] ⚠️ [${providerName}] attempt ${attempt} failed: ${err.message}`);
 
           // Event-driven discovery: trigger on 404 / model-not-found errors
@@ -3945,7 +4575,7 @@ const isMultimodal = !!(imagePaths?.length);
     const contextScopes = context ? ['transcript' as ProviderDataScope, ...this.inferContextScopes(context)] : [];
     const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, contextScopes);
     if (deniedOutboundScopes.length > 0) {
-      const ollamaAvailable = this.useOllama && await this.checkOllamaAvailable(deniedOutboundScopes.includes('screenshots'));
+      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots'));
       for (const scope of deniedOutboundScopes) {
         this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
       }
@@ -3957,8 +4587,29 @@ const isMultimodal = !!(imagePaths?.length);
       }
       const shouldOmitContext = deniedOutboundScopes.some(scope => scope === 'transcript' || scope === 'reference_files' || scope === 'profile_history' || scope === 'post_call_summary');
       if (shouldOmitContext) context = undefined;
+      // Same defect as _streamChatInner: clearing `context` does nothing when
+      // the scoped material is embedded in the MESSAGE (every composed prompt).
+      message = this.stripDeniedScopedBlocksFromMessage(message, deniedOutboundScopes);
       if (deniedOutboundScopes.includes('screenshots')) imagePaths = undefined;
       isMultimodal = !!(imagePaths?.length);
+    }
+
+    // Screen-understanding mode — streaming twin of the _streamChatInner gate.
+    {
+      const { decision: vd, localAvailable } =
+        await this.resolveOutboundVisionDecision(imagePaths, !deniedOutboundScopes.includes('screenshots'));
+      if (vd.action === 'block') { yield vd.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE; return; }
+      if (vd.action === 'local_only') {
+        if (localAvailable) {
+          const localCombined = context ? `CONTEXT:\n${context}\n\nUSER QUESTION:\n${message}` : message;
+          const localPrompt = skipSystemPrompt ? undefined : this.resolveLocalSystemPrompt(this.injectLanguageInstruction(HARD_SYSTEM_PROMPT));
+          yield await this.callOllama(localCombined, imagePaths, localPrompt);
+          return;
+        }
+        if (vd.whenLocalUnavailable === 'block') { yield vd.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE; return; }
+        imagePaths = undefined;
+        isMultimodal = false;
+      }
     }
 
     // Build single-string messages for Groq/Gemini (which use combined prompts)
@@ -3979,15 +4630,25 @@ const isMultimodal = !!(imagePaths?.length);
       ? `CONTEXT:\n${context}\n\nUSER QUESTION:\n${message}`
       : message;
 
+    // Prompt System v2 (flag promptSystemV2): one provider-neutral base prompt
+    // replaces the four drifted per-provider personalities on this legacy
+    // entry point. Flag off → null, and every provider keeps its constant.
+    const v2StreamBase: string | null = (() => {
+      try {
+        const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+        return resolveV2SystemPrompt({ action: 'answer', tier: v2TierForPromptTier(this.getPromptTier()) });
+      } catch { return null; }
+    })();
+
     const combinedMessages = {
-      gemini: buildCombinedMessage(HARD_SYSTEM_PROMPT),
-      groq: buildCombinedMessage(GROQ_SYSTEM_PROMPT),
+      gemini: buildCombinedMessage(v2StreamBase ?? HARD_SYSTEM_PROMPT),
+      groq: buildCombinedMessage(v2StreamBase ?? GROQ_SYSTEM_PROMPT),
     };
 
     // CACHE: separate system for Groq's prefix cache (used by streamWithGroq below).
-    const groqSystemForCache = skipSystemPrompt ? undefined : this.injectLanguageInstruction(GROQ_SYSTEM_PROMPT);
+    const groqSystemForCache = skipSystemPrompt ? undefined : this.injectLanguageInstruction(v2StreamBase ?? GROQ_SYSTEM_PROMPT);
     // CACHE: separate system for Gemini's systemInstruction channel.
-    const geminiSystemForCache = skipSystemPrompt ? undefined : this.injectLanguageInstruction(HARD_SYSTEM_PROMPT);
+    const geminiSystemForCache = skipSystemPrompt ? undefined : this.injectLanguageInstruction(v2StreamBase ?? HARD_SYSTEM_PROMPT);
 
     if (this.useOllama) {
       const response = await this.callOllama(combinedMessages.gemini, imagePaths?.[0]);
@@ -4006,8 +4667,8 @@ const isMultimodal = !!(imagePaths?.length);
     const providers: ProviderAttempt[] = [];
 
     // System prompts for OpenAI/Claude (skipped if skipSystemPrompt)
-    const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(OPENAI_SYSTEM_PROMPT);
-    const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(CLAUDE_SYSTEM_PROMPT);
+    const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(v2StreamBase ?? OPENAI_SYSTEM_PROMPT);
+    const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(v2StreamBase ?? CLAUDE_SYSTEM_PROMPT);
 
     // Get auto-discovered text model IDs from ModelVersionManager
     const textOpenAI = this.modelVersionManager.getTextTieredModels(TextModelFamily.OPENAI).tier1;
@@ -4100,7 +4761,7 @@ const isMultimodal = !!(imagePaths?.length);
         yield "DeepSeek is configured for text-only requests. Add a vision-capable provider like Gemini, OpenAI, Claude, Groq, or Natively to analyze images.";
         return;
       }
-      yield "No AI providers configured. Please add at least one API key in Settings.";
+      yield this.noProviderAvailableMessage();
       return;
     }
 
@@ -4441,7 +5102,33 @@ const isMultimodal = !!(imagePaths?.length);
     // before any reassignment, so the mode-injection skip decision reflects
     // the caller's TRUE original intent regardless of what happens to
     // `systemPromptOverride` in between.
-    const callerOriginallyPassedUniversalOverride = !!systemPromptOverride && (
+    // ── PROMPT SYSTEM V2 (flag promptSystemV2, default OFF) ──────────────────
+    // When the flag is ON and the caller passed no override, the composed v2
+    // 'answer' prompt becomes the base — every downstream `systemPromptOverride
+    // || <PROVIDER>_SYSTEM_PROMPT` default then collapses to the one provider-
+    // neutral prompt. A v2-composed prompt already CONTAINS the active mode's
+    // contract, so it is treated exactly like a universal override below (no
+    // 23–45k ## ACTIVE MODE template suffix on top) — except that custom-mode
+    // pinned instructions and mode context retrieval still apply unchanged.
+    // Flag OFF → callerPassedV2Prompt stays false and nothing here runs.
+    let callerPassedV2Prompt = false;
+    try {
+      const { isPromptSystemV2Enabled, resolveV2SystemPrompt, isV2ComposedPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+      if (isPromptSystemV2Enabled()) {
+        if (!systemPromptOverride) {
+          systemPromptOverride = resolveV2SystemPrompt({
+            action: 'answer',
+            tier: v2TierForPromptTier(this.getPromptTier()),
+            // Universal coding contract: attach when the routed answer type is
+            // coding-shaped, regardless of the active mode (2026-08-02).
+            codingTask: (() => { try { const { isCodingAnswerType } = require('./llm/AnswerPlanner'); return !!(routeOptions?.answerType && isCodingAnswerType(routeOptions.answerType)); } catch { return false; } })(),
+          }) ?? systemPromptOverride;
+        }
+        callerPassedV2Prompt = isV2ComposedPrompt(systemPromptOverride);
+      }
+    } catch { /* non-fatal: legacy prompt selection */ }
+
+    const callerOriginallyPassedUniversalOverride = callerPassedV2Prompt || (!!systemPromptOverride && (
       systemPromptOverride === UNIVERSAL_SYSTEM_PROMPT ||
       systemPromptOverride === UNIVERSAL_ANSWER_PROMPT ||
       systemPromptOverride === UNIVERSAL_WHAT_TO_ANSWER_PROMPT ||
@@ -4451,7 +5138,7 @@ const isMultimodal = !!(imagePaths?.length);
       systemPromptOverride === UNIVERSAL_ASSIST_PROMPT ||
       systemPromptOverride === CHAT_MODE_PROMPT ||
       TINY_PROMPTS_SET.has(systemPromptOverride)
-    );
+    ));
 
     // Stage timer (gated): isolates pre-stream work (knowledge intercept,
     // cache create) from provider TTFT. Set MEASURE_LATENCY=true to see it.
@@ -4487,9 +5174,20 @@ const isMultimodal = !!(imagePaths?.length);
         return mm.getActiveModeDocumentGroundingInfo?.(pin ?? undefined).documentGroundedCustomModeActive === true;
       } catch { return false; }
     })();
-    if (documentGroundedCustomModeActive) {
-      console.log('[LLMHelper.stream] Generic bypass disabled: document-grounded custom mode active', {
-        genericBypassDisabledReason: 'document_grounded_custom_mode',
+    // Defect C (2026-08-01): the log now reports the EXPLICIT strictness flag —
+    // this line fired on every default Team Meet/Lecture session (template seed
+    // = reference_files_primary) and was the primary runtime evidence of the
+    // misclassification. `retrievalRequired` was a hardcoded literal.
+    const strictDocGroundedForLog = (() => {
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        const pin = routeOptions?.pinnedModeId ?? null;
+        return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.(pin ?? undefined).strictDocumentGroundedActive === true;
+      } catch { return false; }
+    })();
+    if (strictDocGroundedForLog) {
+      console.log('[LLMHelper.stream] Generic bypass disabled: strict document-grounded mode active', {
+        genericBypassDisabledReason: 'strict_document_grounded_mode',
         retrievalRequired: true,
       });
     }
@@ -4514,7 +5212,15 @@ const isMultimodal = !!(imagePaths?.length);
     const contextOsGovernedDocumentTurn = Boolean(
       (routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined)?.govern,
     );
-    if (documentGroundedCustomModeActive && !contextOsGovernedDocumentTurn) {
+    // Context Intelligence V3 (2026-07-31): a V3-owned turn arrives with prompts
+    // composed end-to-end by the decision layer — scope/version/claim-authority
+    // filtered evidence, frozen decision. Every injection or reshape below this
+    // point would ride UNFILTERED content in around that evidence (this block's
+    // fresh retrieval; shapeDocumentGroundedSystemPrompt; the doc-grounded
+    // userContent wrapping; the Context OS govern substitution, which replaces
+    // V3's user prompt wholesale). LLMHelper is transport for these turns.
+    const v3OwnedTurn = routeOptions?.v3Owned === true;
+    if (documentGroundedCustomModeActive && !contextOsGovernedDocumentTurn && !v3OwnedTurn) {
       try {
         const { ModesManager } = require('./services/ModesManager');
         const mm = ModesManager.getInstance();
@@ -4678,7 +5384,21 @@ const isMultimodal = !!(imagePaths?.length);
       activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.(_pinnedModeId);
     } catch { /* non-fatal: preserve legacy skip behavior if modes cannot load */ }
     const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
-    const forceDocumentGrounding = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
+    // `!v3OwnedTurn`: a V3-owned turn must not enter ANY of the doc-grounded
+    // machinery this local gates (system-prompt reshape at ~5030, the govern
+    // block, the userContent wrapping at ~5260) — see the v3OwnedTurn comment
+    // above. Legacy callers are unaffected (v3OwnedTurn is false without the
+    // route option).
+    // Defect C (2026-08-01): STRICT shaping (system-prompt reshape, question-
+    // first doc wrapping, scope-denied refusal) now keys on the EXPLICIT
+    // strictness flag. The template seed marks every non-interview mode
+    // `reference_files_primary`, so the broad flag classified a stock Team
+    // Meet/Lecture — zero files, zero custom prompt — as a strict document-
+    // grounded custom mode and suppressed its general-knowledge fallback.
+    // Reference-file INJECTION above (:documentGroundedCustomModeActive) is
+    // unchanged: surfacing attached documents is correct for default modes;
+    // refusing to answer beyond them is not.
+    const forceDocumentGrounding = !v3OwnedTurn && activeModeGroundingInfo?.strictDocumentGroundedActive === true;
     // Hoisted to function scope (round-6) so the document-grounded userContent
     // shaping below can read the actual retrieval output as `retrievedBlock`.
     // It is assigned inside the mode-injection block; '' when retrieval didn't
@@ -4942,7 +5662,13 @@ const isMultimodal = !!(imagePaths?.length);
         // Sensitivity-scoped by answer type inside the accessor.
         const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions), routeOptions?.pinnedModeId ?? undefined) || '';
 
-        if (modePromptSuffix) {
+        // Prompt System v2: a v2-composed base already carries the active
+        // mode's contract — appending the legacy MODE_* template on top would
+        // duplicate the role and reintroduce the exact formatting rules v2
+        // replaces (mandatory bold, dash bullets, canned admissions). Pinned
+        // custom instructions below still apply — they are user config, not a
+        // competing mode template.
+        if (modePromptSuffix && !callerPassedV2Prompt) {
           const baseForMode = systemPromptOverride || HARD_SYSTEM_PROMPT;
           systemPromptOverride = `${baseForMode}\n\n## ACTIVE MODE\n${modePromptSuffix}`;
         }
@@ -4990,10 +5716,19 @@ const isMultimodal = !!(imagePaths?.length);
 
     // Preparation
     let isMultimodal = !!(imagePaths?.length);
-    const contextScopes = [...extraDataScopes, ...this.inferContextScopes(context), ...this.inferEmbeddedMessageScopes(message)];
+    // `context` here is the legacy transcript/context blob — state that
+    // LITERALLY, the way chatWithGemini already does, instead of leaving it to
+    // the payload heuristic. Everything else the caller declares
+    // (extraDataScopes) or the payload's own markup discloses.
+    const contextScopes = [
+      ...extraDataScopes,
+      ...(context?.trim() ? ['transcript' as ProviderDataScope] : []),
+      ...this.inferContextScopes(context),
+      ...this.inferEmbeddedMessageScopes(message),
+    ];
     const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, contextScopes);
     if (deniedOutboundScopes.length > 0) {
-      const ollamaAvailable = this.useOllama && await this.checkOllamaAvailable(deniedOutboundScopes.includes('screenshots'));
+      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots'));
       for (const scope of deniedOutboundScopes) {
         this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
       }
@@ -5013,6 +5748,44 @@ const isMultimodal = !!(imagePaths?.length);
       message = this.stripDeniedScopedBlocksFromMessage(message, deniedOutboundScopes);
       if (deniedOutboundScopes.includes('screenshots')) imagePaths = undefined;
       isMultimodal = !!(imagePaths?.length);
+    }
+
+    // ── Screen-understanding mode ───────────────────────────────────────────
+    // "Keep screenshots on this device" (private_vision) and "Require a
+    // vision-capable provider" (vision_only) reached exactly ONE runtime call
+    // site — generate-what-to-say — while this, the primary
+    // Ask-AI-with-screenshot path, forwarded imagePaths to the cloud cascade
+    // untouched. Decided here, WITH the screenshots scope, so the two switches
+    // over the same bytes cannot disagree. The last-boundary check in
+    // assertOutboundScopes makes it true by construction; this block exists so
+    // the user gets one clear sentence instead of a cascade of provider errors.
+    {
+      const { decision: visionDecision, localAvailable: localVisionAvailable } =
+        await this.resolveOutboundVisionDecision(imagePaths, !deniedOutboundScopes.includes('screenshots'));
+      if (visionDecision.action === 'block') {
+        console.warn(`[VisionPolicy] blocked: ${visionDecision.reason}`);
+        yield visionDecision.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
+        return;
+      }
+      if (visionDecision.action === 'local_only') {
+        if (localVisionAvailable) {
+          console.warn(`[VisionPolicy] routing screenshot to local vision: ${visionDecision.reason}`);
+          const localVisionPrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT));
+          yield* this.streamWithOllama(message, context, localVisionPrompt, imagePaths, abortSignal);
+          return;
+        }
+        if (visionDecision.whenLocalUnavailable === 'block') {
+          console.warn(`[VisionPolicy] blocked (no local vision): ${visionDecision.reason}`);
+          yield visionDecision.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
+          return;
+        }
+        // drop_images: no local model and the scope forbids the cloud. The
+        // image is discarded, never sent — the Privacy panel's "Omitted" badge
+        // describes exactly this.
+        console.warn(`[VisionPolicy] dropping screenshot (no local vision): ${visionDecision.reason}`);
+        imagePaths = undefined;
+        isMultimodal = false;
+      }
     }
 
     // Determine the system prompt to use
@@ -5196,7 +5969,12 @@ const isMultimodal = !!(imagePaths?.length);
       // EvidenceResolver above, unaffected) and only ADDS rendering for a
       // pre-resolved, non-doc-grounded governed pack.
       const callerPreResolvedPack = Boolean(_cog?.evidencePack);
-      if (_cog && _cog.govern && (forceDocumentGrounding || callerPreResolvedPack) && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
+      // `!v3OwnedTurn`: WTA passes BOTH contextOsGeneration and a V3-composed
+      // prompt. Without this term the pack replaced V3's user prompt wholesale
+      // (userContent overwritten below), splicing two governance layers into
+      // one turn — the model received V3's system prompt and Context OS's user
+      // pack while V3's composed user prompt was silently discarded.
+      if (_cog && _cog.govern && !v3OwnedTurn && (forceDocumentGrounding || callerPreResolvedPack) && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
         const { renderGoverningFactualBlock } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
         const pack = _cog.evidencePack;
         if (!pack) throw new Error('governed turn missing canonical EvidencePack');
@@ -5296,9 +6074,42 @@ const isMultimodal = !!(imagePaths?.length);
           : message;
       }
     } else {
-      userContent = combinedContext
+      // ── PROMPT SYSTEM V2 TURN ENVELOPE (flag promptSystemV2) ──────────────
+      // The plain (ungoverned, non-doc-grounded) branch only. When the LIVE
+      // system prompt for this turn is a v2 composition — checked here, not at
+      // entry, because the knowledge intercept may have replaced the prompt —
+      // the user content uses the v2 ordering: assembled context first
+      // (VERBATIM — it was sanitized upstream), then the tagged newest turn,
+      // then the task LAST. Gates:
+      //   • combinedContext non-empty — callers that pass their whole blob AS
+      //     the message (Recap/Clarify/FUQ/Brainstorm) must not have that blob
+      //     mislabeled as the newest turn;
+      //   • not a coding answer type — coding user content carries its own
+      //     contract machinery;
+      //   • message not already enveloped (WTA/FollowUp pre-compose).
+      // Any failure falls through to the legacy CONTEXT: shape.
+      let v2Turn: string | null = null;
+      try {
+        const { isV2ComposedPrompt, buildAssembledTurnContentV2, hasV2TurnEnvelope } = require('./llm/promptSystemV2');
+        const { isCodingAnswerType } = require('./llm/AnswerPlanner');
+        if (combinedContext
+            && isV2ComposedPrompt(systemPromptOverride)
+            && !hasV2TurnEnvelope(message)
+            && !(routeOptions?.answerType && isCodingAnswerType(routeOptions.answerType))) {
+          v2Turn = buildAssembledTurnContentV2({ assembledContext: combinedContext, currentTurn: message });
+        }
+      } catch { v2Turn = null; }
+      userContent = v2Turn ?? (combinedContext
         ? `CONTEXT:\n${combinedContext}\n\nUSER QUESTION:\n${message}`
-        : message;
+        : message);
+      // Same transport normalization the governed path performs below: legacy
+      // transports that build from message/context (Ollama/custom) must see
+      // the SAME enveloped payload, never a competing raw channel.
+      if (v2Turn) {
+        message = userContent;
+        context = undefined;
+        combinedContext = '';
+      }
     }
 
     // Some legacy transports construct their request from `message`/`context`
@@ -5830,7 +6641,7 @@ const isMultimodal = !!(imagePaths?.length);
       }
     }
 
-    throw new Error("No AI provider configured. Please add at least one API key in Settings.");
+    throw new Error(this.noProviderAvailableMessage());
   }
 
   /**
@@ -7407,6 +8218,19 @@ const isMultimodal = !!(imagePaths?.length);
   public resolveLocalSystemPrompt(systemPrompt?: string): string {
     if (!this.useOllama) return systemPrompt ?? HARD_SYSTEM_PROMPT;
     const tier = selectPromptTier(this.getCurrentModel(), true);
+    // Prompt System v2: a v2-composed cloud prompt downgrades to the v2 LOCAL
+    // composition of the SAME mode+action (small core, same contracts) instead
+    // of being concatenated onto TINY_SYSTEM_PROMPT — which would stack two
+    // competing cores. Never throws; falls through to legacy on any error.
+    try {
+      const { getV2PromptDescriptor, buildSystemPromptV2 } = require('./llm/promptSystemV2');
+      const desc = systemPrompt ? getV2PromptDescriptor(systemPrompt) : null;
+      if (desc) {
+        return tier === 'tiny'
+          ? buildSystemPromptV2({ ...desc, tier: 'local' })
+          : systemPrompt as string;
+      }
+    } catch { /* legacy resolution below */ }
     const base = tier === 'tiny' ? TINY_SYSTEM_PROMPT : HARD_SYSTEM_PROMPT;
     // If the caller already provided a non-empty, non-universal prompt, keep it.
     // This preserves explicit mode/custom-mode/policy injections — the previous
@@ -7710,7 +8534,7 @@ const isMultimodal = !!(imagePaths?.length);
     }
     const summaryDeniedScopes = getDeniedDataScopes(['post_call_summary'], this.getProviderScopePolicy());
     if (summaryDeniedScopes.includes('post_call_summary')) {
-      const ollamaAvailable = this.useOllama && await this.checkOllamaAvailable();
+      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected();
       this.logScopeFallback('post_call_summary', ollamaAvailable ? 'routing' : 'omitting');
       if (ollamaAvailable) {
         return this.processResponse(await this.callOllama(`Context:\n${context}`, undefined, systemPrompt));
@@ -8001,7 +8825,7 @@ const isMultimodal = !!(imagePaths?.length);
   public async testConnection(): Promise<{ success: boolean; error?: string }> {
     try {
       if (this.useOllama) {
-        const available = await this.checkOllamaAvailable();
+        const available = await this.ensureOllamaModelSelected();
         if (!available) {
           return { success: false, error: `Ollama not available at ${this.ollamaUrl}` };
         }

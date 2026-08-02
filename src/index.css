@@ -22,7 +22,7 @@
   /* System Fonts - SF Pro */
   --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 
-  /* ─── SOFT ORCHID PALETTE — single canonical source of truth ──────────────
+  /* ─── PERIWINKLE PALETTE — single canonical source of truth ──────────────
      The 10-step scale, defined ONCE here at :root so it's available to any
      stylesheet in the document via normal CSS custom-property inheritance —
      including the separate `.pi-root` (ProfileIntelligenceSettings.tsx) and
@@ -31,18 +31,63 @@
      values via var()/color-mix() rather than duplicating hex. If the hue
      ever needs adjusting, this is the only place to change it.
      --------------------------------------------------------------------- */
-  --orchid-50:  #FBF6FD;
-  --orchid-100: #F5E9F9;
-  --orchid-200: #EBCFF3;
-  --orchid-300: #D9A7E8; /* dark-mode accent (light bg, needs dark foreground) */
-  --orchid-400: #C987DD;
-  --orchid-500: #B66ACF;
-  --orchid-600: #984DB2; /* light-mode accent (contrast-corrected — see SoftOrchidContrastGuard.test.mjs) */
-  --orchid-700: #773B8B;
-  --orchid-800: #572C66;
-  --orchid-900: #3A1D45;
-  --orchid-on-accent-dark: #1A1020;  /* foreground for solid orchid-300 fills */
-  --orchid-on-accent-light: #FFFFFF; /* foreground for solid orchid-600 fills */
+  /* PERIWINKLE (2026-08), replacing Soft Orchid (2026-07) as the app-wide
+     accent — a re-hue from magenta-violet (H≈330) to blue-violet (H≈296).
+     Renamed as well as revalued, so nothing in the tree still says "orchid":
+     the scale, the .pi-root and .modes-manager-root blocks that consume it,
+     the [data-settings-theme] scoping attribute and both guard tests moved
+     together. If you are grepping for the old name, it is gone.
+
+     Derivation, so a future step can be added consistently: -300 is the
+     anchor, picked by eye. Every other step keeps Soft Orchid's OKLCH
+     LIGHTNESS ramp (so all the contrast relationships the old scale was tuned
+     for are preserved), pins hue to the anchor's 296.4°, and scales chroma by
+     1.163 — the anchor's chroma over the old -300's — with per-step gamut
+     clamping. That is why -400 and -500 are more saturated than their orchid
+     counterparts: blue-violet has more gamut headroom there than magenta did. */
+  --periwinkle-50:  #F9F7FF;
+  --periwinkle-100: #EFEAFF;
+  --periwinkle-200: #DED3FF;
+  --periwinkle-300: #B9A1F6; /* dark-mode accent (light bg, needs dark foreground) — the anchor */
+  --periwinkle-400: #AF8CFE;
+  --periwinkle-500: #9C6FF3;
+  --periwinkle-600: #8050D4; /* light-mode accent (contrast-corrected — see PeriwinkleContrastGuard.test.mjs) */
+  --periwinkle-700: #643EA6;
+  --periwinkle-800: #492E7A;
+  --periwinkle-900: #311E52;
+  --periwinkle-on-accent-dark: #14102A;  /* foreground for solid periwinkle-300 fills */
+  --periwinkle-on-accent-light: #FFFFFF; /* foreground for solid periwinkle-600 fills */
+
+  /* ─── Meeting notes → Usage tab, user question bubble ─────────────────────
+     This bubble is the only chromatic element in the whole view — the AI answer
+     below it is an open canvas of grey text — so it carries the entire accent
+     moment, and it therefore tracks --periwinkle-300 rather than holding a
+     private hue.
+
+     ACCESSIBILITY EXCEPTION, SEVERE — the foreground is white by explicit
+     owner instruction, on a fill the palette calibrates for a DARK foreground.
+     White measures 2.21:1 on the top gradient stop and 2.55:1 on the bottom,
+     against a 4.5:1 WCAG AA floor for normal text (15px regular, so the 3:1
+     large-text allowance does not apply); neither stop clears even the 3:1 bar
+     used for non-text UI. --periwinkle-on-accent-dark on this same fill gives
+     8.35:1, which is what the 300 step was designed for. Two ways to keep
+     white legible if this is ever revisited: swap the foreground back, or
+     point --bubble-user-bg at --periwinkle-600 (white clears AA there at
+     5.23:1, as light mode already does). Both stops are pinned in
+     PeriwinkleContrastGuard.test.mjs.
+
+     --bubble-user-bg MUST stay a solid colour: it is consumed through
+     Tailwind's bg-[var(...)], which compiles to `background-color`, and a
+     gradient value there is silently dropped. The gradient rides
+     background-image in .bubble-user instead.
+
+     Dark-mode values; the light-theme override lives in the
+     [data-theme='light'] block. Every stop is asserted in
+     PeriwinkleContrastGuard.test.mjs. */
+  --bubble-user-bg: var(--periwinkle-300);
+  --bubble-user-fg: #FFFFFF;
+  --bubble-user-grad-to: #AC96E5;
+  --bubble-user-glow: rgba(185, 161, 246, 0.28);
 
   /* --- SEMANTIC TOKEN SYSTEM (DEFAULT: DARK) --- */
   /* Reference Image Matching */
@@ -59,6 +104,14 @@
   /* User Spec: Icons & Input Backgrounds */
   --bg-item-active: #2C2C2C;
   /* Selected state */
+  --bg-row-hover: #2E2E32;
+  /* Neutral hover fill for full-width list rows sitting on --bg-item-surface.
+     Needed because --bg-item-active is blue-tinted in the light theme, and a
+     Tailwind opacity modifier (bg-bg-input/40) emits no CSS at all against
+     these bare var() colour tokens. */
+  --text-danger: #EF4444;
+  /* Destructive label colour. Theme-split because a single Tailwind red can't
+     clear 4.5:1 on both the dark and the light red-500/10 button fill. */
 
   --bg-primary: #000000;
   /* Fallback */
@@ -77,8 +130,8 @@
   --border-muted: #333333;
 
   /* Promoted from Settings-only to the app-wide default (Phase 2). */
-  --accent-primary: var(--orchid-300);
-  --accent-muted: color-mix(in srgb, var(--orchid-300) 15%, transparent);
+  --accent-primary: var(--periwinkle-300);
+  --accent-muted: color-mix(in srgb, var(--periwinkle-300) 15%, transparent);
 
   --bg-component: #262626;
   /* Specific legacy value */
@@ -111,35 +164,43 @@
   --overlay-text-muted: rgba(255, 255, 255, 0.7);
   --overlay-text-placeholder: rgba(255, 255, 255, 0.58);
   --overlay-text-strong: #ffffff;
+  /* Teleprompter hot words — lavender, deliberately NOT --accent-primary.
+     The accent also paints buttons, focus rings and usage bars; the glance
+     highlight is its own concern and moves independently. Defined once per
+     scope that decides light-on-dark vs dark-on-light (i.e. wherever
+     --overlay-text-primary is set), because that is what the ratio depends
+     on. 9.03:1 on the #1E1E1E overlay — see PeriwinkleContrastGuard. */
+  --hotword-color: #C4B5FD;
   --overlay-shell-blur: calc(2px + (var(--overlay-opacity) * 18px));
   --overlay-pill-blur: calc(1px + (var(--overlay-opacity) * 12px));
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 6px);
 
-  /* Primary Action Button Defaults (Dark) — promoted to orchid (Phase 2) */
-  --btn-primary-bg: var(--orchid-300);
+
+  /* Primary Action Button Defaults (Dark) — promoted to the accent (Phase 2) */
+  --btn-primary-bg: var(--periwinkle-300);
   --btn-primary-hover: #E4BCEF; /* not a canonical scale step — dedicated lighter dark-mode hover tint */
-  --btn-primary-disabled-bg: color-mix(in srgb, var(--orchid-300) 12%, transparent);
-  --btn-primary-disabled-border: color-mix(in srgb, var(--orchid-300) 20%, transparent);
-  --btn-primary-disabled-text: color-mix(in srgb, var(--orchid-300) 45%, transparent);
-  --btn-primary-shadow-color: color-mix(in srgb, var(--orchid-500) 20%, transparent);
+  --btn-primary-disabled-bg: color-mix(in srgb, var(--periwinkle-300) 12%, transparent);
+  --btn-primary-disabled-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
+  --btn-primary-disabled-text: color-mix(in srgb, var(--periwinkle-300) 45%, transparent);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-500) 20%, transparent);
 
   /* Semantic accent tiers — promoted from Settings-only to the app-wide
      default (Phase 2). Numerically identical to the [data-settings-theme
-     ="orchid"] scoped block below, which is now a redundant no-op override
+     ="periwinkle"] scoped block below, which is now a redundant no-op override
      kept only so a future Settings-specific divergence has somewhere to go. */
-  --accent-subtle: color-mix(in srgb, var(--orchid-300) 10%, transparent);
+  --accent-subtle: color-mix(in srgb, var(--periwinkle-300) 10%, transparent);
   --accent-hover: #E4BCEF;
-  --accent-pressed: var(--orchid-400);
-  --accent-strong: var(--orchid-500);
-  --accent-border: color-mix(in srgb, var(--orchid-300) 28%, transparent);
-  --accent-focus: color-mix(in srgb, var(--orchid-300) 48%, transparent);
-  --accent-shadow-20: color-mix(in srgb, var(--orchid-500) 20%, transparent);
-  --on-accent: var(--orchid-on-accent-dark);
-  --on-accent-surface: color-mix(in srgb, var(--orchid-on-accent-dark) 12%, transparent);
+  --accent-pressed: var(--periwinkle-400);
+  --accent-strong: var(--periwinkle-500);
+  --accent-border: color-mix(in srgb, var(--periwinkle-300) 28%, transparent);
+  --accent-focus: color-mix(in srgb, var(--periwinkle-300) 48%, transparent);
+  --accent-shadow-20: color-mix(in srgb, var(--periwinkle-500) 20%, transparent);
+  --on-accent: var(--periwinkle-on-accent-dark);
+  --on-accent-surface: color-mix(in srgb, var(--periwinkle-on-accent-dark) 12%, transparent);
 
   /* Legacy blue action-button tokens — deliberately defined ONLY here and in
-     [data-theme='light'], never inside the [data-settings-theme="orchid"]
-     blocks below, so specific Settings CTAs can opt out of the orchid
+     [data-theme='light'], never inside the [data-settings-theme="periwinkle"]
+     blocks below, so specific Settings CTAs can opt out of the
      accent and stay blue regardless of scope. */
   --legacy-action-bg: #3b82f6;
   --legacy-action-hover: #60a5fa;
@@ -153,27 +214,27 @@
   --legacy-action-disabled-text: rgba(96, 165, 250, 0.4);
 }
 
-/* Phase-1 Settings-only Soft Orchid accent override (dark mode), scoped via
+/* Phase-1 Settings-only accent override (dark mode), scoped via
    data-settings-theme so the rest of the app keeps the blue brand accent. */
-[data-settings-theme="orchid"] {
-  --accent-primary: var(--orchid-300);
+[data-settings-theme="periwinkle"] {
+  --accent-primary: var(--periwinkle-300);
   --accent-hover: #E4BCEF; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
-  --accent-pressed: var(--orchid-400);
-  --accent-strong: var(--orchid-500);
-  --accent-subtle: color-mix(in srgb, var(--orchid-300) 10%, transparent);
-  --accent-muted: color-mix(in srgb, var(--orchid-300) 16%, transparent);
-  --accent-border: color-mix(in srgb, var(--orchid-300) 28%, transparent);
-  --accent-focus: color-mix(in srgb, var(--orchid-300) 48%, transparent);
-  --accent-shadow-20: color-mix(in srgb, var(--orchid-500) 20%, transparent);
-  --on-accent: var(--orchid-on-accent-dark);
-  --on-accent-surface: color-mix(in srgb, var(--orchid-on-accent-dark) 12%, transparent);
+  --accent-pressed: var(--periwinkle-400);
+  --accent-strong: var(--periwinkle-500);
+  --accent-subtle: color-mix(in srgb, var(--periwinkle-300) 10%, transparent);
+  --accent-muted: color-mix(in srgb, var(--periwinkle-300) 16%, transparent);
+  --accent-border: color-mix(in srgb, var(--periwinkle-300) 28%, transparent);
+  --accent-focus: color-mix(in srgb, var(--periwinkle-300) 48%, transparent);
+  --accent-shadow-20: color-mix(in srgb, var(--periwinkle-500) 20%, transparent);
+  --on-accent: var(--periwinkle-on-accent-dark);
+  --on-accent-surface: color-mix(in srgb, var(--periwinkle-on-accent-dark) 12%, transparent);
 
-  --btn-primary-bg: var(--orchid-300);
+  --btn-primary-bg: var(--periwinkle-300);
   --btn-primary-hover: #E4BCEF; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
-  --btn-primary-disabled-bg: color-mix(in srgb, var(--orchid-300) 12%, transparent);
-  --btn-primary-disabled-border: color-mix(in srgb, var(--orchid-300) 20%, transparent);
-  --btn-primary-disabled-text: color-mix(in srgb, var(--orchid-300) 45%, transparent);
-  --btn-primary-shadow-color: color-mix(in srgb, var(--orchid-500) 20%, transparent);
+  --btn-primary-disabled-bg: color-mix(in srgb, var(--periwinkle-300) 12%, transparent);
+  --btn-primary-disabled-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
+  --btn-primary-disabled-text: color-mix(in srgb, var(--periwinkle-300) 45%, transparent);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-500) 20%, transparent);
 }
 
 [data-theme='light'] {
@@ -207,6 +268,8 @@
   --bg-component:      #F3F4F6;   /* Secondary button fill (gray-100)             */
   --bg-item-surface:   #EAECEF;   /* Row hover — clearly visible against canvas   */
   --bg-item-active:    rgba(37, 99, 235, 0.09); /* Blue-tinted selection (Linear/Notion style) */
+  --bg-row-hover:      #E1E4E8;   /* Neutral list-row hover (see dark-theme note) */
+  --text-danger:       #B91C1C;   /* Destructive label — red-700 for contrast on light fills */
   --bg-toggle-switch:  #D1D5DB;   /* Toggle off-state track (gray-300)            */
 
   /* ── Typography — Tailwind gray scale, proven for readability ── */
@@ -219,8 +282,8 @@
   --border-muted:      rgba(0, 0, 0, 0.11);   /* inputs, tables                   */
 
   /* ── Accent — promoted from Settings-only to the app-wide default (Phase 2) ── */
-  --accent-primary:    var(--orchid-600);
-  --accent-muted:      color-mix(in srgb, var(--orchid-600) 10%, transparent);
+  --accent-primary:    var(--periwinkle-600);
+  --accent-muted:      color-mix(in srgb, var(--periwinkle-600) 10%, transparent);
 
   --bg-component:      #F3F4F6;
 
@@ -252,27 +315,43 @@
   --overlay-text-muted:      rgba(107, 114, 128, 0.90);
   --overlay-text-placeholder:rgba(156, 163, 175, 0.90);
   --overlay-text-strong:     #111827;
+  /* Dark lavender: this scope puts dark text on a near-white overlay, so the
+     light lavender above would be invisible here. 5.33:1 on white. */
+  --hotword-color:           #6D5AC7;
   --overlay-shell-blur:      calc(2px + (var(--overlay-opacity) * 18px));
   --overlay-pill-blur:       calc(2px + (var(--overlay-opacity) * 12px));
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 5px);
 
-  /* Primary Action Button (Light) — promoted to orchid (Phase 2) */
-  --btn-primary-bg: var(--orchid-600);
-  --btn-primary-hover: var(--orchid-700);
+
+  /* Primary Action Button (Light) — promoted to the accent (Phase 2) */
+  --btn-primary-bg: var(--periwinkle-600);
+  --btn-primary-hover: var(--periwinkle-700);
   --btn-primary-disabled-bg: var(--bg-input); /* #F9FAFB */
   --btn-primary-disabled-border: var(--border-subtle);
   --btn-primary-disabled-text: var(--text-tertiary);
-  --btn-primary-shadow-color: color-mix(in srgb, var(--orchid-600) 15%, transparent);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-600) 15%, transparent);
 
-  --accent-subtle: color-mix(in srgb, var(--orchid-600) 8%, transparent);
-  --accent-hover: var(--orchid-700);
-  --accent-pressed: var(--orchid-800);
-  --accent-strong: var(--orchid-700);
-  --accent-border: color-mix(in srgb, var(--orchid-600) 24%, transparent);
-  --accent-focus: color-mix(in srgb, var(--orchid-600) 40%, transparent);
-  --accent-shadow-20: color-mix(in srgb, var(--orchid-600) 18%, transparent);
-  --on-accent: var(--orchid-on-accent-light);
-  --on-accent-surface: color-mix(in srgb, var(--orchid-on-accent-light) 18%, transparent);
+  --accent-subtle: color-mix(in srgb, var(--periwinkle-600) 8%, transparent);
+  --accent-hover: var(--periwinkle-700);
+  --accent-pressed: var(--periwinkle-800);
+  --accent-strong: var(--periwinkle-700);
+  --accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
+  --accent-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
+  --accent-shadow-20: color-mix(in srgb, var(--periwinkle-600) 18%, transparent);
+  --on-accent: var(--periwinkle-on-accent-light);
+  --on-accent-surface: color-mix(in srgb, var(--periwinkle-on-accent-light) 18%, transparent);
+
+  /* Question bubble, light theme. The dark-mode lavender-pink is tuned for a
+     near-black ground and loses its separation on the #f5f5f5 pane, so light
+     keeps the solid periwinkle-600 + white it already had.
+     grad-to and glow MUST be redeclared here even though the hue is unchanged:
+     .bubble-user references them unconditionally, and an undefined custom
+     property drops the entire declaration silently — leaving light mode with
+     no gradient and no shadow, with nothing to indicate why. */
+  --bubble-user-bg: var(--periwinkle-600);
+  --bubble-user-fg: #FFFFFF;
+  --bubble-user-grad-to: #764AC3;
+  --bubble-user-glow: rgba(128, 80, 212, 0.28);
 
   --legacy-action-bg: #2563EB;
   --legacy-action-hover: #1d4ed8;
@@ -286,27 +365,27 @@
   --legacy-action-disabled-text: var(--text-tertiary);
 }
 
-/* Phase-1 Settings-only Soft Orchid accent override (light mode), scoped via
+/* Phase-1 Settings-only accent override (light mode), scoped via
    data-settings-theme so the rest of the app keeps the blue brand accent. */
-[data-theme='light'] [data-settings-theme="orchid"] {
-  --accent-primary: var(--orchid-600);
-  --accent-hover: var(--orchid-700);
-  --accent-pressed: var(--orchid-800);
-  --accent-strong: var(--orchid-700);
-  --accent-subtle: color-mix(in srgb, var(--orchid-600) 8%, transparent);
-  --accent-muted: color-mix(in srgb, var(--orchid-600) 14%, transparent);
-  --accent-border: color-mix(in srgb, var(--orchid-600) 24%, transparent);
-  --accent-focus: color-mix(in srgb, var(--orchid-600) 40%, transparent);
-  --accent-shadow-20: color-mix(in srgb, var(--orchid-600) 18%, transparent);
-  --on-accent: var(--orchid-on-accent-light);
-  --on-accent-surface: color-mix(in srgb, var(--orchid-on-accent-light) 18%, transparent);
+[data-theme='light'] [data-settings-theme="periwinkle"] {
+  --accent-primary: var(--periwinkle-600);
+  --accent-hover: var(--periwinkle-700);
+  --accent-pressed: var(--periwinkle-800);
+  --accent-strong: var(--periwinkle-700);
+  --accent-subtle: color-mix(in srgb, var(--periwinkle-600) 8%, transparent);
+  --accent-muted: color-mix(in srgb, var(--periwinkle-600) 14%, transparent);
+  --accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
+  --accent-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
+  --accent-shadow-20: color-mix(in srgb, var(--periwinkle-600) 18%, transparent);
+  --on-accent: var(--periwinkle-on-accent-light);
+  --on-accent-surface: color-mix(in srgb, var(--periwinkle-on-accent-light) 18%, transparent);
 
-  --btn-primary-bg: var(--orchid-600);
-  --btn-primary-hover: var(--orchid-700);
+  --btn-primary-bg: var(--periwinkle-600);
+  --btn-primary-hover: var(--periwinkle-700);
   --btn-primary-disabled-bg: var(--bg-input);
   --btn-primary-disabled-border: var(--border-subtle);
   --btn-primary-disabled-text: var(--text-tertiary);
-  --btn-primary-shadow-color: color-mix(in srgb, var(--orchid-600) 15%, transparent);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-600) 15%, transparent);
 }
 
 [data-theme='light'] .force-black-icon {
@@ -356,6 +435,9 @@
   --overlay-text-muted:       rgba(255, 255, 255, 0.60);
   --overlay-text-placeholder: rgba(255, 255, 255, 0.40);
   --overlay-text-strong:      #ffffff;
+  /* Light theme + liquid glass still renders WHITE text on a dark glass
+     panel, so it takes the light lavender, not the light-theme one. */
+  --hotword-color:            #C4B5FD;
 
   /* Glass surfaces — near-transparent white tints */
   --overlay-panel-bg:           rgba(255, 255, 255, 0.055);
@@ -378,6 +460,7 @@
   --overlay-pill-shadow:        rgba(0, 0, 0, 0.20);
   --overlay-shell-blur:         48px;
   --overlay-pill-blur:          28px;
+
 }
 
 /* Glass shell — pure CSS liquid-glass.
@@ -1276,6 +1359,13 @@
   --overlay-text-muted:       rgba(255, 255, 255, 0.74);
   --overlay-text-placeholder: rgba(255, 255, 255, 0.50);
   --overlay-text-strong:      #ffffff;
+  /* Modern forces white text on the slate gradient in BOTH themes, so it
+     takes the light lavender. Measured against all three gradient stops:
+     3.65 / 6.33 / 8.28. The lightest top stop sits under 4.5, but that is
+     pre-existing and system-wide — the modern accent #8FB4F7 measures 3.22
+     and the old orchid highlight 3.42 at the same point, so this is strictly
+     better than what it replaces, not a new shortfall. */
+  --hotword-color:            #C4B5FD;
 
   /* Slate/graphite surfaces — the DARK_GLASS gradient */
   --overlay-panel-bg:           linear-gradient(160deg, rgba(90, 90, 108, 0.88) 0%, rgba(55, 55, 70, 0.93) 50%, rgba(36, 36, 50, 0.97) 100%);
@@ -1308,6 +1398,7 @@
      selector — never applied to Launcher/Settings/ModelSelector windows
      (App.tsx wrappers carry no data-interface-theme). */
   --accent-primary: #8FB4F7;
+
 }
 
 /* Modern shell — DARK_GLASS gradient + multi-layer shadow.
@@ -2015,6 +2106,7 @@ body {
   overflow: hidden;
 }
 
+
 .overlay-shell-surface {
   background: var(--overlay-panel-bg);
   border-color: var(--overlay-border);
@@ -2140,14 +2232,18 @@ body {
 
 .aurora-focus:hover {
   transform: translateY(-0.5px) translateZ(0);
-  will-change: transform, box-shadow;
+  /* `box-shadow` is not a compositable property, so listing it here
+     bought a permanent extra layer and no acceleration. */
+  will-change: transform;
 }
 
 .aurora-focus:focus {
   animation: aurora 900ms cubic-bezier(0.22, 1, 0.36, 1);
   outline: none;
   transform: translateY(-0.5px) translateZ(0);
-  will-change: transform, box-shadow;
+  /* `box-shadow` is not a compositable property, so listing it here
+     bought a permanent extra layer and no acceleration. */
+  will-change: transform;
 }
 
 [data-interface-theme="liquid-glass"] .aurora-focus:focus {
@@ -2430,6 +2526,79 @@ body {
   color: var(--overlay-text-strong);
 }
 
+/* ── Teleprompter glance layer ─────────────────────────────────────────
+   Hot words: the model marks the two or three load-bearing words of a
+   spoken answer with **bold**; they render in the accent color so the
+   speaker can reconstruct the answer from a glance. Applied explicitly on
+   the spoken-answer ReactMarkdown intents and, via the scoped rule below,
+   on the imperative streaming bubble (marked.parse emits bare <strong>). */
+.overlay-hotword {
+  color: var(--hotword-color, #C4B5FD);
+}
+
+.natively-streaming-answer strong {
+  color: var(--hotword-color, #C4B5FD);
+  font-weight: 600;
+}
+
+/* Meeting notes → Usage tab, user question bubble.
+
+   Three separable layers, deliberately kept apart so a future "it looks wrong"
+   can be bisected: the flat fill, the vertical gradient, and the hue-tinted
+   glow. Tokens live in the :root / [data-theme='light'] blocks.
+
+   Why a class rather than Tailwind utilities: bg-[var(--bubble-user-bg)]
+   compiles to `background-color`, which cannot hold a gradient — assigning one
+   there fails silently and leaves a transparent bubble with white text on the
+   dark pane.
+
+   The gradient runs DOWNWARD (base → darker). Lightening it upward was tested
+   and drops white text to 4.01:1, below AA; darkening keeps the lightest pixel
+   at the top stop, so the worst white contrast anywhere in the fill is the
+   4.699:1 asserted in the guard test.
+
+   The glow and the inset highlight sit outside the 10px text padding, so
+   neither touches legibility. On a flat dark ground salience comes from chroma
+   rather than luminance, and bleeding a faint tinted halo into the surrounding
+   neutral grey is what makes the bubble read as a lit object instead of a
+   pasted swatch. */
+.bubble-user {
+  background-color: var(--bubble-user-bg);
+  background-image: linear-gradient(180deg, var(--bubble-user-bg) 0%, var(--bubble-user-grad-to) 100%);
+  color: var(--bubble-user-fg);
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.28),
+    0 6px 18px -8px var(--bubble-user-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+/* Bottom gist chip: the trailing [[GIST]] line — five-to-eight-word
+   essence, never spoken — rendered as a small summary pill under the
+   answer body. */
+.overlay-gist-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  margin-top: 8px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--overlay-text-secondary);
+  background: color-mix(in srgb, var(--hotword-color, #C4B5FD) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hotword-color, #C4B5FD) 24%, transparent);
+}
+
+.overlay-gist-chip::before {
+  content: 'GIST';
+  flex: none;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--hotword-color, #C4B5FD);
+}
+
 .overlay-text-interactive {
   color: var(--overlay-text-primary);
 }
@@ -2613,7 +2782,7 @@ html[data-platform="linux"] body {
   background: transparent !important;
   border: none !important;
   color: var(--text-secondary) !important;
-  padding: 8px 12px !important;
+  padding: 6px 10px !important;
   font-size: 11.5px !important;
   font-weight: 500 !important;
   text-align: center !important;
@@ -2655,48 +2824,54 @@ html[data-platform="linux"] body {
   transition: all 260ms cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
 
+/* FOUR HUES ON ONE LUMINANCE LADDER — Standard 178° teal, Pro 208° azure,
+   Max 298° amethyst, Ultra 336° black-cherry. These `background` rules LOSE
+   to the .natively-api-selector-bar block far below (that one is (0,3,0));
+   they are kept in sync anyway so no stale hue can surface if the scoping
+   ever changes. See the committed-fill block for the full rationale, the
+   measured hue/ΔE separations and the contrast table. */
 [data-interface-theme="liquid-glass"] .natively-api-selector-pill-standard {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.15) 100%),
-    rgba(148, 163, 184, 0.22) !important;
+    rgba(103, 164, 162, 0.22) !important;
   border: 1px solid rgba(255, 255, 255, 0.25) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.65),
     inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
-    0 4px 14px rgba(148, 163, 184, 0.25) !important;
+    0 4px 14px rgba(60, 107, 105, 0.25) !important;
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-selector-pill-pro {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.18) 100%),
-    rgba(139, 92, 246, 0.32) !important;
-  border: 1px solid rgba(196, 181, 253, 0.45) !important;
+    rgba(59, 141, 213, 0.28) !important;
+  border: 1px solid rgba(162, 205, 244, 0.42) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
     inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
-    0 5px 16px rgba(139, 92, 246, 0.40) !important;
+    0 5px 16px rgba(17, 89, 153, 0.34) !important;
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-selector-pill-max {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.18) 100%),
-    rgba(59, 130, 246, 0.32) !important;
-  border: 1px solid rgba(147, 197, 253, 0.45) !important;
+    rgba(155, 97, 157, 0.34) !important;
+  border: 1px solid rgba(206, 179, 207, 0.45) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
     inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
-    0 5px 16px rgba(59, 130, 246, 0.40) !important;
+    0 5px 16px rgba(103, 60, 104, 0.40) !important;
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-selector-pill-ultra {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.18) 100%),
-    rgba(249, 115, 22, 0.32) !important;
-  border: 1px solid rgba(253, 186, 116, 0.45) !important;
+    rgba(162, 64, 103, 0.40) !important;
+  border: 1px solid rgba(209, 162, 181, 0.48) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
     inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
-    0 5px 16px rgba(249, 115, 22, 0.40) !important;
+    0 5px 16px rgba(111, 37, 66, 0.46) !important;
 }
 
 /* Double-Bezel layout */
@@ -2727,9 +2902,26 @@ html[data-platform="linux"] body {
   border: 1.5px solid transparent !important;
   position: relative !important;
   overflow: hidden !important;
-  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
-              box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
-              border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  /* `transform` is deliberately NOT transitioned here. InteractiveCard writes
+     transform: scale(...) inline from a spring on every frame; a CSS transition
+     on the same property re-smooths each of those writes, so the press spring
+     arrives late and mushy. Framer owns transform, CSS owns the material.
+     (The .pricing-card-* rules keep transform in their lists — those cards are
+     not wrapped in InteractiveCard.)
+
+     THIS LIST IS THE LEAVE HALF. A transition declared on the base rule runs
+     when :hover stops matching; the one on the :hover rule runs on enter. That
+     is how the asymmetry below is achieved without JS.
+     The curve changed, not just the clock, and that is the point:
+     cubic-bezier(0.23, 1, 0.32, 1) puts ~83% of the travel in the first 30% of
+     the duration, so at 180ms all perceptible motion was over in ~54ms — it was
+     animating and still reading as instant. Raising the duration on that curve
+     only lengthens an invisible tail. easeOutCubic spreads the travel out.
+     Leave is the SLOWER half here, which inverts the usual "exit fast" rule
+     because nothing is exiting: this is ambient light on a surface that stays
+     put, and light that snaps off is exactly what reads as un-animated. */
+  transition: box-shadow 420ms cubic-bezier(0.33, 1, 0.68, 1),
+              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1) !important;
 }
 
 /* Glass shine gloss highlight on liquid glass detail cards */
@@ -2745,6 +2937,45 @@ html[data-platform="linux"] body {
   z-index: 2 !important;
 }
 
+/* ── The cursor-tracked glow, masked off the rim ──────────────────────────
+   The overlay is `absolute inset-0` inside a card with `overflow: hidden`, so a
+   radial gradient whose CENTRE approaches an edge gets terminated against the
+   border at near-full alpha. Concretely: the wrapper is 234px tall and the
+   gradient reaches zero at 180px, so with the pointer 20px below the top edge
+   the alpha AT the border is still ~85% of peak — a hard-edged bright band
+   running along the rim, sliding as the cursor slides. That is a border
+   highlight, and an animated one.
+   No radius or alpha value fixes this: a radial is brightest at its centre and
+   the centre can sit anywhere, including 5px from an edge. The only correct fix
+   is to force the overlay's alpha to zero at the perimeter regardless of where
+   the cursor is. These two linear masks intersect to do exactly that.
+   32px horizontal / 24px vertical because the card is wide and short — a band
+   as wide vertically as horizontally would start eating the middle. At 24px the
+   ramp is already at 50% by 12px in, well clear of the 1.5px border and the rim
+   hairline inside it. The bands are static, so this is one alpha multiply per
+   raster, not per-frame work. */
+.natively-interactive-glow {
+  border-radius: inherit;
+  -webkit-mask-image:
+    linear-gradient(to right,  transparent 0, #000 32px, #000 calc(100% - 32px), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+          mask-image:
+    linear-gradient(to right,  transparent 0, #000 32px, #000 calc(100% - 32px), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+  -webkit-mask-composite: source-in;
+          mask-composite: intersect;
+
+  /* Leave half — see the card's base transition for why the slower side is the
+     exit rather than the entrance. */
+  transition: opacity 420ms cubic-bezier(0.33, 1, 0.68, 1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .group:hover > .natively-interactive-glow {
+    transition: opacity 260ms cubic-bezier(0.32, 0.72, 0, 1) !important;
+  }
+}
+
 /* Blueprint tech grid overlay on detail cards */
 [data-interface-theme="liquid-glass"] .natively-api-detail-card::after,
 [data-interface-theme="modern"] .natively-api-detail-card::after {
@@ -2753,8 +2984,8 @@ html[data-platform="linux"] body {
   inset: 0 !important;
   border-radius: inherit !important;
   background-image: 
-    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px) !important;
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px) !important;
   background-size: 24px 24px !important;
   pointer-events: none !important;
   z-index: 1 !important;
@@ -2762,154 +2993,157 @@ html[data-platform="linux"] body {
   transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .natively-api-detail-card:hover::after {
-    opacity: 0.8 !important;
-  }
-}
+/* The grid's 0.55 -> 0.8 hover bump was removed. Its first hairline lands at
+   x=0/y=0 of the padding box, flush inside the tier border, so brightening it
+   on hover was a third channel drawing attention to the edge — and it ran on
+   its own 180ms opacity clock, separate from the shadow. It was already dead
+   in light theme (a later [data-theme='light'] rule pins the grid to 0.22), so
+   deleting it also makes the two themes behave alike. The spotlight is the
+   hover light now. */
 
-/* Card Specific color variations (Liquid Glass) */
-/* Standard - Cool Slate / Blue */
+/* Card Specific variations (Liquid Glass) — FOUR HUES, ONE DEPTH LADDER.
+   These `background` declarations are superseded by the committed-fill block
+   further down (same (0,2,0), it wins on SOURCE ORDER). `border-color` is NOT
+   declared there, so the borders below are what actually paint — which is why
+   they have to move with the fills rather than being left on the old palette.
+   Border alpha climbs with tier depth so the edge tracks the ladder too. */
 [data-interface-theme="liquid-glass"] .natively-api-detail-card-standard {
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.16), transparent 50%),
-    radial-gradient(circle at 100% 100%, rgba(148, 163, 184, 0.20), transparent 60%),
-    linear-gradient(135deg, rgba(148, 163, 184, 0.12) 0%, rgba(45, 55, 75, 0.40) 100%) !important;
-  box-shadow:
-    inset 0 2.5px 0 rgba(255, 255, 255, 0.42),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.20),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
-    0 12px 30px rgba(0, 0, 0, 0.15) !important;
+    radial-gradient(circle at 100% 100%, rgba(103, 164, 162, 0.20), transparent 60%),
+    linear-gradient(135deg, rgba(103, 164, 162, 0.12) 0%, rgba(36, 63, 62, 0.40) 100%) !important;
+  border-color: rgba(145, 197, 195, 0.28) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
-/* Pro - Deep Violet / Indigo */
 [data-interface-theme="liquid-glass"] .natively-api-detail-card-pro {
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.28) 0%, transparent 60%),
-    radial-gradient(circle at 100% 100%, rgba(139, 92, 246, 0.35) 0%, transparent 60%),
-    linear-gradient(135deg, rgba(55, 30, 95, 0.50) 0%, rgba(20, 10, 36, 0.65) 100%) !important;
-  border-color: rgba(139, 92, 246, 0.32) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(139, 92, 246, 0.60),
-    inset 0 2.5px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.30),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
-    0 14px 34px rgba(139, 92, 246, 0.22),
-    0 6px 18px rgba(0, 0, 0, 0.22) !important;
+    radial-gradient(circle at 100% 100%, rgba(59, 141, 213, 0.30) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(15, 74, 127, 0.50) 0%, rgba(7, 46, 80, 0.65) 100%) !important;
+  border-color: rgba(140, 193, 239, 0.34) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
-/* Max - Indigo / Deep Blue */
 [data-interface-theme="liquid-glass"] .natively-api-detail-card-max {
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.25) 0%, transparent 60%),
-    radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.32) 0%, transparent 60%),
-    linear-gradient(135deg, rgba(30, 48, 80, 0.50) 0%, rgba(15, 23, 42, 0.65) 100%) !important;
-  border-color: rgba(59, 130, 246, 0.32) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(59, 130, 246, 0.55),
-    inset 0 2.5px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.30),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
-    0 14px 34px rgba(59, 130, 246, 0.20),
-    0 6px 18px rgba(0, 0, 0, 0.22) !important;
+    radial-gradient(circle at 100% 100%, rgba(155, 97, 157, 0.32) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(82, 48, 84, 0.50) 0%, rgba(49, 28, 49, 0.65) 100%) !important;
+  border-color: rgba(196, 165, 197, 0.40) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
-/* Ultra - Sunset / Magenta Accent */
 [data-interface-theme="liquid-glass"] .natively-api-detail-card-ultra {
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.28) 0%, transparent 60%),
-    radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.30) 0%, transparent 60%),
-    linear-gradient(135deg, rgba(70, 40, 30, 0.50) 0%, rgba(25, 12, 16, 0.65) 100%) !important;
-  border-color: rgba(249, 115, 22, 0.32) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(249, 115, 22, 0.55),
-    inset 0 2.5px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.30),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
-    0 14px 34px rgba(249, 115, 22, 0.20),
-    0 6px 18px rgba(0, 0, 0, 0.22) !important;
+    radial-gradient(circle at 100% 100%, rgba(162, 64, 103, 0.34) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(82, 30, 51, 0.50) 0%, rgba(45, 16, 28, 0.65) 100%) !important;
+  border-color: rgba(199, 149, 169, 0.46) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
-/* Active State overrides (Color tailored to each plan with rich ambient glowing halos) */
+/* Active State overrides. Each tier's OWN hue, one step brighter, so the
+   "this is your plan" edge reads without importing a second colour. */
 [data-interface-theme="liquid-glass"] .natively-api-detail-card-standard[data-active="true"] {
-  border-color: rgba(148, 163, 184, 0.60) !important;
+  border-color: rgba(165, 209, 207, 0.60) !important;
   box-shadow:
-    inset 0 1px 0 rgba(148, 163, 184, 0.75),
-    inset 0 2px 6px rgba(255, 255, 255, 0.35),
+    inset 0 1px 0 rgba(165, 209, 207, 0.72),
     inset 0 -3px 8px rgba(0, 0, 0, 0.6),
-    0 0 24px rgba(148, 163, 184, 0.20),
-    0 16px 36px rgba(148, 163, 184, 0.20),
-    0 4px 12px rgba(0, 0, 0, 0.40) !important;
+    0 4px 12px rgba(0, 0, 0, 0.40),
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-detail-card-pro[data-active="true"] {
-  border-color: rgba(139, 92, 246, 0.65) !important;
+  border-color: rgba(151, 199, 241, 0.66) !important;
   box-shadow:
-    inset 0 1px 0 rgba(139, 92, 246, 0.80),
-    inset 0 2px 6px rgba(255, 255, 255, 0.35),
+    inset 0 1px 0 rgba(151, 199, 241, 0.78),
     inset 0 -3px 8px rgba(0, 0, 0, 0.6),
-    0 0 32px rgba(139, 92, 246, 0.32),
-    0 16px 40px rgba(139, 92, 246, 0.28),
-    0 4px 12px rgba(0, 0, 0, 0.40) !important;
+    0 4px 12px rgba(0, 0, 0, 0.40),
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-detail-card-max[data-active="true"] {
-  border-color: rgba(59, 130, 246, 0.65) !important;
+  border-color: rgba(203, 175, 204, 0.72) !important;
   box-shadow:
-    inset 0 1px 0 rgba(59, 130, 246, 0.80),
-    inset 0 2px 6px rgba(255, 255, 255, 0.35),
+    inset 0 1px 0 rgba(203, 175, 204, 0.84),
     inset 0 -3px 8px rgba(0, 0, 0, 0.6),
-    0 0 32px rgba(59, 130, 246, 0.32),
-    0 16px 40px rgba(59, 130, 246, 0.26),
-    0 4px 12px rgba(0, 0, 0, 0.40) !important;
+    0 4px 12px rgba(0, 0, 0, 0.40),
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-detail-card-ultra[data-active="true"] {
-  border-color: rgba(249, 115, 22, 0.65) !important;
+  border-color: rgba(207, 160, 179, 0.78) !important;
   box-shadow:
-    inset 0 1px 0 rgba(249, 115, 22, 0.80),
-    inset 0 2px 6px rgba(255, 255, 255, 0.35),
+    inset 0 1px 0 rgba(207, 160, 179, 0.90),
     inset 0 -3px 8px rgba(0, 0, 0, 0.6),
-    0 0 32px rgba(249, 115, 22, 0.32),
-    0 16px 40px rgba(249, 115, 22, 0.26),
-    0 4px 12px rgba(0, 0, 0, 0.40) !important;
+    0 4px 12px rgba(0, 0, 0, 0.40),
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
-/* Hover effect on detail cards */
-@media (hover: hover) and (pointer: fine) {
-  [data-interface-theme="liquid-glass"] .natively-api-detail-card:hover {
-    box-shadow:
-      inset 0 2.5px 0 rgba(255, 255, 255, 0.45),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.20),
-      0 20px 45px rgba(0, 0, 0, 0.35) !important;
-  }
-}
+/* NO border brighten on hover for the API detail card. It used to brighten its
+   edge to rgba(255,255,255,0.30) here, mirroring .pricing-card-yearly:hover —
+   but on a card that is already a saturated fill with a lit rim, the edge
+   flicking brighter under the pointer read as the card being selected rather
+   than merely pointed at, which the active-state border is what actually means.
+   Hover feedback is now the cursor-tracked spotlight (InteractiveCard) plus the
+   per-tier bloom near the end of this file — both of which change the card's
+   LIGHT, not its outline.
+   The rule that lived here declared `border-color` and a `box-shadow`; only
+   the border was ever live, since the per-tier bloom is later in source at
+   equal specificity and every detail card carries both classes (see
+   NativelyApiSettings.tsx:896). Deleted whole rather than trimmed, so nothing
+   is left implying the shadow here does something. Same for the `modern`
+   twin that used to sit near the features panel. */
 
 /* ──── Premium Graphics & Specular Upgrades (Liquid Glass Theme) ──── */
 
+/* Legacy per-tier accents. These classes are NOT emitted by
+   NativelyApiSettings.tsx (the filled card uses .natively-api-on-fill and
+   .natively-api-feature-badge instead), but they are recoloured with the rest
+   of the set so no stale hue can surface if anything reinstates them. Each
+   tier carries its own hue; the ramp runs by CHROMA here rather than by
+   luminance, because these are ink on a dark surface and darkening them would
+   just make them illegible. */
 .natively-api-price-pro {
-  background: linear-gradient(135deg, #ffffff 30%, #c4b5fd 100%) !important;
+  background: linear-gradient(135deg, #ffffff 30%, #8cc7fa 100%) !important;
   -webkit-background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
   display: inline-block;
 }
 
 .natively-api-price-max {
-  background: linear-gradient(135deg, #ffffff 30%, #93c5fd 100%) !important;
+  background: linear-gradient(135deg, #ffffff 30%, #cca6cd 100%) !important;
   -webkit-background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
   display: inline-block;
 }
 
 .natively-api-price-ultra {
-  background: linear-gradient(135deg, #ffffff 30%, #fdb582 100%) !important;
+  background: linear-gradient(135deg, #ffffff 30%, #d592ad 100%) !important;
   -webkit-background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
   display: inline-block;
 }
 
 .natively-api-price-standard {
-  background: linear-gradient(135deg, #ffffff 40%, #cbd5e1 100%) !important;
+  background: linear-gradient(135deg, #ffffff 40%, #a1c2c1 100%) !important;
   -webkit-background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
   display: inline-block;
@@ -2917,16 +3151,16 @@ html[data-platform="linux"] body {
 
 /* Feature Check icon glows */
 .natively-api-check-icon-pro {
-  filter: drop-shadow(0 0 4.5px rgba(139, 92, 246, 0.55)) !important;
+  filter: drop-shadow(0 0 4.5px rgba(59, 141, 213, 0.55)) !important;
 }
 .natively-api-check-icon-max {
-  filter: drop-shadow(0 0 4.5px rgba(59, 130, 246, 0.55)) !important;
+  filter: drop-shadow(0 0 4.5px rgba(155, 97, 157, 0.55)) !important;
 }
 .natively-api-check-icon-ultra {
-  filter: drop-shadow(0 0 4.5px rgba(249, 115, 22, 0.55)) !important;
+  filter: drop-shadow(0 0 4.5px rgba(162, 64, 103, 0.55)) !important;
 }
 .natively-api-check-icon-standard {
-  filter: drop-shadow(0 0 4.5px rgba(148, 163, 184, 0.35)) !important;
+  filter: drop-shadow(0 0 4.5px rgba(103, 164, 162, 0.35)) !important;
 }
 
 /* Premium Features Glass Panel */
@@ -2958,9 +3192,12 @@ html[data-platform="linux"] body {
   font-size: 13px !important;
   font-weight: 600 !important;
   text-align: center !important;
-  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1), 
-              box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1), 
-              background-color 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  /* Leave half, matching the card's asymmetry one notch quicker so the button
+     still settles slightly ahead of the surface it sits on. Enter is declared
+     on the :hover rule further down. */
+  transition: transform 320ms cubic-bezier(0.33, 1, 0.68, 1),
+              box-shadow 320ms cubic-bezier(0.33, 1, 0.68, 1),
+              background-color 320ms cubic-bezier(0.33, 1, 0.68, 1) !important;
   cursor: pointer !important;
   display: flex !important;
   align-items: center !important;
@@ -2997,12 +3234,12 @@ html[data-platform="linux"] body {
       rgba(255, 255, 255, 0.05) 50%,
       rgba(0, 0, 0, 0.24) 100%
     ),
-    #8b5cf6 !important;
+    #12538c !important;
   color: #ffffff !important;
   box-shadow:
     inset 0 2px 3px rgba(255, 255, 255, 0.45),
     inset 0 -2px 6px rgba(0, 0, 0, 0.35),
-    0 6px 18px rgba(139, 92, 246, 0.30) !important;
+    0 6px 18px rgba(17, 89, 153, 0.34) !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -3013,12 +3250,12 @@ html[data-platform="linux"] body {
         rgba(255, 255, 255, 0.05) 50%,
         rgba(0, 0, 0, 0.24) 100%
       ),
-      #7c3aed !important;
+      #1D4959 !important;
     transform: translateY(-1px) !important;
     box-shadow:
       inset 0 2px 3px rgba(255, 255, 255, 0.55),
       inset 0 -2px 6px rgba(0, 0, 0, 0.35),
-      0 10px 22px rgba(139, 92, 246, 0.45) !important;
+      0 10px 22px rgba(36, 94, 114, 0.50) !important;
   }
 }
 
@@ -3029,12 +3266,12 @@ html[data-platform="linux"] body {
       rgba(255, 255, 255, 0.05) 50%,
       rgba(0, 0, 0, 0.24) 100%
     ),
-    #3b82f6 !important;
+    #5d365f !important;
   color: #ffffff !important;
   box-shadow:
     inset 0 2px 3px rgba(255, 255, 255, 0.45),
     inset 0 -2px 6px rgba(0, 0, 0, 0.35),
-    0 6px 18px rgba(59, 130, 246, 0.30) !important;
+    0 6px 18px rgba(103, 60, 104, 0.34) !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -3045,12 +3282,12 @@ html[data-platform="linux"] body {
         rgba(255, 255, 255, 0.05) 50%,
         rgba(0, 0, 0, 0.24) 100%
       ),
-      #2563eb !important;
+      #123B4A !important;
     transform: translateY(-1px) !important;
     box-shadow:
       inset 0 2px 3px rgba(255, 255, 255, 0.55),
       inset 0 -2px 6px rgba(0, 0, 0, 0.35),
-      0 10px 22px rgba(59, 130, 246, 0.45) !important;
+      0 10px 22px rgba(25, 81, 102, 0.50) !important;
   }
 }
 
@@ -3061,12 +3298,12 @@ html[data-platform="linux"] body {
       rgba(255, 255, 255, 0.05) 50%,
       rgba(0, 0, 0, 0.24) 100%
     ),
-    #f97316 !important;
+    #61213b !important;
   color: #ffffff !important;
   box-shadow:
     inset 0 2px 3px rgba(255, 255, 255, 0.45),
     inset 0 -2px 6px rgba(0, 0, 0, 0.35),
-    0 6px 18px rgba(249, 115, 22, 0.30) !important;
+    0 6px 18px rgba(111, 37, 66, 0.34) !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -3077,12 +3314,12 @@ html[data-platform="linux"] body {
         rgba(255, 255, 255, 0.05) 50%,
         rgba(0, 0, 0, 0.24) 100%
       ),
-      #ea580c !important;
+      #0A303E !important;
     transform: translateY(-1px) !important;
     box-shadow:
       inset 0 2px 3px rgba(255, 255, 255, 0.55),
       inset 0 -2px 6px rgba(0, 0, 0, 0.35),
-      0 10px 22px rgba(249, 115, 22, 0.45) !important;
+      0 10px 22px rgba(14, 69, 89, 0.50) !important;
   }
 }
 
@@ -3108,7 +3345,7 @@ html[data-platform="linux"] body {
 [data-interface-theme="liquid-glass"] .natively-api-pricing-badge-standard {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
-    rgba(148, 163, 184, 0.22) !important;
+    rgba(103, 164, 162, 0.22) !important;
   border: 1px solid rgba(255, 255, 255, 0.25) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
@@ -3120,37 +3357,37 @@ html[data-platform="linux"] body {
 [data-interface-theme="liquid-glass"] .natively-api-pricing-badge-recommended {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
-    rgba(139, 92, 246, 0.32) !important;
-  border: 1px solid rgba(196, 181, 253, 0.45) !important;
+    rgba(59, 141, 213, 0.28) !important;
+  border: 1px solid rgba(162, 205, 244, 0.42) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.75),
     inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
     inset 0 0 0 1px rgba(255, 255, 255, 0.15),
-    0 4px 12px rgba(139, 92, 246, 0.35) !important;
+    0 4px 12px rgba(17, 89, 153, 0.40) !important;
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-pricing-badge-max {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
-    rgba(59, 130, 246, 0.32) !important;
-  border: 1px solid rgba(147, 197, 253, 0.45) !important;
+    rgba(155, 97, 157, 0.34) !important;
+  border: 1px solid rgba(206, 179, 207, 0.45) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.75),
     inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
     inset 0 0 0 1px rgba(255, 255, 255, 0.15),
-    0 4px 12px rgba(59, 130, 246, 0.35) !important;
+    0 4px 12px rgba(103, 60, 104, 0.44) !important;
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-pricing-badge-ultra {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
-    rgba(249, 115, 22, 0.32) !important;
-  border: 1px solid rgba(253, 186, 116, 0.45) !important;
+    rgba(162, 64, 103, 0.40) !important;
+  border: 1px solid rgba(209, 162, 181, 0.48) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.75),
     inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
     inset 0 0 0 1px rgba(255, 255, 255, 0.15),
-    0 4px 12px rgba(249, 115, 22, 0.35) !important;
+    0 4px 12px rgba(111, 37, 66, 0.48) !important;
 }
 
 [data-interface-theme="liquid-glass"] .natively-api-pricing-badge-emerald {
@@ -3181,7 +3418,7 @@ html[data-platform="linux"] body {
   background: transparent !important;
   border: none !important;
   color: var(--text-secondary) !important;
-  padding: 8px 12px !important;
+  padding: 6px 10px !important;
   font-size: 11.5px !important;
   font-weight: 500 !important;
   text-align: center !important;
@@ -3226,45 +3463,45 @@ html[data-platform="linux"] body {
 [data-interface-theme="modern"] .natively-api-selector-pill-standard {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.15) 100%),
-    rgba(148, 163, 184, 0.22) !important;
+    rgba(103, 164, 162, 0.22) !important;
   border: 1px solid rgba(255, 255, 255, 0.25) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.65),
     inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
-    0 4px 14px rgba(148, 163, 184, 0.25) !important;
+    0 4px 14px rgba(60, 107, 105, 0.25) !important;
 }
 
 [data-interface-theme="modern"] .natively-api-selector-pill-pro {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.18) 100%),
-    rgba(139, 92, 246, 0.32) !important;
-  border: 1px solid rgba(196, 181, 253, 0.45) !important;
+    rgba(59, 141, 213, 0.28) !important;
+  border: 1px solid rgba(162, 205, 244, 0.42) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
     inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
-    0 5px 16px rgba(139, 92, 246, 0.40) !important;
+    0 5px 16px rgba(17, 89, 153, 0.34) !important;
 }
 
 [data-interface-theme="modern"] .natively-api-selector-pill-max {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.18) 100%),
-    rgba(59, 130, 246, 0.32) !important;
-  border: 1px solid rgba(147, 197, 253, 0.45) !important;
+    rgba(155, 97, 157, 0.34) !important;
+  border: 1px solid rgba(206, 179, 207, 0.45) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
     inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
-    0 5px 16px rgba(59, 130, 246, 0.40) !important;
+    0 5px 16px rgba(103, 60, 104, 0.40) !important;
 }
 
 [data-interface-theme="modern"] .natively-api-selector-pill-ultra {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.00) 45%, rgba(0, 0, 0, 0.18) 100%),
-    rgba(249, 115, 22, 0.32) !important;
-  border: 1px solid rgba(253, 186, 116, 0.45) !important;
+    rgba(162, 64, 103, 0.40) !important;
+  border: 1px solid rgba(209, 162, 181, 0.48) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
     inset 0 -1.5px 2px rgba(0, 0, 0, 0.40),
-    0 5px 16px rgba(249, 115, 22, 0.40) !important;
+    0 5px 16px rgba(111, 37, 66, 0.46) !important;
 }
 
 /* Double-Bezel layout (Modern) */
@@ -3281,115 +3518,118 @@ html[data-platform="linux"] body {
   border: 1.5px solid transparent !important;
   position: relative !important;
   overflow: hidden !important;
-  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
-              box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
-              border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  /* `transform` is deliberately NOT transitioned here. InteractiveCard writes
+     transform: scale(...) inline from a spring on every frame; a CSS transition
+     on the same property re-smooths each of those writes, so the press spring
+     arrives late and mushy. Framer owns transform, CSS owns the material.
+     (The .pricing-card-* rules keep transform in their lists — those cards are
+     not wrapped in InteractiveCard.)
+
+     THIS LIST IS THE LEAVE HALF. A transition declared on the base rule runs
+     when :hover stops matching; the one on the :hover rule runs on enter. That
+     is how the asymmetry below is achieved without JS.
+     The curve changed, not just the clock, and that is the point:
+     cubic-bezier(0.23, 1, 0.32, 1) puts ~83% of the travel in the first 30% of
+     the duration, so at 180ms all perceptible motion was over in ~54ms — it was
+     animating and still reading as instant. Raising the duration on that curve
+     only lengthens an invisible tail. easeOutCubic spreads the travel out.
+     Leave is the SLOWER half here, which inverts the usual "exit fast" rule
+     because nothing is exiting: this is ambient light on a surface that stays
+     put, and light that snaps off is exactly what reads as un-animated. */
+  transition: box-shadow 420ms cubic-bezier(0.33, 1, 0.68, 1),
+              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1) !important;
 }
 
-/* Card Specific color variations (Modern) */
-/* Standard - Slate */
+/* Card Specific variations (Modern) — same four hues, same depth ladder as
+   the liquid-glass twin above. The `background` loses to the committed-fill block
+   on source order (both are (0,2,0)); the border-color is what paints. */
 [data-interface-theme="modern"] .natively-api-detail-card-standard {
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.16), transparent 50%),
-    linear-gradient(160deg, rgba(100, 112, 132, 0.65) 0%, rgba(60, 68, 88, 0.75) 50%, rgba(35, 40, 55, 0.85) 100%) !important;
-  box-shadow:
-    inset 0 2px 3px rgba(255, 255, 255, 0.25),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.30),
-    0 12px 32px rgba(0, 0, 0, 0.35) !important;
+    linear-gradient(160deg, rgba(85, 135, 133, 0.65) 0%, rgba(54, 93, 91, 0.75) 50%, rgba(34, 60, 60, 0.85) 100%) !important;
+  border-color: rgba(145, 197, 195, 0.28) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
-/* Pro - Deep Violet */
 [data-interface-theme="modern"] .natively-api-detail-card-pro {
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.22), transparent 50%),
-    linear-gradient(160deg, rgba(130, 110, 180, 0.65) 0%, rgba(80, 65, 125, 0.75) 50%, rgba(45, 35, 80, 0.85) 100%) !important;
-  border-color: rgba(139, 92, 246, 0.32) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(139, 92, 246, 0.45),
-    inset 0 2px 3px rgba(255, 255, 255, 0.28),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.35),
-    0 16px 36px rgba(0, 0, 0, 0.35),
-    0 4px 12px rgba(110, 90, 155, 0.15) !important;
+    linear-gradient(160deg, rgba(44, 116, 180, 0.65) 0%, rgba(23, 79, 128, 0.75) 50%, rgba(13, 50, 83, 0.85) 100%) !important;
+  border-color: rgba(140, 193, 239, 0.34) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
-/* Max - Indigo / Deep Blue */
 [data-interface-theme="modern"] .natively-api-detail-card-max {
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.18), transparent 50%),
-    linear-gradient(160deg, rgba(85, 110, 165, 0.65) 0%, rgba(50, 68, 115, 0.75) 50%, rgba(30, 40, 75, 0.85) 100%) !important;
-  border-color: rgba(59, 130, 246, 0.32) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(59, 130, 246, 0.45),
-    inset 0 2px 3px rgba(255, 255, 255, 0.25),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.32),
-    0 16px 36px rgba(0, 0, 0, 0.35),
-    0 4px 12px rgba(59, 130, 246, 0.15) !important;
+    linear-gradient(160deg, rgba(125, 83, 126, 0.65) 0%, rgba(86, 54, 87, 0.75) 50%, rgba(55, 33, 56, 0.85) 100%) !important;
+  border-color: rgba(196, 165, 197, 0.40) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
-/* Ultra - Sunset Accent */
 [data-interface-theme="modern"] .natively-api-detail-card-ultra {
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.22), transparent 50%),
-    linear-gradient(160deg, rgba(155, 110, 125, 0.65) 0%, rgba(95, 58, 95, 0.75) 50%, rgba(55, 32, 60, 0.85) 100%) !important;
-  border-color: rgba(249, 115, 22, 0.32) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(249, 115, 22, 0.45),
-    inset 0 2px 3px rgba(255, 255, 255, 0.28),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.35),
-    0 16px 36px rgba(0, 0, 0, 0.35),
-    0 4px 12px rgba(249, 115, 22, 0.15) !important;
+    linear-gradient(160deg, rgba(131, 57, 87, 0.65) 0%, rgba(88, 36, 57, 0.75) 50%, rgba(54, 20, 33, 0.85) 100%) !important;
+  border-color: rgba(199, 149, 169, 0.46) !important;
+  /* No box-shadow here. The committed-fill block further down declares one at
+     the same (0,2,0) specificity and later in source, so anything written here
+     would never paint — and a dead value that violates the four-slot contract
+     is a trap for whoever reorders this file next. `background` is likewise
+     superseded; `border-color` is NOT, which is why it stays. */
 }
 
-/* Active State overrides (Modern - Color tailored to each plan with rich ambient glowing halos) */
+/* Active State overrides (Modern). Each tier's own hue, one step brighter. */
 [data-interface-theme="modern"] .natively-api-detail-card-standard[data-active="true"] {
-  border-color: rgba(148, 163, 184, 0.60) !important;
+  border-color: rgba(165, 209, 207, 0.60) !important;
   box-shadow:
-    inset 0 1px 0 rgba(148, 163, 184, 0.75),
-    inset 0 2px 3px rgba(255, 255, 255, 0.25),
+    inset 0 1px 0 rgba(165, 209, 207, 0.72),
     inset 0 -3px 8px rgba(0, 0, 0, 0.40),
     0 16px 36px rgba(0, 0, 0, 0.55),
-    0 0 24px rgba(148, 163, 184, 0.20) !important;
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
 [data-interface-theme="modern"] .natively-api-detail-card-pro[data-active="true"] {
-  border-color: rgba(139, 92, 246, 0.65) !important;
+  border-color: rgba(151, 199, 241, 0.66) !important;
   box-shadow:
-    inset 0 1px 0 rgba(139, 92, 246, 0.80),
-    inset 0 2px 3px rgba(255, 255, 255, 0.25),
+    inset 0 1px 0 rgba(151, 199, 241, 0.78),
     inset 0 -3px 8px rgba(0, 0, 0, 0.40),
     0 16px 36px rgba(0, 0, 0, 0.55),
-    0 0 32px rgba(139, 92, 246, 0.30) !important;
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
 [data-interface-theme="modern"] .natively-api-detail-card-max[data-active="true"] {
-  border-color: rgba(59, 130, 246, 0.65) !important;
+  border-color: rgba(203, 175, 204, 0.72) !important;
   box-shadow:
-    inset 0 1px 0 rgba(59, 130, 246, 0.80),
-    inset 0 2px 3px rgba(255, 255, 255, 0.25),
+    inset 0 1px 0 rgba(203, 175, 204, 0.84),
     inset 0 -3px 8px rgba(0, 0, 0, 0.40),
     0 16px 36px rgba(0, 0, 0, 0.55),
-    0 0 32px rgba(59, 130, 246, 0.30) !important;
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
 [data-interface-theme="modern"] .natively-api-detail-card-ultra[data-active="true"] {
-  border-color: rgba(249, 115, 22, 0.65) !important;
+  border-color: rgba(207, 160, 179, 0.78) !important;
   box-shadow:
-    inset 0 1px 0 rgba(249, 115, 22, 0.80),
-    inset 0 2px 3px rgba(255, 255, 255, 0.25),
+    inset 0 1px 0 rgba(207, 160, 179, 0.90),
     inset 0 -3px 8px rgba(0, 0, 0, 0.40),
     0 16px 36px rgba(0, 0, 0, 0.55),
-    0 0 32px rgba(249, 115, 22, 0.30) !important;
+    0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
-/* Hover effect on detail cards (Modern) */
-@media (hover: hover) and (pointer: fine) {
-  [data-interface-theme="modern"] .natively-api-detail-card:hover {
-    box-shadow:
-      inset 0 2px 3px rgba(255, 255, 255, 0.25),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.30),
-      0 20px 45px rgba(0, 0, 0, 0.50) !important;
-  }
-}
+/* The `modern` hover border brighten was removed with its liquid-glass twin —
+   see the note where that one used to be, above the tier-fill variations. */
 
 /* Premium Features Glass Panel (Modern) */
 [data-interface-theme="modern"] .natively-api-features-panel {
@@ -3420,9 +3660,12 @@ html[data-platform="linux"] body {
   font-size: 13px !important;
   font-weight: 600 !important;
   text-align: center !important;
-  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1), 
-              box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1), 
-              background-color 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  /* Leave half, matching the card's asymmetry one notch quicker so the button
+     still settles slightly ahead of the surface it sits on. Enter is declared
+     on the :hover rule further down. */
+  transition: transform 320ms cubic-bezier(0.33, 1, 0.68, 1),
+              box-shadow 320ms cubic-bezier(0.33, 1, 0.68, 1),
+              background-color 320ms cubic-bezier(0.33, 1, 0.68, 1) !important;
   cursor: pointer !important;
   display: flex !important;
   align-items: center !important;
@@ -3461,12 +3704,12 @@ html[data-platform="linux"] body {
       rgba(255, 255, 255, 0.05) 50%,
       rgba(0, 0, 0, 0.24) 100%
     ),
-    #8b5cf6 !important;
+    #12538c !important;
   color: #ffffff !important;
   box-shadow:
     inset 0 2px 3px rgba(255, 255, 255, 0.45),
     inset 0 -2px 6px rgba(0, 0, 0, 0.35),
-    0 6px 18px rgba(139, 92, 246, 0.30) !important;
+    0 6px 18px rgba(17, 89, 153, 0.34) !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -3477,12 +3720,12 @@ html[data-platform="linux"] body {
         rgba(255, 255, 255, 0.05) 50%,
         rgba(0, 0, 0, 0.24) 100%
       ),
-      #7c3aed !important;
+      #1D4959 !important;
     transform: translateY(-1px) !important;
     box-shadow:
       inset 0 2px 3px rgba(255, 255, 255, 0.55),
       inset 0 -2px 6px rgba(0, 0, 0, 0.35),
-      0 10px 22px rgba(139, 92, 246, 0.45) !important;
+      0 10px 22px rgba(36, 94, 114, 0.50) !important;
   }
 }
 
@@ -3493,12 +3736,12 @@ html[data-platform="linux"] body {
       rgba(255, 255, 255, 0.05) 50%,
       rgba(0, 0, 0, 0.24) 100%
     ),
-    #3b82f6 !important;
+    #5d365f !important;
   color: #ffffff !important;
   box-shadow:
     inset 0 2px 3px rgba(255, 255, 255, 0.45),
     inset 0 -2px 6px rgba(0, 0, 0, 0.35),
-    0 6px 18px rgba(59, 130, 246, 0.30) !important;
+    0 6px 18px rgba(103, 60, 104, 0.34) !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -3509,12 +3752,12 @@ html[data-platform="linux"] body {
         rgba(255, 255, 255, 0.05) 50%,
         rgba(0, 0, 0, 0.24) 100%
       ),
-      #2563eb !important;
+      #123B4A !important;
     transform: translateY(-1px) !important;
     box-shadow:
       inset 0 2px 3px rgba(255, 255, 255, 0.55),
       inset 0 -2px 6px rgba(0, 0, 0, 0.35),
-      0 10px 22px rgba(59, 130, 246, 0.45) !important;
+      0 10px 22px rgba(25, 81, 102, 0.50) !important;
   }
 }
 
@@ -3525,12 +3768,12 @@ html[data-platform="linux"] body {
       rgba(255, 255, 255, 0.05) 50%,
       rgba(0, 0, 0, 0.24) 100%
     ),
-    #f97316 !important;
+    #61213b !important;
   color: #ffffff !important;
   box-shadow:
     inset 0 2px 3px rgba(255, 255, 255, 0.45),
     inset 0 -2px 6px rgba(0, 0, 0, 0.35),
-    0 6px 18px rgba(249, 115, 22, 0.30) !important;
+    0 6px 18px rgba(111, 37, 66, 0.34) !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -3541,12 +3784,12 @@ html[data-platform="linux"] body {
         rgba(255, 255, 255, 0.05) 50%,
         rgba(0, 0, 0, 0.24) 100%
       ),
-      #ea580c !important;
+      #0A303E !important;
     transform: translateY(-1px) !important;
     box-shadow:
       inset 0 2px 3px rgba(255, 255, 255, 0.55),
       inset 0 -2px 6px rgba(0, 0, 0, 0.35),
-      0 10px 22px rgba(249, 115, 22, 0.45) !important;
+      0 10px 22px rgba(14, 69, 89, 0.50) !important;
   }
 }
 
@@ -3572,7 +3815,7 @@ html[data-platform="linux"] body {
 [data-interface-theme="modern"] .natively-api-pricing-badge-standard {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
-    rgba(148, 163, 184, 0.25) !important;
+    rgba(103, 164, 162, 0.25) !important;
   border: 1px solid rgba(255, 255, 255, 0.25) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.70),
@@ -3584,37 +3827,37 @@ html[data-platform="linux"] body {
 [data-interface-theme="modern"] .natively-api-pricing-badge-recommended {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
-    rgba(139, 92, 246, 0.32) !important;
-  border: 1px solid rgba(196, 181, 253, 0.45) !important;
+    rgba(59, 141, 213, 0.28) !important;
+  border: 1px solid rgba(162, 205, 244, 0.42) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.75),
     inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
     inset 0 0 0 1px rgba(255, 255, 255, 0.15),
-    0 4px 12px rgba(139, 92, 246, 0.35) !important;
+    0 4px 12px rgba(17, 89, 153, 0.40) !important;
 }
 
 [data-interface-theme="modern"] .natively-api-pricing-badge-max {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
-    rgba(59, 130, 246, 0.32) !important;
-  border: 1px solid rgba(147, 197, 253, 0.45) !important;
+    rgba(155, 97, 157, 0.34) !important;
+  border: 1px solid rgba(206, 179, 207, 0.45) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.75),
     inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
     inset 0 0 0 1px rgba(255, 255, 255, 0.15),
-    0 4px 12px rgba(59, 130, 246, 0.35) !important;
+    0 4px 12px rgba(103, 60, 104, 0.44) !important;
 }
 
 [data-interface-theme="modern"] .natively-api-pricing-badge-ultra {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.18) 100%),
-    rgba(249, 115, 22, 0.32) !important;
-  border: 1px solid rgba(253, 186, 116, 0.45) !important;
+    rgba(162, 64, 103, 0.40) !important;
+  border: 1px solid rgba(209, 162, 181, 0.48) !important;
   box-shadow:
     inset 0 1.5px 0.5px rgba(255, 255, 255, 0.75),
     inset 0 -1.5px 2.5px rgba(0, 0, 0, 0.45),
     inset 0 0 0 1px rgba(255, 255, 255, 0.15),
-    0 4px 12px rgba(249, 115, 22, 0.35) !important;
+    0 4px 12px rgba(111, 37, 66, 0.48) !important;
 }
 
 [data-interface-theme="modern"] .natively-api-pricing-badge-emerald {
@@ -3629,10 +3872,489 @@ html[data-platform="linux"] body {
     0 4px 12px rgba(16, 185, 129, 0.35) !important;
 }
 
-/* Layout Stabilization - Enforce Identical Sizing for All Plans */
+/* The mesh-header rule set was removed here: the header zone it styled is
+   gone (see the quiet-surface block below). Only the hairline survives. */
+
+.natively-api-body-rule {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent) !important;
+}
+
+[data-theme='light'] .natively-api-body-rule {
+  background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.12), transparent) !important;
+}
+
+/* ── Committed colour fill: FOUR HUES, ONE LUMINANCE LADDER ─────────────────
+   Calibration history, in the order it was rejected: a flat neutral list with
+   hairline dividers (generic), an iridescent mesh (too bright), a near-black
+   surface with a faint glow (too dark), a four-hue rainbow (Ultra 16°,
+   Standard 189°, Max 224°, Pro 48° gold — arbitrary hues that collided), a
+   magenta Pro, a gold Pro, and then a SINGLE-HUE 196° teal ramp, rejected as
+   "all of them are of the same colour profile". What survived every round is
+   the MATERIAL: a committed, saturated fill at mid luminance, white ink, and
+   one high-contrast CTA that is the loudest thing on the card. Only the
+   colour ENCODING keeps changing.
+
+   THE SYSTEM RULE, in one line: luminance falls monotonically with price, the
+   hue rotates ONCE from the cool arc into the jewel arc, and CHROMA PEAKS AT
+   PRO. Standard 178° deep teal · Pro 208° vivid azure · Max 298° amethyst ·
+   Ultra 336° black-cherry. The rotation breaks between Pro and Max, which is
+   exactly where the product's story changes from utility to status.
+
+   WHY THESE FOUR, AND WHY HUE DEGREES ARE THE WRONG INSTRUMENT. The wheel is
+   heavily spoken for: the Natively key card's Activate button is 236° and the
+   Pro teaser plaque is 263° (both stay), so ~225-275° is unavailable; emerald
+   ~160° means "connected / active plan" app-wide; amber ~38-48° means "quota
+   running low"; red is destructive. That leaves a cool arc and a jewel arc,
+   and four tiers do NOT fit if you insist on 40° of hue between everything.
+   They fit comfortably once you measure PERCEPTUAL distance instead, because
+   lightness and chroma direction separate colours as much as hue does:
+
+     adjacent tiers   Standard→Pro ΔE76 41.6 · Pro→Max 32.5 · Max→Ultra 20.0
+     (the rejected single-hue ramp scored 4.9 / 5.4 / 5.1 — that is the
+      entire difference between "four tiers" and "one colour profile")
+     vs the fixed elements   Pro is 28° from the 236° Activate button but
+     ΔE76 36.4 from it, because the button is a LIGHT violet-leaning
+     periwinkle (L* 47) and Pro is a DARK ocean azure (L* 30-37) with no
+     violet cast. Max is 35° / ΔE76 31.3 from the 263° teaser plaque.
+     Nothing lands within ΔE76 55 of emerald, amber or red.
+
+   Max↔Ultra at ΔE 20 is the tightest pair in the set and the one to watch if
+   anything here is ever re-tuned; it is still 4x the rejected ramp's spacing.
+
+   CHROMA PEAKS AT PRO, DELIBERATELY. HSL saturation is NOT perceptual chroma —
+   at equal luminance a 298° purple carries far more Lab chroma than a 208°
+   blue at the same S. Measured C* at the lighter stop, dark theme:
+   Standard 16.9 < Max 32.1 < Ultra 35.6 < Pro 40.6. The HSL S values that
+   produce that (28 / 80 / 27 / 50) look unsystematic and are not: they are
+   whatever each hue needs in order to sit at its target chroma. Pro is the
+   conversion target, so it is the most chromatic surface on the tab; Max and
+   Ultra earn their step up from DEPTH plus the jewel register, not by
+   out-saturating Pro. If you re-tune, re-check C* — not S.
+
+   THE OTHER SATURATED SURFACES ON THIS TAB, measured rather than assumed —
+   the jewel arc has neighbours the old teal ramp never had to care about:
+     --accent-primary (the usage bars, directly above the plan selector) is
+       PERIWINKLE: #B9A1F6 257° dark / #8050D4 262° light.
+       *** THE ΔE76 FIGURES BELOW ARE STALE — RE-MEASURE BEFORE RELYING ON
+       THEM. *** They were taken when the accent was Soft Orchid (#D9A7E8 286°
+       dark / #984DB2 285° light), which measured 12-13° from Max at ΔE76 43.8
+       (dark) / 34.1 (light). The 2026-08 re-hue moved the accent 29° toward
+       blue, i.e. TOWARD the cool end of the plan ladder rather than away from
+       it, so the separation from Max and from the 259° lifetime card can only
+       have narrowed. Nobody has re-run the numbers: this note records that the
+       basis changed, not a new result. This was already flagged as the pairing
+       to re-measure first if Max is ever brightened; the accent moving instead
+       triggers the same check.
+     .pricing-card-lifetime (inside the expanded Pro section) is violet 259°,
+       ΔE76 21.7 from Max — part of the existing periwinkle/violet identity,
+       not a new one.
+     .pro-feature-card-pink is 329° and composites to ΔE76 7.8 from Ultra,
+       which WOULD be a collision. It is safe only because no .tsx emits
+       `pro-feature-card` at all (the sole reference is a stale untracked
+       NativelyProSettings.js build artifact). If those feature cards are
+       ever revived, Ultra and that pink cannot both stand.
+
+   So the tab carries the plan ladder (cool → jewel), periwinkle/indigo
+   (key card, Pro teaser, lifetime card) and the app accent — which as of the
+   2026-08 re-hue is ITSELF periwinkle, i.e. no longer a fourth distinct hue on
+   this tab. That convergence is part of what the stale ΔE note above is asking
+   you to re-measure. Plus the reserved
+   semantics (emerald = connected/active, amber = low quota, red = danger).
+
+   CONTRAST IS INVARIANT BY CONSTRUCTION. Every stop here was solved to the
+   EXACT relative luminance of the single-hue ramp it replaced, so all four
+   hues sit on the luminance ladder that was already measured and shipped.
+   That means the numbers below are unchanged by the recolour (max drift
+   0.15) and do not depend on the y-band model being exactly right. Dark
+   theme carries white ink, so the LIGHTEST tier binds and the worst case is
+   the BOTTOM gradient stop; light theme carries #10162b, so the DEEPEST tier
+   binds. Every value is measured against the composited backdrop at the
+   element's own y-band in the 234px card, with text alpha composited over
+   it, never as if the ink were opaque on the top stop.
+
+   The single element that sets the ceiling is the LAST feature check glyph:
+   white, inside `.natively-api-feature-badge`, whose translucent white chip
+   LIGHTENS the fill under it at ~76% height where the gradient has already
+   lifted. That chip was 0.18 and it capped the lightest fill at L* 38, which
+   forced the whole family down into the territory that already read as too
+   dark. It is 0.13 now (border raised to compensate so the chip still reads),
+   which buys ~4 L* across all four tiers and, as a side effect, lifts the
+   Active Plan tag over 4.5 for the first time. If you ever raise those chip
+   alphas back, the lightest fill has to come down with them.
+
+   Measured, dark theme, white ink (worst value per element across the four
+   tiers, which is always Standard because it is the lightest fill):
+     badge chip 5.44 · plan name 7.42 · description 6.67 · $8 price 7.09 ·
+     / month 6.47 · WHAT'S INCLUDED 6.08 · feature label 5.90 ·
+     LAST check glyph 4.68 · CTA label 17.92 · Active Plan tag 4.99 ·
+     10px note 4.26.
+   Measured, light theme, #10162b ink (worst is always Ultra, the deepest):
+     badge chip 8.22 · plan name 9.78 · description 5.15 · $35 price 9.52 ·
+     / month 5.09 · WHAT'S INCLUDED 4.98 · feature label 4.92 ·
+     check glyph 7.39 · CTA 17.92 · Active Plan tag 7.74 · 10px note 3.38.
+   Selector pills, white ink on the worst (lighter) stop, dark theme:
+     tab name 6.83 / 8.19 / 9.82 / 11.71, tab price at 0.80 alpha
+     5.07 / 5.88 / 6.96 / 8.04. Light theme, #10162b: name 13.72 / 11.82 /
+     10.10 / 8.59, price 8.04 / 7.25 / 6.52 / 5.82.
+   Pro's badge chip is the exception to its own row: it is overridden to an
+   OPAQUE white (dark) / near-black (light) plaque further down, so it
+   measures 17.92, not 6.48. The 6.48 figure describes a state Pro never
+   paints.
+   The 10px note is the one knowingly sub-AA element and it is NOT a tier
+   problem: it is `.natively-api-on-fill-dim` multiplied by an extra
+   `opacity: 0.80` in the TSX, i.e. an effective 0.75 (dark) / 0.58 (light)
+   alpha. Fixing it means touching shared rules or the JSX and is out of
+   scope here.
+
+   The specular lift stays an `inset` box-shadow on every tier. A white-blend
+   background gradient over the top half is exactly what drops white ink under
+   4.5:1 through the RECOMMENDED badge and price band. */
+
+/* ┌─ FOUR-SLOT SHADOW CONTRACT ────────────────────────────────────────────┐
+   │ Every box-shadow on this card — rest, hover, active, active+hover, both │
+   │ themes — MUST be exactly these four shadows in this order:              │
+   │                                                                         │
+   │   1  inset rim      top hairline                                        │
+   │   2  inset floor    bottom darkening                                    │
+   │   3  outer ambient  the broad lift                                      │
+   │   4  outer contact  the tight grounding shadow                          │
+   │                                                                         │
+   │ WHY IT IS A CONTRACT, NOT A STYLE PREFERENCE. box-shadow interpolates   │
+   │ as a LIST: the shorter side is padded with transparent shadows and each │
+   │ index is animated pairwise — but if any index pair disagrees on `inset` │
+   │ the entire list becomes non-interpolable and the browser falls back to  │
+   │ DISCRETE interpolation, i.e. it hard-flips at 50% of the duration.      │
+   │ Rest used to be [inset, outer] and hover [inset, inset, inset, outer,   │
+   │ outer]; index 1 was outer-vs-inset, so three of the four theme/active   │
+   │ combinations snapped instead of animating. That was the reported "no    │
+   │ animation between hover and no-hover".                                  │
+   │                                                                         │
+   │ SLOT 1 IS FROZEN ACROSS HOVER. It is a 1px white line sitting directly  │
+   │ inside the 1.5px tier border, so brightening it on hover (0.17 → 0.30   │
+   │ dark; 1px/0.60 → 1.5px/0.85 light, which also animated the WIDTH) read  │
+   │ as the border highlighting even after the literal `border-color` hover  │
+   │ was removed. Hover may move slots 2-4 only. The only thing that ever    │
+   │ changes this card's outline is [data-active="true"].                    │
+   └─────────────────────────────────────────────────────────────────────────┘ */
+[data-interface-theme] .natively-api-detail-card-standard {
+  background: linear-gradient(180deg, #325957 0%, #3C6B69 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.28),
+    /* Resting outer shadow. Without it the :hover shadow materialised from
+       nothing, which is a different motion from the Pro cards (they deepen a
+       shadow they already carry at rest). */
+    0 4px 16px rgba(0, 0, 0, 0.20),
+    0 1px 3px rgba(0, 0, 0, 0.18) !important;
+}
+
+[data-interface-theme] .natively-api-detail-card-pro {
+  background: linear-gradient(180deg, #0E487C 0%, #115999 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.17),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.28),
+    0 4px 16px rgba(0, 0, 0, 0.20),
+    0 1px 3px rgba(0, 0, 0, 0.18) !important;
+}
+
+[data-interface-theme] .natively-api-detail-card-max {
+  background: linear-gradient(180deg, #512F52 0%, #663C68 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.28),
+    0 4px 16px rgba(0, 0, 0, 0.20),
+    0 1px 3px rgba(0, 0, 0, 0.18) !important;
+}
+
+[data-interface-theme] .natively-api-detail-card-ultra {
+  background: linear-gradient(180deg, #551C33 0%, #6F2542 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.20),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.28),
+    0 4px 16px rgba(0, 0, 0, 0.20),
+    0 1px 3px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* Light theme: the same ladder in the same order, one band up. Standard is
+   still the shallowest and Ultra still the deepest — the ramp does NOT invert
+   with the theme, because the ordering is the whole point. The band is chosen
+   so #10162b at the dim-ink 0.72 alpha still clears 4.5 on the deepest tier
+   (that caps Ultra at about L* 70; it sits at 73). */
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard {
+  background: linear-gradient(180deg, #DEF0EF 0%, #CAE7E6 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
+    0 4px 16px rgba(15, 23, 42, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro {
+  background: linear-gradient(180deg, #C4E2FD 0%, #ACD7FC 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.60),
+    inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
+    0 4px 16px rgba(15, 23, 42, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-max {
+  background: linear-gradient(180deg, #DFCAE0 0%, #D5BAD6 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
+    0 4px 16px rgba(15, 23, 42, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra {
+  background: linear-gradient(180deg, #DEB8C7 0%, #D6A7BA 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.70),
+    inset 0 -2.5px 6px rgba(0, 0, 0, 0.04),
+    0 4px 16px rgba(15, 23, 42, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+/* ── Ink on the fill ─────────────────────────────────────────────────────── */
+[data-interface-theme] .natively-api-detail-card .natively-api-on-fill {
+  color: #ffffff !important;
+}
+
+/* Muted WHITE, not gray — gray on a saturated fill reads as dirt. */
+[data-interface-theme] .natively-api-detail-card .natively-api-on-fill-dim {
+  color: rgba(255, 255, 255, 0.94) !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card .natively-api-on-fill {
+  color: #10162b !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card .natively-api-on-fill-dim {
+  color: rgba(16, 22, 43, 0.72) !important;
+}
+
+/* Circular translucent white badges over the fill.
+   0.13, not 0.18: this chip is the ceiling on how light the shallowest tier
+   can be (see the contrast note above). The BORDER carries the extra weight
+   instead, which costs nothing because the glyph sits in the middle of the
+   chip, not on its edge. */
+[data-interface-theme] .natively-api-detail-card .natively-api-feature-badge {
+  background: rgba(255, 255, 255, 0.13) !important;
+  border: 1px solid rgba(255, 255, 255, 0.34) !important;
+  color: #ffffff !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card .natively-api-feature-badge {
+  background: rgba(16, 22, 43, 0.10) !important;
+  border: 1px solid rgba(16, 22, 43, 0.16) !important;
+  color: #10162b !important;
+}
+
+[data-interface-theme] .natively-api-detail-card .natively-api-fill-pill {
+  background: rgba(255, 255, 255, 0.13) !important;
+  border: 1px solid rgba(255, 255, 255, 0.36) !important;
+  color: #ffffff !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card .natively-api-fill-pill {
+  background: rgba(16, 22, 43, 0.10) !important;
+  border: 1px solid rgba(16, 22, 43, 0.18) !important;
+  color: #10162b !important;
+}
+
+[data-interface-theme] .natively-api-detail-card .natively-api-body-rule {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.30), transparent) !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card .natively-api-body-rule {
+  background: linear-gradient(90deg, transparent, rgba(16, 22, 43, 0.22), transparent) !important;
+}
+
+/* ── CTA: the one high-contrast element ──────────────────────────────────────
+   0,3,0 so it overrides the per-tier .natively-api-pricing-cta-{tier} fills
+   (0,2,0 + !important) without deleting them — they are still the right
+   treatment for the Pro cards elsewhere, just not on a filled surface.
+   Identical on all four tiers, which is the point: nothing about the CTA's
+   colour encodes which tier you are looking at. */
+[data-interface-theme] .natively-api-detail-card .natively-api-pricing-cta {
+  background: #ffffff !important;
+  color: #10162b !important;
+  border: 1px solid rgba(255, 255, 255, 0.9) !important;
+  text-shadow: none !important;
+  box-shadow:
+    inset 0 -1px 0 rgba(16, 22, 43, 0.10),
+    0 2px 8px rgba(0, 0, 0, 0.18) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .natively-api-detail-card .natively-api-pricing-cta:hover {
+    background: #f2f7fa !important;
+    box-shadow:
+      inset 0 -1px 0 rgba(16, 22, 43, 0.10),
+      0 4px 14px rgba(0, 0, 0, 0.24) !important;
+  }
+}
+
+/* Light theme flips it: a dark button on the light tinted card is the
+   higher-contrast option there. */
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card .natively-api-pricing-cta {
+  background: #10162b !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(16, 22, 43, 0.9) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 2px 8px rgba(0, 0, 0, 0.18) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card .natively-api-pricing-cta:hover {
+    background: #1c2440 !important;
+  }
+}
+
+/* 0.13 for the same reason as the chips above — it is the Active Plan tag's
+   own label that has to clear 4.5 on the SHALLOWEST tier, and at the old 0.22
+   it measured 3.77 there. The border carries the weight the fill gave up. */
+[data-interface-theme] .natively-api-detail-card .natively-api-active-tag {
+  background: rgba(255, 255, 255, 0.13) !important;
+  border: 1px solid rgba(255, 255, 255, 0.40) !important;
+  color: #ffffff !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card .natively-api-active-tag {
+  background: rgba(16, 22, 43, 0.10) !important;
+  border: 1px solid rgba(16, 22, 43, 0.20) !important;
+  color: #10162b !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+/* ── Pro only: "Recommended" carried by WEIGHT, not by colour ────────────────
+   This replaces the gold-inversion block that used to live here. Pro no longer
+   owns a hue, so its recommended status has to be said some other way, and the
+   two levers that do not reintroduce colour are the badge and the CTA.
+
+   The badge goes OPAQUE — a solid white chip with near-black ink on the dark
+   card, solid near-black with white ink on the light one. Every other tier's
+   badge is a translucent chip that lets the fill through, so this is the only
+   fully committed small element on any of the four cards and it reads
+   instantly in a side-by-side comparison. It is also the highest-contrast
+   thing on the card after the CTA (17.92:1 in both themes).
+
+   The CTA keeps the shared white / near-black fill — flipping its colour would
+   be a colour signal — and gains a soft outer ring in the ink's own colour, so
+   it sits a little more forward than the identical button on the other three
+   tiers without becoming a different button.
+
+   ORDER, NOT SPECIFICITY, DECIDES THE DARK RULES. Each is (0,3,0), the same as
+   the tier-agnostic rule it overrides, and both carry `!important`; they win
+   only because they are declared after. Do not move this block above the "Ink
+   on the fill" section and do not drop the `[data-interface-theme]` prefix —
+   that would make it (0,2,0) and it would silently stop winning. The light
+   variants are restated at (0,4,0) rather than left to inherit, because the
+   light tier-agnostic rules above are also (0,4,0) and would otherwise win. */
+[data-interface-theme] .natively-api-detail-card-pro .natively-api-fill-pill {
+  background: #ffffff !important;
+  border: 1px solid #ffffff !important;
+  color: #10162b !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22) !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro .natively-api-fill-pill {
+  background: #10162b !important;
+  border: 1px solid #10162b !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 4px rgba(16, 22, 43, 0.18) !important;
+}
+
+[data-interface-theme] .natively-api-detail-card-pro .natively-api-pricing-cta {
+  box-shadow:
+    inset 0 -1px 0 rgba(16, 22, 43, 0.10),
+    0 0 0 3px rgba(255, 255, 255, 0.16),
+    0 4px 14px rgba(0, 0, 0, 0.26) !important;
+}
+
+/* ENTER half for the CTA. `transition` only, so it never competes with any
+   tier's box-shadow values. */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .natively-api-detail-card .natively-api-pricing-cta:hover {
+    transition: transform 220ms cubic-bezier(0.32, 0.72, 0, 1),
+                box-shadow 220ms cubic-bezier(0.32, 0.72, 0, 1),
+                background-color 220ms cubic-bezier(0.32, 0.72, 0, 1) !important;
+  }
+}
+
+/* THE RING IS FROZEN, for the same reason the card's rim is.
+   `0 0 0 Npx` is spread-only: it has no offset and no blur, so it paints a
+   hard-edged ring that is visually indistinguishable from a border. This one
+   grew 3px -> 4px AND brightened 0.16 -> 0.22 on hover, i.e. an animated
+   border-width plus an animated border-colour, on a white pill sitting on a
+   saturated blue field — the highest-contrast edge event in the panel. It only
+   exists on `-pro`, the tier selected by default, so it is on screen the
+   instant the section opens. Freezing the card's outline while leaving this
+   animating is why "border highlighting" survived that fix.
+   Hover now lives entirely in the ambient shadow (slot 3). */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .natively-api-detail-card-pro .natively-api-pricing-cta:hover {
+    box-shadow:
+      inset 0 -1px 0 rgba(16, 22, 43, 0.10),
+      0 0 0 3px rgba(255, 255, 255, 0.16),
+      0 8px 22px rgba(0, 0, 0, 0.32) !important;
+  }
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro .natively-api-pricing-cta {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 0 3px rgba(16, 22, 43, 0.14),
+    0 4px 14px rgba(0, 0, 0, 0.20) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  /* Ring frozen — see the dark rule above. */
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro .natively-api-pricing-cta:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      0 0 0 3px rgba(16, 22, 43, 0.14),
+      0 8px 22px rgba(0, 0, 0, 0.26) !important;
+  }
+}
+
+/* The gloss veil and blueprint grid both read as film over a committed colour
+   surface. Suppressed in both themes (light restyles ::after further down the
+   file and would otherwise win on source order). */
+/* Only the gloss veil (::before) stays suppressed. The blueprint grid (::after)
+   is the crosshatch backdrop and is wanted — it was collateral damage from a
+   rule that killed both pseudos to remove the veil. Its own opacity (0.55, and
+   0.8 on hover) is declared with the grid above. */
+[data-interface-theme] .natively-api-detail-card::before,
+[data-theme='light'] [data-interface-theme] .natively-api-detail-card::before {
+  opacity: 0 !important;
+}
+
+/* Layout Stabilization — Enforce Identical Sizing for All Plans.
+   The card can't size to its content: the AnimatePresence child that holds the
+   two columns is `position:absolute` (so the crossfade between tiers doesn't
+   reflow), which means it contributes nothing to the parent's height. An
+   explicit height is therefore load-bearing, not decorative.
+
+   It was 390px against ~274px of real content, and `justify-between` +
+   `flex-1` on the features list flushed that 116px surplus into two dead
+   holes — ~89px between the plan description and the promo chip, ~84px
+   between the last feature and the note. All four tiers measure the SAME
+   natural height (verified in a 640px harness at every tier), so the height
+   can be tightened to just clear the tallest content instead of guessing high.
+
+   Both breakpoints now agree. They previously disagreed by 150px, and the
+   `max-width: 767px` branch was dead code regardless: the settings pane is
+   640px only because the modal already hit its 896px `max-w-4xl` cap, which
+   requires a viewport far above 768px. */
 @media (min-width: 768px) {
   .natively-api-details-wrapper {
-    height: 390px !important;
+    height: 234px !important;
   }
   .natively-api-detail-shell {
     height: 100% !important;
@@ -3647,7 +4369,7 @@ html[data-platform="linux"] body {
 
 @media (max-width: 767px) {
   .natively-api-details-wrapper {
-    min-height: 540px !important;
+    min-height: 234px !important;
   }
   .natively-api-detail-shell {
     height: 100% !important;
@@ -3665,9 +4387,32 @@ html[data-platform="linux"] body {
 }
 
 .natively-api-pricing-cta,
-.natively-api-pricing-active-tag {
-  height: 44px !important;
+.natively-api-pricing-active-tag,
+.natively-api-active-tag {
+  height: 38px !important;
   box-sizing: border-box !important;
+}
+
+/* Reduced motion: strip movement, keep meaning. The tier switch still
+   crossfades (opacity carries the state change and aids comprehension), but
+   the pill stops sliding, the tab stops scaling on press, and the per-column
+   entrance — which is a real translate + blur via cardSlideLeft/RightVariants,
+   not an opacity-only fade — is pinned to its resting position.
+   A stylesheet !important declaration outranks framer-motion's inline styles,
+   which is what makes gating a JS-driven animation from CSS work at all. */
+@media (prefers-reduced-motion: reduce) {
+  .natively-api-selector-pill,
+  .natively-api-selector-pill-track {
+    transition: none !important;
+  }
+  .natively-api-selector-tab:active {
+    transform: none !important;
+  }
+  .natively-api-detail-card > div,
+  .natively-api-detail-card > div * {
+    filter: none !important;
+    transform: none !important;
+  }
 }
 
 /* ───────────────────────────────────────────────────────────────────────
@@ -3889,6 +4634,126 @@ html[data-platform="linux"] body {
   color: rgba(255, 255, 255, 0.75) !important;
 }
 
+/* ───────────────────────────────────────────────────────────────────────
+   Pro teaser plaque — the always-visible summary row that reveals the
+   Yearly/Lifetime grid (NativelyProSettings.tsx).
+
+   Deliberately a smaller sibling of the two pricing cards, not a third
+   pricing card: same violet family and the same jelly construction
+   (radial crown glow, specular top inset, pressed bottom inset), but a
+   20px radius against their 28px, roughly a third of their height, and
+   only one piece of high-contrast ink in it (the CTA pill). It must be
+   impossible to mistake for a footnote and impossible to mistake for the
+   primary Natively API card directly above it.
+   ─────────────────────────────────────────────────────────────────────── */
+[data-interface-theme="liquid-glass"] .pro-teaser,
+[data-interface-theme="modern"] .pro-teaser {
+  background:
+    radial-gradient(circle at 22% 0%, rgba(167, 139, 250, 0.45) 0%, transparent 64%),
+    linear-gradient(135deg, rgba(90, 58, 156, 0.80) 0%, rgba(44, 26, 82, 0.86) 100%) !important;
+  border: 1px solid rgba(167, 139, 250, 0.40) !important;
+  border-radius: 20px !important;
+  box-shadow:
+    inset 0 1px 0 rgba(139, 92, 246, 0.55),
+    inset 0 2px 4px rgba(255, 255, 255, 0.16),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.38),
+    0 4px 14px rgba(0, 0, 0, 0.20) !important;
+  transform: scale(1);
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+              border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+/* Specular crown, matching .pricing-card-*::before */
+[data-interface-theme="liquid-glass"] .pro-teaser::before,
+[data-interface-theme="modern"] .pro-teaser::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 1px !important;
+  height: 52% !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0) 100%) !important;
+  border-radius: 19px 19px 0 0 !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme="liquid-glass"] .pro-teaser:hover,
+  [data-interface-theme="modern"] .pro-teaser:hover {
+    border-color: rgba(139, 92, 246, 0.52) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(139, 92, 246, 0.65),
+      inset 0 2px 6px rgba(255, 255, 255, 0.22),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.42),
+      0 10px 26px rgba(139, 92, 246, 0.18),
+      0 4px 12px rgba(0, 0, 0, 0.26) !important;
+  }
+}
+
+[data-interface-theme] .pro-teaser .pro-teaser-eyebrow {
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.30) 0%, rgba(109, 40, 217, 0.18) 100%) !important;
+  border: 1px solid rgba(139, 92, 246, 0.44) !important;
+  color: #ddd3ff !important;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.25) !important;
+}
+
+[data-interface-theme] .pro-teaser .pro-teaser-title {
+  color: #ffffff !important;
+}
+
+[data-interface-theme] .pro-teaser .pro-teaser-sub {
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+/* The single highest-contrast element in the row. Solid white on a
+   committed violet fill is the reference this surface was signed off
+   against, and it is what pulls the eye to the one thing to press. */
+[data-interface-theme] .pro-teaser .pro-teaser-cta {
+  background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 1) 0%, rgba(241, 245, 249, 1) 100%) !important;
+  color: #0f172a !important;
+  border: 1px solid rgba(255, 255, 255, 0.8) !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.9),
+    inset 0 -2.5px 3px rgba(15, 23, 42, 0.12),
+    0 3px 8px rgba(0, 0, 0, 0.18) !important;
+  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .pro-teaser:hover .pro-teaser-cta {
+    transform: translateY(-1px) !important;
+    box-shadow:
+      inset 0 2px 3px rgba(255, 255, 255, 0.95),
+      inset 0 -2.5px 3px rgba(15, 23, 42, 0.16),
+      0 6px 14px rgba(0, 0, 0, 0.24) !important;
+  }
+}
+
+/* Press feedback on the row itself, not just the pill: the whole plaque is
+   the button, so the whole plaque should acknowledge the press. */
+[data-interface-theme] .pro-teaser:active {
+  transform: scale(0.985) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-interface-theme] .pro-teaser,
+  [data-interface-theme] .pro-teaser .pro-teaser-cta {
+    transition: none !important;
+  }
+  [data-interface-theme] .pro-teaser:active {
+    transform: none !important;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    [data-interface-theme] .pro-teaser:hover .pro-teaser-cta {
+      transform: none !important;
+    }
+  }
+}
+
 
 /* --- MODERN THEME --- */
 [data-interface-theme="modern"] .pricing-card-yearly {
@@ -4075,6 +4940,7 @@ html[data-platform="linux"] body {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
   color: rgba(255, 255, 255, 0.75) !important;
 }
+
 
 /* ------------------------------------------------------------------ */
 /* About Section Jelly UI Styles                                      */
@@ -4931,79 +5797,78 @@ html[data-platform="linux"] body {
 [data-theme='light'] .natively-api-selector-pill-standard {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
-    rgba(148, 163, 184, 0.25) !important;
-  border-color: rgba(148, 163, 184, 0.35) !important;
+    rgba(103, 164, 162, 0.18) !important;
+  border-color: rgba(103, 164, 162, 0.32) !important;
   box-shadow:
     inset 0 1.5px 2px rgba(255, 255, 255, 0.8),
     inset 0 -1.5px 2px rgba(0, 0, 0, 0.08),
-    0 4px 12px rgba(148, 163, 184, 0.15) !important;
+    0 4px 12px rgba(60, 107, 105, 0.15) !important;
 }
 
 [data-theme='light'] .natively-api-selector-pill-pro {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
-    rgba(139, 92, 246, 0.18) !important;
-  border-color: rgba(139, 92, 246, 0.32) !important;
+    rgba(59, 141, 213, 0.24) !important;
+  border-color: rgba(59, 141, 213, 0.36) !important;
   box-shadow:
     inset 0 1.5px 2px rgba(255, 255, 255, 0.8),
     inset 0 -1.5px 2px rgba(0, 0, 0, 0.08),
-    0 4px 12px rgba(139, 92, 246, 0.20) !important;
+    0 4px 12px rgba(17, 89, 153, 0.18) !important;
 }
 
 [data-theme='light'] .natively-api-selector-pill-max {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
-    rgba(59, 130, 246, 0.18) !important;
-  border-color: rgba(59, 130, 246, 0.32) !important;
+    rgba(155, 97, 157, 0.30) !important;
+  border-color: rgba(155, 97, 157, 0.40) !important;
   box-shadow:
     inset 0 1.5px 2px rgba(255, 255, 255, 0.8),
     inset 0 -1.5px 2px rgba(0, 0, 0, 0.08),
-    0 4px 12px rgba(59, 130, 246, 0.18) !important;
+    0 4px 12px rgba(103, 60, 104, 0.20) !important;
 }
 
 [data-theme='light'] .natively-api-selector-pill-ultra {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
-    rgba(249, 115, 22, 0.18) !important;
-  border-color: rgba(249, 115, 22, 0.32) !important;
+    rgba(162, 64, 103, 0.36) !important;
+  border-color: rgba(162, 64, 103, 0.44) !important;
   box-shadow:
     inset 0 1.5px 2px rgba(255, 255, 255, 0.8),
     inset 0 -1.5px 2px rgba(0, 0, 0, 0.08),
-    0 4px 12px rgba(249, 115, 22, 0.18) !important;
+    0 4px 12px rgba(111, 37, 66, 0.22) !important;
 }
 
-/* 3. Light Mode Specular Price Gradients */
+/* 3. Light Mode Specular Price Gradients. Each tier's own hue; the far stop
+   deepens with the tier so the ladder survives even here. NOT EMITTED by the
+   current TSX — kept in sync so no stale hue can surface. */
 [data-theme='light'] .natively-api-price-pro {
-  background: linear-gradient(135deg, #1e1b4b 20%, #6d28d9 100%) !important;
+  background: linear-gradient(135deg, #0f172a 20%, #1f6098 100%) !important;
   -webkit-background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
 }
 
 [data-theme='light'] .natively-api-price-max {
-  background: linear-gradient(135deg, #0f172a 20%, #1d4ed8 100%) !important;
+  background: linear-gradient(135deg, #0f172a 20%, #69416a 100%) !important;
   -webkit-background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
 }
 
 [data-theme='light'] .natively-api-price-ultra {
-  background: linear-gradient(135deg, #1c0a00 20%, #c2410c 100%) !important;
+  background: linear-gradient(135deg, #0f172a 20%, #6c2843 100%) !important;
   -webkit-background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
 }
 
 [data-theme='light'] .natively-api-price-standard {
-  background: linear-gradient(135deg, #0f172a 30%, #475569 100%) !important;
+  background: linear-gradient(135deg, #0f172a 30%, #476d6c 100%) !important;
   -webkit-background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
 }
 
 /* 4. Light Mode Detail Card Backgrounds & Specular reflections */
-[data-theme='light'] .natively-api-detail-card {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.8),
-    inset 0 -2px 5px rgba(0, 0, 0, 0.02),
-    0 8px 24px rgba(15, 23, 42, 0.04) !important;
-}
+/* The light base-card box-shadow that used to sit here was dead: every render
+   of this card carries a tier class (NativelyApiSettings.tsx:896), and the
+   per-tier light fills are (0,3,0) against this rule's (0,2,0). */
 
 [data-theme='light'] .natively-api-detail-card::before {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, transparent 60%) !important;
@@ -5017,77 +5882,76 @@ html[data-platform="linux"] body {
     linear-gradient(to bottom, rgba(15, 23, 42, 0.08) 1.5px, transparent 1.5px) !important;
 }
 
+/* Light tier cards. `background` loses to the light committed-fill block
+   (0,3,0); the 1.5px border is only declared here, so it paints — which is
+   why it has to track the ramp. Border alpha climbs with depth. */
 [data-theme='light'] .natively-api-detail-card-standard {
   background:
-    radial-gradient(circle at 50% 0%, rgba(148, 163, 184, 0.14) 0%, transparent 65%),
-    radial-gradient(circle at 100% 100%, rgba(148, 163, 184, 0.18) 0%, transparent 65%),
-    linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%) !important;
-  border: 1.5px solid rgba(148, 163, 184, 0.35) !important;
+    radial-gradient(circle at 50% 0%, rgba(103, 164, 162, 0.14) 0%, transparent 65%),
+    radial-gradient(circle at 100% 100%, rgba(103, 164, 162, 0.18) 0%, transparent 65%),
+    linear-gradient(135deg, #ffffff 0%, #eff6f6 100%) !important;
+  border: 1.5px solid rgba(85, 147, 145, 0.30) !important;
 }
 
 [data-theme='light'] .natively-api-detail-card-pro {
   background:
-    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.15) 0%, transparent 65%),
-    radial-gradient(circle at 100% 100%, rgba(139, 92, 246, 0.18) 0%, transparent 65%),
-    linear-gradient(135deg, #ffffff 0%, #f5f3ff 100%) !important;
-  border: 1.5px solid rgba(139, 92, 246, 0.36) !important;
+    radial-gradient(circle at 50% 0%, rgba(59, 141, 213, 0.15) 0%, transparent 65%),
+    radial-gradient(circle at 100% 100%, rgba(59, 141, 213, 0.18) 0%, transparent 65%),
+    linear-gradient(135deg, #ffffff 0%, #e6f2fc 100%) !important;
+  border: 1.5px solid rgba(22, 119, 205, 0.36) !important;
 }
 
 [data-theme='light'] .natively-api-detail-card-max {
   background:
-    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.15) 0%, transparent 65%),
-    radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.18) 0%, transparent 65%),
-    linear-gradient(135deg, #ffffff 0%, #eff6ff 100%) !important;
-  border: 1.5px solid rgba(59, 130, 246, 0.36) !important;
+    radial-gradient(circle at 50% 0%, rgba(155, 97, 157, 0.15) 0%, transparent 65%),
+    radial-gradient(circle at 100% 100%, rgba(155, 97, 157, 0.18) 0%, transparent 65%),
+    linear-gradient(135deg, #ffffff 0%, #f1e9f1 100%) !important;
+  border: 1.5px solid rgba(136, 77, 138, 0.42) !important;
 }
 
 [data-theme='light'] .natively-api-detail-card-ultra {
   background:
-    radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.15) 0%, transparent 65%),
-    radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.18) 0%, transparent 65%),
-    linear-gradient(135deg, #ffffff 0%, #fff7ed 100%) !important;
-  border: 1.5px solid rgba(249, 115, 22, 0.36) !important;
+    radial-gradient(circle at 50% 0%, rgba(162, 64, 103, 0.15) 0%, transparent 65%),
+    radial-gradient(circle at 100% 100%, rgba(162, 64, 103, 0.18) 0%, transparent 65%),
+    linear-gradient(135deg, #ffffff 0%, #f2e2e9 100%) !important;
+  border: 1.5px solid rgba(141, 47, 84, 0.48) !important;
 }
 
-/* 5. Light Mode Active Plan Ambient Halos */
+/* 5. Light Mode Active Plan Ambient Halos. Each tier's own hue, deepening. */
 [data-theme='light'] .natively-api-detail-card-standard[data-active="true"] {
-  border-color: rgba(71, 85, 105, 0.70) !important;
+  border-color: rgba(71, 109, 108, 0.70) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     inset 0 -2px 5px rgba(0, 0, 0, 0.02),
-    0 0 24px rgba(148, 163, 184, 0.20),
-    0 16px 36px rgba(148, 163, 184, 0.14),
-    0 6px 14px rgba(0, 0, 0, 0.05) !important;
+    0 6px 14px rgba(0, 0, 0, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
 }
 
 [data-theme='light'] .natively-api-detail-card-pro[data-active="true"] {
-  border-color: rgba(109, 40, 217, 0.75) !important;
+  border-color: rgba(31, 96, 152, 0.75) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     inset 0 -2px 5px rgba(0, 0, 0, 0.02),
-    0 0 28px rgba(139, 92, 246, 0.28),
-    0 16px 36px rgba(139, 92, 246, 0.20),
-    0 6px 14px rgba(0, 0, 0, 0.05) !important;
+    0 6px 14px rgba(0, 0, 0, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
 }
 
 [data-theme='light'] .natively-api-detail-card-max[data-active="true"] {
-  border-color: rgba(29, 78, 216, 0.75) !important;
+  border-color: rgba(105, 65, 106, 0.80) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     inset 0 -2px 5px rgba(0, 0, 0, 0.02),
-    0 0 28px rgba(59, 130, 246, 0.26),
-    0 16px 36px rgba(59, 130, 246, 0.18),
-    0 6px 14px rgba(0, 0, 0, 0.05) !important;
+    0 6px 14px rgba(0, 0, 0, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
 }
 
 [data-theme='light'] .natively-api-detail-card-ultra[data-active="true"] {
-  border-color: rgba(194, 65, 12, 0.75) !important;
+  border-color: rgba(108, 40, 67, 0.85) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     inset 0 -2px 5px rgba(0, 0, 0, 0.02),
-    0 0 28px rgba(249, 115, 22, 0.26),
-    0 16px 36px rgba(249, 115, 22, 0.18),
-    0 6px 14px rgba(0, 0, 0, 0.05) !important;
+    0 6px 14px rgba(0, 0, 0, 0.05),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
 }
 
 /* 6. Light Mode Features Columns & Scope Panels */
@@ -5113,17 +5977,23 @@ html[data-platform="linux"] body {
    ────────────────────────────────────────────────────────────────────────── */
 
 /* A. Default / Dark Mode Badge Text & Icons */
+/* Each tier's own hue at ink weight. These are ink on a dark surface, so the
+   ramp runs by CHROMA, not luminance — darkening them for depth would just
+   make them illegible. Solved to the same relative luminance as before, so
+   the measured values on #1E1E21 are unchanged: 8.73 / 9.21 / 7.85 / 6.77.
+   NOT EMITTED by the current TSX. Emerald is untouched — it is the
+   active-plan semantic, not a tier. */
 .natively-api-badge-text-recommended {
-  color: #c4b5fd !important;
+  color: #8cc7fa !important;
 }
 .natively-api-badge-text-max {
-  color: #93c5fd !important;
+  color: #cca6cd !important;
 }
 .natively-api-badge-text-ultra {
-  color: #fdb582 !important;
+  color: #d592ad !important;
 }
 .natively-api-badge-text-standard {
-  color: #cbd5e1 !important;
+  color: #a1c2c1 !important;
 }
 .natively-api-badge-text-emerald {
   color: #a7f3d0 !important;
@@ -5131,20 +6001,20 @@ html[data-platform="linux"] body {
 
 /* Feature Check icon sheens (Dark Mode) */
 .natively-api-check-icon-pro {
-  color: #a78bfa !important;
-  filter: drop-shadow(0 0 4.5px rgba(139, 92, 246, 0.55)) !important;
+  color: #8cc7fa !important;
+  filter: drop-shadow(0 0 4.5px rgba(59, 141, 213, 0.55)) !important;
 }
 .natively-api-check-icon-max {
-  color: #60a5fa !important;
-  filter: drop-shadow(0 0 4.5px rgba(59, 130, 246, 0.55)) !important;
+  color: #cca6cd !important;
+  filter: drop-shadow(0 0 4.5px rgba(155, 97, 157, 0.55)) !important;
 }
 .natively-api-check-icon-ultra {
-  color: #fb923c !important;
-  filter: drop-shadow(0 0 4.5px rgba(249, 115, 22, 0.55)) !important;
+  color: #d592ad !important;
+  filter: drop-shadow(0 0 4.5px rgba(162, 64, 103, 0.55)) !important;
 }
 .natively-api-check-icon-standard {
-  color: #94a3b8 !important;
-  filter: drop-shadow(0 0 4.5px rgba(148, 163, 184, 0.35)) !important;
+  color: #a1c2c1 !important;
+  filter: drop-shadow(0 0 4.5px rgba(103, 164, 162, 0.35)) !important;
 }
 
 /* Promo Voucher badge (Dark Mode) */
@@ -5172,17 +6042,19 @@ html[data-platform="linux"] body {
 }
 
 /* B. Light Mode High-Contrast Overrides (WCAG Compliant 4.5:1 Ratio) */
+/* Light mode: the ramp runs by LUMINANCE again, because here darker means
+   more legible. Measured on #ffffff: 5.71 / 6.63 / 8.21 / 10.37. */
 [data-theme='light'] .natively-api-badge-text-recommended {
-  color: #5b21b6 !important; /* Rich Dark Violet */
+  color: #1f6098 !important;
 }
 [data-theme='light'] .natively-api-badge-text-max {
-  color: #1e40af !important; /* Rich Dark Blue */
+  color: #69416a !important;
 }
 [data-theme='light'] .natively-api-badge-text-ultra {
-  color: #9a3412 !important; /* Rich Sunset Burnt Orange */
+  color: #6c2843 !important;
 }
 [data-theme='light'] .natively-api-badge-text-standard {
-  color: #334155 !important; /* Slate Gray */
+  color: #476d6c !important;
 }
 [data-theme='light'] .natively-api-badge-text-emerald {
   color: #065f46 !important; /* Dark Forest Green */
@@ -5190,20 +6062,20 @@ html[data-platform="linux"] body {
 
 /* Feature Check icon sheens (Light Mode) */
 [data-theme='light'] .natively-api-check-icon-pro {
-  color: #6d28d9 !important;
-  filter: drop-shadow(0 0 3px rgba(109, 40, 217, 0.22)) !important;
+  color: #1f6098 !important;
+  filter: drop-shadow(0 0 3px rgba(31, 96, 152, 0.22)) !important;
 }
 [data-theme='light'] .natively-api-check-icon-max {
-  color: #2563eb !important;
-  filter: drop-shadow(0 0 3px rgba(37, 99, 235, 0.22)) !important;
+  color: #69416a !important;
+  filter: drop-shadow(0 0 3px rgba(105, 65, 106, 0.22)) !important;
 }
 [data-theme='light'] .natively-api-check-icon-ultra {
-  color: #ea580c !important;
-  filter: drop-shadow(0 0 3px rgba(234, 88, 12, 0.22)) !important;
+  color: #6c2843 !important;
+  filter: drop-shadow(0 0 3px rgba(108, 40, 67, 0.22)) !important;
 }
 [data-theme='light'] .natively-api-check-icon-standard {
-  color: #64748b !important;
-  filter: drop-shadow(0 0 3px rgba(100, 116, 139, 0.12)) !important;
+  color: #476d6c !important;
+  filter: drop-shadow(0 0 3px rgba(71, 109, 108, 0.12)) !important;
 }
 
 /* Promo Voucher badge (Light Mode) */
@@ -5254,6 +6126,631 @@ html[data-platform="linux"] body {
 [data-theme='light'] .natively-api-header-promo-code {
   color: #3b0764 !important;
 }
+
+
+/* Tighten markdown spacing and remove nested paragraph margins inside lists */
+.markdown-content p {
+  margin-top: 0 !important;
+  margin-bottom: 6px !important;
+  line-height: 1.6 !important;
+}
+.markdown-content p:last-child {
+  margin-bottom: 0 !important;
+}
+.markdown-content li p {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  display: inline !important;
+  line-height: 1.6 !important;
+}
+.markdown-content li {
+  margin-top: 0 !important;
+  margin-bottom: 4.5px !important;
+  line-height: 1.6 !important;
+}
+.markdown-content li:last-child {
+  margin-bottom: 0 !important;
+}
+.markdown-content ul, .markdown-content ol {
+  margin-top: 4.5px !important;
+  margin-bottom: 4.5px !important;
+}
+/* Code fences carry the same 6px rhythm as paragraphs. Tailwind's preflight
+   zeroes `pre`, and the streaming bubble used to get its spacing from the
+   literal newline marked emits between blocks — which `whitespace-pre-wrap`
+   painted as a full blank line, giving roughly two line-heights of gap.
+   That newline is now stripped at the injection point (collapseBlockGaps),
+   so the gap has to come from a real margin instead of an artifact. */
+.markdown-content pre {
+  margin-top: 6px !important;
+  margin-bottom: 6px !important;
+}
+.markdown-content pre:last-child {
+  margin-bottom: 0 !important;
+}
+.markdown-content pre:first-child {
+  margin-top: 0 !important;
+}
+.markdown-content h1, 
+.markdown-content h2, 
+.markdown-content h3, 
+.markdown-content h4, 
+.markdown-content h5, 
+.markdown-content h6 {
+  margin-top: 8px !important;
+  margin-bottom: 4.5px !important;
+  line-height: 1.6 !important;
+  font-weight: 700 !important;
+}
+/* ── Usage-section code block: thin horizontal scrollbar, revealed on hover ──
+   The global scrollbar is hidden (width:0). The code hero needs a discreet
+   horizontal scrollbar so long lines are reachable; it stays near-invisible
+   until the card is hovered. Scoped to .code-scroll so nothing else changes. */
+.code-scroll {
+  scrollbar-width: thin;                       /* Firefox */
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 200ms ease;
+}
+.code-scroll:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.code-scroll::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+  background: transparent;
+}
+.code-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  transition: background 200ms ease;
+}
+.code-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+}
+.code-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+.code-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PLANS & BILLING — pricing surfaces
+   ═══════════════════════════════════════════════════════════════════════
+   Restores the colour/gradient character of the original "jelly card"
+   pricing UI, rebuilt against the three design references the original was
+   based on:
+
+     Ref A — iridescent holographic mesh header band + huge price + solid
+             black pill CTA                        → .plan-tier-* below
+     Ref B — soft blurred colour bleeding in from the card edges, no hard
+             gradient block                        → .trial-bleed-card
+     Ref C — saturated periwinkle fill / frosted smoky glass, strikethrough
+             pricing, circular icon badges         → .pro-license-*
+
+   The mesh bands are deliberately theme-INDEPENDENT: they are their own
+   light micro-context carrying near-black text in both app themes, exactly
+   as in Ref A. Only the card BODY below the band follows the app theme.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Ref A: plan tier card ──────────────────────────────────────────── */
+.plan-tier-card {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--bg-item-surface);
+  border: 1px solid var(--border-subtle);
+  transition:
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .plan-tier-card:hover {
+    border-color: rgba(148, 163, 184, 0.34);
+    box-shadow: 0 10px 30px rgba(2, 6, 23, 0.28);
+  }
+  [data-theme='light'] .plan-tier-card:hover {
+    border-color: rgba(15, 23, 42, 0.16);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.09);
+  }
+}
+
+.plan-tier-card[data-selected='true'] {
+  border-color: rgba(148, 163, 184, 0.42);
+  box-shadow: 0 12px 34px rgba(2, 6, 23, 0.34);
+}
+[data-theme='light'] .plan-tier-card[data-selected='true'] {
+  border-color: rgba(15, 23, 42, 0.2);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.1);
+}
+
+/* The full-bleed iridescent band. Layered radial colour fields flowing into
+   each other — soft, organic, no hard stops — over a base linear wash. */
+.plan-tier-band {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Card 1 — mint → cyan → lavender → pink */
+.plan-tier-band-standard {
+  background:
+    radial-gradient(115% 150% at 8% 0%, #a7f3d0 0%, rgba(167, 243, 208, 0) 58%),
+    radial-gradient(100% 130% at 52% 8%, #67e8f9 0%, rgba(103, 232, 249, 0) 52%),
+    radial-gradient(120% 140% at 96% 52%, #f5d0fe 0%, rgba(245, 208, 254, 0) 56%),
+    radial-gradient(95% 130% at 38% 104%, #c7d2fe 0%, rgba(199, 210, 254, 0) 60%),
+    linear-gradient(118deg, #d9f99d 0%, #a5b4fc 100%);
+}
+
+/* Card 2 — peach/orange → violet → hot pink (the recommended tier) */
+.plan-tier-band-pro {
+  background:
+    radial-gradient(115% 150% at 6% 4%, #fed7aa 0%, rgba(254, 215, 170, 0) 56%),
+    radial-gradient(105% 130% at 48% 0%, #fdba74 0%, rgba(253, 186, 116, 0) 48%),
+    radial-gradient(125% 145% at 92% 40%, #f472b6 0%, rgba(244, 114, 182, 0) 58%),
+    radial-gradient(100% 135% at 30% 106%, #a78bfa 0%, rgba(167, 139, 250, 0) 62%),
+    linear-gradient(122deg, #fecaca 0%, #c4b5fd 100%);
+}
+
+/* Card 3 — blue → gold → orange, with the faint vertical banding of Ref A */
+.plan-tier-band-max {
+  background:
+    radial-gradient(115% 150% at 10% 0%, #93c5fd 0%, rgba(147, 197, 253, 0) 55%),
+    radial-gradient(100% 125% at 55% 18%, #fde68a 0%, rgba(253, 230, 138, 0) 50%),
+    radial-gradient(120% 140% at 95% 70%, #fdba74 0%, rgba(253, 186, 116, 0) 56%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 2px, rgba(255, 255, 255, 0) 2px 9px),
+    linear-gradient(120deg, #bfdbfe 0%, #fed7aa 100%);
+}
+
+/* Card 4 — deep violet → indigo → magenta */
+.plan-tier-band-ultra {
+  background:
+    radial-gradient(115% 150% at 12% 0%, #c4b5fd 0%, rgba(196, 181, 253, 0) 56%),
+    radial-gradient(105% 130% at 58% 10%, #a5b4fc 0%, rgba(165, 180, 252, 0) 50%),
+    radial-gradient(125% 145% at 94% 58%, #f0abfc 0%, rgba(240, 171, 252, 0) 58%),
+    radial-gradient(95% 130% at 26% 104%, #99f6e4 0%, rgba(153, 246, 228, 0) 60%),
+    linear-gradient(124deg, #ddd6fe 0%, #a5f3fc 100%);
+}
+
+/* Specular top highlight — the "jelly" read of the original cards. */
+.plan-tier-band::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0) 62%);
+  pointer-events: none;
+}
+
+/* Near-black on the band in BOTH themes — the band is its own light context. */
+.plan-tier-band-text {
+  color: #0b1020;
+}
+.plan-tier-band-text-muted {
+  color: rgba(11, 16, 32, 0.62);
+}
+
+/* "Popular" / "Recommended" pill sitting on the band. */
+.plan-tier-pill {
+  background: rgba(255, 255, 255, 0.62);
+  color: #0b1020;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 1px 2px rgba(11, 16, 32, 0.08);
+  backdrop-filter: blur(6px);
+}
+
+/* Ref A's solid black pill CTA. Inverts to white-on-near-black in dark so it
+   stays the highest-contrast control on the surface in both themes. */
+.plan-tier-cta {
+  background: #0b1020;
+  color: #ffffff;
+  transition:
+    background-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .plan-tier-cta:hover { background: #1e293b; }
+}
+.plan-tier-cta:active { transform: scale(0.985); }
+
+[data-theme='dark'] .plan-tier-cta {
+  background: #f8fafc;
+  color: #0b1020;
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-theme='dark'] .plan-tier-cta:hover { background: #e2e8f0; }
+}
+
+/* ── Circular icon badge (Ref C feature rows) ───────────────────────── */
+.pricing-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: rgba(15, 23, 42, 0.06);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  color: rgba(15, 23, 42, 0.72);
+}
+[data-theme='dark'] .pricing-icon-badge {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.78);
+}
+
+/* On a saturated / glass surface the badge is translucent white. */
+.pricing-icon-badge-on-fill {
+  background: rgba(255, 255, 255, 0.22) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+}
+
+/* ── Ref C: saturated periwinkle Pro card ───────────────────────────── */
+.pro-license-periwinkle {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #6f7ce8 0%, #7f8bec 55%, #949ef2 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 8px 24px rgba(79, 92, 214, 0.26);
+  transition:
+    box-shadow 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pro-license-periwinkle:hover {
+    border-color: rgba(255, 255, 255, 0.32);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.34),
+      0 14px 34px rgba(79, 92, 214, 0.36);
+  }
+}
+
+/* ── Ref C: frosted smoky-glass card ────────────────────────────────── */
+.pro-license-glass {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 20% 100%, rgba(99, 102, 241, 0.22) 0%, rgba(99, 102, 241, 0) 62%),
+    linear-gradient(180deg, rgba(148, 163, 184, 0.16) 0%, rgba(51, 65, 85, 0.32) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(18px) saturate(120%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 8px 24px rgba(2, 6, 23, 0.28);
+  transition:
+    box-shadow 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+[data-theme='light'] .pro-license-glass {
+  background:
+    radial-gradient(120% 90% at 20% 100%, rgba(99, 102, 241, 0.16) 0%, rgba(99, 102, 241, 0) 62%),
+    linear-gradient(180deg, rgba(51, 65, 85, 0.9) 0%, rgba(30, 41, 59, 0.96) 100%);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pro-license-glass:hover {
+    border-color: rgba(255, 255, 255, 0.26);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      0 14px 34px rgba(2, 6, 23, 0.36);
+  }
+}
+
+/* Both Ref C cards carry white text regardless of app theme — they are
+   saturated/dark surfaces in the reference and in both of our themes. */
+.pro-license-text { color: #ffffff; }
+.pro-license-text-muted { color: rgba(255, 255, 255, 0.72); }
+.pro-license-strike {
+  color: rgba(255, 255, 255, 0.55);
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 255, 255, 0.42);
+}
+.pro-license-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+}
+
+/* Ref C CTAs: white on the saturated card, blue on the glass card. */
+.pro-license-cta-white {
+  background: #ffffff;
+  color: #10162e;
+  transition:
+    background-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pro-license-cta-white:hover { background: #eef2ff; }
+}
+.pro-license-cta-white:active { transform: scale(0.985); }
+
+.pro-license-cta-blue {
+  background: #4f6ef7;
+  color: #ffffff;
+  transition:
+    background-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pro-license-cta-blue:hover { background: #4059e0; }
+}
+.pro-license-cta-blue:active { transform: scale(0.985); }
+
+/* Discount / savings pill beside the CTA. */
+.pro-license-save-pill {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+}
+.pro-license-badge-pill {
+  background: rgba(255, 255, 255, 0.86);
+  color: #10162e;
+}
+
+/* ── Ref B: soft colour bleed card (trial) ──────────────────────────── */
+.trial-bleed-card {
+  position: relative;
+  border-radius: 22px;
+  overflow: hidden;
+  background: var(--bg-item-surface);
+  border: 1px solid var(--border-subtle);
+}
+/* Diffuse cool haze at the top edge and warm amber haze at bottom-middle,
+   bleeding into the card surface — light behind frosted glass, per Ref B.
+   No hard gradient block. */
+.trial-bleed-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(90% 55% at 22% -8%, rgba(96, 165, 250, 0.32) 0%, rgba(96, 165, 250, 0) 70%),
+    radial-gradient(80% 55% at 62% 112%, rgba(251, 146, 60, 0.28) 0%, rgba(251, 146, 60, 0) 70%);
+  filter: blur(6px);
+}
+[data-theme='light'] .trial-bleed-card::before {
+  background:
+    radial-gradient(90% 55% at 22% -8%, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0) 70%),
+    radial-gradient(80% 55% at 62% 112%, rgba(249, 115, 22, 0.16) 0%, rgba(249, 115, 22, 0) 70%);
+}
+.trial-bleed-content { position: relative; z-index: 1; }
+
+/* ── Reduced motion ─────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .plan-tier-card,
+  .plan-tier-cta,
+  .pro-license-periwinkle,
+  .pro-license-glass,
+  .pro-license-cta-white,
+  .pro-license-cta-blue {
+    transition: none !important;
+  }
+  .plan-tier-cta:active,
+  .pro-license-cta-white:active,
+  .pro-license-cta-blue:active {
+    transform: none !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Tier selector ⇄ plan card colour continuity
+   ─────────────────────────────────────────────────────────────────────────
+   The selector's pill was tuned to the detail card's PREVIOUS treatment
+   (translucent "jelly-clay": a white specular sheen over a low-alpha tint,
+   a bright per-tier border, and a coloured outer glow). The card was since
+   rebuilt as a committed, opaque per-tier fill with no aura. Stacked 12px
+   apart those read as two design systems, so the pill is rebuilt from the
+   card's own recipe: an opaque two-stop fill in the same hue, one inset
+   top highlight, no outer aura.
+
+   DARK: the pill fill is the card gradient at 0.86 lightness — a deeper
+   sibling, not a different colour (an RGB scale preserves chromaticity, so
+   only lightness moves). Deeper is the right direction here twice over.
+   Visually the pill sits INSIDE a recessed near-black bar; a fill deeper
+   than the card lets the pill read as the echo and the card as the hero
+   instead of two equal claims on attention. Numerically it buys the
+   contrast headroom the card itself had to fight for: at the card's own
+   luminance, white ink clears 4.5:1 by so little that the price line could
+   not be dimmed at all without failing AA.
+
+   LIGHT: the pill fill is the card gradient UNCHANGED. The deepening move
+   inverts in light theme — against a near-white bar, deeper means louder,
+   which would put the pill ahead of the card. Ink here is near-black on a
+   pale tint, which starts at ~10:1, so there is headroom without it.
+
+   Contrast is measured against the LIGHTEST gradient stop in dark (white
+   ink) and the DARKEST stop in light (near-black ink) — the worst case
+   flips with the ink. Both happen to be the bottom stop. The price line's
+   alpha is composited over that stop, never read as if it were opaque.
+
+   Specificity note: `index.css` is saturated with `!important` around this
+   component and other processes append to this file, so every rule below
+   is anchored on `.natively-api-selector-bar` to outrank the earlier
+   per-interface-theme rules (0-2-0) and the earlier light overrides
+   (0-3-0) on specificity rather than on source order. Selectors key off
+   attribute PRESENCE, matching the card's own `[data-interface-theme]`
+   pattern, so `liquid-glass` and `modern` are both covered.
+   ───────────────────────────────────────────────────────────────────── */
+
+/* ── Pill: dark theme (card fill × 0.86) ─────────────────────────────── */
+[data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill {
+  /* Not `all`: only the properties that actually change on a tier switch.
+     The slide itself lives on .natively-api-selector-pill-track and is
+     deliberately left alone. */
+  transition:
+    background 260ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 260ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 260ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+/* The four pills ARE the four card fills surfacing up through the segmented
+   control, so they can never lag the cards: each is its tier's fill deepened
+   by a flat 3.5 L*, which keeps the ramp's spacing identical (5 L* between
+   adjacent tiers) while sitting the selected pill just under its card.
+
+   This is also the ONE place the ladder is visible all at once in a real
+   session — you see one card at a time, but you can compare pills by tabbing
+   across. Measured, white ink on each pill's lighter (worst-case) stop:
+   name 6.83 / 7.95 / 9.68 / 11.70, price at 0.80 alpha 4.80 / 5.77 / 6.85 /
+   8.09. Every tier carries the SAME white ink now — there is no inverted
+   tier left, which is why the old `[data-selected-tier="pro"]` dark-ink
+   override that used to sit further down is gone. */
+[data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-standard {
+  background: linear-gradient(180deg, #2D504F 0%, #376260 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 1px 2px rgba(0, 0, 0, 0.35) !important;
+}
+
+[data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-pro {
+  background: linear-gradient(180deg, #0C416F 0%, #0F518A 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.17),
+    0 1px 2px rgba(0, 0, 0, 0.35) !important;
+}
+
+[data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-max {
+  background: linear-gradient(180deg, #472948 0%, #5C365D 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.35) !important;
+}
+
+[data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-ultra {
+  background: linear-gradient(180deg, #48182B 0%, #62213B 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.20),
+    0 1px 2px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* ── Pill: light theme (card fill, unchanged) ────────────────────────── */
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-standard {
+  background: linear-gradient(180deg, #DEF0EF 0%, #CAE7E6 100%) !important;
+  border: 1px solid rgba(16, 22, 43, 0.08) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 1px 2px rgba(15, 23, 42, 0.10) !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-pro {
+  background: linear-gradient(180deg, #C4E2FD 0%, #ACD7FC 100%) !important;
+  border: 1px solid rgba(16, 22, 43, 0.09) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.60),
+    0 1px 2px rgba(15, 23, 42, 0.10) !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-max {
+  background: linear-gradient(180deg, #DFCAE0 0%, #D5BAD6 100%) !important;
+  border: 1px solid rgba(16, 22, 43, 0.10) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    0 1px 2px rgba(15, 23, 42, 0.10) !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill-ultra {
+  background: linear-gradient(180deg, #DEB8C7 0%, #D6A7BA 100%) !important;
+  border: 1px solid rgba(16, 22, 43, 0.11) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.70),
+    0 1px 2px rgba(15, 23, 42, 0.10) !important;
+}
+
+/* ── Ink on the tabs ─────────────────────────────────────────────────────
+   Only the SELECTED tab carries colour — inactive tabs are neutral and
+   quiet, mirroring the card's one-saturated-element discipline. The price
+   is demoted by colour + weight, never by `opacity`: the old
+   `.tab-price { opacity: 0.65 }` multiplied on top of an inherited colour,
+   which is what put white-on-saturated below AA while looking fine. Font
+   sizes, padding and margins are untouched so the bar's height cannot
+   move (measured: 54.5px before and after).
+
+   The INACTIVE alphas are floors, not taste: an inactive price is still a
+   real price, so it has to clear 4.5:1 against the bar's own composited
+   backdrop (measured in-page: #0E0E0E dark, #F3F3F4 light). Dark price
+   0.48 → 5.00 under a 0.62 name → 7.69; light price 0.62 → 4.85 under a
+   0.74 name → 7.27. The name/price step is a real luminance gap in both,
+   so the hierarchy survives the accessibility floor.
+   ───────────────────────────────────────────────────────────────────── */
+
+[data-interface-theme] .natively-api-selector-bar .natively-api-selector-tab .tab-name {
+  color: rgba(255, 255, 255, 0.62) !important;
+  font-weight: 500 !important;
+}
+
+[data-interface-theme] .natively-api-selector-bar .natively-api-selector-tab .tab-price {
+  color: rgba(255, 255, 255, 0.48) !important;
+  font-weight: 500 !important;
+  opacity: 1 !important;
+}
+
+[data-interface-theme] .natively-api-selector-bar .natively-api-selector-tab:hover .tab-name {
+  color: rgba(255, 255, 255, 0.86) !important;
+}
+
+[data-interface-theme] .natively-api-selector-bar .natively-api-selector-tab.active .tab-name {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+[data-interface-theme] .natively-api-selector-bar .natively-api-selector-tab.active .tab-price {
+  color: rgba(255, 255, 255, 0.80) !important;
+  font-weight: 500 !important;
+  opacity: 1 !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-tab .tab-name {
+  color: rgba(15, 23, 42, 0.74) !important;
+  font-weight: 500 !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-tab .tab-price {
+  color: rgba(15, 23, 42, 0.62) !important;
+  font-weight: 500 !important;
+  opacity: 1 !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-tab:hover .tab-name {
+  color: rgba(15, 23, 42, 0.92) !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-tab.active .tab-name {
+  color: #10162B !important;
+  font-weight: 600 !important;
+}
+
+[data-theme='light'] [data-interface-theme] .natively-api-selector-bar .natively-api-selector-tab.active .tab-price {
+  color: rgba(16, 22, 43, 0.72) !important;
+  font-weight: 500 !important;
+  opacity: 1 !important;
+}
+
+/* There is deliberately NO per-tier tab-ink override here any more. A
+   `[data-selected-tier="pro"]` rule used to flip the selected tab to dark ink
+   because Pro's pill was gold and gold cannot carry white. Under the one-hue
+   ramp every pill is a mid-to-deep teal, so every selected tab takes the same
+   white ink in dark and the same #10162B in light, from the shared rules
+   above. The `data-selected-tier` attribute is still set on the bar in
+   NativelyApiSettings.tsx; it is now an unused hook, harmless, and left alone
+   so this file owns no TSX dependency. */
+
+/* Reduced motion. Restated at this block's specificity: the earlier
+   `.natively-api-selector-pill { transition: none !important }` is 0-1-0
+   and would otherwise LOSE to the 0-3-0 transition declared above. */
+@media (prefers-reduced-motion: reduce) {
+  [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill {
+    transition: none !important;
+  }
+}
+
 
 /* ──────────────────────────────────────────────────────────────────────────
    ──── Natively Pro Yearly & Lifetime Cards: Light Mode Overrides ──────────
@@ -5395,25 +6892,119 @@ html[data-platform="linux"] body {
   border: 1px solid rgba(139, 92, 246, 0.16) !important;
 }
 
-/* 5. Yearly CTA (Neutral Bright Jelly button in Dark, refined in Light) */
+/* 5. Yearly CTA.
+   Dark mode keeps the bright neutral jelly. Light mode does NOT: a white
+   pill on the pale ice-blue Yearly card was the lowest-contrast element on
+   the whole surface, so the card that is supposed to offer a purchase read
+   as disabled. It flips to the same near-black ink the accepted Natively API
+   card already uses for its light-mode CTA (`.natively-api-pricing-cta`,
+   #10162b), which keeps one high-contrast action per card in both themes
+   without dulling anything. Lifetime stays violet, so the two remain
+   distinguishable and Lifetime keeps the recommendation. */
 [data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-yearly,
 [data-theme='light'] [data-interface-theme="modern"] .pricing-cta-yearly {
-  background: radial-gradient(circle at 50% 0%, #ffffff 0%, #e2e8f0 100%) !important;
-  color: #0f172a !important;
-  border: 1px solid rgba(15, 23, 42, 0.14) !important;
-  box-shadow: 
-    inset 0 2px 3px rgba(255, 255, 255, 0.9), 
-    inset 0 -2.5px 3px rgba(15, 23, 42, 0.08), 
-    0 3px 8px rgba(15, 23, 42, 0.06) !important;
+  background: radial-gradient(circle at 50% 0%, #232c48 0%, #10162b 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(16, 22, 43, 0.9) !important;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -2.5px 3px rgba(0, 0, 0, 0.25),
+    0 3px 8px rgba(15, 23, 42, 0.16) !important;
 }
 
 [data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-yearly:hover,
 [data-theme='light'] [data-interface-theme="modern"] .pricing-cta-yearly:hover {
-  background: radial-gradient(circle at 50% 0%, #ffffff 0%, #f1f5f9 100%) !important;
-  box-shadow: 
-    inset 0 2px 3px rgba(255, 255, 255, 0.95), 
-    inset 0 -2.5px 3px rgba(15, 23, 42, 0.10), 
-    0 6px 14px rgba(15, 23, 42, 0.10) !important;
+  background: radial-gradient(circle at 50% 0%, #303a5c 0%, #1c2440 100%) !important;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.20),
+    inset 0 -2.5px 3px rgba(0, 0, 0, 0.28),
+    0 6px 14px rgba(15, 23, 42, 0.22) !important;
+}
+
+/* ─── "BEST VALUE" pill (Lifetime card) ────────────────────────────────
+   `.badge-best-value` shipped in the liquid-glass and modern blocks above
+   with no light-mode override and no colour, because nothing rendered it
+   until now. */
+[data-interface-theme] .pricing-card-lifetime .badge-best-value {
+  color: #e9e2ff !important;
+}
+
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-best-value {
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.20) 0%, rgba(109, 40, 217, 0.12) 100%) !important;
+  border: 1px solid rgba(109, 40, 217, 0.32) !important;
+  color: #5b21b6 !important;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.85),
+    0 2px 6px rgba(139, 92, 246, 0.08) !important;
+}
+
+/* ─── Pro teaser plaque: light mode ────────────────────────────────────
+   Follows the convention the light Natively API card already sets: a pale
+   tinted fill with dark ink and one near-black action, rather than the
+   saturated fill used in dark mode. Going saturated here would have made
+   the secondary option louder than the primary product above it. */
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pro-teaser,
+[data-theme='light'] [data-interface-theme="modern"] .pro-teaser {
+  background:
+    radial-gradient(circle at 22% 0%, rgba(139, 92, 246, 0.24) 0%, transparent 64%),
+    linear-gradient(135deg, #e7dfff 0%, #d6cbf8 100%) !important;
+  border: 1px solid rgba(109, 40, 217, 0.30) !important;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    inset 0 3px 6px rgba(255, 255, 255, 0.45),
+    inset 0 -2.5px 6px rgba(109, 40, 217, 0.06),
+    0 4px 14px rgba(15, 23, 42, 0.05) !important;
+}
+
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pro-teaser::before,
+[data-theme='light'] [data-interface-theme="modern"] .pro-teaser::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 100%) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-theme='light'] [data-interface-theme="liquid-glass"] .pro-teaser:hover,
+  [data-theme='light'] [data-interface-theme="modern"] .pro-teaser:hover {
+    border-color: rgba(109, 40, 217, 0.46) !important;
+    box-shadow:
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.95),
+      inset 0 3px 8px rgba(255, 255, 255, 0.6),
+      inset 0 -2.5px 6px rgba(109, 40, 217, 0.06),
+      0 10px 24px rgba(139, 92, 246, 0.14),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+}
+
+[data-theme='light'] [data-interface-theme] .pro-teaser .pro-teaser-eyebrow {
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.18) 0%, rgba(109, 40, 217, 0.10) 100%) !important;
+  border: 1px solid rgba(109, 40, 217, 0.30) !important;
+  color: #5b21b6 !important;
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.85) !important;
+}
+
+[data-theme='light'] [data-interface-theme] .pro-teaser .pro-teaser-title {
+  color: #150f2e !important;
+}
+
+[data-theme='light'] [data-interface-theme] .pro-teaser .pro-teaser-sub {
+  color: rgba(21, 15, 46, 0.66) !important;
+}
+
+[data-theme='light'] [data-interface-theme] .pro-teaser .pro-teaser-cta {
+  background: radial-gradient(circle at 50% 0%, #232c48 0%, #10162b 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(16, 22, 43, 0.9) !important;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.16),
+    0 2px 8px rgba(15, 23, 42, 0.18) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-theme='light'] [data-interface-theme] .pro-teaser:hover .pro-teaser-cta {
+    background: radial-gradient(circle at 50% 0%, #303a5c 0%, #1c2440 100%) !important;
+    box-shadow:
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.20),
+      0 5px 14px rgba(15, 23, 42, 0.24) !important;
+  }
 }
 
 /* 6. Lifetime CTA (Vibrant Purple button, refined contrast in Light) */
@@ -5437,101 +7028,916 @@ html[data-platform="linux"] body {
     0 6px 16px rgba(109, 40, 217, 0.28) !important;
 }
 
-/* 7. Poster SVGs - Theme Responsive Styles */
-.pricing-poster-stroke-subtle-line { stroke: rgba(255, 255, 255, 0.12) !important; }
-.pricing-poster-node-bg { fill: rgba(15, 23, 42, 0.85) !important; }
-.pricing-poster-glass-node-border { stroke: rgba(255, 255, 255, 0.15) !important; }
-.pricing-poster-stroke-bright { stroke: rgba(255, 255, 255, 0.6) !important; }
-.pricing-poster-text-muted { fill: rgba(255, 255, 255, 0.4) !important; }
-.pricing-poster-text-bright { fill: rgba(255, 255, 255, 0.7) !important; }
-.pricing-poster-central-ai-text { fill: #e0e7ff !important; }
-.pricing-poster-avatar-bg { fill: rgba(255, 255, 255, 0.18) !important; }
-.pricing-poster-rect-light { fill: rgba(255, 255, 255, 0.25) !important; }
-.pricing-poster-rect-subtle { fill: rgba(255, 255, 255, 0.15) !important; }
-.pricing-poster-check3-bg { fill: rgba(255, 255, 255, 0.08) !important; }
-.pricing-poster-check3-border { stroke: rgba(255, 255, 255, 0.2) !important; }
+/* 7. Poster SVG — theme-responsive paint
+   ─────────────────────────────────────────────────────────────────────────
+   Paint for `ProOverlayPoster` in NativelyProSettings.tsx, which draws ONE
+   overlay illustration on BOTH pricing cards in two scenes: `live` on Yearly,
+   and `grounded` on Lifetime, which is the same scene plus a column of the
+   sources one answer is drawn from. See that component's header for why two
+   scenes do not assert a capability gap.
 
-[data-theme='light'] .pricing-poster-stroke-subtle-line { stroke: rgba(15, 23, 42, 0.12) !important; }
-[data-theme='light'] .pricing-poster-node-bg { fill: #ffffff !important; }
-[data-theme='light'] .pricing-poster-glass-node-border { stroke: rgba(15, 23, 42, 0.16) !important; }
-[data-theme='light'] .pricing-poster-stroke-bright { stroke: rgba(15, 23, 42, 0.60) !important; }
-[data-theme='light'] .pricing-poster-text-muted { fill: rgba(15, 23, 42, 0.48) !important; }
-[data-theme='light'] .pricing-poster-text-bright { fill: rgba(15, 23, 42, 0.75) !important; }
-[data-theme='light'] .pricing-poster-central-ai-text { fill: #1e3a8a !important; }
-[data-theme='light'] .pricing-poster-avatar-bg { fill: rgba(15, 23, 42, 0.14) !important; }
-[data-theme='light'] .pricing-poster-rect-light { fill: rgba(15, 23, 42, 0.18) !important; }
-[data-theme='light'] .pricing-poster-rect-subtle { fill: rgba(15, 23, 42, 0.10) !important; }
-[data-theme='light'] .pricing-poster-check3-bg { fill: rgba(15, 23, 42, 0.05) !important; }
-[data-theme='light'] .pricing-poster-check3-border { stroke: rgba(15, 23, 42, 0.16) !important; }
-[data-theme='light'] .pricing-poster-badge-text-purple { fill: #5b21b6 !important; }
-[data-theme='light'] .pricing-poster-badge-text-blue { fill: #1d4ed8 !important; }
+   WHAT FORKS PER CARD AND WHAT DOES NOT. Only the `-accent-*` and `-glow-*`
+   pairs fork by plan (blue on Yearly, violet on Lifetime), and they are
+   selected by prop in the TSX rather than by a descendant selector here, so
+   the two cards cannot pick up each other's hue through the cascade. Every
+   other rule below — plate, panel, specular crown, bars, source cards — is
+   shared verbatim by both scenes. There is one palette, not two.
 
-/* Tighten markdown spacing and remove nested paragraph margins inside lists */
-.markdown-content p {
-  margin-top: 0 !important;
-  margin-bottom: 6px !important;
-  line-height: 1.6 !important;
+   `.pricing-poster-panel-border` IS LOAD-BEARING AND MUST EXIST IN BOTH
+   THEMES. It was once referenced by the TSX while missing from this file,
+   which does not error: the panel simply rendered with no border at all, so
+   the glass body dissolved into the card fill and the whole drawing lost its
+   edge. If you are pruning this block, that rule is the one to keep.
+
+   Everything here is `!important` for the same reason as the blocks above it:
+   these elements also carry Tailwind utility classes, and this paint has to
+   win regardless of stylesheet source order.
+
+   The palettes for two earlier generations of this art are gone with the
+   drawings they painted: the `ProIncludes` feature-list plaque
+   (`.pricing-includes*`, `.pricing-feature-*`, `@keyframes pricing-feature-in`)
+   that briefly replaced the illustration, and before that the node-graph /
+   match-diagram pair (`-node-bg`, `-rect-light`, `-check3-*`, `-text-*`, and
+   the two orphaned light-only `-badge-text-*` rules left behind when the
+   "94% MATCH" badge was deleted). Nothing else in the app referenced any of
+   them; verified by grep across src/ and electron/ before removal.
+
+   LIGHT MODE IS NOT A TINT INVERSION. The panel body stays WHITE in both
+   themes — on the light cards it is white glass on a pale blue/violet wash,
+   which is exactly how the real overlay looks on a light desktop — while the
+   bars, plate and source cards flip to slate ink so they still read against
+   it. Both `data-interface-theme` values (`liquid-glass`, `modern`) paint
+   from these same rules: nothing here is scoped under that attribute, so the
+   two interface themes cannot diverge. */
+
+/* ── Ambient bloom, per card ─────────────────────────────────────────────── */
+.pricing-poster-glow-yearly { stop-color: rgba(59, 130, 246, 0.42) !important; }
+.pricing-poster-glow-lifetime { stop-color: rgba(139, 92, 246, 0.45) !important; }
+
+/* ── The plate behind (the call/doc the overlay is sitting on top of) ────── */
+.pricing-poster-plate-fill { fill: rgba(255, 255, 255, 0.05) !important; }
+.pricing-poster-plate-stroke { stroke: rgba(255, 255, 255, 0.10) !important; }
+.pricing-poster-plate-bar { fill: rgba(255, 255, 255, 0.14) !important; }
+.pricing-poster-plate-bar-dim { fill: rgba(255, 255, 255, 0.08) !important; }
+
+/* ── The overlay panel in front ──────────────────────────────────────────── */
+.pricing-poster-glass-top { stop-color: rgba(255, 255, 255, 0.20) !important; }
+.pricing-poster-glass-bottom { stop-color: rgba(255, 255, 255, 0.05) !important; }
+.pricing-poster-panel-border { stroke: rgba(255, 255, 255, 0.24) !important; }
+.pricing-poster-panel-specular { stroke: rgba(255, 255, 255, 0.40) !important; }
+/* Not `!important`: no utility class sets `filter` on this element, and a
+   `drop-shadow()` has to stay overridable by anything that later wants to
+   flatten the poster (print, a static export). */
+.pricing-poster-panel-shadow { filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.30)); }
+
+/* ── The content inside it: heard question (weak) vs answer (strong) ─────── */
+.pricing-poster-bar-strong { fill: rgba(255, 255, 255, 0.52) !important; }
+.pricing-poster-bar-weak { fill: rgba(255, 255, 255, 0.22) !important; }
+
+/* ── The source cards (grounded scene only) ──────────────────────────────────
+   A shade brighter than the plate behind the panel and a shade dimmer than
+   the answer runs: they are objects sitting ON the panel, so they have to
+   lift off it without competing with the answer, which is the subject. The
+   inner line lands between `-bar-weak` and `-bar-strong` for the same
+   reason. The accent PIP inside each card is not painted here — it reuses
+   the card's own `-accent-*` fill, so a source pip can never end up a
+   different hue from the meter beside it. */
+.pricing-poster-source-fill { fill: rgba(255, 255, 255, 0.11) !important; }
+.pricing-poster-source-stroke { stroke: rgba(255, 255, 255, 0.20) !important; }
+.pricing-poster-source-line { fill: rgba(255, 255, 255, 0.34) !important; }
+
+/* ── The live accent: level meter, source pips, streaming caret, per card ── */
+.pricing-poster-accent-yearly { fill: #8CBBFF !important; }
+.pricing-poster-accent-lifetime { fill: #C3AEFF !important; }
+
+[data-theme='light'] .pricing-poster-glow-yearly { stop-color: rgba(59, 130, 246, 0.20) !important; }
+[data-theme='light'] .pricing-poster-glow-lifetime { stop-color: rgba(139, 92, 246, 0.22) !important; }
+
+[data-theme='light'] .pricing-poster-plate-fill { fill: rgba(255, 255, 255, 0.50) !important; }
+[data-theme='light'] .pricing-poster-plate-stroke { stroke: rgba(15, 23, 42, 0.12) !important; }
+[data-theme='light'] .pricing-poster-plate-bar { fill: rgba(15, 23, 42, 0.16) !important; }
+[data-theme='light'] .pricing-poster-plate-bar-dim { fill: rgba(15, 23, 42, 0.09) !important; }
+
+[data-theme='light'] .pricing-poster-glass-top { stop-color: rgba(255, 255, 255, 0.95) !important; }
+[data-theme='light'] .pricing-poster-glass-bottom { stop-color: rgba(255, 255, 255, 0.72) !important; }
+[data-theme='light'] .pricing-poster-panel-border { stroke: rgba(15, 23, 42, 0.14) !important; }
+[data-theme='light'] .pricing-poster-panel-specular { stroke: rgba(255, 255, 255, 0.95) !important; }
+[data-theme='light'] .pricing-poster-panel-shadow { filter: drop-shadow(0 3px 7px rgba(15, 23, 42, 0.13)); }
+
+[data-theme='light'] .pricing-poster-bar-strong { fill: rgba(15, 23, 42, 0.44) !important; }
+[data-theme='light'] .pricing-poster-bar-weak { fill: rgba(15, 23, 42, 0.18) !important; }
+
+[data-theme='light'] .pricing-poster-source-fill { fill: rgba(15, 23, 42, 0.055) !important; }
+[data-theme='light'] .pricing-poster-source-stroke { stroke: rgba(15, 23, 42, 0.15) !important; }
+[data-theme='light'] .pricing-poster-source-line { fill: rgba(15, 23, 42, 0.28) !important; }
+
+[data-theme='light'] .pricing-poster-accent-yearly { fill: #2563EB !important; }
+[data-theme='light'] .pricing-poster-accent-lifetime { fill: #6D28D9 !important; }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ──── Natively key card: tactile credential plaque (Plans & Billing) ──────
+   ══════════════════════════════════════════════════════════════════════════
+
+   THE PROBLEM THIS SOLVES: everything else on the Plans & Billing tab is
+   built out of one material — layered (never flat) fills, a specular top
+   hairline, generous radii, and buttons that lift on hover and compress on
+   press. The "Natively key" card was a flat neutral box holding a flat
+   hairline input and a flat solid button, so it read as a different design
+   system parked above the plan chooser.
+
+   THE HUE: periwinkle/indigo, anchored on `.natively-api-detail-card-max`
+   (#2C4EAE → #3F68CE). Borrowing an existing tier family instead of inventing
+   a new hue is what makes this card read as part of the same product surface.
+
+   Max is no longer an anchor either — this button KEEPS 236° while the whole
+   tier family has moved, repeatedly. The block originally cited
+   `.natively-api-detail-card-pro` (#454FB8 → #5762CE) alongside Max, but Pro
+   moved away — magenta, then gold, then a 196° teal ramp — precisely because
+   this button's 236° made the old Pro/Max/pill cluster read as one colour.
+
+   CURRENT STATE (keep this paragraph honest if the tiers move again): the
+   ladder is four hues — Standard 178°, Pro 208°, Max 298°, Ultra 336° — and
+   the NEAREST of them to this button is Pro at 28°. That is closer than the
+   40° this block used to demand, and it is deliberate: measured perceptually
+   it is ΔE76 36.4, because this button is a LIGHT violet-leaning periwinkle
+   (L* 47) and Pro is a DARK ocean azure (L* 30-37) with no violet in it. Hue
+   degrees alone were the wrong instrument; four tiers do not fit the wheel
+   under a 40° rule once 225-275°, emerald, amber and red are excluded.
+   Do not re-derive this card's hue from any tier. If you move Pro, re-measure
+   ΔE against #5C65DB rather than trusting the degree gap.
+
+   BUT THE CARD IS TINTED, NOT SATURATED. In the unsaved state this card
+   stacks directly above the saturated tier detail card AND the saturated
+   app-only-license banner. A third fully saturated slab there would fight
+   both of them, and Activate is a utility action (paste a credential), not a
+   purchase. So the split is: the CONTAINER carries the hue at low chroma as
+   a tinted plaque, and the BUTTON carries it at full saturation. Same
+   family, one clear winner, no competition at equal saturation.
+
+   The bright end of the family (`.pro-license-periwinkle`, #6f7ce8 →
+   #949ef2) is deliberately NOT used for the button: white ink measures
+   3.67:1 / 2.49:1 on those stops, well under AA. The tier-card luminances
+   are the ones that carry white ink, which is why the button sits there.
+
+   Deliberately NOT scoped to [data-interface-theme]: liquid-glass and modern
+   want the same material, and the rules also hold if the attribute is ever
+   absent. Everything is !important so the paint wins over the Tailwind
+   utility classes on the same elements regardless of stylesheet source
+   order. ────────────────────────────────────────────────────────────────── */
+
+/* ── 1. The plaque ─────────────────────────────────────────────────────────
+   NEUTRAL, deliberately. This was a periwinkle-tinted gradient so the card
+   would read as part of the same set as the tier cards below it, but tinting
+   the whole surface made the accent ambient: everything in the section was
+   coloured, so nothing was. The colour now lives on the Activate button alone,
+   which is the one thing here worth pointing at.
+   What survives the de-tinting is the CRAFT, not the hue — a two-stop
+   gradient in the luminance band of --bg-item-surface (#27272A), a specular
+   top hairline and a soft floor shadow. Those are what stopped this card
+   feeling flat and out of place next to the pricing surfaces; the tint was
+   never doing that work. Shadows are black now rather than indigo, since a
+   tinted shadow under an untinted card reads as a colour cast. */
+.natively-key-card {
+  background: linear-gradient(180deg, #313134 0%, #232326 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 22px !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -16px 30px rgba(0, 0, 0, 0.20),
+    0 6px 20px rgba(0, 0, 0, 0.28) !important;
 }
-.markdown-content p:last-child {
-  margin-bottom: 0 !important;
+
+/* The same 24px blueprint grid the pricing surfaces carry, in neutral ink.
+   Individually invisible; it is one of the things that makes them read as a
+   set, and it costs no colour to keep. */
+.natively-key-card::before {
+  content: '' !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.020) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.020) 1px, transparent 1px) !important;
+  background-size: 24px 24px !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
 }
-.markdown-content li p {
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
-  display: inline !important;
-  line-height: 1.6 !important;
+
+.natively-key-card > * {
+  position: relative !important;
+  z-index: 1 !important;
 }
-.markdown-content li {
-  margin-top: 0 !important;
-  margin-bottom: 4.5px !important;
-  line-height: 1.6 !important;
+
+/* Light: same construction, no hue. Bottom stop lands on --bg-item-surface
+   (#EAECEF) so the plaque resolves into the section's own card colour instead
+   of a tint of it; the top stays near-white to keep the vertical lift. */
+[data-theme='light'] .natively-key-card {
+  background: linear-gradient(180deg, #FDFDFD 0%, #EAECEF 100%) !important;
+  border: 1px solid rgba(0, 0, 0, 0.09) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -14px 26px rgba(0, 0, 0, 0.035),
+    0 6px 18px rgba(0, 0, 0, 0.07) !important;
 }
-.markdown-content li:last-child {
-  margin-bottom: 0 !important;
+
+[data-theme='light'] .natively-key-card::before {
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.028) 1px, transparent 1px) !important;
 }
-.markdown-content ul, .markdown-content ol {
-  margin-top: 4.5px !important;
-  margin-bottom: 4.5px !important;
+
+/* ── 2. The input, as a pressed-in well ───────────────────────────────────
+   A hairline box on a flat card was the flattest thing on the flattest
+   surface. Sinking it gives the plaque somewhere for the credential to go,
+   and it is the same inset-shadow vocabulary as the jelly controls. */
+.natively-key-input {
+  background: linear-gradient(180deg, #161618 0%, #1C1C1F 100%) !important;
+  border: 1px solid rgba(0, 0, 0, 0.55) !important;
+  border-radius: 14px !important;
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.50),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05) !important;
+  transition: border-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
-.markdown-content h1, 
-.markdown-content h2, 
-.markdown-content h3, 
-.markdown-content h4, 
-.markdown-content h5, 
-.markdown-content h6 {
-  margin-top: 8px !important;
-  margin-bottom: 4.5px !important;
-  line-height: 1.6 !important;
-  font-weight: 700 !important;
+
+/* Focus is neutral too — the accent belongs to the Activate button alone, and
+   a violet halo blooming under the cursor was the loudest thing in the section
+   at exactly the moment attention is already on the field.
+   It is still clearly marked, just achromatically: the well's edge brightens
+   and a soft light ring replaces the coloured one. Removing the indicator
+   outright is not an option — this is a text field, and keyboard users need to
+   see where focus landed. */
+.natively-key-input:focus {
+  outline: none !important;
+  border-color: rgba(255, 255, 255, 0.30) !important;
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.50),
+    0 0 0 2px rgba(255, 255, 255, 0.10) !important;
 }
-/* ── Usage-section code block: thin horizontal scrollbar, revealed on hover ──
-   The global scrollbar is hidden (width:0). The code hero needs a discreet
-   horizontal scrollbar so long lines are reachable; it stays near-invisible
-   until the card is hovered. Scoped to .code-scroll so nothing else changes. */
-.code-scroll {
-  scrollbar-width: thin;                       /* Firefox */
-  scrollbar-color: transparent transparent;
-  transition: scrollbar-color 200ms ease;
+
+[data-theme='light'] .natively-key-input {
+  background: linear-gradient(180deg, #EFEFF1 0%, #FDFDFD 100%) !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.06),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.9) !important;
 }
-.code-scroll:hover {
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+
+[data-theme='light'] .natively-key-input:focus {
+  border-color: rgba(0, 0, 0, 0.34) !important;
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.06),
+    0 0 0 2px rgba(0, 0, 0, 0.09) !important;
 }
-.code-scroll::-webkit-scrollbar {
-  height: 6px;
-  width: 6px;
-  background: transparent;
+
+/* Last, and at (0,3,0): the per-theme rules above use the `border` shorthand,
+   which resets border-color, so an invalid-state rule declared before them
+   would lose the red edge in light theme even though it matched. */
+.natively-key-input[data-invalid='true'],
+[data-theme] .natively-key-input[data-invalid='true'] {
+  border-color: var(--text-danger) !important;
 }
-.code-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 3px;
-  transition: background 200ms ease;
+
+/* ── 3. Activate: jelly clay in saturated periwinkle ─────────────────────
+   The pricing CTAs are solid white / near-black because they are the one
+   high-contrast element on a saturated card. Reusing white here would import
+   that purchase-CTA weight, so this is jelly clay in the tier cards' own
+   periwinkle instead: same family as the surface it sits on, at full
+   saturation while the surface stays tinted, so it wins without a fight.
+
+   Two luminances of one hue, inverted per theme, exactly as the tier cards
+   do it: on the DARK plaque the button is the brighter thing (#5C65DB); on
+   the pale LIGHT plaque it is the darker thing (#454FB8, the tier Pro fill's
+   own top stop). Both carry white ink above AA.
+
+   `data-state` mirrors the four states the button already had (idle / ready /
+   saving / done) — it is derived from the existing booleans in the JSX and
+   drives nothing but paint. */
+.natively-key-cta {
+  border: 1px solid transparent !important;
+  border-radius: 9999px !important;
+  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1),
+              border-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+              color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+              transform 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
-.code-scroll:hover::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+
+/* READY — there is something to submit, so this is the loudest thing here. */
+/* The specular highlight is an INSET SHADOW, not a background gradient
+   covering the top half. That is what keeps the clay look honest about
+   contrast: an inset shadow is edge-local, so the band the 13px label
+   actually occupies (roughly 32–68% of a 40px button) stays the measured
+   fill colour instead of a washed-out white blend, which is exactly where
+   white-on-periwinkle quietly drops under 4.5:1. The darkening gradient
+   starts at 55% for the same reason — below the label, not through it. */
+.natively-key-cta[data-state='ready'] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.16) 100%),
+    #5C65DB !important;
+  color: #FFFFFF !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.42),
+    inset 0 -2px 5px rgba(10, 12, 40, 0.30),
+    0 4px 14px rgba(69, 79, 184, 0.42) !important;
 }
-.code-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.22);
+
+@media (hover: hover) and (pointer: fine) {
+  .natively-key-cta[data-state='ready']:hover {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.10) 100%),
+      #656EE4 !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+      inset 0 2.5px 3px rgba(255, 255, 255, 0.52),
+      inset 0 -2px 5px rgba(10, 12, 40, 0.28),
+      0 7px 20px rgba(69, 79, 184, 0.55) !important;
+  }
 }
-.code-scroll::-webkit-scrollbar-track {
-  background: transparent;
+
+.natively-key-cta[data-state='ready']:active {
+  transform: translateY(0) scale(0.97) !important;
+  box-shadow:
+    inset 0 2px 5px rgba(6, 8, 28, 0.38),
+    0 2px 6px rgba(69, 79, 184, 0.24) !important;
+}
+
+/* Light: the darker end of the same hue, so it is the darkest thing on a pale
+   plaque the way the dark-theme button is the brightest thing on a dark one. */
+[data-theme='light'] .natively-key-cta[data-state='ready'] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.16) 100%),
+    #454FB8 !important;
+  color: #FFFFFF !important;
+  border-color: rgba(255, 255, 255, 0.26) !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.40),
+    inset 0 -2px 5px rgba(10, 12, 40, 0.28),
+    0 4px 14px rgba(69, 79, 184, 0.32) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-theme='light'] .natively-key-cta[data-state='ready']:hover {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.10) 100%),
+      #3E47AC !important;
+    box-shadow:
+      inset 0 2.5px 3px rgba(255, 255, 255, 0.48),
+      inset 0 -2px 5px rgba(10, 12, 40, 0.26),
+      0 7px 20px rgba(69, 79, 184, 0.42) !important;
+  }
+}
+
+/* IDLE / SAVING — an unpressable control must not be the loudest element on
+   the card, and `idle` is this card's RESTING look (both empty and
+   already-saved), so it recedes to a ghost that still reads as a button:
+   a faint fill, a visible edge, and a top hairline so it keeps its shape.
+   Achromatic, and for a reason beyond matching the de-tinted plaque: `idle`
+   is the state the card sits in most of the time, so a periwinkle ghost meant
+   the accent was always faintly present and therefore signalled nothing. With
+   this neutral, colour arrives exactly when `ready` does — when there is
+   actually something to press. */
+.natively-key-cta[data-state='idle'],
+.natively-key-cta[data-state='saving'] {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+  color: rgba(255, 255, 255, 0.50) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+}
+
+.natively-key-cta[data-state='saving'] {
+  color: rgba(255, 255, 255, 0.78) !important;
+}
+
+/* DONE — "Saved" / "Pro activated". The SAME jelly clay as `ready` above, just
+   in emerald: this is one control changing state, so it should not also change
+   material. It used to be a 0.14-alpha frosted chip, which made the moment of
+   success the flattest the button ever looked.
+   #047857 (emerald-700) rather than a brighter green because the label is
+   13px: white on emerald-600 (#059669) measures 3.77:1 and misses AA, while
+   this measures 5.48:1. Dark enough to hold white ink under both themes, so it
+   needs no light-theme counterpart — the override that used to sit further
+   down was deleted with this change. */
+.natively-key-cta[data-state='done'] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.16) 100%),
+    #047857 !important;
+  color: #FFFFFF !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.38),
+    inset 0 -2px 5px rgba(0, 30, 20, 0.30),
+    0 4px 14px rgba(4, 120, 87, 0.40) !important;
+}
+
+[data-theme='light'] .natively-key-cta[data-state='idle'],
+[data-theme='light'] .natively-key-cta[data-state='saving'] {
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.14) !important;
+  color: rgba(0, 0, 0, 0.45) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+[data-theme='light'] .natively-key-cta[data-state='saving'] {
+  color: rgba(0, 0, 0, 0.68) !important;
+}
+
+/* No light-theme override for `done` any more: the solid #047857 chip above
+   clears AA on both, so a second declaration would only be a second thing to
+   keep in sync. The specular top hairline is dropped with it — that highlight
+   is what made the chip read as a lit glass surface. */
+
+/* ── 4. Supporting copy ───────────────────────────────────────────────────
+   These used to override the global text tokens because a tinted plaque
+   shifted the effective contrast: --text-secondary (#6B7280) on the old
+   periwinkle light surface measured ~4.0:1, under AA. With the plaque neutral
+   that reason is gone — the light bottom stop IS --bg-item-surface (#EAECEF),
+   where #6B7280 measures 4.61:1, so the token can be used directly and will
+   track any future change to it.
+   Dark keeps an explicit alpha rather than the token: white at 0.74 over the
+   #313134 top stop resolves to ~#CACACA for 8.9:1, comfortably clear, and an
+   alpha ink stays correct across the gradient in a way a fixed hex would not. */
+.natively-key-sub {
+  color: rgba(255, 255, 255, 0.74) !important;
+}
+
+[data-theme='light'] .natively-key-sub {
+  color: var(--text-secondary) !important;
+}
+
+/* ── 5. The Natively mark ─────────────────────────────────────────────────
+   src/assets/logo.webp is a WHITE monochrome glyph on transparency, so on the
+   pale light plaque an <img> would be invisible. It is painted as a MASK
+   instead, which lets the mark take the plaque's own ink per theme. Both inks
+   are now achromatic: it was tier-card periwinkle in light theme, which made
+   the mark a second coloured element competing with the Activate button.
+
+   No squircle, no tinted well, no boxed header — just the mark, set on the
+   supporting-copy line. The URL arrives as a custom property set from the
+   TSX import so the bundler still fingerprints the asset. */
+.natively-key-mark {
+  width: 22px !important;
+  height: 22px !important;
+  flex-shrink: 0 !important;
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  -webkit-mask-image: var(--natively-key-mark-src) !important;
+  mask-image: var(--natively-key-mark-src) !important;
+  -webkit-mask-size: contain !important;
+  mask-size: contain !important;
+  -webkit-mask-repeat: no-repeat !important;
+  mask-repeat: no-repeat !important;
+  -webkit-mask-position: center !important;
+  mask-position: center !important;
+}
+
+[data-theme='light'] .natively-key-mark {
+  background-color: #4B5563 !important;
+}
+
+/* ══ Pro License Active — the receipt, in the pricing cards' material ══════
+   Built from the two treatments already in this tab rather than a third
+   invention: the SLAB is the .pricing-card-* recipe (hue radial from the top
+   edge, diagonal base, specular crown, floor shadow) and the BUTTON is the
+   Activate CTA's jelly clay (hue fill under a darkening foot gradient, bright
+   inset crown, coloured drop shadow, lift on hover, compress on press).
+
+   Emerald rather than the Pro tier's periwinkle for one reason: this card sits
+   directly under the Natively key plaque, whose Activate button is periwinkle
+   jelly. Two saturated periwinkle objects stacked would read as one region.
+   Emerald also happens to be what a confirmation wants.
+
+   OPAQUE base, unlike .pricing-card-yearly's alpha slab. That card is only
+   ever shown in dark contexts; this one renders in both themes, and white ink
+   over the alpha version composited to 2.9:1 against a light card — under AA.
+   The fixed base measures 6.3:1 at the radial's brightest point. */
+.pro-active-card {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.28) 0%, transparent 62%),
+    linear-gradient(135deg, #14503F 0%, #0B2B22 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 18px !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow:
+    inset 0 1px 0 rgba(16, 185, 129, 0.5),
+    inset 0 2px 4px rgba(255, 255, 255, 0.18),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Specular crown, matching .pricing-card-*::before. Radius is 1px under the
+   card's own so it tucks inside the border rather than overprinting it. */
+.pro-active-card::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 1px !important;
+  height: 45% !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 100%) !important;
+  border-radius: 17px 17px 0 0 !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+}
+
+/* Ink is fixed, not tokenised: --text-primary inverts per theme and would go
+   near-black on this slab in light mode. */
+.pro-active-card .pro-active-ink {
+  color: #FFFFFF !important;
+  position: relative !important;
+  z-index: 3 !important;
+}
+
+/* 0.84 rather than the 0.78 used elsewhere on tinted fills: at 0.78 this
+   composites to exactly 4.50:1 over the radial's brightest point, i.e. sitting
+   on the AA line with no margin. 0.84 gives 4.94:1. */
+.pro-active-card .pro-active-sub {
+  color: rgba(255, 255, 255, 0.84) !important;
+  position: relative !important;
+  z-index: 3 !important;
+}
+
+.pro-active-card .pro-active-check {
+  color: #6EE7B7 !important;
+  position: relative !important;
+  z-index: 3 !important;
+}
+
+/* Jelly clay, same construction as .natively-key-cta[data-state='ready'] but
+   in near-black: on a saturated slab the pricing cards make their CTA the one
+   near-neutral object, and a green button on a green card would have no edge.
+   Rest is neutral for the reason it always was — a destructive control should
+   not outrank the state it is attached to — and the danger colour arrives as
+   a full jelly fill on hover, so the warning still reads at a glance. */
+.pro-deactivate-cta {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.18) 100%),
+    rgba(3, 22, 17, 0.55) !important;
+  color: #FFFFFF !important;
+  border: 1px solid rgba(255, 255, 255, 0.20) !important;
+  border-radius: 9999px !important;
+  position: relative !important;
+  z-index: 3 !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.26),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.34),
+    0 4px 12px rgba(0, 0, 0, 0.28) !important;
+  /* "Deactivating…" plus a spinner is the wider label. Pinning the width stops
+     the pill resizing under the pointer at the exact moment it is pressed. */
+  min-width: 124px !important;
+  /* Leave half of the house asymmetric pair; the enter half is on :hover. */
+  transition: background-color 320ms cubic-bezier(0.33, 1, 0.68, 1),
+              box-shadow      320ms cubic-bezier(0.33, 1, 0.68, 1),
+              border-color    320ms cubic-bezier(0.33, 1, 0.68, 1),
+              transform       320ms cubic-bezier(0.33, 1, 0.68, 1) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  /* White on #DC2626 measures 4.83:1, so the label stays AA-legible at the
+     moment the button turns into a warning. */
+  .pro-deactivate-cta:hover {
+    transition: background-color 220ms cubic-bezier(0.32, 0.72, 0, 1),
+                box-shadow      220ms cubic-bezier(0.32, 0.72, 0, 1),
+                border-color    220ms cubic-bezier(0.32, 0.72, 0, 1),
+                transform       220ms cubic-bezier(0.32, 0.72, 0, 1) !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.14) 100%),
+      #DC2626 !important;
+    border-color: rgba(255, 255, 255, 0.28) !important;
+    transform: translateY(-1px) !important;
+    box-shadow:
+      inset 0 2.5px 3px rgba(255, 255, 255, 0.40),
+      inset 0 -2px 5px rgba(60, 6, 6, 0.30),
+      0 7px 18px rgba(220, 38, 38, 0.45) !important;
+  }
+}
+
+.pro-deactivate-cta:active {
+  transform: translateY(0) scale(0.97) !important;
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.42),
+    0 2px 6px rgba(0, 0, 0, 0.24) !important;
+}
+
+/* PENDING — the licence-server round trip. Holds the committed red rather than
+   reverting to neutral: the button turned red to warn, and it must look like it
+   is doing the warned-about thing. No lift (the pointer's relationship to the
+   button is over) and no press response.
+   Full opacity ON PURPOSE. The reflexive `disabled:opacity-50` would drop white
+   on #DC2626 from 4.83:1 to about 2.4:1 — an unreadable busy state — and a
+   greyed-out red button reads as permanently unavailable rather than working. */
+.pro-deactivate-cta[data-phase='pending'] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, 0.14) 100%),
+    #DC2626 !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  transform: none !important;
+  cursor: default !important;
+  opacity: 1 !important;
+  box-shadow:
+    inset 0 2.5px 3px rgba(255, 255, 255, 0.40),
+    inset 0 -2px 5px rgba(60, 6, 6, 0.30),
+    0 4px 12px rgba(220, 38, 38, 0.30) !important;
+}
+
+.pro-deactivate-cta[data-phase='pending']:active {
+  transform: none !important;
+}
+
+.pro-deactivate-spinner {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #ffffff;
+  border-radius: 9999px;
+  /* Fast on purpose. A quicker spinner makes the same wait feel shorter; the
+     conventional 1s rotation reads as stalled. */
+  animation: pro-deactivate-spin 620ms linear infinite;
+}
+
+@keyframes pro-deactivate-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── 6. Reduced motion ────────────────────────────────────────────────────
+   The JSX used to carry `motion-reduce:transition-none`; moving the paint
+   into CSS would have dropped that, so it is restated here. Colour/shadow
+   crossfades are kept (they aid comprehension); the lift and the press
+   compression are movement and go away. */
+@media (prefers-reduced-motion: reduce) {
+  .pro-deactivate-cta {
+    transition: none !important;
+  }
+
+  .pro-deactivate-cta:hover,
+  .pro-deactivate-cta:active {
+    transform: none !important;
+  }
+
+  .pro-deactivate-spinner {
+    animation-duration: 1100ms !important;
+  }
+
+  .natively-key-input,
+  .natively-key-cta {
+    transition: none !important;
+  }
+
+  .natively-key-cta[data-state='ready']:hover,
+  .natively-key-cta[data-state='ready']:active {
+    transform: none !important;
+  }
+}
+
+
+
+
+/* The generic light-theme hover that used to sit here is GONE, and the comment
+   with it claimed its box-shadow was live. It was not: at (0,4,0) it ties the
+   per-tier light hovers below, which come later in source, and every render of
+   this card carries a tier class (NativelyApiSettings.tsx:896). Nothing it
+   declared ever painted. */
+
+
+/* The ENTER half of the card's asymmetric hover. Declares `transition` and
+   nothing else: no box-shadow, so it cannot participate in (or violate) the
+   four-slot contract, and at (0,3,0) it outranks the base rule's leave timing
+   from anywhere in the file.
+   cubic-bezier(0.32, 0.72, 0, 1) moves immediately — no ease-in sluggishness —
+   but spreads the travel across the middle (~55% at the 30% mark, against the
+   old curve's 83%), which is what makes the arrival legible rather than instant. */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .natively-api-detail-card:hover {
+    transition: box-shadow 260ms cubic-bezier(0.32, 0.72, 0, 1),
+                border-color 260ms cubic-bezier(0.32, 0.72, 0, 1) !important;
+  }
+}
+
+
+/* Per-tier hover bloom. The Pro purchase cards glow in their OWN hue on hover
+   (.pricing-card-yearly:hover uses its blue, lifetime its violet); a neutral
+   grey glow here read as a different control. Deepens the resting shadow the
+   committed-fill block already carries rather than introducing one.
+   Obeys the four-slot contract above the committed fills: slot 1 repeats each
+   tier's RESTING rim byte-for-byte, so the hairline against the border does not
+   move; hover lives entirely in the floor (slot 2), the tier-hued ambient
+   bloom (slot 3) and the contact shadow (slot 4). */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .natively-api-detail-card-standard:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
+      0 12px 32px rgba(60, 107, 105, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+  [data-interface-theme] .natively-api-detail-card-pro:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.17),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
+      0 12px 32px rgba(17, 89, 153, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+  [data-interface-theme] .natively-api-detail-card-max:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
+      0 12px 32px rgba(102, 60, 104, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+  [data-interface-theme] .natively-api-detail-card-ultra:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.20),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
+      0 12px 32px rgba(111, 37, 66, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+}
+
+
+/* Active + hover. Without these the per-tier bloom above — (0,3,0), later in
+   source than every [data-active="true"] rule — would win on the CURRENT plan's
+   card and replace its tier-hued rim with the generic one, i.e. the active
+   card's outline would change on hover. That is exactly the border-highlight
+   behaviour being removed, and it also breaks the four-slot contract's promise
+   that slot 1 never moves. These sit at (0,4,0) so they outrank it, repeat the
+   active rim verbatim, and let hover act only on slots 2-4. */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .natively-api-detail-card-standard[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(165, 209, 207, 0.72),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
+      0 12px 32px rgba(60, 107, 105, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+  [data-interface-theme] .natively-api-detail-card-pro[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(151, 199, 241, 0.78),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
+      0 12px 32px rgba(17, 89, 153, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+  [data-interface-theme] .natively-api-detail-card-max[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(203, 175, 204, 0.84),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
+      0 12px 32px rgba(102, 60, 104, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+  [data-interface-theme] .natively-api-detail-card-ultra[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(207, 160, 179, 0.90),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
+      0 12px 32px rgba(111, 37, 66, 0.28),
+      0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  }
+}
+
+
+/* Light-theme per-tier hover bloom (mirrors the dark rules above and the
+   Pro cards' own light hovers). */
+@media (hover: hover) and (pointer: fine) {
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.55),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
+      0 12px 28px rgba(60, 107, 105, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.60),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
+      0 12px 28px rgba(17, 89, 153, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-max:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.65),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
+      0 12px 28px rgba(102, 60, 104, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.70),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
+      0 12px 28px rgba(111, 37, 66, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+}
+
+
+/* Light active + hover — (0,5,0), outranking the light per-tier bloom (0,4,0)
+   for the same reason as the dark pair above. */
+@media (hover: hover) and (pointer: fine) {
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
+      0 12px 28px rgba(60, 107, 105, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
+      0 12px 28px rgba(17, 89, 153, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-max[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
+      0 12px 28px rgba(102, 60, 104, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra[data-active="true"]:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
+      0 12px 28px rgba(111, 37, 66, 0.18),
+      0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Settings — section entrance stagger                                 */
+/* ------------------------------------------------------------------ */
+/* Opt-in via the `data-settings-stagger` attribute on a section's
+   content container: its DIRECT CHILDREN settle in sequence when the
+   section is entered.
+
+   Why CSS and not framer-motion variants, given framer-motion is already
+   a dependency here:
+
+   1. A CSS animation runs once when the element is inserted, and a React
+      re-render does NOT restart it (the rule matched before and still
+      matches). That is exactly the "stagger on section entrance, never on
+      list state updates" requirement, for free — toggling a provider,
+      editing a skill or refreshing a list cannot replay it. Variants would
+      have needed an explicit guard for the same result.
+   2. It composes with the sections that already animate. Several of these
+      files (HelpSettings, IntelligenceSettings, NativelyApi/Pro) own rich
+      interaction motion; the attribute is only ever placed on containers
+      whose direct children are plain elements, so the two never meet.
+   3. It runs off the main thread and costs nothing on a panel that can
+      contain hundreds of rows.
+
+   The stagger restarts because the panel wrapper in SettingsOverlay.tsx is
+   keyed on the section, so entering a section remounts this subtree.
+
+   Budget: last child starts at 175ms and is done by 395ms. Step is 30ms
+   (a cascade, not a slideshow) and the delay ladder is CAPPED at the 7th
+   child so a long list can't turn into a loading screen. */
+@keyframes settings-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    /* `none`, NOT translateY(0): with `animation-fill-mode: both` the final
+       keyframe persists, and a lingering transform would make every
+       staggered container a containing block for its absolutely- and
+       fixed-positioned descendants (dropdowns, popovers, tooltips). */
+    transform: none;
+  }
+}
+
+/* `data-stagger-skip` is the opt-out. A child that ALREADY owns an
+   entrance animation must carry it, or this ladder's animation-delay
+   would land on that animation instead (delay is a longhand; it applies
+   even when the `animation` shorthand here loses to a later rule) and
+   silently lag it. AI Providers' `.aip-panel-fade` tab panels are the
+   live case: without the opt-out, switching cloud/gateways/vision INSIDE
+   that tab would sit still for 175ms before fading. */
+[data-settings-stagger] > *:not([data-stagger-skip]) {
+  animation: settings-stagger-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+[data-settings-stagger] > *:not([data-stagger-skip]):nth-child(1) { animation-delay: 0ms; }
+[data-settings-stagger] > *:not([data-stagger-skip]):nth-child(2) { animation-delay: 30ms; }
+[data-settings-stagger] > *:not([data-stagger-skip]):nth-child(3) { animation-delay: 60ms; }
+[data-settings-stagger] > *:not([data-stagger-skip]):nth-child(4) { animation-delay: 90ms; }
+[data-settings-stagger] > *:not([data-stagger-skip]):nth-child(5) { animation-delay: 120ms; }
+[data-settings-stagger] > *:not([data-stagger-skip]):nth-child(6) { animation-delay: 150ms; }
+/* Cap. Everything from the 7th child on lands together at 175ms rather
+   than marching down the page — a 40-row list must not take 1.2s. */
+[data-settings-stagger] > *:not([data-stagger-skip]):nth-child(n+7) { animation-delay: 175ms; }
+
+@keyframes settings-stagger-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Reduced motion: no transform and no cascade — one short fade, all at
+   once. The delay override must be !important to beat the nth-child
+   ladder above, which is more specific. */
+@media (prefers-reduced-motion: reduce) {
+  [data-settings-stagger] > *:not([data-stagger-skip]) {
+    animation: settings-stagger-fade 120ms linear both;
+    animation-delay: 0ms !important;
+  }
 }

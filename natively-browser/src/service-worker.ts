@@ -13,6 +13,12 @@
  *        -> classify 200/400/401/413/429/refused and report to the popup
  */
 
+import { originPatternFromUrl } from './capture/originPattern';
+// Static, NOT a dynamic import: chrome.permissions.request must run inside the
+// popup's user-gesture window, and a dynamic import can resolve on a later
+// microtask than that window allows ("may only be called from a user gesture").
+import { requestOriginPermission } from './capture/permissions';
+
 const STORAGE_KEY = 'pairing';
 const PAIR_PROBE_DOM = '__pair_probe__';
 
@@ -35,6 +41,10 @@ export type DomPostOutcome =
   | { kind: 'rate-limited' } // 429
   | { kind: 'refused' } // connection refused — Phone Mirror off / port moved
   | { kind: 'http-error'; status: number }
+  // Chrome refused to run the extractor because this host was never granted.
+  // Carries the origin so the popup can request exactly that one site from a
+  // user gesture, and so the desktop can name the site instead of failing mute.
+  | { kind: 'needs-host-permission'; origin: string }
   | { kind: 'error'; message: string };
 
 /** Minimal injectable fetch so the core is unit-testable without a browser. */
@@ -464,7 +474,18 @@ async function captureActiveTab(opts?: { reqId?: string; tabId?: number }): Prom
   try {
     extracted = await extractFromTab(tab.id);
   } catch (err) {
-    return { outcome: { kind: 'error', message: err instanceof Error ? err.message : String(err) } };
+    const message = err instanceof Error ? err.message : String(err);
+    // Chrome's own wording when the host was never granted:
+    //   Cannot access contents of url "https://…". Extension manifest must
+    //   request permission to access this host.
+    // Report it as its own outcome carrying the origin, so callers can offer a
+    // one-click grant instead of showing a raw internal error (or, on the
+    // desktop pull, silently falling back to a screenshot that then fails too).
+    if (/Cannot access contents of|must request permission to access this host|Missing host permission/i.test(message)) {
+      const origin = originPatternFromUrl(tab.url || '');
+      if (origin) return { outcome: { kind: 'needs-host-permission', origin } };
+    }
+    return { outcome: { kind: 'error', message } };
   }
   if (!extracted.text) return { outcome: { kind: 'error', message: 'Page had no readable content' } };
 
@@ -842,6 +863,7 @@ type PopupMessage =
   | { type: 'pair'; value: string }
   | { type: 'autopair' }
   | { type: 'capture' }
+  | { type: 'grant-host'; value: string }
   | { type: 'status' }
   | { type: 'ws-status' }
   | { type: 'unpair' };
@@ -877,6 +899,15 @@ chrome.runtime.onMessage.addListener((msg: PopupMessage, _sender, sendResponse) 
       case 'capture':
         sendResponse(await captureActiveTab());
         return;
+      case 'grant-host': {
+        // The popup asks for ONE origin after a capture came back
+        // needs-host-permission. chrome.permissions.request must run inside a
+        // user gesture; the popup's click handler is that gesture, and the
+        // gesture survives this round-trip because the popup awaits us.
+        const origin = typeof msg.value === 'string' ? msg.value : '';
+        sendResponse(await requestOriginPermission(chrome.permissions, origin));
+        return;
+      }
       case 'status':
         sendResponse(await connectionStatus());
         return;

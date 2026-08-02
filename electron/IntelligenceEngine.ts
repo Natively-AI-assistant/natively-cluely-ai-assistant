@@ -196,6 +196,16 @@ export class IntelligenceEngine extends EventEmitter {
     private readonly wtaDiversityGuard = new AnswerDiversityGuard(20);
 
     // Timestamps for tracking
+    /**
+     * Lazy access to the meeting-RAG retriever, injected after RAGManager exists.
+     *
+     * A PROVIDER rather than the instance: IntelligenceManager is constructed
+     * before RAGManager in main.ts, so holding the object would capture null
+     * forever and a later re-init would never be picked up. The engine keeps no
+     * RAG import — it only calls what it is handed.
+     */
+    private ragRetrieverProvider: (() => unknown) | null = null;
+
     private lastTranscriptTime: number = 0;
     private lastTriggerTime: number = 0;
     private readonly triggerCooldown: number = 3000; // 3 seconds
@@ -262,6 +272,15 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     private static isNonAnswerSentinel(answer: string): boolean {
+        // Prompt System v2 (2026-08-01): the machine sentinel [[NO_ACTION]]
+        // replaces the visible "Nothing actionable right now." escape hatch
+        // when the promptSystemV2 flag is on. Both are recognized here so the
+        // existing speculative-discard / manual-press-substitution branches
+        // apply identically to either prompt generation. Never throws.
+        try {
+            const { shouldSuppressModelOutput } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+            if (shouldSuppressModelOutput(answer)) return true;
+        } catch { /* legacy detection below */ }
         const normalized = answer.trim().toLowerCase().replace(/[.!?]+$/g, '');
         return normalized === 'nothing actionable right now'
             || normalized === 'nothing to capture right now';
@@ -756,7 +775,11 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             const controller = this.assistCancellationToken;
-            const insight = await this.assistLLM.generate(context, controller.signal);
+            // V3 (Phase 6): a confidently-resolved transcript question hands the
+            // turn to the decision layer; no resolvable question keeps legacy
+            // proactive behaviour byte-for-byte.
+            const assistV3 = await this.buildV3ForTranscriptSurface();
+            const insight = await this.assistLLM.generate(context, controller.signal, assistV3 ?? undefined);
 
             if (controller.signal.aborted) {
                 this.setMode('idle');
@@ -1166,6 +1189,29 @@ export class IntelligenceEngine extends EventEmitter {
                 } catch (e) { console.warn('[TRACE:LONGCTX] question_extracted logging failed', e); }
             }
 
+            // GOVERNED-INPUT CONTRACT (deep-run 2 / Pattern I, 2026-08-01): a
+            // What-to-Answer press with no transcript, no screen/DOM/image
+            // capture and no typed question used to proceed through planning,
+            // retrieval and a full provider round-trip with an EMPTY question —
+            // V3 refuses empty input and opts out, so the governed layer never
+            // saw the turn, and the user got a deadline-timeout message seconds
+            // later, a hallucinated answer to no question, or a raw internal
+            // error. The derivation chain is transcript → screen/DOM/image →
+            // last interviewer turn; when ALL of it is empty, answer instantly
+            // and deterministically (mirrors the runBrainstorm guard).
+            // Speculative runs return silently, per the speculative contract.
+            const _wtaHasVisualContext = (imagePaths?.length ?? 0) > 0
+                || Boolean(options?.screenContext) || Boolean(options?.domContext);
+            if (!question?.trim() && !extractedQuestion.latestQuestion && !lastInterviewerTurn
+                && !preparedTranscript.trim() && !_wtaHasVisualContext) {
+                if (isSpeculative) return null;
+                this.setMode('idle');
+                const noContextMsg = "I don't have anything to answer yet — no conversation, screen capture, or question has come in. Ask something or start the meeting audio, then press again.";
+                this.session.addAssistantMessage(noContextMsg, undefined, 'what_to_answer');
+                this.emit('suggested_answer', noContextMsg, 'inferred', 1.0, generationId);
+                return noContextMsg;
+            }
+
             // LIVE TRANSCRIPT BRAIN (Phase 6 wiring, SHADOW/PARITY behind live_transcript_brain_enabled):
             // the WTA path already builds the hot window inline (getContext(180) + interim
             // injection above) and extracts the question — exactly what LiveTranscriptBrain
@@ -1394,7 +1440,14 @@ export class IntelligenceEngine extends EventEmitter {
             var _wtaTurnSourceDecision:
                 import('./llm/turnSourceDecision').TurnSourceDecision | null = null;
             try {
-                const _wtaQHoist = extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+                // MUST match wtaTurnQuestion / canonicalTurn's expression below.
+                // This previously omitted the caller-supplied `question`, so on
+                // any press where the user typed something that differed from
+                // the last interviewer utterance, the source-authority decision
+                // was resolved for the TRANSCRIPT's question while the answer
+                // type, context route and prompt were resolved for the TYPED
+                // one — two authorities governing one turn with no tie-break.
+                const _wtaQHoist = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
                 const _wtaOrchAvail = this.llmHelper.getKnowledgeOrchestrator?.();
                 const _wtaSourceContract = (snapshotModeInfo as any)?.sourceContract ?? null;
                 if (_wtaSourceContract) {
@@ -1637,7 +1690,13 @@ export class IntelligenceEngine extends EventEmitter {
                 const { resolveSourceOwnership } = require('./llm/sourceOwnership');
                 const { getSourceOwnerEnforcementStage } = require('./intelligence/intelligenceFlags');
                 const { buildTurnContractIfEnabled, allowsEvidence: coAllowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-                const _wtaQ = extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+                // MUST match wtaTurnQuestion / canonicalTurn's expression below
+                // (see the _wtaQHoist comment above): _wtaQ drives planAnswer →
+                // _wtaContract, resolveSourceOwnership and
+                // buildTurnContractIfEnabled — i.e. the EVIDENCE and SOURCE
+                // gates — while canonicalTurn drives the answer type and the
+                // prompt. Omitting `question` here made the two disagree.
+                const _wtaQ = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
                 const _wtaOrchForAvail = this.llmHelper.getKnowledgeOrchestrator?.();
                 // Grounding-campaign2 fix (2026-07-20): these two were `const`
                 // — block-scoped to THIS try block (closes below) — but are
@@ -1955,6 +2014,33 @@ export class IntelligenceEngine extends EventEmitter {
                 included: false,
                 reason: canonicalTurn.turnSourceDecision?.reasonCode ?? 'legacy_source_contract_absent',
             });
+            // CONTEXT INTELLIGENCE V3 — legacy trace emission (Layer A: WTA).
+            //
+            // Observability only: gated on NATIVELY_CI_V3_TRACE (default off),
+            // never throws, and carries evidence IDENTITY only — no source text.
+            // This is the prerequisite for shadow-mode parity: until the legacy
+            // layers emit a comparable decision object, there is nothing for the
+            // V3 path to be proven equivalent against.
+            try {
+                const { recordLegacyTurn } = require('./context-intelligence/observability/legacy-trace');
+                // Accessors are read defensively (`any` + optional chaining): this
+                // is observability on a live answer path, and a shape change in a
+                // legacy type must degrade the trace, never the answer.
+                const _s = this.session as any;
+                const _q = String(question || extractedQuestion?.latestQuestion || '');
+                recordLegacyTurn({
+                    requestId: String((canonicalTurn as any).turnId ?? `wta-${Date.now()}`),
+                    surface: 'what-to-answer',
+                    scope: { userId: 'local', meetingId: _s?.getMeetingMetadata?.()?.id ?? undefined },
+                    originalQuestion: _q,
+                    resolvedQuestion: _q,
+                    modeId: (this.getActiveModeInfo() as any)?.templateType ?? undefined,
+                    groundingPolicy: (canonicalTurn.sourceAuthority ?? undefined) as never,
+                    retrievalPath: 'GROUNDED',
+                    legacyPath: 'IntelligenceEngine.resolveCanonicalTurn',
+                });
+            } catch { /* observability must never break an answer */ }
+
             wtaTrace.setRouting({
                 source: 'what_to_answer',
                 answerType: answerPlan.answerType,
@@ -2356,6 +2442,81 @@ export class IntelligenceEngine extends EventEmitter {
                     govern: true,
                 };
             }
+            // CONTEXT INTELLIGENCE V3 (Phase 6) — WTA adoption, second surface.
+            //
+            // Same contract as the manual-chat wiring: flag off or ANY failure
+            // yields null and the legacy assembly below runs byte-for-byte
+            // unchanged. When a prompt comes back, it is frozen INTO the request
+            // snapshot with the rest of the t0 decision, and WhatToAnswerLLM
+            // sends it verbatim — the legacy transport (streaming, deadlines,
+            // supersession) is untouched.
+            //
+            // Unlike the runManualAnswer adoption, this one passes a RETRIEVAL
+            // PORT, so grounded turns carry real evidence instead of composing a
+            // no-evidence disclosure. The port is the shared fail-closed factory
+            // — the same one the manual-chat handler uses.
+            const wtaV3Prompt = await (async () => {
+                try {
+                    const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
+                    const _ctx = this.v3ModeRetrievalContext();
+                    if (!_ctx) return undefined;
+                    const _v3 = await buildV3Prompt({
+                        surface: 'what-to-answer',
+                        question: String(wtaTurnQuestion || ''),
+                        modeTemplateType: _ctx.raw,
+                        modeUniqueId: _ctx.modeUniqueId,
+                        modeName: _ctx.modeName,
+                        attachedSourceCount: _ctx.attachedSourceCount,
+                        attachedFileNames: _ctx.attachedFileNames,
+                        profileSourceCount: _ctx.profileSourceCount,
+                        resolvedProfileSources: _ctx.resolvedProfileSources,
+                        extraAllowedSourceTypes: _ctx.extraAllowedSourceTypes as never[],
+                        // sessionId scopes the V3 conversation-state store. Left
+                        // unset it fell back to the literal 'engine', so every
+                        // WTA turn across every meeting shared one key.
+                        scope: {
+                            meetingId: _ctx.meetingId ?? meetingMarker ?? undefined,
+                            sessionId: _ctx.meetingId ?? meetingMarker ?? undefined,
+                        },
+                        requestId: trace.requestId,
+                        requestSequence: generationId,
+                        // Question provenance. When the user typed the question
+                        // it IS manual; when it was chosen out of live speech by
+                        // extractLatestQuestion it is not, and the decision layer
+                        // must see the extractor's real confidence rather than a
+                        // blanket manual/1.0 stamp.
+                        questionSource: question ? 'manual' : 'transcript',
+                        questionConfidence: question ? 1 : extractedQuestion.confidence,
+                        // Both were already computed far above and simply never
+                        // threaded through, leaving usePreviousSourceContinuity
+                        // dead for every live meeting turn.
+                        isFollowUp: extractedQuestion.isFollowUp,
+                        hasScreenContext: Boolean(options?.screenContext),
+                        // The live meeting's own recent words, into the composer's
+                        // labelled untrusted section. Without this, a live meeting
+                        // question under V3 composed a no-evidence disclosure even
+                        // though the answer was said out loud a minute ago.
+                        conversationSummary: _ctx.conversationWindow(90),
+                        retrieval: _ctx.port as any,
+                    });
+                    if (_v3) {
+                        wtaTrace.lifecycle('planned', {
+                            answerType: answerPlan.answerType,
+                            sourceAuthority: 'context-intelligence-v3',
+                            sourceKinds: [],
+                        });
+                        console.log(`[IntelligenceEngine] WTA V3 prompt in effect: answerability=${_v3.answerability} evidence=${_v3.evidenceCount} fallback=${_v3.fallbackUsed}`);
+                    }
+                    return _v3 ? {
+                        system: _v3.system, user: _v3.user,
+                        // Carried for the source badge: when V3 composed the
+                        // prompt, the label must reflect V3's decision, not the
+                        // legacy TurnPlan that did not drive the answer.
+                        evidenceCount: _v3.evidenceCount, answerability: _v3.answerability,
+                    } : undefined;
+                } catch { return undefined; }
+            })();
+
             const requestSnapshot: WhatToAnswerRequestSnapshot = Object.freeze({
                 activeModeInfo: snapshotModeInfo,
                 modeId: snapshotModeId,
@@ -2366,6 +2527,7 @@ export class IntelligenceEngine extends EventEmitter {
                 surface: 'what_to_answer' as const,
                 generationId,
                 ...(wtaContextOsGeneration ? { contextOsGeneration: wtaContextOsGeneration } : {}),
+                ...(wtaV3Prompt ? { v3Prompt: wtaV3Prompt } : {}),
             });
 
             // RC-03 fix: hold a reference to the generator so we can call .return()
@@ -2460,7 +2622,15 @@ export class IntelligenceEngine extends EventEmitter {
                         streamingTokenBuffer += token;
                         if (streamingTokenBuffer.length >= STREAMING_SAFE_PREFIX_CHARS
                             && !IntelligenceEngine.isNonAnswerSentinel(streamingTokenBuffer)) {
-                            emitChunk(streamingTokenBuffer);
+                            // Prompt System v2: a misfired "[[NO_ACTION]] real
+                            // text…" keeps its real text but the sentinel token
+                            // itself must never paint.
+                            let visiblePrefix = streamingTokenBuffer;
+                            try {
+                                const { stripLeadingNoActionSentinel } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+                                visiblePrefix = stripLeadingNoActionSentinel(visiblePrefix) || visiblePrefix;
+                            } catch { /* emit unmodified */ }
+                            emitChunk(visiblePrefix);
                             streamingTokenBuffer = '';
                         }
                     }
@@ -2627,10 +2797,17 @@ export class IntelligenceEngine extends EventEmitter {
                 // payload. Defensive fallback to 'General knowledge' if the
                 // helper throws — the emit boundary must never throw.
                 const { computeEngineSourceLabel } = require('./llm/SourceBadge');
-                const _c3SourceLabel = computeEngineSourceLabel({
-                    turnPlan: _c3TurnPlan,
-                    evidenceFound: true,
-                });
+                // When V3 composed this turn's prompt, the legacy TurnPlan did
+                // not drive the answer — labelling from it said "General
+                // knowledge" over reference-grounded V3 answers. Derive from
+                // the V3 decision instead.
+                const _v3ForLabel = (requestSnapshot as any)?.v3Prompt;
+                const _c3SourceLabel = _v3ForLabel
+                    ? ((_v3ForLabel.evidenceCount ?? 0) > 0 ? 'Reference material' : 'General knowledge')
+                    : computeEngineSourceLabel({
+                        turnPlan: _c3TurnPlan,
+                        evidenceFound: true,
+                    });
                 // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
                 this.emit('suggested_answer', fullAnswer, question || extractedQuestion.latestQuestion || 'inferred', confidence, generationId, _c3SourceLabel);
                 this.setMode('idle');
@@ -2799,15 +2976,29 @@ export class IntelligenceEngine extends EventEmitter {
             // check naturally returns false for genuinely clean extracted
             // text (no double-fire on the common case) and only fires this
             // fallback when the extracted tail is ITSELF still contaminated.
+            // Gate on a real question (2026-08-02). The repair prompt below ships
+            // ONLY <question> + optional <candidate_facts> — no transcript, no
+            // DOM/screen context, no evidence. On surfaces where the question is
+            // empty (turnPlanner:empty_question, plus no transcript because
+            // Ambient AI Chat suppresses STT), ALL FOUR fallbacks below are
+            // blank, so the model is asked to "answer the question below" with
+            // nothing below it and returns a refusal that then REPLACES a
+            // validated answer the user already watched stream in.
+            //
+            // Gate on the SAME four-way fallback the prompt actually consumes —
+            // not on extractedQuestion alone, which is only the third source and
+            // would skip repairs that had a perfectly good `question` or
+            // `answerPlan.question` available.
+            const scaffoldQuestion = question || answerPlan.question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
             if (!isSpeculative
                 && fullAnswer
+                && scaffoldQuestion.trim()
                 && !isCodingAnswerType(answerPlan.answerType)
                 && !TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION.has(answerPlan.answerType)
                 && !isDocGroundedAnswerType(answerPlan.answerType)
                 && hasUnrecoveredScaffoldContamination(answerPlan.answerType, fullAnswer)
                 && this.currentGenerationId === generationId) {
                 try {
-                    const scaffoldQuestion = question || answerPlan.question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
                     if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                         try {
                             console.log('[TRACE:LONGCTX] scaffold_contamination_discard', JSON.stringify({
@@ -2870,8 +3061,22 @@ export class IntelligenceEngine extends EventEmitter {
                         // Reject and fall through with the ORIGINAL fullAnswer
                         // unchanged if either check fails, rather than shipping a
                         // possibly-worse second guess.
+                        // Also reject a repair that is ITSELF a non-answer, so a
+                        // strictly worse second guess can't overwrite a validated
+                        // answer. NOTE the coverage limit: both predicates match
+                        // only near-exact known sentinel phrasings, so a
+                        // free-form refusal ("To answer that, please clarify…")
+                        // still slips through — the empty-question gate above is
+                        // the real guard; this is a cheap backstop. Also note
+                        // isNonAnswerSentinel now additionally matches the
+                        // promptSystemV2 [[NO_ACTION]] sentinel, so if that flag
+                        // is ever enabled a repair leading with a stripped
+                        // sentinel would be rejected here rather than cleaned.
                         const stillContaminated = hasUnrecoveredScaffoldContamination(answerPlan.answerType, scaffoldRepairedTrim);
-                        if (!stillContaminated && !isLeakedAnswerArtifact(scaffoldRepairedTrim)) {
+                        if (!stillContaminated
+                            && !isLeakedAnswerArtifact(scaffoldRepairedTrim)
+                            && !IntelligenceEngine.isNonAnswerSentinel(scaffoldRepairedTrim)
+                            && !IntelligenceEngine.isFalseNoContentClaim(scaffoldRepairedTrim)) {
                             fullAnswer = scaffoldRepairedTrim;
                             trace.mark('repair_used', { reason: 'scaffold_contamination_regenerated' });
                         } else {
@@ -3952,6 +4157,190 @@ export class IntelligenceEngine extends EventEmitter {
      * MODE 3: Follow-Up (Refinement)
      * Modify the last assistant message
      */
+    /** Injected by IntelligenceManager once the RAG stack is up. */
+    setRagRetrieverProvider(provider: (() => unknown) | null): void {
+        this.ragRetrieverProvider = provider;
+    }
+
+    // ── CONTEXT INTELLIGENCE V3 — shared adoption plumbing (Phase 6) ─────────
+    //
+    // One place that knows how to stand up the fail-closed retrieval port for
+    // the active mode. WTA and runManualAnswer previously each carried a copy of
+    // this block; a third copy for the proactive surfaces is where drift starts,
+    // so all of them now call this.
+    private v3ModeRetrievalContext(): {
+        raw: string; modeUniqueId: string | null; modeName: string | null; meetingId: string | null;
+        attachedSourceCount: number;
+        attachedFileNames: string[];
+        profileSourceCount: number;
+        resolvedProfileSources: Array<{ role: string; id: string }>;
+        extraAllowedSourceTypes: string[];
+        port: unknown; conversationWindow: (sec: number) => string;
+    } | null {
+        try {
+            const { createModeRetrievalPort, attachmentSourceTypeExtensions } = require('./context-intelligence/retrieval/mode-retrieval-port');
+            const { resolveModePolicy, isModeId } = require('./context-intelligence/policies/mode-policy-registry');
+            const { ModesManager } = require('./services/ModesManager');
+            const _mm = ModesManager.getInstance();
+            const _mi = _mm.getActiveModeInfo?.() ?? null;
+            const _files = _mi?.id ? (_mm.getReferenceFiles?.(_mi.id) ?? []) : [];
+            const raw = (_mi as any)?.templateType ?? 'general';
+            const _modeId = isModeId(raw) ? raw : 'general';
+            const policy = resolveModePolicy(_modeId);
+            // Deep-test D10: custom/general modes gain the source types their own
+            // attachments evidence (candidate résumé → CANDIDATE_FILE, JD →
+            // JOB_DESCRIPTION). Same list feeds the bridge so plan and port agree.
+            const extraSourceTypes = attachmentSourceTypeExtensions(_modeId, _files);
+            const modePort = createModeRetrievalPort({
+                modesManager: _mm, modeInfo: _mi, files: _files,
+                // Types each file by shape against what this mode authorizes —
+                // a résumé is RESUME here and CANDIDATE_FILE in recruiting.
+                allowedSourceTypes: [...policy.allowedSourceTypes, ...extraSourceTypes],
+                tokenBudget: policy.contextBudget.evidenceTokens, userId: 'local',
+            });
+
+            // Profile Intelligence hydration (2026-07-31 source-routing fix):
+            // the active résumé/target JD are the PRIMARY pool for modes that
+            // opt in via policy.profileSources — mode attachments supplement,
+            // never gate. Same construction as the ipcHandlers manual-chat
+            // site; additive, so a failure degrades to attachments only.
+            let profilePort: unknown = null;
+            let profileSourceCount = 0;
+            let resolvedProfileSources: Array<{ role: string; id: string }> = [];
+            try {
+                if (policy.profileSources?.length) {
+                    const { collectV3ProfileSources } = require('./services/knowledge/v3ProfileSources');
+                    const collected = collectV3ProfileSources(this.llmHelper.getKnowledgeOrchestrator?.() ?? null);
+                    if (collected.docs.length) {
+                        const { createProfileRetrievalPort } = require('./context-intelligence/retrieval/profile-retrieval-port');
+                        profilePort = createProfileRetrievalPort({
+                            docs: collected.docs,
+                            allowedSourceTypes: policy.allowedSourceTypes,
+                            profileSources: policy.profileSources,
+                            userId: 'local',
+                        });
+                        if (profilePort) {
+                            profileSourceCount = collected.docs.length;
+                            resolvedProfileSources = collected.resolved;
+                        }
+                    }
+                }
+            } catch (profErr) {
+                // Additive, but NEVER silent: a broken collector is indistinguishable
+                // from "no profile" and reintroduces the upload-again defect (§22.1).
+                console.warn('[V3] profile hydration failed — continuing with mode attachments only:', (profErr as Error)?.message ?? profErr);
+            }
+
+            // Meeting evidence, when this turn is INSIDE a meeting and the mode
+            // authorizes transcripts. Without it a live meeting question found
+            // only reference files and disclosed a gap for something that had
+            // just been said aloud. Cross-meeting isolation is the scope
+            // filter's job, not this call site's (06 §4).
+            const meetingId = (this.session as any)?.getMeetingMetadata?.()?.id ?? null;
+            let port: unknown = modePort;
+            try {
+                const { combineRetrievalPorts } = require('./context-intelligence/retrieval/meeting-retrieval-port');
+                const ports: unknown[] = [modePort, ...(profilePort ? [profilePort] : [])];
+                const retriever = this.ragRetrieverProvider?.();
+                if (retriever && meetingId && policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT')) {
+                    const { createMeetingRetrievalPort } =
+                        require('./context-intelligence/retrieval/meeting-retrieval-port');
+                    ports.push(createMeetingRetrievalPort({
+                        retriever, currentMeetingId: meetingId, userId: 'local',
+                        tokenBudget: policy.contextBudget.evidenceTokens,
+                    }));
+                }
+                if (ports.length > 1) port = combineRetrievalPorts(ports as never[]);
+            } catch { /* meeting/profile combination is additive — mode port alone still answers */ }
+
+            return {
+                raw,
+                modeUniqueId: (_mi as any)?.id ?? null,
+                modeName: (_mi as any)?.name ?? null,
+                meetingId,
+                attachedSourceCount: _files.length,
+                attachedFileNames: (_files as Array<{ fileName?: string }>).map((f) => f.fileName ?? '').filter(Boolean),
+                profileSourceCount,
+                resolvedProfileSources,
+                extraAllowedSourceTypes: extraSourceTypes,
+                port,
+                // Bounded live-transcript window for the composer's labelled
+                // "Conversation so far" section. This is NOT the §32.16 raw-blob
+                // anti-pattern: it enters ONE named, untrusted, size-bounded
+                // section of a composed prompt — it does not substitute for a
+                // source decision, and evidence still comes only from the port.
+                conversationWindow: (sec: number) =>
+                    String((this.session as any)?.getFormattedContext?.(sec) ?? '').slice(-2400),
+            };
+        } catch { return null; }
+    }
+
+    /**
+     * V3 prompt for a TRANSCRIPT-DRIVEN surface (assist / clarify / brainstorm).
+     *
+     * These surfaces receive no question — they receive a rolling speech window.
+     * §12's answer is the question RESOLVER, not the classifier: extract the
+     * latest stable interviewer question from structured turns; only when one
+     * resolves confidently does the decision layer take the turn. No resolvable
+     * question (the genuinely proactive case) returns null and the surface keeps
+     * its legacy behaviour — proactivity is the product feature, and degrading it
+     * into no-evidence disclosures would be adoption theatre.
+     */
+    private async buildV3ForTranscriptSurface(tag: 'assist' | 'clarify' | 'brainstorm' = 'assist'): Promise<{ system: string; user: string } | null> {
+        try {
+            const { isContextIntelligenceV3Enabled } = require('./context-intelligence/contracts/flag');
+            if (!isContextIntelligenceV3Enabled()) return null;
+            const segs: any[] = (this.session as any)?.getContext?.(120) ?? [];
+            if (!segs.length) return null;
+            const { resolveQuestion } = require('./context-intelligence/question/question-resolver');
+            const resolved = resolveQuestion({
+                // getContext() returns ContextItem, whose field is `role`
+                // ('interviewer' | 'user' | 'assistant') — there is no `speaker`
+                // here. The previous mapping read `t.speaker` (always undefined)
+                // and so labelled EVERY segment 'interviewer', including the
+                // assistant's own prior answers — which the resolver then
+                // treated as candidate interviewer questions, defeating its
+                // assistant-echo guard (question-resolver.ts:148).
+                transcript: segs.map((t: any) => ({
+                    role: (t.role === 'user' || t.role === 'assistant') ? t.role : 'interviewer',
+                    text: String(t.text ?? ''), timestamp: Number(t.timestamp ?? 0),
+                })),
+            });
+            if (!resolved.resolvedQuestion || resolved.requiresClarification || resolved.confidence < 0.6) return null;
+
+            const ctx = this.v3ModeRetrievalContext();
+            if (!ctx) return null;
+            const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
+            const _v3 = await buildV3Prompt({
+                surface: 'assist',
+                // AnswerSurface has no clarify/brainstorm members; the tag keeps
+                // their traces separable from real assist turns.
+                pathTag: tag,
+                question: resolved.resolvedQuestion,
+                modeTemplateType: ctx.raw,
+                modeUniqueId: ctx.modeUniqueId,
+                modeName: ctx.modeName,
+                attachedSourceCount: ctx.attachedSourceCount,
+                attachedFileNames: ctx.attachedFileNames,
+                profileSourceCount: ctx.profileSourceCount,
+                resolvedProfileSources: ctx.resolvedProfileSources,
+                extraAllowedSourceTypes: ctx.extraAllowedSourceTypes as never[],
+                requestSequence: this.currentGenerationId,
+                scope: { meetingId: ctx.meetingId ?? undefined, sessionId: ctx.meetingId ?? undefined },
+                // This question came out of live speech via question-resolver,
+                // not from the user's keyboard, so it must not be stamped
+                // manual/1.0. The resolver's own confidence is already gated at
+                // >= 0.6 above; pass the real value through rather than
+                // discarding it at the boundary.
+                questionSource: 'transcript',
+                questionConfidence: resolved.confidence,
+                conversationSummary: ctx.conversationWindow(60),
+                retrieval: ctx.port as any,
+            });
+            return _v3 ? { system: _v3.system, user: _v3.user } : null;
+        } catch { return null; }
+    }
+
     async runFollowUp(intent: string, userRequest?: string): Promise<string | null> {
         console.log(`[IntelligenceEngine] runFollowUp called with intent: ${intent}`);
         const lastMsg = this.session.getLastAssistantMessage();
@@ -4213,7 +4602,8 @@ export class IntelligenceEngine extends EventEmitter {
 
             const generationId = ++this.currentGenerationId;
             let fullClarification = "";
-            const stream = this.clarifyLLM.generateStream(context);
+            const clarifyV3 = await this.buildV3ForTranscriptSurface('clarify');
+            const stream = this.clarifyLLM.generateStream(context, clarifyV3 ?? undefined);
             let streamAborted = false;
 
             for await (const token of stream) {
@@ -4348,10 +4738,76 @@ export class IntelligenceEngine extends EventEmitter {
                 speakerPerspective: 'user',
                 activeMode: activeModeInfo,
             });
-            const context = activeModeInfo?.documentGroundedCustomModeActive === true || isCodingAnswerType(answerPlan.answerType)
-                ? undefined
-                : this.session.getFormattedContext(120);
-            let answer = await this.answerLLM.generate(question, context, answerPlan);
+
+            // CONTEXT INTELLIGENCE V3 — legacy trace emission (Layer C).
+            //
+            // This path constructs NO source authority: no canonical turn, no
+            // turn contract, no evidence pack. It passes a raw formatted-context
+            // blob straight to the model. The trace therefore records
+            // groundingPolicy/modePolicyVersion as absent rather than
+            // substituting a plausible default — that absence IS the finding
+            // (investigation report F2), and a default would hide it.
+            try {
+                const { recordLegacyTurn } = require('./context-intelligence/observability/legacy-trace');
+                recordLegacyTurn({
+                    requestId: `manual-answer-${Date.now()}`,
+                    surface: 'manual-chat',
+                    scope: { userId: 'local', meetingId: (this.session as any)?.getMeetingMetadata?.()?.id ?? undefined },
+                    originalQuestion: question,
+                    resolvedQuestion: question,
+                    modeId: (activeModeInfo as any)?.templateType ?? undefined,
+                    // groundingPolicy deliberately omitted — there is none.
+                    authorizedSources: [],
+                    retrievalPath: 'GROUNDED',
+                    answerability: 'NONE',
+                    legacyPath: 'IntelligenceEngine.runManualAnswer (no source authority)',
+                });
+            } catch { /* observability must never break an answer */ }
+
+            // CONTEXT INTELLIGENCE V3 — adoption point for this surface.
+            //
+            // Returns null when the flag is off or anything fails, so the legacy
+            // line below runs unchanged. When it returns a prompt, the raw
+            // getFormattedContext(120) blob is NOT used at all — that blob is the
+            // §32.16 anti-pattern this surface exists to demonstrate.
+            let answer: string;
+            const _v3 = await (async () => {
+                try {
+                    const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
+                    // Phase 6: this adoption originally passed NO retrieval port —
+                    // the decision layer was live but BLIND. Shared plumbing now.
+                    const _ctx = this.v3ModeRetrievalContext();
+                    if (!_ctx) return null;
+                    return await buildV3Prompt({
+                        surface: 'manual-chat',
+                        // Shares 'manual-chat' with the IPC surface; the tag keeps
+                        // the two call sites' traces separable (they previously
+                        // both recorded legacyPath 'v3-manual-chat').
+                        pathTag: 'engine',
+                        question,
+                        modeTemplateType: _ctx.raw,
+                        modeUniqueId: _ctx.modeUniqueId,
+                        modeName: _ctx.modeName,
+                        attachedSourceCount: _ctx.attachedSourceCount,
+                        profileSourceCount: _ctx.profileSourceCount,
+                        resolvedProfileSources: _ctx.resolvedProfileSources,
+                        requestSequence: this.currentGenerationId,
+                        scope: { meetingId: _ctx.meetingId ?? undefined },
+                        retrieval: _ctx.port as any,
+                    });
+                } catch { return null; }
+            })();
+
+            if (_v3) {
+                // V3 owns the system prompt entirely; the legacy universal prompt
+                // and the raw context blob are both bypassed.
+                answer = await this.answerLLM.generate(_v3.user, undefined, answerPlan, _v3.system);
+            } else {
+                const context = activeModeInfo?.documentGroundedCustomModeActive === true || isCodingAnswerType(answerPlan.answerType)
+                    ? undefined
+                    : this.session.getFormattedContext(120);
+                answer = await this.answerLLM.generate(question, context, answerPlan);
+            }
             const structureValidation = validateAnswerStructure(answerPlan.answerType, answer);
             if (!structureValidation.ok && structureValidation.repaired) {
                 console.warn('[IntelligenceEngine] Repaired manual answer structure', {
@@ -4513,7 +4969,8 @@ export class IntelligenceEngine extends EventEmitter {
             }
             const generationId = ++this.currentGenerationId;
             let fullResult = "";
-            const stream = this.brainstormLLM.generateStream(context, imagePaths);
+            const brainstormV3 = await this.buildV3ForTranscriptSurface('brainstorm');
+            const stream = this.brainstormLLM.generateStream(context, imagePaths, brainstormV3 ?? undefined);
             let streamAborted = false;
 
             for await (const token of stream) {
