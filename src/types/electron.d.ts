@@ -33,15 +33,6 @@ export interface DynamicActionPayload {
 }
 
 export interface ElectronAPI {
-  visionBenchmarkInfo: () => Promise<any>
-  visionBenchmarkPickImage: () => Promise<{ cancelled: boolean; path?: string }>
-  visionBenchmarkPreviewPrompt: (input: any) => Promise<any>
-  visionBenchmarkRun: (config: any) => Promise<any>
-  visionBenchmarkCancel: () => Promise<{ ok: boolean }>
-  visionBenchmarkRate: (input: any) => Promise<{ ok: boolean; error?: string }>
-  visionBenchmarkExport: () => Promise<{ ok: boolean; path?: string; error?: string }>
-  visionBenchmarkShowExport: (reportPath: string) => Promise<{ ok: boolean; error?: string }>
-  onVisionBenchmarkProgress: (callback: (payload: any) => void) => () => void
   updateContentDimensions: (dimensions: {
     width: number
     height: number

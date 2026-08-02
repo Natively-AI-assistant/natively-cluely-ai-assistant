@@ -1969,22 +1969,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
   ) => ipcRenderer.invoke('gemini-chat-stream', message, imagePaths, context, options),
 
-  // Developer-only Vision Model Benchmark. Main-process handlers are not
-  // registered unless NATIVELY_ENABLE_BENCHMARKS=true.
-  visionBenchmarkInfo: () => ipcRenderer.invoke('vision-benchmark:info'),
-  visionBenchmarkPickImage: () => ipcRenderer.invoke('vision-benchmark:pick-image'),
-  visionBenchmarkPreviewPrompt: (input: any) => ipcRenderer.invoke('vision-benchmark:preview-prompt', input),
-  visionBenchmarkRun: (config: any) => ipcRenderer.invoke('vision-benchmark:run', config),
-  visionBenchmarkCancel: () => ipcRenderer.invoke('vision-benchmark:cancel'),
-  visionBenchmarkRate: (input: any) => ipcRenderer.invoke('vision-benchmark:rate', input),
-  visionBenchmarkExport: () => ipcRenderer.invoke('vision-benchmark:export'),
-  visionBenchmarkShowExport: (reportPath: string) => ipcRenderer.invoke('vision-benchmark:show-export', reportPath),
-  onVisionBenchmarkProgress: (callback: (payload: any) => void) => {
-    const subscription = (_: any, payload: any) => callback(payload);
-    ipcRenderer.on('vision-benchmark:progress', subscription);
-    return () => ipcRenderer.removeListener('vision-benchmark:progress', subscription);
-  },
-
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => {
     // meta is an optional 2nd arg carrying { streamId } (audit finding #3). Existing
     // (token)=>… callbacks ignore it; the renderer uses it to drop stale-stream tokens.

@@ -3,9 +3,11 @@ logs
 .env
 STATUS.md
 left.md
+.audit
 performance-audit-report.md
 FIXES.md
 /.env
+scripts
 python-installer.pkg
 Sales20260405-60-494j8t.csv
 /Sales20260405-60-494j8t.csv

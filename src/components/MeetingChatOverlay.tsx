@@ -7,6 +7,7 @@ import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
 import { registerPrismLanguages } from '../utils/registerPrismLanguages';
 import nativelyIcon from './icon.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { splitGistLineStreaming } from '../lib/displayMarkup';
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -93,10 +94,13 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => (
 
 const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({ content, isStreaming }) => {
     const [copied, setCopied] = useState(false);
+    // Teleprompter gist: persisted answers can end with a [[GIST]] line —
+    // split it into a bottom summary chip instead of showing the marker.
+    const { body: gistBody, gist: gistLine } = splitGistLineStreaming(content);
 
     const handleCopy = async () => {
         try {
-            await navigator.clipboard.writeText(content);
+            await navigator.clipboard.writeText(gistBody);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch (err) {
@@ -183,8 +187,9 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                             },
                         }}
                     >
-                        {content}
+                        {gistBody}
                     </ReactMarkdown>
+                    {gistLine && <div className="overlay-gist-chip">{gistLine}</div>}
                 </div>
             </div>
         </motion.div>
