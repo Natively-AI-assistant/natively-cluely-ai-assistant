@@ -8,6 +8,7 @@ import { DatabaseManager, Meeting } from './db/DatabaseManager';
 import { GROQ_TITLE_PROMPT, GROQ_SUMMARY_JSON_PROMPT } from './llm';
 import { buildPostCallEnhancements } from './services/post-call/PostCallWorkflow';
 import { MeetingContextAssembler } from './services/meeting/MeetingContextAssembler';
+import { cleanMeetingTitle, cleanString } from './services/meeting/MeetingSummaryV3';
 import type { MeetingSummaryTelemetryMeta } from './services/meeting/types';
 import { MeetingMemoryService, buildPersistedMeetingMemory } from './intelligence/MeetingMemoryService';
 import type { MeetingMemoryProvenanceTelemetry } from './intelligence/MeetingMemoryService';
@@ -291,7 +292,22 @@ export class MeetingPersistence {
                     .join('\n')
                     .slice(0, 8000);
                 const generatedTitle = await this.llmHelper.generateMeetingSummary(titlePrompt, titleContext, groqTitlePrompt);
-                if (generatedTitle) title = generatedTitle.replace(/["*]/g, '').trim();
+                // Clamp the GENERATED title to title shape. The prompt asks for
+                // 3-6 words, but that is advice — a model that answers the
+                // transcript instead of naming it wrote its whole reply into
+                // this column (observed 2026-08-02: a 197-char assistant
+                // self-introduction and a 60-char truncated prose answer). The
+                // caps sit above the prompt's contract, so a title that already
+                // obeys it passes through byte-for-byte. Calendar/user titles
+                // never reach here — this branch is skipped when metadata.title
+                // is set — so their length is left alone.
+                const cleanedTitle = cleanMeetingTitle(generatedTitle);
+                if (cleanedTitle) {
+                    if (cleanedTitle !== cleanString(generatedTitle)) {
+                        console.warn(`[MeetingPersistence] Generated title clamped: ${cleanString(generatedTitle).length} chars -> "${cleanedTitle}"`);
+                    }
+                    title = cleanedTitle;
+                }
             }
 
             // Load template note sections for the mode that was active when meeting stopped.
