@@ -112,7 +112,11 @@ export class WindowsVadSegmenter extends EventEmitter {
     this.remainder = offset < bytes.length ? Buffer.from(bytes.subarray(offset)) : Buffer.alloc(0);
   }
 
-  flush(): void { if (this.speaking) this.finalize(performance.now()); }
+  flush(inferredSilenceMs = 0): void {
+    if (!this.speaking) return;
+    this.silenceMs = Math.max(this.silenceMs, inferredSilenceMs);
+    this.finalize(performance.now());
+  }
 
   private frame(frame: Buffer, capturedAt: number): void {
     const active = rms(frame) >= this.config.rmsThreshold;
@@ -166,7 +170,7 @@ export class WindowsVadSegmenter extends EventEmitter {
  * global loopback, so unrelated notifications cannot leak into a process-only session.
  */
 export class WindowsAudioCaptureProvider extends EventEmitter {
-  private channels = new Map<WindowsAudioSourceType, { capture: NativeCapture; segmenter: WindowsVadSegmenter; source: DefenceConfig['input']['source'] }>();
+  private channels = new Map<WindowsAudioSourceType, { capture: NativeCapture; segmenter: WindowsVadSegmenter; source: DefenceConfig['input']['source']; idleTimer?: NodeJS.Timeout }>();
   private running = false;
   private counters = {
     processAudioChunks: 0, microphoneAudioChunks: 0, processActiveAudioChunks: 0, microphoneActiveAudioChunks: 0,
@@ -210,13 +214,19 @@ export class WindowsAudioCaptureProvider extends EventEmitter {
   private async startChannel(sourceType: WindowsAudioSourceType, source: DefenceConfig['input']['source'], capture: NativeCapture, target?: ProcessEntry): Promise<void> {
     const sourceId = sourceType === 'remote-process' ? `process:${target?.pid || 'system'}` : 'microphone:selected';
     const segmenter = new WindowsVadSegmenter(this.config.input.vad, source, sourceType, sourceId, target);
+    const idleFlushMs = sourceType === 'remote-process' ? this.config.input.vad.questionMergeSilenceMs : this.config.input.vad.silenceMs;
     segmenter.on('partial', value => { this.counters.partialCount++; this.emit('partial', value); });
     segmenter.on('utterance', value => { this.counters.utteranceCount++; this.emit('utterance', value); });
     segmenter.on('duplicate', value => { this.counters.duplicateSuppressed++; this.emit('duplicate', value); });
-    this.channels.set(sourceType, { capture, segmenter, source });
+    const channel: { capture: NativeCapture; segmenter: WindowsVadSegmenter; source: DefenceConfig['input']['source']; idleTimer?: NodeJS.Timeout } = { capture, segmenter, source };
+    this.channels.set(sourceType, channel);
     capture.start((error, chunk) => {
       if (error) return this.emit('error', error);
       if (chunk?.length && this.running && this.channels.get(sourceType)?.segmenter === segmenter) {
+        if (channel.idleTimer) clearTimeout(channel.idleTimer);
+        channel.idleTimer = setTimeout(() => {
+          if (this.running && this.channels.get(sourceType) === channel) segmenter.flush(idleFlushMs);
+        }, idleFlushMs);
         const chunkRms = rms(chunk);
         if (sourceType === 'remote-process') {
           this.counters.processAudioChunks++; if (chunkRms >= this.config.input.vad.rmsThreshold) this.counters.processActiveAudioChunks++;
@@ -236,7 +246,10 @@ export class WindowsAudioCaptureProvider extends EventEmitter {
   stop(): void {
     if (!this.running) return;
     this.running = false;
-    for (const { capture, segmenter } of this.channels.values()) { capture.stop(); segmenter.flush(); }
+    for (const { capture, segmenter, idleTimer } of this.channels.values()) {
+      if (idleTimer) clearTimeout(idleTimer);
+      capture.stop(); segmenter.flush();
+    }
     this.channels.clear();
     this.emit('status', { running: false, source: this.config.input.source });
   }

@@ -5,11 +5,16 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { WebSocket } from 'ws';
-import { createDefenceRuntime, DefenceServer, isAdminRequestAllowed } from '../../../dist-electron/electron/defence/server.js';
+import { createDefenceRuntime, DefenceServer, isAdminRequestAllowed, mergeQuestionTranscript } from '../../../dist-electron/electron/defence/server.js';
 
 const providerNone={provider:'none',apiKey:'',baseUrl:'',model:'',timeoutMs:1000,maxRetries:0};
 const wsSession=(url,token)=>new Promise((resolve,reject)=>{const socket=new WebSocket(`${url.replace('http','ws')}/api/defence/live?token=${encodeURIComponent(token)}`);const timer=setTimeout(()=>{socket.terminate();reject(Error('websocket timeout'))},2000);socket.once('message',raw=>{clearTimeout(timer);resolve({socket,message:JSON.parse(raw.toString())})});socket.once('error',error=>{clearTimeout(timer);reject(error)})});
 test('admin policy allows loopback and blocks simulated non-loopback clients',()=>{assert.equal(isAdminRequestAllowed('127.0.0.1',true),true);assert.equal(isAdminRequestAllowed('::1',true),true);assert.equal(isAdminRequestAllowed('192.168.1.25',true),false);assert.equal(isAdminRequestAllowed('192.168.1.25',false),true)});
+
+test('question transcript fragments merge into one prompt without duplicating cumulative STT text',()=>{
+  assert.equal(mergeQuestionTranscript('Why did you formulate','the task as a Top-K ranking problem?'),'Why did you formulate the task as a Top-K ranking problem?');
+  assert.equal(mergeQuestionTranscript('Why did you formulate the task','Why did you formulate the task as a Top-K ranking problem?'),'Why did you formulate the task as a Top-K ranking problem?');
+});
 
 test('high-entropy pairing is one-time; invalid and revoked sessions are rejected', async t=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'defence-server-'));await fs.writeFile(path.join(root,'README.md'),'# Demo\nThis project implements a local evidence index.\n');
@@ -46,12 +51,12 @@ test('companion-only proxy exposes PWA and authenticated session routes but neve
   assert.equal((await fetch(publicBase+'/')).status,200);const publicHealth=await fetch(publicBase+'/api/health').then(r=>r.json());assert.equal(publicHealth.config.adminNotExposed,true);assert.equal(publicHealth.config.iphoneOutputOnly,true);assert.equal(JSON.stringify(publicHealth).includes(root),false);assert.equal((await fetch(publicBase+'/admin')).status,404);assert.equal((await fetch(publicBase+'/api/project/index',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,404);assert.equal((await fetch(publicBase+'/api/project/sources')).status,404);assert.equal((await fetch(publicBase+'/api/projects')).status,404);assert.equal((await fetch(publicBase+'/api/input/status')).status,404);assert.equal((await fetch(publicBase+'/api/input/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:'system-loopback'})})).status,404);
   await assert.rejects(()=>wsSession(companionBase,'unpaired-token'));
   const pairing=await fetch(adminBase+'/api/pairing/create',{method:'POST'}).then(r=>r.json());assert.match(pairing.pairUrl,/^https:\/\/companion\.example\.test\//);const verify=await fetch(publicBase+'/api/pairing/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:pairing.id,secret:pairing.secret})});assert.equal(verify.status,200);const auth=await verify.json();
-  const headers={Authorization:`Bearer ${auth.token}`};assert.equal((await fetch(publicBase+'/api/defence/session/'+auth.sessionId,{headers})).status,200);assert.equal((await fetch(publicBase+'/api/defence/session/'+auth.sessionId,{method:'DELETE',headers})).status,200);await assert.rejects(()=>wsSession(companionBase,auth.token));
+  const headers={Authorization:`Bearer ${auth.token}`};const sessionResponse=await fetch(publicBase+'/api/defence/session/'+auth.sessionId,{headers});assert.equal(sessionResponse.status,200);const sessionBody=await sessionResponse.json();assert.equal(sessionBody.settings.outputLanguage,'bilingual');assert.equal(sessionBody.settings.answerDepth,'brief');assert.equal((await fetch(publicBase+'/api/defence/session/'+auth.sessionId,{method:'DELETE',headers})).status,200);await assert.rejects(()=>wsSession(companionBase,auth.token));
 });
 
 test('a finalized automatic question pushes hint then answer and invokes the LLM once',async t=>{
   let llmCalls=0;
-  const provider=http.createServer((req,res)=>{llmCalls++;req.resume();req.on('end',()=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({spokenAnswer:'The project uses a grounded local evidence index.',noEvidence:false,keywords:['grounded','evidence'],followUps:[]})}}]}))})});
+  const provider=http.createServer((req,res)=>{llmCalls++;req.resume();req.on('end',()=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({spokenAnswer:'这个项目使用本地证据索引。',alternateLanguageAnswer:'The project uses a grounded local evidence index for concise spoken answers.',noEvidence:false,keywords:['grounded','evidence'],followUps:[]})}}]}))})});
   await new Promise(resolve=>provider.listen(0,'127.0.0.1',resolve));const providerUrl=`http://127.0.0.1:${provider.address().port}`;
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'defence-single-answer-'));await fs.writeFile(path.join(root,'README.md'),'# Demo\nThe project uses a grounded local evidence index for answers.\n');
   const config={host:'127.0.0.1',port:0,adminLocalOnly:true,tls:{enabled:false,certPath:'',keyPath:''},projectId:'demo-project',projectDisplayName:'Demo',projectsConfigPath:path.join(root,'projects.json'),projectSourcePath:root,indexPath:path.join(root,'.index'),retrievalTopK:3,retrievalTopKAdjusted:false,stt:{...providerNone,language:'auto'},llm:{provider:'mock',apiKey:'TEST',baseUrl:providerUrl,model:'mock',timeoutMs:2000,maxRetries:0,thinking:false},search:{provider:'none',apiKey:'',baseUrl:''},pairingTtlMs:300000,sessionRetentionDays:7,storeAudio:false,storeTranscripts:true,maxUploadBytes:1024*1024,maxAudioBytes:1024*1024,maxAudioDurationMs:5000};

@@ -1,6 +1,8 @@
-# iPhone Project Defence Copilot
+# 问答小助手
 
-This module is an independently implemented companion PWA for project demonstrations, defences, and accessibility prompting. It does not unlock or copy the paid Phone Link or Reference Files product. It deliberately does not implement hidden recording, capture evasion, or access to audio from other iOS apps.
+问答小助手识别 Windows 电脑语音，使用可定制的本地项目知识库生成精简的中英文回答，并通过安全 WSS 将结果显示在手机浏览器中。手机端是只读提词器，不请求麦克风权限；原始音频默认不保存。
+
+This module is independently implemented. It does not unlock or copy the paid Phone Link or Reference Files product. It deliberately does not implement hidden recording, capture evasion, or access to audio from other iOS apps.
 
 ## What works without an API key
 

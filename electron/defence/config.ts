@@ -40,6 +40,7 @@ export interface DefenceConfig {
       silenceMs: number;
       maxUtteranceMs: number;
       partialIntervalMs: number;
+      questionMergeSilenceMs: number;
       rmsThreshold: number;
       duplicateWindowMs: number;
     };
@@ -128,6 +129,7 @@ export function loadDefenceConfig(env: NodeJS.ProcessEnv = process.env): Defence
         silenceMs: Math.min(800, Math.max(500, numberFrom(env.VAD_SILENCE_MS, 650))),
         maxUtteranceMs: numberFrom(env.VAD_MAX_UTTERANCE_MS, 20_000),
         partialIntervalMs: numberFrom(env.VAD_PARTIAL_INTERVAL_MS, 1_200),
+        questionMergeSilenceMs: Math.min(2_500, Math.max(1_000, numberFrom(env.QUESTION_MERGE_SILENCE_MS, 1_600))),
         rmsThreshold: Math.min(0.25, Math.max(0.001, Number(env.VAD_RMS_THRESHOLD || 0.012))),
         duplicateWindowMs: numberFrom(env.VAD_DUPLICATE_WINDOW_MS, 30_000),
       },

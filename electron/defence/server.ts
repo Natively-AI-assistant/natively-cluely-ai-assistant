@@ -25,7 +25,8 @@ const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 interface Pairing { id: string; codeHash: string; secretHash: string; expiresAt: number; used: boolean; failedAttempts: number }
 interface SessionDiagnostics { lastAudioBytes?: number; lastAudioMime?: string; lastSttLatencyMs?: number; sttStatus?: number; sttRetries?: number; sttRequestId?: string; partialCount: number; finalCount: number; lastErrorCode?: string; retrievalMs?: number; candidateCount?: number; evidenceCount?: number; llmFirstResponseMs?: number; llmTotalMs?: number; llmStatus?: number; llmRetries?: number; llmRequestId?: string; schemaValid?: boolean; windowsCaptureMs?: number; questionFinalizationMs?: number; fastHintMs?: number; fullAnswerMs?: number; semanticCacheHit?: boolean; inputSource?: string; inputSourceType?: string; questionSource?: string; inputProcessId?: number; inputProcessName?: string; includeProcessTree?: boolean; echoDuplicateSuppressed?: boolean; userAnswerSuppressed?: boolean }
-interface Session { id: string; tokenHash: string; createdAt: number; settings: DefenceSettings; detector: QuestionDetector; audio: AudioChunkTracker; transcript: string; answers: StructuredAnswer[]; diagnostics: SessionDiagnostics; questionCounter: number; lastQuestionId?: string; revision: number; abort?: AbortController; answeredQuestionKeys: Set<string>; inFlightQuestionKeys: Set<string> }
+interface PendingQuestion { text: string; source?: string; pipelineStarted: number; timer?: NodeJS.Timeout }
+interface Session { id: string; tokenHash: string; createdAt: number; settings: DefenceSettings; detector: QuestionDetector; audio: AudioChunkTracker; transcript: string; answers: StructuredAnswer[]; diagnostics: SessionDiagnostics; questionCounter: number; lastQuestionId?: string; revision: number; abort?: AbortController; answeredQuestionKeys: Set<string>; inFlightQuestionKeys: Set<string>; pendingQuestion?: PendingQuestion }
 interface ProjectRegistryEntry { projectId: string; displayName: string; sourcePath: string; indexPath: string; personaPath?: string; verifiedFactsPath?: string }
 type ServerMode = 'full' | 'companion';
 interface DefenceRuntime { pairings: Map<string, Pairing>; sessions: Map<string, Session>; events: EventEmitter }
@@ -34,6 +35,16 @@ export function createDefenceRuntime(): DefenceRuntime { return { pairings: new 
 function token(): string { return crypto.randomBytes(24).toString('base64url'); }
 function hash(value: string): string { return crypto.createHash('sha256').update(value).digest('hex'); }
 function safeEqual(a: string, b: string): boolean { const aa = Buffer.from(a); const bb = Buffer.from(b); return aa.length === bb.length && crypto.timingSafeEqual(aa, bb); }
+function compactTranscript(value: string): string { return value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ''); }
+export function mergeQuestionTranscript(current: string, next: string): string {
+  const left = current.replace(/\s+/g, ' ').trim(); const right = next.replace(/\s+/g, ' ').trim();
+  if (!left) return right; if (!right) return left;
+  const leftCompact = compactTranscript(left); const rightCompact = compactTranscript(right);
+  if (leftCompact === rightCompact || leftCompact.includes(rightCompact)) return left;
+  if (rightCompact.includes(leftCompact)) return right;
+  const separator = /[?!.。！？,，;；:]$/.test(left) ? ' ' : /[\u3400-\u9fff]$/.test(left) && /^[\u3400-\u9fff]/.test(right) ? '，' : ' ';
+  return `${left}${separator}${right}`;
+}
 function loopback(address?: string): boolean { return !address || address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'; }
 export function isAdminRequestAllowed(remoteAddress: string | undefined, adminLocalOnly: boolean): boolean { return !adminLocalOnly || loopback(remoteAddress); }
 
@@ -84,7 +95,7 @@ export class DefenceServer {
     const hosts = this.config.host === '0.0.0.0' ? ['127.0.0.1', ...lanAddresses()] : [this.config.host];
     const protocol = this.config.tls.enabled ? 'https' : 'http'; return { port, urls: hosts.map(host => `${protocol}://${host}:${port}`) };
   }
-  async close(): Promise<void> { this.windowsInput?.stop(); for (const client of this.wss.clients) client.close(); await new Promise<void>(resolve => this.server.close(() => resolve())); }
+  async close(): Promise<void> { this.windowsInput?.stop(); for (const session of this.sessions.values()) if (session.pendingQuestion?.timer) clearTimeout(session.pendingQuestion.timer); for (const client of this.wss.clients) client.close(); await new Promise<void>(resolve => this.server.close(() => resolve())); }
 
   private rate(remote = ''): boolean {
     const now = Date.now(); const bucket = this.requestBuckets.get(remote);
@@ -185,7 +196,8 @@ export class DefenceServer {
         const secretValid = typeof data.secret === 'string' && safeEqual(pairing.secretHash, hash(data.secret)); const codeValid = typeof data.code === 'string' && safeEqual(pairing.codeHash, hash(data.code));
         if (!secretValid && !codeValid) { pairing.failedAttempts++; if (pairing.failedAttempts >= 5) pairing.used = true; return this.json(res, 401, { error: 'invalid_or_expired_pairing', attemptsRemaining: Math.max(0, 5 - pairing.failedAttempts) }); }
         pairing.used = true; const rawToken = token(); const id = crypto.randomUUID();
-        this.sessions.set(id, { id, tokenHash: hash(rawToken), createdAt: Date.now(), settings: DEFAULT_SETTINGS, detector: new QuestionDetector(), audio: new AudioChunkTracker(), transcript: '', answers: [], diagnostics: { partialCount: 0, finalCount: 0, inputSource: this.config.input.source }, questionCounter: 0, revision: 0, answeredQuestionKeys: new Set(), inFlightQuestionKeys: new Set() });
+        const settings: DefenceSettings = { ...DEFAULT_SETTINGS, outputLanguage: this.config.input.iphoneOutputOnly ? 'bilingual' : DEFAULT_SETTINGS.outputLanguage, answerDepth: this.config.input.iphoneOutputOnly ? 'brief' : DEFAULT_SETTINGS.answerDepth };
+        this.sessions.set(id, { id, tokenHash: hash(rawToken), createdAt: Date.now(), settings, detector: new QuestionDetector(), audio: new AudioChunkTracker(), transcript: '', answers: [], diagnostics: { partialCount: 0, finalCount: 0, inputSource: this.config.input.source }, questionCounter: 0, revision: 0, answeredQuestionKeys: new Set(), inFlightQuestionKeys: new Set() });
         return this.json(res, 200, { sessionId: id, token: rawToken, expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString() });
       }
       if (url.pathname.startsWith('/api/pairing/') && method === 'DELETE') { if (!adminAllowed) return this.json(res, 403, { error: 'admin_loopback_required' }); this.pairings.delete(url.pathname.split('/').pop()!); return this.json(res, 200, { ok: true }); }
@@ -199,7 +211,7 @@ export class DefenceServer {
       if (url.pathname === '/api/project/index' && method === 'DELETE') { if (!adminAllowed) return this.json(res, 403, { error: 'admin_loopback_required' }); await this.indexer.clear(); return this.json(res, 200, { ok: true }); }
       if (url.pathname === '/api/defence/session' && method === 'POST') { const session = this.auth(req); if (!session) return this.json(res, 401, { error: 'unauthorized' }); return this.json(res, 200, { id: session.id, settings: session.settings }); }
       const sessionMatch = url.pathname.match(/^\/api\/defence\/session\/([^/]+)$/);
-      if (sessionMatch) { const session = this.auth(req); if (!session || session.id !== sessionMatch[1]) return this.json(res, 401, { error: 'unauthorized' }); if (method === 'DELETE') { this.sessions.delete(session.id); return this.json(res, 200, { ok: true }); } return this.json(res, 200, { id: session.id, settings: session.settings, transcript: session.transcript, answers: session.answers, diagnostics: session.diagnostics, nextAudioSequence: session.audio.nextSequence }); }
+      if (sessionMatch) { const session = this.auth(req); if (!session || session.id !== sessionMatch[1]) return this.json(res, 401, { error: 'unauthorized' }); if (method === 'DELETE') { if (session.pendingQuestion?.timer) clearTimeout(session.pendingQuestion.timer); this.sessions.delete(session.id); return this.json(res, 200, { ok: true }); } return this.json(res, 200, { id: session.id, settings: session.settings, transcript: session.transcript, answers: session.answers, diagnostics: session.diagnostics, nextAudioSequence: session.audio.nextSequence }); }
       if (url.pathname === '/api/defence/answer' && method === 'POST') { const session = this.auth(req); if (!session) return this.json(res, 401, { error: 'unauthorized' }); const data = await this.body(req); const answer = await this.generate(session, String(data.question || '')); return this.json(res, 200, answer); }
       if (url.pathname === '/api/defence/retry' && method === 'POST') { const session = this.auth(req); if (!session) return this.json(res, 401, { error: 'unauthorized' }); const question = session.answers.at(-1)?.question || ''; return this.json(res, 200, await this.generate(session, question)); }
       if (url.pathname === '/api/defence/history' && method === 'GET') { const session = this.auth(req); if (!session) return this.json(res, 401, { error: 'unauthorized' }); return this.json(res, 200, session.answers); }
@@ -241,7 +253,7 @@ export class DefenceServer {
         }
         if (message.type === 'generate') { const question = String(message.question || session.transcript); this.send(ws, { type: 'retrieval', state: 'searching' }); const answer = await this.generate(session, question); return this.send(ws, { type: 'answer', answer }); }
         if (message.type === 'cancel') { session.abort?.abort(); session.revision++; return this.send(ws, { type: 'cancelled', questionId: session.lastQuestionId, revision: session.revision }); }
-        if (message.type === 'clear') { session.transcript = ''; session.answers = []; session.detector.reset(); session.answeredQuestionKeys.clear(); session.inFlightQuestionKeys.clear(); return this.send(ws, { type: 'cleared' }); }
+        if (message.type === 'clear') { if (session.pendingQuestion?.timer) clearTimeout(session.pendingQuestion.timer); session.pendingQuestion = undefined; session.transcript = ''; session.answers = []; session.detector.reset(); session.answeredQuestionKeys.clear(); session.inFlightQuestionKeys.clear(); return this.send(ws, { type: 'cleared' }); }
       } catch (error) { const code = error instanceof ProviderError || error instanceof AudioProtocolError ? error.code : 'MESSAGE_FAILED'; session.diagnostics.lastErrorCode = code; this.send(ws, { type: 'error', code, message: error instanceof Error ? error.message : 'The request failed.' }); }
     });
   }
@@ -298,16 +310,37 @@ export class DefenceServer {
         this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'transcript', text: result.value, final: false, detector: { state: 'candidate', confidence: .5 }, source: segment.source, sourceType: segment.sourceType } });
         continue;
       }
-      session.diagnostics.finalCount++;
       if (!transcriptDecision.allowQuestion) {
         this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'transcript', text: result.value, final: true, detector: { state: 'duplicate', confidence: 1 }, source: segment.source, sourceType: segment.sourceType, suppressed: transcriptDecision.reason } });
         continue;
       }
-      const detector = session.detector.push(result.value, { final: true, silenceMs: 1000 });
-      session.diagnostics.questionFinalizationMs = segment.finalizationLatencyMs; session.diagnostics.questionSource = segment.sourceType;
-      this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'transcript', text: result.value, final: true, detector, source: segment.source, sourceType: segment.sourceType } });
-      if (detector.state === 'complete' && detector.question) void this.generateTwoStage(session, detector.question, manifest, pipelineStarted, segment.sourceType);
+      session.diagnostics.questionSource = segment.sourceType;
+      this.queueWindowsQuestionPart(session, result.value, segment.sourceType, pipelineStarted);
+      void this.engine.prewarm(session.transcript, manifest);
     }
+  }
+  private queueWindowsQuestionPart(session: Session, text: string, source: string, pipelineStarted: number): void {
+    if (session.pendingQuestion?.timer) clearTimeout(session.pendingQuestion.timer);
+    const pending: PendingQuestion = {
+      text: mergeQuestionTranscript(session.pendingQuestion?.text || '', text),
+      source,
+      pipelineStarted,
+    };
+    session.pendingQuestion = pending; session.transcript = pending.text;
+    this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'transcript', text: pending.text, final: false, pendingQuestion: true, detector: { state: 'candidate', confidence: .65 }, source: 'question-merge', sourceType: source } });
+    const elapsedSinceSpeechEnd = Math.max(0, performance.now() - pipelineStarted);
+    const remaining = Math.max(100, this.config.input.vad.questionMergeSilenceMs - elapsedSinceSpeechEnd);
+    pending.timer = setTimeout(() => void this.finalizePendingQuestion(session, pending), remaining);
+  }
+  private async finalizePendingQuestion(session: Session, pending: PendingQuestion): Promise<void> {
+    if (session.pendingQuestion !== pending) return;
+    session.pendingQuestion = undefined;
+    const detector = session.detector.push(pending.text, { final: true, silenceMs: this.config.input.vad.questionMergeSilenceMs });
+    session.diagnostics.finalCount++; session.diagnostics.questionFinalizationMs = Math.round(performance.now() - pending.pipelineStarted); session.diagnostics.questionSource = pending.source;
+    this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'transcript', text: pending.text, final: true, detector, source: 'question-merge', sourceType: pending.source } });
+    if (detector.state !== 'complete' || !detector.question) return;
+    try { await this.generateTwoStage(session, detector.question, await this.indexer.load(), pending.pipelineStarted, pending.source); }
+    catch (error) { this.broadcastInputError(error); }
   }
   private async generateTwoStage(session: Session, question: string, manifest: Awaited<ReturnType<ProjectIndexer['load']>>, pipelineStarted: number, questionSource?: string): Promise<void> {
     const key = question.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();

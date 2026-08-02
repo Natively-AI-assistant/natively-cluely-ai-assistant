@@ -16,21 +16,22 @@ function keywords(question: string): string[] {
 function fallbackAnswer(question: string, evidence: Evidence[], language: 'zh' | 'en' | 'mixed', settings: DefenceSettings, projectId = ''): Partial<StructuredAnswer> {
   if (!evidence.length) return {
     spokenAnswer: language === 'en' ? NO_EVIDENCE_EN : NO_EVIDENCE_ZH, noEvidence: true,
+    alternateLanguageAnswer: settings.outputLanguage === 'bilingual' ? (language === 'en' ? NO_EVIDENCE_ZH : NO_EVIDENCE_EN) : undefined,
     missingInformation: language === 'en' ? ['Relevant implementation, documentation, or test evidence'] : ['相关实现、文档或测试证据'],
     followUps: [],
   };
   const count = settings.answerDepth === 'brief' ? 1 : settings.answerDepth === 'deep' ? 4 : 2;
   const facts = evidence.slice(0, count).map(item => item.excerpt.replace(/\s+/g, ' ').slice(0, settings.answerDepth === 'brief' ? 180 : 340));
   if (projectId === 'cba-import-candidate-ranking') {
-    const spokenAnswer = language === 'en'
-      ? `This project uses public multi-league player-season data for Top-K CBA import-candidate ranking and scouting-shortlist decision support; it does not make a deterministic signing prediction. The cited project evidence states: ${facts.join(' ')}`
-      : `这个项目使用多联盟公开 player-season 数据，对潜在 CBA 外援候选人进行 Top-K 排序，为 scouting shortlist 提供决策支持，并不作确定性签约预测。项目证据显示：${facts.join('；')}`;
-    return { spokenAnswer, noEvidence: false, followUps: language === 'en' ? ['Would you like the code path or metric interpretation?'] : ['你希望我展开代码调用链还是指标解释？'] };
+    const enAnswer = `This project uses public multi-league player-season data for Top-K CBA import-candidate ranking and scouting-shortlist decision support; it does not make a deterministic signing prediction. The cited project evidence states: ${facts.join(' ')}`;
+    const zhAnswer = `这个项目使用多联盟公开 player-season 数据，对潜在 CBA 外援候选人进行 Top-K 排序，为 scouting shortlist 提供决策支持，并不作确定性签约预测。项目证据显示：${facts.join('；')}`;
+    const spokenAnswer = settings.outputLanguage === 'bilingual' ? zhAnswer : language === 'en' ? enAnswer : zhAnswer;
+    return { spokenAnswer, alternateLanguageAnswer: settings.outputLanguage === 'bilingual' ? enAnswer : undefined, noEvidence: false, followUps: language === 'en' ? ['Would you like the code path or metric interpretation?'] : ['你希望我展开代码调用链还是指标解释？'] };
   }
-  const spokenAnswer = language === 'en'
-    ? `The project evidence shows the following: ${facts.join(' ')} These points come directly from the cited project files.`
-    : `根据项目证据，可以直接确认：${facts.join('；')}。以上内容来自下方列出的项目文件。`;
-  return { spokenAnswer, noEvidence: false, followUps: language === 'en' ? ['What trade-offs does this implementation have?'] : ['这一实现有哪些取舍？'] };
+  const enAnswer = `The project evidence shows the following: ${facts.join(' ')} These points come directly from the cited project files.`;
+  const zhAnswer = `根据项目证据，可以直接确认：${facts.join('；')}。以上内容来自下方列出的项目文件。`;
+  const spokenAnswer = settings.outputLanguage === 'bilingual' ? zhAnswer : language === 'en' ? enAnswer : zhAnswer;
+  return { spokenAnswer, alternateLanguageAnswer: settings.outputLanguage === 'bilingual' ? enAnswer : undefined, noEvidence: false, followUps: language === 'en' ? ['What trade-offs does this implementation have?'] : ['这一实现有哪些取舍？'] };
 }
 
 function requestedLanguage(settings: DefenceSettings, detected: 'zh' | 'en' | 'mixed'): string {

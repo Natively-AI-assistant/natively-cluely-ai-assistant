@@ -490,7 +490,7 @@ You explicitly control:
 
 ## Installation (Developers & Contributors)
 
-> Building the iPhone project-defence companion? See [Project Defence Copilot](docs/PROJECT_DEFENCE_COPILOT.md) for local indexing, one-time pairing, provider configuration, iPhone HTTPS setup, and privacy defaults.
+> 使用“问答小助手”识别电脑语音、定制项目知识库并在手机浏览器查看中英文回答：参见 [问答小助手](docs/PROJECT_DEFENCE_COPILOT.md)。文档包含本地索引、一次性配对、Provider 配置、手机 HTTPS/WSS 和隐私默认值。
 
 > [!NOTE]
 > **macOS Users (Both Apple Silicon & Intel Macs supported):**

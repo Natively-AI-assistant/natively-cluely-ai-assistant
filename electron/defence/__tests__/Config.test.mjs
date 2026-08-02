@@ -20,3 +20,10 @@ test('companion-only listener settings are parsed independently',()=>{
   assert.equal(config.companionPort,5432);
   assert.equal(config.companionPublicUrl,'https://defence.example.test');
 });
+
+test('question merge silence waits longer than packet-level VAD silence',()=>{
+  const config=loadDefenceConfig({VAD_SILENCE_MS:'650',QUESTION_MERGE_SILENCE_MS:'1600'});
+  assert.equal(config.input.vad.silenceMs,650);
+  assert.equal(config.input.vad.questionMergeSilenceMs,1600);
+  assert.ok(config.input.vad.questionMergeSilenceMs>config.input.vad.silenceMs);
+});

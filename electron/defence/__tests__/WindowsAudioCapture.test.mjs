@@ -28,6 +28,15 @@ test('output-only PWA exits before requesting microphone permission', () => {
   assert.ok(startFunction.indexOf("if(diagnostics.iphoneOutputOnly)throw") >= 0);
   assert.ok(startFunction.indexOf("if(diagnostics.iphoneOutputOnly)throw") < startFunction.indexOf('getUserMedia'));
   assert.match(source, /classList\.toggle\('hidden',outputOnly\)/);
+  assert.match(source, /appendTeleprompter\(answer\)/);
+  assert.match(source, /中文回答/);
+  assert.match(source, /English answer/);
+  const teleprompterRenderer = source.slice(source.indexOf('function appendTeleprompter'), source.indexOf('function renderTeleprompterHistory'));
+  assert.doesNotMatch(teleprompterRenderer, /answer\.(?:evidence|keywords)|diagnostic/i);
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const teleprompterCss = fs.readFileSync(new URL('../public/teleprompter.css', import.meta.url), 'utf8');
+  assert.match(html, /id="teleprompterHistory"/);
+  assert.match(teleprompterCss, /\.output-only #diagnosticsPanel/);
 });
 
 test('mono PCM is encoded as a valid 16 kHz WAV', () => {
@@ -55,6 +64,21 @@ test('many PCM frames produce one final utterance and repeated audio is suppress
   assert.equal(utterances[0].source, 'system-loopback');
   assert.equal(utterances[0].sourceType, 'remote-process');
   assert.ok(utterances[0].qpcEndMs >= utterances[0].qpcStartMs);
+});
+
+test('packet-idle flush waits for the question merge window before finalizing application loopback audio', () => {
+  const config = loadDefenceConfig({ VAD_MIN_SPEECH_MS: '300', VAD_SILENCE_MS: '650', VAD_RMS_THRESHOLD: '0.01' });
+  const segmenter = new WindowsVadSegmenter(config.input.vad, 'specific-process-loopback', 'remote-process', 'process:123');
+  const utterances = [];
+  segmenter.on('utterance', value => utterances.push(value));
+  segmenter.push(Buffer.concat(Array(20).fill(0).map(() => speechFrame())), performance.now());
+  assert.equal(utterances.length, 0);
+  segmenter.flush(config.input.vad.questionMergeSilenceMs);
+  assert.equal(utterances.length, 1);
+  assert.equal(utterances[0].finalizationLatencyMs, 1600);
+  assert.equal(utterances[0].sourceType, 'remote-process');
+  const providerSource = fs.readFileSync(new URL('../windowsAudioCapture.ts', import.meta.url), 'utf8');
+  assert.match(providerSource, /sourceType === 'remote-process' \? this\.config\.input\.vad\.questionMergeSilenceMs/);
 });
 
 function segment(sourceType, start, fingerprint, source = sourceType === 'remote-process' ? 'specific-process-loopback' : 'windows-microphone') {

@@ -73,10 +73,17 @@ export class SearchProvider {
   }
 }
 
-function validateStructured(value: any): Partial<StructuredAnswer> {
+function englishDominant(value: string): boolean {
+  const latin = (value.match(/[A-Za-z]/g) || []).length;
+  const cjk = (value.match(/[\u3400-\u9fff]/g) || []).length;
+  return latin >= 20 && latin >= cjk * 2;
+}
+
+function validateStructured(value: any, language: string): Partial<StructuredAnswer> {
   if (!value || typeof value !== 'object' || typeof value.spokenAnswer !== 'string' || typeof value.noEvidence !== 'boolean') throw new ProviderError('INVALID_STRUCTURED_OUTPUT', 'LLM output did not match the required structured schema.');
   if (value.keywords !== undefined && !Array.isArray(value.keywords)) throw new ProviderError('INVALID_STRUCTURED_OUTPUT', 'LLM keywords must be an array.');
   if (value.followUps !== undefined && !Array.isArray(value.followUps)) throw new ProviderError('INVALID_STRUCTURED_OUTPUT', 'LLM followUps must be an array.');
+  if (language === 'bilingual' && (typeof value.alternateLanguageAnswer !== 'string' || !englishDominant(value.alternateLanguageAnswer))) throw new ProviderError('INVALID_STRUCTURED_OUTPUT', 'Bilingual output requires a genuinely English alternateLanguageAnswer.');
   return value;
 }
 
@@ -87,7 +94,11 @@ export class LlmProvider {
   async answerWithMetrics(question: string, evidence: Evidence[], external: Evidence[], language: string, depth: string, groundingRules = ''): Promise<ProviderResult<Partial<StructuredAnswer>>> {
     if (!this.available()) throw new ProviderError('AUTHENTICATION_FAILED', 'LLM configuration is incomplete.');
     const evidencePayload = [...evidence, ...external].map((item, index) => ({ id: index + 1, ...item }));
-    const languageRules = language === 'en' ? 'Write spokenAnswer in English and questionExplanation in Chinese.' : 'Write spokenAnswer and questionExplanation in Chinese while preserving English technical terms.';
+    const languageRules = language === 'bilingual'
+      ? 'Write spokenAnswer in natural spoken Chinese and alternateLanguageAnswer in natural spoken English only. The English field must be predominantly English, not a Chinese restatement. Give each version 3 to 5 concise spoken sentences, with no headings, bullet points, or filler. Both must answer the same question from the same evidence.'
+      : language === 'en'
+        ? 'Write spokenAnswer in English and questionExplanation in Chinese.'
+        : 'Write spokenAnswer and questionExplanation in Chinese while preserving English technical terms.';
     const prompt = `You are a project defence speaking copilot. Answer only from PROJECT_EVIDENCE for project facts. EXTERNAL_SOURCES never prove project implementation. Never invent files, symbols, metrics, incidents, or status. Keep every cited evidence ID unchanged. If evidence is insufficient set noEvidence=true. Preserve code names. ${languageRules} Output a JSON object with keys: questionExplanation, keywords, spokenAnswer, alternateLanguageAnswer, followUps, noEvidence, missingInformation. Example JSON: {"spokenAnswer":"...","noEvidence":false,"keywords":[],"followUps":[]}. Requested output=${language}, depth=${depth}.\nGROUNDING_RULES:\n${groundingRules || 'Use only the supplied project evidence.'}\nQUESTION:\n${question}\nPROJECT_EVIDENCE:\n${JSON.stringify(evidencePayload)}`;
     const started = performance.now(); let lastInvalid: ProviderError | undefined;
     for (let structuredAttempt = 0; structuredAttempt < 2; structuredAttempt++) {
@@ -99,7 +110,7 @@ export class LlmProvider {
         const content = json.choices?.[0]?.message?.content;
         const parsed = JSON.parse(String(content || '').replace(/^```json\s*|\s*```$/g, ''));
         result.timing.retries += structuredAttempt; result.timing.totalMs = Math.round(performance.now() - started);
-        return { value: validateStructured(parsed), timing: result.timing };
+        return { value: validateStructured(parsed, language), timing: result.timing };
       } catch (error) {
         lastInvalid = error instanceof ProviderError ? error : new ProviderError('INVALID_STRUCTURED_OUTPUT', 'LLM response was not valid structured JSON.', result.timing.status, result.timing.retries + structuredAttempt);
       }
