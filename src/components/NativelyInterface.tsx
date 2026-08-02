@@ -6081,6 +6081,7 @@ Provide only the answer, nothing else.`;
               {showAnswerPanel && (
                 <motion.div
                   ref={scrollContainerRef}
+                  data-testid="sd-overlay-answer-panel"
                   className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 no-drag isolate"
                   layout={false}
                   style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH }}
