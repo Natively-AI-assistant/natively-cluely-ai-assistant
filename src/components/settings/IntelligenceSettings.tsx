@@ -702,7 +702,12 @@ export const IntelligenceSettings: React.FC = () => {
   // payload exposes an `envForced` field, honor it; for now toggles are always enabled.)
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    // data-settings-stagger: the 4 blocks below settle in sequence on tab
+    // entrance (rules in src/index.css). Safe here — all four direct children
+    // are plain elements, and the file's own motion (12 AnimatePresence, all
+    // `initial={false}`, plus StaggerRow inside the "Customize" disclosure)
+    // is interaction-only and lives deeper in the tree.
+    <div className="space-y-6 max-w-2xl" data-settings-stagger>
       <header>
         <h3 className="text-lg font-bold text-text-primary mb-1">{t('Intelligence')}</h3>
         <p className="text-xs text-text-secondary mb-5">

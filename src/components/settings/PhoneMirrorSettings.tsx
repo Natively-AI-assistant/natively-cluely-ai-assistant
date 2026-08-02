@@ -286,7 +286,7 @@ export const PhoneMirrorSettings: React.FC = () => {
   const hiddenOptionalCount = 4;
 
   return (
-    <div className="space-y-6 animated fadeIn">
+    <div className="space-y-6 animated fadeIn" data-settings-stagger>
       <header>
         <h3 className="text-lg font-bold text-text-primary mb-1">{t('Sync')}</h3>
         <p className="text-xs text-text-secondary mb-5">

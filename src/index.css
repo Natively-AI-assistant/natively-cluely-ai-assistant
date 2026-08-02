@@ -22,7 +22,7 @@
   /* System Fonts - SF Pro */
   --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 
-  /* ─── SOFT ORCHID PALETTE — single canonical source of truth ──────────────
+  /* ─── PERIWINKLE PALETTE — single canonical source of truth ──────────────
      The 10-step scale, defined ONCE here at :root so it's available to any
      stylesheet in the document via normal CSS custom-property inheritance —
      including the separate `.pi-root` (ProfileIntelligenceSettings.tsx) and
@@ -31,18 +31,63 @@
      values via var()/color-mix() rather than duplicating hex. If the hue
      ever needs adjusting, this is the only place to change it.
      --------------------------------------------------------------------- */
-  --orchid-50:  #FBF6FD;
-  --orchid-100: #F5E9F9;
-  --orchid-200: #EBCFF3;
-  --orchid-300: #D9A7E8; /* dark-mode accent (light bg, needs dark foreground) */
-  --orchid-400: #C987DD;
-  --orchid-500: #B66ACF;
-  --orchid-600: #984DB2; /* light-mode accent (contrast-corrected — see SoftOrchidContrastGuard.test.mjs) */
-  --orchid-700: #773B8B;
-  --orchid-800: #572C66;
-  --orchid-900: #3A1D45;
-  --orchid-on-accent-dark: #1A1020;  /* foreground for solid orchid-300 fills */
-  --orchid-on-accent-light: #FFFFFF; /* foreground for solid orchid-600 fills */
+  /* PERIWINKLE (2026-08), replacing Soft Orchid (2026-07) as the app-wide
+     accent — a re-hue from magenta-violet (H≈330) to blue-violet (H≈296).
+     Renamed as well as revalued, so nothing in the tree still says "orchid":
+     the scale, the .pi-root and .modes-manager-root blocks that consume it,
+     the [data-settings-theme] scoping attribute and both guard tests moved
+     together. If you are grepping for the old name, it is gone.
+
+     Derivation, so a future step can be added consistently: -300 is the
+     anchor, picked by eye. Every other step keeps Soft Orchid's OKLCH
+     LIGHTNESS ramp (so all the contrast relationships the old scale was tuned
+     for are preserved), pins hue to the anchor's 296.4°, and scales chroma by
+     1.163 — the anchor's chroma over the old -300's — with per-step gamut
+     clamping. That is why -400 and -500 are more saturated than their orchid
+     counterparts: blue-violet has more gamut headroom there than magenta did. */
+  --periwinkle-50:  #F9F7FF;
+  --periwinkle-100: #EFEAFF;
+  --periwinkle-200: #DED3FF;
+  --periwinkle-300: #B9A1F6; /* dark-mode accent (light bg, needs dark foreground) — the anchor */
+  --periwinkle-400: #AF8CFE;
+  --periwinkle-500: #9C6FF3;
+  --periwinkle-600: #8050D4; /* light-mode accent (contrast-corrected — see PeriwinkleContrastGuard.test.mjs) */
+  --periwinkle-700: #643EA6;
+  --periwinkle-800: #492E7A;
+  --periwinkle-900: #311E52;
+  --periwinkle-on-accent-dark: #14102A;  /* foreground for solid periwinkle-300 fills */
+  --periwinkle-on-accent-light: #FFFFFF; /* foreground for solid periwinkle-600 fills */
+
+  /* ─── Meeting notes → Usage tab, user question bubble ─────────────────────
+     This bubble is the only chromatic element in the whole view — the AI answer
+     below it is an open canvas of grey text — so it carries the entire accent
+     moment, and it therefore tracks --periwinkle-300 rather than holding a
+     private hue.
+
+     ACCESSIBILITY EXCEPTION, SEVERE — the foreground is white by explicit
+     owner instruction, on a fill the palette calibrates for a DARK foreground.
+     White measures 2.21:1 on the top gradient stop and 2.55:1 on the bottom,
+     against a 4.5:1 WCAG AA floor for normal text (15px regular, so the 3:1
+     large-text allowance does not apply); neither stop clears even the 3:1 bar
+     used for non-text UI. --periwinkle-on-accent-dark on this same fill gives
+     8.35:1, which is what the 300 step was designed for. Two ways to keep
+     white legible if this is ever revisited: swap the foreground back, or
+     point --bubble-user-bg at --periwinkle-600 (white clears AA there at
+     5.23:1, as light mode already does). Both stops are pinned in
+     PeriwinkleContrastGuard.test.mjs.
+
+     --bubble-user-bg MUST stay a solid colour: it is consumed through
+     Tailwind's bg-[var(...)], which compiles to `background-color`, and a
+     gradient value there is silently dropped. The gradient rides
+     background-image in .bubble-user instead.
+
+     Dark-mode values; the light-theme override lives in the
+     [data-theme='light'] block. Every stop is asserted in
+     PeriwinkleContrastGuard.test.mjs. */
+  --bubble-user-bg: var(--periwinkle-300);
+  --bubble-user-fg: #FFFFFF;
+  --bubble-user-grad-to: #AC96E5;
+  --bubble-user-glow: rgba(185, 161, 246, 0.28);
 
   /* --- SEMANTIC TOKEN SYSTEM (DEFAULT: DARK) --- */
   /* Reference Image Matching */
@@ -85,8 +130,8 @@
   --border-muted: #333333;
 
   /* Promoted from Settings-only to the app-wide default (Phase 2). */
-  --accent-primary: var(--orchid-300);
-  --accent-muted: color-mix(in srgb, var(--orchid-300) 15%, transparent);
+  --accent-primary: var(--periwinkle-300);
+  --accent-muted: color-mix(in srgb, var(--periwinkle-300) 15%, transparent);
 
   --bg-component: #262626;
   /* Specific legacy value */
@@ -119,36 +164,43 @@
   --overlay-text-muted: rgba(255, 255, 255, 0.7);
   --overlay-text-placeholder: rgba(255, 255, 255, 0.58);
   --overlay-text-strong: #ffffff;
+  /* Teleprompter hot words — lavender, deliberately NOT --accent-primary.
+     The accent also paints buttons, focus rings and usage bars; the glance
+     highlight is its own concern and moves independently. Defined once per
+     scope that decides light-on-dark vs dark-on-light (i.e. wherever
+     --overlay-text-primary is set), because that is what the ratio depends
+     on. 9.03:1 on the #1E1E1E overlay — see PeriwinkleContrastGuard. */
+  --hotword-color: #C4B5FD;
   --overlay-shell-blur: calc(2px + (var(--overlay-opacity) * 18px));
   --overlay-pill-blur: calc(1px + (var(--overlay-opacity) * 12px));
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 6px);
 
 
-  /* Primary Action Button Defaults (Dark) — promoted to orchid (Phase 2) */
-  --btn-primary-bg: var(--orchid-300);
+  /* Primary Action Button Defaults (Dark) — promoted to the accent (Phase 2) */
+  --btn-primary-bg: var(--periwinkle-300);
   --btn-primary-hover: #E4BCEF; /* not a canonical scale step — dedicated lighter dark-mode hover tint */
-  --btn-primary-disabled-bg: color-mix(in srgb, var(--orchid-300) 12%, transparent);
-  --btn-primary-disabled-border: color-mix(in srgb, var(--orchid-300) 20%, transparent);
-  --btn-primary-disabled-text: color-mix(in srgb, var(--orchid-300) 45%, transparent);
-  --btn-primary-shadow-color: color-mix(in srgb, var(--orchid-500) 20%, transparent);
+  --btn-primary-disabled-bg: color-mix(in srgb, var(--periwinkle-300) 12%, transparent);
+  --btn-primary-disabled-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
+  --btn-primary-disabled-text: color-mix(in srgb, var(--periwinkle-300) 45%, transparent);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-500) 20%, transparent);
 
   /* Semantic accent tiers — promoted from Settings-only to the app-wide
      default (Phase 2). Numerically identical to the [data-settings-theme
-     ="orchid"] scoped block below, which is now a redundant no-op override
+     ="periwinkle"] scoped block below, which is now a redundant no-op override
      kept only so a future Settings-specific divergence has somewhere to go. */
-  --accent-subtle: color-mix(in srgb, var(--orchid-300) 10%, transparent);
+  --accent-subtle: color-mix(in srgb, var(--periwinkle-300) 10%, transparent);
   --accent-hover: #E4BCEF;
-  --accent-pressed: var(--orchid-400);
-  --accent-strong: var(--orchid-500);
-  --accent-border: color-mix(in srgb, var(--orchid-300) 28%, transparent);
-  --accent-focus: color-mix(in srgb, var(--orchid-300) 48%, transparent);
-  --accent-shadow-20: color-mix(in srgb, var(--orchid-500) 20%, transparent);
-  --on-accent: var(--orchid-on-accent-dark);
-  --on-accent-surface: color-mix(in srgb, var(--orchid-on-accent-dark) 12%, transparent);
+  --accent-pressed: var(--periwinkle-400);
+  --accent-strong: var(--periwinkle-500);
+  --accent-border: color-mix(in srgb, var(--periwinkle-300) 28%, transparent);
+  --accent-focus: color-mix(in srgb, var(--periwinkle-300) 48%, transparent);
+  --accent-shadow-20: color-mix(in srgb, var(--periwinkle-500) 20%, transparent);
+  --on-accent: var(--periwinkle-on-accent-dark);
+  --on-accent-surface: color-mix(in srgb, var(--periwinkle-on-accent-dark) 12%, transparent);
 
   /* Legacy blue action-button tokens — deliberately defined ONLY here and in
-     [data-theme='light'], never inside the [data-settings-theme="orchid"]
-     blocks below, so specific Settings CTAs can opt out of the orchid
+     [data-theme='light'], never inside the [data-settings-theme="periwinkle"]
+     blocks below, so specific Settings CTAs can opt out of the
      accent and stay blue regardless of scope. */
   --legacy-action-bg: #3b82f6;
   --legacy-action-hover: #60a5fa;
@@ -162,27 +214,27 @@
   --legacy-action-disabled-text: rgba(96, 165, 250, 0.4);
 }
 
-/* Phase-1 Settings-only Soft Orchid accent override (dark mode), scoped via
+/* Phase-1 Settings-only accent override (dark mode), scoped via
    data-settings-theme so the rest of the app keeps the blue brand accent. */
-[data-settings-theme="orchid"] {
-  --accent-primary: var(--orchid-300);
+[data-settings-theme="periwinkle"] {
+  --accent-primary: var(--periwinkle-300);
   --accent-hover: #E4BCEF; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
-  --accent-pressed: var(--orchid-400);
-  --accent-strong: var(--orchid-500);
-  --accent-subtle: color-mix(in srgb, var(--orchid-300) 10%, transparent);
-  --accent-muted: color-mix(in srgb, var(--orchid-300) 16%, transparent);
-  --accent-border: color-mix(in srgb, var(--orchid-300) 28%, transparent);
-  --accent-focus: color-mix(in srgb, var(--orchid-300) 48%, transparent);
-  --accent-shadow-20: color-mix(in srgb, var(--orchid-500) 20%, transparent);
-  --on-accent: var(--orchid-on-accent-dark);
-  --on-accent-surface: color-mix(in srgb, var(--orchid-on-accent-dark) 12%, transparent);
+  --accent-pressed: var(--periwinkle-400);
+  --accent-strong: var(--periwinkle-500);
+  --accent-subtle: color-mix(in srgb, var(--periwinkle-300) 10%, transparent);
+  --accent-muted: color-mix(in srgb, var(--periwinkle-300) 16%, transparent);
+  --accent-border: color-mix(in srgb, var(--periwinkle-300) 28%, transparent);
+  --accent-focus: color-mix(in srgb, var(--periwinkle-300) 48%, transparent);
+  --accent-shadow-20: color-mix(in srgb, var(--periwinkle-500) 20%, transparent);
+  --on-accent: var(--periwinkle-on-accent-dark);
+  --on-accent-surface: color-mix(in srgb, var(--periwinkle-on-accent-dark) 12%, transparent);
 
-  --btn-primary-bg: var(--orchid-300);
+  --btn-primary-bg: var(--periwinkle-300);
   --btn-primary-hover: #E4BCEF; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
-  --btn-primary-disabled-bg: color-mix(in srgb, var(--orchid-300) 12%, transparent);
-  --btn-primary-disabled-border: color-mix(in srgb, var(--orchid-300) 20%, transparent);
-  --btn-primary-disabled-text: color-mix(in srgb, var(--orchid-300) 45%, transparent);
-  --btn-primary-shadow-color: color-mix(in srgb, var(--orchid-500) 20%, transparent);
+  --btn-primary-disabled-bg: color-mix(in srgb, var(--periwinkle-300) 12%, transparent);
+  --btn-primary-disabled-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
+  --btn-primary-disabled-text: color-mix(in srgb, var(--periwinkle-300) 45%, transparent);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-500) 20%, transparent);
 }
 
 [data-theme='light'] {
@@ -230,8 +282,8 @@
   --border-muted:      rgba(0, 0, 0, 0.11);   /* inputs, tables                   */
 
   /* ── Accent — promoted from Settings-only to the app-wide default (Phase 2) ── */
-  --accent-primary:    var(--orchid-600);
-  --accent-muted:      color-mix(in srgb, var(--orchid-600) 10%, transparent);
+  --accent-primary:    var(--periwinkle-600);
+  --accent-muted:      color-mix(in srgb, var(--periwinkle-600) 10%, transparent);
 
   --bg-component:      #F3F4F6;
 
@@ -263,28 +315,43 @@
   --overlay-text-muted:      rgba(107, 114, 128, 0.90);
   --overlay-text-placeholder:rgba(156, 163, 175, 0.90);
   --overlay-text-strong:     #111827;
+  /* Dark lavender: this scope puts dark text on a near-white overlay, so the
+     light lavender above would be invisible here. 5.33:1 on white. */
+  --hotword-color:           #6D5AC7;
   --overlay-shell-blur:      calc(2px + (var(--overlay-opacity) * 18px));
   --overlay-pill-blur:       calc(2px + (var(--overlay-opacity) * 12px));
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 5px);
 
 
-  /* Primary Action Button (Light) — promoted to orchid (Phase 2) */
-  --btn-primary-bg: var(--orchid-600);
-  --btn-primary-hover: var(--orchid-700);
+  /* Primary Action Button (Light) — promoted to the accent (Phase 2) */
+  --btn-primary-bg: var(--periwinkle-600);
+  --btn-primary-hover: var(--periwinkle-700);
   --btn-primary-disabled-bg: var(--bg-input); /* #F9FAFB */
   --btn-primary-disabled-border: var(--border-subtle);
   --btn-primary-disabled-text: var(--text-tertiary);
-  --btn-primary-shadow-color: color-mix(in srgb, var(--orchid-600) 15%, transparent);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-600) 15%, transparent);
 
-  --accent-subtle: color-mix(in srgb, var(--orchid-600) 8%, transparent);
-  --accent-hover: var(--orchid-700);
-  --accent-pressed: var(--orchid-800);
-  --accent-strong: var(--orchid-700);
-  --accent-border: color-mix(in srgb, var(--orchid-600) 24%, transparent);
-  --accent-focus: color-mix(in srgb, var(--orchid-600) 40%, transparent);
-  --accent-shadow-20: color-mix(in srgb, var(--orchid-600) 18%, transparent);
-  --on-accent: var(--orchid-on-accent-light);
-  --on-accent-surface: color-mix(in srgb, var(--orchid-on-accent-light) 18%, transparent);
+  --accent-subtle: color-mix(in srgb, var(--periwinkle-600) 8%, transparent);
+  --accent-hover: var(--periwinkle-700);
+  --accent-pressed: var(--periwinkle-800);
+  --accent-strong: var(--periwinkle-700);
+  --accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
+  --accent-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
+  --accent-shadow-20: color-mix(in srgb, var(--periwinkle-600) 18%, transparent);
+  --on-accent: var(--periwinkle-on-accent-light);
+  --on-accent-surface: color-mix(in srgb, var(--periwinkle-on-accent-light) 18%, transparent);
+
+  /* Question bubble, light theme. The dark-mode lavender-pink is tuned for a
+     near-black ground and loses its separation on the #f5f5f5 pane, so light
+     keeps the solid periwinkle-600 + white it already had.
+     grad-to and glow MUST be redeclared here even though the hue is unchanged:
+     .bubble-user references them unconditionally, and an undefined custom
+     property drops the entire declaration silently — leaving light mode with
+     no gradient and no shadow, with nothing to indicate why. */
+  --bubble-user-bg: var(--periwinkle-600);
+  --bubble-user-fg: #FFFFFF;
+  --bubble-user-grad-to: #764AC3;
+  --bubble-user-glow: rgba(128, 80, 212, 0.28);
 
   --legacy-action-bg: #2563EB;
   --legacy-action-hover: #1d4ed8;
@@ -298,27 +365,27 @@
   --legacy-action-disabled-text: var(--text-tertiary);
 }
 
-/* Phase-1 Settings-only Soft Orchid accent override (light mode), scoped via
+/* Phase-1 Settings-only accent override (light mode), scoped via
    data-settings-theme so the rest of the app keeps the blue brand accent. */
-[data-theme='light'] [data-settings-theme="orchid"] {
-  --accent-primary: var(--orchid-600);
-  --accent-hover: var(--orchid-700);
-  --accent-pressed: var(--orchid-800);
-  --accent-strong: var(--orchid-700);
-  --accent-subtle: color-mix(in srgb, var(--orchid-600) 8%, transparent);
-  --accent-muted: color-mix(in srgb, var(--orchid-600) 14%, transparent);
-  --accent-border: color-mix(in srgb, var(--orchid-600) 24%, transparent);
-  --accent-focus: color-mix(in srgb, var(--orchid-600) 40%, transparent);
-  --accent-shadow-20: color-mix(in srgb, var(--orchid-600) 18%, transparent);
-  --on-accent: var(--orchid-on-accent-light);
-  --on-accent-surface: color-mix(in srgb, var(--orchid-on-accent-light) 18%, transparent);
+[data-theme='light'] [data-settings-theme="periwinkle"] {
+  --accent-primary: var(--periwinkle-600);
+  --accent-hover: var(--periwinkle-700);
+  --accent-pressed: var(--periwinkle-800);
+  --accent-strong: var(--periwinkle-700);
+  --accent-subtle: color-mix(in srgb, var(--periwinkle-600) 8%, transparent);
+  --accent-muted: color-mix(in srgb, var(--periwinkle-600) 14%, transparent);
+  --accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
+  --accent-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
+  --accent-shadow-20: color-mix(in srgb, var(--periwinkle-600) 18%, transparent);
+  --on-accent: var(--periwinkle-on-accent-light);
+  --on-accent-surface: color-mix(in srgb, var(--periwinkle-on-accent-light) 18%, transparent);
 
-  --btn-primary-bg: var(--orchid-600);
-  --btn-primary-hover: var(--orchid-700);
+  --btn-primary-bg: var(--periwinkle-600);
+  --btn-primary-hover: var(--periwinkle-700);
   --btn-primary-disabled-bg: var(--bg-input);
   --btn-primary-disabled-border: var(--border-subtle);
   --btn-primary-disabled-text: var(--text-tertiary);
-  --btn-primary-shadow-color: color-mix(in srgb, var(--orchid-600) 15%, transparent);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-600) 15%, transparent);
 }
 
 [data-theme='light'] .force-black-icon {
@@ -368,6 +435,9 @@
   --overlay-text-muted:       rgba(255, 255, 255, 0.60);
   --overlay-text-placeholder: rgba(255, 255, 255, 0.40);
   --overlay-text-strong:      #ffffff;
+  /* Light theme + liquid glass still renders WHITE text on a dark glass
+     panel, so it takes the light lavender, not the light-theme one. */
+  --hotword-color:            #C4B5FD;
 
   /* Glass surfaces — near-transparent white tints */
   --overlay-panel-bg:           rgba(255, 255, 255, 0.055);
@@ -1289,6 +1359,13 @@
   --overlay-text-muted:       rgba(255, 255, 255, 0.74);
   --overlay-text-placeholder: rgba(255, 255, 255, 0.50);
   --overlay-text-strong:      #ffffff;
+  /* Modern forces white text on the slate gradient in BOTH themes, so it
+     takes the light lavender. Measured against all three gradient stops:
+     3.65 / 6.33 / 8.28. The lightest top stop sits under 4.5, but that is
+     pre-existing and system-wide — the modern accent #8FB4F7 measures 3.22
+     and the old orchid highlight 3.42 at the same point, so this is strictly
+     better than what it replaces, not a new shortfall. */
+  --hotword-color:            #C4B5FD;
 
   /* Slate/graphite surfaces — the DARK_GLASS gradient */
   --overlay-panel-bg:           linear-gradient(160deg, rgba(90, 90, 108, 0.88) 0%, rgba(55, 55, 70, 0.93) 50%, rgba(36, 36, 50, 0.97) 100%);
@@ -2447,6 +2524,79 @@ body {
 
 .overlay-text-strong {
   color: var(--overlay-text-strong);
+}
+
+/* ── Teleprompter glance layer ─────────────────────────────────────────
+   Hot words: the model marks the two or three load-bearing words of a
+   spoken answer with **bold**; they render in the accent color so the
+   speaker can reconstruct the answer from a glance. Applied explicitly on
+   the spoken-answer ReactMarkdown intents and, via the scoped rule below,
+   on the imperative streaming bubble (marked.parse emits bare <strong>). */
+.overlay-hotword {
+  color: var(--hotword-color, #C4B5FD);
+}
+
+.natively-streaming-answer strong {
+  color: var(--hotword-color, #C4B5FD);
+  font-weight: 600;
+}
+
+/* Meeting notes → Usage tab, user question bubble.
+
+   Three separable layers, deliberately kept apart so a future "it looks wrong"
+   can be bisected: the flat fill, the vertical gradient, and the hue-tinted
+   glow. Tokens live in the :root / [data-theme='light'] blocks.
+
+   Why a class rather than Tailwind utilities: bg-[var(--bubble-user-bg)]
+   compiles to `background-color`, which cannot hold a gradient — assigning one
+   there fails silently and leaves a transparent bubble with white text on the
+   dark pane.
+
+   The gradient runs DOWNWARD (base → darker). Lightening it upward was tested
+   and drops white text to 4.01:1, below AA; darkening keeps the lightest pixel
+   at the top stop, so the worst white contrast anywhere in the fill is the
+   4.699:1 asserted in the guard test.
+
+   The glow and the inset highlight sit outside the 10px text padding, so
+   neither touches legibility. On a flat dark ground salience comes from chroma
+   rather than luminance, and bleeding a faint tinted halo into the surrounding
+   neutral grey is what makes the bubble read as a lit object instead of a
+   pasted swatch. */
+.bubble-user {
+  background-color: var(--bubble-user-bg);
+  background-image: linear-gradient(180deg, var(--bubble-user-bg) 0%, var(--bubble-user-grad-to) 100%);
+  color: var(--bubble-user-fg);
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.28),
+    0 6px 18px -8px var(--bubble-user-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+/* Bottom gist chip: the trailing [[GIST]] line — five-to-eight-word
+   essence, never spoken — rendered as a small summary pill under the
+   answer body. */
+.overlay-gist-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  margin-top: 8px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--overlay-text-secondary);
+  background: color-mix(in srgb, var(--hotword-color, #C4B5FD) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hotword-color, #C4B5FD) 24%, transparent);
+}
+
+.overlay-gist-chip::before {
+  content: 'GIST';
+  flex: none;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--hotword-color, #C4B5FD);
 }
 
 .overlay-text-interactive {
@@ -3784,10 +3934,17 @@ html[data-platform="linux"] body {
    THE OTHER SATURATED SURFACES ON THIS TAB, measured rather than assumed —
    the jewel arc has neighbours the old teal ramp never had to care about:
      --accent-primary (the usage bars, directly above the plan selector) is
-       ORCHID: #D9A7E8 286° dark / #984DB2 285° light. That is only 12-13°
-       from Max, but ΔE76 43.8 (dark) / 34.1 (light) — a BRIGHT orchid bar
-       against a DARK muted amethyst card. Distinct, but this is the pairing
-       to re-measure first if Max is ever brightened.
+       PERIWINKLE: #B9A1F6 257° dark / #8050D4 262° light.
+       *** THE ΔE76 FIGURES BELOW ARE STALE — RE-MEASURE BEFORE RELYING ON
+       THEM. *** They were taken when the accent was Soft Orchid (#D9A7E8 286°
+       dark / #984DB2 285° light), which measured 12-13° from Max at ΔE76 43.8
+       (dark) / 34.1 (light). The 2026-08 re-hue moved the accent 29° toward
+       blue, i.e. TOWARD the cool end of the plan ladder rather than away from
+       it, so the separation from Max and from the 259° lifetime card can only
+       have narrowed. Nobody has re-run the numbers: this note records that the
+       basis changed, not a new result. This was already flagged as the pairing
+       to re-measure first if Max is ever brightened; the accent moving instead
+       triggers the same check.
      .pricing-card-lifetime (inside the expanded Pro section) is violet 259°,
        ΔE76 21.7 from Max — part of the existing periwinkle/violet identity,
        not a new one.
@@ -3797,8 +3954,11 @@ html[data-platform="linux"] body {
        NativelyProSettings.js build artifact). If those feature cards are
        ever revived, Ultra and that pink cannot both stand.
 
-   So the tab carries the plan ladder (cool → jewel), periwinkle/indigo/orchid
-   (key card, Pro teaser, lifetime card, app accent) and the reserved
+   So the tab carries the plan ladder (cool → jewel), periwinkle/indigo
+   (key card, Pro teaser, lifetime card) and the app accent — which as of the
+   2026-08 re-hue is ITSELF periwinkle, i.e. no longer a fourth distinct hue on
+   this tab. That convergence is part of what the stale ΔE note above is asking
+   you to re-measure. Plus the reserved
    semantics (emerald = connected/active, amber = low quota, red = danger).
 
    CONTRAST IS INVARIANT BY CONSTRUCTION. Every stop here was solved to the
@@ -5995,6 +6155,22 @@ html[data-platform="linux"] body {
   margin-top: 4.5px !important;
   margin-bottom: 4.5px !important;
 }
+/* Code fences carry the same 6px rhythm as paragraphs. Tailwind's preflight
+   zeroes `pre`, and the streaming bubble used to get its spacing from the
+   literal newline marked emits between blocks — which `whitespace-pre-wrap`
+   painted as a full blank line, giving roughly two line-heights of gap.
+   That newline is now stripped at the injection point (collapseBlockGaps),
+   so the gap has to come from a real margin instead of an artifact. */
+.markdown-content pre {
+  margin-top: 6px !important;
+  margin-bottom: 6px !important;
+}
+.markdown-content pre:last-child {
+  margin-bottom: 0 !important;
+}
+.markdown-content pre:first-child {
+  margin-top: 0 !important;
+}
 .markdown-content h1, 
 .markdown-content h2, 
 .markdown-content h3, 
@@ -7684,5 +7860,84 @@ html[data-platform="linux"] body {
       inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
       0 12px 28px rgba(111, 37, 66, 0.18),
       0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Settings — section entrance stagger                                 */
+/* ------------------------------------------------------------------ */
+/* Opt-in via the `data-settings-stagger` attribute on a section's
+   content container: its DIRECT CHILDREN settle in sequence when the
+   section is entered.
+
+   Why CSS and not framer-motion variants, given framer-motion is already
+   a dependency here:
+
+   1. A CSS animation runs once when the element is inserted, and a React
+      re-render does NOT restart it (the rule matched before and still
+      matches). That is exactly the "stagger on section entrance, never on
+      list state updates" requirement, for free — toggling a provider,
+      editing a skill or refreshing a list cannot replay it. Variants would
+      have needed an explicit guard for the same result.
+   2. It composes with the sections that already animate. Several of these
+      files (HelpSettings, IntelligenceSettings, NativelyApi/Pro) own rich
+      interaction motion; the attribute is only ever placed on containers
+      whose direct children are plain elements, so the two never meet.
+   3. It runs off the main thread and costs nothing on a panel that can
+      contain hundreds of rows.
+
+   The stagger restarts because the panel wrapper in SettingsOverlay.tsx is
+   keyed on the section, so entering a section remounts this subtree.
+
+   Budget: last child starts at 175ms and is done by 395ms. Step is 30ms
+   (a cascade, not a slideshow) and the delay ladder is CAPPED at the 7th
+   child so a long list can't turn into a loading screen. */
+@keyframes settings-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    /* `none`, NOT translateY(0): with `animation-fill-mode: both` the final
+       keyframe persists, and a lingering transform would make every
+       staggered container a containing block for its absolutely- and
+       fixed-positioned descendants (dropdowns, popovers, tooltips). */
+    transform: none;
+  }
+}
+
+/* `data-stagger-skip` is the opt-out. A child that ALREADY owns an
+   entrance animation must carry it, or this ladder's animation-delay
+   would land on that animation instead (delay is a longhand; it applies
+   even when the `animation` shorthand here loses to a later rule) and
+   silently lag it. AI Providers' `.aip-panel-fade` tab panels are the
+   live case: without the opt-out, switching cloud/gateways/vision INSIDE
+   that tab would sit still for 175ms before fading. */
+[data-settings-stagger] > *:not([data-stagger-skip]) {
+  animation: settings-stagger-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+[data-settings-stagger] > *:not([data-stagger-skip]):nth-child(1) { animation-delay: 0ms; }
+[data-settings-stagger] > *:not([data-stagger-skip]):nth-child(2) { animation-delay: 30ms; }
+[data-settings-stagger] > *:not([data-stagger-skip]):nth-child(3) { animation-delay: 60ms; }
+[data-settings-stagger] > *:not([data-stagger-skip]):nth-child(4) { animation-delay: 90ms; }
+[data-settings-stagger] > *:not([data-stagger-skip]):nth-child(5) { animation-delay: 120ms; }
+[data-settings-stagger] > *:not([data-stagger-skip]):nth-child(6) { animation-delay: 150ms; }
+/* Cap. Everything from the 7th child on lands together at 175ms rather
+   than marching down the page — a 40-row list must not take 1.2s. */
+[data-settings-stagger] > *:not([data-stagger-skip]):nth-child(n+7) { animation-delay: 175ms; }
+
+@keyframes settings-stagger-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Reduced motion: no transform and no cascade — one short fade, all at
+   once. The delay override must be !important to beat the nth-child
+   ladder above, which is more specific. */
+@media (prefers-reduced-motion: reduce) {
+  [data-settings-stagger] > *:not([data-stagger-skip]) {
+    animation: settings-stagger-fade 120ms linear both;
+    animation-delay: 0ms !important;
   }
 }

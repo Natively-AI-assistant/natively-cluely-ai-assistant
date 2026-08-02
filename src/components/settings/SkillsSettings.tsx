@@ -383,7 +383,7 @@ export const SkillsSettings: React.FC = () => {
         s.length <= n ? s : `${s.slice(0, n).trimEnd()}…`;
 
     return (
-        <div className="space-y-5 animated fadeIn select-text pb-4">
+        <div className="space-y-5 animated fadeIn select-text pb-4" data-settings-stagger>
             <div className="flex items-start justify-between gap-4">
                 <div>
                     <h3 className="text-lg font-bold text-text-primary mb-1">{t('Skills')}</h3>

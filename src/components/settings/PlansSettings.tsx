@@ -212,6 +212,22 @@ export const PlansSettings: React.FC<PlansSettingsProps> = ({
         // the SAME layout pass. Without it each region FLIPs independently and
         // they can disagree about where they are mid-transition.
         <LayoutGroup>
+        {/* Deliberately NO `data-settings-stagger` here, or in NativelyApiSettings /
+            NativelyProSettings. Every other Settings tab opts into the entrance
+            cascade in src/index.css; this tab is the one exception and the omission
+            is intentional:
+
+              1. Its regions are `layout="position"` FLIP children under this
+                 LayoutGroup. The cascade's translateY writes the same `transform`
+                 the FLIP owns — and PlansMotionCompositing.test.mjs already forbids
+                 compositing a y-offset on top of the FLIP.
+              2. Its regions are `AnimatePresence mode="popLayout"` children, which
+                 framer fades out via inline opacity. A CSS animation with
+                 `animation-fill-mode: both` PINS opacity and silently swallows that
+                 exit — the exact bug the comment below this one records as the
+                 reason `animated fadeIn` was stripped from NativelyProSettings.
+
+            This tab already animates; it does not need the generic cascade. */}
         <div className="space-y-6 animated fadeIn">
             <header>
                 <h2 className="text-[17px] font-semibold text-text-primary tracking-[-0.015em]">{t('Plans & Billing')}</h2>

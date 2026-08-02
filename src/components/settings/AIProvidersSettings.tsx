@@ -67,8 +67,8 @@ import { useResolvedTheme } from '../../hooks/useResolvedTheme';
    built against a transparent value.
 
    The accent is ALIASED, not re-declared per theme: this panel renders inside
-   `[data-settings-theme="orchid"]` (SettingsOverlay.tsx) where
-   `--accent-primary` already resolves to orchid-300 dark / orchid-600 light.
+   `[data-settings-theme="periwinkle"]` (SettingsOverlay.tsx) where
+   `--accent-primary` already resolves to periwinkle-300 dark / periwinkle-600 light.
    `--text-danger` is reused for the same reason (it is already theme-split
    because one red cannot clear 4.5:1 on both fills).
 
@@ -423,9 +423,9 @@ const AIP_CSS = `
     transition: transform var(--aip-dur-travel) var(--aip-ease-spring),
                 background var(--aip-dur-state) var(--aip-ease-out);
 }
-/* --aip-on-accent, not #fff: in dark mode the accent track is orchid-300
-   (#D9A7E8, a LIGHT lilac) so a white thumb sat at ~1.35:1. --on-accent is
-   theme-split precisely for solid orchid fills (#1A1020 dark / #fff light). */
+/* --aip-on-accent, not #fff: in dark mode the accent track is periwinkle-300
+   (#B9A1F6, a LIGHT periwinkle) so a white thumb sat at ~1.5:1. --on-accent is
+   theme-split precisely for solid accent fills (#14102A dark / #fff light). */
 .aip-switch[aria-checked='true'] .aip-switch-thumb { transform: translateX(14px); background: var(--aip-on-accent); }
 
 /* ── Buttons ───────────────────────────────────────────────────────────── */
@@ -488,7 +488,7 @@ const AIP_CSS = `
                 background   var(--aip-dur-state) var(--aip-ease-out);
 }
 .aip-field:hover:not(:focus-within) { border-color: var(--aip-border-strong); }
-/* Neutral focus, no accent. The orchid treatment (a 40%-accent border plus a 2px
+/* Neutral focus, no accent. The accent treatment (a 40%-accent border plus a 2px
    solid accent outline) read as an alarm around a field you had merely clicked into
    — and :focus-visible matches pointer focus on text inputs, so it fired on every
    click, not just keyboard nav. A brightened border carries the same information
@@ -749,7 +749,7 @@ const AIP_CSS = `
 textarea.aip-input { height:auto; padding:10px; line-height:1.5; resize:none; }
 select.aip-input { cursor:pointer; }
 
-/* ── In-flow select expander. Portals are banned in this file (the orchid
+/* ── In-flow select expander. Portals are banned in this file (the accent
       token scope resolves by DOM ancestry) AND overflow-y:auto computes
       overflow-x:auto, making the settings scroller a clip box on BOTH axes —
       so a floating list opens into clipped space for the lower cards. An
@@ -867,7 +867,7 @@ select.aip-input { cursor:pointer; }
 `;
 
 /* ───────────────────────── Primitives ─────────────────────────────────────
-   These live HERE, not in a new file: `SettingsOrchidPortalScopeGuard.test.mjs`
+   These live HERE, not in a new file: `SettingsPeriwinklePortalScopeGuard.test.mjs`
    asserts that readdirSync('src/components/settings') filtered to *.tsx EXACTLY
    equals its GUARDED_FILES list, so adding a file to this directory fails the
    suite. `ProviderCard.tsx` imports them from here.
@@ -1128,7 +1128,7 @@ const AIP_PREVIEW_RE = /preview|exp(erimental)?\b|-latest$|-\d{4}-\d{2}-\d{2}$|-
  * scrolls and whether a filter appears — never what the control *is*.
  *
  * Deliberately NOT a modal or popover. Portals are forbidden in this file
- * (SettingsOrchidPortalScopeGuard) because the design tokens resolve by DOM
+ * (SettingsPeriwinklePortalScopeGuard) because the design tokens resolve by DOM
  * ancestry, and `overflow-y:auto` on the settings scroller computes `overflow-x`
  * to `auto`, making it a clip box on both axes — a floating layer on a lower card
  * opens into clipped space.
@@ -1370,7 +1370,7 @@ interface AipSelectProps {
 
 /**
  * The in-flow select expander. Deliberately NOT a floating layer:
- *  - portals are banned in this file (the orchid tokens resolve by DOM
+ *  - portals are banned in this file (the accent tokens resolve by DOM
  *    ancestry, so a portalled menu silently falls back to the blue root), and
  *  - `overflow-y:auto` computes `overflow-x:auto`, so the settings scroller is
  *    a clip box on both axes and a dropdown on a lower card opens into
@@ -2861,7 +2861,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // DOM ancestry from here (which is why nothing in this file may portal).
         // ConfirmDialog DOES portal — it is pre-existing, renders outside this
         // subtree, and is intentionally not token-matched.
-        <div className="aip-root space-y-5 pb-10" data-theme={theme}>
+        // data-settings-stagger: header + cards + tablist settle in sequence on
+        // tab entrance (rules in src/index.css). The three cloud/gateways/vision
+        // panels below carry `data-stagger-skip` because they already own
+        // `.aip-panel-fade`; without the opt-out this ladder's animation-delay
+        // would apply to THAT animation and put a 175ms stall in front of every
+        // in-tab panel switch. `.aip-root`'s own reduced-motion guard (~line 841)
+        // already neutralises both.
+        <div className="aip-root space-y-5 pb-10" data-theme={theme} data-settings-stagger>
             {confirmCopy && (
                 <ConfirmDialog
                     open
@@ -3049,6 +3056,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 aria-labelledby={tabButtonId('cloud')}
                 tabIndex={0}
                 className="space-y-5 aip-panel-fade"
+                data-stagger-skip
             >
             {/* Cloud Providers */}
             <div className="space-y-5">
@@ -3298,6 +3306,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 aria-labelledby={tabButtonId('gateways')}
                 tabIndex={0}
                 className="space-y-5 aip-panel-fade"
+                data-stagger-skip
             >
             {/* LiteLLM — OpenAI-compatible AI gateway, grouped with the other gateways. */}
             <div className="space-y-5">
@@ -3771,6 +3780,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 aria-labelledby={tabButtonId('vision')}
                 tabIndex={0}
                 className="space-y-5 aip-panel-fade"
+                data-stagger-skip
             >
             {/* Screenshots — the privacy-relevant half of screenUnderstandingMode.
                 Was three radios (Vision first / Vision only / Private vision) whose

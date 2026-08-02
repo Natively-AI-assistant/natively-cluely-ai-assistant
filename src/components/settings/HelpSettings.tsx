@@ -860,7 +860,13 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                 </p>
             </header>
 
-            <div className="flex-1 space-y-2">
+            {/* Stagger lives here, not on the root above: the root is just
+                header + this, so staggering it would cascade two items. These
+                18 children (15 AccordionSections) are all plain elements —
+                AccordionSection's root is a plain div, and every motion.* in
+                this file belongs to a Mock*Anim demo inside a COLLAPSED
+                accordion body, so nothing is mounted to collide with. */}
+            <div className="flex-1 space-y-2" data-settings-stagger>
 
                 {onNavigate && (
                     <div
