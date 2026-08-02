@@ -36,6 +36,7 @@
     "dist:signed": "npm run app:build:signed && node scripts/upload-release.mjs",
     "build:native": "node scripts/build-native.js",
     "defence:windows-audio-native-smoke": "node scripts/defence-windows-audio-native-smoke.cjs",
+    "defence:wasapi-microphone-baseline": "cargo run --offline --manifest-path native-module/tools/wasapi-microphone-baseline/Cargo.toml",
     "defence:windows-microphone-smoke": "node scripts/defence-windows-microphone-smoke.cjs",
     "defence:windows-process-capture-smoke": "npm run build:defence && node scripts/defence-windows-audio-e2e.cjs --capture-only",
     "defence:windows-audio-e2e": "npm run build:defence && node scripts/defence-windows-audio-e2e.cjs",
