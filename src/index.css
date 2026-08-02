@@ -7914,8 +7914,27 @@ html[data-platform="linux"] body {
    silently lag it. AI Providers' `.aip-panel-fade` tab panels are the
    live case: without the opt-out, switching cloud/gateways/vision INSIDE
    that tab would sit still for 175ms before fading. */
+/* `backwards`, NOT `both`. An animation whose keyframes touch `transform` or
+   `opacity` makes its element a STACKING CONTEXT for as long as the animation
+   is in effect — and `forwards`/`both` keeps it in effect forever, long after
+   the 220ms is over. Every staggered child therefore stayed a stacking
+   context at rest, which trapped any `z-index` inside it: an open dropdown in
+   the AI Providers "Active Model" card (z-50) could not rise above the plain
+   `z-index: auto` cards BELOW it, because painting order between the siblings
+   was settled by document order before the dropdown's z-50 was ever consulted.
+   Verified in Chromium: same keyframes, `both` occludes / `backwards` does not.
+
+   `backwards` is visually identical here. It still applies the `from` frame
+   through the animation-delay (which is what stops the pre-stagger flash — the
+   only thing `both` was buying), and after the active phase the element falls
+   back to its own style, which already IS the `to` frame: `opacity: 1` and
+   `transform: none` are the initial values for a plain container.
+
+   Bonus: a persistent fill also OUTRANKED normal declarations in the cascade,
+   so `transform: none` was silently killing `.aip-press:active`'s press-scale
+   on any staggered child. */
 [data-settings-stagger] > *:not([data-stagger-skip]) {
-  animation: settings-stagger-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: settings-stagger-in 220ms cubic-bezier(0.23, 1, 0.32, 1) backwards;
 }
 [data-settings-stagger] > *:not([data-stagger-skip]):nth-child(1) { animation-delay: 0ms; }
 [data-settings-stagger] > *:not([data-stagger-skip]):nth-child(2) { animation-delay: 30ms; }
@@ -7937,7 +7956,10 @@ html[data-platform="linux"] body {
    ladder above, which is more specific. */
 @media (prefers-reduced-motion: reduce) {
   [data-settings-stagger] > *:not([data-stagger-skip]) {
-    animation: settings-stagger-fade 120ms linear both;
+    /* `backwards` for the same reason as the full-motion rule above — a
+       filling opacity animation is still an opacity animation, and still
+       pins the element as a stacking context at rest. */
+    animation: settings-stagger-fade 120ms linear backwards;
     animation-delay: 0ms !important;
   }
 }

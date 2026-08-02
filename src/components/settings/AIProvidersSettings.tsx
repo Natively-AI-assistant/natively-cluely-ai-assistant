@@ -350,6 +350,22 @@ const AIP_CSS = `
 .aip-float { background: var(--bg-elevated); border: 1px solid var(--aip-border-strong);
              border-radius: var(--aip-r-md); box-shadow: 0 10px 28px rgba(0,0,0,0.30); }
 
+/* Lift the card that currently HOLDS an open menu above its siblings. Once any
+   ancestor of the menu is a stacking context, the menu's own z-index stops
+   deciding anything — the CARD, at z-index auto, is what gets ordered against
+   the cards below it, so the menu paints under them however high it is. That
+   ancestor was the settings stagger's animation-fill-mode (fixed at source in
+   src/index.css); this rule keeps the layout right for any future one.
+
+   :has() rather than an isOpen prop threaded down to the card: .aip-float
+   only exists while a menu is open, so the selector already tracks exactly the
+   right state for all five ModelSelect sites plus the language menu.
+
+   position: relative is required (z-index does nothing on a static box) and is
+   safe: the only absolutely-positioned things in a card are the menu and
+   .aip-switch::after, both of which already have a nearer positioned ancestor. */
+.aip-card:has(.aip-float) { position: relative; z-index: 40; }
+
 /* Focus. NOTE: the spec's version also set border-radius here; dropped, because
    at specificity 0,2,0 it outranks Tailwind's .rounded-* (0,1,0) and every
    focused control visibly snapped its corners. Chromium's outline already
