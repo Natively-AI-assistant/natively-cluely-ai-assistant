@@ -1,12 +1,29 @@
 import 'dotenv/config';
 import fs from 'fs';
 import os from 'os';
-import { X509Certificate } from 'crypto';
+import path from 'path';
+import { execFileSync } from 'child_process';
+import { createHash, X509Certificate } from 'crypto';
 import { loadDefenceConfig } from './config';
 
 function privateIps(): string[] { return Object.values(os.networkInterfaces()).flatMap(items => items || []).filter(item => item.family === 'IPv4' && !item.internal).map(item => item.address).filter(ip => /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(ip)); }
 function configured(value: string): boolean { return !!value && !/^(?:your_|example|changeme|placeholder)/i.test(value); }
 function baseHost(value: string): string { try { return new URL(value).host; } catch { return ''; } }
+function commandVersion(command: string, args: string[]): string | null { try { return execFileSync(command, args, { encoding: 'utf8', windowsHide: true, timeout: 3000 }).trim().split(/\r?\n/)[0]; } catch { return null; } }
+function nativeModuleDiagnostics() {
+  const binaryName = process.platform === 'win32' ? `index.win32-${process.arch}-msvc.node` : '';
+  const binaryPath = binaryName ? path.join(process.cwd(), 'native-module', binaryName) : '';
+  let binarySha256: string | null = null;
+  if (binaryPath && fs.existsSync(binaryPath)) binarySha256 = createHash('sha256').update(fs.readFileSync(binaryPath)).digest('hex').toUpperCase();
+  return {
+    binaryPresent: Boolean(binarySha256), binaryName: binaryName || null, binarySha256,
+    architecture: process.arch, nodeApi: process.versions.napi || null,
+    buildToolchain: process.platform === 'win32' ? 'Rust MSVC via napi-rs' : 'Rust via napi-rs',
+    rustcVersion: commandVersion('rustc', ['--version']), cargoVersion: commandVersion('cargo', ['--version']),
+    sourceCommit: commandVersion('git', ['rev-parse', 'HEAD']), windowsBuild: process.platform === 'win32' ? os.release() : null,
+    windowsVersion: process.platform === 'win32' ? os.version() : null,
+  };
+}
 
 export function runDoctor(env: NodeJS.ProcessEnv = process.env) {
   const config = loadDefenceConfig(env); const protocol = config.tls.enabled ? 'https' : 'http'; const hosts = config.host === '0.0.0.0' ? privateIps() : [config.host];
@@ -32,6 +49,7 @@ export function runDoctor(env: NodeJS.ProcessEnv = process.env) {
     searchProvider: config.search.provider, searchDisabled: config.search.provider === 'none', indexExists: fs.existsSync(`${config.indexPath}/manifest.json`), storeAudio: config.storeAudio,
     retrievalTopK: config.retrievalTopK, retrievalTopKAdjusted: config.retrievalTopKAdjusted,
     inputMode: config.input.mode, inputSource: config.input.source, iphoneOutputOnly: config.input.iphoneOutputOnly,
+    nativeModule: nativeModuleDiagnostics(),
     windowsVad: { minSpeechMs: config.input.vad.minSpeechMs, silenceMs: config.input.vad.silenceMs, maxUtteranceMs: config.input.vad.maxUtteranceMs, partialIntervalMs: config.input.vad.partialIntervalMs },
     companionHttpsConfigured: companionSecure,
     externalTlsTrustUnverified: config.companionPublicUrl.startsWith('https://'),

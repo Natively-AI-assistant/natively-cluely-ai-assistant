@@ -23,7 +23,7 @@ const DEFAULT_SETTINGS: DefenceSettings = { inputLanguage: 'auto', outputLanguag
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 interface Pairing { id: string; codeHash: string; secretHash: string; expiresAt: number; used: boolean; failedAttempts: number }
-interface SessionDiagnostics { lastAudioBytes?: number; lastAudioMime?: string; lastSttLatencyMs?: number; sttStatus?: number; sttRetries?: number; sttRequestId?: string; partialCount: number; finalCount: number; lastErrorCode?: string; retrievalMs?: number; candidateCount?: number; evidenceCount?: number; llmFirstResponseMs?: number; llmTotalMs?: number; llmStatus?: number; llmRetries?: number; llmRequestId?: string; schemaValid?: boolean; windowsCaptureMs?: number; questionFinalizationMs?: number; fastHintMs?: number; fullAnswerMs?: number; semanticCacheHit?: boolean; inputSource?: string }
+interface SessionDiagnostics { lastAudioBytes?: number; lastAudioMime?: string; lastSttLatencyMs?: number; sttStatus?: number; sttRetries?: number; sttRequestId?: string; partialCount: number; finalCount: number; lastErrorCode?: string; retrievalMs?: number; candidateCount?: number; evidenceCount?: number; llmFirstResponseMs?: number; llmTotalMs?: number; llmStatus?: number; llmRetries?: number; llmRequestId?: string; schemaValid?: boolean; windowsCaptureMs?: number; questionFinalizationMs?: number; fastHintMs?: number; fullAnswerMs?: number; semanticCacheHit?: boolean; inputSource?: string; inputProcessId?: number; inputProcessName?: string; includeProcessTree?: boolean }
 interface Session { id: string; tokenHash: string; createdAt: number; settings: DefenceSettings; detector: QuestionDetector; audio: AudioChunkTracker; transcript: string; answers: StructuredAnswer[]; diagnostics: SessionDiagnostics; questionCounter: number; lastQuestionId?: string; revision: number; abort?: AbortController; answeredQuestionKeys: Set<string>; inFlightQuestionKeys: Set<string> }
 interface ProjectRegistryEntry { projectId: string; displayName: string; sourcePath: string; indexPath: string; personaPath?: string; verifiedFactsPath?: string }
 type ServerMode = 'full' | 'companion';
@@ -249,6 +249,9 @@ export class DefenceServer {
     provider.on('error', error => this.broadcastInputError(error));
     await provider.start();
   }
+  getWindowsInputDiagnostics(): ReturnType<WindowsAudioCaptureProvider['getDiagnostics']> | undefined {
+    return this.windowsInput?.getDiagnostics();
+  }
   private broadcastAll(value: unknown): void {
     for (const session of this.sessions.values()) this.runtime.events.emit('outbound', { sessionId: session.id, value });
   }
@@ -264,7 +267,7 @@ export class DefenceServer {
     const sttLatencyMs = Math.round(performance.now() - sttStarted); const sessions = [...this.sessions.values()].filter(session => Date.now() - session.createdAt < SESSION_TTL_MS);
     const manifest = await this.indexer.load();
     for (const session of sessions) {
-      Object.assign(session.diagnostics, { lastAudioBytes: segment.pcmBytes, lastAudioMime: 'audio/wav', lastSttLatencyMs: sttLatencyMs, sttStatus: result.timing.status, sttRetries: result.timing.retries, sttRequestId: result.timing.requestId, windowsCaptureMs: segment.captureLatencyMs, inputSource: segment.source });
+      Object.assign(session.diagnostics, { lastAudioBytes: segment.pcmBytes, lastAudioMime: 'audio/wav', lastSttLatencyMs: sttLatencyMs, sttStatus: result.timing.status, sttRetries: result.timing.retries, sttRequestId: result.timing.requestId, windowsCaptureMs: segment.captureLatencyMs, inputSource: segment.source, inputProcessId: segment.processId, inputProcessName: segment.processName, includeProcessTree: Boolean(segment.processId) });
       session.transcript = result.value;
       if (!final) {
         session.diagnostics.partialCount++;
@@ -284,16 +287,18 @@ export class DefenceServer {
     if (!key || session.answeredQuestionKeys.has(key) || session.inFlightQuestionKeys.has(key)) {
       this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'question_duplicate', question } }); return;
     }
-    session.inFlightQuestionKeys.add(key); session.questionCounter++; session.lastQuestionId = `q-${session.questionCounter}`; session.revision = 1;
+    session.inFlightQuestionKeys.add(key); session.questionCounter++; const questionId = `q-${session.questionCounter}`; session.lastQuestionId = questionId; session.revision = 1;
     try {
-      const hint = await this.engine.fastHint(session.lastQuestionId, question, manifest);
-      hint.diagnostics.fastHintMs = Math.round(performance.now() - pipelineStarted); session.diagnostics.fastHintMs = hint.diagnostics.fastHintMs;
+      this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'question_finalized', questionId, question } });
+      const hint = await this.engine.fastHint(questionId, question, manifest);
+      const fastHintMs = Math.round(performance.now() - pipelineStarted); hint.diagnostics.fastHintMs = fastHintMs; session.diagnostics.fastHintMs = fastHintMs;
       this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'fast_hint', hint } });
       const generationId = crypto.randomUUID(); const answer = await this.engine.answer(question, manifest, session.settings);
-      answer.questionId = session.lastQuestionId; answer.revision = session.revision; answer.generationId = generationId;
-      if (answer.diagnostics) { answer.diagnostics.windowsCaptureMs = session.diagnostics.windowsCaptureMs; answer.diagnostics.sttLatencyMs = session.diagnostics.lastSttLatencyMs; answer.diagnostics.questionFinalizationMs = session.diagnostics.questionFinalizationMs; answer.diagnostics.fastHintMs = session.diagnostics.fastHintMs; answer.diagnostics.fullAnswerMs = Math.round(performance.now() - pipelineStarted); Object.assign(session.diagnostics, answer.diagnostics); }
+      answer.questionId = questionId; answer.revision = session.revision; answer.generationId = generationId;
+      if (answer.diagnostics) { answer.diagnostics.windowsCaptureMs = session.diagnostics.windowsCaptureMs; answer.diagnostics.sttLatencyMs = session.diagnostics.lastSttLatencyMs; answer.diagnostics.questionFinalizationMs = session.diagnostics.questionFinalizationMs; answer.diagnostics.fastHintMs = fastHintMs; answer.diagnostics.fullAnswerMs = Math.round(performance.now() - pipelineStarted); Object.assign(session.diagnostics, answer.diagnostics); }
       session.answers.push(answer); if (session.answers.length > 50) session.answers.shift(); session.answeredQuestionKeys.add(key);
       this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'full_answer', answer } });
+      this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'evidence', questionId, evidence: answer.evidence } });
       this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'answer', answer } });
     } catch (error) { this.broadcastInputError(error); }
     finally { session.inFlightQuestionKeys.delete(key); }

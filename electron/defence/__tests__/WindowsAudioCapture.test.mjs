@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { loadDefenceConfig } from '../../../dist-electron/electron/defence/config.js';
 import { encodeMonoPcmWav, WindowsVadSegmenter } from '../../../dist-electron/electron/defence/windowsAudioCapture.js';
 
@@ -16,6 +17,14 @@ test('Windows audio and iPhone output-only are the safe defaults', () => {
   assert.equal(config.input.iphoneOutputOnly, true);
   assert.equal(config.storeAudio, false);
   assert.ok(config.input.vad.silenceMs >= 500 && config.input.vad.silenceMs <= 800);
+});
+
+test('output-only PWA exits before requesting microphone permission', () => {
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  const startFunction = source.slice(source.indexOf('async function start()'), source.indexOf('async function stop()'));
+  assert.ok(startFunction.indexOf("if(diagnostics.iphoneOutputOnly)throw") >= 0);
+  assert.ok(startFunction.indexOf("if(diagnostics.iphoneOutputOnly)throw") < startFunction.indexOf('getUserMedia'));
+  assert.match(source, /classList\.toggle\('hidden',outputOnly\)/);
 });
 
 test('mono PCM is encoded as a valid 16 kHz WAV', () => {

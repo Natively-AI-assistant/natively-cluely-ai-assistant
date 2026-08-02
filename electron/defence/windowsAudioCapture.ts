@@ -155,6 +155,7 @@ export class WindowsAudioCaptureProvider extends EventEmitter {
   private capture?: NativeCapture;
   private segmenter?: WindowsVadSegmenter;
   private running = false;
+  private counters = { audioChunkCount: 0, activeAudioChunkCount: 0, maxRms: 0, partialCount: 0, utteranceCount: 0, duplicateSuppressed: 0 };
 
   constructor(private config: DefenceConfig) { super(); }
 
@@ -174,18 +175,33 @@ export class WindowsAudioCaptureProvider extends EventEmitter {
       this.capture = new native.MicrophoneCapture(this.config.input.deviceId || null);
     } else throw new Error('iphone-microphone is handled by the authenticated Companion fallback.');
     this.segmenter = new WindowsVadSegmenter(this.config.input.vad, this.config.input.source, target);
-    for (const name of ['partial', 'utterance', 'duplicate'] as const) this.segmenter.on(name, value => this.emit(name, value));
+    this.segmenter.on('partial', value => { this.counters.partialCount++; this.emit('partial', value); });
+    this.segmenter.on('utterance', value => { this.counters.utteranceCount++; this.emit('utterance', value); });
+    this.segmenter.on('duplicate', value => { this.counters.duplicateSuppressed++; this.emit('duplicate', value); });
+    const segmenter = this.segmenter;
+    this.running = true;
     this.capture!.start((error, chunk) => {
       if (error) return this.emit('error', error);
-      if (chunk?.length) this.segmenter!.push(chunk, performance.now());
+      if (chunk?.length && this.running && this.segmenter === segmenter) {
+        const chunkRms = rms(chunk);
+        this.counters.audioChunkCount++;
+        if (chunkRms >= this.config.input.vad.rmsThreshold) this.counters.activeAudioChunkCount++;
+        this.counters.maxRms = Math.max(this.counters.maxRms, chunkRms);
+        segmenter.push(chunk, performance.now());
+      }
     }, error => { if (error) this.emit('error', error); });
-    this.running = true;
-    this.emit('status', { running: true, source: this.config.input.source, processId: target?.pid, processName: target?.name, sampleRate: SAMPLE_RATE, channels: CHANNELS });
+    this.emit('status', { running: true, source: this.config.input.source, processId: target?.pid, processName: target?.name, includeProcessTree: Boolean(target), sampleRate: SAMPLE_RATE, channels: CHANNELS });
   }
+
+  getDiagnostics(): Readonly<typeof this.counters> { return { ...this.counters }; }
 
   stop(): void {
     if (!this.running) return;
-    this.segmenter?.flush(); this.capture?.stop(); this.capture = undefined; this.segmenter = undefined; this.running = false;
+    this.running = false;
+    const capture = this.capture; const segmenter = this.segmenter;
+    capture?.stop();
+    segmenter?.flush();
+    this.capture = undefined; this.segmenter = undefined;
     this.emit('status', { running: false, source: this.config.input.source });
   }
 }
