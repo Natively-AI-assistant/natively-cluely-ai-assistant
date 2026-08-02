@@ -341,65 +341,30 @@ const PI_CSS = `
         margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
 
-    /* ── File upload (Modes-style) ──
-       Shaped like .pi-toggle-card (subject on the left, control on the right)
-       so Identity reads as one column of cards rather than a horizontal toggle
-       card sandwiched between two centred boxes. The icon + title name the
-       document, which the old centre-aligned hint-only card never did.
-       NOTE: every length here needs a unit — the previous revision wrote
-       gap as a bare 12 / 8 / 7 / 6, which CSS drops silently, so the
-       paperclip sat flush against "Upload file". */
+    /* ── File upload (Modes-style) ── */
     .pi-file-empty {
-        display: flex; align-items: center; gap: 12px;
-        padding: 12px 14px; text-align: left; cursor: pointer;
-        border: 1px solid var(--pi-border); border-radius: var(--pi-r-lg);
-        background: var(--pi-card-bg);
+        border: 1px solid var(--pi-input-border); border-radius: var(--pi-r-lg);
+        padding: 22px 24px; display: flex; flex-direction: column;
+        align-items: center; gap: 12; text-align: center;
+        background: var(--pi-input-bg);
         margin-bottom: 16px;
-        transition: border-color 200ms var(--pi-ease-out), background 200ms ease;
-    }
-    @media (hover: hover) and (pointer: fine) {
-        .pi-file-empty:hover { border-color: var(--pi-btn-border); }
-        .pi-file-empty:hover .pi-upload-btn { background: var(--pi-btn-bg-hover); }
-    }
-    .pi-file-empty-icon {
-        display: flex; align-items: center; justify-content: center;
-        width: 28px; height: 28px; border-radius: var(--pi-r-sm);
-        background: var(--pi-btn-bg); border: 1px solid var(--pi-btn-border);
-        color: var(--pi-secondary); flex-shrink: 0;
-    }
-    .pi-file-empty-text { flex: 1; min-width: 0; }
-    .pi-file-empty-title {
-        display: flex; align-items: center; gap: 6px;
-        font-size: 12.5px; font-weight: 600; line-height: 1.3;
-        color: var(--pi-primary);
-    }
-    .pi-file-empty-hint {
-        font-size: 11px; line-height: 1.4; color: var(--pi-tertiary);
-        margin: 2px 0 0;
-    }
-    .pi-file-empty-pro {
-        font-size: 8.5px; font-weight: 700; letter-spacing: 0.4px;
-        text-transform: uppercase; padding: 1px 5px;
-        border-radius: var(--pi-r-pill); flex-shrink: 0;
-        color: var(--pi-badge-text); border: 1px solid var(--pi-badge-border);
     }
     .pi-file-row {
         display: grid; grid-template-columns: 13px 1fr 20px;
-        align-items: center; gap: 8px; padding: 8px 12px;
+        align-items: center; gap: 8; padding: 8px 12px;
         background: var(--pi-btn-bg); border: 1px solid var(--pi-btn-border);
         border-radius: var(--pi-r-md); margin-bottom: 6px;
     }
     .pi-upload-btn {
         display: flex; align-items: center; gap: 7px;
-        padding: 7px 14px; background: var(--pi-btn-bg);
-        border: 1px solid var(--pi-btn-border); border-radius: var(--pi-r-pill);
+        padding: 7px 18px; background: var(--pi-btn-bg);
+        border: 1px solid var(--pi-btn-border); border-radius: 20px;
         color: var(--pi-primary); font-size: 12px; font-weight: 500;
         cursor: pointer; font-family: inherit;
-        flex-shrink: 0; white-space: nowrap;
         transition: background 180ms var(--pi-ease-out), transform 160ms var(--pi-ease-out);
     }
     .pi-upload-btn:hover:not(:disabled) { background: var(--pi-btn-bg-hover); }
-    .pi-file-empty:active .pi-upload-btn:not(:disabled) { transform: scale(0.97); }
+    .pi-upload-btn:active:not(:disabled) { transform: scale(0.97); }
     .pi-upload-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .pi-add-file-btn {
         display: flex; align-items: center; gap: 6px;
@@ -450,7 +415,6 @@ const PI_CSS = `
         .pi-panel-fade { animation: none; }
         .pi-list-item  { animation-duration: 100ms; animation-delay: 0ms !important; }
         .pi-press:active, .pi-press-soft:active { transform: none; }
-        .pi-file-empty:active .pi-upload-btn:not(:disabled) { transform: none; }
         .pi-cta--shimmer::after { animation: none; }
         .pi-skeleton { animation: none; opacity: 0.5; }
     }
@@ -587,36 +551,21 @@ const PIIndexBadge: React.FC<{ status?: string }> = ({ status }) => {
 };
 
 // ─── FileUploadEmpty — Modes-style empty state ────────────────────────────────
-// The whole card is the click target; the inner <button> carries no handler of
-// its own and simply bubbles, so there is exactly one action per card and
-// keyboard users still get a real focusable control.
-// Drag-and-drop is deliberately absent (and so is any dashed "drop zone"
-// border): profile:upload-resume/-jd only accept paths minted by
-// profile:select-file, so a dropped path would be rejected by the main-process
-// gate. Better no affordance than a lying one.
 interface FileUploadEmptyProps {
-    Icon: typeof FileText;
-    title: string;
     hint: string;
     uploading: boolean;
     hasAccess: boolean;
     onBrowse: () => void;
     onNeedUpgrade: () => void;
 }
-const FileUploadEmpty = ({ Icon, title, hint, uploading, hasAccess, onBrowse, onNeedUpgrade }: FileUploadEmptyProps) => (
-    <div
-        className="pi-file-empty"
-        onClick={() => { if (uploading) return; if (!hasAccess) { onNeedUpgrade(); return; } onBrowse(); }}
-    >
-        <span className="pi-file-empty-icon"><Icon size={14} /></span>
-        <div className="pi-file-empty-text">
-            <div className="pi-file-empty-title">
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
-                {!hasAccess && <span className="pi-file-empty-pro">Pro</span>}
-            </div>
-            <p className="pi-file-empty-hint">{hint}</p>
-        </div>
-        <button className="pi-upload-btn" type="button" disabled={uploading}>
+const FileUploadEmpty = ({ hint, uploading, hasAccess, onBrowse, onNeedUpgrade }: FileUploadEmptyProps) => (
+    <div className="pi-file-empty" style={{ gap: 12 }}>
+        <p style={{ fontSize: 12, color: 'var(--pi-tertiary)', margin: 0 }}>{hint}{!hasAccess ? ' Requires Pro.' : ''}</p>
+        <button
+            className="pi-upload-btn"
+            disabled={uploading}
+            onClick={() => { if (!hasAccess) { onNeedUpgrade(); return; } onBrowse(); }}
+        >
             {uploading
                 ? <><RefreshCw size={13} className="pi-spinner" /> Processing…</>
                 : <><Paperclip size={13} /> Upload file</>}
@@ -1402,13 +1351,25 @@ export function ProfileIntelligenceSettings({
             </div>
             )}
 
-            {/* Resume */}
-            <h3 className="pi-section-label">Resume</h3>
+            {/* Resume — header + descriptor, same shape as Company Intel's so the
+                two sections read as one product. The descriptor says what the file
+                *powers*; the faint hint inside the dropzone stays the CTA. Three
+                type levels (hero / secondary / tertiary) keep them from colliding.
+                It deliberately does NOT enumerate "roles, projects, skills" — in the
+                filled state the snapshot card directly below renders exactly those,
+                and the line would read as that card's caption instead of the
+                section's descriptor. Kept to a single line: at 12px the content
+                column is wide enough that one sentence never wraps, so the header
+                block stays a tight two-line unit above the card. */}
+            <div style={{ marginBottom: 10 }}>
+                <h3 className="pi-section-label" style={{ margin: 0 }}>Resume</h3>
+                <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                    Grounds every answer in what you've actually done, instead of generic advice.
+                </p>
+            </div>
             {!profileStatus.hasProfile && !profileUploading ? (
                 <FileUploadEmpty
-                    Icon={FileText}
-                    title="Add your resume"
-                    hint="PDF, DOCX, TXT or MD — grounds every answer in your real background."
+                    hint="Add your resume as real-time context."
                     uploading={profileUploading}
                     hasAccess={hasProfileAccess}
                     onBrowse={browseResume}
@@ -1512,13 +1473,18 @@ export function ProfileIntelligenceSettings({
                 </div>
             )}
 
-            {/* Job Description */}
-            <h3 className="pi-section-label">Job Description</h3>
+            {/* Job Description — same header + descriptor pattern. Company Intel
+                keys off this JD's extracted company name, so the descriptor names
+                that downstream payoff rather than restating the upload CTA. */}
+            <div style={{ marginBottom: 10 }}>
+                <h3 className="pi-section-label" style={{ margin: 0 }}>Job Description</h3>
+                <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                    Frames answers around what this specific role asks for, and powers Company Intel.
+                </p>
+            </div>
             {!profileData?.hasActiveJD && !jdUploading ? (
                 <FileUploadEmpty
-                    Icon={Briefcase}
-                    title="Add a job description"
-                    hint="PDF, DOCX, TXT or MD — tailors every answer to the role."
+                    hint="Add a job description as real-time context."
                     uploading={jdUploading}
                     hasAccess={hasProfileAccess}
                     onBrowse={browseJD}
@@ -1610,6 +1576,31 @@ export function ProfileIntelligenceSettings({
                     {jdError}
                 </div>
             )}
+
+            {/* Scope note — applies to BOTH files above, so it closes the section
+                rather than sitting under either card. Deliberately borderless: a
+                third bordered box after two would read as another upload target.
+                11px/tertiary puts it below the cards' own hint text in the type
+                hierarchy, which is what a footnote should be.
+
+                The two named modes are the ONLY ones whose policy opts into
+                profile hydration — MODE_POLICIES.profileSources is non-empty for
+                'looking-for-work' and 'technical-interview' and [] for general,
+                sales, recruiting, team-meet, lecture and seminar (see
+                electron/context-intelligence/policies/mode-policy-registry.ts).
+                Custom modes fall back to 'general', so they get nothing either.
+                If that registry gains a profile-aware mode, this line must move
+                with it. */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginTop: 2 }}>
+                <Info size={12} style={{ color: 'var(--pi-tertiary)', flexShrink: 0, marginTop: 1 }} />
+                <p style={{ fontSize: 11, color: 'var(--pi-tertiary)', margin: 0, lineHeight: 1.5 }}>
+                    Used only in{' '}
+                    <span style={{ color: 'var(--pi-secondary)', fontWeight: 500 }}>Looking for work</span>{' '}
+                    and{' '}
+                    <span style={{ color: 'var(--pi-secondary)', fontWeight: 500 }}>Technical Interview</span>{' '}
+                    modes. Other modes never receive them.
+                </p>
+            </div>
 
         </>
         );
