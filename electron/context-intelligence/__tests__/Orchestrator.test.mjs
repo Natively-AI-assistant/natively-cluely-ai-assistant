@@ -9,7 +9,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const base = path.resolve(process.cwd(), 'dist-electron/electron/context-intelligence');
-const { decide, orchestrate, evaluateAnswerability } =
+const { decide, orchestrate, evaluateAnswerability, propertyHeadTerms } =
   await import(pathToFileURL(path.join(base, 'orchestration/orchestrator.js')).href);
 const { adaptLegacyChunks } = await import(pathToFileURL(path.join(base, 'retrieval/legacy-adapter.js')).href);
 const { clearConversationState } = await import(pathToFileURL(path.join(base, 'question/conversation-state-store.js')).href);
@@ -295,5 +295,47 @@ describe('a bare follow-up with no antecedent is not FULL', () => {
     }), port([{ sourceId: 'resume-1', text: 'Built a WebRTC pipeline', chunkIndex: 0, score: 0.9 }]));
     assert.notEqual(r.answerability, 'NONE');
     assert.notEqual(r.trace.fallbackUsed, 'CLARIFICATION');
+  });
+});
+
+// ── Live-log regression (2026-08-02): self-presentation grading + remedy ─────
+//
+// "Can you tell me about yourself?" in looking-for-work retrieved and USED the
+// résumé (evidence admitted, answer grounded in the user's real background) —
+// yet graded answerability NONE / DOCUMENT_FACT_NOT_FOUND, because
+// propertyHeadTerms took the reflexive tail "yourself" as the requested
+// property and demanded the résumé literally contain that word. A reflexive
+// denotes the PERSON; a whole-person request has no property head.
+
+describe('self-presentation questions grade on claim authority, not a pronoun term-match', () => {
+  const introDecision = () => decide(req({
+    modeId: 'looking-for-work',
+    manualQuestion: 'Can you tell me about yourself?',
+  }));
+  const resumeEv = (over = {}) => ({
+    evidenceId: 'e1', sourceId: 'psrc_x', sourceType: 'RESUME',
+    versionId: 'v1', retrievedVersionId: 'v1',
+    acceptedFor: ['USER_EMPLOYMENT'],
+    content: 'Rohan Varma. Backend engineer. Built APIs at Acme, led GraphQL schema design. Kochi, India.',
+    scope: { userId: 'u1' }, metadata: {},
+    ...over,
+  });
+
+  test('résumé evidence FULLY supports the intro turn', () => {
+    assert.equal(evaluateAnswerability(introDecision(), [resumeEv()]), 'FULL');
+  });
+
+  test('no evidence still grades NONE — honesty preserved', () => {
+    assert.equal(evaluateAnswerability(introDecision(), []), 'NONE');
+  });
+
+  test('propertyHeadTerms: reflexive tail = whole-person request = no heads', () => {
+    for (const q of ['can you tell me about yourself', 'introduce yourself', 'describe yourself']) {
+      assert.deepEqual(propertyHeadTerms(q), [], q);
+    }
+  });
+
+  test('property lookups keep their heads (control)', () => {
+    assert.ok(propertyHeadTerms('what are the RTO and RPO in the dossier').length >= 2);
   });
 });

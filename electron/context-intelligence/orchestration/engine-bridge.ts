@@ -100,6 +100,18 @@ export interface BridgeInput {
   realtimeInstruction?: string;
   conversationSummary?: string;
   retrieval?: RetrievalPort;
+  /**
+   * Surface persona/voice contract factory (2026-08-02). Called AFTER the
+   * decision exists so the caller can compose against what the turn actually
+   * is (`codingTask` = the router classified it a coding problem — the same
+   * semantic-activation contract Prompt System v2 uses everywhere else).
+   * A callback rather than a string because the caller cannot know the
+   * decision, and the bridge must not import the caller's prompt system —
+   * the caller (which already holds both worlds) supplies the bridge a
+   * closure instead. Returning null/throwing ⇒ no persona, composition
+   * byte-identical to before this field existed.
+   */
+  personaBase?: (ctx: { codingTask: boolean }) => string | null;
 }
 
 export interface BridgeResult {
@@ -221,9 +233,19 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       withheldScopes.add('transcript');
     }
 
+    // Persona resolution must never break a turn: a throwing factory or a null
+    // return simply composes without one (today's behaviour).
+    let personaBase: string | undefined;
+    try {
+      personaBase = input.personaBase?.({
+        codingTask: (result.decision.questionTypes as readonly string[]).includes('CODING_TASK'),
+      }) ?? undefined;
+    } catch { personaBase = undefined; }
+
     const composed = composePrompt({
       decision: result.decision,
       policy,
+      personaBase,
       evidence: scopeFilter.evidence,
       withheldScopes: [...withheldScopes],
       realtimeInstruction: input.realtimeInstruction,

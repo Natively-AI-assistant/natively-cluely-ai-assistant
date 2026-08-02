@@ -83,7 +83,17 @@ const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 // in the third person, and a second-person-only pattern silently classified
 // "What is the name of the price-comparison website the candidate built?" as
 // requiring no source at all.
-const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|walk me through your|my|the candidate|candidate'?s?|the applicant|applicant'?s?)\b/;
+// `yourself` (2026-08-02): a second-person REFLEXIVE marks the addressee as the
+// object of the predicate — "introduce yourself", "present yourself", "describe
+// yourself" are self-presentation requests about the USER's person, the same
+// class as "tell me about yourself". The list previously carried only that one
+// literal phrase, so every other imperative of the class produced zero claims;
+// the general-knowledge last resort then routed "introduce yourself" FAST and
+// the model INVENTED a persona from the conversation topic (live log,
+// 2026-08-02: a GraphQL chat produced "I'm a backend engineer…" from nothing).
+// Emphatic uses ("did you build it yourself?") are questions about the user's
+// own work, so the personal claim is correct for them too.
+const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|yourself|walk me through your|my|the candidate|candidate'?s?|the applicant|applicant'?s?)\b/;
 // FIRST person is personal too (2026-07-31): manual chat is the USER asking
 // about THEMSELF — "Do I have Kubernetes experience?", "Which required
 // languages do I not list?" — and a second/third-person-only pattern classified
@@ -343,6 +353,70 @@ const SYSTEM_DESIGN_RE = /\b(design a|scale (a|the|to)|system design|architectur
 const FOLLOW_UP_RE = /^(why|how|and|but|what about|would (it|that|this)|can you|could you|explain that|more detail|go on|really)\b/;
 const FOLLOW_UP_MAX_WORDS = 5;
 
+// ── Relational nominals with no complement (2026-08-02) ──────────────────────
+//
+// A follow-up does not have to start with a pronoun or a wh-word. "Examples",
+// typed on its own after two turns about GraphQL, carries no pronoun, no
+// follow-up starter and no rephrase shape, so all three existing gates missed
+// it: the turn reached the model as a one-word question with no referent and
+// was answered with an invented list of CSS tokens and emoji (live log,
+// 2026-08-01, turn 6024).
+//
+// The signal is grammatical, not lexical-per-scenario. Some nouns cannot denote
+// on their own — "examples" is always examples OF something, "the difference"
+// is always a difference BETWEEN things, "the steps" are steps TO something.
+// When that obligatory complement is ABSENT the turn is a fragment, and a
+// fragment's antecedent is the turn before it. When the complement is PRESENT
+// ("examples of graphql", "steps to deploy") the turn is self-contained and
+// must not inherit anything — which is exactly how the user repaired the failure
+// by hand.
+// Two sub-classes, one grammar. Content relationals name a part or property of
+// the antecedent ("examples", "the difference", "the steps"); solicitation
+// relationals ask for a stance on it ("thoughts", "feedback"). Both are
+// two-place nouns whose second argument is the previous turn.
+const CONTINUATION_NOUN_RE =
+  /\b(examples?|details?|alternatives?|options?|differences?|difference|trade-?offs?|pros|cons|benefits?|drawbacks?|advantages?|disadvantages?|use ?cases?|steps?|reasons?|comparisons?|comparison|syntax|summary|explanation|definitions?|definition|specifics?|clarification|more|thoughts?|opinions?|feedback|suggestions?|recommendations?|takeaways?|ideas?)\b/;
+// Anything that can head the missing complement: a preposition, a
+// complementiser, or a relative/interrogative word. Only the text AFTER the
+// noun counts — "what is the difference" is still a fragment.
+const COMPLEMENT_RE = /\b(?:of|for|to|between|in|on|with|about|from|that|which|how|when|where|why|behind|regarding|versus|vs)\b/;
+// A fragment is short by nature: its subject lives in the previous turn. The
+// cap keeps a long self-contained sentence that merely happens to contain one
+// of these nouns out of the class.
+const FRAGMENT_MAX_WORDS = 6;
+
+// A turn that points BACK at the conversation cannot be answered from general
+// knowledge, even when it names no source and carries no claim: "Thoughts on
+// that?" is three words whose entire content is the antecedent. Deliberately a
+// near-copy of conversation-state's PRONOUN_RE pair rather than a shared import
+// — that module imports THIS one, and inverting the dependency to share a regex
+// is a bigger change than the gate it serves. Kept byte-comparable so the two
+// cannot silently diverge.
+const CONTEXT_ANAPHOR_RE = /\b(it|its|that|this|those|these|they|them|she|he|her|him|his|hers|the (?:same|latter|former)|there)\b/i;
+// Same twelve-word insight as PRONOUN_RESOLUTION_MAX_WORDS: a LONG turn
+// containing "it" almost always binds the pronoun to its own antecedent
+// ("what is a mutex and how does it help?"), so the anaphor is not evidence of
+// context-dependence there.
+const ANAPHOR_BINDS_INTERNALLY_ABOVE_WORDS = 12;
+
+/**
+ * A subject-less relational nominal — "examples", "the difference", "pros and
+ * cons" — whose complement is missing and must be inherited from context.
+ *
+ * Exported because detection and RESOLUTION must share one definition: the
+ * resolver anchors this class to the previous question rather than to the topic
+ * slot (see conversation-state.ts), and the two gates disagreeing is the failure
+ * mode documented on isBareFollowUp below.
+ */
+export const isContinuationFragment = (raw: string): boolean => {
+  const q = String(raw).toLowerCase().replace(/[?!.]+$/, '').trim();
+  if (!q) return false;
+  if (q.split(/\s+/).filter(Boolean).length > FRAGMENT_MAX_WORDS) return false;
+  const m = q.match(CONTINUATION_NOUN_RE);
+  if (!m) return false;
+  return !COMPLEMENT_RE.test(q.slice((m.index ?? 0) + m[0].length));
+};
+
 // Requests to REPHRASE the previous turn. "What should I say?" carries no
 // subject of its own — its referent is the question just asked — but it does not
 // start with a pronoun, so the bare-follow-up test missed it and the turn was
@@ -357,6 +431,7 @@ const RESPONSE_REQUEST_RE =
 export const isBareFollowUp = (raw: string): boolean => {
   const q = String(raw).toLowerCase();
   if (RESPONSE_REQUEST_RE.test(q)) return true;
+  if (isContinuationFragment(q)) return true;
   return FOLLOW_UP_RE.test(q) && q.split(/\s+/).filter(Boolean).length <= FOLLOW_UP_MAX_WORDS;
 };
 
@@ -866,6 +941,33 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // out of the candidate pool entirely.
   if (META_REQUEST_RE.test(input.resolvedQuestion)) {
     return { types: ['META_REQUEST'], claims: [], clauses: {} };
+  }
+
+  // LAST-RESORT general-knowledge claim (2026-08-02). Every claim branch above
+  // has now run — private claims, the primary-source fallback, the document
+  // last resort — and NOTHING claimed this turn. There is no source in this
+  // mode that could evidence it, so the grounded path can only ever come back
+  // with zero evidence: measured as AMBIGUOUS → GROUNDED → answerability NONE
+  // on four of six live turns ("qraphql?", "examples of graphql", "give me an
+  // example for running a python script"), each paying +0.3-1.5s of TTFT to
+  // retrieve nothing (live log, 2026-08-01).
+  //
+  // Why this is not another keyword list: the earlier GENERAL_TECHNICAL rescue
+  // is gated on `techTask`, three regexes that only recognise questions phrased
+  // the way they expect — "write the code for odd even" matched, "give me an
+  // example for running a python script" did not, and vocabulary decided the
+  // route. The structural fact is simply that no branch claimed the turn.
+  //
+  // Follow-ups are excluded, and that exclusion is load-bearing: a subject-less
+  // turn ("Thoughts?", "examples") is not a general-knowledge question, it is a
+  // turn whose subject lives in the previous one. It keeps the conservative
+  // grounded route so its referent can be resolved instead of guessed. A short
+  // turn carrying an anaphor ("Thoughts on that?") is the same case wearing a
+  // complement, and is excluded on the same grounds.
+  const shortAnaphoricTurn = CONTEXT_ANAPHOR_RE.test(q)
+    && q.split(/\s+/).filter(Boolean).length <= ANAPHOR_BINDS_INTERNALLY_ABOVE_WORDS;
+  if (claims.size === 0 && !types.has('FOLLOW_UP') && !shortAnaphoricTurn) {
+    types.add('GENERAL_TECHNICAL'); noteWholeQ('GENERAL_TECHNICAL');
   }
 
   const privateTypes: QuestionType[] = ['PERSONAL_PROJECT', 'PERSONAL_SKILL', 'PERSONAL_EXPERIENCE',

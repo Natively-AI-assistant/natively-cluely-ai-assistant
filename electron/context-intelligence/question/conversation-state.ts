@@ -16,7 +16,7 @@
 
 import type { EvidenceScope, PriorTurnDecision } from '../contracts/types';
 import { scopeKey } from '../contracts/types';
-import { isBareFollowUp, isResponseRequest } from './turn-classifier';
+import { isBareFollowUp, isResponseRequest, isContinuationFragment } from './turn-classifier';
 
 export interface ConversationTurn {
   role: 'user' | 'interviewer' | 'assistant';
@@ -291,6 +291,7 @@ export function resolveReference(question: string, state: ConversationState | nu
   const pronoun = pronounAnywhere && shortTurn;
   const bare = isBareFollowUp(q);
   const rephrase = isResponseRequest(q);
+  const fragment = isContinuationFragment(q);
   if (!pronoun && !bare && !rephrase) {
     return {
       resolved: q, usedState: false,
@@ -326,6 +327,23 @@ export function resolveReference(question: string, state: ConversationState | nu
       usedState: true,
       referent: referent ?? state.previousQuestion,
       reason: 'REPHRASE_ANCHORED_TO_PREVIOUS_QUESTION',
+    };
+  }
+
+  // A relational fragment takes its antecedent from the turn IMMEDIATELY before
+  // it, not from the topic slot (2026-08-02). activeTopic persists across turns
+  // and goes stale exactly when a fragment arrives after a turn that set no
+  // topic of its own: "qraphql?" is lowercase and matches no topic pattern, so
+  // activeTopic stayed on the older "rest api", and resolving "examples"
+  // against it would have answered about neither subject. The previous QUESTION
+  // is always the fragment's real antecedent. Skipped when that question is
+  // itself a fragment, or a chain of them anchors to nothing.
+  if (fragment && state.previousQuestion && !isContinuationFragment(state.previousQuestion)) {
+    return {
+      resolved: `${q} (follow-up to: "${state.previousQuestion}")`,
+      usedState: true,
+      referent: state.previousQuestion,
+      reason: 'ANCHORED_TO_PREVIOUS_QUESTION',
     };
   }
 

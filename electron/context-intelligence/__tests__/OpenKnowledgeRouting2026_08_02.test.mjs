@@ -185,3 +185,150 @@ describe('resolver never glues a referent onto a self-contained turn', () => {
     assert.equal(ref.usedState, true);
   });
 });
+
+// ── Live-log regressions, 2026-08-01 session (manual chat, `general` mode) ────
+//
+// Six consecutive real turns. Four of them misrouted, and one produced a
+// visibly wrong answer:
+//
+//   "write the code for odd even"                     → CODING_TASK / FAST  ✓
+//   "what is a rest api"                              → GENERAL_TECHNICAL / FAST ✓
+//   "qraphql?"                                        → AMBIGUOUS / GROUNDED / NONE
+//   "examples"                                        → AMBIGUOUS → answered with an
+//                                                       invented list of CSS tokens
+//                                                       and emoji (turn 6024)
+//   "examples of graphql"                             → AMBIGUOUS / GROUNDED / NONE
+//   "give me an example for running a python script"  → AMBIGUOUS / GROUNDED / NONE
+//
+// Two independent causes: a claimless turn had no general-knowledge last resort
+// (it fell through to AMBIGUOUS → grounded-with-nothing-to-retrieve), and a
+// relational nominal with no complement was not recognised as a follow-up at
+// all, so it reached the model with no referent.
+
+describe('live-log regressions: claimless open-knowledge turns are not AMBIGUOUS', () => {
+  const LOGGED = [
+    'qraphql?',
+    'examples of graphql',
+    'give me an example for running a python script',
+    'what is a rest api',
+    'write the code for odd even',
+  ];
+
+  for (const q of LOGGED) {
+    test(`"${q}" takes the fast path in general mode`, () => {
+      const r = classify(q, 'general');
+      assert.ok(!r.questionTypes.includes('AMBIGUOUS'),
+        `still AMBIGUOUS: ${JSON.stringify(r.questionTypes)} (${r.reason})`);
+      assert.equal(r.path, 'FAST', `${r.reason} (types=${r.questionTypes})`);
+      assert.equal(r.shouldRetrieve, false);
+      assert.deepEqual(r.requiredSourceTypes, []);
+    });
+  }
+
+  test('the last resort never overrides a turn some source can actually evidence', () => {
+    // team-meet plans the transcript + brief for these; the general-knowledge
+    // last resort must run strictly AFTER every other claim branch.
+    const meeting = classify('What caused the checkout latency regression?', 'team-meet');
+    assert.ok(meeting.requiredSourceTypes.includes('MEETING_TRANSCRIPT'),
+      JSON.stringify(meeting.requiredSourceTypes));
+    const personal = classify('What did I ship at my last job?', 'technical-interview');
+    assert.ok(!personal.claimTypes.includes('GENERAL_TECHNICAL'),
+      JSON.stringify(personal.claimTypes));
+  });
+
+  test('a short anaphoric turn keeps the conservative route', () => {
+    for (const q of ['Thoughts on that?', 'How does it compare?', 'Is this the same?']) {
+      const r = classify(q, 'general');
+      assert.notEqual(r.path, 'FAST', `${q} → ${r.reason}`);
+    }
+  });
+});
+
+describe('live-log regressions: relational nominals inherit their complement', () => {
+  const scope = { meetingId: 'm-fragment' };
+
+  test('"examples" after a bare topic turn anchors to that turn, not a stale topic', () => {
+    // Exactly the logged sequence. "what is a rest api" sets activeTopic to
+    // "rest api"; "qraphql?" is lowercase and matches no topic pattern, so the
+    // topic slot STAYS on "rest api". Anchoring the fragment to the topic would
+    // answer about the wrong subject; the previous QUESTION is the antecedent.
+    let state = advance(null, { scope, question: 'what is a rest api' });
+    state = advance(state, { scope, question: 'qraphql?' });
+    const ref = resolveReference('examples', state);
+    assert.equal(ref.usedState, true, 'a bare relational nominal must resolve');
+    assert.ok(ref.resolved.includes('qraphql'),
+      `must anchor to the immediately preceding turn, got: ${ref.resolved}`);
+    assert.ok(!ref.resolved.includes('rest api'),
+      `must not inherit the stale topic slot, got: ${ref.resolved}`);
+  });
+
+  test('a complement makes the same noun self-contained', () => {
+    // The user repaired the failure by hand exactly this way.
+    let state = advance(null, { scope, question: 'what is a rest api' });
+    state = advance(state, { scope, question: 'qraphql?' });
+    for (const q of ['examples of graphql', 'give me an example for running a python script']) {
+      const ref = resolveReference(q, state);
+      assert.equal(ref.resolved, q, `must pass through untouched: ${ref.resolved}`);
+      assert.equal(ref.usedState, false);
+    }
+  });
+
+  test('a fragment with no conversation state is a clarification, never a guess', () => {
+    const ref = resolveReference('examples', null);
+    assert.equal(ref.resolved, 'examples');
+    assert.equal(ref.usedState, false);
+  });
+
+  test('a chain of fragments does not anchor to another fragment', () => {
+    let state = advance(null, { scope, question: 'what is a rest api' });
+    state = advance(state, { scope, question: 'examples' });
+    const ref = resolveReference('more', state);
+    assert.ok(!ref.resolved.includes('"examples"'),
+      `anchoring to another fragment resolves nothing, got: ${ref.resolved}`);
+  });
+
+  test('relational nominals classify as FOLLOW_UP, not as fresh questions', () => {
+    for (const q of ['examples', 'pros and cons', 'the difference', 'thoughts']) {
+      const r = classify(q, 'general');
+      assert.ok(r.questionTypes.includes('FOLLOW_UP'),
+        `${q} → ${JSON.stringify(r.questionTypes)}`);
+      assert.notEqual(r.path, 'FAST');
+    }
+  });
+});
+
+// ── Live-log regression (2026-08-02, session 2): self-presentation imperatives
+// are PERSONAL, never general knowledge ───────────────────────────────────────
+//
+// "introduce yourself" carried no claim (PERSONAL_RE listed only the literal
+// phrase "tell me about yourself"), so the general-knowledge last resort
+// routed it FAST — and the model invented a persona from the conversation
+// topic ("I'm a backend engineer… GraphQL"). A second-person reflexive marks
+// the addressee as the object of the predicate: the turn is about the USER's
+// person, which is exactly what the résumé pool grounds.
+
+describe('self-presentation reflexives are personal claims', () => {
+  const SELF_PRESENTATION = [
+    'introduce yourself',
+    'present yourself',
+    'describe yourself',
+    'Can you tell me about yourself?',
+    'how would you describe yourself',
+  ];
+
+  for (const q of SELF_PRESENTATION) {
+    test(`"${q}" claims the user's history and never takes the fast path`, () => {
+      const r = classify(q, 'looking-for-work');
+      assert.ok(r.questionTypes.includes('PERSONAL_EXPERIENCE'), JSON.stringify(r.questionTypes));
+      assert.ok(r.claimTypes.includes('USER_EMPLOYMENT'), JSON.stringify(r.claimTypes));
+      assert.notEqual(r.path, 'FAST', r.reason);
+      assert.ok(!r.claimTypes.includes('GENERAL_TECHNICAL'),
+        'a fabricatable identity turn must never carry a general-knowledge claim');
+    });
+  }
+
+  test('emphatic reflexive about own work is also personal (correct, not collateral)', () => {
+    const r = classify('did you deploy it yourself', 'looking-for-work');
+    assert.ok(r.claimTypes.includes('USER_EMPLOYMENT'), JSON.stringify(r.claimTypes));
+  });
+});

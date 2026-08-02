@@ -166,3 +166,121 @@ describe('token estimation', () => {
     assert.ok(estimateTokens('x'.repeat(400)) > estimateTokens('x'.repeat(100)));
   });
 });
+
+// ── Live-log regression (2026-08-02): general follow-up must not be narrated
+// as a missing document ─────────────────────────────────────────────────────
+//
+// "give me an example" after "what is a REST API" — the referent resolved, the
+// merged claims were all GENERAL_TECHNICAL, answerability FULL — and the
+// answer still said "no documents or reference files are attached", because
+// noEvidenceNotice's zero-attachment branch never checked whether any claim
+// actually required a private source. The guard is the same principle the
+// !shouldRetrieve branch already had; it now covers every branch.
+
+describe('no-evidence notice requires a private claim', () => {
+  const followUpDecision = () => decide({
+    requestId: 'r-fu', requestSequence: 1, surface: 'manual-chat', modeId: 'general',
+    scope: { userId: 'u1' }, sessionId: 's-fu',
+    manualQuestion: 'give me an example (follow-up to: "what is a rest api")',
+    isFollowUp: true,
+  });
+
+  test('general-claims follow-up with zero attachments gets NO evidence narrative', () => {
+    const d = followUpDecision();
+    // Pin the routing shape this regression lives in: grounded conservative
+    // retrieval, nothing needed from a private source.
+    assert.equal(d.retrievalPlan.path, 'GROUNDED');
+    assert.ok(!d.claimRequirements.some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED'),
+      JSON.stringify(d.claimRequirements));
+    const p = composePrompt({
+      decision: d, policy: MODE_POLICIES.general, evidence: [],
+      attachedSourceCount: 0, profileSourceCount: 0,
+    });
+    for (const phrase of ['NO reference material', 'no document has been added', 'does not cover this',
+      'No supporting evidence was retrieved', 'nothing to search']) {
+      assert.ok(!p.user.includes(phrase), `user content still narrates a source gap: "${phrase}"\n${p.user}`);
+    }
+    assert.ok(!p.sections.includes('no_evidence'), p.sections.join(','));
+  });
+
+  test('a document question with zero attachments KEEPS the notice (guard is not a blanket)', () => {
+    const d = decide({
+      requestId: 'r-doc', requestSequence: 1, surface: 'manual-chat', modeId: 'lecture',
+      scope: { userId: 'u1' }, sessionId: 's-doc',
+      manualQuestion: 'What does the handout say about quantum computing?',
+    });
+    assert.ok(d.claimRequirements.some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED'),
+      JSON.stringify(d.claimRequirements));
+    const p = composePrompt({
+      decision: d, policy: MODE_POLICIES.lecture, evidence: [],
+      attachedSourceCount: 0, profileSourceCount: 0,
+    });
+    assert.ok(p.sections.includes('no_evidence'), p.sections.join(','));
+  });
+});
+
+// ── Persona base (2026-08-02): surface identity rides FIRST, governance last ─
+
+describe('personaBase composition', () => {
+  const PERSONA = 'You are Natively, a live conversation assistant by Evin John.\n<chat_layout>typed panel</chat_layout>';
+
+  test('absent personaBase composes byte-identically to before the field existed', () => {
+    const d = decision();
+    const without = composePrompt({ decision: d, policy: MODE_POLICIES['technical-interview'], evidence: [] });
+    const explicit = composePrompt({ decision: d, policy: MODE_POLICIES['technical-interview'], evidence: [], personaBase: undefined });
+    assert.equal(without.system, explicit.system);
+    assert.ok(!without.sections.includes('persona_base'));
+  });
+
+  test('personaBase renders FIRST; every governance section still present after it', () => {
+    const d = decision();
+    const p = composePrompt({ decision: d, policy: MODE_POLICIES['technical-interview'], evidence: [], personaBase: PERSONA });
+    assert.ok(p.system.startsWith(PERSONA), p.system.slice(0, 120));
+    assert.ok(p.sections[0] === 'persona_base', p.sections.join(','));
+    // Governance holds recency: the rules/grounding sections come AFTER the persona.
+    assert.ok(p.system.indexOf('# Rules') > p.system.indexOf('<chat_layout>'));
+    assert.ok(p.system.includes('# Grounding'));
+    assert.ok(p.system.includes('# Capabilities'));
+  });
+
+  test('whitespace-only personaBase is ignored', () => {
+    const d = decision();
+    const p = composePrompt({ decision: d, policy: MODE_POLICIES['technical-interview'], evidence: [], personaBase: '   \n ' });
+    assert.ok(!p.sections.includes('persona_base'));
+  });
+});
+
+describe('unsupported-in-mode notice names the remedy (2026-08-02)', () => {
+  test('a personal question in a profile-less mode points at profile-enabled modes', () => {
+    // general does not authorize RESUME/PROFILE_FACT — the mode-less chat case
+    // that produced a coaching template with bracket placeholders.
+    const d = decide({
+      requestId: 'r-intro', requestSequence: 1, surface: 'manual-chat', modeId: 'general',
+      scope: { userId: 'u1' }, sessionId: 's-intro',
+      manualQuestion: 'Can you tell me about yourself?',
+    });
+    assert.equal(d.retrievalPlan.shouldRetrieve, false, d.retrievalPlan.reason);
+    const p = composePrompt({
+      decision: d, policy: MODE_POLICIES.general, evidence: [],
+      attachedSourceCount: 0, profileSourceCount: 0,
+    });
+    assert.ok(p.user.includes('Profile Intelligence'), p.user);
+    assert.ok(p.user.includes('do not invent a template or example answer'), p.user);
+  });
+
+  test('remedy derives from claim sources, never question wording — meeting claims name the transcript', () => {
+    const d = decide({
+      requestId: 'r-meet', requestSequence: 1, surface: 'manual-chat', modeId: 'technical-interview',
+      scope: { userId: 'u1' }, sessionId: 's-meet',
+      manualQuestion: 'What did we decide in the meeting?',
+    });
+    const p = composePrompt({
+      decision: d, policy: MODE_POLICIES['technical-interview'], evidence: [],
+      attachedSourceCount: 0, profileSourceCount: 0,
+    });
+    if (p.sections.includes('no_evidence')) {
+      assert.ok(!p.user.includes('Profile Intelligence'),
+        'a meeting gap must not advertise the profile remedy');
+    }
+  });
+});

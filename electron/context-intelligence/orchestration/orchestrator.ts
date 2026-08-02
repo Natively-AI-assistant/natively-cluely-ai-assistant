@@ -363,6 +363,14 @@ export function propertyHeadTerms(clause: string): string[] {
   } while (q !== prev);
   // trailing predicate: "is explicitly documented", "are configured", "was used"
   q = q.replace(/\s+(?:is|are|was|were)\s+(?:\w+ly\s+)?(?:documented|used|configured|listed|stated|mentioned|recorded|defined|specified|required|described)\s*$/, '');
+  // A REFLEXIVE tail is a whole-person request, not a property lookup
+  // (2026-08-02): "tell me about yourself", "introduce yourself", "describe
+  // yourself" ask for the person, and a résumé never contains the literal word
+  // "yourself" — treating it as the requested property graded every correctly
+  // résumé-grounded introduction NONE / DOCUMENT_FACT_NOT_FOUND (live log,
+  // looking-for-work, evidence admitted and used). No property head exists, so
+  // the head check must not block; claim authority still gates what counts.
+  if (/\b(?:your|my|him|her|it|our|them)?sel(?:f|ves)\s*$/.test(q)) return [];
   const terms = salientTermList(q);
   if (!terms.length) return [];
   const heads = [terms[terms.length - 1]];

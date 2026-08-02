@@ -132,8 +132,17 @@ describe('determinism and traceability', () => {
 
   test('an ambiguous question retrieves conservatively rather than guessing', () => {
     const r = classify('Thoughts?');
-    assert.ok(r.questionTypes.includes('AMBIGUOUS'));
+    // The GUARANTEE is the route, not the label: a turn that states no subject
+    // of its own must never take the fast path and answer from model knowledge.
+    // Label widened 2026-08-02: "Thoughts?" is a relational nominal with no
+    // complement ("thoughts ON WHAT?"), so it now classifies as the FOLLOW_UP it
+    // actually is rather than as unclassifiable. That is strictly more useful —
+    // a follow-up gets its referent resolved against conversation state, while
+    // AMBIGUOUS only ever retrieved conservatively against nothing.
+    assert.ok(r.questionTypes.includes('AMBIGUOUS') || r.questionTypes.includes('FOLLOW_UP'),
+      JSON.stringify(r.questionTypes));
     assert.notEqual(r.path, 'FAST');
+    assert.equal(r.shouldRetrieve, true);
   });
 });
 
