@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import type { DefenceSettings, Evidence, IndexManifest, StructuredAnswer } from './types';
+import type { DefenceSettings, Evidence, FastHint, IndexManifest, StructuredAnswer } from './types';
 import type { DefenceConfig } from './config';
 import { detectLanguage } from './questionDetector';
 import { classifyQuestion, HybridRetriever } from './retriever';
@@ -50,7 +50,49 @@ function cbaOutputSafe(value: Partial<StructuredAnswer>): boolean {
 
 export class AnswerEngine {
   private llm: LlmProvider; private search: SearchProvider;
+  private answerCache = new Map<string, { createdAt: number; answer: StructuredAnswer }>();
+  private hintCache = new Map<string, { createdAt: number; evidence: Evidence[]; retrievalMs: number }>();
   constructor(private config: DefenceConfig) { this.llm = new LlmProvider(config.llm); this.search = new SearchProvider(config.search); }
+  private cacheKey(question: string, settings: DefenceSettings): string {
+    const normalized = question.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    return `${settings.outputLanguage}:${settings.answerDepth}:${normalized}`;
+  }
+  private findSemanticCache(question: string, settings: DefenceSettings): StructuredAnswer | undefined {
+    const now = Date.now(); const target = new Set(this.cacheKey(question, settings).split(/\s+/));
+    let best: { score: number; answer: StructuredAnswer } | undefined;
+    for (const [key, entry] of this.answerCache) {
+      if (now - entry.createdAt > this.config.semanticCacheTtlMs) { this.answerCache.delete(key); continue; }
+      const candidate = new Set(key.split(/\s+/)); let overlap = 0;
+      for (const token of target) if (candidate.has(token)) overlap++;
+      const score = overlap / Math.max(1, target.size + candidate.size - overlap);
+      if (score >= .88 && (!best || score > best.score)) best = { score, answer: entry.answer };
+    }
+    return best ? structuredClone(best.answer) : undefined;
+  }
+  async prewarm(question: string, manifest: IndexManifest): Promise<void> {
+    const key = question.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (this.hintCache.has(key)) return;
+    const started = performance.now();
+    const evidence = new HybridRetriever(manifest.chunks).searchMultilingual(question, this.config.retrievalTopK);
+    this.hintCache.set(key, { createdAt: Date.now(), evidence, retrievalMs: Math.round(performance.now() - started) });
+  }
+  async fastHint(questionId: string, question: string, manifest: IndexManifest): Promise<FastHint> {
+    const started = performance.now(); const key = question.toLowerCase().replace(/\s+/g, ' ').trim();
+    const cached = this.hintCache.get(key); let evidence: Evidence[]; let retrievalMs: number;
+    if (cached && Date.now() - cached.createdAt <= this.config.semanticCacheTtlMs) ({ evidence, retrievalMs } = cached);
+    else { const retrievalStarted = performance.now(); evidence = new HybridRetriever(manifest.chunks).searchMultilingual(question, this.config.retrievalTopK); retrievalMs = Math.round(performance.now() - retrievalStarted); this.hintCache.set(key, { createdAt: Date.now(), evidence, retrievalMs }); }
+    const structures: Record<string, string[]> = {
+      system_architecture: ['先说明目标与边界', '再讲数据流和关键组件', '最后说明取舍与验证'],
+      testing_evaluation: ['先定义评价目标', '给出核心指标和结果', '解释限制与改进方向'],
+      development_difficulty: ['说明具体难点', '解释解决方案', '给出验证证据'],
+      security_privacy: ['说明威胁边界', '列出保护措施', '说明仍存在的风险'],
+      technology_choice: ['说明选择标准', '比较备选方案', '解释最终取舍'],
+      code_implementation: ['定位入口', '说明核心调用链', '指出异常处理与测试'],
+      project_feature: ['一句话结论', '给出项目证据', '说明限制'],
+    };
+    const category = classifyQuestion(question).category;
+    return { questionId, question, keywords: keywords(question), structure: structures[category] || structures.project_feature, evidence: evidence.slice(0, 3), diagnostics: { retrievalMs, fastHintMs: Math.round(performance.now() - started), semanticCacheHit: !!cached } };
+  }
   private cbaGroundingRules(): string {
     if (this.config.projectId !== 'cba-import-candidate-ranking') return '';
     try {
@@ -60,6 +102,12 @@ export class AnswerEngine {
     } catch { return 'Project positioning: Top-K scouting shortlist decision support, never a deterministic signing prediction. Do not state unverified metrics.'; }
   }
   async answer(question: string, manifest: IndexManifest, settings: DefenceSettings): Promise<StructuredAnswer> {
+    const fullStarted = performance.now(); const cached = this.findSemanticCache(question, settings);
+    if (cached) {
+      cached.question = question;
+      cached.diagnostics = { ...(cached.diagnostics || { retrievalMs: 0, candidateCount: 0, evidenceCount: 0, schemaValid: true }), semanticCacheHit: true, fullAnswerMs: Math.round(performance.now() - fullStarted) };
+      return cached;
+    }
     const retrievalStarted = performance.now();
     const detected = detectLanguage(question); const classification = classifyQuestion(question);
     const retrievalQuestion = this.config.projectId === 'cba-import-candidate-ranking' && /predict|what exactly|到底|预测|签约|一定会/i.test(question)
@@ -86,7 +134,7 @@ export class AnswerEngine {
     }
     const noEvidence = evidence.length === 0 && (classification.projectInternal || externalSources.length === 0);
     if (noEvidence) generated = { ...generated, spokenAnswer: detected === 'en' ? NO_EVIDENCE_EN : NO_EVIDENCE_ZH, noEvidence: true };
-    return {
+    const answer: StructuredAnswer = {
       question, language: detected, questionExplanation: generated.questionExplanation,
       keywords: Array.isArray(generated.keywords) ? generated.keywords.slice(0, 10) : keywords(question),
       spokenAnswer: String(generated.spokenAnswer || (detected === 'en' ? NO_EVIDENCE_EN : NO_EVIDENCE_ZH)),
@@ -96,7 +144,9 @@ export class AnswerEngine {
       missingInformation: generated.missingInformation,
       searchedSourceTypes: ['source code', 'project documentation', 'test evidence', ...(allowExternal ? ['external sources'] : [])],
       provider: this.llm.available() ? this.config.llm.provider : 'local-grounded-fallback',
-      diagnostics: { retrievalMs, candidateCount: evidence.length, evidenceCount: evidence.length, llmFirstResponseMs, llmTotalMs, llmStatus, llmRetries, llmRequestId, schemaValid },
+      diagnostics: { retrievalMs, candidateCount: evidence.length, evidenceCount: evidence.length, llmFirstResponseMs, llmTotalMs, llmStatus, llmRetries, llmRequestId, schemaValid, semanticCacheHit: false, fullAnswerMs: Math.round(performance.now() - fullStarted) },
     };
+    this.answerCache.set(this.cacheKey(question, settings), { createdAt: Date.now(), answer: structuredClone(answer) });
+    return answer;
   }
 }

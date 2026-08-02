@@ -26,6 +26,23 @@ export interface DefenceConfig {
   maxAudioDurationMs: number;
   retrievalTopK: number;
   retrievalTopKAdjusted: boolean;
+  input: {
+    mode: 'windows-audio' | 'iphone-microphone';
+    iphoneOutputOnly: boolean;
+    source: 'specific-process-loopback' | 'system-loopback' | 'windows-microphone' | 'iphone-microphone';
+    processName: string;
+    processId?: number;
+    deviceId: string;
+    vad: {
+      minSpeechMs: number;
+      silenceMs: number;
+      maxUtteranceMs: number;
+      partialIntervalMs: number;
+      rmsThreshold: number;
+      duplicateWindowMs: number;
+    };
+  };
+  semanticCacheTtlMs: number;
 }
 
 const numberFrom = (value: string | undefined, fallback: number) => {
@@ -38,6 +55,11 @@ export function loadDefenceConfig(env: NodeJS.ProcessEnv = process.env): Defence
   const projectId = env.PROJECT_ID || 'default';
   const requestedRetrievalTopK = numberFrom(env.RETRIEVAL_TOP_K, 6);
   const retrievalTopKAdjusted = projectId === 'cba-import-candidate-ranking' && requestedRetrievalTopK < 3;
+  const inputMode = env.INPUT_MODE === 'iphone-microphone' ? 'iphone-microphone' : 'windows-audio';
+  const requestedSource = env.WINDOWS_AUDIO_SOURCE || (inputMode === 'windows-audio' ? 'specific-process-loopback' : 'iphone-microphone');
+  const allowedSources = new Set(['specific-process-loopback', 'system-loopback', 'windows-microphone', 'iphone-microphone']);
+  const inputSource = (allowedSources.has(requestedSource) ? requestedSource : 'specific-process-loopback') as DefenceConfig['input']['source'];
+  const processId = Number(env.WINDOWS_AUDIO_PROCESS_ID || 0);
   return {
     host: env.DEFENCE_HOST || '127.0.0.1',
     port: numberFrom(env.DEFENCE_PORT, 4317),
@@ -81,6 +103,23 @@ export function loadDefenceConfig(env: NodeJS.ProcessEnv = process.env): Defence
     maxAudioDurationMs: numberFrom(env.MAX_AUDIO_DURATION_MS, 15_000),
     retrievalTopK: retrievalTopKAdjusted ? 3 : requestedRetrievalTopK,
     retrievalTopKAdjusted,
+    input: {
+      mode: inputMode,
+      iphoneOutputOnly: env.IPHONE_OUTPUT_ONLY !== 'false' && inputMode === 'windows-audio',
+      source: inputSource,
+      processName: env.WINDOWS_AUDIO_PROCESS_NAME || 'auto',
+      processId: Number.isSafeInteger(processId) && processId > 0 ? processId : undefined,
+      deviceId: env.WINDOWS_AUDIO_DEVICE_ID || '',
+      vad: {
+        minSpeechMs: numberFrom(env.VAD_MIN_SPEECH_MS, 320),
+        silenceMs: Math.min(800, Math.max(500, numberFrom(env.VAD_SILENCE_MS, 650))),
+        maxUtteranceMs: numberFrom(env.VAD_MAX_UTTERANCE_MS, 20_000),
+        partialIntervalMs: numberFrom(env.VAD_PARTIAL_INTERVAL_MS, 1_200),
+        rmsThreshold: Math.min(0.25, Math.max(0.001, Number(env.VAD_RMS_THRESHOLD || 0.012))),
+        duplicateWindowMs: numberFrom(env.VAD_DUPLICATE_WINDOW_MS, 30_000),
+      },
+    },
+    semanticCacheTtlMs: numberFrom(env.SEMANTIC_CACHE_TTL_MS, 30 * 60 * 1000),
   };
 }
 
@@ -90,6 +129,7 @@ export function publicConfig(config: DefenceConfig) {
     projectId: config.projectId, projectDisplayName: config.projectDisplayName,
     secure: config.tls.enabled, adminLocalOnly: config.adminLocalOnly, publicMode: config.publicMode,
     adminNotExposed: config.publicMode === 'companion-only', retrievalTopK: config.retrievalTopK,
+    inputMode: config.input.mode, inputSource: config.input.source, iphoneOutputOnly: config.input.iphoneOutputOnly,
     capabilities: {
       stt: config.stt.provider !== 'none' && !!config.stt.apiKey,
       llm: config.llm.provider !== 'none' && (!!config.llm.apiKey || config.llm.provider === 'ollama'),

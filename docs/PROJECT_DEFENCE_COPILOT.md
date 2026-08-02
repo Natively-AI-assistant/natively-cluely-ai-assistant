@@ -20,9 +20,9 @@ Copy-Item .env.example .env
 npm.cmd run defence:start
 ```
 
-Open `http://127.0.0.1:4317/admin` on the computer, index a project, and create a one-time pairing code. To let a phone connect on a trusted LAN, set `DEFENCE_HOST=0.0.0.0`, restart, and use the displayed private-network address.
+Open `http://127.0.0.1:4317/admin` on the computer, index a project, select a Windows input source, and create a one-time pairing code. The default mode is `INPUT_MODE=windows-audio` with `IPHONE_OUTPUT_ONLY=true`; the phone does not request microphone permission.
 
-On iPhone, open the address in Safari, enter the pairing ID and six-digit code, choose languages/depth/search policy, then press **Start listening**. The microphone indicator remains visible and capture only starts after an explicit tap. Raw audio is not saved.
+On iPhone, open the address in Safari and pair. In the default mode it is a read-only display for live transcript, current question, fast hint, full answer, and project evidence. Set `WINDOWS_AUDIO_SOURCE` to `specific-process-loopback`, `system-loopback`, or `windows-microphone`. Set it to `iphone-microphone` (or `INPUT_MODE=iphone-microphone`) only for the existing fallback. Raw audio is not saved.
 
 ## HTTPS on iPhone
 
@@ -63,10 +63,15 @@ API keys are read only by the backend. They are never returned by `/api/health`,
 ## Data flow
 
 ```text
-iPhone microphone -> browser/STT provider -> stable transcript
-  -> question detector -> local hybrid retrieval -> evidence gate
-  -> optional LLM structured answer -> authenticated WebSocket -> iPhone cards
+Windows process/system/microphone -> WASAPI capture -> 16 kHz mono PCM
+  -> local VAD/utterance finalization -> Groq STT
+  -> CBA retrieval -> fast_hint -> DeepSeek full_answer
+  -> authenticated WSS -> read-only iPhone Companion
 ```
+
+`specific-process-loopback` uses Windows WASAPI application loopback and includes the selected process tree. It never falls back silently to system loopback, so unrelated notification sounds are not accepted in process-only mode. `auto` prefers Teams, Zoom, Chrome, and Edge. This module does not read Windows Live Captions and contains no caption-window scraping, OCR, clipboard capture, or UI Automation path.
+
+The local segmenter uses 20 ms PCM frames, a configurable minimum speech duration, 500–800 ms end silence, short-pause merging, a maximum utterance length, and recent-audio digest suppression. Partial STT results only prewarm retrieval. Only a finalized question can trigger generation, and an automatic question key can trigger the LLM at most once. The first push is `fast_hint` (keywords, structure, early evidence); `full_answer` follows with the complete spoken answer and evidence.
 
 The index stores file hashes and chunk metadata under `PROJECT_INDEX_PATH`. Unchanged files are retained, changed files are replaced, deleted files are removed, and a full rebuild is available from the admin page. Evidence sent to the phone is limited to answer-relevant excerpts.
 
@@ -106,7 +111,7 @@ Verified facts use `VERIFIED`, `CONFLICTING`, or `NOT_FOUND`. Production answers
 - HTTPS certificates and public DNS are not provisioned by this repository.
 - PPTX extraction reads visible slide text; speaker notes and scanned images need OCR or manual export.
 - The local fallback is grounded but less fluent than an LLM. Bilingual alternate answers require an LLM.
-- Browser speech APIs and MediaRecorder formats vary by iOS release; the UI reports actionable permission/provider errors.
+- The iPhone MediaRecorder path remains a fallback and varies by iOS release; Windows input is the default.
 
 ## License
 

@@ -85,6 +85,9 @@ export interface StructuredAnswer {
   searchedSourceTypes: string[];
   provider: string;
   diagnostics?: {
+    windowsCaptureMs?: number;
+    sttLatencyMs?: number;
+    questionFinalizationMs?: number;
     retrievalMs: number;
     candidateCount: number;
     evidenceCount: number;
@@ -94,5 +97,17 @@ export interface StructuredAnswer {
     llmRetries?: number;
     llmRequestId?: string;
     schemaValid: boolean;
+    fastHintMs?: number;
+    fullAnswerMs?: number;
+    semanticCacheHit?: boolean;
   };
+}
+
+export interface FastHint {
+  questionId: string;
+  question: string;
+  keywords: string[];
+  structure: string[];
+  evidence: Evidence[];
+  diagnostics: { retrievalMs: number; fastHintMs: number; semanticCacheHit: boolean };
 }

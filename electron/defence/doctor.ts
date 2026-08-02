@@ -17,7 +17,7 @@ export function runDoctor(env: NodeJS.ProcessEnv = process.env) {
     try { fs.accessSync(config.tls.keyPath, fs.constants.R_OK); keyReadable = true; } catch { keyReadable = false; }
   }
   const notes: string[] = [];
-  if (!config.tls.enabled && !config.companionPublicUrl.startsWith('https://')) notes.push('HTTPS is disabled; a physical iPhone cannot grant microphone access to this origin.');
+  if (!config.input.iphoneOutputOnly && !config.tls.enabled && !config.companionPublicUrl.startsWith('https://')) notes.push('HTTPS is disabled; a physical iPhone cannot grant microphone access to this origin.');
   if (config.companionPublicUrl.startsWith('https://')) notes.push('Companion HTTPS terminates at a reverse proxy or tunnel; verify its certificate on the iPhone.');
   if (config.retrievalTopKAdjusted) notes.push('CBA retrievalTopK was below 3 and has been automatically promoted to 3 for cross-language evidence recall.');
   if (config.publicMode !== 'companion-only') notes.push('Companion-only mode is disabled; do not expose the full admin listener through a tunnel.');
@@ -31,9 +31,12 @@ export function runDoctor(env: NodeJS.ProcessEnv = process.env) {
     llm: { provider: config.llm.provider, baseHost: baseHost(config.llm.baseUrl), model: config.llm.model, providerConfigured: config.llm.provider !== 'none', endpointConfigured: configured(config.llm.baseUrl), keyConfigured: config.llm.provider === 'ollama' || configured(config.llm.apiKey), modelConfigured: configured(config.llm.model) },
     searchProvider: config.search.provider, searchDisabled: config.search.provider === 'none', indexExists: fs.existsSync(`${config.indexPath}/manifest.json`), storeAudio: config.storeAudio,
     retrievalTopK: config.retrievalTopK, retrievalTopKAdjusted: config.retrievalTopKAdjusted,
+    inputMode: config.input.mode, inputSource: config.input.source, iphoneOutputOnly: config.input.iphoneOutputOnly,
+    windowsVad: { minSpeechMs: config.input.vad.minSpeechMs, silenceMs: config.input.vad.silenceMs, maxUtteranceMs: config.input.vad.maxUtteranceMs, partialIntervalMs: config.input.vad.partialIntervalMs },
     companionHttpsConfigured: companionSecure,
     externalTlsTrustUnverified: config.companionPublicUrl.startsWith('https://'),
     suitableForIPhoneMicrophone: config.tls.enabled && certReadable && keyReadable && certificateMatchesHost && !config.storeAudio,
+    suitableForIPhoneOutputOnly: config.input.iphoneOutputOnly && companionSecure && !config.storeAudio,
     notes,
   };
   return result;

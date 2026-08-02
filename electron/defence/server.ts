@@ -5,10 +5,11 @@ import https from 'https';
 import os from 'os';
 import path from 'path';
 import { URL } from 'url';
+import { EventEmitter } from 'events';
 import { WebSocket, WebSocketServer } from 'ws';
 import QRCode from 'qrcode';
 import type { DefenceConfig } from './config';
-import { publicConfig } from './config';
+import { loadDefenceConfig, publicConfig } from './config';
 import { ProjectIndexer } from './projectIndexer';
 import { QuestionDetector } from './questionDetector';
 import { AnswerEngine } from './answerEngine';
@@ -16,17 +17,18 @@ import { SttProvider } from './providers';
 import { ProviderError } from './providers';
 import { AudioChunkTracker, AudioProtocolError, allowedAudioMimeTypes } from './audioProtocol';
 import type { DefenceSettings, StructuredAnswer } from './types';
+import { WindowsAudioCaptureProvider, type WindowsAudioSegment } from './windowsAudioCapture';
 
 const DEFAULT_SETTINGS: DefenceSettings = { inputLanguage: 'auto', outputLanguage: 'follow', answerDepth: 'standard', searchMode: 'off' };
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 interface Pairing { id: string; codeHash: string; secretHash: string; expiresAt: number; used: boolean; failedAttempts: number }
-interface SessionDiagnostics { lastAudioBytes?: number; lastAudioMime?: string; lastSttLatencyMs?: number; sttStatus?: number; sttRetries?: number; sttRequestId?: string; partialCount: number; finalCount: number; lastErrorCode?: string; retrievalMs?: number; candidateCount?: number; evidenceCount?: number; llmFirstResponseMs?: number; llmTotalMs?: number; llmStatus?: number; llmRetries?: number; llmRequestId?: string; schemaValid?: boolean }
-interface Session { id: string; tokenHash: string; createdAt: number; settings: DefenceSettings; detector: QuestionDetector; audio: AudioChunkTracker; transcript: string; answers: StructuredAnswer[]; diagnostics: SessionDiagnostics; questionCounter: number; lastQuestionId?: string; revision: number; abort?: AbortController }
+interface SessionDiagnostics { lastAudioBytes?: number; lastAudioMime?: string; lastSttLatencyMs?: number; sttStatus?: number; sttRetries?: number; sttRequestId?: string; partialCount: number; finalCount: number; lastErrorCode?: string; retrievalMs?: number; candidateCount?: number; evidenceCount?: number; llmFirstResponseMs?: number; llmTotalMs?: number; llmStatus?: number; llmRetries?: number; llmRequestId?: string; schemaValid?: boolean; windowsCaptureMs?: number; questionFinalizationMs?: number; fastHintMs?: number; fullAnswerMs?: number; semanticCacheHit?: boolean; inputSource?: string }
+interface Session { id: string; tokenHash: string; createdAt: number; settings: DefenceSettings; detector: QuestionDetector; audio: AudioChunkTracker; transcript: string; answers: StructuredAnswer[]; diagnostics: SessionDiagnostics; questionCounter: number; lastQuestionId?: string; revision: number; abort?: AbortController; answeredQuestionKeys: Set<string>; inFlightQuestionKeys: Set<string> }
 interface ProjectRegistryEntry { projectId: string; displayName: string; sourcePath: string; indexPath: string; personaPath?: string; verifiedFactsPath?: string }
 type ServerMode = 'full' | 'companion';
-interface DefenceRuntime { pairings: Map<string, Pairing>; sessions: Map<string, Session> }
-export function createDefenceRuntime(): DefenceRuntime { return { pairings: new Map(), sessions: new Map() }; }
+interface DefenceRuntime { pairings: Map<string, Pairing>; sessions: Map<string, Session>; events: EventEmitter }
+export function createDefenceRuntime(): DefenceRuntime { return { pairings: new Map(), sessions: new Map(), events: new EventEmitter() }; }
 
 function token(): string { return crypto.randomBytes(24).toString('base64url'); }
 function hash(value: string): string { return crypto.createHash('sha256').update(value).digest('hex'); }
@@ -48,8 +50,17 @@ export class DefenceServer {
   private server: http.Server | https.Server; private wss: WebSocketServer; private listeningPort = 0;
   private indexer: ProjectIndexer; private engine: AnswerEngine; private stt: SttProvider;
   private pairings: Map<string, Pairing>; private sessions: Map<string, Session>;
+  private clients = new Map<string, Set<WebSocket>>();
+  private windowsInput?: WindowsAudioCaptureProvider;
+  private windowsQueue: Promise<void> = Promise.resolve();
+  private windowsPartialInFlight = false;
   private requestBuckets = new Map<string, { count: number; reset: number }>();
-  constructor(private config: DefenceConfig, private mode: ServerMode = 'full', runtime: DefenceRuntime = createDefenceRuntime()) {
+  constructor(private config: DefenceConfig, private mode: ServerMode = 'full', private runtime: DefenceRuntime = createDefenceRuntime()) {
+    const defaults = loadDefenceConfig({});
+    this.config.input = { ...defaults.input, ...((this.config as any).input || {}), vad: { ...defaults.input.vad, ...((this.config as any).input?.vad || {}) } };
+    this.config.semanticCacheTtlMs = this.config.semanticCacheTtlMs || defaults.semanticCacheTtlMs;
+    this.config.publicMode = this.config.publicMode || 'full'; this.config.companionHost = this.config.companionHost || '127.0.0.1'; this.config.companionPort = this.config.companionPort || 4318; this.config.companionPublicUrl = this.config.companionPublicUrl || '';
+    this.config.retrievalTopK = this.config.retrievalTopK || 6; this.config.retrievalTopKAdjusted = this.config.retrievalTopKAdjusted || false;
     this.pairings = runtime.pairings; this.sessions = runtime.sessions;
     this.wss = new WebSocketServer({ noServer: true, maxPayload: Math.max(10 * 1024 * 1024, Math.ceil(config.maxAudioBytes * 4 / 3) + 64 * 1024) });
     this.indexer = new ProjectIndexer(config.projectSourcePath, config.indexPath); this.engine = new AnswerEngine(config); this.stt = new SttProvider(config.stt);
@@ -59,6 +70,9 @@ export class DefenceServer {
       : http.createServer(handler);
     this.server.on('upgrade', (req, socket, head) => this.upgrade(req, socket, head));
     (this.wss as any).on('connection', (ws: WebSocket, _req: http.IncomingMessage, session: Session) => this.socket(ws, session));
+    this.runtime.events.on('outbound', ({ sessionId, value }) => {
+      for (const ws of this.clients.get(sessionId) || []) this.send(ws, value);
+    });
   }
   async listen(): Promise<{ port: number; urls: string[] }> {
     await new Promise<void>((resolve, reject) => { this.server.once('error', reject); this.server.listen(this.config.port, this.config.host, resolve); });
@@ -66,7 +80,7 @@ export class DefenceServer {
     const hosts = this.config.host === '0.0.0.0' ? ['127.0.0.1', ...lanAddresses()] : [this.config.host];
     const protocol = this.config.tls.enabled ? 'https' : 'http'; return { port, urls: hosts.map(host => `${protocol}://${host}:${port}`) };
   }
-  async close(): Promise<void> { for (const client of this.wss.clients) client.close(); await new Promise<void>(resolve => this.server.close(() => resolve())); }
+  async close(): Promise<void> { this.windowsInput?.stop(); for (const client of this.wss.clients) client.close(); await new Promise<void>(resolve => this.server.close(() => resolve())); }
 
   private rate(remote = ''): boolean {
     const now = Date.now(); const bucket = this.requestBuckets.get(remote);
@@ -130,6 +144,22 @@ export class DefenceServer {
         this.config.projectId = selected.projectId; this.config.projectDisplayName = selected.displayName; this.config.projectSourcePath = source; this.config.indexPath = index; this.indexer = new ProjectIndexer(source, index); this.engine = new AnswerEngine(this.config);
         return this.json(res, 200, { ok: true, projectId: selected.projectId, displayName: selected.displayName, sourcePath: source, indexPath: index, indexed: fs.existsSync(path.join(index, 'manifest.json')) });
       }
+      if (url.pathname === '/api/input/status' && method === 'GET') {
+        if (!adminAllowed) return this.json(res, 403, { error: 'admin_loopback_required' });
+        return this.json(res, 200, { mode: this.config.input.mode, source: this.config.input.source, iphoneOutputOnly: this.config.input.iphoneOutputOnly, processName: this.config.input.processName, processId: this.config.input.processId });
+      }
+      if (url.pathname === '/api/input/select' && method === 'POST') {
+        if (!adminAllowed) return this.json(res, 403, { error: 'admin_loopback_required' }); const data = await this.body(req);
+        const allowed = new Set(['specific-process-loopback', 'system-loopback', 'windows-microphone', 'iphone-microphone']); const source = String(data.source || '');
+        if (!allowed.has(source)) return this.json(res, 400, { error: 'invalid_input_source' });
+        this.windowsInput?.stop(); this.windowsInput = undefined;
+        this.config.input.source = source as DefenceConfig['input']['source']; this.config.input.mode = source === 'iphone-microphone' ? 'iphone-microphone' : 'windows-audio'; this.config.input.iphoneOutputOnly = source !== 'iphone-microphone';
+        if (typeof data.processName === 'string' && data.processName.trim()) this.config.input.processName = data.processName.trim();
+        const processId = Number(data.processId || 0); this.config.input.processId = Number.isSafeInteger(processId) && processId > 0 ? processId : undefined;
+        if (this.config.input.mode === 'windows-audio') await this.startWindowsInput();
+        this.broadcastAll({ type: 'input_status', running: this.config.input.mode === 'windows-audio', source: this.config.input.source, iphoneOutputOnly: this.config.input.iphoneOutputOnly });
+        return this.json(res, 200, { ok: true, mode: this.config.input.mode, source: this.config.input.source, iphoneOutputOnly: this.config.input.iphoneOutputOnly, processName: this.config.input.processName, processId: this.config.input.processId });
+      }
       if (url.pathname === '/api/pairing/create' && method === 'POST') {
         if (!adminAllowed) return this.json(res, 403, { error: 'admin_loopback_required' });
         const id = crypto.randomUUID(); const code = String(crypto.randomInt(100000, 1000000)); const secret = token();
@@ -148,7 +178,7 @@ export class DefenceServer {
         const secretValid = typeof data.secret === 'string' && safeEqual(pairing.secretHash, hash(data.secret)); const codeValid = typeof data.code === 'string' && safeEqual(pairing.codeHash, hash(data.code));
         if (!secretValid && !codeValid) { pairing.failedAttempts++; if (pairing.failedAttempts >= 5) pairing.used = true; return this.json(res, 401, { error: 'invalid_or_expired_pairing', attemptsRemaining: Math.max(0, 5 - pairing.failedAttempts) }); }
         pairing.used = true; const rawToken = token(); const id = crypto.randomUUID();
-        this.sessions.set(id, { id, tokenHash: hash(rawToken), createdAt: Date.now(), settings: DEFAULT_SETTINGS, detector: new QuestionDetector(), audio: new AudioChunkTracker(), transcript: '', answers: [], diagnostics: { partialCount: 0, finalCount: 0 }, questionCounter: 0, revision: 0 });
+        this.sessions.set(id, { id, tokenHash: hash(rawToken), createdAt: Date.now(), settings: DEFAULT_SETTINGS, detector: new QuestionDetector(), audio: new AudioChunkTracker(), transcript: '', answers: [], diagnostics: { partialCount: 0, finalCount: 0, inputSource: this.config.input.source }, questionCounter: 0, revision: 0, answeredQuestionKeys: new Set(), inFlightQuestionKeys: new Set() });
         return this.json(res, 200, { sessionId: id, token: rawToken, expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString() });
       }
       if (url.pathname.startsWith('/api/pairing/') && method === 'DELETE') { if (!adminAllowed) return this.json(res, 403, { error: 'admin_loopback_required' }); this.pairings.delete(url.pathname.split('/').pop()!); return this.json(res, 200, { ok: true }); }
@@ -180,7 +210,9 @@ export class DefenceServer {
   }
   private send(ws: WebSocket, value: unknown): void { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value)); }
   private socket(ws: WebSocket, session: Session): void {
-    this.send(ws, { type: 'session', sessionId: session.id, settings: session.settings, transcript: session.transcript, answers: session.answers, capabilities: publicConfig(this.config).capabilities, nextAudioSequence: session.audio.nextSequence, diagnostics: { ...session.diagnostics, secure: this.config.tls.enabled, allowedMimeTypes: allowedAudioMimeTypes() } });
+    const sessionClients = this.clients.get(session.id) || new Set<WebSocket>(); sessionClients.add(ws); this.clients.set(session.id, sessionClients);
+    ws.once('close', () => { sessionClients.delete(ws); if (!sessionClients.size) this.clients.delete(session.id); });
+    this.send(ws, { type: 'session', sessionId: session.id, settings: session.settings, transcript: session.transcript, answers: session.answers, capabilities: publicConfig(this.config).capabilities, input: { mode: this.config.input.mode, source: this.config.input.source, iphoneOutputOnly: this.config.input.iphoneOutputOnly }, nextAudioSequence: session.audio.nextSequence, diagnostics: { ...session.diagnostics, secure: this.config.tls.enabled, allowedMimeTypes: allowedAudioMimeTypes() } });
     ws.on('message', async (raw, binary) => {
       try {
         if (binary) throw new AudioProtocolError('AUDIO_METADATA_REQUIRED', 'Binary audio without authenticated metadata is not accepted.');
@@ -188,21 +220,92 @@ export class DefenceServer {
         if (message.type === 'settings') { session.settings = { ...session.settings, ...message.settings }; return this.send(ws, { type: 'settings', settings: session.settings }); }
         if (message.type === 'transcript') return await this.onTranscript(ws, session, String(message.text || ''), Boolean(message.final), Number(message.silenceMs || 0));
         if (message.type === 'audio') {
+          if (this.config.input.iphoneOutputOnly) throw new AudioProtocolError('IPHONE_OUTPUT_ONLY', 'iPhone microphone input is disabled while Windows audio mode is active.');
           const decision = session.audio.accept(message, this.config, session.id); if (decision.action === 'duplicate') return this.send(ws, { type: 'audio-ack', sequence: message.sequence, duplicate: true, nextAudioSequence: decision.expectedSequence });
           session.diagnostics.lastAudioBytes = decision.bytes.length; session.diagnostics.lastAudioMime = decision.metadata.mimeType; const started = performance.now();
           const result = await this.stt.transcribeWithMetrics(decision.bytes, decision.metadata.mimeType); session.diagnostics.lastSttLatencyMs = Math.round(performance.now() - started); session.diagnostics.sttStatus = result.timing.status; session.diagnostics.sttRetries = result.timing.retries; session.diagnostics.sttRequestId = result.timing.requestId;
           this.send(ws, { type: 'audio-ack', sequence: decision.metadata.sequence, duplicate: false, nextAudioSequence: session.audio.nextSequence });
-          return await this.onTranscript(ws, session, result.value, true, decision.metadata.finalChunk ? 1000 : 0);
+          return await this.onTranscript(ws, session, result.value, decision.metadata.finalChunk, decision.metadata.finalChunk ? 1000 : 0);
         }
         if (message.type === 'generate') { const question = String(message.question || session.transcript); this.send(ws, { type: 'retrieval', state: 'searching' }); const answer = await this.generate(session, question); return this.send(ws, { type: 'answer', answer }); }
         if (message.type === 'cancel') { session.abort?.abort(); session.revision++; return this.send(ws, { type: 'cancelled', questionId: session.lastQuestionId, revision: session.revision }); }
-        if (message.type === 'clear') { session.transcript = ''; session.answers = []; session.detector.reset(); return this.send(ws, { type: 'cleared' }); }
+        if (message.type === 'clear') { session.transcript = ''; session.answers = []; session.detector.reset(); session.answeredQuestionKeys.clear(); session.inFlightQuestionKeys.clear(); return this.send(ws, { type: 'cleared' }); }
       } catch (error) { const code = error instanceof ProviderError || error instanceof AudioProtocolError ? error.code : 'MESSAGE_FAILED'; session.diagnostics.lastErrorCode = code; this.send(ws, { type: 'error', code, message: error instanceof Error ? error.message : 'The request failed.' }); }
     });
   }
+  async startWindowsInput(): Promise<void> {
+    if (this.mode !== 'full' || this.config.input.mode !== 'windows-audio' || this.windowsInput) return;
+    const provider = new WindowsAudioCaptureProvider(this.config); this.windowsInput = provider;
+    provider.on('partial', (segment: WindowsAudioSegment) => {
+      if (this.windowsPartialInFlight) return;
+      this.windowsPartialInFlight = true;
+      void this.processWindowsSegment(segment, false).finally(() => { this.windowsPartialInFlight = false; });
+    });
+    provider.on('utterance', (segment: WindowsAudioSegment) => {
+      this.windowsQueue = this.windowsQueue.then(() => this.processWindowsSegment(segment, true)).catch(error => this.broadcastInputError(error));
+    });
+    provider.on('duplicate', () => this.broadcastAll({ type: 'input_duplicate', source: this.config.input.source }));
+    provider.on('status', status => this.broadcastAll({ type: 'input_status', ...status, iphoneOutputOnly: this.config.input.iphoneOutputOnly }));
+    provider.on('error', error => this.broadcastInputError(error));
+    await provider.start();
+  }
+  private broadcastAll(value: unknown): void {
+    for (const session of this.sessions.values()) this.runtime.events.emit('outbound', { sessionId: session.id, value });
+  }
+  private broadcastInputError(error: unknown): void {
+    const message = error instanceof Error ? error.message.replace(/[A-Za-z]:\\[^\s]+/g, '[LOCAL_PATH]') : 'Windows audio input failed.';
+    for (const session of this.sessions.values()) { session.diagnostics.lastErrorCode = 'WINDOWS_AUDIO_CAPTURE_FAILED'; this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'error', code: 'WINDOWS_AUDIO_CAPTURE_FAILED', message } }); }
+  }
+  private async processWindowsSegment(segment: WindowsAudioSegment, final: boolean): Promise<void> {
+    // Anchor end-to-end answer latency at the last active speech frame, so the
+    // reported fast/full figures include the configured VAD end-silence wait.
+    const pipelineStarted = performance.now() - (final ? segment.finalizationLatencyMs : 0); const sttStarted = performance.now();
+    const result = await this.stt.transcribeWithMetrics(segment.wav, 'audio/wav');
+    const sttLatencyMs = Math.round(performance.now() - sttStarted); const sessions = [...this.sessions.values()].filter(session => Date.now() - session.createdAt < SESSION_TTL_MS);
+    const manifest = await this.indexer.load();
+    for (const session of sessions) {
+      Object.assign(session.diagnostics, { lastAudioBytes: segment.pcmBytes, lastAudioMime: 'audio/wav', lastSttLatencyMs: sttLatencyMs, sttStatus: result.timing.status, sttRetries: result.timing.retries, sttRequestId: result.timing.requestId, windowsCaptureMs: segment.captureLatencyMs, inputSource: segment.source });
+      session.transcript = result.value;
+      if (!final) {
+        session.diagnostics.partialCount++;
+        void this.engine.prewarm(result.value, manifest);
+        this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'transcript', text: result.value, final: false, detector: { state: 'candidate', confidence: .5 }, source: segment.source } });
+        continue;
+      }
+      session.diagnostics.finalCount++;
+      const detector = session.detector.push(result.value, { final: true, silenceMs: 1000 });
+      session.diagnostics.questionFinalizationMs = segment.finalizationLatencyMs;
+      this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'transcript', text: result.value, final: true, detector, source: segment.source } });
+      if (detector.state === 'complete' && detector.question) void this.generateTwoStage(session, detector.question, manifest, pipelineStarted);
+    }
+  }
+  private async generateTwoStage(session: Session, question: string, manifest: Awaited<ReturnType<ProjectIndexer['load']>>, pipelineStarted: number): Promise<void> {
+    const key = question.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    if (!key || session.answeredQuestionKeys.has(key) || session.inFlightQuestionKeys.has(key)) {
+      this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'question_duplicate', question } }); return;
+    }
+    session.inFlightQuestionKeys.add(key); session.questionCounter++; session.lastQuestionId = `q-${session.questionCounter}`; session.revision = 1;
+    try {
+      const hint = await this.engine.fastHint(session.lastQuestionId, question, manifest);
+      hint.diagnostics.fastHintMs = Math.round(performance.now() - pipelineStarted); session.diagnostics.fastHintMs = hint.diagnostics.fastHintMs;
+      this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'fast_hint', hint } });
+      const generationId = crypto.randomUUID(); const answer = await this.engine.answer(question, manifest, session.settings);
+      answer.questionId = session.lastQuestionId; answer.revision = session.revision; answer.generationId = generationId;
+      if (answer.diagnostics) { answer.diagnostics.windowsCaptureMs = session.diagnostics.windowsCaptureMs; answer.diagnostics.sttLatencyMs = session.diagnostics.lastSttLatencyMs; answer.diagnostics.questionFinalizationMs = session.diagnostics.questionFinalizationMs; answer.diagnostics.fastHintMs = session.diagnostics.fastHintMs; answer.diagnostics.fullAnswerMs = Math.round(performance.now() - pipelineStarted); Object.assign(session.diagnostics, answer.diagnostics); }
+      session.answers.push(answer); if (session.answers.length > 50) session.answers.shift(); session.answeredQuestionKeys.add(key);
+      this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'full_answer', answer } });
+      this.runtime.events.emit('outbound', { sessionId: session.id, value: { type: 'answer', answer } });
+    } catch (error) { this.broadcastInputError(error); }
+    finally { session.inFlightQuestionKeys.delete(key); }
+  }
   private async onTranscript(ws: WebSocket, session: Session, text: string, final: boolean, silenceMs = 0): Promise<void> {
-    if (!text) return; session.transcript = text; final ? session.diagnostics.finalCount++ : session.diagnostics.partialCount++; const result = session.detector.push(text, { final, silenceMs }); this.send(ws, { type: 'transcript', text: session.transcript, final, detector: result });
-    if (result.state === 'complete' && result.question) { this.send(ws, { type: 'retrieval', state: 'searching' }); const answer = await this.generate(session, result.question); this.send(ws, { type: 'answer', answer }); }
+    if (!text) return; session.transcript = text; final ? session.diagnostics.finalCount++ : session.diagnostics.partialCount++;
+    if (!final) { void this.engine.prewarm(text, await this.indexer.load()); return this.send(ws, { type: 'transcript', text: session.transcript, final: false, detector: { state: 'candidate', confidence: .5 } }); }
+    const result = session.detector.push(text, { final: true, silenceMs }); this.send(ws, { type: 'transcript', text: session.transcript, final: true, detector: result });
+    if (result.state === 'complete' && result.question) {
+      const manifest = await this.indexer.load();
+      await this.generateTwoStage(session, result.question, manifest, performance.now() - Math.max(0, silenceMs));
+    }
   }
   private async generate(session: Session, question: string): Promise<StructuredAnswer> {
     if (!question.trim()) throw new Error('question_required'); session.abort?.abort(); session.abort = new AbortController();
