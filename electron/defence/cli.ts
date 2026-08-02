@@ -11,9 +11,9 @@ async function main(): Promise<void> {
     const companion = new DefenceServer(companionConfig, 'companion', runtime); const companionInfo = await companion.listen(); servers.push(companion);
     console.log('[Defence Copilot] companion-only running'); for (const url of companionInfo.urls) console.log(`  ${url}`);
   } else console.log('  Companion: /');
-  if (config.input.mode === 'windows-audio') {
+  if (config.input.mode !== 'iphone-microphone') {
     try { await admin.startWindowsInput(); console.log(`[Defence Copilot] Windows input active (${config.input.source})`); }
-    catch (error) { console.error('[Defence Copilot] Windows input unavailable:', error instanceof Error ? error.message : error); console.error('  Set WINDOWS_AUDIO_SOURCE=system-loopback or windows-microphone, or INPUT_MODE=iphone-microphone for fallback.'); }
+    catch (error) { console.error('[Defence Copilot] Windows input unavailable:', error instanceof Error ? error.message : error); console.error('  Set INPUT_MODE=system-loopback/windows-microphone, or INPUT_MODE=iphone-microphone for fallback.'); }
   }
   const stop = async () => { await Promise.all(servers.map(server => server.close())); process.exit(0); };
   process.on('SIGINT', stop); process.on('SIGTERM', stop);

@@ -27,12 +27,14 @@ export interface DefenceConfig {
   retrievalTopK: number;
   retrievalTopKAdjusted: boolean;
   input: {
-    mode: 'windows-audio' | 'iphone-microphone';
+    mode: 'windows-audio' | 'dual-process-and-microphone' | 'iphone-microphone';
     iphoneOutputOnly: boolean;
-    source: 'specific-process-loopback' | 'system-loopback' | 'windows-microphone' | 'iphone-microphone';
+    source: 'dual-process-and-microphone' | 'specific-process-loopback' | 'system-loopback' | 'windows-microphone' | 'iphone-microphone';
+    scenario: 'remote-interview' | 'in-person-defence' | 'hybrid';
     processName: string;
     processId?: number;
     deviceId: string;
+    dualSource: { enabled: boolean; overlapWindowMs: number; transcriptSimilarity: number };
     vad: {
       minSpeechMs: number;
       silenceMs: number;
@@ -55,10 +57,15 @@ export function loadDefenceConfig(env: NodeJS.ProcessEnv = process.env): Defence
   const projectId = env.PROJECT_ID || 'default';
   const requestedRetrievalTopK = numberFrom(env.RETRIEVAL_TOP_K, 6);
   const retrievalTopKAdjusted = projectId === 'cba-import-candidate-ranking' && requestedRetrievalTopK < 3;
-  const inputMode = env.INPUT_MODE === 'iphone-microphone' ? 'iphone-microphone' : 'windows-audio';
-  const requestedSource = env.WINDOWS_AUDIO_SOURCE || (inputMode === 'windows-audio' ? 'specific-process-loopback' : 'iphone-microphone');
-  const allowedSources = new Set(['specific-process-loopback', 'system-loopback', 'windows-microphone', 'iphone-microphone']);
-  const inputSource = (allowedSources.has(requestedSource) ? requestedSource : 'specific-process-loopback') as DefenceConfig['input']['source'];
+  const requestedMode = env.INPUT_MODE || '';
+  const dualSourceEnabled = env.DUAL_SOURCE_ENABLED === 'true';
+  const allowedSources = new Set(['dual-process-and-microphone', 'specific-process-loopback', 'system-loopback', 'windows-microphone', 'iphone-microphone']);
+  const requestedSource = env.WINDOWS_AUDIO_SOURCE || (allowedSources.has(requestedMode) ? requestedMode : 'specific-process-loopback');
+  const guardedSource = requestedSource === 'dual-process-and-microphone' && !dualSourceEnabled ? 'specific-process-loopback' : requestedSource;
+  const inputSource = (allowedSources.has(guardedSource) ? guardedSource : 'specific-process-loopback') as DefenceConfig['input']['source'];
+  const inputMode: DefenceConfig['input']['mode'] = inputSource === 'iphone-microphone' ? 'iphone-microphone' : inputSource === 'dual-process-and-microphone' ? 'dual-process-and-microphone' : 'windows-audio';
+  const requestedScenario = env.AUDIO_SCENARIO || 'remote-interview';
+  const inputScenario = (['remote-interview', 'in-person-defence', 'hybrid'].includes(requestedScenario) ? requestedScenario : 'remote-interview') as DefenceConfig['input']['scenario'];
   const processId = Number(env.WINDOWS_AUDIO_PROCESS_ID || 0);
   return {
     host: env.DEFENCE_HOST || '127.0.0.1',
@@ -105,11 +112,17 @@ export function loadDefenceConfig(env: NodeJS.ProcessEnv = process.env): Defence
     retrievalTopKAdjusted,
     input: {
       mode: inputMode,
-      iphoneOutputOnly: env.IPHONE_OUTPUT_ONLY !== 'false' && inputMode === 'windows-audio',
+      iphoneOutputOnly: env.IPHONE_OUTPUT_ONLY !== 'false' && inputMode !== 'iphone-microphone',
       source: inputSource,
+      scenario: inputScenario,
       processName: env.WINDOWS_AUDIO_PROCESS_NAME || 'auto',
       processId: Number.isSafeInteger(processId) && processId > 0 ? processId : undefined,
       deviceId: env.WINDOWS_AUDIO_DEVICE_ID || '',
+      dualSource: {
+        enabled: dualSourceEnabled,
+        overlapWindowMs: numberFrom(env.DUAL_SOURCE_OVERLAP_WINDOW_MS, 1_000),
+        transcriptSimilarity: Math.min(1, Math.max(0.5, Number(env.DUAL_SOURCE_TRANSCRIPT_SIMILARITY || 0.8))),
+      },
       vad: {
         minSpeechMs: numberFrom(env.VAD_MIN_SPEECH_MS, 320),
         silenceMs: Math.min(800, Math.max(500, numberFrom(env.VAD_SILENCE_MS, 650))),
@@ -129,7 +142,7 @@ export function publicConfig(config: DefenceConfig) {
     projectId: config.projectId, projectDisplayName: config.projectDisplayName,
     secure: config.tls.enabled, adminLocalOnly: config.adminLocalOnly, publicMode: config.publicMode,
     adminNotExposed: config.publicMode === 'companion-only', retrievalTopK: config.retrievalTopK,
-    inputMode: config.input.mode, inputSource: config.input.source, iphoneOutputOnly: config.input.iphoneOutputOnly,
+    inputMode: config.input.mode, inputSource: config.input.source, audioScenario: config.input.scenario, iphoneOutputOnly: config.input.iphoneOutputOnly,
     capabilities: {
       stt: config.stt.provider !== 'none' && !!config.stt.apiKey,
       llm: config.llm.provider !== 'none' && (!!config.llm.apiKey || config.llm.provider === 'ollama'),

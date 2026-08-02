@@ -20,9 +20,9 @@ Copy-Item .env.example .env
 npm.cmd run defence:start
 ```
 
-Open `http://127.0.0.1:4317/admin` on the computer, index a project, select a Windows input source, and create a one-time pairing code. The default mode is `INPUT_MODE=windows-audio` with `IPHONE_OUTPUT_ONLY=true`; the phone does not request microphone permission.
+Open `http://127.0.0.1:4317/admin` on the computer, index a project, select a Windows input source, and create a one-time pairing code. The production default remains `INPUT_MODE=specific-process-loopback`, `DUAL_SOURCE_ENABLED=false`, and `IPHONE_OUTPUT_ONLY=true`; the phone does not request microphone permission. The dual-source framework is feature-gated until both real inputs pass validation.
 
-On iPhone, open the address in Safari and pair. In the default mode it is a read-only display for live transcript, current question, fast hint, full answer, and project evidence. Set `WINDOWS_AUDIO_SOURCE` to `specific-process-loopback`, `system-loopback`, or `windows-microphone`. Set it to `iphone-microphone` (or `INPUT_MODE=iphone-microphone`) only for the existing fallback. Raw audio is not saved.
+On iPhone, open the address in Safari and pair. In the default mode it is a read-only display for live transcript, current question, transcript/question source, fast hint, full answer, and project evidence. The Companion can switch among `remote-interview`, `in-person-defence`, and `hybrid`; it still never opens the iPhone microphone in output-only mode. Set `INPUT_MODE` to `specific-process-loopback`, `system-loopback`, or `windows-microphone` for a single Windows source, and to `iphone-microphone` only for the existing fallback. Raw audio is not saved.
 
 ## HTTPS on iPhone
 
@@ -63,13 +63,13 @@ API keys are read only by the backend. They are never returned by `/api/health`,
 ## Data flow
 
 ```text
-Windows process/system/microphone -> WASAPI capture -> 16 kHz mono PCM
-  -> local VAD/utterance finalization -> Groq STT
+Windows process loopback ----> independent WASAPI capture/VAD --\
+Windows microphone ---------> independent WASAPI capture/VAD ----> SourceArbiter -> Groq STT
   -> CBA retrieval -> fast_hint -> DeepSeek full_answer
   -> authenticated WSS -> read-only iPhone Companion
 ```
 
-`specific-process-loopback` uses Windows WASAPI application loopback and includes the selected process tree. It never falls back silently to system loopback, so unrelated notification sounds are not accepted in process-only mode. `auto` prefers Teams, Zoom, Chrome, and Edge. This module does not read Windows Live Captions and contains no caption-window scraping, OCR, clipboard capture, or UI Automation path.
+`specific-process-loopback` uses Windows WASAPI application loopback and includes the selected process tree. It never falls back silently to system loopback, so unrelated notification sounds are not accepted in process-only mode. `dual-process-and-microphone` keeps process loopback and microphone PCM, clocks, VAD state, lifecycle, and errors separate; PCM is not mixed at the WASAPI layer. `SourceArbiter` gives the process stream priority, suppresses overlapping microphone echo by timestamp and energy fingerprint before STT, then applies transcript similarity as a second guard. `auto` prefers Teams, Zoom, Chrome, and Edge. This module does not read Windows Live Captions and contains no caption-window scraping, OCR, clipboard capture, or UI Automation path.
 
 The local segmenter uses 20 ms PCM frames, a configurable minimum speech duration, 500–800 ms end silence, short-pause merging, a maximum utterance length, and recent-audio digest suppression. Partial STT results only prewarm retrieval. Only a finalized question can trigger generation, and an automatic question key can trigger the LLM at most once. The first push is `fast_hint` (keywords, structure, early evidence); `full_answer` follows with the complete spoken answer and evidence.
 

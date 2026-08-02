@@ -9,6 +9,7 @@ const root = path.resolve(__dirname, '..');
 const fixtureDir = path.join(root, '.defence-data', 'windows-audio-test');
 const chromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const captureOnly = process.argv.includes('--capture-only');
+const dualSource = process.argv.includes('--dual');
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 function launchChrome(profileName, url, debugPort) {
@@ -72,14 +73,14 @@ function openSocket(url) {
   const native = require(path.join(root, 'native-module'));
   const config = loadDefenceConfig(process.env);
   config.host = '127.0.0.1'; config.port = 0; config.publicMode = 'full';
-  config.input.mode = 'windows-audio'; config.input.source = 'specific-process-loopback'; config.input.iphoneOutputOnly = true;
+  config.input.mode = dualSource ? 'dual-process-and-microphone' : 'windows-audio'; config.input.source = dualSource ? 'dual-process-and-microphone' : 'specific-process-loopback'; config.input.scenario = 'remote-interview'; config.input.iphoneOutputOnly = true;
   if (!config.stt.apiKey) throw new Error('STT provider is not configured');
   if (!captureOnly && !config.llm.apiKey) throw new Error('LLM provider is not configured');
 
   const server = new DefenceServer(config);
   const fixtureServer = await startFixtureServer();
   const systemSegments = [];
-  const systemVad = new WindowsVadSegmenter(config.input.vad, 'system-loopback');
+  const systemVad = new WindowsVadSegmenter(config.input.vad, 'system-loopback', 'remote-process', 'system:control');
   systemVad.on('utterance', segment => systemSegments.push(segment));
   const systemCapture = new native.SystemAudioCapture(null);
   const systemErrors = [];
@@ -140,7 +141,7 @@ function openSocket(url) {
     const diagnostics = answers.map(message => message.answer?.diagnostics || {});
     const report = {
       status: finalMessages.length >= 3 && !/purple elephant|control phrase/i.test(targetText) && /purple elephant|control phrase/i.test(systemText) && wssOrderValid && singleGeneration && (captureOnly || answers.length >= 3) ? 'SUCCESS' : 'FAILED',
-      captureMode: 'specific-process-loopback', targetProcess: { name: 'chrome.exe', pid: targetBrowser.pid, includeProcessTree: true },
+      captureMode: config.input.source, audioScenario: config.input.scenario, targetProcess: { name: 'chrome.exe', pid: targetBrowser.pid, includeProcessTree: true },
       targetAudioCaptured: finalMessages.length >= 3,
       nonTargetAudioExcluded: !/purple elephant|control phrase/i.test(targetText),
       systemLoopbackControl: /purple elephant|control phrase/i.test(systemText),

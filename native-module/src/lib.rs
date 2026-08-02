@@ -14,6 +14,10 @@ use ringbuf::traits::Consumer;
 
 pub mod audio_config;
 pub mod license;
+#[cfg(not(target_os = "windows"))]
+pub mod microphone;
+#[cfg(target_os = "windows")]
+#[path = "microphone_windows.rs"]
 pub mod microphone;
 pub mod resampler;
 pub mod silence_suppression;
