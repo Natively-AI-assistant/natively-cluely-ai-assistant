@@ -39,6 +39,8 @@
  *        APPLE_API_KEY       = absolute path to the .p8 key file
  *        APPLE_API_KEY_ID    = key id (e.g. T9GPZ92M7K)
  *        APPLE_API_ISSUER    = issuer UUID (team keys)
+ *      If APPLE_API_KEY names a file that does not exist, this strategy is SKIPPED
+ *      (with a loud warning) rather than selected — see resolveCredentials().
  *   2) Apple ID + app-specific password:
  *        APPLE_ID                      = your Apple Developer login email
  *        APPLE_APP_SPECIFIC_PASSWORD   = app-specific password (NOT your Apple ID password)
@@ -50,6 +52,7 @@
  * We never log secret values — only which strategy was selected.
  */
 
+const fs = require('fs');
 const path = require('path');
 
 /** Decide which credential strategy is configured, if any. Returns null if none. */
@@ -59,15 +62,35 @@ function resolveCredentials() {
   // App Store Connect API key. APPLE_API_ISSUER is REQUIRED for Team keys but must be
   // OMITTED for Individual keys (passing it yields a 401), so we only require key+id and
   // forward the issuer only when present (matches @electron/notarize v3 optional issuer).
+  //
+  // APPLE_API_KEY is a FILE PATH, and a path that stops resolving is how this strategy
+  // rots in practice: App Store Connect serves the .p8 exactly once, it lands in
+  // ~/Downloads, the folder later gets cleaned out, and the stale `export` lives on in a
+  // shell rc forever. Because api-key is checked FIRST, that dead path then shadows a
+  // perfectly good APPLE_KEYCHAIN_PROFILE (which electron-builder.signed.cjs always
+  // sets). Without the existence check the bad path goes straight to notarytool, which
+  // fails with "The file couldn't be opened because it doesn't exist" — ~20 minutes into
+  // a signed build, AFTER packing and Developer ID signing have already succeeded.
+  // Skipping (loudly) instead of selecting lets the next configured strategy carry the
+  // build, and turns a late, cryptic notarytool usage error into an early, named one.
   if (env.APPLE_API_KEY && env.APPLE_API_KEY_ID) {
-    return {
-      strategy: 'api-key',
-      creds: {
-        appleApiKey: env.APPLE_API_KEY,
-        appleApiKeyId: env.APPLE_API_KEY_ID,
-        ...(env.APPLE_API_ISSUER ? { appleApiIssuer: env.APPLE_API_ISSUER } : {}),
-      },
-    };
+    if (fs.existsSync(env.APPLE_API_KEY)) {
+      return {
+        strategy: 'api-key',
+        creds: {
+          appleApiKey: env.APPLE_API_KEY,
+          appleApiKeyId: env.APPLE_API_KEY_ID,
+          ...(env.APPLE_API_ISSUER ? { appleApiIssuer: env.APPLE_API_ISSUER } : {}),
+        },
+      };
+    }
+    console.warn(
+      `[notarize] APPLE_API_KEY points at a file that does not exist: ${env.APPLE_API_KEY}\n` +
+        '[notarize] Ignoring the api-key strategy and falling through to the next configured one ' +
+        '(apple-id, then keychain-profile). App Store Connect serves a .p8 only ONCE — if it is ' +
+        'gone, generate a new key, or drop APPLE_API_KEY/APPLE_API_KEY_ID and use ' +
+        'APPLE_KEYCHAIN_PROFILE (`xcrun notarytool store-credentials`) instead.'
+    );
   }
 
   if (env.APPLE_ID && env.APPLE_APP_SPECIFIC_PASSWORD && env.APPLE_TEAM_ID) {
