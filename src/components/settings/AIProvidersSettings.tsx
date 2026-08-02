@@ -136,6 +136,15 @@ const AIP_CSS = `
     --aip-item-active:        rgba(255,255,255,0.10);
     --aip-input-bg:           transparent;
     --aip-input-border:       rgba(255,255,255,0.10);
+    /* Focused field edge. Was --aip-primary (rgba(255,255,255,0.86)), which
+       lands at 11.4:1 on the #27272A card — nearly four times the 3:1 that
+       SC 1.4.11 asks of a state indicator, and it read as a hard white
+       rectangle around a field you had merely clicked into. 0.36 composites to
+       #757577 = 3.24:1, so it still clears the floor with margin while sitting
+       in the panel's own grey range instead of shouting over it.
+       Progression it has to stay legible against: rest 0.10 -> hover 0.12
+       (--aip-border-strong) -> focus 0.36. */
+    --aip-input-border-focus: rgba(255,255,255,0.36);
     --aip-switch-off:         rgba(255,255,255,0.14);
     --aip-pill-bg:            var(--aip-item-active);
     --aip-pill-border:        var(--aip-border-strong);
@@ -226,6 +235,11 @@ const AIP_CSS = `
     --aip-item-hover:   rgba(0,0,0,0.03);
     --aip-item-active:  rgba(0,0,0,0.06);
     --aip-input-border: rgba(0,0,0,0.11);
+    /* Light needs far more alpha than dark for the same ratio: black over the
+       #EAECEF card climbs the luminance curve much more slowly than white over
+       #27272A. 0.44 composites to #838486 = 3.16:1. (Was #374151 at 8.7:1.)
+       Rest 0.11 -> hover 0.13 -> focus 0.44. */
+    --aip-input-border-focus: rgba(0,0,0,0.44);
     --aip-switch-off:   rgba(0,0,0,0.16);
     --aip-pill-bg:      #ffffff;
     --aip-pill-border:  rgba(0,0,0,0.06);
@@ -508,9 +522,13 @@ const AIP_CSS = `
    solid accent outline) read as an alarm around a field you had merely clicked into
    — and :focus-visible matches pointer focus on text inputs, so it fired on every
    click, not just keyboard nav. A brightened border carries the same information
-   without the hue. --aip-primary is rgba(255,255,255,.86) in dark and #374151 in
-   light, so it clears 3:1 against the card in both themes (SC 1.4.11). */
-.aip-field:focus-within { border-color: var(--aip-primary); }
+   without the hue.
+   The brightening is now --aip-input-border-focus, not --aip-primary. Reusing the
+   TEXT colour for an edge overshot the 3:1 that SC 1.4.11 actually asks for by
+   ~3.6x (11.4:1 dark / 8.7:1 light) and drew a hard white rectangle around a field
+   you had only clicked into. The token is tuned per theme to sit just above the
+   floor — see the ratios at its declaration. */
+.aip-field:focus-within { border-color: var(--aip-input-border-focus); }
 .aip-field-icon { flex-shrink:0; margin-left:10px; color: var(--aip-tertiary); }
 .aip-field > .aip-input {
     height:100%; border:0; border-radius:0; background:transparent;
@@ -759,8 +777,9 @@ const AIP_CSS = `
 .aip-input::placeholder { color: var(--aip-tertiary); }
 /* Same neutral focus as .aip-field — every input in the panel brightens its border
    rather than taking an accent tint. Accent is reserved for things that are selected
-   or active, not for things that merely have the caret. */
-.aip-input:focus { border-color: var(--aip-primary); }
+   or active, not for things that merely have the caret. Shares .aip-field's token so
+   the two focus treatments cannot drift apart. */
+.aip-input:focus { border-color: var(--aip-input-border-focus); }
 .aip-input[data-mono='true'] { font-family: var(--aip-mono); font-size:11.5px; }
 textarea.aip-input { height:auto; padding:10px; line-height:1.5; resize:none; }
 select.aip-input { cursor:pointer; }
