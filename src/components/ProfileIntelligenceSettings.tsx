@@ -1012,8 +1012,22 @@ export function ProfileIntelligenceSettings({
     const [profileUploading, setProfileUploading] = useState(false);
     const [profileUploadStatus, setProfileUploadStatus] = useState<string | undefined>(undefined);
     const [profileError, setProfileError] = useState('');
+    // Nothing sets `cancelled` any more — the X button used to, but that only
+    // silenced this renderer while main finished the ingest anyway. Retained as
+    // a no-op guard so the upload paths keep their shape; don't go hunting for
+    // the writer.
     const profileAbortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
     const [profileData, setProfileData] = useState<any>(null);
+    // Set when this mount ADOPTED an ingest that was already running in main —
+    // i.e. the user uploaded, closed the panel, and reopened it. There is no
+    // local promise to resume from (the old one's continuation died with the
+    // previous mount), so the poll below is the only thing that can finalize it.
+    const profileDetachedRef = useRef(false);
+    // Bumped whenever a detached ref is set. The refs themselves cannot start the
+    // poll below — ref writes do not re-render — and relying on the accompanying
+    // setUploading(true) to do it only works while `uploading` happens to be
+    // false at that moment. This makes adoption an explicit render signal.
+    const [adoptTick, setAdoptTick] = useState(0);
 
     // ── Hero stat (static rounded value, no count-up) ────────────────────────
     const heroYearsRounded = (profileStatus.totalExperienceYears != null && Number.isFinite(profileStatus.totalExperienceYears))
@@ -1025,6 +1039,7 @@ export function ProfileIntelligenceSettings({
     const [jdUploadStatus, setJdUploadStatus] = useState<string | undefined>(undefined);
     const [jdError, setJdError] = useState('');
     const jdAbortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
+    const jdDetachedRef = useRef(false);
 
     // Tavily
     const [tavilyApiKey, setTavilyApiKey] = useState('');
@@ -1070,7 +1085,26 @@ export function ProfileIntelligenceSettings({
                 writePremiumCache(!!live, premiumPlan);
             }).catch(() => {}).finally(() => setLicenseLoaded(true));
         }
-        window.electronAPI?.profileGetStatus?.().then(setProfileStatus).catch(() => {});
+        // Adopt any ingest still running in main. Closing the panel unmounts this
+        // component but does NOT cancel the upload — main runs it to completion —
+        // so on reopen we re-derive the indexing state instead of rendering the
+        // empty upload slot (which invited a duplicate upload of the same file).
+        window.electronAPI?.profileGetStatus?.().then((status: any) => {
+            setProfileStatus(status);
+            if (status?.resume_indexing_in_flight) {
+                profileDetachedRef.current = true;
+                setProfileUploading(true);
+                setProfileUploadStatus('processing');
+            }
+            if (status?.jd_indexing_in_flight) {
+                jdDetachedRef.current = true;
+                setJdUploading(true);
+                setJdUploadStatus('processing');
+            }
+            if (status?.resume_indexing_in_flight || status?.jd_indexing_in_flight) {
+                setAdoptTick(t => t + 1);
+            }
+        }).catch(() => {});
         window.electronAPI?.profileGetProfile?.().then((data: any) => {
             setProfileData(data);
             if (data?.coverLetter) setCoverLetter(data.coverLetter);
@@ -1099,6 +1133,71 @@ export function ProfileIntelligenceSettings({
         }).catch(() => {});
     }, []);
 
+    // Finalize an ADOPTED ingest. Only runs for uploads this mount inherited —
+    // when doResumeUpload/doJdUpload own the request their awaited promise
+    // already reports the outcome, so polling would double-handle it.
+    useEffect(() => {
+        if (!profileDetachedRef.current && !jdDetachedRef.current) return;
+        let stopped = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const finish = (
+            setUploading: (v: boolean) => void,
+            setStatus: (v: string | undefined) => void,
+            ok: boolean,
+        ) => {
+            setUploading(false);
+            setStatus(ok ? 'ready' : 'failed');
+            // NOT guarded by `stopped`: clearing `uploading` re-runs this effect
+            // and tears it down, so a stopped-guard here would leave the badge
+            // pinned on ready/failed forever. Matches the local-upload path,
+            // which fires the same unguarded reset.
+            setTimeout(() => setStatus(undefined), 3000);
+        };
+        const tick = async () => {
+            try {
+                const st: any = await window.electronAPI?.profileGetStatus?.();
+                if (stopped || !st) return;
+                const resumeSettled = profileDetachedRef.current && !st.resume_indexing_in_flight;
+                const jdSettled = jdDetachedRef.current && !st.jd_indexing_in_flight;
+
+                // Load the profile BEFORE clearing `uploading`. Both empty-slot
+                // guards are `!<has data> && !<uploading>`, and the JD one reads
+                // profileData.hasActiveJD — a different source than the status
+                // flags. Clearing `uploading` first leaves a render where neither
+                // holds and the panel flashes the empty upload slot: exactly the
+                // symptom this whole change removes.
+                const data = (resumeSettled || jdSettled)
+                    ? await window.electronAPI?.profileGetProfile?.()
+                    : null;
+                if (stopped) return;
+                if (data) setProfileData(data);
+                setProfileStatus(st);
+
+                if (resumeSettled) {
+                    profileDetachedRef.current = false;
+                    const ok = Boolean(st.hasProfile);
+                    // A background ingest that failed would otherwise land the
+                    // user on a bare empty slot with no explanation — the local
+                    // upload path sets profileError here, so this one must too.
+                    if (!ok) setProfileError('Indexing failed. Please upload the file again.');
+                    finish(setProfileUploading, setProfileUploadStatus, ok);
+                }
+                if (jdSettled) {
+                    jdDetachedRef.current = false;
+                    // Judge by the same field the JD empty-slot guard renders on.
+                    const ok = Boolean(data?.hasActiveJD ?? st.jd_structured_extraction_complete);
+                    if (!ok) setJdError('Indexing failed. Please upload the file again.');
+                    finish(setJdUploading, setJdUploadStatus, ok);
+                }
+            } catch { /* transient IPC failure — keep polling */ }
+            if (!stopped && (profileDetachedRef.current || jdDetachedRef.current)) {
+                timer = setTimeout(tick, 1500);
+            }
+        };
+        timer = setTimeout(tick, 1500);
+        return () => { stopped = true; if (timer) clearTimeout(timer); };
+    }, [profileUploading, jdUploading, adoptTick]);
+
     const handleRemoveTavilyKey = async () => {
         if (!confirm('Remove your Tavily API key?')) return;
         try {
@@ -1113,6 +1212,7 @@ export function ProfileIntelligenceSettings({
     const doResumeUpload = async (filePath: string) => {
         const token = { cancelled: false };
         profileAbortRef.current = token;
+        profileDetachedRef.current = false; // this mount owns the request
         setProfileError(''); setProfileUploading(true); setProfileUploadStatus('uploading');
         try {
             setProfileUploadStatus('processing');
@@ -1146,6 +1246,7 @@ export function ProfileIntelligenceSettings({
     const doJdUpload = async (filePath: string) => {
         const token = { cancelled: false };
         jdAbortRef.current = token;
+        jdDetachedRef.current = false; // this mount owns the request
         setJdError(''); setJdUploading(true); setJdUploadStatus('uploading');
         try {
             setJdUploadStatus('processing');
@@ -1270,19 +1371,21 @@ export function ProfileIntelligenceSettings({
                         <PIIndexBadge status={profileUploadStatus} />
                         <button
                             className="pi-press-soft"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
-                            onMouseEnter={e => (e.currentTarget.style.color = 'var(--pi-danger)')}
+                            disabled={profileUploading}
+                            title={profileUploading
+                                ? 'Indexing — this finishes in the background and cannot be stopped. Delete it once it completes.'
+                                : 'Delete resume'}
+                            style={{ background: 'none', border: 'none', cursor: profileUploading ? 'not-allowed' : 'pointer', opacity: profileUploading ? 0.4 : 1, color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
+                            onMouseEnter={e => { if (!profileUploading) e.currentTarget.style.color = 'var(--pi-danger)'; }}
                             onMouseLeave={e => (e.currentTarget.style.color = 'var(--pi-tertiary)')}
                             onClick={async () => {
-                                if (profileUploading) {
-                                    profileAbortRef.current.cancelled = true;
-                                    setProfileUploading(false);
-                                    setProfileUploadStatus(undefined);
-                                    setProfileStatus({ hasProfile: false, profileMode: false });
-                                    const cancelData = await window.electronAPI?.profileGetProfile?.();
-                                    setProfileData(cancelData ?? null);
-                                    return;
-                                }
+                                // Previously this set profileAbortRef.cancelled and rendered
+                                // { hasProfile: false } — but that flag only silences this
+                                // renderer. Main runs ingestDocument to completion and then
+                                // enables knowledge mode, so "cancel" produced a UI claiming
+                                // no profile while the resume was in fact saved and live.
+                                // The button is disabled mid-ingest rather than lying.
+                                if (profileUploading) return;
                                 if (!confirm('Delete your resume and its extracted data?')) return;
                                 try {
                                     await window.electronAPI?.profileDelete?.();
@@ -1378,16 +1481,17 @@ export function ProfileIntelligenceSettings({
                         <PIIndexBadge status={jdUploadStatus} />
                         <button
                             className="pi-press-soft"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
-                            onMouseEnter={e => (e.currentTarget.style.color = 'var(--pi-danger)')}
+                            disabled={jdUploading}
+                            title={jdUploading
+                                ? 'Indexing — this finishes in the background and cannot be stopped. Delete it once it completes.'
+                                : 'Delete job description'}
+                            style={{ background: 'none', border: 'none', cursor: jdUploading ? 'not-allowed' : 'pointer', opacity: jdUploading ? 0.4 : 1, color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
+                            onMouseEnter={e => { if (!jdUploading) e.currentTarget.style.color = 'var(--pi-danger)'; }}
                             onMouseLeave={e => (e.currentTarget.style.color = 'var(--pi-tertiary)')}
                             onClick={async () => {
-                                if (jdUploading) {
-                                    jdAbortRef.current.cancelled = true;
-                                    setJdUploading(false);
-                                    setJdUploadStatus(undefined);
-                                    return;
-                                }
+                                // Same lie as the resume X — the abort flag only silenced
+                                // this renderer while main finished the JD ingest.
+                                if (jdUploading) return;
                                 try {
                                     await window.electronAPI?.profileDeleteJD?.();
                                     const data = await window.electronAPI?.profileGetProfile?.();

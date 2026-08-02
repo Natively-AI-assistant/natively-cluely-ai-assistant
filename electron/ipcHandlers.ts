@@ -10265,6 +10265,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       const status = orchestrator.getStatus();
       const activeResume = (orchestrator as any)?.activeResume?.structured_data ?? null;
       const activeJD = (orchestrator as any)?.activeJD?.structured_data ?? null;
+      // Indexing runs in the main process and outlives the Profile Intelligence
+      // panel (a React modal — closing it unmounts a subtree, it does NOT cancel
+      // this handler). The panel's local uploading state dies with that unmount,
+      // so main has to hand it back or a reopen mid-ingest renders the empty
+      // upload slot and invites a duplicate upload. NOT covered by
+      // aot_pipeline_running: that is JD-side and, per the comment above,
+      // deliberately excluded from the resume readiness signal.
+      const { DocType: StatusDocType } = require('../premium/electron/knowledge/types');
       return {
         hasProfile: status.hasResume,
         profileMode: status.activeMode,
@@ -10277,6 +10285,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         jd_structured_extraction_complete: Boolean(activeJD),
         jdFactsReady: Boolean(activeJD),
         aot_pipeline_running: Boolean((orchestrator as any)?.getAOTPipeline?.()?.isRunning?.()),
+        resume_indexing_in_flight: Boolean((orchestrator as any)?.isIngesting?.(StatusDocType.RESUME)),
+        jd_indexing_in_flight: Boolean((orchestrator as any)?.isIngesting?.(StatusDocType.JD)),
         // D3: surface how the resume was parsed so the UI can hint that a
         // heuristic (LLM-down) profile may be re-extracted for richer facts.
         extractionMode: activeResume
