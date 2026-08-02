@@ -63,6 +63,21 @@ export interface BridgeInput {
   isFollowUp?: boolean;
   hasScreenContext?: boolean;
   /**
+   * Where `question` came from. Defaults to 'manual' — correct for the manual
+   * chat and typed-question call sites, which is what every caller was before
+   * this field existed.
+   *
+   * 'transcript' means the string was chosen from live speech by
+   * extractLatestQuestion, NOT typed by the user. That matters downstream:
+   * resolveQuestion (orchestrator.ts) stamps manual input `confidence: 1`, so
+   * a low-confidence extraction — a fragment the extractor itself scored 0.3
+   * or 0.4 — was arriving indistinguishable from a deliberate typed question,
+   * with no answerability signal for the decision layer to defend against.
+   */
+  questionSource?: 'manual' | 'transcript';
+  /** Extractor confidence (0..1) when questionSource is 'transcript'. */
+  questionConfidence?: number;
+  /**
    * Attachment-derived source types for custom/general modes (deep-test D10) —
    * computed at the call site that holds the files, via
    * attachmentSourceTypeExtensions. Additive only.
@@ -147,7 +162,13 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       modeId,
       scope: { userId: 'local', ...input.scope },
       sessionId: input.scope?.sessionId ?? 'engine',
-      manualQuestion: question,
+      // Route the question to the field that matches its actual provenance so
+      // resolveQuestion assigns real confidence (manual → 1, transcript → 0.7)
+      // instead of stamping everything `manual/1.0`.
+      ...(input.questionSource === 'transcript'
+        ? { transcriptQuestion: question }
+        : { manualQuestion: question }),
+      questionConfidence: input.questionConfidence,
       userAnswerPolicy,
       isFollowUp: input.isFollowUp,
       hasScreenContext: input.hasScreenContext,

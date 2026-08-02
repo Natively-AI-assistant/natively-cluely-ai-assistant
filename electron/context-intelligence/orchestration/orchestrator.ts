@@ -44,6 +44,14 @@ export interface AnswerRequest {
   /** Manual input ALWAYS wins over transcript extraction (§12.2). */
   manualQuestion?: string;
   transcriptQuestion?: string;
+  /**
+   * Caller-supplied confidence for `transcriptQuestion` (0..1). When present it
+   * replaces the flat 0.7 default, so the decision layer sees the extractor's
+   * ACTUAL certainty — a turn the extractor scored 0.3 (no interrogative shape
+   * at all) is no longer indistinguishable from a clean "?"-terminated
+   * question. Ignored when manualQuestion is set.
+   */
+  questionConfidence?: number;
   isFollowUp?: boolean;
   hasScreenContext?: boolean;
   /** True when the turn has real documents (mode attachments or hydrated
@@ -84,7 +92,13 @@ function resolveQuestion(req: AnswerRequest): { resolved: string; source: 'manua
   const manual = req.manualQuestion?.trim();
   if (manual) return { resolved: manual, source: 'manual', confidence: 1 };
   const t = req.transcriptQuestion?.trim() ?? '';
-  return { resolved: t, source: 'transcript', confidence: t ? 0.7 : 0 };
+  if (!t) return { resolved: t, source: 'transcript', confidence: 0 };
+  // Honour the extractor's own confidence when the caller supplied it; fall
+  // back to the historical flat 0.7 when it did not.
+  const c = typeof req.questionConfidence === 'number' && Number.isFinite(req.questionConfidence)
+    ? Math.max(0, Math.min(1, req.questionConfidence))
+    : 0.7;
+  return { resolved: t, source: 'transcript', confidence: c };
 }
 
 function buildClaimRequirements(

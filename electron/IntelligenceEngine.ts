@@ -1431,7 +1431,14 @@ export class IntelligenceEngine extends EventEmitter {
             var _wtaTurnSourceDecision:
                 import('./llm/turnSourceDecision').TurnSourceDecision | null = null;
             try {
-                const _wtaQHoist = extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+                // MUST match wtaTurnQuestion / canonicalTurn's expression below.
+                // This previously omitted the caller-supplied `question`, so on
+                // any press where the user typed something that differed from
+                // the last interviewer utterance, the source-authority decision
+                // was resolved for the TRANSCRIPT's question while the answer
+                // type, context route and prompt were resolved for the TYPED
+                // one — two authorities governing one turn with no tie-break.
+                const _wtaQHoist = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
                 const _wtaOrchAvail = this.llmHelper.getKnowledgeOrchestrator?.();
                 const _wtaSourceContract = (snapshotModeInfo as any)?.sourceContract ?? null;
                 if (_wtaSourceContract) {
@@ -1674,7 +1681,13 @@ export class IntelligenceEngine extends EventEmitter {
                 const { resolveSourceOwnership } = require('./llm/sourceOwnership');
                 const { getSourceOwnerEnforcementStage } = require('./intelligence/intelligenceFlags');
                 const { buildTurnContractIfEnabled, allowsEvidence: coAllowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-                const _wtaQ = extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+                // MUST match wtaTurnQuestion / canonicalTurn's expression below
+                // (see the _wtaQHoist comment above): _wtaQ drives planAnswer →
+                // _wtaContract, resolveSourceOwnership and
+                // buildTurnContractIfEnabled — i.e. the EVIDENCE and SOURCE
+                // gates — while canonicalTurn drives the answer type and the
+                // prompt. Omitting `question` here made the two disagree.
+                const _wtaQ = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
                 const _wtaOrchForAvail = this.llmHelper.getKnowledgeOrchestrator?.();
                 // Grounding-campaign2 fix (2026-07-20): these two were `const`
                 // — block-scoped to THIS try block (closes below) — but are
@@ -2449,9 +2462,27 @@ export class IntelligenceEngine extends EventEmitter {
                         profileSourceCount: _ctx.profileSourceCount,
                         resolvedProfileSources: _ctx.resolvedProfileSources,
                         extraAllowedSourceTypes: _ctx.extraAllowedSourceTypes as never[],
-                        scope: { meetingId: _ctx.meetingId ?? meetingMarker ?? undefined },
+                        // sessionId scopes the V3 conversation-state store. Left
+                        // unset it fell back to the literal 'engine', so every
+                        // WTA turn across every meeting shared one key.
+                        scope: {
+                            meetingId: _ctx.meetingId ?? meetingMarker ?? undefined,
+                            sessionId: _ctx.meetingId ?? meetingMarker ?? undefined,
+                        },
                         requestId: trace.requestId,
                         requestSequence: generationId,
+                        // Question provenance. When the user typed the question
+                        // it IS manual; when it was chosen out of live speech by
+                        // extractLatestQuestion it is not, and the decision layer
+                        // must see the extractor's real confidence rather than a
+                        // blanket manual/1.0 stamp.
+                        questionSource: question ? 'manual' : 'transcript',
+                        questionConfidence: question ? 1 : extractedQuestion.confidence,
+                        // Both were already computed far above and simply never
+                        // threaded through, leaving usePreviousSourceContinuity
+                        // dead for every live meeting turn.
+                        isFollowUp: extractedQuestion.isFollowUp,
+                        hasScreenContext: Boolean(options?.screenContext),
                         // The live meeting's own recent words, into the composer's
                         // labelled untrusted section. Without this, a live meeting
                         // question under V3 composed a no-evidence disclosure even
@@ -4278,7 +4309,14 @@ export class IntelligenceEngine extends EventEmitter {
                 resolvedProfileSources: ctx.resolvedProfileSources,
                 extraAllowedSourceTypes: ctx.extraAllowedSourceTypes as never[],
                 requestSequence: this.currentGenerationId,
-                scope: { meetingId: ctx.meetingId ?? undefined },
+                scope: { meetingId: ctx.meetingId ?? undefined, sessionId: ctx.meetingId ?? undefined },
+                // This question came out of live speech via question-resolver,
+                // not from the user's keyboard, so it must not be stamped
+                // manual/1.0. The resolver's own confidence is already gated at
+                // >= 0.6 above; pass the real value through rather than
+                // discarding it at the boundary.
+                questionSource: 'transcript',
+                questionConfidence: resolved.confidence,
                 conversationSummary: ctx.conversationWindow(60),
                 retrieval: ctx.port as any,
             });
