@@ -13,6 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import os from 'node:os';
 import Module from 'node:module';
@@ -20,7 +21,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const COMPILED = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
+  path.dirname(fileURLToPath(import.meta.url)),
   '../../../dist-electron/electron/services/CredentialsManager.js',
 );
 
@@ -313,7 +314,7 @@ test('process.platform is NOT in the fallback key material (P5 hardening)', () =
   // process.platform was removed from the fallback key derivation. This pins
   // the comment block at CredentialsManager.ts:822-847 against future regressions.
   const src = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../CredentialsManager.ts'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../CredentialsManager.ts'),
     'utf8',
   );
   // Locate the getFallbackKey body — everything from "private getFallbackKey"
@@ -327,7 +328,7 @@ test('process.platform is NOT in the fallback key material (P5 hardening)', () =
 
 test('STT key setter source normalizes empty string to undefined (P2 source guard)', () => {
   const src = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../CredentialsManager.ts'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../CredentialsManager.ts'),
     'utf8',
   );
   for (const { name, setter } of STT_KEY_SETTERS) {
@@ -346,7 +347,7 @@ test('STT key setter source normalizes empty string to undefined (P2 source guar
 
 test('LLM key setter source normalizes empty string to undefined (M-2 follow-up — matches STT pattern)', () => {
   const src = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../CredentialsManager.ts'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../CredentialsManager.ts'),
     'utf8',
   );
   // The 4 LLM key setters that originally stored `''` verbatim. setNativelyApiKey
@@ -381,7 +382,7 @@ test('LLM key setters: empty-string resave clears the stored key (M-2 behavioral
 
 test('local-whisper is in the set-stt-provider IPC + preload + types unions (P4 contract)', () => {
   const ipc = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../ipcHandlers.ts'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../ipcHandlers.ts'),
     'utf8',
   );
   // The handler signature must include 'local-whisper'.
@@ -392,13 +393,13 @@ test('local-whisper is in the set-stt-provider IPC + preload + types unions (P4 
   assert.match(handlerBlock, /'local-whisper'/, 'set-stt-provider IPC handler union must include local-whisper');
 
   const preload = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../preload.ts'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../preload.ts'),
     'utf8',
   );
   assert.match(preload, /'local-whisper'/, 'preload setSttProvider union must include local-whisper');
 
   const types = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../src/types/electron.d.ts'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../src/types/electron.d.ts'),
     'utf8',
   );
   assert.match(types, /setSttProvider[^]*'local-whisper'/, 'electron.d.ts setSttProvider union must include local-whisper');
@@ -406,7 +407,7 @@ test('local-whisper is in the set-stt-provider IPC + preload + types unions (P4 
 
 test('SettingsOverlay sends USE_STORED sentinel when input empty but key on disk (P1 renderer guard)', () => {
   const src = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../src/components/SettingsOverlay.tsx'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../src/components/SettingsOverlay.tsx'),
     'utf8',
   );
   // The sentinel constant must appear in the renderer (it matches what the IPC resolves).
