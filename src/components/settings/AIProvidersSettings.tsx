@@ -3431,7 +3431,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             </p>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        {/* flex-wrap, not plain flex: <AipModelList> is a fragment whose
+                            summary is `order-2` (so it lands after these order-0 buttons)
+                            and whose panel is `basis-full order-4` (so it wraps onto its
+                            own line). Both only work as direct children of a wrapping flex
+                            row — outside one the classes are inert and the panel squeezes. */}
+                        <div className="flex flex-wrap items-center gap-2">
                             <button
                                 type="button"
                                 onClick={handleSaveLitellm}
@@ -3455,33 +3460,33 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                     {t('Remove')}
                                 </button>
                             )}
-                        </div>
 
-                        {/* The proxy can expose dozens of models; without this the Active
-                            Model dropdown gets all of them. Reuses the cloud providers'
-                            allow-list wholesale — `cloudEnabledModels` is keyed by provider
-                            string, so 'litellm' needs no dedicated store or IPC channel.
-                            No `onSetDefault`/`defaultId`: there is no litellmPreferredModel
-                            credential, and STANDARD_CLOUD_MODELS has no litellm pmKey, so a
-                            per-provider default would write a key nothing reads. */}
-                        {hasStoredKey.litellm && (
-                            <AipModelList
-                                models={effectiveModels('litellm')}
-                                enabled={cloudEnabledModels['litellm'] || []}
-                                onToggle={(modelId) => handleToggleModel('litellm', modelId)}
-                                onReset={() => handleResetModels('litellm')}
-                                error={modelSaveError['litellm'] ? 'save-failed' : null}
-                                refreshing={isRefreshingLitellm}
-                                onRefresh={handleRefreshLitellmModels}
-                                // Deliberately NOT gated on litellmModels.length: an empty
-                                // catalogue (proxy down at save time, or the cache cleared)
-                                // is exactly when the user needs Refresh, and this list is
-                                // now the only place it lives.
-                                onFirstOpen={() => {
-                                    if (litellmModels.length === 0) handleRefreshLitellmModels();
-                                }}
-                            />
-                        )}
+                            {/* The proxy can expose dozens of models; without this the Active
+                                Model dropdown gets all of them. Reuses the cloud providers'
+                                allow-list wholesale — `cloudEnabledModels` is keyed by provider
+                                string, so 'litellm' needs no dedicated store or IPC channel.
+                                No `onSetDefault`/`defaultId`: there is no litellmPreferredModel
+                                credential, and STANDARD_CLOUD_MODELS has no litellm pmKey, so a
+                                per-provider default would write a key nothing reads. */}
+                            {hasStoredKey.litellm && (
+                                <AipModelList
+                                    models={effectiveModels('litellm')}
+                                    enabled={cloudEnabledModels['litellm'] || []}
+                                    onToggle={(modelId) => handleToggleModel('litellm', modelId)}
+                                    onReset={() => handleResetModels('litellm')}
+                                    error={modelSaveError['litellm'] ? 'save-failed' : null}
+                                    refreshing={isRefreshingLitellm}
+                                    onRefresh={handleRefreshLitellmModels}
+                                    // Deliberately NOT gated on litellmModels.length: an empty
+                                    // catalogue (proxy down at save time, or the cache cleared)
+                                    // is exactly when the user needs Refresh, and this list is
+                                    // now the only place it lives.
+                                    onFirstOpen={() => {
+                                        if (litellmModels.length === 0) handleRefreshLitellmModels();
+                                    }}
+                                />
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
