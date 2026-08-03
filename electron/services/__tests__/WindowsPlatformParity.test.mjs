@@ -75,6 +75,7 @@ test('preflight: Windows has its own sharp / sqlite-vec checks, arch-agnostic', 
   );
 });
 
+<<<<<<< a42cefa056f51870c5b3d580ec05ed55c4063a5e
 // ── 2. Full-screen screenshots captured the wrong monitor on Windows ─────────
 // main.ts resolves the display the overlay/meeting is on and passes it down,
 // but the win32 branch dropped the argument, so capture fell through to
@@ -490,6 +491,8 @@ test('rust: the foreground-change proc ignores transient hwnd==0 states', () => 
 
 =======
 >>>>>>> c42b28ef
+=======
+>>>>>>> e0c6ae2c
 test('preflight: the new Windows check ids are still selected by nativeOk', () => {
   // `nativeOk` picks checks by id prefix; renaming an id silently drops it from
   // the aggregate, which would make the gate pass while the asset is missing.
