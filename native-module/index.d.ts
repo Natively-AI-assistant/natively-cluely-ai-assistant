@@ -19,41 +19,19 @@ export declare class MicrophoneCapture {
 export declare class StealthKeyboardTap {
   constructor()
   /**
-   * Engage the tap. Every keystroke fires `callback` with the captured
-   * metadata; the foreground app does NOT receive the event.
-   *
-   * Returns:
-   *   - `true` if the tap engaged.
-   *   - `false` if Accessibility permission is missing. Call
-   *     `is_accessibility_granted()` and `request_accessibility_permission()`
-   *     to drive the user through System Settings, then restart the app.
-   *
-   * Idempotent: repeated `start()` calls while active are no-ops.
+   * Engage the hook. Every plain-text keystroke fires `callback` and is
+   * swallowed from the foreground app. `overlay_bounds` is accepted for
+   * cross-platform parity and ignored (no outside-click stop on Windows,
+   * matching the shipped macOS build). Idempotent while active.
    */
   start(callback: ((err: Error | null, arg: CapturedKey) => any), overlayBounds?: OverlayBoundsInput | undefined | null): boolean
-  /**
-   * Push fresh overlay bounds into the live tap. Required when the
-   * OS window moves or resizes mid-session: without this, the start()
-   * snapshot goes stale and mouse-down classification (inside vs
-   * outside the overlay) drifts against the actual frame. No-op when
-   * the tap is not active so JS can call it unconditionally.
-   *
-   * Concurrency note: a benign TOCTOU exists where this method observes
-   * `active=true`, stop() then clears bounds, and we overwrite with a
-   * stale value. That's safe: the worker is exiting, the per-event reader
-   * short-circuits on `!active`, and the next `start()` re-snapshots
-   * bounds from the provider — so the stale write is invisible.
-   */
+  /** No-op on Windows (accepted for API parity — see `start`). */
   updateOverlayBounds(overlayBounds?: OverlayBoundsInput | undefined | null): void
   /**
-   * Disengage the tap. After this returns, the next keystroke will
-   * reach the foreground app normally. Safe to call multiple times.
+   * Disengage the hook. Safe to call when inactive. After this returns the
+   * next keystroke reaches the foreground app normally.
    */
   stop(): void
-  /**
-   * True while the tap is engaged. Use to drive UI state ("stealth
-   * typing" badge, mode indicator, etc.).
-   */
   get isActive(): boolean
 }
 
@@ -73,56 +51,39 @@ export declare class SystemAudioCapture {
   stop(): void
 }
 
-/**
- * Apply stealth attributes to the BrowserWindow whose native handle is
- * passed in.
- *
- * `handle` is the buffer returned by `BrowserWindow.getNativeWindowHandle()`.
- * On macOS that buffer contains a single pointer to the BrowserWindow's
- * content `NSView`. We dereference to the parent `NSWindow` and apply the
- * stealth attributes on it.
- *
- * Returns `Ok(())` on success, `Err(...)` if the handle is malformed or the
- * view has no associated window (e.g. window destroyed mid-call).
- */
-export declare function applyStealthToWindow(handle: Buffer): void
-
 export interface AudioDeviceInfo {
   id: string
   name: string
 }
 
-/**
- * Event payload delivered to the JS callback. Crossing the V8 boundary is
- * not free, so we keep this struct flat (no nested objects) and only include
- * fields the renderer actually needs.
- */
+/** Event payload delivered to the JS callback. Flat, matching macOS. */
 export interface CapturedKey {
   /**
-   * HID virtual keycode (e.g. 36 = Return, 51 = Delete, 53 = Esc). Stable
-   * across keyboard layouts; use for shortcut detection (Esc → exit mode).
+   * macOS HID virtual keycode (53=Esc, 36=Return, 76=NumpadEnter,
+   * 51=Backspace). Translated from the Windows VK so the renderer's
+   * hardcoded switch works unchanged. 0 for ordinary printable keys.
    */
   keyCode: number
   /**
-   * The characters this key would type, given the active keyboard layout
-   * and any held dead keys. Empty string for non-printable keys (Esc,
-   * arrows, modifiers alone). Multi-char for IME composition or
-   * surrogate pairs.
+   * The character(s) this key produces under the active layout + modifiers
+   * (via ToUnicodeEx). Empty for non-printable keys.
    */
   chars: string
   /**
-   * Raw CGEventFlags bitmask (cmd=1<<20, opt=1<<19, ctrl=1<<18,
-   * shift=1<<17, capsLock=1<<16, fn=1<<23). Renderer can decode without
-   * us pre-splitting into bools.
+   * Modifier bitmask using the SAME bit layout the macOS tap emits
+   * (cmd=1<<20, opt=1<<19, ctrl=1<<18, shift=1<<17, capsLock=1<<16) so the
+   * renderer can decode identically. We only ever set shift/caps here
+   * because modifier combos are passed through (see the filter below).
    */
   flags: number
-  /**
-   * True for keyDown, false for keyUp. flagsChanged events are converted
-   * to keyDown=true (modifier press) or keyDown=false (modifier release)
-   * by the worker.
-   */
+  /** True for keyDown, false for keyUp. The renderer only acts on keyDown. */
   isKeyDown: boolean
-  /** True for a pass-through mouse down outside the overlay bounds. */
+  /**
+   * True when the user has left Natively and stealth must stop: a click on
+   * another process's window (mouse hook) or a foreground switch such as
+   * Alt+Tab (WinEvent hook). StealthKeyboardManager turns this into stop().
+   * Named for the macOS field it mirrors; on Windows it covers both triggers.
+   */
   isOutsideMouseDown: boolean
 }
 
@@ -162,11 +123,43 @@ export declare function getInputDevices(): Array<AudioDeviceInfo>
 export declare function getOutputDevices(): Array<AudioDeviceInfo>
 
 /**
- * True if this process has Accessibility trust (required for CGEventTap).
- * Cheap; safe to poll from JS to drive UI state.
+ * Windows needs no OS permission for a WH_KEYBOARD_LL hook (unlike macOS
+ * Accessibility). Always true so the JS permission flow no-ops.
  */
 export declare function isAccessibilityGranted(): boolean
 
+/**
+ * True when the active keyboard layout is a CJK IME (Chinese / Japanese /
+ * Korean), i.e. one where text is composed rather than typed key-for-key.
+ *
+ * # Why the stealth hook is unusable for these users
+ *
+ * IME composition happens ABOVE the raw keyboard layer, in IMM32/TSF. Our
+ * WH_KEYBOARD_LL hook swallows the keystroke (returns 1) before it ever
+ * reaches that layer, and the text we substitute comes from `ToUnicodeEx`,
+ * which resolves the layout but performs no composition. So with an IME
+ * active, engaging the hook means the candidate window never appears and the
+ * user can only enter raw Latin letters.
+ *
+ * macOS has exactly this problem with its CGEventTap and solves it by probing
+ * the enabled input sources and declining to auto-engage (see
+ * electron/services/ImeDetector.ts). This is the Windows probe for the same
+ * decision. JS uses it to report stealth typing unavailable, which routes
+ * these users through the existing no-hook fallback: the overlay stays a
+ * normal focusable window and typing works through real DOM focus, at the cost
+ * of the click stealing foreground focus. Composition that works beats silent,
+ * unexplained mojibake.
+ *
+ * Reads the layout of the FOREGROUND thread (the app the user is actually
+ * typing in), falling back to this process's layout when that is unavailable.
+ */
+export declare function isImeKeyboardActive(): boolean
+
+/**
+ * Overlay bounds accepted for API parity with macOS. Windows does not wire an
+ * outside-click stop (neither does the shipped macOS build — its bounds
+ * provider is never registered), so these are accepted and ignored.
+ */
 export interface OverlayBoundsInput {
   x: number
   y: number
