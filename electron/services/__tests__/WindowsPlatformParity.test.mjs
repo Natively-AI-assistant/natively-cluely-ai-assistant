@@ -250,6 +250,145 @@ test('ime: the Windows auto-engage handlers consult the probe, not a hardcoded t
   );
 });
 
+// ── Review hardening: security (bounded capture, IPC auth, shutdown) ─────────
+
+test('security: stealth typing is stopped when the overlay hides or we leave it', () => {
+  const wh = read('electron/WindowHelper.ts');
+  assert.match(
+    wh,
+    /private stopStealthTyping\(\): void \{[\s\S]{0,260}StealthKeyboardManager[\s\S]{0,80}\.stop\(\)/,
+    'BUG: WindowHelper needs a stopStealthTyping() that disengages the hook.',
+  );
+  const hide = wh.slice(wh.indexOf('public hideOverlay()'), wh.indexOf('public hideOverlay()') + 800);
+  assert.match(hide, /this\.stopStealthTyping\(\)/, 'BUG: hideOverlay must stop stealth typing.');
+  const toLauncher = wh.slice(
+    wh.indexOf('public switchToLauncher('),
+    wh.indexOf('public switchToLauncher(') + 800,
+  );
+  assert.match(
+    toLauncher,
+    /this\.stopStealthTyping\(\)/,
+    'BUG: switchToLauncher (end-meeting) must stop stealth typing, or the hook keeps swallowing ' +
+      'keystrokes system-wide with the overlay hidden and no visible indicator.',
+  );
+  // And the manager stops when the overlay window is destroyed.
+  const mgr = read('electron/services/StealthKeyboardManager.ts');
+  assert.match(
+    mgr,
+    /this\.overlayWebContents = null;[\s\S]{0,400}if \(this\.active\) this\.stop\(\)/,
+    "BUG: the overlay 'closed' handler must stop the tap — a destroyed sink must not keep capture live.",
+  );
+});
+
+test('security: stealth-tap:start is authorized to the overlay sender only', () => {
+  const main = read('electron/main.ts');
+  const block = main.slice(
+    main.indexOf('const isFromOverlay'),
+    main.indexOf("registerStealthHandler('stealth-tap:start'") + 200,
+  );
+  assert.match(
+    block,
+    /overlay\.webContents\.id === event\?\.sender\?\.id/,
+    'BUG: isFromOverlay must compare the sender to the overlay webContents id.',
+  );
+  assert.match(
+    block,
+    /registerStealthHandler\('stealth-tap:start', \(event: any\) =>\s*isFromOverlay\(event\) \? stealth\.start\(\) : false/,
+    'BUG: stealth-tap:start must reject senders that are not the overlay — any renderer could ' +
+      'otherwise engage the system-wide keyboard hook.',
+  );
+});
+
+test('security: shutdown stops the tap on Windows too (napi teardown race)', () => {
+  const main = read('electron/main.ts');
+  assert.match(
+    main,
+    /if \(process\.platform === 'darwin' \|\| process\.platform === 'win32'\) \{[\s\S]{0,800}Failed to stop StealthKeyboardManager during shutdown/,
+    'BUG: the shutdown stop() was darwin-only; the Windows worker holds an Arc<ThreadsafeFunction> ' +
+      'and can crash on quit if a keystroke fires during V8 teardown.',
+  );
+});
+
+// ── Review hardening: native Rust safety/correctness (source assertions) ─────
+
+test('rust: all three hook procs are panic-contained (catch_unwind) and cleanup is a Drop guard', () => {
+  const rust = read('native-module/src/keyboard_hook_windows.rs');
+  for (const proc of ['keyboard_hook_inner', 'mouse_hook_inner', 'foreground_event_inner']) {
+    assert.match(
+      rust,
+      new RegExp(`catch_unwind\\(AssertUnwindSafe\\(\\|\\| unsafe \\{\\s*${proc}`),
+      `BUG: ${proc} must run under catch_unwind — a panic across the extern "system" boundary ` +
+        'aborts the whole app from the OS input thread.',
+    );
+  }
+  assert.match(
+    rust,
+    /impl Drop for HookGuard \{[\s\S]{0,400}UnhookWindowsHookEx\(self\.kb\)/,
+    'BUG: hook cleanup must be a Drop guard so a panic in the worker still unhooks — otherwise a ' +
+      'global keyboard hook is left installed swallowing every keystroke system-wide.',
+  );
+});
+
+test('rust: the message-queue race and session-id cleanup are fixed', () => {
+  const rust = read('native-module/src/keyboard_hook_windows.rs');
+  // PeekMessage forces the thread queue to exist BEFORE ready is signalled.
+  assert.match(
+    rust,
+    /PeekMessageW\(&mut msg, HWND::default\(\), WM_USER, WM_USER, PM_NOREMOVE\)[\s\S]{0,200}ready_tx\.send\(true\)/,
+    'BUG: the queue must be forced (PeekMessageW) before signalling ready, or a fast stop()' +
+      "'s WM_QUIT is dropped and the main thread hangs on join().",
+  );
+  // Cleanup keyed on session id, not the always-true Arc::ptr_eq.
+  assert.match(
+    rust,
+    /session_id\.load\(Ordering::Acquire\) == self\.session_id/,
+    'BUG: cleanup must compare a session id — Arc::ptr_eq was always true (every worker shares one Arc).',
+  );
+  assert.doesNotMatch(rust, /Arc::ptr_eq\(/, 'BUG: the no-op Arc::ptr_eq() guard call must be gone.');
+});
+
+test('rust: char translation uses the foreground layout, captures AltGr, honours NumLock/CapsLock', () => {
+  const rust = read('native-module/src/keyboard_hook_windows.rs');
+  assert.match(
+    rust,
+    /fn foreground_keyboard_layout\(\)[\s\S]{0,200}GetKeyboardLayout\(tid\)/,
+    'BUG: must resolve chars with the foreground app\'s layout, not the worker thread default.',
+  );
+  assert.match(
+    rust,
+    /let altgr = modifier_held\(VK_RMENU\) \|\| \(ctrl && alt\)/,
+    'BUG: AltGr (Ctrl+Alt / right-Alt) must be detected so its characters are captured, not leaked.',
+  );
+  assert.match(
+    rust,
+    /if altgr && key_code == 0 && chars\.is_empty\(\) \{\s*return pass\(\)/,
+    'BUG: an AltGr combo that yields no text is a real shortcut and must pass through.',
+  );
+  assert.match(
+    rust,
+    /if num \{\s*key_state\[VK_NUMLOCK\.0 as usize\] = 0x01/,
+    'BUG: NumLock must be set in the key-state or numpad digits resolve to nothing.',
+  );
+  assert.match(
+    rust,
+    /caps_on: AtomicBool[\s\S]{0,60}num_on: AtomicBool/,
+    'BUG: CapsLock/NumLock toggle state must be tracked (worker-thread GetKeyState is stale).',
+  );
+});
+
+test('rust: the foreground-change proc ignores transient hwnd==0 states', () => {
+  const rust = read('native-module/src/keyboard_hook_windows.rs');
+  const fg = rust.slice(
+    rust.indexOf('unsafe fn foreground_event_inner'),
+    rust.indexOf('fn send_payload('),
+  );
+  assert.match(
+    fg,
+    /if hwnd\.0 == 0 \{\s*return;/,
+    'BUG: a transient foreground change to hwnd==0 must NOT stop the session (it is not an app switch).',
+  );
+});
+
 test('preflight: the new Windows check ids are still selected by nativeOk', () => {
   // `nativeOk` picks checks by id prefix; renaming an id silently drops it from
   // the aggregate, which would make the gate pass while the asset is missing.
