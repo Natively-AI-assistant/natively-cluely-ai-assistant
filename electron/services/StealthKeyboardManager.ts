@@ -53,6 +53,9 @@ export class StealthKeyboardManager {
     /// listener (intentionally or accidentally during development), it
     /// would silently receive every user keystroke. Scoping prevents this.
     private overlayWebContents: Electron.WebContents | null = null;
+    /// The overlay BrowserWindow, kept alongside its webContents so start() can
+    /// enforce "hook engaged ⟹ overlay visible" on Windows (see start()).
+    private overlayWindow: BrowserWindow | null = null;
     private overlayBoundsProvider: (() => OverlayBoundsInput | null) | null = null;
     /// Monotonic counter incremented on every setOverlayWindow call. The
     /// 'closed' listener captures the token at registration time and only
@@ -150,8 +153,10 @@ export class StealthKeyboardManager {
         const myToken = ++this.overlayRegistrationToken;
         if (!win) {
             this.overlayWebContents = null;
+            this.overlayWindow = null;
             return;
         }
+        this.overlayWindow = !win.isDestroyed() ? win : null;
         // ROUND 2 FIX (#5): Issue a fresh registration token so any
         // previously-registered window's 'closed' handler can detect that
         // it's been superseded and skip the null-out. Identity comparison
@@ -164,6 +169,7 @@ export class StealthKeyboardManager {
             // the closure of an older window must NOT touch the field.
             if (this.overlayRegistrationToken === myToken) {
                 this.overlayWebContents = null;
+                this.overlayWindow = null;
                 // The sink is gone — stop capturing. Without this, a hook
                 // engaged when the overlay window is destroyed would keep
                 // swallowing keystrokes system-wide with nowhere to deliver
@@ -291,6 +297,19 @@ export class StealthKeyboardManager {
     public start(): boolean {
         if (!this.tap) return false;
         if (this.active) return true;
+
+        // Windows invariant: the hook is engaged ONLY while the overlay is
+        // visible. The hook swallows keystrokes system-wide, so engaging it with
+        // the overlay hidden (e.g. the hotkey pressed in launcher mode, or after
+        // Ctrl+B) would eat the user's keystrokes with no visible indicator and
+        // nowhere to deliver them. Refuse in that case. macOS is unchanged — its
+        // panel-based path predates this and has no equivalent hazard.
+        if (
+            process.platform === 'win32' &&
+            (!this.overlayWindow || this.overlayWindow.isDestroyed() || !this.overlayWindow.isVisible())
+        ) {
+            return false;
+        }
 
         // ROUND 2 FIX (#12): Flip active=true BEFORE tap.start() so the
         // first captured callback (which can fire on the worker thread the
