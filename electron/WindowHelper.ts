@@ -241,6 +241,34 @@ export class WindowHelper {
     });
   }
 
+  /**
+   * Windows: keep the launcher out of the taskbar while undetectable mode is on.
+   *
+   * Every other window is created with `skipTaskbar: true` (overlay, pill,
+   * toggle, popover catcher, settings, model selector, cropper) — the launcher
+   * is the sole exception, because in NORMAL mode it is the main app window and
+   * belongs in the taskbar. That left undetectable mode only half-applied on
+   * Windows: macOS removes the app from the Dock entirely, while Windows still
+   * showed a "Natively" taskbar button whenever the launcher was up (before and
+   * after a meeting — during one the overlay is already skipTaskbar).
+   *
+   * Called at launcher creation and on every undetectable toggle. No-op off
+   * win32: macOS stealth is the Dock/activation-policy path, and forcing
+   * skipTaskbar there would be a behaviour change on a platform that does not
+   * use it.
+   */
+  public syncLauncherTaskbarForStealth(): void {
+    if (process.platform !== 'win32') return;
+    const win = this.launcherWindow;
+    if (!win || win.isDestroyed()) return;
+    try {
+      win.setSkipTaskbar(!!this.appState.getUndetectable());
+    } catch (e) {
+      // Non-fatal: worst case the taskbar button remains, exactly as before.
+      console.error('[WindowHelper] setSkipTaskbar failed:', e);
+    }
+  }
+
   // Force-reapply the CURRENT content-protection state to every live window,
   // bypassing the dedupe guard in setContentProtection(). Needed because
   // app.dock.hide()/show() flips the macOS activation policy, which makes
@@ -510,6 +538,10 @@ export class WindowHelper {
     }
 
     this.launcherWindow.setContentProtection(this.contentProtection);
+    // Apply the persisted undetectable state to the launcher's taskbar presence
+    // now, at creation — a session that STARTS undetectable would otherwise show
+    // a taskbar button until the user toggled the setting off and on again.
+    this.syncLauncherTaskbarForStealth();
 
     // A/B KILL-SWITCH (2026-07-10): NATIVELY_DISABLE_ONBOARDING_ORCH=1 appends
     // ?noorch=1, which makes App.tsx skip orch.start() entirely (no drain loop,
