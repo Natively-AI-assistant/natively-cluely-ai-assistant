@@ -1246,6 +1246,7 @@ import { OllamaManager } from './services/OllamaManager'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
+import { setTypingFocus } from './utils/windowsFocusPolicy'
 
 // Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
 // for a copied-profile native OOM investigation. It is inert unless explicitly enabled.
@@ -1805,6 +1806,13 @@ export class AppState {
           // Fallback: panel-safe focus on macOS without tap, brief focus on Win.
           if (overlay && !overlay.isDestroyed()) {
             this.sendToWindow(overlay, 'global-shortcut', { action: 'focusInput' });
+            // win32: the overlay runs with WS_EX_NOACTIVATE (clicks never
+            // activate it — see windowsFocusPolicy), which also makes a bare
+            // focus() a no-op. This explicit typing shortcut is the one
+            // sanctioned focus grab, so grant transient typing focus
+            // (focusable + focus); it self-reverts on the overlay's next
+            // blur/hide. No-op on macOS/Linux.
+            setTypingFocus(overlay, true);
             overlay.focus();
           }
         } else if (

@@ -2714,3 +2714,66 @@ contextBridge.exposeInMainWorld('electronAPI', {
     _verbose = enabled;
   });
 })();
+
+// ── Windows no-activate typing bridge ────────────────────────────────────────
+// The meeting overlay family (overlay, pill, toggle, settings/model popovers)
+// runs with WS_EX_NOACTIVATE on Windows (see utils/windowsFocusPolicy) so
+// clicks never steal foreground focus from the user's meeting app. That style
+// also blocks keyboard input, so when the user puts the caret in an editable
+// element we ask the main process for a transient typing grant (window becomes
+// focusable + focused), and release it when the caret leaves. This is the
+// Windows analogue of the macOS NSPanel's becomesKeyOnlyIfNeeded.
+//
+// Installed in every window; the main-process handler only honors senders
+// whose BrowserWindow is under the no-activate policy (launcher etc. are
+// ignored), so no per-window gating is needed here.
+(function installWindowsTypingFocusBridge() {
+  if (process.platform !== 'win32') return;
+
+  const isEditable = (target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable) return true;
+    const tag = target.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  };
+
+  // Dedupe to one IPC per state change — but reset on window blur: the OS can
+  // take focus away while the DOM caret stays in the input, and the next
+  // click on that same input re-fires pointerdown (not focusin), which must
+  // re-request the grant.
+  let granted = false;
+  const send = (active: boolean) => {
+    if (granted === active) return;
+    granted = active;
+    ipcRenderer.send('overlay-typing-focus', active);
+  };
+
+  window.addEventListener(
+    'focusin',
+    (e) => {
+      if (isEditable(e.target)) send(true);
+    },
+    true,
+  );
+  window.addEventListener(
+    'focusout',
+    (e) => {
+      if (!isEditable(e.target)) return;
+      // Caret moving between two editables: keep the grant (skip the
+      // false→true flap that would briefly deactivate the window).
+      if (isEditable((e as FocusEvent).relatedTarget)) return;
+      send(false);
+    },
+    true,
+  );
+  window.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (isEditable(e.target)) send(true);
+    },
+    true,
+  );
+  window.addEventListener('blur', () => {
+    granted = false;
+  });
+})();
