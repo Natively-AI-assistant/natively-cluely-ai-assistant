@@ -106,6 +106,7 @@ test('screenshot: BOTH desktop platforms forward preferredDisplay', () => {
   );
 });
 
+<<<<<<< 48d5728865be5a840717b98682e979e3212cd7ca
 // ── 3 & 5. Undetectable mode was only half-applied on Windows ────────────────
 // showTray()/hideTray() were reachable only from _enforceDockState(), which
 // returns immediately off darwin — so on Windows nothing drove the tray at all
@@ -487,6 +488,8 @@ test('rust: the foreground-change proc ignores transient hwnd==0 states', () => 
   );
 });
 
+=======
+>>>>>>> c42b28ef
 test('preflight: the new Windows check ids are still selected by nativeOk', () => {
   // `nativeOk` picks checks by id prefix; renaming an id silently drops it from
   // the aggregate, which would make the gate pass while the asset is missing.
