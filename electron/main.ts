@@ -16,6 +16,13 @@ import os from "os"
 import dns from "dns"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { autoUpdater } from "electron-updater"
+import {
+  DisguiseMode,
+  normalizeDisguiseMode,
+  disguiseAppName,
+  disguiseIconPath,
+  appIconPath,
+} from "./disguise"
 
 // Override global dns.lookup to resolve macOS system resolver issues with api.natively.software
 const originalLookup = dns.lookup;
@@ -1258,13 +1265,9 @@ const nativeOomTrace = new NativeOomTrace()
 // window falls back to the terminal icon. That identity mismatch reads as an
 // extra/duplicate dock tile. Coerce any out-of-union value to 'none' on load
 // and at the runtime entry point so app, dock, and window always agree.
-type DisguiseMode = 'terminal' | 'settings' | 'activity' | 'none'
-const VALID_DISGUISE_MODES: readonly DisguiseMode[] = ['terminal', 'settings', 'activity', 'none'] as const
-function normalizeDisguiseMode(value: unknown): DisguiseMode {
-  return (VALID_DISGUISE_MODES as readonly string[]).includes(value as string)
-    ? (value as DisguiseMode)
-    : 'none'
-}
+// Moved to electron/disguise.ts so WindowHelper's launcher-icon resolution and
+// the tray/dock identity here cannot drift apart. Re-exported for callers that
+// imported these from main.
 
 export class AppState {
   private static instance: AppState | null = null
@@ -1307,7 +1310,7 @@ export class AppState {
   private updateDownloadState: 'idle' | 'available' | 'downloading' | 'downloaded' = 'idle'
   private updateDownloadPromise: Promise<unknown> | null = null
   private downloadedUpdateInfo: any = null
-  private disguiseMode: 'terminal' | 'settings' | 'activity' | 'none' = 'none'
+  private disguiseMode: DisguiseMode = 'none'
 
   // View management
   private view: "queue" | "solutions" = "queue"
@@ -6450,51 +6453,65 @@ export class AppState {
     this.showTray();
   }
 
-  public showTray(): void {
-    if (this.tray) return;
+  // Tray tooltip for the current disguise. Derived from the mode directly and
+  // NOT read back off process.title: process.title is set by _applyDisguise(),
+  // so reading it here silently depends on that having already run — a tray
+  // created first would show the real name. Names mirror _applyDisguise().
+  private getTrayTooltip(): string {
+    // Trimmed: disguiseAppName carries a deliberate trailing space for
+    // process.title/app.setName parity, which must not reach the tooltip.
+    return disguiseAppName(this.disguiseMode).trim();
+  }
 
-    // Try to find a template image first for macOS
+  // Single source of truth for the tray image. Both the initial Tray() and the
+  // refresh in _applyDisguise() must go through this: _applyDisguise's own icon
+  // resolution points 'none' at natively.icns on macOS, and pushing that into
+  // the tray replaces the monochrome menu-bar template with a full-colour icon
+  // that no longer inverts for light/dark. Template flag must follow the file.
+  private buildTrayImage(): Electron.NativeImage {
     const resourcesPath = app.isPackaged ? process.resourcesPath : app.getAppPath();
 
-    // Potential paths for tray icon
-    const templatePath = path.join(resourcesPath, 'assets', 'iconTemplate.png');
-    const defaultIconPath = app.isPackaged
-      ? path.join(resourcesPath, 'assets', 'icon.png')
-      : path.join(app.getAppPath(), 'src/components/icon.png');
+    let iconToUse = disguiseIconPath(this.disguiseMode) ?? "";
 
-    let iconToUse = defaultIconPath;
+    if (!iconToUse || !fs.existsSync(iconToUse)) {
+      const templatePath = path.join(resourcesPath, 'assets', 'iconTemplate.png');
+      const defaultIconPath = app.isPackaged
+        ? path.join(resourcesPath, 'assets', 'icon.png')
+        : path.join(app.getAppPath(), 'src/components/icon.png');
 
-    // Check if template exists (sync check is fine for startup/rare toggle)
-    try {
-      if (require('fs').existsSync(templatePath)) {
-        iconToUse = templatePath;
-        console.log('[Tray] Using template icon:', templatePath);
-      } else {
-        // Also check src/components for dev
-        const devTemplatePath = path.join(app.getAppPath(), 'src/components/iconTemplate.png');
-        if (require('fs').existsSync(devTemplatePath)) {
-          iconToUse = devTemplatePath;
-          console.log('[Tray] Using dev template icon:', devTemplatePath);
+      iconToUse = defaultIconPath;
+
+      try {
+        if (fs.existsSync(templatePath)) {
+          iconToUse = templatePath;
         } else {
-          console.log('[Tray] Template icon not found, using default:', defaultIconPath);
+          const devTemplatePath = path.join(app.getAppPath(), 'src/components/iconTemplate.png');
+          if (fs.existsSync(devTemplatePath)) {
+            iconToUse = devTemplatePath;
+          }
         }
+      } catch (e) {
+        console.error('[Tray] Error checking for icon:', e);
       }
-    } catch (e) {
-      console.error('[Tray] Error checking for icon:', e);
     }
 
     const trayIcon = nativeImage.createFromPath(iconToUse).resize({ width: 16, height: 16 });
-    // IMPORTANT: specific template settings for macOS if needed, but 'Template' in name usually suffices
     trayIcon.setTemplateImage(iconToUse.endsWith('Template.png'));
+    return trayIcon;
+  }
 
-    this.tray = new Tray(trayIcon)
-    this.tray.setToolTip('Natively') // This tooltip might also need update if we change global shortcut, but global shortcut is removed.
+  public showTray(): void {
+    if (this.tray) return;
+
+    const trayIcon = this.buildTrayImage();
+
+    this.tray = new Tray(trayIcon);
+    this.tray.setToolTip(this.getTrayTooltip());
     this.updateTrayMenu();
 
-    // Double-click to show window
     this.tray.on('double-click', () => {
-      this.centerAndShowWindow()
-    })
+      this.centerAndShowWindow();
+    });
   }
 
   public updateTrayMenu() {
@@ -6505,8 +6522,7 @@ export class AppState {
 
     console.log('[Main] updateTrayMenu called. Screenshot Accelerator:', screenshotAccel);
 
-    // Update tooltip for verification
-    this.tray.setToolTip('Natively');
+    this.tray.setToolTip(this.getTrayTooltip());
 
     // Helper to format accelerator for display (e.g. CommandOrControl+H -> Cmd+H)
     const formatAccel = (accel: string) => {
@@ -6614,6 +6630,21 @@ export class AppState {
       this.windowHelper.syncOverlayInteractionPolicy();
       this.settingsWindowHelper.syncActivationPolicy();
       this.modelSelectorWindowHelper.syncActivationPolicy();
+      // The tray must follow undetectable state on Windows too. On macOS the
+      // _enforceDockState loop hides the tray alongside the dock and restores
+      // both on the way out — but that loop returns immediately off darwin, and
+      // it holds the ONLY showTray()/hideTray() call sites besides startup. So
+      // nothing drove the tray on Windows: launching with undetectable ON never
+      // created it, and toggling back OFF never created it either, leaving the
+      // user with no tray menu (show window / quit) until they restarted in
+      // normal mode. hideTray() is null-guarded and showTray() is idempotent,
+      // so this is safe to call on every real state change.
+      if (state) this.hideTray();
+      else this.showTray();
+      // Undetectable also means "no taskbar button" — the launcher is the only
+      // window without skipTaskbar (it needs one in normal mode). macOS achieves
+      // the equivalent by dropping the Dock tile.
+      this.windowHelper.syncLauncherTaskbarForStealth();
     }
 
     // Persist state via SettingsManager
@@ -6731,7 +6762,6 @@ export class AppState {
 
         console.log(`[Stealth] app.dock.hide() (enforce attempt ${attempt})`);
         app.dock.hide();
-        this.hideTray();
 
         // Re-assert content protection: the activation-policy flip can reset
         // the windows' sharingType, silently undoing screen-capture stealth.
@@ -6745,9 +6775,22 @@ export class AppState {
       } else {
         console.log(`[Stealth] app.dock.show() (enforce attempt ${attempt})`);
         app.dock.show();
-        this.showTray();
         // Do NOT call focus() — let the user's current app retain focus.
       }
+    }
+
+    // Tray follows the DESIRED state, NOT the dock transition. decideDockTransition
+    // short-circuits (shouldApply=false) whenever the dock is already settled — so
+    // gating the tray on it meant: stealth ON while the dock was already hidden
+    // never ran hideTray(), leaving a tray with the real app name visible for the
+    // whole stealth session; and the mirror case left no tray at all after an
+    // OFF that skipped the dock transition. Both calls are idempotent
+    // (showTray early-returns if a tray exists, hideTray no-ops if none), so
+    // running them on every enforcement attempt is safe.
+    if (wantUndetectable) {
+      this.hideTray();
+    } else {
+      this.showTray();
     }
 
     // Verify it actually stuck. macOS may apply the policy change a tick later
@@ -6818,8 +6861,31 @@ export class AppState {
   // to call redundantly — it no-ops immediately off-darwin or when not
   // undetectable, and stops early via the isUndetectable guard inside the loop.
   public reassertUndetectableStealth(maxAttempts: number = 10): void {
-    if (process.platform !== 'darwin') return;
     if (!this.isUndetectable) return;
+
+    if (process.platform === 'win32') {
+      // Windows has no dock or activation policy, so there is no self-verifying
+      // loop to run — but the two things that DO carry the app's identity here
+      // can come back on their own mid-session, and previously nothing put them
+      // back. The launcher's taskbar button returns on an explorer.exe restart,
+      // and setDisguise() re-registers the AUMID (app.setAppUserModelId) while
+      // stealth is on, which re-associates the window with a taskbar identity.
+      // Either way the user has no reason to re-toggle, so the entry would sit
+      // there under the real title for the rest of the session.
+      //
+      // Content protection is re-asserted for the same reason it is on macOS:
+      // it is the screen-capture half of stealth and is cheap to reapply.
+      this.reassertAllContentProtection();
+
+      const launcherWin = this.windowHelper.getLauncherWindow();
+      if (launcherWin && !launcherWin.isDestroyed()) {
+        launcherWin.setSkipTaskbar(true);
+      }
+      this.hideTray();
+      return;
+    }
+
+    if (process.platform !== 'darwin') return;
     // Collapse any in-flight enforcement chain from a PRIOR re-assert before
     // starting a fresh one — same discipline as setUndetectable(). Without this,
     // a burst of launcher shows (rapid Stop→Start→Stop, or a cold-start
@@ -6899,32 +6965,10 @@ export class AppState {
     console.log(`[AppState] ambientChatEnabled set to ${enabled}`);
   }
 
-  public setDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
+  public setDisguise(mode: DisguiseMode): void {
     mode = normalizeDisguiseMode(mode);
     this.disguiseMode = mode;
     SettingsManager.getInstance().set('disguiseMode', mode);
-
-    // NO runtime activation-policy churn here — and this is deliberate.
-    //
-    // The dual-dock-icon bug is a STARTUP phenomenon: the app is born, paints a
-    // tile, THEN renames via app.setName()+CFBundleName, and the LaunchServices
-    // re-registration races into a second tile. That path is fully handled at
-    // startup by LSUIElement (the bundle is born tile-less) plus the one-shot
-    // accessory→regular promotion after createWindow() — see the whenReady block.
-    //
-    // At RUNTIME the app already owns a single stable 'regular' dock tile, and
-    // app.setName() updates that tile's label in place rather than spawning a
-    // duplicate. The old code still bracketed this rename in accessory→regular
-    // "to be safe", but that round-trip deactivates the whole application for a
-    // tick — the always-on-top overlay/launcher windows leave the foreground
-    // layer and snap back, producing a visible disappear/reappear flicker on
-    // every disguise switch. Trading a guaranteed flicker for a hypothetical
-    // duplicate tile is the wrong deal, so the bracket is gone. With no policy
-    // change the app never deactivates, so there is also nothing to re-focus.
-    //
-    // Stealth is unaffected: _applyDisguise() already skips app.setName() and
-    // app.dock.setIcon() when isUndetectable (the dock stays hidden), and we
-    // never promote activation policy here.
     this._applyDisguise(mode);
   }
 
@@ -6932,68 +6976,14 @@ export class AppState {
     this._applyDisguise(this.disguiseMode);
   }
 
-  private _applyDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
-    let appName = "Natively";
-    let iconPath = "";
-
+  private _applyDisguise(mode: DisguiseMode): void {
     const isWin = process.platform === 'win32';
     const isMac = process.platform === 'darwin';
 
-    switch (mode) {
-      case 'terminal':
-        appName = isWin ? "Command Prompt " : "Terminal ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/terminal.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/terminal.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/terminal.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/terminal.png");
-        }
-        break;
-      case 'settings':
-        appName = isWin ? "Settings " : "System Settings ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/settings.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/settings.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/settings.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/settings.png");
-        }
-        break;
-      case 'activity':
-        appName = isWin ? "Task Manager " : "Activity Monitor ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/activity.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/activity.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/activity.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/activity.png");
-        }
-        break;
-      case 'none':
-      default:
-        appName = "Natively";
-        if (isMac) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "natively.icns")
-            : path.join(app.getAppPath(), "assets/natively.icns");
-        } else if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/icons/win/icon.ico")
-            : path.join(app.getAppPath(), "assets/icons/win/icon.ico");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/icon.png")
-            : path.join(app.getAppPath(), "assets/icon.png");
-        }
-        break;
-    }
+    // Identity comes from electron/disguise.ts — the same source the launcher
+    // icon and the tray use, so all three can never disagree about a mode.
+    const appName = disguiseAppName(mode);
+    const iconPath = disguiseIconPath(mode) ?? appIconPath();
 
     console.log(`[AppState] Applying disguise: ${mode} (${appName}) on ${process.platform}`);
 
@@ -7001,8 +6991,6 @@ export class AppState {
     process.title = appName;
 
     // 2. Update app name (affects macOS Menu / Dock)
-    // Skip when undetectable — app.setName() causes macOS to re-register
-    // the app and re-show the dock icon even after dock.hide()
     if (!this.isUndetectable) {
       app.setName(appName);
     }
@@ -7013,7 +7001,6 @@ export class AppState {
 
     // 3. Update App User Model ID (Windows Taskbar grouping)
     if (isWin) {
-      // Use unique AUMID per disguise to avoid grouping with the real app
       app.setAppUserModelId(`com.natively.assistant.${mode}`);
     }
 
@@ -7022,15 +7009,23 @@ export class AppState {
       const image = nativeImage.createFromPath(iconPath);
 
       if (isMac) {
-        // Skip dock icon update when dock is hidden to avoid potential flicker
         if (!this.isUndetectable) {
           app.dock.setIcon(image);
         }
       } else {
-        // Windows/Linux: Update all window icons
         this.windowHelper.getLauncherWindow()?.setIcon(image);
         this.windowHelper.getOverlayWindow()?.setIcon(image);
         this.settingsWindowHelper.getSettingsWindow()?.setIcon(image);
+      }
+
+      // Update System Tray Icon & Tooltip if tray is initialized. Deliberately
+      // NOT `image` (this function's dock/window icon): for mode 'none' that is
+      // natively.icns on macOS, which would replace the monochrome menu-bar
+      // template with a non-inverting full-colour icon. buildTrayImage() applies
+      // the tray's own resolution + template flag.
+      if (this.tray && !this.tray.isDestroyed()) {
+        this.tray.setImage(this.buildTrayImage());
+        this.tray.setToolTip(this.getTrayTooltip());
       }
     } else {
       console.warn(`[AppState] Disguise icon not found: ${iconPath}`);
@@ -7565,17 +7560,14 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   // Apply initial stealth state based on isUndetectable setting.
+  // Only mint a tray when NOT undetectable. Force-showing it on Windows
+  // regardless of stealth state made a persisted-undetectable cold start paint
+  // a tray icon that stealth then never removed.
   if (!appState.getUndetectable()) {
-    // Normal mode: show tray (dock is already showing — no need to call dock.show() again)
     appState.showTray();
-  } else {
-    // Persisted undetectable: the pre-emptive app.dock.hide() above is NOT
-    // sufficient — createWindow() + the launcher's first show re-registers the
-    // app and re-shows the dock. Converge through the same self-verifying
-    // enforcement the runtime toggle uses, so the app comes up actually
-    // undetectable without the user having to toggle off/on. The enforcement
-    // loop re-checks app.dock.isVisible() across several retries, which also
-    // catches the dock re-show that lands at the launcher's ready-to-show.
+  }
+
+  if (appState.getUndetectable()) {
     appState.applyInitialUndetectableState();
   }
   // Register global shortcuts using KeybindManager

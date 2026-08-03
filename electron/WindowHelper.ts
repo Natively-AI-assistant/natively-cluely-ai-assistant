@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, screen } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppState } from './main';
+import { disguiseIconPath, appIconPath, normalizeDisguiseMode } from './disguise';
 import { KeybindManager } from './services/KeybindManager';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
@@ -240,6 +241,34 @@ export class WindowHelper {
     });
   }
 
+  /**
+   * Windows: keep the launcher out of the taskbar while undetectable mode is on.
+   *
+   * Every other window is created with `skipTaskbar: true` (overlay, pill,
+   * toggle, popover catcher, settings, model selector, cropper) — the launcher
+   * is the sole exception, because in NORMAL mode it is the main app window and
+   * belongs in the taskbar. That left undetectable mode only half-applied on
+   * Windows: macOS removes the app from the Dock entirely, while Windows still
+   * showed a "Natively" taskbar button whenever the launcher was up (before and
+   * after a meeting — during one the overlay is already skipTaskbar).
+   *
+   * Called at launcher creation and on every undetectable toggle. No-op off
+   * win32: macOS stealth is the Dock/activation-policy path, and forcing
+   * skipTaskbar there would be a behaviour change on a platform that does not
+   * use it.
+   */
+  public syncLauncherTaskbarForStealth(): void {
+    if (process.platform !== 'win32') return;
+    const win = this.launcherWindow;
+    if (!win || win.isDestroyed()) return;
+    try {
+      win.setSkipTaskbar(!!this.appState.getUndetectable());
+    } catch (e) {
+      // Non-fatal: worst case the taskbar button remains, exactly as before.
+      console.error('[WindowHelper] setSkipTaskbar failed:', e);
+    }
+  }
+
   // Force-reapply the CURRENT content-protection state to every live window,
   // bypassing the dedupe guard in setContentProtection(). Needed because
   // app.dock.hide()/show() flips the macOS activation policy, which makes
@@ -417,6 +446,10 @@ export class WindowHelper {
         webSecurity: !isDev, // DEBUG: Disable web security only in dev
       },
       show: false, // DEBUG: Force show -> Fixed white screen, now relies on ready-to-show
+      // Taskbar presence must track stealth state, not be a hardcoded constant:
+      // a cold start with undetectable persisted must not paint a taskbar entry
+      // before setUndetectable() ever runs. Re-asserted on every toggle.
+      skipTaskbar: this.appState.getUndetectable(),
       // Platform-specific frame settings
       ...(isMac
         ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 14 } }
@@ -434,55 +467,11 @@ export class WindowHelper {
       resizable: true,
       movable: true,
       center: true,
-      icon: (() => {
-        const isMac = process.platform === 'darwin';
-        const isWin = process.platform === 'win32';
-        const mode = this.appState.getDisguise();
-
-        if (mode === 'none') {
-          if (isMac) {
-            return app.isPackaged
-              ? path.join(process.resourcesPath, 'natively.icns')
-              : path.resolve(__dirname, '../../assets/natively.icns');
-          } else if (isWin) {
-            return app.isPackaged
-              ? path.join(process.resourcesPath, 'assets/icons/win/icon.ico')
-              : path.resolve(__dirname, '../../assets/icons/win/icon.ico');
-          } else {
-            return app.isPackaged
-              ? path.join(process.resourcesPath, 'assets', 'icon.png')
-              : path.resolve(__dirname, '../../assets/icon.png');
-          }
-        }
-
-        // Disguise mode icons. Only the three known disguise modes map to a
-        // fake icon; any unexpected value falls through to 'none' above, so we
-        // never silently paint a terminal icon for an unrecognized mode.
-        let iconName: string | null = null;
-        if (mode === 'terminal') iconName = 'terminal.png';
-        if (mode === 'settings') iconName = 'settings.png';
-        if (mode === 'activity') iconName = 'activity.png';
-        if (!iconName) {
-          // Defensive: unknown mode — use the real app icon, matching 'none'.
-          if (isMac) {
-            return app.isPackaged
-              ? path.join(process.resourcesPath, 'natively.icns')
-              : path.resolve(__dirname, '../../assets/natively.icns');
-          } else if (isWin) {
-            return app.isPackaged
-              ? path.join(process.resourcesPath, 'assets/icons/win/icon.ico')
-              : path.resolve(__dirname, '../../assets/icons/win/icon.ico');
-          }
-          return app.isPackaged
-            ? path.join(process.resourcesPath, 'icon.png')
-            : path.resolve(__dirname, '../../assets/icon.png');
-        }
-
-        const platformDir = isWin ? 'win' : 'mac';
-        return app.isPackaged
-          ? path.join(process.resourcesPath, `assets/fakeicon/${platformDir}/${iconName}`)
-          : path.resolve(__dirname, `../../assets/fakeicon/${platformDir}/${iconName}`);
-      })(),
+      // Shared with the tray and the dock/process identity via
+      // electron/disguise.ts. normalizeDisguiseMode() keeps the old defensive
+      // behaviour: any out-of-union value coerces to 'none' and yields the real
+      // app icon, so an unrecognized mode never silently paints a fake one.
+      icon: disguiseIconPath(normalizeDisguiseMode(this.appState.getDisguise())) ?? appIconPath(),
     };
 
     console.log(`[WindowHelper] Icon Path: ${launcherSettings.icon}`);
@@ -502,6 +491,10 @@ export class WindowHelper {
     }
 
     this.launcherWindow.setContentProtection(this.contentProtection);
+    // Apply the persisted undetectable state to the launcher's taskbar presence
+    // now, at creation — a session that STARTS undetectable would otherwise show
+    // a taskbar button until the user toggled the setting off and on again.
+    this.syncLauncherTaskbarForStealth();
 
     // A/B KILL-SWITCH (2026-07-10): NATIVELY_DISABLE_ONBOARDING_ORCH=1 appends
     // ?noorch=1, which makes App.tsx skip orch.start() entirely (no drain loop,
@@ -1096,6 +1089,7 @@ export class WindowHelper {
   public syncOverlayInteractionPolicy(quiet = false): void {
     if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
 
+
     const passthrough = this.appState.getOverlayMousePassthrough();
     // The pill and toggle windows follow ONLY the stealth passthrough — they
     // are fully painted (no transparent margins), so the hover gate never
@@ -1125,7 +1119,6 @@ export class WindowHelper {
       this.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
     } else {
       this.overlayWindow.setIgnoreMouseEvents(false);
-      // Restore full interactivity when capturing clicks.
       this.overlayWindow.setFocusable(true);
     }
     auxWindows.forEach((w) => {
@@ -1813,7 +1806,6 @@ export class WindowHelper {
   public showOverlay(): void {
     if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
 
-    // Restore opacity in case it was zeroed by hideMainWindow() before a screenshot.
     this.overlayWindow.setOpacity(1);
     this.pillWindow?.setOpacity(1);
     this.toggleWindow?.setOpacity(1);
@@ -2007,6 +1999,7 @@ export class WindowHelper {
         expanded: true,
       });
 
+  
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).
       if (process.platform === 'win32' && this.contentProtection) {
         // Opacity Shield: Show at 0 opacity first to prevent frame leak.
