@@ -55,8 +55,10 @@
 #![cfg(target_os = "windows")]
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
@@ -348,7 +350,7 @@ fn unicode_for_key(vk: u32, scan: u32) -> String {
 
 // ─── Worker thread: installs the hook and pumps messages ─────────────────────
 
-fn hook_worker(state: Arc<HookState>) {
+fn hook_worker(state: Arc<HookState>, ready_tx: mpsc::Sender<bool>) {
     // Publish this thread's id so stop() can PostThreadMessageW(WM_QUIT).
     let tid = unsafe { GetCurrentThreadId() };
     state.worker_thread_id.store(tid, Ordering::Release);
@@ -375,13 +377,23 @@ fn hook_worker(state: Arc<HookState>) {
     {
         Ok(h) => h,
         Err(e) => {
+            // Most likely cause in the wild: security software / corporate EDR
+            // blocking global keyboard hooks. Report the failure to start() so
+            // it returns false and JS never shows an "engaged" state that would
+            // silently capture nothing.
             eprintln!("[keyboard_hook_windows] SetWindowsHookExW failed: {e:?}");
             state.active.store(false, Ordering::Release);
+            state.worker_thread_id.store(0, Ordering::Release);
             let mut guard = ACTIVE_HOOK.lock().unwrap_or_else(|p| p.into_inner());
             *guard = None;
+            let _ = ready_tx.send(false);
             return;
         }
     };
+
+    // The hook is installed — tell start() it may report success. Sent BEFORE
+    // the blocking message loop below.
+    let _ = ready_tx.send(true);
 
     // Message pump: REQUIRED for the LL hook to fire. GetMessageW blocks until
     // stop() posts WM_QUIT (returns 0) or an error (returns -1).
@@ -470,10 +482,16 @@ impl StealthKeyboardTap {
         self.state.active.store(true, Ordering::Release);
         *self.state.callback.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::new(callback));
 
+        // Confirm the hook actually installs before reporting success. Without
+        // this, start() returns true the moment the thread spawns, so a hook
+        // blocked by EDR would leave JS showing "stealth engaged" while keys go
+        // nowhere. The worker sends true once SetWindowsHookExW succeeds (before
+        // its blocking message loop) or false on failure.
+        let (ready_tx, ready_rx) = mpsc::channel::<bool>();
         let state = self.state.clone();
         let handle = thread::Builder::new()
             .name("natively-keyboard-hook".into())
-            .spawn(move || hook_worker(state))
+            .spawn(move || hook_worker(state, ready_tx))
             .map_err(|e| {
                 self.state.active.store(false, Ordering::Release);
                 *self.state.callback.lock().unwrap_or_else(|p| p.into_inner()) = None;
@@ -482,8 +500,37 @@ impl StealthKeyboardTap {
                     format!("failed to spawn keyboard-hook worker: {e}"),
                 )
             })?;
-        *self.worker.lock().unwrap_or_else(|p| p.into_inner()) = Some(handle);
-        Ok(true)
+
+        // SetWindowsHookExW is fast; 2s is a generous ceiling. On success keep
+        // the worker (stop() joins it later). On failure/timeout roll back so
+        // no false "engaged" state persists.
+        match ready_rx.recv_timeout(Duration::from_secs(2)) {
+            Ok(true) => {
+                *self.worker.lock().unwrap_or_else(|p| p.into_inner()) = Some(handle);
+                Ok(true)
+            }
+            Ok(false) => {
+                // Worker reported an install failure and has already returned.
+                self.state.active.store(false, Ordering::Release);
+                let _ = handle.join();
+                *self.state.callback.lock().unwrap_or_else(|p| p.into_inner()) = None;
+                Ok(false)
+            }
+            Err(_) => {
+                // Timeout or the worker died before signalling. Don't block on
+                // join(); best-effort ask it to quit and detach the handle.
+                self.state.active.store(false, Ordering::Release);
+                let tid = self.state.worker_thread_id.load(Ordering::Acquire);
+                if tid != 0 {
+                    unsafe {
+                        let _ = PostThreadMessageW(tid, WM_QUIT, WPARAM(0), LPARAM(0));
+                    }
+                }
+                drop(handle);
+                *self.state.callback.lock().unwrap_or_else(|p| p.into_inner()) = None;
+                Ok(false)
+            }
+        }
     }
 
     /// No-op on Windows (accepted for API parity — see `start`).

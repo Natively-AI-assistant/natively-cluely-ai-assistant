@@ -1258,6 +1258,7 @@ import { OllamaManager } from './services/OllamaManager'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
+import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
 
 // Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
 // for a copied-profile native OOM investigation. It is inert unless explicitly enabled.
@@ -1453,6 +1454,23 @@ export class AppState {
     } catch (e) {
       console.warn('[AppState] context-debug binding failed (logging disabled):', (e as Error)?.message);
     }
+
+    // Teach the no-activate window policy how to detect the native stealth
+    // typing hook, BEFORE any window is created. On Windows the policy makes the
+    // overlay unfocusable, which is only safe when there's a hook to type
+    // through; if the hook is missing (no rebuilt binary, unsupported arch, EDR
+    // block) the policy falls back to a focusable window so the input still
+    // works (with a blur) instead of being dead. No-op off win32.
+    setStealthHookAvailabilityProvider(() => {
+      if (process.platform !== 'win32') return false;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+        return StealthKeyboardManager.getInstance().isAvailable();
+      } catch {
+        return false;
+      }
+    });
 
     // 2. Initialize Helpers with loaded state
     this.windowHelper = new WindowHelper(this)

@@ -29,7 +29,19 @@ const {
   isClickActivatingPlatform,
   attachNoActivate,
   isNoActivateManaged,
+  setStealthHookAvailabilityProvider,
 } = require(path.join(repoRoot, 'dist-electron/electron/utils/windowsFocusPolicy.js'));
+
+// The availability provider is module-level state. Default it back to "hook
+// present" after each test so ordering can't leak.
+function withHookAvailable(available, fn) {
+  setStealthHookAvailabilityProvider(() => available);
+  try {
+    fn();
+  } finally {
+    setStealthHookAvailabilityProvider(() => true);
+  }
+}
 
 function fakeWindow() {
   const calls = [];
@@ -74,6 +86,26 @@ test('win32: attach applies WS_EX_NOACTIVATE (setFocusable(false)) immediately',
   assert.equal(attachNoActivate(win, 'win32'), true);
   assert.deepEqual(win.calls, [['setFocusable', false]]);
   assert.equal(isNoActivateManaged(win), true);
+});
+
+test('win32: NO stealth hook → policy is skipped, window stays focusable (fallback, not dead input)', () => {
+  withHookAvailable(false, () => {
+    const win = fakeWindow();
+    // With no hook to type through, making the overlay unfocusable would leave
+    // a dead input. Fall back: skip the policy, leave the window focusable.
+    assert.equal(attachNoActivate(win, 'win32'), false);
+    assert.deepEqual(win.calls, [], 'must not touch focusable when falling back');
+    assert.equal(isNoActivateManaged(win), false);
+  });
+});
+
+test('win32: hook available → policy applies (the normal path)', () => {
+  withHookAvailable(true, () => {
+    const win = fakeWindow();
+    assert.equal(attachNoActivate(win, 'win32'), true);
+    assert.deepEqual(win.calls, [['setFocusable', false]]);
+    assert.equal(isNoActivateManaged(win), true);
+  });
 });
 
 test('win32: the window is NEVER focused — the policy is permanent, not a typing grant', () => {
@@ -230,6 +262,23 @@ test('typing without focus is wired to the native stealth hook on BOTH desktop p
     /overlay\.focus\(\)|setTypingFocus/,
     'BUG: chat:focusInput must NOT focus the overlay — focusing a WS_EX_NOACTIVATE window steals ' +
       'foreground focus, the regression this feature removes.',
+  );
+});
+
+test('main registers the hook-availability provider before creating windows (dead-input fallback)', () => {
+  const providerIdx = mainSource.indexOf('setStealthHookAvailabilityProvider(');
+  const windowIdx = mainSource.indexOf('this.windowHelper = new WindowHelper(this)');
+  assert.ok(providerIdx > 0, 'BUG: main must register the stealth-hook availability provider.');
+  assert.ok(windowIdx > 0, 'WindowHelper construction not found');
+  assert.ok(
+    providerIdx < windowIdx,
+    'BUG: the provider must be registered BEFORE WindowHelper is created, or the overlay could be ' +
+      'made no-activate before availability is known — a dead input when the hook is missing.',
+  );
+  assert.match(
+    mainSource.slice(providerIdx, providerIdx + 400),
+    /StealthKeyboardManager[\s\S]{0,80}isAvailable\(\)/,
+    'BUG: the provider must report actual native-hook availability via StealthKeyboardManager.isAvailable().',
   );
 });
 
