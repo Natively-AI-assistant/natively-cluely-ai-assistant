@@ -2657,6 +2657,19 @@ body {
   -webkit-app-region: drag;
 }
 
+/* Managed overlay-group drag (macOS + Windows): the pill window must not be
+   dragged by the OS. On macOS it is an AppKit CHILD of the shell and AppKit
+   propagates moves parent→child only, so an OS drag region would move the pill
+   ALONE and tear the group apart. On Windows an OS drag region enters the
+   modal move loop, which starves the follower window's moves. Both are handled
+   by OverlayAuxWindows.useManagedGroupDrag instead, which moves the whole
+   group from the main process. Scoped to the pill window's root — the shell
+   keeps its own native drag region. */
+[data-overlay-group-drag-managed='true'] .draggable-area,
+[data-overlay-group-drag-managed='true'].draggable-area {
+  -webkit-app-region: no-drag;
+}
+
 /* Make sure buttons and interactive elements are not draggable */
 button,
 input,

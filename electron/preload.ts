@@ -23,6 +23,12 @@ interface ElectronAPI {
   setOverlayHoverInteractive: (interactive: boolean) => Promise<void>;
   dismissOverlayPopovers: (opts?: { settings?: boolean; model?: boolean }) => Promise<void>;
   sendOverlayUiAction: (action: { type: string }) => Promise<void>;
+  sendOverlayGroupDrag: (delta: {
+    dx?: number;
+    dy?: number;
+    phase?: 'start' | 'move' | 'end';
+  }) => Promise<void>;
+  isOverlayGroupDragManaged: () => Promise<boolean>;
   onOverlayUiAction: (callback: (action: { type: string }) => void) => () => void;
   getRecognitionLanguages: () => Promise<Record<string, any>>;
   getScreenshots: () => Promise<Array<{ path: string; preview: string }>>;
@@ -1115,6 +1121,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Aux windows → main → overlay renderer: user actions.
   sendOverlayUiAction: (action: { type: string }) =>
     ipcRenderer.invoke('overlay-ui-action', action),
+  // Pill window → main: drag the overlay group as one (macOS: the pill is a
+  // child window and must drag its parent; Windows: bypasses the modal move loop).
+  sendOverlayGroupDrag: (delta: { dx?: number; dy?: number; phase?: 'start' | 'move' | 'end' }) =>
+    ipcRenderer.invoke('overlay-group-drag', delta),
+  isOverlayGroupDragManaged: () => ipcRenderer.invoke('overlay-group-drag-managed'),
   onOverlayUiAction: (callback: (action: { type: string }) => void) => {
     const subscription = (_: any, action: { type: string }) => callback(action);
     ipcRenderer.on('overlay-ui-action', subscription);

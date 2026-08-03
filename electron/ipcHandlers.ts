@@ -666,6 +666,38 @@ export function initializeIpcHandlers(appState: AppState): void {
     helper.forwardOverlayUiAction(action);
   });
 
+  // Pill window → main: drag the welded overlay group by a pointer delta.
+  // Only the PILL may send (the toggle is not a drag handle). Sender-id
+  // validated like every other overlay channel. No-ops unless the group is
+  // welded, so the mirroring fallback is unaffected.
+  safeHandle(
+    'overlay-group-drag',
+    async (event, delta: { dx?: number; dy?: number; phase?: 'start' | 'move' | 'end' }) => {
+      const helper = appState.getWindowHelper();
+      const pillWin = helper.getPillWindow();
+      const fromPill =
+        !!pillWin && !pillWin.isDestroyed() && pillWin.webContents.id === event.sender.id;
+      if (!fromPill) return;
+      if (delta?.phase === 'start') {
+        helper.beginOverlayGroupDrag();
+        return;
+      }
+      if (delta?.phase === 'end') {
+        helper.endOverlayGroupDrag();
+        return;
+      }
+      // dx/dy are the pointer's TOTAL offset since drag start, not a per-frame
+      // delta — see moveOverlayGroupTo for why that distinction matters.
+      helper.moveOverlayGroupTo(Number(delta?.dx) || 0, Number(delta?.dy) || 0);
+    },
+  );
+
+  // Pill renderer asks whether it must run its own drag (macOS: welded child;
+  // Windows: modal-move-loop bypass) or leave dragging to the OS drag region.
+  safeHandle('overlay-group-drag-managed', async () =>
+    appState.getWindowHelper().isOverlayGroupDragManaged(),
+  );
+
   // (Removed) 'animate-overlay-width' — the overlay window is a FIXED WIDTH
   // (WindowHelper.OVERLAY_DEFAULT_WIDTH = 732) and is NEVER width-resized.
   // The expand/contract animation is CSS-only in the renderer (the panel

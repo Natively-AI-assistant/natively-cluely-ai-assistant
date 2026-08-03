@@ -76,10 +76,123 @@ function useDismissPopoversOnMouseDown() {
   }, []);
 }
 
+// ── Managed group drag (macOS + Windows) ────────────────────────────────────
+// The pill does NOT use an OS drag region on either desktop platform. Pointer
+// deltas go to main, which moves the whole group. Same mechanism, two reasons:
+//   • macOS: the pill is an AppKit CHILD of the shell. Propagation is
+//     parent→child only, so a natively-dragged child moves ALONE and tears the
+//     group apart — the exact artifact welding exists to remove. Dragging the
+//     PARENT makes AppKit carry pill and toggle in the same transaction.
+//   • Windows: there is no weld, but `-webkit-app-region: drag` enters the
+//     modal move loop, which owns the message pump while you drag — the
+//     follower window's moves are serviced around it rather than at refresh
+//     rate. Moving every window ourselves from one tick bypasses that loop.
+//
+// The renderer sends the pointer's TOTAL offset from where the drag started —
+// never a per-frame delta. Main anchors on the shell's origin at drag start and
+// clamps each target into the work area; with deltas a clamped frame would
+// silently drop movement and the window would jump when the pointer came back.
+// Screen coordinates stay correct even though the window moves underneath the
+// pointer. Sends are coalesced to one per frame, and pointer capture keeps the
+// stream alive when the cursor leaves the ~200px pill window mid-drag (without
+// it the drag dies the moment you move fast).
+function useManagedGroupDrag(rootRef: React.RefObject<HTMLDivElement | null>): boolean {
+  const [managed, setManaged] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    window.electronAPI
+      ?.isOverlayGroupDragManaged?.()
+      .then((v) => {
+        if (alive) setManaged(!!v);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!managed || !el) return;
+
+    let dragging = false;
+    let startX = 0;
+    let startY = 0;
+    let pending: { dx: number; dy: number } | null = null;
+    let frame = 0;
+
+    const flush = () => {
+      frame = 0;
+      const next = pending;
+      pending = null;
+      if (!next) return;
+      window.electronAPI?.sendOverlayGroupDrag?.({ ...next, phase: 'move' }).catch(() => {});
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      // Never begin a drag from a control — the pill's buttons (logo, expand,
+      // end-meeting) must keep behaving as buttons.
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('button, a, input, select, textarea, [role="button"]')) return;
+      dragging = true;
+      startX = e.screenX;
+      startY = e.screenY;
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        // Capture is an optimisation; the listeners still work without it.
+      }
+      // Anchor main on the shell's current origin before any movement lands.
+      window.electronAPI?.sendOverlayGroupDrag?.({ phase: 'start' }).catch(() => {});
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragging) return;
+      // TOTAL offset from the drag's start, not the step since the last event.
+      pending = { dx: e.screenX - startX, dy: e.screenY - startY };
+      if (!frame) frame = requestAnimationFrame(flush);
+    };
+
+    const onPointerEnd = (e: PointerEvent) => {
+      if (!dragging) return;
+      dragging = false;
+      try {
+        el.releasePointerCapture(e.pointerId);
+      } catch {
+        // Already released (pointercancel) — nothing to undo.
+      }
+      if (frame) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+      }
+      flush();
+      // Settle: release the anchor and re-assert exact geometry.
+      window.electronAPI?.sendOverlayGroupDrag?.({ phase: 'end' }).catch(() => {});
+    };
+
+    el.addEventListener('pointerdown', onPointerDown);
+    el.addEventListener('pointermove', onPointerMove);
+    el.addEventListener('pointerup', onPointerEnd);
+    el.addEventListener('pointercancel', onPointerEnd);
+    return () => {
+      el.removeEventListener('pointerdown', onPointerDown);
+      el.removeEventListener('pointermove', onPointerMove);
+      el.removeEventListener('pointerup', onPointerEnd);
+      el.removeEventListener('pointercancel', onPointerEnd);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [managed, rootRef]);
+
+  return managed;
+}
+
 export function OverlayPillWindow() {
   const state = useOverlayUiState();
   const appearance = useOverlayAuxAppearance(state);
   const rootRef = useRef<HTMLDivElement>(null);
+  const dragManaged = useManagedGroupDrag(rootRef);
   useDismissPopoversOnMouseDown();
 
   // Report the pill's w-fit size so the main process can size + re-center the
@@ -105,6 +218,10 @@ export function OverlayPillWindow() {
     <div
       ref={rootRef}
       data-interface-theme={state.interfaceTheme ?? 'default'}
+      // Drives the CSS that turns OFF the OS drag region inside this window —
+      // see useManagedGroupDrag for why neither platform may drag the pill
+      // window itself.
+      data-overlay-group-drag-managed={dragManaged ? 'true' : undefined}
       className="w-fit h-fit bg-transparent select-none"
       style={{
         ['--overlay-opacity' as '--overlay-opacity']: String(state.overlayOpacity ?? 1),
