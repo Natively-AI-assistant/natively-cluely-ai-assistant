@@ -672,6 +672,17 @@ export class WindowHelper {
     };
 
     this.overlayWindow = new BrowserWindow(overlaySettings);
+    // Windows counterpart of the mac panel treatment above: WS_EX_NOACTIVATE
+    // (setFocusable(false)) so clicking the overlay/buttons never activates
+    // Natively — the user's meeting app keeps foreground focus, exactly like
+    // becomesKeyOnlyIfNeeded on macOS. Typing is granted transiently via the
+    // preload focusin bridge → setTypingFocus(). No-op on macOS/Linux.
+    if (attachNoActivate(this.overlayWindow)) {
+      // Startup breadcrumb: lets a debug log positively confirm the running
+      // process has the no-activate build (a stale process is the #1 cause of
+      // "still steals focus" reports — the bundle is only read at launch).
+      console.log('[WindowHelper] Windows no-activate policy applied to overlay');
+    }
     this.overlayWindow.setContentProtection(this.contentProtection);
     // Apply the current mouse-interaction policy to the NEW window. Without
     // this, a window (re)created while stealth passthrough is ON would start
@@ -736,12 +747,6 @@ export class WindowHelper {
       });
     } else if (process.platform === 'win32') {
       // 'floating' level (HWND_TOPMOST baseline) is not enough to render above
-    // Windows counterpart of the mac panel treatment above: WS_EX_NOACTIVATE
-    // (setFocusable(false)) so clicking the overlay/buttons never activates
-    // Natively — the user's meeting app keeps foreground focus, exactly like
-    // becomesKeyOnlyIfNeeded on macOS. Typing is granted transiently via the
-    // preload focusin bridge → setTypingFocus(). No-op on macOS/Linux.
-    attachNoActivate(this.overlayWindow);
       // fullscreen browser windows (F11). 'screen-saver' uses a higher TOPMOST
       // priority that wins against window-mode fullscreen apps. macOS uses
       // visibleOnFullScreen above; Windows has no equivalent flag, so the level
@@ -1376,6 +1381,12 @@ export class WindowHelper {
 
     this.pillWindow = new BrowserWindow(auxSettings(true));
     this.toggleWindow = new BrowserWindow(auxSettings(false));
+    // Same Windows no-activate treatment as the overlay body: the pill's
+    // buttons (end meeting, expand, width toggle) must not steal foreground
+    // focus from the meeting app on click. Mac parity comes from
+    // type:'panel' + applyStealthToWindow below. No-op on macOS/Linux.
+    attachNoActivate(this.pillWindow);
+    attachNoActivate(this.toggleWindow);
 
     // Weld the group via real AppKit child windows (macOS only) — see the
     // overlayGroupWelded field comment for the measured semantics. Applied
@@ -1501,12 +1512,6 @@ export class WindowHelper {
       // never lands here — only our own setBounds calls do. Reverse-mirroring
       // those would move the overlay from a move we just made, which on macOS
       // double-moves the welded child (the "double-move feedback" the old
-    // Same Windows no-activate treatment as the overlay body: the pill's
-    // buttons (end meeting, expand, width toggle) must not steal foreground
-    // focus from the meeting app on click. Mac parity comes from
-    // type:'panel' + applyStealthToWindow below. No-op on macOS/Linux.
-    attachNoActivate(this.pillWindow);
-    attachNoActivate(this.toggleWindow);
       // comment warned about) and on Windows fights the managed drag.
       if (this.overlayGroupDragManaged) return;
       if (this.auxSyncing) return;
