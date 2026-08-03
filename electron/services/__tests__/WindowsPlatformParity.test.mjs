@@ -173,6 +173,83 @@ test('undetectable: the launcher leaves the Windows taskbar, at creation AND on 
   );
 });
 
+// ── 4. CJK/IME input was silently broken on Windows ─────────────────────────
+// The hook swallows keystrokes before IMM32/TSF can compose them, and the text
+// it substitutes comes from ToUnicodeEx, which does no composition. Windows had
+// no probe and hardcoded should-auto-engage=true, so a Pinyin/Hangul/Kanji user
+// clicking the input lost the candidate window and could only type raw Latin.
+// macOS detects the same situation (ImeDetector) and declines to auto-engage.
+
+test('ime: the native probe exists and keys off the CJK primary language ids', () => {
+  const rust = read('native-module/src/keyboard_hook_windows.rs');
+  const fn = rust.slice(
+    rust.indexOf('pub fn is_ime_keyboard_active()'),
+    rust.indexOf('pub struct StealthKeyboardTap'),
+  );
+  assert.ok(fn.length > 0, 'is_ime_keyboard_active() not found');
+  assert.match(fn, /GetKeyboardLayout\(thread_id\)/, 'BUG: must read the active keyboard layout.');
+  assert.match(
+    fn,
+    /LANG_CHINESE: u16 = 0x04[\s\S]{0,200}LANG_JAPANESE: u16 = 0x11[\s\S]{0,200}LANG_KOREAN: u16 = 0x12/,
+    'BUG: must test the CJK PRIMARYLANGIDs (zh/ja/ko) — those are the composing layouts.',
+  );
+  assert.match(
+    fn,
+    /& 0x03FF/,
+    'BUG: PRIMARYLANGID is the low 10 bits of the LANGID; masking wrongly misclassifies layouts.',
+  );
+});
+
+test('ime: Windows reports stealth typing unavailable while a CJK IME is active', () => {
+  const mgr = read('electron/services/StealthKeyboardManager.ts');
+  const isAvail = mgr.slice(
+    mgr.indexOf('public isAvailable()'),
+    mgr.indexOf('public isNativeTapPresent()'),
+  );
+  assert.ok(isAvail.length > 0, 'isAvailable() not found');
+  assert.match(
+    isAvail,
+    /process\.platform === 'win32' && this\.isImeActive\(\)\) return false/,
+    'BUG: an active CJK IME must make stealth typing report unavailable, which routes the user ' +
+      'through the focusable-overlay fallback where composition actually works.',
+  );
+  // The probe must fail OPEN (no IME) when the export is missing, so a stale
+  // binary keeps working instead of disabling stealth typing for everyone.
+  const probe = mgr.slice(mgr.indexOf('private isImeActive()'));
+  assert.match(
+    probe,
+    /typeof native\?\.isImeKeyboardActive === 'function'[\s\S]{0,120}: false/,
+    'BUG: a binary without the probe must be treated as "no IME", not as "IME active".',
+  );
+  // Binary-presence semantics must remain available separately.
+  assert.match(mgr, /public isNativeTapPresent\(\)/, 'BUG: keep a raw binary-presence accessor.');
+});
+
+test('ime: the Windows auto-engage handlers consult the probe, not a hardcoded true', () => {
+  const main = read('electron/main.ts');
+  const win32Else = main.slice(
+    main.indexOf('// Windows: same decision as macOS, different probe.'),
+    main.indexOf("registerStealthHandler('stealth-tap:available', () => false)"),
+  );
+  assert.ok(win32Else.length > 0, 'win32 stealth-handler branch not found');
+  assert.match(
+    win32Else,
+    /'stealth-tap:should-auto-engage', \(\) => stealth\.isAvailable\(\)/,
+    'BUG: Windows must decline auto-engage while an IME is active.',
+  );
+  assert.doesNotMatch(
+    win32Else,
+    /'stealth-tap:should-auto-engage', \(\) => true/,
+    'BUG: the hardcoded true is back — CJK users would auto-engage and lose composition.',
+  );
+  // macOS must still use its own TIS probe (no regression).
+  assert.match(
+    main,
+    /const \{ shouldAutoEngageStealthTap \} = require\('\.\/services\/ImeDetector'\)/,
+    'BUG: macOS regression — the ImeDetector probe is no longer used on darwin.',
+  );
+});
+
 test('preflight: the new Windows check ids are still selected by nativeOk', () => {
   // `nativeOk` picks checks by id prefix; renaming an id silently drops it from
   // the aggregate, which would make the gate pass while the asset is missing.

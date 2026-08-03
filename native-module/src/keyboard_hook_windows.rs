@@ -70,14 +70,15 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::{GetCurrentProcessId, GetCurrentThreadId};
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, GetKeyState, ToUnicodeEx, VIRTUAL_KEY, VK_CAPITAL, VK_CONTROL, VK_LWIN,
-    VK_MENU, VK_RWIN, VK_SHIFT,
+    GetAsyncKeyState, GetKeyState, GetKeyboardLayout, ToUnicodeEx, VIRTUAL_KEY, VK_CAPITAL,
+    VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
 // HKL (keyboard layout handle) lives under TextServices, not KeyboardAndMouse.
 use windows::Win32::UI::TextServices::HKL;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetAncestor, GetMessageW, GetWindowThreadProcessId,
-    PostThreadMessageW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, WindowFromPoint,
+    CallNextHookEx, DispatchMessageW, GetAncestor, GetForegroundWindow, GetMessageW,
+    GetWindowThreadProcessId, PostThreadMessageW, SetWindowsHookExW, TranslateMessage,
+    UnhookWindowsHookEx, WindowFromPoint,
     EVENT_SYSTEM_FOREGROUND, GA_ROOT, HHOOK, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT,
     WH_KEYBOARD_LL, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN,
     WM_MBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONDOWN,
@@ -708,6 +709,51 @@ fn hook_worker(state: Arc<HookState>, ready_tx: mpsc::Sender<bool>) {
 #[napi]
 pub fn is_accessibility_granted() -> bool {
     true
+}
+
+/// True when the active keyboard layout is a CJK IME (Chinese / Japanese /
+/// Korean), i.e. one where text is composed rather than typed key-for-key.
+///
+/// # Why the stealth hook is unusable for these users
+///
+/// IME composition happens ABOVE the raw keyboard layer, in IMM32/TSF. Our
+/// WH_KEYBOARD_LL hook swallows the keystroke (returns 1) before it ever
+/// reaches that layer, and the text we substitute comes from `ToUnicodeEx`,
+/// which resolves the layout but performs no composition. So with an IME
+/// active, engaging the hook means the candidate window never appears and the
+/// user can only enter raw Latin letters.
+///
+/// macOS has exactly this problem with its CGEventTap and solves it by probing
+/// the enabled input sources and declining to auto-engage (see
+/// electron/services/ImeDetector.ts). This is the Windows probe for the same
+/// decision. JS uses it to report stealth typing unavailable, which routes
+/// these users through the existing no-hook fallback: the overlay stays a
+/// normal focusable window and typing works through real DOM focus, at the cost
+/// of the click stealing foreground focus. Composition that works beats silent,
+/// unexplained mojibake.
+///
+/// Reads the layout of the FOREGROUND thread (the app the user is actually
+/// typing in), falling back to this process's layout when that is unavailable.
+#[napi]
+pub fn is_ime_keyboard_active() -> bool {
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        let thread_id = if hwnd.0 != 0 {
+            GetWindowThreadProcessId(hwnd, None)
+        } else {
+            0
+        };
+        // idthread = 0 means "the calling thread's layout".
+        let hkl = GetKeyboardLayout(thread_id);
+        // The low word of an HKL is the LANGID; its low 10 bits are the
+        // PRIMARYLANGID. LANG_CHINESE = 0x04, LANG_JAPANESE = 0x11,
+        // LANG_KOREAN = 0x12.
+        let primary_lang = (hkl.0 as usize as u16) & 0x03FF;
+        const LANG_CHINESE: u16 = 0x04;
+        const LANG_JAPANESE: u16 = 0x11;
+        const LANG_KOREAN: u16 = 0x12;
+        matches!(primary_lang, LANG_CHINESE | LANG_JAPANESE | LANG_KOREAN)
+    }
 }
 
 #[napi]
