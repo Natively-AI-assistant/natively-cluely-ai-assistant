@@ -1106,6 +1106,13 @@ export class WindowHelper {
   }
 
   public hideMainWindow(): void {
+    // Hiding the overlay (Cmd/Ctrl+B toggle-visibility, screenshot hide) must
+    // disengage stealth typing for the same reason as hideOverlay/switchTo-
+    // Launcher: the hook swallows keystrokes system-wide and its only "engaged"
+    // indicator is in the now-hidden overlay UI. This path hides the overlay
+    // directly (overlayWindow.hide() below) rather than via hideOverlay(), so it
+    // needs its own stop. No-op if not engaged.
+    this.stopStealthTyping();
     // Do NOT call setOpacity(0) before hide() on macOS — it causes WindowServer to
     // re-register the app as a regular window, breaking undetectable/stealth mode
     // (fixed in v2.0.8, regressed when opacity was re-added for screenshot flash).

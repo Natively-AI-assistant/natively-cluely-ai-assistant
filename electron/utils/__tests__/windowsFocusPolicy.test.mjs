@@ -245,8 +245,9 @@ test('typing without focus is wired to the native stealth hook on BOTH desktop p
       'keystrokes have no sink (and would fan out to all windows if the guard were dropped).',
   );
 
-  // chat:focusInput must toggle the native tap on any platform where it is
-  // available (not darwin-gated) and must NOT focus the overlay as a fallback.
+  // chat:focusInput must drive the native tap on any platform where it is
+  // available (not darwin-gated). It branches stop/start on the pre-show engaged
+  // state (see the round-2 toggle-regression fix) rather than calling toggle().
   const focusInputBlock = mainSource.slice(
     mainSource.indexOf("actionId === 'chat:focusInput'"),
     mainSource.indexOf("actionId === 'chat:whatToAnswer'"),
@@ -254,8 +255,8 @@ test('typing without focus is wired to the native stealth hook on BOTH desktop p
   assert.ok(focusInputBlock.length > 0, 'chat:focusInput handler not found');
   assert.match(
     focusInputBlock,
-    /mgr\.isAvailable\(\)[\s\S]{0,80}mgr\.toggle\(\)/,
-    'BUG: chat:focusInput must toggle the stealth tap whenever available (macOS AND Windows).',
+    /if \(mgr\.isAvailable\(\)\) \{[\s\S]{0,300}mgr\.stop\(\)[\s\S]{0,60}mgr\.start\(\)/,
+    'BUG: chat:focusInput must drive the stealth tap whenever available (macOS AND Windows).',
   );
   // The overlay must never be focused UNCONDITIONALLY (that steals the meeting
   // app's foreground on Windows). But the no-native-tap fallback DOES need

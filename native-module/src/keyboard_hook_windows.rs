@@ -72,7 +72,7 @@ use windows::Win32::System::Threading::{GetCurrentProcessId, GetCurrentThreadId}
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, GetKeyboardLayout, ToUnicodeEx, VIRTUAL_KEY, VK_CAPITAL,
-    VK_CONTROL, VK_LWIN, VK_MENU, VK_NUMLOCK, VK_RMENU, VK_RWIN, VK_SHIFT,
+    VK_CONTROL, VK_LWIN, VK_MENU, VK_NUMLOCK, VK_RWIN, VK_SHIFT,
 };
 // HKL (keyboard layout handle) lives under TextServices, not KeyboardAndMouse.
 use windows::Win32::UI::TextServices::HKL;
@@ -187,15 +187,16 @@ unsafe extern "system" fn keyboard_hook_proc(
     // Rust 1.81) — a hard kill from the OS input thread. Contain it and pass the
     // event through, mirroring keyboard_tap.rs. `pass_through` never swallows, so
     // on any internal failure the keystroke still reaches the foreground app.
-    let pass_through = || CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+    // NB: do NOT log in the Err arm. eprintln! panics if the stderr write fails
+    // (a console-less packaged GUI process is exactly that case), and this arm
+    // runs on the extern "system" hook thread — a panic here crosses the FFI
+    // boundary and aborts the process, reintroducing the very abort the
+    // catch_unwind exists to prevent. Just pass the event through.
     match catch_unwind(AssertUnwindSafe(|| unsafe {
         keyboard_hook_inner(code, wparam, lparam)
     })) {
         Ok(r) => r,
-        Err(_) => {
-            eprintln!("[keyboard_hook_windows] keyboard proc panicked; passing event through");
-            pass_through()
-        }
+        Err(_) => CallNextHookEx(HHOOK::default(), code, wparam, lparam),
     }
 }
 
@@ -259,7 +260,12 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
     // it was a genuine Ctrl+Alt shortcut, which produces no text).
     let ctrl = modifier_held(VK_CONTROL);
     let alt = modifier_held(VK_MENU);
-    let altgr = modifier_held(VK_RMENU) || (ctrl && alt);
+    // AltGr == Ctrl+Alt. On layouts that define AltGr, Windows injects a
+    // synthetic Left-Ctrl alongside right-Alt, so (ctrl && alt) already catches
+    // every real AltGr. Do NOT also test VK_RMENU: on US/UK layouts right-Alt is
+    // a plain Alt (no synthetic Ctrl), and flagging it as AltGr would fabricate
+    // a Ctrl in the key-state and split right- vs left-Alt shortcut handling.
+    let altgr = ctrl && alt;
     if win_held() {
         return pass();
     }
@@ -356,10 +362,9 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPA
         mouse_hook_inner(code, wparam, lparam)
     })) {
         Ok(r) => r,
-        Err(_) => {
-            eprintln!("[keyboard_hook_windows] mouse proc panicked; passing click through");
-            CallNextHookEx(HHOOK::default(), code, wparam, lparam)
-        }
+        // No eprintln! here — see keyboard_hook_proc: logging in the panic arm
+        // can itself panic across the FFI boundary and abort.
+        Err(_) => CallNextHookEx(HHOOK::default(), code, wparam, lparam),
     }
 }
 
@@ -758,6 +763,22 @@ fn hook_worker(state: Arc<HookState>, session_id: u64, ready_tx: mpsc::Sender<bo
     let tid = unsafe { GetCurrentThreadId() };
     state.worker_thread_id.store(tid, Ordering::Release);
 
+    // Force this thread's message queue to exist FIRST — before installing the
+    // hooks, not just before signalling ready. A low-level hook does not create
+    // a queue, and thread spawn doesn't either; the queue is created lazily on
+    // the first queue call. If it doesn't exist yet, a PostThreadMessageW(WM_QUIT)
+    // from stop()/the start() timeout path fails with ERROR_INVALID_THREAD_ID and
+    // is lost, and this worker blocks in GetMessageW forever — leaking the thread
+    // and both global hooks (and, on the happy path, hanging the main thread on
+    // join). Creating the queue here (right after the tid is published) means any
+    // WM_QUIT posted once tid is known is delivered whenever GetMessageW runs,
+    // even if SetWindowsHookExW below is slow. PeekMessageW(PM_NOREMOVE) is the
+    // documented way to force queue creation (MSDN PostThreadMessage remarks).
+    let mut msg = MSG::default();
+    unsafe {
+        let _ = PeekMessageW(&mut msg, HWND::default(), WM_USER, WM_USER, PM_NOREMOVE);
+    }
+
     // Register the shared state BEFORE installing the hook so the very first
     // callback (which can fire immediately) can find it.
     {
@@ -836,20 +857,8 @@ fn hook_worker(state: Arc<HookState>, session_id: u64, ready_tx: mpsc::Sender<bo
         eprintln!("[keyboard_hook_windows] SetWinEventHook failed (Alt+Tab auto-stop disabled)");
     }
 
-    // Force this thread's message queue to EXIST before we signal ready. A
-    // low-level hook does not create a queue, and neither does thread spawn; the
-    // queue is created lazily on the first queue call. If we signalled ready and
-    // stop() called PostThreadMessageW(WM_QUIT) before GetMessageW ran, the post
-    // would fail with ERROR_INVALID_THREAD_ID, the worker would block in
-    // GetMessageW forever, and stop()'s join() would hang the Electron main
-    // thread. PeekMessageW(PM_NOREMOVE) is the documented way to force queue
-    // creation. (MSDN PostThreadMessage remarks.)
-    let mut msg = MSG::default();
-    unsafe {
-        let _ = PeekMessageW(&mut msg, HWND::default(), WM_USER, WM_USER, PM_NOREMOVE);
-    }
-
-    // The queue exists and the hooks are installed — start() may report success.
+    // The queue was already forced at the top of this function; the hooks are
+    // installed — start() may report success.
     let _ = ready_tx.send(true);
 
     // Message pump: REQUIRED for the LL hooks to fire. Blocks until stop() posts
