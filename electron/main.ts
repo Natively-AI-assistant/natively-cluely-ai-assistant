@@ -14,7 +14,7 @@ import path from "path"
 import fs from "fs"
 import os from "os"
 import dns from "dns"
-import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
+import { SystemAudioHealthClassifier, peakToPeakInt16LE } from "./audio/systemAudioHealthClassifier.mjs"
 import { autoUpdater } from "electron-updater"
 
 // Override global dns.lookup to resolve macOS system resolver issues with api.natively.software
@@ -3534,7 +3534,14 @@ export class AppState {
     // sample is 0. Without this, the user just sees an empty user transcript
     // and assumes the meeting itself is broken.
     const ZEROFILL_OBSERVATION_MS = 12000;
+    // How many above-threshold chunks before we accept "this mic is fine".
+    // zerofillLatched is a one-way latch, so a single chunk is too weak a basis
+    // for permanently disabling the dead-mic banner: one driver glitch or DC
+    // step from a muted-but-not-silent mic would suppress it for the whole
+    // meeting. Mirrors DEFAULT_MEANINGFUL_CHUNK_COUNT in the system path.
+    const ZEROFILL_LATCH_CHUNKS = 3;
     let firstChunkAt = 0;
+    let loudChunkCount = 0;
     let zerofillLatched = false;
     let zerofillTriggered = false;
     // One-shot guard for the mid-meeting HFP-degradation backstop below.
@@ -3618,21 +3625,19 @@ export class AppState {
 
       if (!zerofillLatched && !zerofillTriggered) {
         if (firstChunkAt === 0) firstChunkAt = now;
-        // B10: peak-to-peak detection — see wireSystemCapture for full rationale.
+        // B10: peak-to-peak detection — see peakToPeakInt16LE for full rationale.
         // Pre-fix `abs(sample) > 8` false-latched on DC bias from muted-but-biased
         // mics (USB/Bluetooth hardware bias of ±10..±50 is common), permanently
         // disabling the detector. Peak-to-peak (max - min) is DC-offset invariant.
-        let minS = 32767;
-        let maxS = -32768;
-        const stride = Math.max(2, (chunk.length >> 5) & ~1);
-        for (let i = 0; i + 1 < chunk.length; i += stride) {
-          const s = chunk.readInt16LE(i);
-          if (s < minS) minS = s;
-          if (s > maxS) maxS = s;
-        }
-        const peakToPeak = maxS - minS;
+        //
+        // Shared with the system-audio path rather than reimplemented inline:
+        // the two copies had already drifted once (the system side moved into
+        // SystemAudioHealthClassifier while this one stayed here), and only one
+        // of them was under test.
+        const peakToPeak = peakToPeakInt16LE(chunk);
         if (peakToPeak > 100) {
-          zerofillLatched = true;
+          loudChunkCount++;
+          if (loudChunkCount >= ZEROFILL_LATCH_CHUNKS) zerofillLatched = true;
         } else if (now - firstChunkAt >= ZEROFILL_OBSERVATION_MS) {
           zerofillTriggered = true;
           console.warn(`${prefix}Mic chunks all zero-filled (peak-to-peak < 100) for ${ZEROFILL_OBSERVATION_MS / 1000}s — TCC denial or device-mute suspected.`);

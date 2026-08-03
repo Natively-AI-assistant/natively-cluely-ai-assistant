@@ -20,6 +20,8 @@ export interface SystemAudioHealthClassifierOptions {
   watchdogMs?: number;
   zeroObservationMs?: number;
   meaningfulPeakToPeak?: number;
+  /** Above-threshold chunks required before the meaningful-signal latch flips. */
+  meaningfulChunkCount?: number;
   interChunkGapLogMs?: number;
 }
 
