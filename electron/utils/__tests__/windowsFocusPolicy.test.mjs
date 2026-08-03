@@ -282,6 +282,35 @@ test('main registers the hook-availability provider before creating windows (dea
   );
 });
 
+test('the Windows native hook stops stealth on a click outside Natively (outside-click parity)', () => {
+  // Rust-source assertion (the binary is built out-of-band). The manager already
+  // stops on isOutsideMouseDown; the Windows hook must PRODUCE that signal via a
+  // WH_MOUSE_LL hook using a process check (DPI-free, no bounds needed).
+  const rust = read('native-module/src/keyboard_hook_windows.rs');
+  assert.match(
+    rust,
+    /SetWindowsHookExW\(\s*WH_MOUSE_LL/,
+    'BUG: a WH_MOUSE_LL hook must be installed — without it, clicking back into the meeting app ' +
+      'does not stop stealth, so the keyboard hook keeps swallowing keys and the user cannot type there.',
+  );
+  assert.match(
+    rust,
+    /is_outside_mouse_down: true/,
+    'BUG: the mouse hook must emit isOutsideMouseDown so StealthKeyboardManager.stop() fires.',
+  );
+  assert.match(
+    rust,
+    /GetWindowThreadProcessId[\s\S]{0,200}GetCurrentProcessId\(\)/,
+    'BUG: outside-vs-inside must be decided by the clicked window PROCESS (clicking any Natively ' +
+      'window keeps the session; another process stops it) — DPI-free, no bounds math.',
+  );
+  assert.match(
+    rust,
+    /Never swallow the click[\s\S]{0,80}CallNextHookEx/,
+    'BUG: the mouse hook must pass clicks through (never swallow) — the click must reach its target.',
+  );
+});
+
 test('main registers real stealth-tap handlers on Windows (not the non-desktop no-op stubs)', () => {
   // The gate that decides real-vs-stub must include win32.
   assert.match(
