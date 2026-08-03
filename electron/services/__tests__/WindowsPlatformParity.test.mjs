@@ -106,6 +106,73 @@ test('screenshot: BOTH desktop platforms forward preferredDisplay', () => {
   );
 });
 
+// ── 3 & 5. Undetectable mode was only half-applied on Windows ────────────────
+// showTray()/hideTray() were reachable only from _enforceDockState(), which
+// returns immediately off darwin — so on Windows nothing drove the tray at all
+// (launch-undetectable gave no tray for the session; toggling back off never
+// restored it). Separately the launcher is the only window without
+// skipTaskbar, so undetectable still left a taskbar button.
+
+test('undetectable: Windows drives the tray on toggle (macOS does it via _enforceDockState)', () => {
+  const src = read('electron/main.ts');
+  const win32Branch = src.slice(
+    src.indexOf("if (process.platform === 'win32') {", src.indexOf('public setUndetectable')),
+    src.indexOf("SettingsManager.getInstance().set('isUndetectable'"),
+  );
+  assert.ok(win32Branch.length > 0, 'win32 branch of setUndetectable not found');
+  assert.match(
+    win32Branch,
+    /if \(state\) this\.hideTray\(\);\s*\n\s*else this\.showTray\(\);/,
+    'BUG: the Windows toggle must drive the tray — otherwise the tray menu (show window / quit) ' +
+      'never appears for a session that started undetectable, and never returns after toggling off.',
+  );
+  // macOS must keep driving it from the enforcement loop (no regression).
+  assert.match(
+    src,
+    /app\.dock\.show\(\);\s*\n\s*this\.showTray\(\);/,
+    'BUG: macOS regression — the dock/tray restore in _enforceDockState disappeared.',
+  );
+  assert.match(
+    src,
+    /app\.dock\.hide\(\);\s*\n\s*this\.hideTray\(\);/,
+    'BUG: macOS regression — the dock/tray hide in _enforceDockState disappeared.',
+  );
+});
+
+test('undetectable: the launcher leaves the Windows taskbar, at creation AND on toggle', () => {
+  const wh = read('electron/WindowHelper.ts');
+  const main = read('electron/main.ts');
+  const fn = wh.slice(
+    wh.indexOf('public syncLauncherTaskbarForStealth()'),
+    wh.indexOf('// Force-reapply the CURRENT content-protection state'),
+  );
+  assert.ok(fn.length > 0, 'syncLauncherTaskbarForStealth() not found');
+  assert.match(
+    fn,
+    /process\.platform !== 'win32'\) return/,
+    'BUG: must no-op off win32 — macOS stealth is the Dock/activation-policy path and does not ' +
+      'use skipTaskbar; forcing it there would be an unrequested behaviour change.',
+  );
+  assert.match(
+    fn,
+    /setSkipTaskbar\(!!this\.appState\.getUndetectable\(\)\)/,
+    'BUG: the launcher taskbar presence must track the undetectable setting.',
+  );
+  // Creation-time application: a session that STARTS undetectable must not show
+  // a taskbar button until the user toggles twice.
+  assert.match(
+    wh,
+    /this\.launcherWindow\.setContentProtection\(this\.contentProtection\);\s*\n[\s\S]{0,320}this\.syncLauncherTaskbarForStealth\(\);/,
+    'BUG: apply the persisted undetectable state to the launcher at creation.',
+  );
+  // Toggle-time application.
+  assert.match(
+    main,
+    /this\.windowHelper\.syncLauncherTaskbarForStealth\(\);/,
+    'BUG: setUndetectable must re-sync the launcher taskbar on Windows.',
+  );
+});
+
 test('preflight: the new Windows check ids are still selected by nativeOk', () => {
   // `nativeOk` picks checks by id prefix; renaming an id silently drops it from
   // the aggregate, which would make the gate pass while the asset is missing.
