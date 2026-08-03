@@ -1689,10 +1689,24 @@ export class AppState {
     if (process.platform === 'darwin' || process.platform === 'win32') {
       const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
       const stealth = StealthKeyboardManager.getInstance();
+      // Only the overlay renderer may ENGAGE the system-wide keyboard hook.
+      // stealth-tap:start had no sender check, so any renderer (settings,
+      // cropper, model-selector) — or a compromised one — could turn on
+      // keystroke capture. Keystrokes still only ever flow to the overlay (see
+      // StealthKeyboardManager.overlayWebContents scoping), so this is a
+      // start-authority gate, not a read gate; but engaging capture is itself a
+      // capability that belongs to the overlay alone. stop() stays ungated —
+      // disengaging is always safe.
+      const isFromOverlay = (event: any): boolean => {
+        const overlay = this.windowHelper?.getOverlayWindow?.();
+        return !!overlay && !overlay.isDestroyed() && overlay.webContents.id === event?.sender?.id;
+      };
       registerStealthHandler('stealth-tap:available', () => stealth.isAvailable());
       registerStealthHandler('stealth-tap:open-settings', () => { stealth.openSettings(); });
       registerStealthHandler('stealth-tap:stop', () => { stealth.stop(); });
-      registerStealthHandler('stealth-tap:start', () => stealth.start());
+      registerStealthHandler('stealth-tap:start', (event: any) =>
+        isFromOverlay(event) ? stealth.start() : false,
+      );
       if (process.platform === 'darwin') {
         // IME users (Pinyin, Hangul, Kanji, …) cannot compose under the tap
         // because CGEventTap fires below TIS. Renderer consults this before
@@ -1851,13 +1865,19 @@ export class AppState {
             return; // the hook/tap is the input path; never focus the overlay
           }
 
-          // No native stealth path (stale binary / Linux): just surface the
-          // input. We deliberately do NOT focus the overlay — focusing a
-          // WS_EX_NOACTIVATE window would steal foreground focus from the
-          // meeting app, the exact regression this feature removes. The user
-          // rebuilds the native module to get keystroke capture.
+          // No native stealth path (stale binary, or Linux, or a CJK IME made
+          // isAvailable() false). Surface the input and focus the window so the
+          // user can actually type — EXCEPT on Windows, where the overlay is
+          // WS_EX_NOACTIVATE and focusing it would steal the meeting app's
+          // foreground (the regression this feature removes; there the user
+          // rebuilds the native module to get capture). On macOS this focus()
+          // is what promotes the non-activating panel to key window so the DOM
+          // input receives keystrokes — dropping it unconditionally (as an
+          // earlier revision did) broke the macOS no-tap fallback and left
+          // Linux, which always takes this branch, unable to focus at all.
           if (overlay && !overlay.isDestroyed()) {
             this.sendToWindow(overlay, 'global-shortcut', { action: 'focusInput' });
+            if (process.platform !== 'win32') overlay.focus();
           }
         } else if (
           actionId === 'chat:whatToAnswer' ||
@@ -8101,7 +8121,11 @@ if (process.env.THINKING_MATRIX === '1') {
     // cleanup (cropper.dispose, ollama.stop, phoneMirror.dispose). Those
     // can spawn their own native threads or release napi resources, which
     // would race with our worker if it's still alive.
-    if (process.platform === 'darwin') {
+    if (process.platform === 'darwin' || process.platform === 'win32') {
+      // Stop BEFORE the napi-touching cleanup below on Windows too: the Windows
+      // hook worker holds an Arc<ThreadsafeFunction> and calls into napi from a
+      // non-V8 thread exactly like the macOS tap, so a keystroke firing during
+      // V8 teardown would race the same way. (This guard was darwin-only.)
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');

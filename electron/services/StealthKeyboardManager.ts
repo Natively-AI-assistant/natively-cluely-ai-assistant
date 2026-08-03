@@ -164,6 +164,11 @@ export class StealthKeyboardManager {
             // the closure of an older window must NOT touch the field.
             if (this.overlayRegistrationToken === myToken) {
                 this.overlayWebContents = null;
+                // The sink is gone — stop capturing. Without this, a hook
+                // engaged when the overlay window is destroyed would keep
+                // swallowing keystrokes system-wide with nowhere to deliver
+                // them, until the idle backstop. Idempotent if already stopped.
+                if (this.active) this.stop();
             }
         });
     }

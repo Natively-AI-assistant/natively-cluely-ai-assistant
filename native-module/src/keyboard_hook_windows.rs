@@ -54,7 +54,8 @@
 
 #![cfg(target_os = "windows")]
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -71,17 +72,18 @@ use windows::Win32::System::Threading::{GetCurrentProcessId, GetCurrentThreadId}
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, GetKeyboardLayout, ToUnicodeEx, VIRTUAL_KEY, VK_CAPITAL,
-    VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+    VK_CONTROL, VK_LWIN, VK_MENU, VK_NUMLOCK, VK_RMENU, VK_RWIN, VK_SHIFT,
 };
 // HKL (keyboard layout handle) lives under TextServices, not KeyboardAndMouse.
 use windows::Win32::UI::TextServices::HKL;
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetAncestor, GetForegroundWindow, GetMessageW,
-    GetWindowThreadProcessId, PostThreadMessageW, SetWindowsHookExW, TranslateMessage,
-    UnhookWindowsHookEx, WindowFromPoint,
+    GetWindowThreadProcessId, PeekMessageW, PostThreadMessageW, SetWindowsHookExW,
+    TranslateMessage, UnhookWindowsHookEx, WindowFromPoint,
     EVENT_SYSTEM_FOREGROUND, GA_ROOT, HHOOK, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT,
-    WH_KEYBOARD_LL, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN,
-    WM_MBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONDOWN,
+    PM_NOREMOVE, WH_KEYBOARD_LL, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT, WM_KEYDOWN, WM_KEYUP,
+    WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    WM_USER, WM_XBUTTONDOWN,
 };
 
 // ─── napi objects shared with the macOS module's JS surface ──────────────────
@@ -136,6 +138,18 @@ struct HookState {
     active: AtomicBool,
     /// Worker thread id, for PostThreadMessageW(WM_QUIT) from stop().
     worker_thread_id: AtomicU32,
+    /// Monotonic session counter. `start()` bumps it; each worker captures the
+    /// value at spawn. Cleanup only touches the shared state if its captured id
+    /// still matches — so a stale worker (e.g. one detached on a start() timeout)
+    /// can never clear ACTIVE_HOOK / active out from under a newer session.
+    /// (The old Arc::ptr_eq guard was a no-op: every worker clones the same Arc.)
+    session_id: AtomicU64,
+    /// CapsLock / NumLock toggle state, seeded on the JS main thread at start()
+    /// (which pumps input so GetKeyState is accurate) and flipped by the hook on
+    /// each lock-key press. GetKeyState on the worker thread is unreliable for
+    /// toggles because that thread pumps no keyboard input.
+    caps_on: AtomicBool,
+    num_on: AtomicBool,
     /// Threadsafe callback into V8. Set on start(), cleared on stop().
     callback: Mutex<Option<Arc<ThreadsafeFunction<CapturedKey>>>>,
 }
@@ -145,6 +159,9 @@ impl HookState {
         Self {
             active: AtomicBool::new(false),
             worker_thread_id: AtomicU32::new(0),
+            session_id: AtomicU64::new(0),
+            caps_on: AtomicBool::new(false),
+            num_on: AtomicBool::new(false),
             callback: Mutex::new(None),
         }
     }
@@ -166,10 +183,29 @@ unsafe extern "system" fn keyboard_hook_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
+    // A panic crossing this `extern "system"` boundary aborts the process (since
+    // Rust 1.81) — a hard kill from the OS input thread. Contain it and pass the
+    // event through, mirroring keyboard_tap.rs. `pass_through` never swallows, so
+    // on any internal failure the keystroke still reaches the foreground app.
+    let pass_through = || CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+    match catch_unwind(AssertUnwindSafe(|| unsafe {
+        keyboard_hook_inner(code, wparam, lparam)
+    })) {
+        Ok(r) => r,
+        Err(_) => {
+            eprintln!("[keyboard_hook_windows] keyboard proc panicked; passing event through");
+            pass_through()
+        }
+    }
+}
+
+unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    let pass = || CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+
     // HC_ACTION == 0. Negative codes must be passed straight through per the
     // Win32 contract; codes other than HC_ACTION carry no actionable struct.
     if code != 0 {
-        return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+        return pass();
     }
 
     // Snapshot the shared state (clone the Arc under a brief lock, then drop the
@@ -183,70 +219,118 @@ unsafe extern "system" fn keyboard_hook_proc(
         guard.as_ref().map(Arc::clone)
     };
     let Some(state) = state else {
-        return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+        return pass();
     };
     if !state.active.load(Ordering::Acquire) {
-        return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+        return pass();
     }
 
     let msg = wparam.0 as u32;
     let is_key_down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
     let is_key_up = msg == WM_KEYUP || msg == WM_SYSKEYUP;
     if !is_key_down && !is_key_up {
-        return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+        return pass();
     }
 
     let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
     let vk = kb.vkCode;
     let scan = kb.scanCode;
 
+    // Keep our toggle state current. The lock keys are passed through below, but
+    // we must observe their DOWN transition first — the worker thread's own
+    // GetKeyState is unreliable for toggles (it pumps no keyboard input). A
+    // single press flips the lock.
+    if is_key_down {
+        if vk == VK_CAPITAL.0 as u32 {
+            state.caps_on.fetch_xor(true, Ordering::AcqRel);
+        } else if vk == VK_NUMLOCK.0 as u32 {
+            state.num_on.fetch_xor(true, Ordering::AcqRel);
+        }
+    }
+
     // ── PASS-THROUGH FILTER (mirrors keyboard_tap.rs R3/R4) ──
-    // Any system-modifier combo (Ctrl / Alt / Win), F-keys, Tab and arrows are
-    // returned to the OS so system shortcuts and focus-cycling keep working and
-    // the renderer only ever sees plain text keys + Enter + Backspace + Esc.
-    if modifier_held(VK_CONTROL) || modifier_held(VK_MENU) || win_held() {
-        return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+    // Win combos and F-keys/nav/modifiers/lock/media keys go back to the OS so
+    // system shortcuts keep working. Ctrl/Alt combos also pass through EXCEPT
+    // AltGr: Windows reports AltGr as Ctrl+Alt (or right-Alt), and on EU layouts
+    // AltGr produces real text (@ { } \ € ~ …). Passing those through would both
+    // fail to type them into the overlay AND leak them into the foreground
+    // meeting app — the exact stealth leak this module prevents. So for AltGr we
+    // resolve the character first and only pass through if it yields none (i.e.
+    // it was a genuine Ctrl+Alt shortcut, which produces no text).
+    let ctrl = modifier_held(VK_CONTROL);
+    let alt = modifier_held(VK_MENU);
+    let altgr = modifier_held(VK_RMENU) || (ctrl && alt);
+    if win_held() {
+        return pass();
+    }
+    if (ctrl || alt) && !altgr {
+        return pass();
     }
     if is_passthrough_vk(vk) {
-        return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+        return pass();
     }
 
     // Translate to the macOS HID keycode the renderer expects, or 0 for keys
     // whose identity the renderer reads from `chars` instead of `keyCode`.
     let key_code = vk_to_mac_keycode(vk);
 
-    // Shift / CapsLock are the only modifiers that can reach here (combos with
-    // Ctrl/Alt/Win were passed through above). Encode them in the mac bit
-    // layout for completeness; `chars` already reflects their effect.
-    let mut flags = 0u32;
-    if modifier_held(VK_SHIFT) {
-        flags |= MAC_FLAG_SHIFT;
-    }
-    if caps_lock_on() {
-        flags |= MAC_FLAG_CAPS;
-    }
+    let shift = modifier_held(VK_SHIFT);
+    let caps = state.caps_on.load(Ordering::Acquire);
+    let num = state.num_on.load(Ordering::Acquire);
 
-    // Printable characters via the active keyboard layout (handles Shift,
-    // CapsLock, and layout-specific keys). Non-printable keys yield "".
+    // Resolve characters using the FOREGROUND app's keyboard layout (the layout
+    // the user actually selected), not this worker thread's default.
+    let hkl = foreground_keyboard_layout();
     let chars = if key_code == 0 {
-        unicode_for_key(vk, scan)
+        unicode_for_key(vk, scan, hkl, shift, caps, num, altgr)
     } else {
         // Enter/Backspace/Esc: the renderer keys off key_code, not chars.
         String::new()
     };
 
-    // Send BOTH keydown and keyup (renderer filters on isKeyDown), matching
-    // the macOS tap so the cross-platform contract is identical.
-    send_payload(&state, CapturedKey {
+    // An AltGr combo that produced no character is a genuine Ctrl+Alt shortcut —
+    // let the OS have it.
+    if altgr && key_code == 0 && chars.is_empty() {
+        return pass();
+    }
+
+    let mut flags = 0u32;
+    if shift {
+        flags |= MAC_FLAG_SHIFT;
+    }
+    if caps {
+        flags |= MAC_FLAG_CAPS;
+    }
+
+    // Send BOTH keydown and keyup (renderer filters on isKeyDown), matching the
+    // macOS tap. If delivery could not even be attempted (no live callback),
+    // DON'T swallow — a swallowed key with nowhere to go is lost input.
+    let delivered = send_payload(&state, CapturedKey {
         key_code,
         chars,
         flags,
         is_key_down,
         is_outside_mouse_down: false,
     });
+    if !delivered {
+        return pass();
+    }
 
     // Swallow: the foreground meeting app never sees this keystroke.
     LRESULT(1)
+}
+
+/// The keyboard layout of the foreground window's thread — the layout the user
+/// actually has selected. Falls back to the calling thread's layout (NULL HKL)
+/// when there is no foreground window.
+unsafe fn foreground_keyboard_layout() -> HKL {
+    let hwnd = GetForegroundWindow();
+    let tid = if hwnd.0 != 0 {
+        GetWindowThreadProcessId(hwnd, None)
+    } else {
+        0
+    };
+    GetKeyboardLayout(tid)
 }
 
 // ─── The low-level MOUSE hook procedure ──────────────────────────────────────
@@ -266,6 +350,20 @@ unsafe extern "system" fn keyboard_hook_proc(
 // pill, toggle, settings, model selector) keeps the session; clicking any other
 // process's window — or empty desktop — stops it.
 unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // catch_unwind: a panic here would abort the process from the input thread.
+    // On panic, pass the click through (never swallow).
+    match catch_unwind(AssertUnwindSafe(|| unsafe {
+        mouse_hook_inner(code, wparam, lparam)
+    })) {
+        Ok(r) => r,
+        Err(_) => {
+            eprintln!("[keyboard_hook_windows] mouse proc panicked; passing click through");
+            CallNextHookEx(HHOOK::default(), code, wparam, lparam)
+        }
+    }
+}
+
+unsafe fn mouse_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code != 0 {
         return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
     }
@@ -356,6 +454,23 @@ unsafe fn window_belongs_to_us(hwnd: HWND) -> bool {
 // WINEVENT_OUTOFCONTEXT delivers the callback on the installing thread via its
 // message queue, which the worker already pumps (GetMessageW/DispatchMessageW).
 unsafe extern "system" fn foreground_event_proc(
+    hook: HWINEVENTHOOK,
+    event: u32,
+    hwnd: HWND,
+    id_object: i32,
+    id_child: i32,
+    thread: u32,
+    time: u32,
+) {
+    // catch_unwind: a panic here would abort the process. On panic, do nothing
+    // (the WinEvent callback has no return value / no swallow semantics).
+    let _ = catch_unwind(AssertUnwindSafe(|| unsafe {
+        foreground_event_inner(hook, event, hwnd, id_object, id_child, thread, time)
+    }));
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe fn foreground_event_inner(
     _hook: HWINEVENTHOOK,
     event: u32,
     hwnd: HWND,
@@ -365,6 +480,13 @@ unsafe extern "system" fn foreground_event_proc(
     _time: u32,
 ) {
     if event != EVENT_SYSTEM_FOREGROUND {
+        return;
+    }
+    // hwnd == 0 is a transient foreground state (desktop switch, a window
+    // closing before the next activates). It is NOT the user leaving for another
+    // app, and window_belongs_to_us(0) is false — so without this guard we'd
+    // spuriously stop the session on those transitions.
+    if hwnd.0 == 0 {
         return;
     }
     let state = {
@@ -379,9 +501,9 @@ unsafe extern "system" fn foreground_event_proc(
         return;
     }
     // The overlay is WS_EX_NOACTIVATE so it never becomes foreground; any
-    // foreground change is therefore a real app switch. Still check ownership
-    // explicitly so activating a Natively window (e.g. the launcher) doesn't
-    // end the session.
+    // foreground change to a non-Natively window is therefore a real app switch.
+    // Still check ownership explicitly so activating a Natively window (e.g. the
+    // launcher) doesn't end the session.
     if window_belongs_to_us(hwnd) {
         return;
     }
@@ -401,7 +523,10 @@ unsafe extern "system" fn foreground_event_proc(
     );
 }
 
-fn send_payload(state: &HookState, payload: CapturedKey) {
+/// Deliver a captured event to V8. Returns true if a live callback was called,
+/// false if there was none — the caller uses that to decide whether swallowing
+/// the key is safe (never swallow a key that had nowhere to go).
+fn send_payload(state: &HookState, payload: CapturedKey) -> bool {
     // Clone the tsfn Arc under the lock, drop the lock, then call — same
     // deadlock-avoidance pattern as the macOS module.
     let tsfn = {
@@ -411,8 +536,12 @@ fn send_payload(state: &HookState, payload: CapturedKey) {
         };
         guard.as_ref().map(Arc::clone)
     };
-    if let Some(tsfn) = tsfn {
-        tsfn.call(Ok(payload), ThreadsafeFunctionCallMode::NonBlocking);
+    match tsfn {
+        Some(tsfn) => {
+            tsfn.call(Ok(payload), ThreadsafeFunctionCallMode::NonBlocking);
+            true
+        }
+        None => false,
     }
 }
 
@@ -424,14 +553,6 @@ fn modifier_held(vk: VIRTUAL_KEY) -> bool {
     // hook decides to swallow the key, so it correctly reflects held modifiers.
     // High-order bit (0x8000) = currently down.
     (unsafe { GetAsyncKeyState(vk.0 as i32) } as u16 & 0x8000) != 0
-}
-
-#[inline]
-fn caps_lock_on() -> bool {
-    // Toggle state (low bit) of CapsLock. This is a global lock state the
-    // system keeps synchronized, so the per-thread GetKeyState toggle bit is
-    // the pragmatic read here (GetAsyncKeyState carries no toggle state).
-    (unsafe { GetKeyState(VK_CAPITAL.0 as i32) } & 0x0001) != 0
 }
 
 #[inline]
@@ -539,32 +660,49 @@ fn vk_to_mac_keycode(vk: u32) -> u32 {
     }
 }
 
-/// Resolve the character(s) a key produces under the current layout, using the
-/// foreground window's keyboard layout and a synthesized modifier key-state.
+/// Resolve the character(s) a key produces, given the foreground layout and the
+/// caller-supplied modifier/toggle state.
 ///
-/// We build the 256-byte key-state array ourselves from live GetKeyState reads
-/// for Shift/CapsLock rather than GetKeyboardState(), because a low-level hook
-/// runs outside the foreground input queue and GetKeyboardState there does not
-/// reliably reflect the real-time modifier state.
+/// We build the 256-byte key-state array from state the caller already computed
+/// (via GetAsyncKeyState for live presses and our own maintained toggle flags)
+/// rather than GetKeyboardState(), because a low-level hook runs outside the
+/// foreground input queue and GetKeyboardState there is unreliable.
+///
+/// `hkl` is the FOREGROUND window's layout so the character matches what the
+/// user's active app would type (a US-default worker thread would mistranslate
+/// every non-US layout). `ctrl_alt` set means AltGr — Shift+AltGr and AltGr
+/// characters need Ctrl+Alt in the state array to resolve.
 ///
 /// `ToUnicodeEx` is called with wFlags bit 2 (0x4) set — "do not change the
-/// kernel keyboard state" (Windows 10 1607+) — so probing a dead key here does
-/// not corrupt the foreground app's subsequent composition.
-fn unicode_for_key(vk: u32, scan: u32) -> String {
+/// kernel keyboard state" (Windows 10 1607+) — so probing does not corrupt the
+/// foreground app's dead-key composition.
+#[allow(clippy::too_many_arguments)]
+fn unicode_for_key(
+    vk: u32,
+    scan: u32,
+    hkl: HKL,
+    shift: bool,
+    caps: bool,
+    num: bool,
+    ctrl_alt: bool,
+) -> String {
     let mut key_state = [0u8; 256];
-    // Only the modifiers that survive the pass-through filter matter for text.
-    if modifier_held(VK_SHIFT) {
+    if shift {
         key_state[VK_SHIFT.0 as usize] = 0x80;
     }
-    if caps_lock_on() {
+    if caps {
         key_state[VK_CAPITAL.0 as usize] = 0x01;
     }
-
-    // NULL HKL → ToUnicodeEx uses the calling thread's active layout. Deriving
-    // the foreground thread's layout is more correct but adds FFI surface; the
-    // default is acceptable for v1. Dead-key/AltGr text is out of scope (those
-    // combos are passed through by the modifier filter above).
-    let hkl = HKL::default();
+    // NumLock must be set for the numpad-digit VKs to resolve to digits (with it
+    // clear, ToUnicodeEx returns 0 for VK_NUMPAD0-9 and they'd vanish).
+    if num {
+        key_state[VK_NUMLOCK.0 as usize] = 0x01;
+    }
+    // AltGr = Ctrl+Alt in the state array.
+    if ctrl_alt {
+        key_state[VK_CONTROL.0 as usize] = 0x80;
+        key_state[VK_MENU.0 as usize] = 0x80;
+    }
 
     let mut buf = [0u16; 8];
     // wFlags = 0x4 → do not alter kernel keyboard state (preserve dead keys).
@@ -577,9 +715,45 @@ fn unicode_for_key(vk: u32, scan: u32) -> String {
     String::from_utf16_lossy(&buf[..n])
 }
 
-// ─── Worker thread: installs the hook and pumps messages ─────────────────────
+// ─── Worker thread: installs the hooks and pumps messages ────────────────────
 
-fn hook_worker(state: Arc<HookState>, ready_tx: mpsc::Sender<bool>) {
+/// Owns the three installed hooks and the shared-state teardown. Its Drop runs
+/// on EVERY worker exit — a normal loop break OR a panic unwinding the worker —
+/// so a global keyboard hook can never be left installed swallowing the whole
+/// system's keystrokes with no recovery (the failure mode a bare
+/// unhook-at-the-bottom had if anything above it panicked).
+struct HookGuard {
+    state: Arc<HookState>,
+    session_id: u64,
+    kb: HHOOK,
+    mouse: Option<HHOOK>,
+    fg: HWINEVENTHOOK,
+}
+
+impl Drop for HookGuard {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = UnhookWindowsHookEx(self.kb);
+            if let Some(m) = self.mouse {
+                let _ = UnhookWindowsHookEx(m);
+            }
+            if self.fg.0 != 0 {
+                let _ = UnhookWinEvent(self.fg);
+            }
+        }
+        // Only touch the shared state if we are STILL the current session. A
+        // worker detached on a start() timeout must never clear ACTIVE_HOOK /
+        // active out from under a newer session that reused the same Arc.
+        if self.state.session_id.load(Ordering::Acquire) == self.session_id {
+            let mut guard = ACTIVE_HOOK.lock().unwrap_or_else(|p| p.into_inner());
+            *guard = None;
+            self.state.worker_thread_id.store(0, Ordering::Release);
+            self.state.active.store(false, Ordering::Release);
+        }
+    }
+}
+
+fn hook_worker(state: Arc<HookState>, session_id: u64, ready_tx: mpsc::Sender<bool>) {
     // Publish this thread's id so stop() can PostThreadMessageW(WM_QUIT).
     let tid = unsafe { GetCurrentThreadId() };
     state.worker_thread_id.store(tid, Ordering::Release);
@@ -609,23 +783,34 @@ fn hook_worker(state: Arc<HookState>, ready_tx: mpsc::Sender<bool>) {
             // Most likely cause in the wild: security software / corporate EDR
             // blocking global keyboard hooks. Report the failure to start() so
             // it returns false and JS never shows an "engaged" state that would
-            // silently capture nothing.
+            // silently capture nothing. No guard exists yet, so clean up by hand
+            // (session-scoped so we don't disturb a newer session).
             eprintln!("[keyboard_hook_windows] SetWindowsHookExW failed: {e:?}");
-            state.active.store(false, Ordering::Release);
-            state.worker_thread_id.store(0, Ordering::Release);
-            let mut guard = ACTIVE_HOOK.lock().unwrap_or_else(|p| p.into_inner());
-            *guard = None;
+            if state.session_id.load(Ordering::Acquire) == session_id {
+                state.active.store(false, Ordering::Release);
+                state.worker_thread_id.store(0, Ordering::Release);
+                *ACTIVE_HOOK.lock().unwrap_or_else(|p| p.into_inner()) = None;
+            }
             let _ = ready_tx.send(false);
             return;
         }
     };
 
-    // Also install the low-level MOUSE hook for outside-click stop. NON-FATAL:
-    // if it fails, keyboard stealth still works; the user just loses the
-    // click-away auto-stop (Esc / 10s idle / hotkey still disengage).
-    let mouse_hook = match unsafe {
-        SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), hmod, 0)
-    } {
+    // From here the guard owns cleanup on ALL exit paths (normal + panic). Seed
+    // it with the keyboard hook, then install the two NON-FATAL auxiliary hooks
+    // into it, so a panic during those installs still unhooks the keyboard.
+    let mut guard = HookGuard {
+        state: state.clone(),
+        session_id,
+        kb: hook,
+        mouse: None,
+        fg: HWINEVENTHOOK::default(),
+    };
+
+    // Low-level MOUSE hook for outside-click stop. If it fails, keyboard stealth
+    // still works; the user just loses click-away auto-stop (Esc / idle / hotkey
+    // still disengage).
+    guard.mouse = match unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), hmod, 0) } {
         Ok(h) => Some(h),
         Err(e) => {
             eprintln!("[keyboard_hook_windows] WH_MOUSE_LL install failed (outside-click stop disabled): {e:?}");
@@ -634,9 +819,9 @@ fn hook_worker(state: Arc<HookState>, ready_tx: mpsc::Sender<bool>) {
     };
 
     // Foreground-change hook: stops the session on Alt+Tab / Win+Tab / any app
-    // switch that happens without a click. NON-FATAL, same as the mouse hook.
-    // hmod must be NULL for an out-of-context WinEvent hook.
-    let fg_hook = unsafe {
+    // switch without a click. NON-FATAL. hmod must be NULL for an out-of-context
+    // WinEvent hook.
+    guard.fg = unsafe {
         SetWinEventHook(
             EVENT_SYSTEM_FOREGROUND,
             EVENT_SYSTEM_FOREGROUND,
@@ -647,25 +832,31 @@ fn hook_worker(state: Arc<HookState>, ready_tx: mpsc::Sender<bool>) {
             WINEVENT_OUTOFCONTEXT,
         )
     };
-    if fg_hook.0 == 0 {
-        eprintln!(
-            "[keyboard_hook_windows] SetWinEventHook failed (Alt+Tab auto-stop disabled)"
-        );
+    if guard.fg.0 == 0 {
+        eprintln!("[keyboard_hook_windows] SetWinEventHook failed (Alt+Tab auto-stop disabled)");
     }
 
-    // The keyboard hook is installed — tell start() it may report success. Sent
-    // BEFORE the blocking message loop below.
+    // Force this thread's message queue to EXIST before we signal ready. A
+    // low-level hook does not create a queue, and neither does thread spawn; the
+    // queue is created lazily on the first queue call. If we signalled ready and
+    // stop() called PostThreadMessageW(WM_QUIT) before GetMessageW ran, the post
+    // would fail with ERROR_INVALID_THREAD_ID, the worker would block in
+    // GetMessageW forever, and stop()'s join() would hang the Electron main
+    // thread. PeekMessageW(PM_NOREMOVE) is the documented way to force queue
+    // creation. (MSDN PostThreadMessage remarks.)
+    let mut msg = MSG::default();
+    unsafe {
+        let _ = PeekMessageW(&mut msg, HWND::default(), WM_USER, WM_USER, PM_NOREMOVE);
+    }
+
+    // The queue exists and the hooks are installed — start() may report success.
     let _ = ready_tx.send(true);
 
-    // Message pump: REQUIRED for the LL hook to fire. GetMessageW blocks until
-    // stop() posts WM_QUIT (returns 0) or an error (returns -1).
-    let mut msg = MSG::default();
+    // Message pump: REQUIRED for the LL hooks to fire. Blocks until stop() posts
+    // WM_QUIT (GetMessageW returns 0) or an error (-1).
     loop {
-        // HWND::default() (NULL) → retrieve messages for any window of THIS
-        // thread, which is where the WM_QUIT posted by stop() lands.
         let r = unsafe { GetMessageW(&mut msg, HWND::default(), 0, 0) };
         if r.0 <= 0 {
-            // 0 = WM_QUIT, -1 = error. Either way, exit the loop and unhook.
             break;
         }
         unsafe {
@@ -676,30 +867,8 @@ fn hook_worker(state: Arc<HookState>, ready_tx: mpsc::Sender<bool>) {
             break;
         }
     }
-
-    // Cleanup: unhook all three, then clear the global so no stray callback can
-    // run against a state we are about to drop.
-    unsafe {
-        let _ = UnhookWindowsHookEx(hook);
-        if let Some(mh) = mouse_hook {
-            let _ = UnhookWindowsHookEx(mh);
-        }
-        if fg_hook.0 != 0 {
-            let _ = UnhookWinEvent(fg_hook);
-        }
-    }
-    {
-        let mut guard = ACTIVE_HOOK.lock().unwrap_or_else(|p| p.into_inner());
-        // Only clear if it's still OUR state (a fast stop→start could have
-        // installed a new one; guard against nuking it).
-        if let Some(cur) = guard.as_ref() {
-            if Arc::ptr_eq(cur, &state) {
-                *guard = None;
-            }
-        }
-    }
-    state.worker_thread_id.store(0, Ordering::Release);
-    state.active.store(false, Ordering::Release);
+    // `guard` drops here (or on unwind): unhooks all three and, if still our
+    // session, clears ACTIVE_HOOK + worker_thread_id + active.
 }
 
 // ─── Public N-API: identical surface to the macOS StealthKeyboardTap ─────────
@@ -796,6 +965,23 @@ impl StealthKeyboardTap {
         self.state.active.store(true, Ordering::Release);
         *self.state.callback.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::new(callback));
 
+        // New session id. The worker captures it and only tears down shared
+        // state if it is still current — so a worker detached on a timeout can't
+        // clobber a newer session. fetch_add returns the previous value; +1 is
+        // this session's id.
+        let session_id = self.state.session_id.fetch_add(1, Ordering::AcqRel).wrapping_add(1);
+
+        // Seed the CapsLock / NumLock toggle state HERE, on the JS main thread,
+        // which pumps input so GetKeyState reports the true toggle. The worker
+        // thread cannot read this reliably (it pumps no keyboard input); the
+        // hook then keeps it current by flipping on each lock-key press.
+        self.state
+            .caps_on
+            .store((unsafe { GetKeyState(VK_CAPITAL.0 as i32) } & 0x0001) != 0, Ordering::Release);
+        self.state
+            .num_on
+            .store((unsafe { GetKeyState(VK_NUMLOCK.0 as i32) } & 0x0001) != 0, Ordering::Release);
+
         // Confirm the hook actually installs before reporting success. Without
         // this, start() returns true the moment the thread spawns, so a hook
         // blocked by EDR would leave JS showing "stealth engaged" while keys go
@@ -805,7 +991,7 @@ impl StealthKeyboardTap {
         let state = self.state.clone();
         let handle = thread::Builder::new()
             .name("natively-keyboard-hook".into())
-            .spawn(move || hook_worker(state, ready_tx))
+            .spawn(move || hook_worker(state, session_id, ready_tx))
             .map_err(|e| {
                 self.state.active.store(false, Ordering::Release);
                 *self.state.callback.lock().unwrap_or_else(|p| p.into_inner()) = None;
