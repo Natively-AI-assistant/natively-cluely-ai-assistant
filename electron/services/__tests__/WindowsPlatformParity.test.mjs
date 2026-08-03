@@ -75,6 +75,37 @@ test('preflight: Windows has its own sharp / sqlite-vec checks, arch-agnostic', 
   );
 });
 
+// ── 2. Full-screen screenshots captured the wrong monitor on Windows ─────────
+// main.ts resolves the display the overlay/meeting is on and passes it down,
+// but the win32 branch dropped the argument, so capture fell through to
+// screen.getPrimaryDisplay() — a multi-monitor user silently sent the model
+// their primary screen instead of the meeting's.
+
+test('screenshot: BOTH desktop platforms forward preferredDisplay', () => {
+  const src = read('electron/ScreenshotHelper.ts');
+  // Every full-screen desktopCapturer call (i.e. not the area/cropper one) must
+  // pass preferredDisplay.
+  const fullScreenCalls = src
+    .split('\n')
+    .filter((l) => l.includes('captureWithDesktopCapturer(screenshotPath'));
+  assert.ok(fullScreenCalls.length >= 2, 'expected the queue + extra full-screen capture calls');
+  for (const call of fullScreenCalls) {
+    if (call.includes('captureArea')) continue; // selective capture resolves its own display
+    assert.match(
+      call,
+      /preferredDisplay/,
+      'BUG: a full-screen capture dropped preferredDisplay — it will fall through to ' +
+        'screen.getPrimaryDisplay() and capture the wrong monitor on multi-display setups.',
+    );
+  }
+  // And there must be no win32 branch that calls it without the display.
+  assert.doesNotMatch(
+    src,
+    /process\.platform === 'win32'\) \{\s*\n\s*await this\.captureWithDesktopCapturer\(screenshotPath\);/,
+    'BUG: the win32-only capture branch that omitted preferredDisplay is back.',
+  );
+});
+
 test('preflight: the new Windows check ids are still selected by nativeOk', () => {
   // `nativeOk` picks checks by id prefix; renaming an id silently drops it from
   // the aggregate, which would make the gate pass while the asset is missing.
