@@ -31,6 +31,14 @@ export interface NativeModule {
   // WH_KEYBOARD_LL hook needs no OS permission. Cheap; safe to poll to
   // drive UI state.
   isAccessibilityGranted?: () => boolean;
+  // Windows-only: true when the active keyboard layout is a CJK IME
+  // (Chinese/Japanese/Korean). The WH_KEYBOARD_LL hook swallows keystrokes
+  // before IMM32/TSF can compose them, so stealth typing must be reported
+  // UNAVAILABLE for these users — they fall back to normal focusable typing.
+  // macOS makes the same call from ImeDetector.ts. Optional: requires a binary
+  // rebuild; callers must `typeof`-check and treat a missing export as "no IME"
+  // so a stale binary keeps today's behaviour.
+  isImeKeyboardActive?: () => boolean;
   // Stealth keyboard interception. macOS: CGEventTap. Windows:
   // WH_KEYBOARD_LL low-level hook (native-module/src/keyboard_hook_windows.rs)
   // exposing this IDENTICAL surface. Engaged by StealthKeyboardManager; the
