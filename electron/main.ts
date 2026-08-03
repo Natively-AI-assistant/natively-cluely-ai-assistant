@@ -1712,11 +1712,19 @@ export class AppState {
           return shouldAutoEngageStealthTap();
         });
       } else {
-        // Windows: ToUnicodeEx handles the active layout, but IME composition
-        // (CJK) is out of scope for v1. Auto-engage stays on for Latin layouts;
-        // CJK users can still submit via the normal path. No mac-style TIS probe.
-        registerStealthHandler('stealth-tap:should-auto-engage', () => true);
-        registerStealthHandler('stealth-tap:refresh-ime', () => true);
+        // Windows: same decision as macOS, different probe. The WH_KEYBOARD_LL
+        // hook swallows keystrokes before IMM32/TSF can compose them, so a CJK
+        // IME user who auto-engaged would lose the candidate window and be
+        // limited to raw Latin. isAvailable() folds in the native
+        // isImeKeyboardActive() probe, so declining here routes them through the
+        // no-hook fallback (focusable overlay, real DOM focus, typing works with
+        // a focus change) instead of silently mangling their input.
+        //
+        // Both handlers re-read on every call, so switching layouts mid-session
+        // is reflected for the renderer's gating. (The window's no-activate
+        // policy is fixed at creation — see StealthKeyboardManager.isAvailable.)
+        registerStealthHandler('stealth-tap:should-auto-engage', () => stealth.isAvailable());
+        registerStealthHandler('stealth-tap:refresh-ime', () => stealth.isAvailable());
       }
     } else {
       registerStealthHandler('stealth-tap:available', () => false);
