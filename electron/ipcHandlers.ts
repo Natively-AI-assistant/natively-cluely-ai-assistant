@@ -7495,9 +7495,24 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const persisted = CredentialsManager.getInstance().setGroqSttApiKey(apiKey);
+
+      // Broadcast first so the UI always reflects the saved state, even if
+      // the reconfigure below fails (the key is persisted — only the in-memory
+      // pipeline is stale, and it will be picked up on next start).
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('credentials-changed');
       });
+
+      // Reconfigure the active pipeline so a key saved after provider selection
+      // is picked up immediately (without this, the pipeline stays on the GoogleSTT
+      // fallback that was chosen when reconfigure ran before the key was entered).
+      // A reconfigure failure does NOT undo the save — log and move on.
+      try {
+        await appState.reconfigureSttProvider();
+      } catch (reconfigErr: any) {
+        console.warn('[IPC] Groq STT key saved but pipeline reconfigure failed:', reconfigErr.message);
+      }
+
       return sttKeyPersistenceWarning(apiKey, persisted) ?? { success: true };
     } catch (error: any) {
       console.error('Error saving Groq STT API key:', error);
@@ -7509,9 +7524,24 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const persisted = CredentialsManager.getInstance().setOpenAiSttApiKey(apiKey);
+
+      // Broadcast first so the UI always reflects the saved state, even if
+      // the reconfigure below fails (the key is persisted — only the in-memory
+      // pipeline is stale, and it will be picked up on next start).
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('credentials-changed');
       });
+
+      // Reconfigure the active pipeline so a key saved after provider selection
+      // is picked up immediately (without this, the pipeline stays on the GoogleSTT
+      // fallback that was chosen when reconfigure ran before the key was entered).
+      // A reconfigure failure does NOT undo the save — log and move on.
+      try {
+        await appState.reconfigureSttProvider();
+      } catch (reconfigErr: any) {
+        console.warn('[IPC] OpenAI STT key saved but pipeline reconfigure failed:', reconfigErr.message);
+      }
+
       return sttKeyPersistenceWarning(apiKey, persisted) ?? { success: true };
     } catch (error: any) {
       console.error('Error saving OpenAI STT API key:', error);
