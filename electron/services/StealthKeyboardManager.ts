@@ -155,6 +155,11 @@ export class StealthKeyboardManager {
 
     /** True if Accessibility is granted right now. */
     public isPermissionGranted(): boolean {
+        // Windows: a WH_KEYBOARD_LL hook needs no OS permission. Route through
+        // the native isAccessibilityGranted() (returns true on win32) rather
+        // than a JS constant, so the check reflects the actual loaded binary:
+        // a stale binary without the hook has no such export → false.
+        if (process.platform === 'win32') return this.callNativePermissionCheck();
         if (process.platform !== 'darwin') return false;
         // Prefer Electron's systemPreferences (well-supported, no rebuild
         // required). Fall back to the native module's check if Electron's
@@ -172,6 +177,8 @@ export class StealthKeyboardManager {
      * Settings, then restart the app for the tap to bind).
      */
     public requestPermission(): boolean {
+        // Windows needs no permission for the keyboard hook — report granted.
+        if (process.platform === 'win32') return this.nativeAvailable;
         if (process.platform !== 'darwin') return false;
         try {
             // Pass true to surface the prompt. macOS shows the standard
@@ -351,7 +358,11 @@ export class StealthKeyboardManager {
     // ─── internals ───────────────────────────────────────────────────────
 
     private createTapInstance(): any | null {
-        if (process.platform !== 'darwin') return null;
+        // macOS: CGEventTap. Windows: WH_KEYBOARD_LL low-level hook. Both native
+        // modules export an identical `StealthKeyboardTap` class (see
+        // native-module/src/keyboard_tap.rs and keyboard_hook_windows.rs), so
+        // this loader is platform-agnostic below. Linux has no stealth path.
+        if (process.platform !== 'darwin' && process.platform !== 'win32') return null;
         try {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { loadNativeModule } = require('../audio/nativeModuleLoader');
