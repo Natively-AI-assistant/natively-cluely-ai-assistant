@@ -6699,8 +6699,8 @@ export class AppState {
     this.modelSelectorWindowHelper.setContentProtection(state)
     this.cropperWindowHelper.setContentProtection(state)
 
-    this.windowHelper.syncOverlayInteractionPolicy();
     if (process.platform === 'win32') {
+      this.windowHelper.syncOverlayInteractionPolicy();
       // Tray parity with macOS. On darwin the tray is destroyed/restored at the
       // end of _enforceDockState(), driven by the desired state — but that
       // function early-returns on non-darwin, so Windows previously had NO
