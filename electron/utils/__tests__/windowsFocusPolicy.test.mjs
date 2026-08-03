@@ -265,6 +265,80 @@ test('typing without focus is wired to the native stealth hook on BOTH desktop p
   );
 });
 
+// ── macOS-default parity of the engaged session ─────────────────────────────
+// macOS's DEFAULT path gives the input real DOM focus (the panel holds key
+// focus without activating): submitting keeps the caret, focus never times out,
+// and the input shows the violet `aurora` glow — no green ring (that only marks
+// macOS's explicitly hotkey-engaged tap mode). Windows can never focus the
+// input, so it must reproduce all three through the stealth session.
+
+test('Windows: Enter submits WITHOUT ending the session (macOS keeps the caret)', () => {
+  const src = read('src/components/NativelyInterface.tsx');
+  const enterCase = src.slice(
+    src.indexOf('case 36: // Return'),
+    src.indexOf('case 51: // Backspace'),
+  );
+  assert.ok(enterCase.length > 0, 'Enter case not found in the captured-key switch');
+  assert.match(
+    enterCase,
+    /if \(!isWindows\) \{\s*window\.electronAPI\.stealthTapStop\(\)/,
+    'BUG: on Windows the stealth session must survive Enter — the hook IS the input path, so ' +
+      'stopping would send the next message\'s keystrokes to the meeting app. macOS keeps focus.',
+  );
+});
+
+test('Windows: the idle window is a long backstop, not the 10s macOS tap-mode timer', () => {
+  const mgr = read('electron/services/StealthKeyboardManager.ts');
+  assert.match(
+    mgr,
+    /IDLE_TIMEOUT_WIN32_MS = 5 \* 60_000/,
+    'BUG: Windows needs a long idle backstop — a 10s window silently redirects typing to the ' +
+      'meeting app mid-thought, which macOS (DOM focus, no timeout) never does.',
+  );
+  assert.match(
+    mgr,
+    /idleTimeoutMs\(\)[\s\S]{0,220}process\.platform === 'win32'[\s\S]{0,120}IDLE_TIMEOUT_WIN32_MS/,
+    'BUG: the platform must select the timeout via idleTimeoutMs().',
+  );
+  assert.match(
+    mgr,
+    /}, StealthKeyboardManager\.idleTimeoutMs\(\)\);/,
+    'BUG: armIdleTimer must USE idleTimeoutMs() — a hardcoded constant there ignores the split.',
+  );
+});
+
+test('Windows: the engaged input shows the aurora glow, not the green tap-mode ring', () => {
+  const src = read('src/components/NativelyInterface.tsx');
+  assert.match(
+    src,
+    /stealthTapActive && isWindows \? 'aurora-focus-active' : ''/,
+    'BUG: Windows must apply aurora-focus-active while engaged — the input can never take real ' +
+      'DOM focus, so without it the box looks permanently unfocused (macOS glows on click).',
+  );
+  assert.match(
+    src,
+    /stealthTapActive && !isWindows \? 'ring-2 ring-emerald/,
+    'BUG: the green ring must be macOS-only — on Windows every click engages the hook, so it ' +
+      'would be permanently green, which macOS never shows.',
+  );
+  const css = read('src/index.css');
+  assert.match(
+    css,
+    /\.aurora-focus:focus,\s*\n\.aurora-focus\.aurora-focus-active \{/,
+    'BUG: .aurora-focus-active must be paired with :focus so the scripted class renders identically.',
+  );
+  for (const theme of ['liquid-glass', 'modern']) {
+    assert.match(
+      css,
+      new RegExp(
+        `\\[data-interface-theme="${theme}"\\] \\.aurora-focus\\.aurora-focus-active`,
+      ),
+      `BUG: the ${theme} theme override must also pair with .aurora-focus-active, or the glow ` +
+        'silently differs from macOS under that theme.',
+    );
+  }
+});
+
 test('main registers the hook-availability provider before creating windows (dead-input fallback)', () => {
   const providerIdx = mainSource.indexOf('setStealthHookAvailabilityProvider(');
   const windowIdx = mainSource.indexOf('this.windowHelper = new WindowHelper(this)');
