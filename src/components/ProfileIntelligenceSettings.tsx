@@ -1141,6 +1141,27 @@ export function ProfileIntelligenceSettings({
         }).catch(() => {});
     }, []);
 
+    // Live license refresh. The mount-time query above only runs once, so a Pro
+    // activation performed elsewhere (Settings → Natively API saving a key
+    // auto-activates Pro) left this panel on the gate wall until it was closed
+    // and reopened. Unlike App.tsx we do NOT trust the event payload — it is a
+    // notification that entitlement moved, not the authority on what it is now,
+    // so we re-query main for the authoritative details (and the plan label the
+    // header's Manage-Pro CTA renders).
+    useEffect(() => {
+        const off = window.electronAPI?.onLicenseStatusChanged?.(() => {
+            window.electronAPI?.licenseGetDetails?.().then((details: any) => {
+                const live = !!details?.isPremium;
+                const plan = details?.plan ?? '';
+                setIsPremium(live);
+                if (plan) setPremiumPlan(plan);
+                else if (!live) setPremiumPlan('');
+                writePremiumCache(live, plan);
+            }).catch(() => {}).finally(() => setLicenseLoaded(true));
+        });
+        return () => { off?.(); };
+    }, []);
+
     // Finalize an ADOPTED ingest. Only runs for uploads this mount inherited —
     // when doResumeUpload/doJdUpload own the request their awaited promise
     // already reports the outcome, so polling would double-handle it.
