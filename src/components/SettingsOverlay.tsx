@@ -498,7 +498,22 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     }, [isOpen, initialTab]);
 
-    const { shortcuts, updateShortcut, resetShortcuts } = useShortcuts();
+    const { shortcuts, updateShortcut, resetShortcuts, conflicts } = useShortcuts();
+    // Small badge shown next to a shortcut row when globalShortcut.register()
+    // failed for it (another app/OS already owns that key combo). The
+    // KeyRecorder right next to it is the fix — recording a new combo
+    // re-registers and clears the flag.
+    const renderShortcutConflictBadge = (actionId: keyof typeof shortcuts) => (
+        conflicts.has(actionId) ? (
+            <span
+                className="flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-500/15 border border-amber-500/20 px-1.5 py-0.5 rounded-full shrink-0"
+                title={t('Another app on your system is already using this shortcut. Record a new key combo to fix it.')}
+            >
+                <AlertCircle size={11} />
+                {t('In use')}
+            </span>
+        ) : null
+    );
     const [isUndetectable, setIsUndetectable] = useState(false);
     const [isMousePassthrough, setIsMousePassthrough] = useState(false);
     const [disguiseMode, setDisguiseMode] = useState<'terminal' | 'settings' | 'activity' | 'none'>('none');
@@ -2405,6 +2420,19 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         </button>
                                     </div>
 
+                                    {/* Surfaces globalShortcut.register() failures in bulk — e.g. on
+                                        Windows, another running app (screenshot tool, clipboard
+                                        manager, IME) can silently claim a combo Natively wants,
+                                        which otherwise looks like "the hotkey just doesn't work". */}
+                                    {conflicts.size > 0 && (
+                                        <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                                            <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                                            <p className="text-xs text-amber-200/90 leading-snug">
+                                                {t("Some shortcuts below (marked \"In use\") are claimed by another app on your system and won't fire. Record a new key combo for each to fix it.")}
+                                            </p>
+                                        </div>
+                                    )}
+
                                     <div className="grid gap-6" data-settings-stagger>
                                         {/* General Category */}
                                         <div>
@@ -2415,80 +2443,104 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Eye size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Toggle Visibility')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.toggleVisibility}
-                                                        onSave={(keys) => updateShortcut('toggleVisibility', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('toggleVisibility')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.toggleVisibility}
+                                                            onSave={(keys) => updateShortcut('toggleVisibility', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><PointerOff size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Toggle Mouse Passthrough')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.toggleMousePassthrough}
-                                                        onSave={(keys) => updateShortcut('toggleMousePassthrough', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('toggleMousePassthrough')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.toggleMousePassthrough}
+                                                            onSave={(keys) => updateShortcut('toggleMousePassthrough', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><MessageSquare size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Process Screenshots')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.processScreenshots}
-                                                        onSave={(keys) => updateShortcut('processScreenshots', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('processScreenshots')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.processScreenshots}
+                                                            onSave={(keys) => updateShortcut('processScreenshots', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Sparkles size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Capture Screen & Ask AI')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.captureAndProcess}
-                                                        onSave={(keys) => updateShortcut('captureAndProcess', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('captureAndProcess')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.captureAndProcess}
+                                                            onSave={(keys) => updateShortcut('captureAndProcess', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Globe size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Capture Page (Browser)')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.capturePage}
-                                                        onSave={(keys) => updateShortcut('capturePage', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('capturePage')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.capturePage}
+                                                            onSave={(keys) => updateShortcut('capturePage', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><RotateCcw size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Reset / Cancel')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.resetCancel}
-                                                        onSave={(keys) => updateShortcut('resetCancel', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('resetCancel')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.resetCancel}
+                                                            onSave={(keys) => updateShortcut('resetCancel', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Camera size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Take Screenshot')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.takeScreenshot}
-                                                        onSave={(keys) => updateShortcut('takeScreenshot', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('takeScreenshot')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.takeScreenshot}
+                                                            onSave={(keys) => updateShortcut('takeScreenshot', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Crop size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Selective Screenshot')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.selectiveScreenshot}
-                                                        onSave={(keys) => updateShortcut('selectiveScreenshot', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('selectiveScreenshot')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.selectiveScreenshot}
+                                                            onSave={(keys) => updateShortcut('selectiveScreenshot', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -2518,10 +2570,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center">{item.icon}</span>
                                                             <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t(item.label)}</span>
                                                         </div>
-                                                        <KeyRecorder
-                                                            currentKeys={shortcuts[item.id as keyof typeof shortcuts]}
-                                                            onSave={(keys) => updateShortcut(item.id as any, keys)}
-                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            {renderShortcutConflictBadge(item.id as keyof typeof shortcuts)}
+                                                            <KeyRecorder
+                                                                currentKeys={shortcuts[item.id as keyof typeof shortcuts]}
+                                                                onSave={(keys) => updateShortcut(item.id as any, keys)}
+                                                            />
+                                                        </div>
                                                     </div>
                                                 ))}
                                             </div>
@@ -2542,10 +2597,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center">{item.icon}</span>
                                                             <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t(item.label)}</span>
                                                         </div>
-                                                        <KeyRecorder
-                                                            currentKeys={shortcuts[item.id as keyof typeof shortcuts]}
-                                                            onSave={(keys) => updateShortcut(item.id as any, keys)}
-                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            {renderShortcutConflictBadge(item.id as keyof typeof shortcuts)}
+                                                            <KeyRecorder
+                                                                currentKeys={shortcuts[item.id as keyof typeof shortcuts]}
+                                                                onSave={(keys) => updateShortcut(item.id as any, keys)}
+                                                            />
+                                                        </div>
                                                     </div>
                                                 ))}
                                             </div>
