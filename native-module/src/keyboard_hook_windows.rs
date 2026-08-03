@@ -438,19 +438,90 @@ fn win_held() -> bool {
     modifier_held(VK_LWIN) || modifier_held(VK_RWIN)
 }
 
-/// VK codes we pass through untouched, matching the macOS whitelist intent:
-/// Tab, the four arrows, and F1–F24. (Esc/Enter/Backspace are NOT here — those
-/// are delivered to the renderer with a translated keyCode.)
+/// VK codes we pass through untouched, matching the macOS whitelist intent.
+///
+/// # The modifier keys themselves MUST be here
+///
+/// This is the Windows translation of the macOS tap's `if event_type == 12 {
+/// return event }` — flagsChanged, i.e. a modifier pressed or released on its
+/// own. On Windows there is no separate event type: pressing Alt arrives as an
+/// ordinary WM_KEYDOWN with vkCode = VK_MENU.
+///
+/// The `modifier_held()` guard in the hook proc only catches keys pressed WHILE
+/// a modifier is already down; it cannot catch the modifier's OWN keydown,
+/// because a low-level hook runs before the system updates its key-state
+/// tables, so GetAsyncKeyState does not yet report that very key as down.
+/// Without the modifier VKs listed here, Alt/Ctrl/Shift/Win keydowns were
+/// SWALLOWED — the OS never saw the modifier, so no combination could ever
+/// form. That broke every shortcut while stealth typing was engaged: the app's
+/// own Alt+H screenshot bind, and Windows' own Win-key shortcuts too.
+///
+/// Also passed through: lock keys (swallowing CapsLock would break the toggle),
+/// media / volume / browser keys, and navigation keys — matching the macOS
+/// rationale for arrows and Tab ("navigation, not text"). Esc/Enter/Backspace
+/// are deliberately NOT here: those are delivered to the renderer with a
+/// translated keyCode.
 fn is_passthrough_vk(vk: u32) -> bool {
+    // Modifiers, incl. the left/right-specific codes an LL hook can report.
+    const VK_SHIFT_: u32 = 0x10;
+    const VK_CONTROL_: u32 = 0x11;
+    const VK_MENU_: u32 = 0x12; // Alt
+    const VK_PAUSE_: u32 = 0x13;
+    const VK_CAPITAL_: u32 = 0x14;
+    const VK_LWIN_: u32 = 0x5B;
+    const VK_RWIN_: u32 = 0x5C;
+    const VK_APPS_: u32 = 0x5D; // context-menu key
+    const VK_LSHIFT_: u32 = 0xA0;
+    const VK_RMENU_: u32 = 0xA5; // 0xA0..=0xA5 = L/R Shift, Control, Alt
+    const VK_NUMLOCK_: u32 = 0x90;
+    const VK_SCROLL_: u32 = 0x91;
+    // Navigation / editing cluster.
     const VK_TAB: u32 = 0x09;
+    const VK_PRIOR: u32 = 0x21; // PageUp
+    const VK_NEXT: u32 = 0x22; // PageDown
+    const VK_END: u32 = 0x23;
+    const VK_HOME: u32 = 0x24;
     const VK_LEFT: u32 = 0x25;
     const VK_UP: u32 = 0x26;
     const VK_RIGHT: u32 = 0x27;
     const VK_DOWN: u32 = 0x28;
+    const VK_SNAPSHOT: u32 = 0x2C; // PrintScreen
+    const VK_INSERT: u32 = 0x2D;
+    const VK_DELETE: u32 = 0x2E;
+    // Function keys.
     const VK_F1: u32 = 0x70;
     const VK_F24: u32 = 0x87;
-    matches!(vk, VK_TAB | VK_LEFT | VK_UP | VK_RIGHT | VK_DOWN)
+    // Browser / media / volume / launch keys.
+    const VK_BROWSER_BACK: u32 = 0xA6;
+    const VK_LAUNCH_APP2: u32 = 0xB7;
+
+    matches!(
+        vk,
+        VK_SHIFT_
+            | VK_CONTROL_
+            | VK_MENU_
+            | VK_PAUSE_
+            | VK_CAPITAL_
+            | VK_LWIN_
+            | VK_RWIN_
+            | VK_APPS_
+            | VK_NUMLOCK_
+            | VK_SCROLL_
+            | VK_TAB
+            | VK_PRIOR
+            | VK_NEXT
+            | VK_END
+            | VK_HOME
+            | VK_LEFT
+            | VK_UP
+            | VK_RIGHT
+            | VK_DOWN
+            | VK_SNAPSHOT
+            | VK_INSERT
+            | VK_DELETE
+    ) || (VK_LSHIFT_..=VK_RMENU_).contains(&vk)
         || (VK_F1..=VK_F24).contains(&vk)
+        || (VK_BROWSER_BACK..=VK_LAUNCH_APP2).contains(&vk)
 }
 
 /// Map a Windows VK to the macOS HID keycode the renderer switch expects.

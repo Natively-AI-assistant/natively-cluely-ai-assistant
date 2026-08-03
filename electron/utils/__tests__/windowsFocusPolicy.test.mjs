@@ -425,6 +425,67 @@ test('the Windows native hook stops stealth on Alt+Tab / any app switch (no clic
   );
 });
 
+test('the keyboard hook passes the MODIFIER KEYS THEMSELVES through (or every shortcut dies)', () => {
+  // REGRESSION GUARD. The modifier_held() guard only catches keys pressed WHILE
+  // a modifier is already down — it cannot catch the modifier's own keydown,
+  // because an LL hook runs before the system updates its key-state tables, so
+  // GetAsyncKeyState does not yet report that very key. Without the modifier
+  // VKs in the pass-through list, Alt/Ctrl/Shift/Win keydowns were swallowed,
+  // the OS never saw the modifier, and NO combination could form: the app's
+  // Alt+H screenshot bind and Windows' own Win-key shortcuts all died while
+  // stealth typing was engaged. This is the Windows translation of the macOS
+  // tap's flagsChanged pass-through (keyboard_tap.rs: `if event_type == 12`).
+  const rust = read('native-module/src/keyboard_hook_windows.rs');
+  const fn = rust.slice(
+    rust.indexOf('fn is_passthrough_vk('),
+    rust.indexOf('fn vk_to_mac_keycode('),
+  );
+  assert.ok(fn.length > 0, 'is_passthrough_vk() not found');
+
+  // Alt(0x12), Ctrl(0x11), Shift(0x10) and both Win keys must be listed.
+  for (const [name, code] of [
+    ['VK_MENU_ (Alt)', '0x12'],
+    ['VK_CONTROL_', '0x11'],
+    ['VK_SHIFT_', '0x10'],
+    ['VK_LWIN_', '0x5B'],
+    ['VK_RWIN_', '0x5C'],
+  ]) {
+    assert.match(
+      fn,
+      new RegExp(`${code}`, 'i'),
+      `BUG: ${name} must be passed through — swallowing a modifier's own keydown means the OS ` +
+        'never sees it and no shortcut can ever form.',
+    );
+  }
+  // And they must actually be wired into the matches! arm, not just declared.
+  assert.match(
+    fn,
+    /matches!\([\s\S]{0,900}VK_MENU_[\s\S]{0,900}\)/,
+    'BUG: the modifier constants must be included in the matches! pass-through arm.',
+  );
+  // L/R-specific modifier codes (0xA0..=0xA5) an LL hook can report.
+  assert.match(
+    fn,
+    /\(VK_LSHIFT_\.\.=VK_RMENU_\)\.contains\(&vk\)/,
+    'BUG: the left/right-specific modifier codes (0xA0-0xA5) must pass through too.',
+  );
+  // CapsLock must not be eaten, or the toggle breaks.
+  assert.match(
+    fn,
+    /VK_CAPITAL_/,
+    'BUG: CapsLock must pass through or its toggle stops working while engaged.',
+  );
+  // Esc/Enter/Backspace must NOT be passed through — the renderer needs them.
+  for (const nope of ['0x1B', '0x0D', '0x08']) {
+    assert.doesNotMatch(
+      fn,
+      new RegExp(`${nope}`),
+      `BUG: ${nope} (Esc/Enter/Backspace) must NOT be in the pass-through list — the renderer ` +
+        'switch needs it, and Esc is how the user exits stealth typing.',
+    );
+  }
+});
+
 test('inside-vs-outside ownership uses a GA_ROOT walk (shared by both stop triggers)', () => {
   const rust = read('native-module/src/keyboard_hook_windows.rs');
   const fn = rust.slice(
