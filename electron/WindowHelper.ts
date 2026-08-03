@@ -1913,11 +1913,34 @@ export class WindowHelper {
   // Hide overlay directly without switching to launcher.
   // Used by IPC handlers to hide the overlay independently.
   public hideOverlay(): void {
+    // Stealth typing must never outlive a visible overlay. The keyboard hook
+    // swallows keystrokes system-wide and its only "engaged" indicator lives in
+    // the overlay UI — so if the overlay is hidden while the tap is engaged, the
+    // user has no signal that their keystrokes are still being captured (and,
+    // on Windows, cannot type into any other app). Stop it here and on every
+    // overlay→launcher switch. No-op when not engaged.
+    this.stopStealthTyping();
     // Aux chrome first, in the same block: the pill/toggle are always-on-top,
     // so a body-then-pill sequence leaves them briefly floating alone.
     this.applyOverlayAuxVisibility(false);
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
       this.overlayWindow.hide();
+    }
+  }
+
+  /**
+   * Disengage stealth typing. Called whenever the overlay stops being the
+   * visible, active surface (hide, end-meeting → launcher). Safe on every
+   * platform and when nothing is engaged: the manager no-ops if inactive, and
+   * off macOS/Windows there is no native tap at all.
+   */
+  private stopStealthTyping(): void {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+      StealthKeyboardManager.getInstance().stop();
+    } catch (e) {
+      console.error('[WindowHelper] failed to stop stealth typing:', e);
     }
   }
 
@@ -2143,6 +2166,10 @@ export class WindowHelper {
   public switchToLauncher(inactive?: boolean): void {
     const requestedInactive = !!inactive;
     console.log(`[WindowHelper] Switching to LAUNCHER (inactive: ${requestedInactive})`);
+    // Leaving the overlay (end meeting, etc.) must disengage stealth typing —
+    // otherwise the hook keeps swallowing keystrokes with the overlay hidden.
+    // No-op if not engaged, or at cold-start where this fires with no session.
+    this.stopStealthTyping();
     const wasLauncher = this.currentWindowMode === 'launcher';
     this.currentWindowMode = 'launcher';
     KeybindManager.getInstance().setMode('launcher'); // Adapted from public PR #123 — verify premium interaction
