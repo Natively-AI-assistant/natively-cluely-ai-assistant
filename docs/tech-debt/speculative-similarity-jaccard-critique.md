@@ -54,12 +54,12 @@ Jaccard compares raw word-token sets. This means two questions can score high de
 | Speculative text | Final text | Jaccard score | Should reuse? |
 |---|---|---|---|
 | `"Can you walk me through"` | `"Can you walk me through your design process?"` | ~0.90 (containment) | ✅ Yes |
-| `"What are your greatest strengths"` | `"What are your greatest weaknesses"` | **~0.75** | ❌ No — opposite |
-| `"Tell me about a time you succeeded"` | `"Tell me about a time you failed"` | **~0.64** | ❌ No — opposite |
+| `"What are your greatest strengths"` | `"What are your greatest weaknesses"` | **~0.72** | ❌ No — opposite (but dangerously close to threshold) |
+| `"Tell me about a time you succeeded"` | `"Tell me about a time you failed"` | **~0.77** | ❌ No — opposite (false accept under 0.75 threshold) |
 | `"Can you describe your leadership style"` | `"Can you describe your biggest mistake"` | ~0.55 | ❌ Likely rejected but close |
 | `"Tell me about a project you led"` | `"Tell me about a time you showed leadership"` | ~0.42 | ✅ Should reuse — same intent |
 
-**The critical failure class** for this app is row 2 and row 3. In interview contexts, "strengths/weaknesses", "success/failure", "led/followed" are extremely common antonym pairs. An answer about the candidate's strengths played in response to a weaknesses question is the **single worst possible failure mode** — it gives the candidate the wrong answer to speak aloud.
+**The critical failure class** for this app is row 2 and row 3. In interview contexts, "strengths/weaknesses", "success/failure", "led/followed" are extremely common antonym pairs. Under the current `SPECULATIVE_SIMILARITY_THRESHOLD = 0.75` check, the succeeded/failed comparison (scoring ~0.77 due to containment blend) results in a **false accept**, which is the **single worst possible failure mode** — it serves the candidate the wrong answer (success details) to speak aloud in response to a failure question. The strengths/weaknesses comparison (scoring ~0.72) is rejected under 0.75 but is dangerously close, and would be accepted if a user slightly rephrases either prompt.
 
 ### Why stop words inflate the score
 
@@ -137,7 +137,7 @@ export async function speculativeSimilarity(
         embeddingWorker.embed(finalQuestion),
     ]);
     const cosine = cosineSimilarity(embA, embB);
-    return { score: (cosine + 1) / 2, method: 'sbert' }; // normalize to [0,1]
+    return { score: cosine, method: 'sbert' };
 }
 ```
 
@@ -155,7 +155,7 @@ if (score >= SPECULATIVE_SIMILARITY_THRESHOLD) {
 
 ### Worker reuse
 
-`IntentClassifier.ts` already maintains a warmed transformer worker. The embedding worker can share the same infrastructure — no new model-loading overhead on startup. The worker is already warm by the time a speculative check fires.
+`LocalEmbeddingProvider` already loads `all-MiniLM-L6-v2` in a background worker thread for normalized feature extraction and RAG indexing. The speculative similarity gate should reuse this existing worker infrastructure to retrieve embeddings, avoiding any new model-loading overhead on startup.
 
 ---
 
@@ -164,7 +164,7 @@ if (score >= SPECULATIVE_SIMILARITY_THRESHOLD) {
 The current `SPECULATIVE_SIMILARITY_THRESHOLD` constant should be audited. If it's ≥ 0.7, Jaccard-inflated stop-word matches may be passing the gate. With the hybrid approach:
 
 - **Jaccard fast-accept threshold**: 0.92 (very conservative — only obvious prefix completions bypass SBERT)
-- **SBERT acceptance threshold**: 0.65 (cosine normalized to [0,1])
+- **SBERT acceptance threshold**: 0.65 (raw cosine similarity)
 
 These values should be validated against a test set of real interview question pairs covering:
 - Clear prefixes ("Can you walk me through" → "Can you walk me through your architecture")
@@ -192,10 +192,10 @@ The only thing that needs to change is how the similarity score is computed in t
 
 | Aspect | Current (Jaccard) | Recommended (Hybrid) |
 |--------|------------------|----------------------|
-| Antonym pairs (strengths/weaknesses) | ❌ ~0.75 — often wrong accept | ✅ ~0.31 SBERT — correct reject |
+| Antonym pairs (strengths/weaknesses) | ❌ ~0.72 — close to threshold | ✅ ~0.31 SBERT — correct reject |
 | Prefix completion (partial → full) | ✅ Handled by containment blend | ✅ Still handled at fast-exit tier |
 | Synonymous rephrasing | ❌ ~0.42 — may incorrectly reject | ✅ ~0.82 SBERT — correct accept |
 | Latency (fast cases) | µs | µs (Jaccard fast exit) |
 | Latency (ambiguous zone) | µs | ~5–10ms (SBERT) |
 | Model size overhead | 0MB | +22MB (`all-MiniLM-L6-v2`) |
-| Infrastructure needed | None | Worker thread (reuse IntentClassifier pattern) |
+| Infrastructure needed | None | Worker thread (reuse LocalEmbeddingProvider worker) |
