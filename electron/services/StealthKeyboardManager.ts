@@ -168,9 +168,52 @@ export class StealthKeyboardManager {
         });
     }
 
-    /** True if the native module shipped with stealth-tap support. */
+    /**
+     * True if stealth typing is usable right now.
+     *
+     * Beyond "the binary shipped with the tap", Windows must also decline when a
+     * CJK IME is the active keyboard layout: the WH_KEYBOARD_LL hook swallows
+     * keystrokes before IMM32/TSF can compose them, and the text it substitutes
+     * comes from ToUnicodeEx, which does no composition. Engaging it for those
+     * users suppresses the candidate window and limits them to raw Latin.
+     *
+     * Reporting unavailable routes them through the already-tested no-hook
+     * fallback: the overlay is left focusable (see windowsFocusPolicy's
+     * availability gate) and typing works through real DOM focus, at the cost of
+     * the click taking foreground focus. macOS makes the same trade for the same
+     * reason via ImeDetector.shouldAutoEngageStealthTap().
+     *
+     * NOTE: sampled per call, but the no-activate window policy that consumes it
+     * is applied at window creation — so switching INTO an IME mid-session does
+     * not retroactively make the overlay focusable. Restarting picks it up.
+     */
     public isAvailable(): boolean {
+        if (!this.nativeAvailable) return false;
+        if (process.platform === 'win32' && this.isImeActive()) return false;
+        return true;
+    }
+
+    /** True if the binary supports the tap, ignoring the IME gate. */
+    public isNativeTapPresent(): boolean {
         return this.nativeAvailable;
+    }
+
+    /**
+     * Windows CJK-IME probe. Falls back to `false` (no IME) when the export is
+     * missing, so a binary predating this check keeps today's behaviour rather
+     * than disabling stealth typing for everyone.
+     */
+    private isImeActive(): boolean {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { loadNativeModule } = require('../audio/nativeModuleLoader');
+            const native = loadNativeModule();
+            return typeof native?.isImeKeyboardActive === 'function'
+                ? !!native.isImeKeyboardActive()
+                : false;
+        } catch {
+            return false;
+        }
     }
 
     /** True if Accessibility is granted right now. */
