@@ -1850,18 +1850,26 @@ export class AppState {
           // Windows uses a WH_KEYBOARD_LL hook — both close the gap that a
           // window-focus-based input path would open (the meeting app blurring
           // the instant the overlay took focus). See StealthKeyboardManager.
+          // Platform-agnostic: the native module exports the same
+          // StealthKeyboardTap on macOS and Windows. isAvailable() is false only
+          // if the binary predates this feature (needs `npm run build:native`),
+          // on Linux, or (win32) while a CJK IME is active.
+          const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+          const mgr = StealthKeyboardManager.getInstance();
+          // Capture the engaged state BEFORE showMainWindow: in launcher mode
+          // showMainWindow routes through switchToLauncher, which stops stealth,
+          // so a toggle() afterward would ALWAYS see inactive and always start
+          // (never disengage, and re-engage with the overlay hidden). Branch on
+          // the pre-show state instead of relying on toggle().
+          const wasStealthActive = mgr.isAvailable() && mgr.isActive();
           this.showMainWindow(true);
           const overlay = this.windowHelper.getOverlayWindow();
           this.sendToWindow(overlay, 'ensure-expanded');
-
-          // Platform-agnostic: the native module exports the same
-          // StealthKeyboardTap on macOS and Windows, so toggle() is the input
-          // path on both. isAvailable() is false only if the binary predates
-          // this feature (needs `npm run build:native`) or on Linux.
-          const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-          const mgr = StealthKeyboardManager.getInstance();
           if (mgr.isAvailable()) {
-            mgr.toggle();
+            // start() itself refuses on win32 if the overlay isn't visible, so
+            // pressing this in launcher mode is a safe no-op there.
+            if (wasStealthActive) mgr.stop();
+            else mgr.start();
             return; // the hook/tap is the input path; never focus the overlay
           }
 

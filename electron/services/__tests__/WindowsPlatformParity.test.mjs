@@ -309,6 +309,100 @@ test('security: shutdown stops the tap on Windows too (napi teardown race)', () 
   );
 });
 
+// ── Second-round review: F1-residual, toggle regression, start visibility ────
+
+test('security(round2): hideMainWindow (Ctrl+B / screenshot hide) also stops stealth', () => {
+  const wh = read('electron/WindowHelper.ts');
+  const fn = wh.slice(wh.indexOf('public hideMainWindow()'), wh.indexOf('public hideMainWindow()') + 900);
+  assert.match(
+    fn,
+    /this\.stopStealthTyping\(\)/,
+    'BUG: hideMainWindow hides the overlay directly — it must stop stealth too, or Ctrl+B leaves the ' +
+      'hook engaged with the overlay hidden (the F1 residual).',
+  );
+});
+
+test('security(round2): chat:focusInput branches on pre-show state, not toggle()', () => {
+  const main = read('electron/main.ts');
+  const block = main.slice(
+    main.indexOf("actionId === 'chat:focusInput'"),
+    main.indexOf("actionId === 'chat:whatToAnswer'"),
+  );
+  assert.match(
+    block,
+    /const wasStealthActive = mgr\.isAvailable\(\) && mgr\.isActive\(\);\s*\n\s*this\.showMainWindow/,
+    'BUG: wasActive must be captured BEFORE showMainWindow (which can stop stealth via ' +
+      'switchToLauncher), or the toggle always starts and can never disengage in launcher mode.',
+  );
+  assert.match(
+    block,
+    /if \(wasStealthActive\) mgr\.stop\(\);\s*\n\s*else mgr\.start\(\)/,
+    'BUG: must branch stop/start explicitly.',
+  );
+  assert.doesNotMatch(block, /mgr\.toggle\(\)/, 'BUG: the broken toggle() call must be gone.');
+});
+
+test('security(round2): start() refuses on win32 when the overlay is not visible', () => {
+  const mgr = read('electron/services/StealthKeyboardManager.ts');
+  const start = mgr.slice(mgr.indexOf('public start(): boolean'), mgr.indexOf('this.active = true;'));
+  assert.match(
+    start,
+    /process\.platform === 'win32' &&\s*\([\s\S]{0,160}!this\.overlayWindow\.isVisible\(\)[\s\S]{0,40}\)\s*\)\s*\{\s*return false/,
+    'BUG: start() must refuse on win32 when the overlay is hidden/destroyed — enforces ' +
+      'hook-engaged⟹overlay-visible so the hook can never swallow keystrokes with no visible UI.',
+  );
+  // macOS must NOT gain a visibility gate (no regression).
+  assert.match(start, /process\.platform === 'win32' &&/, 'the gate must be win32-scoped');
+});
+
+test('rust(round2): the catch_unwind Err arms do NOT log (eprintln can panic → abort)', () => {
+  const rust = read('native-module/src/keyboard_hook_windows.rs');
+  // Neither the keyboard nor mouse proc shell may print in the panic arm.
+  assert.doesNotMatch(
+    rust,
+    /Err\(_\) => \{\s*\n\s*eprintln!/,
+    'BUG: an eprintln! in the catch_unwind Err arm can itself panic across the FFI boundary and ' +
+      'abort the process — the exact failure the guard prevents.',
+  );
+  assert.doesNotMatch(rust, /proc panicked/, 'BUG: the panic-arm log lines must be gone.');
+});
+
+test('rust(round2): AltGr is Ctrl+Alt only — the VK_RMENU disjunct is removed', () => {
+  const rust = read('native-module/src/keyboard_hook_windows.rs');
+  assert.match(
+    rust,
+    /let altgr = ctrl && alt;/,
+    'BUG: altgr must be `ctrl && alt` — the VK_RMENU disjunct fabricated a Ctrl on US/UK layouts ' +
+      'and split left/right-Alt shortcut handling.',
+  );
+  assert.doesNotMatch(
+    rust,
+    /modifier_held\(VK_RMENU\)/,
+    'BUG: the VK_RMENU AltGr disjunct must be gone.',
+  );
+});
+
+test('rust(round2): the message queue is forced BEFORE the hooks install (timeout-leak fix)', () => {
+  const rust = read('native-module/src/keyboard_hook_windows.rs');
+  const worker = rust.slice(
+    rust.indexOf('fn hook_worker('),
+    rust.indexOf('let hook = match unsafe'),
+  );
+  assert.match(
+    worker,
+    /PeekMessageW\(&mut msg, HWND::default\(\), WM_USER, WM_USER, PM_NOREMOVE\)/,
+    'BUG: PeekMessageW must run before SetWindowsHookExW so a WM_QUIT on the start() timeout path ' +
+      'is never lost (which would leak the worker thread and both global hooks).',
+  );
+  // And there must be exactly ONE PeekMessageW CALL (the old later one was
+  // removed). Match the call form with its args so a comment mention doesn't count.
+  assert.equal(
+    (rust.match(/PeekMessageW\(&mut msg/g) ?? []).length,
+    1,
+    'BUG: there should be exactly one PeekMessageW call (moved to the top, not duplicated).',
+  );
+});
+
 // ── Review hardening: native Rust safety/correctness (source assertions) ─────
 
 test('rust: all three hook procs are panic-contained (catch_unwind) and cleanup is a Drop guard', () => {
@@ -331,12 +425,15 @@ test('rust: all three hook procs are panic-contained (catch_unwind) and cleanup 
 
 test('rust: the message-queue race and session-id cleanup are fixed', () => {
   const rust = read('native-module/src/keyboard_hook_windows.rs');
-  // PeekMessage forces the thread queue to exist BEFORE ready is signalled.
-  assert.match(
-    rust,
-    /PeekMessageW\(&mut msg, HWND::default\(\), WM_USER, WM_USER, PM_NOREMOVE\)[\s\S]{0,200}ready_tx\.send\(true\)/,
-    'BUG: the queue must be forced (PeekMessageW) before signalling ready, or a fast stop()' +
-      "'s WM_QUIT is dropped and the main thread hangs on join().",
+  // PeekMessage forces the thread queue to exist BEFORE ready is signalled
+  // (it now sits at the top of the worker, so check order, not proximity).
+  const peekIdx = rust.indexOf('PeekMessageW(&mut msg, HWND::default(), WM_USER, WM_USER, PM_NOREMOVE)');
+  const readyIdx = rust.indexOf('ready_tx.send(true)');
+  assert.ok(peekIdx > 0 && readyIdx > 0, 'PeekMessageW / ready_tx.send(true) not found');
+  assert.ok(
+    peekIdx < readyIdx,
+    "BUG: the queue must be forced (PeekMessageW) before signalling ready, or a fast stop()'s " +
+      'WM_QUIT is dropped and the main thread hangs on join().',
   );
   // Cleanup keyed on session id, not the always-true Arc::ptr_eq.
   assert.match(
@@ -356,8 +453,9 @@ test('rust: char translation uses the foreground layout, captures AltGr, honours
   );
   assert.match(
     rust,
-    /let altgr = modifier_held\(VK_RMENU\) \|\| \(ctrl && alt\)/,
-    'BUG: AltGr (Ctrl+Alt / right-Alt) must be detected so its characters are captured, not leaked.',
+    /let altgr = ctrl && alt;/,
+    'BUG: AltGr must be detected as Ctrl+Alt so its characters are captured, not leaked. (The ' +
+      'VK_RMENU disjunct was removed — it fabricated a Ctrl on US/UK layouts.)',
   );
   assert.match(
     rust,
