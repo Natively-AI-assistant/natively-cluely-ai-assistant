@@ -67,6 +67,26 @@ export class StealthKeyboardManager {
     // a stuck tap can't eat keystrokes into the void if the renderer crashes
     // or the user wandered away. Tunable per UX feedback.
     private static readonly IDLE_TIMEOUT_MS = 10_000;
+    // Windows runs a LONG backstop instead of the 10s idle window.
+    //
+    // macOS parity: on macOS the input holds real DOM focus, which never times
+    // out — you can pause to think for a minute and keep typing. The 10s timer
+    // only applies to macOS's explicitly hotkey-engaged tap mode. On Windows
+    // every click engages the hook (it is the only input path), so a 10s window
+    // would silently redirect your typing to the meeting app mid-thought.
+    //
+    // Not removed outright: unlike macOS DOM focus, the Windows hook SWALLOWS
+    // keystrokes system-wide, so a session that somehow outlives its exits would
+    // eat every keypress. The real exits (Esc, click outside Natively, app
+    // switch — see keyboard_hook_windows.rs) are comprehensive and fire in
+    // milliseconds; this is only a last-resort backstop.
+    private static readonly IDLE_TIMEOUT_WIN32_MS = 5 * 60_000;
+
+    private static idleTimeoutMs(): number {
+        return process.platform === 'win32'
+            ? StealthKeyboardManager.IDLE_TIMEOUT_WIN32_MS
+            : StealthKeyboardManager.IDLE_TIMEOUT_MS;
+    }
 
     private constructor() {
         this.tap = this.createTapInstance();
@@ -336,7 +356,7 @@ export class StealthKeyboardManager {
             // walked away or context-switched. Disengage so subsequent typing
             // goes to whatever they're now focused on, not into a hidden tap.
             if (this.active) this.stop();
-        }, StealthKeyboardManager.IDLE_TIMEOUT_MS);
+        }, StealthKeyboardManager.idleTimeoutMs());
     }
 
     private clearIdleTimer(): void {
