@@ -21,6 +21,7 @@ import { SAFE_DOCUMENT_EXTENSIONS } from './services/SafeDocumentTextExtractor';
 import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/skills/SkillValidator';
 
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
+import { setTypingFocus } from './utils/windowsFocusPolicy';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
 import { mintTurnId } from './llm/turnIdentity';
@@ -628,6 +629,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (!overlayWin || overlayWin.isDestroyed()) return;
     if (overlayWin.webContents.id !== event.sender.id) return;
     appState.getWindowHelper().setOverlayHoverInteractive(!!interactive);
+  });
+
+  // Windows no-activate typing bridge (preload → main): an editable element in
+  // a no-activate window (overlay/pill/toggle/popovers, WS_EX_NOACTIVATE)
+  // gained or released the caret — grant/release transient typing focus.
+  // setTypingFocus() only acts on windows registered by attachNoActivate(),
+  // so a sender like the launcher (or any platform but win32) is a no-op —
+  // that membership check IS the sender authorization.
+  safeOn('overlay-typing-focus', (event, active: boolean) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    setTypingFocus(win, !!active);
   });
 
   // Any Natively window → main: dismiss the overlay dropdowns (settings /

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
+import { attachNoActivate, isNoActivateManaged } from './utils/windowsFocusPolicy';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -735,6 +736,12 @@ export class WindowHelper {
       });
     } else if (process.platform === 'win32') {
       // 'floating' level (HWND_TOPMOST baseline) is not enough to render above
+    // Windows counterpart of the mac panel treatment above: WS_EX_NOACTIVATE
+    // (setFocusable(false)) so clicking the overlay/buttons never activates
+    // Natively — the user's meeting app keeps foreground focus, exactly like
+    // becomesKeyOnlyIfNeeded on macOS. Typing is granted transiently via the
+    // preload focusin bridge → setTypingFocus(). No-op on macOS/Linux.
+    attachNoActivate(this.overlayWindow);
       // fullscreen browser windows (F11). 'screen-saver' uses a higher TOPMOST
       // priority that wins against window-mode fullscreen apps. macOS uses
       // visibleOnFullScreen above; Windows has no equivalent flag, so the level
@@ -1133,14 +1140,23 @@ export class WindowHelper {
     } else {
       this.overlayWindow.setIgnoreMouseEvents(false);
       // Restore full interactivity when capturing clicks.
-      this.overlayWindow.setFocusable(true);
+      // Windows: skip — the overlay is under the no-activate policy
+      // (attachNoActivate → WS_EX_NOACTIVATE). setFocusable(true) here would
+      // re-arm click-activation and every overlay click would steal foreground
+      // focus from the meeting app. Mouse interactivity does not need
+      // focusable on Windows; typing focus is granted transiently by
+      // setTypingFocus() via the preload focusin bridge.
+      if (!isNoActivateManaged(this.overlayWindow)) {
+        this.overlayWindow.setFocusable(true);
+      }
     }
     auxWindows.forEach((w) => {
       if (passthrough) {
         w.setIgnoreMouseEvents(true, { forward: true });
       } else {
         w.setIgnoreMouseEvents(false);
-        w.setFocusable(true);
+        // Same no-activate guard as the overlay body above.
+        if (!isNoActivateManaged(w)) w.setFocusable(true);
       }
     });
     if (!quiet) {
@@ -1485,6 +1501,12 @@ export class WindowHelper {
       // never lands here — only our own setBounds calls do. Reverse-mirroring
       // those would move the overlay from a move we just made, which on macOS
       // double-moves the welded child (the "double-move feedback" the old
+    // Same Windows no-activate treatment as the overlay body: the pill's
+    // buttons (end meeting, expand, width toggle) must not steal foreground
+    // focus from the meeting app on click. Mac parity comes from
+    // type:'panel' + applyStealthToWindow below. No-op on macOS/Linux.
+    attachNoActivate(this.pillWindow);
+    attachNoActivate(this.toggleWindow);
       // comment warned about) and on Windows fights the managed drag.
       if (this.overlayGroupDragManaged) return;
       if (this.auxSyncing) return;
