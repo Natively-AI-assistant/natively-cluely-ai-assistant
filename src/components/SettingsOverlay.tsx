@@ -689,17 +689,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Only macOS can actually make the launcher window see-through during
-    // the preview (setLauncherOpacityPreview is a no-op elsewhere — see its
-    // doc comment in WindowHelper.ts: Windows/Linux launcher windows are
-    // created with `transparent: false`). On those platforms, hiding the
-    // Settings backdrop/panel/banners gains nothing — there's no real
-    // desktop showing through regardless — and instead leaves the mockup
-    // floating over a flat opaque background with no context, which reads as
-    // more broken than just leaving the normal (non-transparent) Settings
-    // backdrop visible behind it. So the DOM hide/restore below is itself
-    // macOS-only; non-macOS keeps its backdrop and only toggles the mockup.
-    const canPreviewTransparency = document.documentElement.getAttribute('data-platform') === 'darwin';
+    // The launcher window is created with `transparent: true` on every
+    // platform (see createWindow() in WindowHelper.ts) so setLauncherOpacityPreview
+    // can punch through it at runtime everywhere, not just macOS. Windows/Linux
+    // have no vibrancy API, but stripping the native backgroundColor alone is
+    // enough there to reveal the real desktop, so the DOM hide/restore below
+    // runs on all platforms.
+    const canPreviewTransparency = true;
 
     const startPreviewingOpacity = () => {
         // Bug fix #5: guard against rapid repeated calls (double pointerDown / touch events)
