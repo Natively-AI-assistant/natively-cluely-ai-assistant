@@ -65,9 +65,10 @@ use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use once_cell::sync::Lazy;
 
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::Foundation::{HINSTANCE, HMODULE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::{GetCurrentProcessId, GetCurrentThreadId};
+use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, ToUnicodeEx, VIRTUAL_KEY, VK_CAPITAL, VK_CONTROL, VK_LWIN,
     VK_MENU, VK_RWIN, VK_SHIFT,
@@ -77,9 +78,9 @@ use windows::Win32::UI::TextServices::HKL;
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetAncestor, GetMessageW, GetWindowThreadProcessId,
     PostThreadMessageW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, WindowFromPoint,
-    GA_ROOT, HHOOK, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN,
-    WM_KEYUP, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP,
-    WM_XBUTTONDOWN,
+    EVENT_SYSTEM_FOREGROUND, GA_ROOT, HHOOK, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT,
+    WH_KEYBOARD_LL, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN,
+    WM_MBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONDOWN,
 };
 
 // ─── napi objects shared with the macOS module's JS surface ──────────────────
@@ -116,8 +117,10 @@ pub struct CapturedKey {
     pub flags: u32,
     /// True for keyDown, false for keyUp. The renderer only acts on keyDown.
     pub is_key_down: bool,
-    /// Always false on Windows (no mouse hook / outside-click detection),
-    /// matching the shipped macOS build whose bounds provider is unwired.
+    /// True when the user has left Natively and stealth must stop: a click on
+    /// another process's window (mouse hook) or a foreground switch such as
+    /// Alt+Tab (WinEvent hook). StealthKeyboardManager turns this into stop().
+    /// Named for the macOS field it mirrors; on Windows it covers both triggers.
     pub is_outside_mouse_down: bool,
 }
 
@@ -292,23 +295,7 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPA
 
     // Screen-space click point from the hook struct.
     let pt: POINT = (*(lparam.0 as *const MSLLHOOKSTRUCT)).pt;
-    let hit = WindowFromPoint(pt);
-    // Walk up to the ROOT top-level window before the process check.
-    // WindowFromPoint can return a Chromium child HWND
-    // (Chrome_RenderWidgetHostHWND) whose owning process differs from the main
-    // process in some Electron versions; the root BrowserWindow HWND is always
-    // owned by the main process where this native module runs. Without this,
-    // clicking the overlay input could read as "outside" and stop stealth the
-    // instant the user tries to type.
-    let root = if hit.0 != 0 { GetAncestor(hit, GA_ROOT) } else { hit };
-
-    // Belongs to our process? Clicking any Natively window keeps the session.
-    // HWND(0) = no window under the cursor (e.g. empty desktop edge).
-    let mut click_pid: u32 = 0;
-    if root.0 != 0 {
-        GetWindowThreadProcessId(root, Some(&mut click_pid as *mut u32));
-    }
-    let outside = root.0 == 0 || click_pid != GetCurrentProcessId();
+    let outside = !window_belongs_to_us(WindowFromPoint(pt));
 
     if outside {
         send_payload(
@@ -325,6 +312,92 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPA
 
     // Never swallow the click.
     CallNextHookEx(HHOOK::default(), code, wparam, lparam)
+}
+
+/// True if `hwnd` (or its root top-level window) belongs to THIS process — i.e.
+/// it is one of Natively's windows.
+///
+/// The GA_ROOT walk matters: WindowFromPoint can return a Chromium child HWND
+/// (Chrome_RenderWidgetHostHWND) whose owning process differs from the main
+/// process in some Electron versions. The root BrowserWindow HWND is always
+/// owned by the main process where this native module runs. Without the walk,
+/// clicking the overlay input could read as "not ours" and stop stealth on the
+/// very click that engages typing.
+///
+/// SAFETY: pure Win32 queries on a possibly-stale HWND; both calls are
+/// null/invalid tolerant.
+unsafe fn window_belongs_to_us(hwnd: HWND) -> bool {
+    // HWND(0) = no window (empty desktop, or a destroyed window).
+    if hwnd.0 == 0 {
+        return false;
+    }
+    let root = GetAncestor(hwnd, GA_ROOT);
+    let target = if root.0 != 0 { root } else { hwnd };
+    let mut pid: u32 = 0;
+    GetWindowThreadProcessId(target, Some(&mut pid as *mut u32));
+    pid != 0 && pid == GetCurrentProcessId()
+}
+
+// ─── Foreground-change hook (Alt+Tab and friends) ────────────────────────────
+//
+// The mouse hook only sees CLICKS. The user can also leave via the keyboard —
+// Alt+Tab, Win+Tab, Win+D — and those combos are deliberately passed through by
+// the keyboard hook's system-modifier filter, so no click ever happens. Without
+// this, stealth would stay engaged after Alt+Tab and keep swallowing keystrokes
+// system-wide: the user would type into their newly focused app and the text
+// would silently land in Natively's chatbox instead.
+//
+// macOS gets this for free: when another app activates, the nonactivating panel
+// resigns key and typing goes to the new app. This WinEvent hook is the
+// equivalent — any foreground change to a window that is not ours stops the
+// session.
+//
+// WINEVENT_OUTOFCONTEXT delivers the callback on the installing thread via its
+// message queue, which the worker already pumps (GetMessageW/DispatchMessageW).
+unsafe extern "system" fn foreground_event_proc(
+    _hook: HWINEVENTHOOK,
+    event: u32,
+    hwnd: HWND,
+    _id_object: i32,
+    _id_child: i32,
+    _thread: u32,
+    _time: u32,
+) {
+    if event != EVENT_SYSTEM_FOREGROUND {
+        return;
+    }
+    let state = {
+        let guard = match ACTIVE_HOOK.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        guard.as_ref().map(Arc::clone)
+    };
+    let Some(state) = state else { return };
+    if !state.active.load(Ordering::Acquire) {
+        return;
+    }
+    // The overlay is WS_EX_NOACTIVATE so it never becomes foreground; any
+    // foreground change is therefore a real app switch. Still check ownership
+    // explicitly so activating a Natively window (e.g. the launcher) doesn't
+    // end the session.
+    if window_belongs_to_us(hwnd) {
+        return;
+    }
+    send_payload(
+        &state,
+        CapturedKey {
+            key_code: 0,
+            chars: String::new(),
+            flags: 0,
+            is_key_down: false,
+            // Reuse the existing stop signal: StealthKeyboardManager already
+            // calls stop() on isOutsideMouseDown, and reusing it keeps the
+            // captured-key payload byte-identical across platforms (no JS or
+            // macOS change needed for a Windows-only trigger).
+            is_outside_mouse_down: true,
+        },
+    );
 }
 
 fn send_payload(state: &HookState, payload: CapturedKey) {
@@ -488,6 +561,26 @@ fn hook_worker(state: Arc<HookState>, ready_tx: mpsc::Sender<bool>) {
         }
     };
 
+    // Foreground-change hook: stops the session on Alt+Tab / Win+Tab / any app
+    // switch that happens without a click. NON-FATAL, same as the mouse hook.
+    // hmod must be NULL for an out-of-context WinEvent hook.
+    let fg_hook = unsafe {
+        SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND,
+            EVENT_SYSTEM_FOREGROUND,
+            HMODULE::default(),
+            Some(foreground_event_proc),
+            0, // all processes
+            0, // all threads
+            WINEVENT_OUTOFCONTEXT,
+        )
+    };
+    if fg_hook.0 == 0 {
+        eprintln!(
+            "[keyboard_hook_windows] SetWinEventHook failed (Alt+Tab auto-stop disabled)"
+        );
+    }
+
     // The keyboard hook is installed — tell start() it may report success. Sent
     // BEFORE the blocking message loop below.
     let _ = ready_tx.send(true);
@@ -512,11 +605,15 @@ fn hook_worker(state: Arc<HookState>, ready_tx: mpsc::Sender<bool>) {
         }
     }
 
-    // Cleanup: unhook both, then clear the global so no stray callback can run.
+    // Cleanup: unhook all three, then clear the global so no stray callback can
+    // run against a state we are about to drop.
     unsafe {
         let _ = UnhookWindowsHookEx(hook);
         if let Some(mh) = mouse_hook {
             let _ = UnhookWindowsHookEx(mh);
+        }
+        if fg_hook.0 != 0 {
+            let _ = UnhookWinEvent(fg_hook);
         }
     }
     {

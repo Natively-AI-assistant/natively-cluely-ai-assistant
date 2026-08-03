@@ -311,6 +311,66 @@ test('the Windows native hook stops stealth on a click outside Natively (outside
   );
 });
 
+test('the Windows native hook stops stealth on Alt+Tab / any app switch (no click involved)', () => {
+  // Alt+Tab is PASSED THROUGH by the keyboard hook's system-modifier filter, so
+  // the user can leave without ever clicking. Without a foreground watcher the
+  // hook would keep swallowing keys and their typing would land in Natively's
+  // chatbox instead of the app they switched to. macOS gets this free (the
+  // panel resigns key when another app activates).
+  const rust = read('native-module/src/keyboard_hook_windows.rs');
+  assert.match(
+    rust,
+    /SetWinEventHook\(\s*EVENT_SYSTEM_FOREGROUND/,
+    'BUG: a foreground-change WinEvent hook must be installed, or Alt+Tab leaves stealth engaged.',
+  );
+  assert.match(
+    rust,
+    /WINEVENT_OUTOFCONTEXT/,
+    'BUG: the WinEvent hook must be out-of-context so its callback is delivered on the worker ' +
+      "thread's existing message pump.",
+  );
+  const fgProc = rust.slice(
+    rust.indexOf('unsafe extern "system" fn foreground_event_proc'),
+    rust.indexOf('fn send_payload('),
+  );
+  assert.ok(fgProc.length > 0, 'foreground_event_proc() not found');
+  assert.match(
+    fgProc,
+    /if window_belongs_to_us\(hwnd\) \{\s*return;/,
+    'BUG: activating one of our OWN windows must NOT stop the session.',
+  );
+  assert.match(
+    fgProc,
+    /is_outside_mouse_down: true/,
+    'BUG: the foreground proc must emit the stop signal when the new foreground window is not ours.',
+  );
+  assert.match(
+    rust,
+    /UnhookWinEvent\(fg_hook\)/,
+    'BUG: the WinEvent hook must be released on session cleanup.',
+  );
+});
+
+test('inside-vs-outside ownership uses a GA_ROOT walk (shared by both stop triggers)', () => {
+  const rust = read('native-module/src/keyboard_hook_windows.rs');
+  const fn = rust.slice(
+    rust.indexOf('unsafe fn window_belongs_to_us'),
+    rust.indexOf('// ─── Foreground-change hook'),
+  );
+  assert.ok(fn.length > 0, 'window_belongs_to_us() not found');
+  assert.match(
+    fn,
+    /GetAncestor\(hwnd, GA_ROOT\)/,
+    'BUG: must walk to the root window — a Chromium child HWND can report a different process, ' +
+      'which would read as "not ours" and stop stealth on the very click that engages typing.',
+  );
+  assert.match(
+    fn,
+    /pid == GetCurrentProcessId\(\)/,
+    'BUG: ownership must be decided by process id, not window geometry (DPI-free).',
+  );
+});
+
 test('main registers real stealth-tap handlers on Windows (not the non-desktop no-op stubs)', () => {
   // The gate that decides real-vs-stub must include win32.
   assert.match(
