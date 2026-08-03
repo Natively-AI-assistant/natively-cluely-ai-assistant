@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, screen, systemPreferences } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppState } from './main';
+import { disguiseIconPath, appIconPath, normalizeDisguiseMode } from './disguise';
 import { KeybindManager } from './services/KeybindManager';
 import {
   LAUNCHER_ASPECT_RATIO,
@@ -502,6 +503,10 @@ export class WindowHelper {
         webSecurity: !isDev, // DEBUG: Disable web security only in dev
       },
       show: false, // DEBUG: Force show -> Fixed white screen, now relies on ready-to-show
+      // Taskbar presence must track stealth state, not be a hardcoded constant:
+      // a cold start with undetectable persisted must not paint a taskbar entry
+      // before setUndetectable() ever runs. Re-asserted on every toggle.
+      skipTaskbar: this.appState.getUndetectable(),
       // Platform-specific frame settings
       ...(isMac
         ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 14 } }
@@ -526,55 +531,11 @@ export class WindowHelper {
       resizable: true,
       movable: true,
       center: true,
-      icon: (() => {
-        const isMac = process.platform === 'darwin';
-        const isWin = process.platform === 'win32';
-        const mode = this.appState.getDisguise();
-
-        if (mode === 'none') {
-          if (isMac) {
-            return app.isPackaged
-              ? path.join(process.resourcesPath, 'natively.icns')
-              : path.resolve(__dirname, '../../assets/natively.icns');
-          } else if (isWin) {
-            return app.isPackaged
-              ? path.join(process.resourcesPath, 'assets/icons/win/icon.ico')
-              : path.resolve(__dirname, '../../assets/icons/win/icon.ico');
-          } else {
-            return app.isPackaged
-              ? path.join(process.resourcesPath, 'assets', 'icon.png')
-              : path.resolve(__dirname, '../../assets/icon.png');
-          }
-        }
-
-        // Disguise mode icons. Only the three known disguise modes map to a
-        // fake icon; any unexpected value falls through to 'none' above, so we
-        // never silently paint a terminal icon for an unrecognized mode.
-        let iconName: string | null = null;
-        if (mode === 'terminal') iconName = 'terminal.png';
-        if (mode === 'settings') iconName = 'settings.png';
-        if (mode === 'activity') iconName = 'activity.png';
-        if (!iconName) {
-          // Defensive: unknown mode — use the real app icon, matching 'none'.
-          if (isMac) {
-            return app.isPackaged
-              ? path.join(process.resourcesPath, 'natively.icns')
-              : path.resolve(__dirname, '../../assets/natively.icns');
-          } else if (isWin) {
-            return app.isPackaged
-              ? path.join(process.resourcesPath, 'assets/icons/win/icon.ico')
-              : path.resolve(__dirname, '../../assets/icons/win/icon.ico');
-          }
-          return app.isPackaged
-            ? path.join(process.resourcesPath, 'icon.png')
-            : path.resolve(__dirname, '../../assets/icon.png');
-        }
-
-        const platformDir = isWin ? 'win' : 'mac';
-        return app.isPackaged
-          ? path.join(process.resourcesPath, `assets/fakeicon/${platformDir}/${iconName}`)
-          : path.resolve(__dirname, `../../assets/fakeicon/${platformDir}/${iconName}`);
-      })(),
+      // Shared with the tray and the dock/process identity via
+      // electron/disguise.ts. normalizeDisguiseMode() keeps the old defensive
+      // behaviour: any out-of-union value coerces to 'none' and yields the real
+      // app icon, so an unrecognized mode never silently paints a fake one.
+      icon: disguiseIconPath(normalizeDisguiseMode(this.appState.getDisguise())) ?? appIconPath(),
     };
 
     console.log(`[WindowHelper] Icon Path: ${launcherSettings.icon}`);
@@ -1286,6 +1247,7 @@ export class WindowHelper {
   // first click on the drag handle.
   public syncOverlayInteractionPolicy(quiet = false): void {
     if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+
 
     const passthrough = this.appState.getOverlayMousePassthrough();
     // The pill and toggle windows follow ONLY the stealth passthrough — they
@@ -2019,7 +1981,6 @@ export class WindowHelper {
   public showOverlay(): void {
     if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
 
-    // Restore opacity in case it was zeroed by hideMainWindow() before a screenshot.
     this.overlayWindow.setOpacity(1);
     this.pillWindow?.setOpacity(1);
     this.toggleWindow?.setOpacity(1);
@@ -2235,6 +2196,7 @@ export class WindowHelper {
         expanded: true,
       });
 
+  
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).
       if (process.platform === 'win32' && this.contentProtection) {
         // Opacity Shield: Show at 0 opacity first to prevent frame leak.
