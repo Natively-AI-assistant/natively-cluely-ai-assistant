@@ -2102,11 +2102,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             out.push({ id, label });
         };
         preset?.ids.forEach((id, i) => push(id, preset.names[i] || id));
+        // LiteLLM has no preset table and no `cloudFetchedModels` entry — its universe
+        // is whatever the proxy reported, held UNPREFIXED in `litellmModels`. Prefix it
+        // here so the allow-list stores the same `litellm/<model>` ids that
+        // modelAvailable() in ipcHandlers.ts compares against; storing the bare name
+        // would make the two surfaces disagree and the filter would silently no-op.
+        if (provider === 'litellm') litellmModels.forEach(m => push(`litellm/${m}`, prettifyModelId(m)));
         (cloudFetchedModels[provider] || []).forEach(m => push(m.id, m.label || m.id));
         // Allow-listed ids with no catalog entry still get a row, labelled as best we can.
         (cloudEnabledModels[provider] || []).forEach(id => push(id, prettifyModelId(id)));
         return out;
-    }, [cloudFetchedModels, cloudEnabledModels]);
+    }, [cloudFetchedModels, cloudEnabledModels, litellmModels]);
 
     const buildAvailableModelOptions = (): { id: string; name: string }[] => {
         const opts: { id: string; name: string }[] = [];
@@ -2143,7 +2149,15 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             });
         }
         if (hasStoredKey.litellm && isProviderEnabled('litellm')) {
-            litellmModels.forEach(model => opts.push({ id: `litellm/${model}`, name: `${prettifyModelId(model)} (LiteLLM)` }));
+            // Same allow-list gate the cloud providers get above. Without it the proxy's
+            // full catalogue reaches the picker while modelAvailable() filters it, and
+            // the two surfaces disagree — the exact drift the comment at isProviderEnabled
+            // warns about.
+            litellmModels.forEach(model => {
+                const id = `litellm/${model}`;
+                if (!isModelEnabled('litellm', id)) return;
+                opts.push({ id, name: `${prettifyModelId(model)} (LiteLLM)` });
+            });
         }
         if (isProviderEnabled('custom')) {
             customProviders.forEach(p => opts.push({ id: p.id, name: p.name }));
@@ -3364,26 +3378,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             </div>
                             {hasStoredKey.litellm && (
                                 <div className="flex items-center gap-2 shrink-0">
-                                    {/* tabular-nums so the digit does not twitch as the
-                                        count changes. No odometer, no flash, no pulse. */}
-                                    <span className="aip-count">
-                                        {litellmModels.length === 1
-                                            ? t('1 model')
-                                            : `${litellmModels.length} ${t('models')}`}
-                                    </span>
-                                    {/* Discovery is explicit now — the model picker reads a
-                                        cache so it never blocks on the proxy. */}
-                                    <button
-                                        type="button"
-                                        onClick={handleRefreshLitellmModels}
-                                        disabled={isRefreshingLitellm}
-                                        className="aip-btn"
-                                        data-size="sm"
-                                        title={t('Re-discover models from the proxy')}
-                                    >
-                                        <RefreshCw size={10} strokeWidth={1.75} className={isRefreshingLitellm ? 'aip-spinner' : ''} />
-                                        {isRefreshingLitellm ? t('Refreshing...') : t('Refresh')}
-                                    </button>
+                                    {/* Model count and re-discovery both live in the
+                                        <AipModelList> below now — same as every cloud card.
+                                        Keeping a second Refresh up here would give the card
+                                        two controls for one action. */}
                                     <AipBadge tone="ok" label={t('Configured')} />
                                     <AipSwitch
                                         checked={!disabledProviders.includes('litellm')}
@@ -3458,6 +3456,32 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 </button>
                             )}
                         </div>
+
+                        {/* The proxy can expose dozens of models; without this the Active
+                            Model dropdown gets all of them. Reuses the cloud providers'
+                            allow-list wholesale — `cloudEnabledModels` is keyed by provider
+                            string, so 'litellm' needs no dedicated store or IPC channel.
+                            No `onSetDefault`/`defaultId`: there is no litellmPreferredModel
+                            credential, and STANDARD_CLOUD_MODELS has no litellm pmKey, so a
+                            per-provider default would write a key nothing reads. */}
+                        {hasStoredKey.litellm && (
+                            <AipModelList
+                                models={effectiveModels('litellm')}
+                                enabled={cloudEnabledModels['litellm'] || []}
+                                onToggle={(modelId) => handleToggleModel('litellm', modelId)}
+                                onReset={() => handleResetModels('litellm')}
+                                error={modelSaveError['litellm'] ? 'save-failed' : null}
+                                refreshing={isRefreshingLitellm}
+                                onRefresh={handleRefreshLitellmModels}
+                                // Deliberately NOT gated on litellmModels.length: an empty
+                                // catalogue (proxy down at save time, or the cache cleared)
+                                // is exactly when the user needs Refresh, and this list is
+                                // now the only place it lives.
+                                onFirstOpen={() => {
+                                    if (litellmModels.length === 0) handleRefreshLitellmModels();
+                                }}
+                            />
+                        )}
                     </div>
                 </div>
             </div>
