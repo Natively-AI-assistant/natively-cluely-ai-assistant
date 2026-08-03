@@ -17,9 +17,6 @@ import { getOrchestrator, type OrchestratorEvent, type UserState } from '../../l
 import type { ToasterId } from '../../lib/onboarding/orchestrator.ts';
 import { PermissionsToaster } from './PermissionsToaster';
 import { BrowserExtensionToaster } from './BrowserExtensionToaster';
-import { TrialPromoToaster } from '../trial/TrialPromoToaster';
-import { SupportToaster } from '../SupportToaster';
-import ReviewPromptHost from '../ReviewPromptHost';
 
 // ─── Event channel ────────────────────────────────────────────────
 
@@ -127,76 +124,22 @@ export const OrchestratedToasterHost: React.FC = () => {
       return null;
 
     case 'trial_promo':
-      // TrialPromoToaster needs additional props for start/manual setup,
-      // which it reads from window.electronAPI at runtime. The orchestrator
-      // hands it `isOpen` and onDismiss only.
-      return (
-        <TrialPromoToaster
-          isOpen={true}
-          hasNativelyKey={orch.getUserState().hasNativelyKey}
-          hasTrialToken={orch.getUserState().hasTrialToken}
-          onDismiss={onDismiss('trial_promo')}
-          onStartTrial={async () => {
-            const res = await window.electronAPI?.startTrial?.();
-            if (!res?.ok) throw new Error(res?.error || 'Could not start trial');
-            orch.setUserState({ hasTrialToken: true });
-            onDismiss('trial_promo')();
-          }}
-          onManualSetup={() => {
-            window.electronAPI?.openSettingsTab?.('api');
-            onDismiss('trial_promo')();
-          }}
-        />
-      );
+      // Permanently stripped (commercial-surface-strip / ticket 03). Stage is
+      // always skipWhen; TrialPromoToaster must not mount.
+      return null;
 
     case 'quiet_window':
       // Internal gate — never renders a visible component.
       return null;
 
-    case 'support':
-      return (
-        <SupportToaster
-          isOpen={true}
-          onDismiss={() => {
-            // Mark the donation toast as shown so DonationManager's
-            // lifetimeShows counter increments and the 21-day cooldown
-            // starts. Without this the support toaster re-fires on every
-            // cold launch past the cooldown threshold.
-            window.electronAPI?.markDonationToastShown?.().catch(() => {});
-            onDismiss('support')();
-          }}
-        />
-      );
-
     case 'ads':
-      // The 5 ad toasters are driven by useAdCampaigns.ts which still runs in
-      // App.tsx and consults natively_ads_shown_history. The orchestrator's
-      // role for `ads` is purely as a gate — when eligible, it just allows
-      // useAdCampaigns to proceed (the activeAd state already controls which
-      // component renders).
+      // Permanently stripped (commercial-surface-strip / ticket 05). Stage is
+      // always skipWhen; premium useAdCampaigns stubs remain no-op.
       return null;
 
     case 'review_prompt':
-      // In dev builds an uncontrolled <ReviewPromptHost /> is mounted in
-      // App.tsx via shouldMountDevReviewHost() so the modal can be iterated
-      // on without going through the full orchestrator gating. Skip the
-      // orchestrator's own mount in that case to avoid two modals. In
-      // production, this branch is the only render path.
-      if (typeof window !== 'undefined') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const dev: boolean = !!(import.meta as any)?.env?.DEV
-        if (dev) {
-          try {
-            const params = new URLSearchParams(window.location?.search || '')
-            const explicit = params.get('review')
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const forced = (window as any).__reviewForceShow === true
-            const devAuto = (explicit !== 'off' && (forced || explicit === 'force'))
-            if (devAuto) return null
-          } catch { /* fall through */ }
-        }
-      }
-      return <ReviewPromptHost isOpen={true} paused={false} onClose={onDismiss('review_prompt')} />;
+      // Permanently stripped — ReviewPromptHost must not mount on product paths.
+      return null;
 
     default:
       return null;

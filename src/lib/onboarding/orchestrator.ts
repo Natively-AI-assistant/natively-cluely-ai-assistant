@@ -40,7 +40,6 @@ export type ToasterId =
   | 'modes_manager'
   | 'trial_promo'
   | 'quiet_window'
-  | 'support'
   | 'ads'
   | 'review_prompt';
 
@@ -84,7 +83,6 @@ export interface UserState {
   seenProfileOnboarding: boolean;
   seenModesOnboarding: boolean;
   activeModeSet: boolean;
-  donationShouldShow: boolean;
   isV2_8_OrNewer: boolean;
 }
 
@@ -160,7 +158,6 @@ export const DEFAULT_USER_STATE: UserState = {
   seenProfileOnboarding: false,
   seenModesOnboarding: false,
   activeModeSet: false,
-  donationShouldShow: false,
   isV2_8_OrNewer: true,
 };
 
@@ -532,7 +529,7 @@ export class OnboardingOrchestrator {
     if (t.requiresForeground && !ctx.appInForeground) return false;
     if (t.requiresMeetingInactive && ctx.meetingActive) return false;
 
-    // 6. Custom predicate (e.g. DonationManager fetch outcome)
+    // 6. Custom predicate
     if (config.customPredicate && !config.customPredicate(ctx)) return false;
 
     return true;

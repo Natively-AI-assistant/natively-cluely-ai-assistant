@@ -11,7 +11,6 @@ export const STAGE_ORDER = [
   'profile_intelligence',
   'modes_manager',
   'trial_promo',
-  'support',
   'ads',
   'review_prompt',
 ];
@@ -72,6 +71,7 @@ export const STAGES = [
     skipWhen: (s) => s.seenModesOnboarding || s.activeModeSet,
   },
   {
+    // Permanently skipped — commercial-surface-strip / ticket 03.
     id: 'trial_promo',
     order: 5,
     triggers: {
@@ -81,27 +81,13 @@ export const STAGES = [
       requiresMeetingInactive: true,
     },
     requiresStages: ['modes_manager'],
-    skipWhen: (s) => s.hasNativelyKey || s.hasTrialToken || s.isPremium,
+    skipWhen: () => true,
     cooldownMs: () => 21 * 24 * 60 * 60 * 1000,
-    reEligibility: (s) => !s.hasNativelyKey && !s.hasTrialToken && !s.isPremium,
   },
   {
-    id: 'support',
-    order: 6,
-    triggers: {
-      requiresHomepageMounted: true,
-      requiresHomepageDuration: 10_000,
-      requiresForeground: true,
-      requiresMeetingInactive: true,
-    },
-    requiresStages: ['quiet_window'],
-    skipWhen: (s) => !s.donationShouldShow || s.isPremium,
-    customPredicate: (ctx) => ctx.turnCount >= 10 || ctx.startupCount >= 10,
-    cooldownMs: () => 14 * 24 * 60 * 60 * 1000,
-  },
-  {
+    // Permanently skipped — commercial-surface-strip / ticket 05.
     id: 'ads',
-    order: 7,
+    order: 6,
     triggers: {
       requiresHomepageMounted: true,
       requiresHomepageDuration: 10_000,
@@ -109,13 +95,14 @@ export const STAGES = [
       requiresMeetingInactive: true,
       requiresStartupCount: 4,
     },
-    requiresStages: ['support'],
-    skipWhen: (s) => s.isPremium,
+    requiresStages: ['quiet_window'],
+    skipWhen: () => true,
     cooldownMs: () => 14 * 24 * 60 * 60 * 1000,
   },
   {
+    // Permanently skipped — commercial-surface-strip / ticket 05.
     id: 'review_prompt',
-    order: 8,
+    order: 7,
     triggers: {
       requiresHomepageMounted: true,
       requiresHomepageDuration: 10_000,
@@ -125,6 +112,7 @@ export const STAGES = [
       requiresTotalUsageMs: 45 * 60 * 1000,
     },
     requiresStages: ['ads'],
+    skipWhen: () => true,
     cooldownMs: () => 90 * 24 * 60 * 60 * 1000,
   },
 ];

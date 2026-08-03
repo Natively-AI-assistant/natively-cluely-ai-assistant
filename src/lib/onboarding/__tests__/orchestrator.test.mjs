@@ -22,7 +22,6 @@ const DEFAULT_USER_STATE = {
   seenProfileOnboarding: false,
   seenModesOnboarding: false,
   activeModeSet: false,
-  donationShouldShow: false,
   isV2_8_OrNewer: true,
 };
 
@@ -98,12 +97,12 @@ test('full happy-path sequence progresses through prereqs', () => {
   assert.equal(shouldShowToaster(stageById['modes_manager'], ctx), true);
   completedSet('modes_manager');
 
-  // Stage 5: trial_promo
+  // Stage 5: trial_promo — permanently skipped (commercial-surface-strip / ticket 03)
   ctx = makeCtx({ completed, skipped: skippedSet, homepageMountedFor: 7_000 });
-  assert.equal(shouldShowToaster(stageById['trial_promo'], ctx), true);
+  assert.equal(shouldShowToaster(stageById['trial_promo'], ctx), false);
 });
 
-test('premium user skips trial/ads/support but still gets profile/modes/perms/extension', () => {
+test('premium user skips trial/ads but still gets profile/modes/perms/extension', () => {
   const userState = { ...DEFAULT_USER_STATE, isPremium: true };
   const completed = {};
   const skippedSet = new Set();
@@ -138,11 +137,11 @@ test('linux user: browser_extension skipped, profile_intelligence downstream sta
   assert.equal(shouldShowToaster(stageById['profile_intelligence'], ctxProfile), true);
 });
 
-test('skipped prerequisite: trial_promo fires even if browser_extension was skipped', () => {
+test('skipped prerequisite: trial_promo still permanently skipped even if browser_extension was skipped', () => {
   const completed = { permissions: 1, profile_intelligence: 3, modes_manager: 4 };
   const skippedSet = new Set(['browser_extension']);
   const ctx = makeCtx({ completed, skipped: skippedSet, homepageMountedFor: 7_000 });
-  assert.equal(shouldShowToaster(stageById['trial_promo'], ctx), true);
+  assert.equal(shouldShowToaster(stageById['trial_promo'], ctx), false);
 });
 
 test('homepageMountedFor only matters when homepageCurrentlyMounted', () => {

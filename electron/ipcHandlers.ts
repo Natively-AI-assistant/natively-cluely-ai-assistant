@@ -661,26 +661,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  // Donation IPC Handlers
+  // Donation IPC — hard-disabled (commercial-surface-strip ticket 02).
+  // Never schedule support UI; cadence store is unused.
   safeHandle('get-donation-status', async () => {
-    const { DonationManager } = require('./DonationManager');
-    const manager = DonationManager.getInstance();
-    return {
-      shouldShow: manager.shouldShowToaster(),
-      hasDonated: manager.getDonationState().hasDonated,
-      lifetimeShows: manager.getDonationState().lifetimeShows,
-    };
+    return { shouldShow: false, hasDonated: true, lifetimeShows: 0 };
   });
 
   safeHandle('mark-donation-toast-shown', async () => {
-    const { DonationManager } = require('./DonationManager');
-    DonationManager.getInstance().markAsShown();
     return { success: true };
   });
 
   safeHandle('set-donation-complete', async () => {
-    const { DonationManager } = require('./DonationManager');
-    DonationManager.getInstance().setHasDonated(true);
     return { success: true };
   });
 
@@ -5214,441 +5205,71 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { ok: true };
   });
 
-  // ── Free Trial IPC ───────────────────────────────────────────────────────────
+  // ── Free Trial IPC (hard-disabled — ADR 0002 / commercial-surface-strip) ─────
+  // Fork builds must not start Natively trials, install TRIAL_SENTINEL_KEY, or
+  // wipe Pro profile data via trial teardown. Handlers stay registered so old
+  // preload callers get safe inactive responses instead of crashing.
 
-  // Start or resume a free trial. Fetches HWID, calls server, persists token locally.
   safeHandle('trial:start', async () => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-
-      // Get hardware ID for HWID-binding
-      let hwid = 'unavailable';
-      try {
-        const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-        hwid = LicenseManager.getInstance().getHardwareId() || 'unavailable';
-      } catch {
-        /* LicenseManager not available — fall back */
-      }
-
-      const res = await fetch('https://api.natively.software/v1/trial/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hwid }),
-        signal: AbortSignal.timeout(10_000),
-      });
-
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as any;
-        return { ok: false, error: body.error || 'request_failed', status: res.status };
-      }
-
-      const data = (await res.json()) as any;
-
-      if (data.ok && data.trial_token && !data.expired) {
-        cm.setTrialToken(data.trial_token, data.expires_at, data.started_at);
-
-        // Auto-configure natively as the model + STT provider during trial
-        const prevSttProvider = cm.getSttProvider();
-        cm.setNativelyApiKey(TRIAL_SENTINEL_KEY); // sentinel — activates natively model routing
-        const newSttProvider = cm.getSttProvider();
-        if (newSttProvider !== prevSttProvider) {
-          await appState.reconfigureSttProvider();
-        }
-        const llmHelper = appState.processingHelper?.getLLMHelper?.();
-        if (llmHelper) llmHelper.setNativelyKey(TRIAL_SENTINEL_KEY);
-      }
-
-      const { trial_token, ...safeData } = data;
-      return { ok: true, ...safeData, hasToken: Boolean(data.trial_token) };
-    } catch (error: any) {
-      console.error('[IPC] trial:start failed:', error);
-      return { ok: false, error: error.message || 'network_error' };
-    }
+    return { ok: false, error: 'trial_disabled', hasToken: false };
   });
 
-  // Poll the server for live trial status (remaining time + usage counters).
   safeHandle('trial:status', async () => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const token = CredentialsManager.getInstance().getTrialToken();
-      if (!token) return { ok: false, error: 'no_trial_token' };
-
-      const res = await fetch('https://api.natively.software/v1/trial/status', {
-        headers: { 'x-trial-token': token },
-        signal: AbortSignal.timeout(8_000),
-      });
-
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as any;
-        return { ok: false, error: body.error || 'request_failed', status: res.status };
-      }
-
-      return await res.json();
-    } catch (error: any) {
-      return { ok: false, error: error.message || 'network_error' };
-    }
+    return { ok: false, error: 'trial_disabled', hasToken: false, inactive: true };
   });
 
-  // Return local trial state from credentials (no network call — safe for startup check).
   safeHandle('trial:get-local', async () => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-      const token = cm.getTrialToken();
-      if (!token) return { hasToken: false, trialClaimed: cm.getTrialClaimed() };
-      return {
-        hasToken: true,
-        trialClaimed: true,
-        expiresAt: cm.getTrialExpiresAt(),
-        startedAt: cm.getTrialStartedAt(),
-        expired: cm.getTrialExpiresAt()
-          ? new Date(cm.getTrialExpiresAt()!).getTime() < Date.now()
-          : false,
-      };
-    } catch {
-      return { hasToken: false, trialClaimed: false };
-    }
+    return { hasToken: false, trialClaimed: false, inactive: true };
   });
 
-  // Record the user's post-trial choice in analytics and clean up local state.
-  safeHandle('trial:convert', async (_, choice: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const token = CredentialsManager.getInstance().getTrialToken();
-      if (!token) return { ok: true }; // no token to report
-
-      await fetch('https://api.natively.software/v1/trial/convert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-trial-token': token },
-        body: JSON.stringify({ choice }),
-        signal: AbortSignal.timeout(5_000),
-      }).catch(() => {}); // fire-and-forget — don't block local cleanup on network failure
-
-      return { ok: true };
-    } catch {
-      return { ok: true };
-    }
+  safeHandle('trial:convert', async () => {
+    return { ok: true, disabled: true };
   });
 
-  // End trial via BYOK path: wipe Pro-ingested data, clear trial token + natively key.
+  // ── In-app review IPC (hard-disabled — commercial-surface-strip / ticket 05) ─
+  // Fork builds must not phone home to Natively reviews APIs or surface the
+  // rating/testimonial modal. Handlers stay registered so old preload callers
+  // get safe inactive responses instead of crashing.
+
   safeHandle('review:get-prompt-state', async () => {
-    try {
-      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
-      const svc = ReviewService.getInstance();
-      const apiKey = getReviewApiKey();
-      const hwid = await getReviewHardwareId();
-      const remote = await svc.getPromptState(apiKey, hwid);
-      const local = svc.getLocalState();
-      // Local is the optimistic truth for snappy UX; backend wins on
-      // has_reviewed / dont_show_again because those are global across installs.
-      return {
-        ok: true,
-        local,
-        backend: remote.ok ? remote : null,
-        eligible: svc.shouldShowPrompt(),
-      };
-    } catch (error: any) {
-      console.error('[IPC] review:get-prompt-state failed:', error);
-      return { ok: false, error: error?.message || 'unknown' };
-    }
+    return { ok: false, error: 'review_disabled', eligible: false, local: null, backend: null };
   });
 
   safeHandle('review:record-session', async () => {
-    try {
-      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
-      const svc = ReviewService.getInstance();
-      svc.recordSessionStart();
-      return { ok: true };
-    } catch (error: any) {
-      console.error('[IPC] review:record-session failed:', error);
-      return { ok: false, error: error?.message || 'unknown' };
-    }
+    return { ok: false, error: 'review_disabled' };
   });
 
   safeHandle('review:flush-session', async () => {
-    try {
-      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
-      const svc = ReviewService.getInstance();
-      const totals = svc.recordSessionEnd();
-      if (totals.counted) {
-        const apiKey = getReviewApiKey();
-        const hwid = await getReviewHardwareId();
-        // Fire-and-forget: don't block the caller on the network round trip.
-        svc.reportUsage(apiKey, hwid, totals.usage_ms).catch(() => {});
-      }
-      return { ok: true, totals };
-    } catch (error: any) {
-      console.error('[IPC] review:flush-session failed:', error);
-      return { ok: false, error: error?.message || 'unknown' };
-    }
+    return { ok: false, error: 'review_disabled' };
   });
 
   safeHandle('review:mark-shown', async () => {
-    try {
-      const { ReviewService } = require('./services/ReviewService');
-      const svc = ReviewService.getInstance();
-      svc.markShown();
-      return { ok: true };
-    } catch (error: any) {
-      return { ok: false, error: error?.message || 'unknown' };
-    }
+    return { ok: false, error: 'review_disabled' };
   });
 
   safeHandle('review:dismiss-later', async () => {
-    try {
-      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
-      const svc = ReviewService.getInstance();
-      svc.markDismissLater();
-      const apiKey = getReviewApiKey();
-      const hwid = await getReviewHardwareId();
-      svc.reportEvent(apiKey, hwid, { type: 'dismiss_later' }).catch(() => {});
-      return { ok: true };
-    } catch (error: any) {
-      return { ok: false, error: error?.message || 'unknown' };
-    }
+    return { ok: false, error: 'review_disabled' };
   });
 
   safeHandle('review:dismiss-forever', async () => {
-    try {
-      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
-      const svc = ReviewService.getInstance();
-      svc.markDontShowAgain();
-      const apiKey = getReviewApiKey();
-      const hwid = await getReviewHardwareId();
-      svc.reportEvent(apiKey, hwid, { type: 'dont_show_again' }).catch(() => {});
-      return { ok: true };
-    } catch (error: any) {
-      return { ok: false, error: error?.message || 'unknown' };
-    }
+    return { ok: false, error: 'review_disabled' };
   });
 
-  safeHandle('review:submit', async (_event, payload: {
-    rating: number
-    review_text: string | null
-  }) => {
-    try {
-      const { ReviewService, getReviewApiKey, getReviewHardwareId, getReviewAppVersion, getReviewPlatform } = require('./services/ReviewService');
-      const svc = ReviewService.getInstance();
-      const apiKey = getReviewApiKey();
-      const hwid = await getReviewHardwareId();
-      // Server-side enforcement: rating 1-5, text <= 300 chars. Local re-check
-      // happens in the modal, but we still defend here against renderer bugs.
-      if (!Number.isInteger(payload?.rating) || payload.rating < 1 || payload.rating > 5) {
-        return { ok: false, error: 'rating_required_1_to_5' };
-      }
-      let reviewText: string | null = payload?.review_text ?? null
-      if (typeof reviewText === 'string') {
-        // eslint-disable-next-line no-control-regex
-        reviewText = reviewText.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').replace(/[<>]/g, '').trim().slice(0, 300)
-        if (reviewText.length === 0) reviewText = null
-      }
-      const result = await svc.submitReview(apiKey, hwid, {
-        rating: payload.rating,
-        review_text: reviewText,
-        app_version: getReviewAppVersion(),
-        platform: getReviewPlatform(),
-        build_channel: '',
-        email: null,
-      });
-      if (result.ok && result.id) {
-        svc.markReviewed(result.id);
-        // Backend already records this server-side; the local call is redundant
-        // but keeps the file in sync if the network blip happens after submit.
-      }
-      return result;
-    } catch (error: any) {
-      console.error('[IPC] review:submit failed:', error);
-      return { ok: false, error: error?.message || 'unknown' };
-    }
+  safeHandle('review:submit', async () => {
+    return { ok: false, error: 'review_disabled' };
   });
 
-  safeHandle('review:update-testimonial', async (_event, payload: {
-    review_id: string
-    name: string | null
-    role: string | null
-    company: string | null
-    can_use_publicly: boolean
-    display_name_publicly: boolean
-  }) => {
-    try {
-      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
-      const svc = ReviewService.getInstance();
-      const apiKey = getReviewApiKey();
-      const hwid = await getReviewHardwareId();
-      const id = String(payload?.review_id || '').slice(0, 64)
-      if (!id) return { ok: false, error: 'invalid_review_id' }
-      const name = (typeof payload?.name === 'string') ? payload.name.replace(/[<>]/g, '').trim().slice(0, 80) : null
-      const role = (typeof payload?.role === 'string') ? payload.role.replace(/[<>]/g, '').trim().slice(0, 80) : null
-      const company = (typeof payload?.company === 'string') ? payload.company.replace(/[<>]/g, '').trim().slice(0, 80) : null
-      const can_use_publicly = !!payload?.can_use_publicly
-      const display_name_publicly = !!payload?.display_name_publicly
-      const result = await svc.updateTestimonial(apiKey, hwid, id, {
-        name: name || null,
-        role: role || null,
-        company: company || null,
-        can_use_publicly,
-        display_name_publicly,
-      });
-      return result;
-    } catch (error: any) {
-      console.error('[IPC] review:update-testimonial failed:', error);
-      return { ok: false, error: error?.message || 'unknown' };
-    }
+  safeHandle('review:update-testimonial', async () => {
+    return { ok: false, error: 'review_disabled' };
   });
 
-  // End trial via BYOK path: wipe Pro-ingested data, clear trial token + natively key.
+  // Trial teardown / wipe — hard no-op (must not delete SQLite/OKF profile data).
   safeHandle('trial:end-byok', async () => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-
-      // 1. Fire-and-forget analytics (non-blocking)
-      const token = cm.getTrialToken();
-      if (token) {
-        fetch('https://api.natively.software/v1/trial/convert', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-trial-token': token },
-          body: JSON.stringify({ choice: 'byok' }),
-          signal: AbortSignal.timeout(4_000),
-        }).catch(() => {});
-      }
-
-      // 2. Clear trial token
-      cm.clearTrialToken();
-
-      // 3. Clear the trial sentinel key + revert model / STT to open defaults
-      cm.setNativelyApiKey('');
-      const llmHelper = appState.processingHelper?.getLLMHelper?.();
-      if (llmHelper) llmHelper.setNativelyKey(null);
-      await appState.reconfigureSttProvider();
-
-      // 4. Deactivate Pro license (removes license.enc)
-      try {
-        const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-        await LicenseManager.getInstance().deactivate();
-      } catch {
-        /* LicenseManager not available in this build */
-      }
-
-      // 5. Disable knowledge mode + wipe orchestrator in-memory caches for resume/JD
-      try {
-        const orchestrator = appState.getKnowledgeOrchestrator();
-        if (orchestrator) {
-          orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('./knowledge/types');
-          orchestrator.deleteDocumentsByType(DocType.RESUME);
-          orchestrator.deleteDocumentsByType(DocType.JD);
-        }
-      } catch {
-        /* ignore */
-      }
-
-      // 6. Wipe Pro-specific cached data from local SQLite
-      //    Targets: company dossiers, knowledge docs (+ cascades), resume nodes, user profile
-      //    NOT wiped: meetings, transcripts, chunks (user's own recordings)
-      try {
-        const sqliteDb = DatabaseManager.getInstance().getDb();
-        if (sqliteDb) {
-          // Ticket 08: exclude LESSON — the hellointerview system-design corpus is
-          // persistent/global study material, NOT Pro profile data, so it must
-          // survive trial teardown. The != 'lesson' filter still cascades RESUME/JD
-          // chunks (they are the only other doc types written to this table).
-          sqliteDb.exec(`
-            DELETE FROM company_dossiers;
-            DELETE FROM knowledge_documents WHERE doc_type != 'lesson';
-            DELETE FROM resume_nodes;
-            DELETE FROM user_profile;
-          `);
-          console.log('[IPC] trial:end-byok: Pro data wiped from SQLite (LESSON corpus preserved)');
-        }
-      } catch (dbErr: any) {
-        console.warn('[IPC] trial:end-byok: SQLite wipe partial error:', dbErr.message);
-      }
-
-      // 6b. PII BACKSTOP (2026-07-02): the profile OKF packs (knowledge_sources/
-      //     packs/cards hanging off the reserved '__profile_okf__' mode) hold the
-      //     candidate's name / companies / education. Step 5's deleteProfilePack
-      //     runs ONLY when the orchestrator is present AND swallows its own
-      //     errors, so on trial-end with an uninitialized orchestrator the PII
-      //     would survive. Delete the profile OKF rows directly as a backstop
-      //     regardless of orchestrator state. Document reference-file packs (any
-      //     OTHER mode_id) are intentionally NOT touched — those are the user's
-      //     own uploaded documents, not Pro profile data.
-      try {
-        const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
-        ProfilePackBuilder.getInstance().deleteAllProfilePacks();
-      } catch (piiErr: any) {
-        console.warn('[IPC] trial:end-byok: profile OKF pack wipe failed:', piiErr?.message || piiErr);
-      }
-
-      // 7. Notify all windows to refresh license + model state
-      clearActiveModeOnLicenseLoss();
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) {
-          win.webContents.send('license-status-changed', { isPremium: false });
-          win.webContents.send('trial-ended', { choice: 'byok' });
-        }
-      });
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('[IPC] trial:end-byok error:', error);
-      return { success: false, error: error.message };
-    }
+    return { success: false, error: 'trial_disabled' };
   });
 
-  // Wipe only Pro profile data (resume + JD + company dossiers) without clearing
-  // trial token or natively key. Called automatically when trial expires so that
-  // profile intelligence data can't linger in SQLite after the trial window closes.
   safeHandle('trial:wipe-profile-data', async () => {
-    try {
-      // 1. Disable knowledge mode + wipe orchestrator in-memory caches
-      try {
-        const orchestrator = appState.getKnowledgeOrchestrator();
-        if (orchestrator) {
-          orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('./knowledge/types');
-          orchestrator.deleteDocumentsByType(DocType.RESUME);
-          orchestrator.deleteDocumentsByType(DocType.JD);
-        }
-      } catch {
-        /* ignore — orchestrator may not be initialised */
-      }
-
-      // 2. Wipe Pro-specific SQLite tables
-      //    NOT wiped: meetings, transcripts, audio chunks (user's own recordings)
-      try {
-        const sqliteDb = DatabaseManager.getInstance().getDb();
-        if (sqliteDb) {
-          // Ticket 08: exclude LESSON (persistent study corpus, not Pro profile
-          // data) — see the matching filter in trial:end-byok.
-          sqliteDb.exec(`
-            DELETE FROM company_dossiers;
-            DELETE FROM knowledge_documents WHERE doc_type != 'lesson';
-            DELETE FROM resume_nodes;
-            DELETE FROM user_profile;
-          `);
-        }
-      } catch (dbErr: any) {
-        console.warn('[IPC] trial:wipe-profile-data: SQLite wipe partial error:', dbErr.message);
-      }
-
-      // 2b. PII BACKSTOP (2026-07-02): also wipe the profile OKF packs (name/
-      //     companies/education) — the raw DELETE above does not cover the
-      //     knowledge_sources/packs/cards rows. See the trial:end-byok backstop.
-      try {
-        const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
-        ProfilePackBuilder.getInstance().deleteAllProfilePacks();
-      } catch (piiErr: any) {
-        console.warn('[IPC] trial:wipe-profile-data: profile OKF pack wipe failed:', piiErr?.message || piiErr);
-      }
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('[IPC] trial:wipe-profile-data error:', error);
-      return { success: false, error: error.message };
-    }
+    return { success: false, error: 'trial_disabled' };
   });
 
   // Custom Provider Handlers
@@ -9080,15 +8701,19 @@ export function initializeIpcHandlers(appState: AppState): void {
           const {
             NativelySearchProvider,
           } = require('../premium/electron/knowledge/NativelySearchProvider');
-          // Pass the real trial token when key is the __trial__ sentinel so the
-          // server can authenticate via x-trial-token instead of the invalid key.
-          const trialToken = nativelyKey === TRIAL_SENTINEL_KEY ? cm.getTrialToken() : undefined;
-          engine.setSearchProvider(
-            new NativelySearchProvider(nativelyKey, trialToken ?? undefined),
-          );
-          console.log(
-            '[IPC] Company research: using Natively API search (no Tavily key configured)',
-          );
+          // Trial sentinel must not install trial-token search auth (ADR 0002).
+          if (nativelyKey === TRIAL_SENTINEL_KEY) {
+            console.warn(
+              '[IPC] Company research: ignoring trial sentinel key (trial auth disabled)',
+            );
+          } else {
+            engine.setSearchProvider(
+              new NativelySearchProvider(nativelyKey),
+            );
+            console.log(
+              '[IPC] Company research: using Natively API search (no Tavily key configured)',
+            );
+          }
         }
       }
 
@@ -11182,15 +10807,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       });
     });
 
-    // Force pro-active state for E2E (modes:* handlers are pro-gated). Uses the
-    // real CredentialsManager trial token so the real isProOrTrialActive() passes.
+    // Force pro-active state for E2E (modes:* handlers are pro-gated).
+    // License bypass already returns true; do not plant trial tokens (ADR 0002).
     safeHandle('__e2e__:enable-pro', async () => {
       try {
-        const { CredentialsManager } = require('./services/CredentialsManager');
-        const cm = CredentialsManager.getInstance();
-        const now = new Date();
-        const future = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
-        cm.setTrialToken('e2e-trial-token', future, now.toISOString());
         return { success: true, pro: isProOrTrialActive() };
       } catch (e: any) {
         return { success: false, error: e.message };

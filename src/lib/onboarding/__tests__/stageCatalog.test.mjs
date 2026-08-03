@@ -25,7 +25,6 @@ const DEFAULT_USER_STATE = {
   seenProfileOnboarding: false,
   seenModesOnboarding: false,
   activeModeSet: false,
-  donationShouldShow: false,
   isV2_8_OrNewer: true,
 };
 
@@ -168,134 +167,63 @@ test('modes_manager: skipped when activeModeSet', () => {
   assert.equal(show('modes_manager', ctx), false);
 });
 
-// ─── Trial promo ──────────────────────────────────────────────────
+// ─── Trial promo (ticket 03 permanent skip) ───────────────────────
 
-test('trial_promo: skipped when hasNativelyKey', () => {
+test('trial_promo: permanently skipped even when modes_manager + homepage gates met', () => {
   const ctx = makeCtx({
+    completed: { permissions: 1, browser_extension: 2, profile_intelligence: 3, modes_manager: 4 },
+    homepageMountedFor: 7_000,
+  });
+  assert.equal(show('trial_promo', ctx), false);
+});
+
+test('trial_promo: permanently skipped regardless of key/token/premium state', () => {
+  const base = {
+    completed: { permissions: 1, browser_extension: 2, profile_intelligence: 3, modes_manager: 4 },
+    homepageMountedFor: 7_000,
+  };
+  assert.equal(show('trial_promo', makeCtx({
+    ...base,
+    userState: { ...DEFAULT_USER_STATE, hasNativelyKey: false, hasTrialToken: false, isPremium: false },
+  })), false);
+  assert.equal(show('trial_promo', makeCtx({
+    ...base,
     userState: { ...DEFAULT_USER_STATE, hasNativelyKey: true },
-    completed: { permissions: 1, browser_extension: 2, profile_intelligence: 3, modes_manager: 4 },
-    homepageMountedFor: 7_000,
-  });
-  assert.equal(show('trial_promo', ctx), false);
+  })), false);
 });
 
-test('trial_promo: skipped when hasTrialToken', () => {
-  const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, hasTrialToken: true },
-    completed: { permissions: 1, browser_extension: 2, profile_intelligence: 3, modes_manager: 4 },
-    homepageMountedFor: 7_000,
-  });
-  assert.equal(show('trial_promo', ctx), false);
-});
+// ─── Ads (support stage removed; ads follows quiet_window; ticket 05 permanent skip) ──
 
-test('trial_promo: skipped when isPremium', () => {
-  const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, isPremium: true },
-    completed: { permissions: 1, browser_extension: 2, profile_intelligence: 3, modes_manager: 4 },
-    homepageMountedFor: 7_000,
-  });
-  assert.equal(show('trial_promo', ctx), false);
-});
-
-// ─── Support ──────────────────────────────────────────────────────
-
-test('support: skipped when !donationShouldShow', () => {
+test('ads: permanently skipped even when quiet_window + startup gates met', () => {
   const ctx = makeCtx({
     completed: { quiet_window: 1 },
-    turnCount: 15,
-    homepageMountedFor: 11_000,
-  });
-  assert.equal(show('support', ctx), false);
-});
-
-test('support: skipped when isPremium', () => {
-  const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, isPremium: true, donationShouldShow: true },
-    completed: { quiet_window: 1 },
-    turnCount: 15,
-    homepageMountedFor: 11_000,
-  });
-  assert.equal(show('support', ctx), false);
-});
-
-test('support: requires quiet_window prerequisite', () => {
-  const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, donationShouldShow: true },
-    turnCount: 15,
-    homepageMountedFor: 11_000,
-  });
-  assert.equal(show('support', ctx), false);
-});
-
-test('support: requires turnCount >= 10', () => {
-  const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, donationShouldShow: true },
-    completed: { quiet_window: 1 },
-    turnCount: 5,
-    homepageMountedFor: 11_000,
-  });
-  assert.equal(show('support', ctx), false);
-});
-
-test('support: fires with quiet_window + 10 turns + 10s homepage', () => {
-  const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, donationShouldShow: true },
-    completed: { quiet_window: 1 },
-    turnCount: 15,
-    homepageMountedFor: 11_000,
-  });
-  assert.equal(show('support', ctx), true);
-});
-
-// ─── Ads ──────────────────────────────────────────────────────────
-
-test('ads: requires startupCount >= 4', () => {
-  const ctx = makeCtx({
-    completed: { support: 1 },
-    startupCount: 3,
-    homepageMountedFor: 11_000,
-  });
-  assert.equal(show('ads', ctx), false);
-});
-
-test('ads: requires support prerequisite', () => {
-  const ctx = makeCtx({
     startupCount: 5,
     homepageMountedFor: 11_000,
   });
   assert.equal(show('ads', ctx), false);
 });
 
-test('ads: skipped when isPremium', () => {
-  const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, isPremium: true },
-    completed: { support: 1 },
-    startupCount: 5,
-    homepageMountedFor: 11_000,
-  });
-  assert.equal(show('ads', ctx), false);
+test('ads: requires quiet_window prerequisite (still gated before skip)', () => {
+  const ads = stageById['ads'];
+  assert.deepEqual(ads.requiresStages, ['quiet_window']);
+  assert.equal(ads.requiresStages.includes('support'), false);
 });
 
-// ─── Review prompt ────────────────────────────────────────────────
-
-test('review_prompt: requires startupCount >= 6 AND totalUsageMs >= 45min', () => {
-  const ctx = makeCtx({
-    completed: { ads: 1 },
-    startupCount: 6,
-    totalUsageMs: 44 * 60 * 1000,
-    homepageMountedFor: 11_000,
-  });
-  assert.equal(show('review_prompt', ctx), false);
+test('stage catalog has no support stage', () => {
+  assert.equal(STAGES.some((s) => s.id === 'support'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(stageById, 'support'), false);
 });
 
-test('review_prompt: fires when both gates met', () => {
+// ─── Review prompt (ticket 05 permanent skip) ─────────────────────
+
+test('review_prompt: permanently skipped even when startup + usage gates met', () => {
   const ctx = makeCtx({
     completed: { ads: 1 },
     startupCount: 6,
     totalUsageMs: 46 * 60 * 1000,
     homepageMountedFor: 11_000,
   });
-  assert.equal(show('review_prompt', ctx), true);
+  assert.equal(show('review_prompt', ctx), false);
 });
 
 // ─── Backgrounding / meeting ──────────────────────────────────────

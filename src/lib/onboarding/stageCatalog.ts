@@ -1,11 +1,11 @@
 /**
- * Stage catalog — declarative configs for the 8 orchestrated onboarding stages
- * (10 entries incl. quiet_window).
+ * Stage catalog — declarative configs for orchestrated onboarding stages
+ * (entries incl. quiet_window inserted dynamically).
  *
  * Order matters: stages are evaluated front-to-back by the orchestrator, and
  * the first eligible wins (single-slot invariant). The quiet_window is
- * inserted dynamically after trial_promo dismisses, so it is not in this
- * static catalog.
+ * inserted dynamically after trial_promo would complete (legacy path;
+ * trial_promo is now permanently skipped), so it is not in this static catalog.
  */
 
 import type { Ctx, StageConfig, ToasterId } from './orchestrator';
@@ -16,7 +16,6 @@ export const STAGE_ORDER: ToasterId[] = [
   'profile_intelligence',
   'modes_manager',
   'trial_promo',
-  'support',
   'ads',
   'review_prompt',
 ];
@@ -103,7 +102,8 @@ export const STAGES: StageConfig[] = [
   },
 
   // ──────────────────────────────────────────────────────────────
-  // 5. Trial promo — after modes seen/skipped
+  // 5. Trial promo — permanently skipped (commercial-surface-strip / ticket 03).
+  // Kept registered so persisted queues stay valid; skipWhen always auto-skips.
   // ──────────────────────────────────────────────────────────────
   {
     id: 'trial_promo',
@@ -115,40 +115,19 @@ export const STAGES: StageConfig[] = [
       requiresMeetingInactive: true,
     },
     requiresStages: ['modes_manager'],
-    skipWhen: (s) =>
-      s.hasNativelyKey ||
-      s.hasTrialToken ||
-      s.isPremium,
+    skipWhen: () => true,
     cooldownMs: () => 21 * 24 * 60 * 60 * 1000, // 21 days
-    reEligibility: (s) => !s.hasNativelyKey && !s.hasTrialToken && !s.isPremium,
   },
 
   // ──────────────────────────────────────────────────────────────
-  // 6. Support — after quiet_window resolves
-  // ──────────────────────────────────────────────────────────────
-  {
-    id: 'support',
-    order: 6,
-    triggers: {
-      requiresHomepageMounted: true,
-      requiresHomepageDuration: 10_000,
-      requiresForeground: true,
-      requiresMeetingInactive: true,
-    },
-    requiresStages: ['quiet_window'],
-    skipWhen: (s) => !s.donationShouldShow || s.isPremium,
-    customPredicate: (ctx: Ctx) =>
-      // Trigger after enough engagement: 10 turns OR 10 successful startups
-      ctx.turnCount >= 10 || ctx.startupCount >= 10,
-    cooldownMs: () => 14 * 24 * 60 * 60 * 1000, // 14 days
-  },
-
-  // ──────────────────────────────────────────────────────────────
-  // 7. Ads — useAdCampaigns rotation. After support seen/skipped.
+  // 6. Ads — permanently skipped (commercial-surface-strip / ticket 05).
+  // Kept registered so persisted queues stay valid; skipWhen always
+  // auto-skips. Premium useAdCampaigns stubs remain no-op (skip-premium).
+  // (support / donation stage removed — commercial-surface-strip #02)
   // ──────────────────────────────────────────────────────────────
   {
     id: 'ads',
-    order: 7,
+    order: 6,
     triggers: {
       requiresHomepageMounted: true,
       requiresHomepageDuration: 10_000,
@@ -156,17 +135,17 @@ export const STAGES: StageConfig[] = [
       requiresMeetingInactive: true,
       requiresStartupCount: 4,
     },
-    requiresStages: ['support'],
-    skipWhen: (s) => s.isPremium,
+    requiresStages: ['quiet_window'],
+    skipWhen: () => true,
     cooldownMs: () => 14 * 24 * 60 * 60 * 1000, // 14 days
   },
 
   // ──────────────────────────────────────────────────────────────
-  // 8. Review prompt — late-stage engagement gate
+  // 7. Review prompt — permanently skipped (commercial-surface-strip / ticket 05).
   // ──────────────────────────────────────────────────────────────
   {
     id: 'review_prompt',
-    order: 8,
+    order: 7,
     triggers: {
       requiresHomepageMounted: true,
       requiresHomepageDuration: 10_000,
@@ -176,13 +155,15 @@ export const STAGES: StageConfig[] = [
       requiresTotalUsageMs: 45 * 60 * 1000, // 45 minutes
     },
     requiresStages: ['ads'],
+    skipWhen: () => true,
     cooldownMs: () => 90 * 24 * 60 * 60 * 1000, // 90 days
   },
 ];
 
 // ─── Quiet window stage ───────────────────────────────────────────
-// Inserted dynamically after trial_promo dismisses. Resolves on 3 user turns
-// via customPredicate. No React component — pure orchestrator gate.
+// Inserted dynamically after trial_promo completes (legacy; trial_promo is
+// permanently skipped so this gate is rarely inserted). Resolves on 3 user
+// turns via customPredicate. No React component — pure orchestrator gate.
 
 export const QUIET_WINDOW_STAGE: StageConfig = {
   id: 'quiet_window',

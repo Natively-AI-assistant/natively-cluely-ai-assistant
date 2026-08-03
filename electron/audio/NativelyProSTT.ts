@@ -812,21 +812,12 @@ export class NativelyProSTT extends EventEmitter {
 
     /** Performs the actual session-create + installs the resulting target. */
     private async resolveRelayTarget(flags: NativelyProSTTFlags): Promise<void> {
-        const isTrial = this.apiKey === TRIAL_SENTINEL_KEY;
-        let trialToken: string | undefined;
-        let apiKey: string | undefined;
-        if (isTrial) {
-            try {
-                const { CredentialsManager } = require('../services/CredentialsManager');
-                trialToken = CredentialsManager.getInstance().getTrialToken();
-            } catch { /* no trial token available — resolver returns null → Railway */ }
-        } else {
-            apiKey = this.apiKey;
-        }
+        // Trial sentinel auth is hard-disabled (ADR 0002) — never send trialToken.
+        const apiKey = this.apiKey === TRIAL_SENTINEL_KEY ? undefined : this.apiKey;
 
         const config = await this.resolveSessionImpl({
             apiKey,
-            trialToken,
+            trialToken: undefined,
             channel: this.channel,
             language: this.languageBcp47,
             languageAlternates: this.languageAlternates,
@@ -949,11 +940,7 @@ export class NativelyProSTT extends EventEmitter {
             channel:             this.channel,
         };
         if (this.apiKey === TRIAL_SENTINEL_KEY) {
-            try {
-                const { CredentialsManager } = require('../services/CredentialsManager');
-                const trialToken = CredentialsManager.getInstance().getTrialToken();
-                if (trialToken) baseFrame.trial_token = trialToken;
-            } catch { /* CredentialsManager unavailable — connection will be rejected by server */ }
+            // Trial sentinel auth hard-disabled (ADR 0002) — omit key/trial_token.
         } else {
             baseFrame.key = this.apiKey;
         }
