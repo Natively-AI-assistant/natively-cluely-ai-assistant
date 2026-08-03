@@ -26,14 +26,17 @@ export interface NativeModule {
   // rebuild — WindowHelper checks `typeof` and degrades to plain panel
   // type if missing. Caller passes BrowserWindow.getNativeWindowHandle().
   applyStealthToWindow?: (handle: Buffer) => void;
-  // macOS-only: Accessibility permission gate for CGEventTap. Returns
-  // true if the process is currently trusted; false otherwise. Cheap;
-  // safe to poll to drive UI state.
+  // Permission gate for the stealth keyboard capture. macOS: CGEventTap
+  // Accessibility trust (true if granted). Windows: always true — a
+  // WH_KEYBOARD_LL hook needs no OS permission. Cheap; safe to poll to
+  // drive UI state.
   isAccessibilityGranted?: () => boolean;
-  // macOS-only: CGEventTap-backed stealth keyboard interception.
-  // Engaged by StealthKeyboardManager; the foreground app does NOT
-  // receive any keystroke while the tap is active. Optional: requires
-  // binary rebuild AND Accessibility permission at runtime.
+  // Stealth keyboard interception. macOS: CGEventTap. Windows:
+  // WH_KEYBOARD_LL low-level hook (native-module/src/keyboard_hook_windows.rs)
+  // exposing this IDENTICAL surface. Engaged by StealthKeyboardManager; the
+  // foreground app does NOT receive any keystroke while active, so the user
+  // types into the overlay without it taking OS focus. Optional: requires a
+  // binary rebuild (macOS additionally needs Accessibility permission).
   StealthKeyboardTap?: new () => {
     start(callback: (err: Error | null, ev: CapturedKey) => void, overlayBounds?: OverlayBoundsInput | null): boolean;
     stop(): void;

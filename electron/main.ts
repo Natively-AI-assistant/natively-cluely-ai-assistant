@@ -111,6 +111,18 @@ try {
       `(platform=${process.platform} release=${os.release()} override=${fontationsOverride ?? 'auto'})`
     );
   }
+  // BISECT (NATIVELY_DISABLE_WINDOW_ANIMATIONS=1): turns off Chromium's native
+  // window open/close/minimize/maximize animations on Windows. Diagnostic for
+  // the launcher maximize/restore flicker — if the transition is clean with
+  // this on, the animation is the thing that composites badly, not our sizing
+  // code. Must be appended before app ready, hence here rather than in
+  // WindowHelper. Diagnostic only; delete with the other bisect flags.
+  if (process.env.NATIVELY_DISABLE_WINDOW_ANIMATIONS === '1') {
+    app.commandLine.appendSwitch('wm-window-animations-disabled');
+    console.log(
+      '[Bisect] wm-window-animations-disabled applied (NATIVELY_DISABLE_WINDOW_ANIMATIONS=1)',
+    );
+  }
 } catch {
   // Never let the mitigation itself break boot. Worst case: Fontations stays
   // enabled and the (rare) font crash remains possible — the render-process-gone
@@ -1246,7 +1258,6 @@ import { OllamaManager } from './services/OllamaManager'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
-import { setTypingFocus } from './utils/windowsFocusPolicy'
 
 // Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
 // for a copied-profile native OOM investigation. It is inert unless explicitly enabled.
@@ -1653,36 +1664,48 @@ export class AppState {
       ipcMain.handle(channel, fn);
     };
     registerStealthHandler('get-system-audio-permission-warning', () => latestSystemAudioPermissionWarning);
-    if (process.platform === 'darwin') {
+    // Stealth typing is now available on BOTH desktop platforms: macOS via
+    // CGEventTap, Windows via a WH_KEYBOARD_LL hook (both expose the same
+    // native StealthKeyboardTap). The manager + renderer contract are
+    // platform-agnostic; only the IME-probe handlers below are macOS-specific.
+    if (process.platform === 'darwin' || process.platform === 'win32') {
       const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
       const stealth = StealthKeyboardManager.getInstance();
       registerStealthHandler('stealth-tap:available', () => stealth.isAvailable());
       registerStealthHandler('stealth-tap:open-settings', () => { stealth.openSettings(); });
       registerStealthHandler('stealth-tap:stop', () => { stealth.stop(); });
       registerStealthHandler('stealth-tap:start', () => stealth.start());
-      // IME users (Pinyin, Hangul, Kanji, …) cannot compose under the tap
-      // because CGEventTap fires below TIS. Renderer consults this before
-      // click-to-engage so it can fall back to plain DOM focus when an IME
-      // is in play. See electron/services/ImeDetector.ts for the rationale.
-      registerStealthHandler('stealth-tap:should-auto-engage', () => {
-        const { shouldAutoEngageStealthTap } = require('./services/ImeDetector');
-        return shouldAutoEngageStealthTap();
-      });
-      // Force a fresh IME probe and return the refined value. Renderer calls
-      // this on window focus so users who add a Pinyin/Hangul source mid-
-      // session don't silently break CJK composition the next time the tap
-      // would auto-engage (the cached value from mount-time would be stale).
-      registerStealthHandler('stealth-tap:refresh-ime', () => {
-        const { refreshImeDetection, shouldAutoEngageStealthTap } = require('./services/ImeDetector');
-        refreshImeDetection();
-        return shouldAutoEngageStealthTap();
-      });
+      if (process.platform === 'darwin') {
+        // IME users (Pinyin, Hangul, Kanji, …) cannot compose under the tap
+        // because CGEventTap fires below TIS. Renderer consults this before
+        // click-to-engage so it can fall back to plain DOM focus when an IME
+        // is in play. See electron/services/ImeDetector.ts for the rationale.
+        registerStealthHandler('stealth-tap:should-auto-engage', () => {
+          const { shouldAutoEngageStealthTap } = require('./services/ImeDetector');
+          return shouldAutoEngageStealthTap();
+        });
+        // Force a fresh IME probe and return the refined value. Renderer calls
+        // this on window focus so users who add a Pinyin/Hangul source mid-
+        // session don't silently break CJK composition the next time the tap
+        // would auto-engage (the cached value from mount-time would be stale).
+        registerStealthHandler('stealth-tap:refresh-ime', () => {
+          const { refreshImeDetection, shouldAutoEngageStealthTap } = require('./services/ImeDetector');
+          refreshImeDetection();
+          return shouldAutoEngageStealthTap();
+        });
+      } else {
+        // Windows: ToUnicodeEx handles the active layout, but IME composition
+        // (CJK) is out of scope for v1. Auto-engage stays on for Latin layouts;
+        // CJK users can still submit via the normal path. No mac-style TIS probe.
+        registerStealthHandler('stealth-tap:should-auto-engage', () => true);
+        registerStealthHandler('stealth-tap:refresh-ime', () => true);
+      }
     } else {
       registerStealthHandler('stealth-tap:available', () => false);
       registerStealthHandler('stealth-tap:open-settings', () => {});
       registerStealthHandler('stealth-tap:stop', () => {});
       registerStealthHandler('stealth-tap:start', () => false);
-      // Non-darwin: returns true so the renderer's stealthAutoEngageOkRef
+      // Non-desktop: returns true so the renderer's stealthAutoEngageOkRef
       // stays true and the explicit isCgEventTapAvailableRef guard (added in
       // PR #250) is what actually gates blockInputFocus. Inverted relative
       // to availability on purpose — see ImeDetector.ts:67.
@@ -1780,40 +1803,35 @@ export class AppState {
 
         // Chat actions — fire into the renderer without focusing the window
         } else if (actionId === 'chat:focusInput') {
-          // Toggle CGEventTap-backed stealth typing mode. While engaged, every
-          // keystroke is captured at the OS event-pipeline layer and routed to
-          // the renderer; the foreground app (Zoom/browser/etc.) does NOT
-          // receive any key events and never loses key/frontmost status. This
-          // is the only path that delivers true Cluely-grade undetectability
-          // on macOS — NSPanel-nonactivating gets us 90% there, the tap closes
-          // the remaining gap (the panel never even has to become key-window).
-          //
-          // Falls back to plain panel.focus() if the native tap is unavailable
-          // (no rebuild yet, no Accessibility permission, or non-macOS).
+          // Toggle stealth typing mode. While engaged, every keystroke is
+          // captured at the OS input layer and routed to the renderer; the
+          // foreground app (Zoom/browser/etc.) does NOT receive any key events
+          // and never loses key/frontmost status. macOS uses a CGEventTap;
+          // Windows uses a WH_KEYBOARD_LL hook — both close the gap that a
+          // window-focus-based input path would open (the meeting app blurring
+          // the instant the overlay took focus). See StealthKeyboardManager.
           this.showMainWindow(true);
           const overlay = this.windowHelper.getOverlayWindow();
           this.sendToWindow(overlay, 'ensure-expanded');
 
-          if (process.platform === 'darwin') {
-            const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-            const mgr = StealthKeyboardManager.getInstance();
-            if (mgr.isAvailable()) {
-              mgr.toggle();
-              return; // tap is the input path; no need to focus the panel
-            }
+          // Platform-agnostic: the native module exports the same
+          // StealthKeyboardTap on macOS and Windows, so toggle() is the input
+          // path on both. isAvailable() is false only if the binary predates
+          // this feature (needs `npm run build:native`) or on Linux.
+          const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+          const mgr = StealthKeyboardManager.getInstance();
+          if (mgr.isAvailable()) {
+            mgr.toggle();
+            return; // the hook/tap is the input path; never focus the overlay
           }
 
-          // Fallback: panel-safe focus on macOS without tap, brief focus on Win.
+          // No native stealth path (stale binary / Linux): just surface the
+          // input. We deliberately do NOT focus the overlay — focusing a
+          // WS_EX_NOACTIVATE window would steal foreground focus from the
+          // meeting app, the exact regression this feature removes. The user
+          // rebuilds the native module to get keystroke capture.
           if (overlay && !overlay.isDestroyed()) {
             this.sendToWindow(overlay, 'global-shortcut', { action: 'focusInput' });
-            // win32: the overlay runs with WS_EX_NOACTIVATE (clicks never
-            // activate it — see windowsFocusPolicy), which also makes a bare
-            // focus() a no-op. This explicit typing shortcut is the one
-            // sanctioned focus grab, so grant transient typing focus
-            // (focusable + focus); it self-reverts on the overlay's next
-            // blur/hide. No-op on macOS/Linux.
-            setTypingFocus(overlay, true);
-            overlay.focus();
           }
         } else if (
           actionId === 'chat:whatToAnswer' ||
