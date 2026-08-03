@@ -65,9 +65,9 @@ use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use once_cell::sync::Lazy;
 
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::System::Threading::GetCurrentThreadId;
+use windows::Win32::System::Threading::{GetCurrentProcessId, GetCurrentThreadId};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, ToUnicodeEx, VIRTUAL_KEY, VK_CAPITAL, VK_CONTROL, VK_LWIN,
     VK_MENU, VK_RWIN, VK_SHIFT,
@@ -75,9 +75,11 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 // HKL (keyboard layout handle) lives under TextServices, not KeyboardAndMouse.
 use windows::Win32::UI::TextServices::HKL;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetMessageW, PostThreadMessageW, SetWindowsHookExW,
-    TranslateMessage, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL, WM_KEYDOWN,
-    WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    CallNextHookEx, DispatchMessageW, GetAncestor, GetMessageW, GetWindowThreadProcessId,
+    PostThreadMessageW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, WindowFromPoint,
+    GA_ROOT, HHOOK, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN,
+    WM_KEYUP, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    WM_XBUTTONDOWN,
 };
 
 // ─── napi objects shared with the macOS module's JS surface ──────────────────
@@ -243,6 +245,88 @@ unsafe extern "system" fn keyboard_hook_proc(
     LRESULT(1)
 }
 
+// ─── The low-level MOUSE hook procedure ──────────────────────────────────────
+//
+// Runs alongside the keyboard hook while stealth typing is engaged. Its ONLY
+// job is to detect a click that lands OUTSIDE every Natively window and stop
+// the session — the Windows equivalent of the macOS tap's isOutsideMouseDown.
+// Without it, because the keyboard hook swallows keys process-wide, a user who
+// clicks back into their meeting app could not type there until Esc / 10s idle.
+//
+// Clicks are NEVER swallowed (always CallNextHookEx) — the click itself must
+// reach whatever the user clicked. We only classify inside-vs-outside.
+//
+// DPI-free by design: rather than compare cursor coordinates (physical pixels)
+// against the overlay's DIP bounds, we ask which window is under the cursor and
+// whether it belongs to OUR process. Clicking any Natively window (overlay,
+// pill, toggle, settings, model selector) keeps the session; clicking any other
+// process's window — or empty desktop — stops it.
+unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code != 0 {
+        return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+    }
+
+    // Only button-DOWN events matter; ignore moves / wheels / button-ups.
+    let msg = wparam.0 as u32;
+    let is_button_down = matches!(
+        msg,
+        WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
+    );
+    if !is_button_down {
+        return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+    }
+
+    let state = {
+        let guard = match ACTIVE_HOOK.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        guard.as_ref().map(Arc::clone)
+    };
+    let Some(state) = state else {
+        return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+    };
+    if !state.active.load(Ordering::Acquire) {
+        return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+    }
+
+    // Screen-space click point from the hook struct.
+    let pt: POINT = (*(lparam.0 as *const MSLLHOOKSTRUCT)).pt;
+    let hit = WindowFromPoint(pt);
+    // Walk up to the ROOT top-level window before the process check.
+    // WindowFromPoint can return a Chromium child HWND
+    // (Chrome_RenderWidgetHostHWND) whose owning process differs from the main
+    // process in some Electron versions; the root BrowserWindow HWND is always
+    // owned by the main process where this native module runs. Without this,
+    // clicking the overlay input could read as "outside" and stop stealth the
+    // instant the user tries to type.
+    let root = if hit.0 != 0 { GetAncestor(hit, GA_ROOT) } else { hit };
+
+    // Belongs to our process? Clicking any Natively window keeps the session.
+    // HWND(0) = no window under the cursor (e.g. empty desktop edge).
+    let mut click_pid: u32 = 0;
+    if root.0 != 0 {
+        GetWindowThreadProcessId(root, Some(&mut click_pid as *mut u32));
+    }
+    let outside = root.0 == 0 || click_pid != GetCurrentProcessId();
+
+    if outside {
+        send_payload(
+            &state,
+            CapturedKey {
+                key_code: 0,
+                chars: String::new(),
+                flags: 0,
+                is_key_down: false,
+                is_outside_mouse_down: true,
+            },
+        );
+    }
+
+    // Never swallow the click.
+    CallNextHookEx(HHOOK::default(), code, wparam, lparam)
+}
+
 fn send_payload(state: &HookState, payload: CapturedKey) {
     // Clone the tsfn Arc under the lock, drop the lock, then call — same
     // deadlock-avoidance pattern as the macOS module.
@@ -391,8 +475,21 @@ fn hook_worker(state: Arc<HookState>, ready_tx: mpsc::Sender<bool>) {
         }
     };
 
-    // The hook is installed — tell start() it may report success. Sent BEFORE
-    // the blocking message loop below.
+    // Also install the low-level MOUSE hook for outside-click stop. NON-FATAL:
+    // if it fails, keyboard stealth still works; the user just loses the
+    // click-away auto-stop (Esc / 10s idle / hotkey still disengage).
+    let mouse_hook = match unsafe {
+        SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), hmod, 0)
+    } {
+        Ok(h) => Some(h),
+        Err(e) => {
+            eprintln!("[keyboard_hook_windows] WH_MOUSE_LL install failed (outside-click stop disabled): {e:?}");
+            None
+        }
+    };
+
+    // The keyboard hook is installed — tell start() it may report success. Sent
+    // BEFORE the blocking message loop below.
     let _ = ready_tx.send(true);
 
     // Message pump: REQUIRED for the LL hook to fire. GetMessageW blocks until
@@ -415,9 +512,12 @@ fn hook_worker(state: Arc<HookState>, ready_tx: mpsc::Sender<bool>) {
         }
     }
 
-    // Cleanup: unhook, then clear the global so no stray callback can run.
+    // Cleanup: unhook both, then clear the global so no stray callback can run.
     unsafe {
         let _ = UnhookWindowsHookEx(hook);
+        if let Some(mh) = mouse_hook {
+            let _ = UnhookWindowsHookEx(mh);
+        }
     }
     {
         let mut guard = ACTIVE_HOOK.lock().unwrap_or_else(|p| p.into_inner());
