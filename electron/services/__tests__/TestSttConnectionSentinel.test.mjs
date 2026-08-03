@@ -32,6 +32,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import os from 'node:os';
 import Module from 'node:module';
@@ -39,7 +40,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const COMPILED = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
+  path.dirname(fileURLToPath(import.meta.url)),
   '../../../dist-electron/electron/services/CredentialsManager.js',
 );
 
@@ -101,7 +102,7 @@ test('renderer source uses the same sentinel literal (drift guard)', () => {
   // would fall into the new "No API key provided" branch). This test makes
   // that drift fail CI loudly.
   const overlay = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../src/components/SettingsOverlay.tsx'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../src/components/SettingsOverlay.tsx'),
     'utf8',
   );
   assert.match(overlay, /'__USE_STORED__'/, 'renderer must reference the sentinel literal');

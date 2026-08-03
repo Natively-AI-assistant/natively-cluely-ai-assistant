@@ -29,6 +29,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import os from 'node:os';
 import Module from 'node:module';
@@ -36,7 +37,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const COMPILED = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
+  path.dirname(fileURLToPath(import.meta.url)),
   '../../../dist-electron/electron/services/CredentialsManager.js',
 );
 
