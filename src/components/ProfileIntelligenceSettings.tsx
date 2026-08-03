@@ -8,6 +8,15 @@ import {
 import { PremiumUpgradeModal } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
+import { CHECKOUT_URLS } from '../config/urls';
+
+const openExternal = (url: string) => {
+    if ((window as any).electronAPI?.openExternal) {
+        (window as any).electronAPI.openExternal(url);
+    } else {
+        window.open(url, '_blank', 'noopener,noreferrer');
+    }
+};
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const PI_CSS = `
@@ -791,8 +800,7 @@ const PI_GATE_CSS = `
     }
 `;
 
-function ProfileIntelligenceProGate({ onUnlock, onOpenNativelyAPI, onClose }: {
-    onUnlock: () => void;
+function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
     onOpenNativelyAPI?: () => void;
     onClose?: () => void;
 }) {
@@ -966,7 +974,7 @@ function ProfileIntelligenceProGate({ onUnlock, onOpenNativelyAPI, onClose }: {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button className="pig-cta-group" onClick={onUnlock}>
+                    <button className="pig-cta-group" onClick={() => openExternal(CHECKOUT_URLS.apiMax)}>
                         Unlock Pro
                         <div className="pig-cta-icon-ring">
                             <ArrowUpRight size={14} strokeWidth={2.5} />
@@ -2633,20 +2641,10 @@ export function ProfileIntelligenceSettings({
     if (!hasProfileAccess) {
         if (!licenseLoaded) return null;
         return (
-            <>
-                <ProfileIntelligenceProGate
-                    onUnlock={() => setIsPremiumModalOpen(true)}
-                    onOpenNativelyAPI={onOpenNativelyAPI}
-                    onClose={onClose}
-                />
-                <PremiumUpgradeModal
-                    isOpen={isPremiumModalOpen}
-                    onClose={() => setIsPremiumModalOpen(false)}
-                    isPremium={isPremium}
-                    onActivated={handlePremiumActivated}
-                    onDeactivated={handlePremiumDeactivated}
-                />
-            </>
+            <ProfileIntelligenceProGate
+                onOpenNativelyAPI={onOpenNativelyAPI}
+                onClose={onClose}
+            />
         );
     }
 
