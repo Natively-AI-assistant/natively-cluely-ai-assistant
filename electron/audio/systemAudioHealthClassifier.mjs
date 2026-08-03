@@ -3,13 +3,31 @@ const DEFAULT_ZERO_OBSERVATION_MS = 12_000;
 const DEFAULT_MEANINGFUL_PEAK_TO_PEAK = 100;
 const DEFAULT_INTER_CHUNK_GAP_LOG_MS = 2_000;
 
+/**
+ * Peak-to-peak (max - min) amplitude of an int16 little-endian PCM chunk.
+ *
+ * Peak-to-peak rather than abs-peak (B10): a muted-but-DC-biased mic reads
+ * abs-peak 10..50 while carrying no signal, which false-latched the detector
+ * and permanently disabled it. (max - min) is DC-offset invariant.
+ *
+ * EVERY sample is scanned. A previous version strided through ~32 points per
+ * chunk, which aliased: at 48kHz in 1920-byte chunks the stride was 30 samples,
+ * so any tone whose period divided 30 (1600/3200/4800/8000/9600/16000 Hz) hit
+ * the same phase every time and measured 0 despite full amplitude — for 600 of
+ * 600 chunks in a row, so the observation window never cleared it. On the mic
+ * path that surfaced a false "TCC denial or device-mute suspected" banner.
+ *
+ * The full scan costs ~2us per 1920-byte chunk, i.e. ~0.2ms per second of
+ * audio across both capture streams (~0.02% of one core). `readInt16LE` is
+ * used rather than an Int16Array view so the result never depends on host
+ * endianness or on the Buffer's byteOffset alignment.
+ */
 function peakToPeakInt16LE(chunk) {
   if (!Buffer.isBuffer(chunk) || chunk.length < 2) return 0;
 
   let min = 32767;
   let max = -32768;
-  const stride = Math.max(2, (chunk.length >> 5) & ~1);
-  for (let i = 0; i + 1 < chunk.length; i += stride) {
+  for (let i = 0; i + 1 < chunk.length; i += 2) {
     const sample = chunk.readInt16LE(i);
     if (sample < min) min = sample;
     if (sample > max) max = sample;

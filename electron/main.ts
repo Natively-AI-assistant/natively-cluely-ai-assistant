@@ -14,7 +14,7 @@ import path from "path"
 import fs from "fs"
 import os from "os"
 import dns from "dns"
-import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
+import { SystemAudioHealthClassifier, peakToPeakInt16LE } from "./audio/systemAudioHealthClassifier.mjs"
 import { autoUpdater } from "electron-updater"
 
 // Override global dns.lookup to resolve macOS system resolver issues with api.natively.software
@@ -3618,19 +3618,16 @@ export class AppState {
 
       if (!zerofillLatched && !zerofillTriggered) {
         if (firstChunkAt === 0) firstChunkAt = now;
-        // B10: peak-to-peak detection — see wireSystemCapture for full rationale.
+        // B10: peak-to-peak detection — see peakToPeakInt16LE for full rationale.
         // Pre-fix `abs(sample) > 8` false-latched on DC bias from muted-but-biased
         // mics (USB/Bluetooth hardware bias of ±10..±50 is common), permanently
         // disabling the detector. Peak-to-peak (max - min) is DC-offset invariant.
-        let minS = 32767;
-        let maxS = -32768;
-        const stride = Math.max(2, (chunk.length >> 5) & ~1);
-        for (let i = 0; i + 1 < chunk.length; i += stride) {
-          const s = chunk.readInt16LE(i);
-          if (s < minS) minS = s;
-          if (s > maxS) maxS = s;
-        }
-        const peakToPeak = maxS - minS;
+        //
+        // Shared with the system-audio path rather than reimplemented inline:
+        // the two copies had already drifted once (the system side moved into
+        // SystemAudioHealthClassifier while this one stayed here), and only one
+        // of them was under test.
+        const peakToPeak = peakToPeakInt16LE(chunk);
         if (peakToPeak > 100) {
           zerofillLatched = true;
         } else if (now - firstChunkAt >= ZEROFILL_OBSERVATION_MS) {
