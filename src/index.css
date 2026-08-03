@@ -6184,16 +6184,57 @@ html[data-platform="linux"] body {
 .markdown-content pre:first-child {
   margin-top: 0 !important;
 }
-.markdown-content h1, 
-.markdown-content h2, 
-.markdown-content h3, 
-.markdown-content h4, 
-.markdown-content h5, 
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
 .markdown-content h6 {
   margin-top: 8px !important;
   margin-bottom: 4.5px !important;
   line-height: 1.6 !important;
   font-weight: 700 !important;
+}
+/* GFM tables (dry-run traces etc.): Tailwind's preflight collapses borders
+   and zeroes cell padding, so ReactMarkdown tables rendered columns butted
+   together. Column gaps come from right padding; a hairline under the header
+   row separates it from data. Wide tables scroll inside the bubble instead
+   of stretching it. --border-muted is the table border token — visible in
+   both themes, whereas --border-subtle is transparent in dark. */
+.markdown-content table {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 8px 0;
+  line-height: 1.5;
+}
+.markdown-content table:first-child {
+  margin-top: 0;
+}
+.markdown-content table:last-child {
+  margin-bottom: 0;
+}
+.markdown-content th,
+.markdown-content td {
+  padding: 3px 18px 3px 0;
+  text-align: left;
+  vertical-align: top;
+}
+.markdown-content th:last-child,
+.markdown-content td:last-child {
+  padding-right: 0;
+}
+.markdown-content thead th {
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border-muted);
+}
+.markdown-content tbody tr:first-child td {
+  padding-top: 5px;
+}
+.markdown-content td {
+  font-variant-numeric: tabular-nums;
 }
 /* ── Usage-section code block: thin horizontal scrollbar, revealed on hover ──
    The global scrollbar is hidden (width:0). The code hero needs a discreet
