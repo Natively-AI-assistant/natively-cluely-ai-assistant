@@ -3,6 +3,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
+import {
+  LAUNCHER_ASPECT_RATIO,
+  LAUNCHER_DEFAULT_HEIGHT,
+  LAUNCHER_DEFAULT_WIDTH,
+  LAUNCHER_MIN_HEIGHT,
+  LAUNCHER_MIN_WIDTH,
+  clampSizeToAspectRatio,
+  zoomedLauncherBounds,
+} from './utils/launcherAspect';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -39,6 +48,16 @@ export class WindowHelper {
   // Position/Size tracking for Launcher
   private launcherPosition: { x: number; y: number } | null = null;
   private launcherSize: { width: number; height: number } | null = null;
+  // "Maximize" for the launcher is a ratio-preserving ZOOM (largest 3:2 box in
+  // the work area), not a native maximize — native maximize fills the work area
+  // exactly and would break the 3:2 lock. These two fields are the zoom state
+  // that native isMaximized() used to provide.
+  private launcherZoomed = false;
+  private launcherRestoreBounds: Electron.Rectangle | null = null;
+  // Re-entrancy guard: the ratio correction below itself calls
+  // unmaximize()/setBounds(), which re-fire 'resize'/'unmaximize' on the very
+  // window being corrected.
+  private launcherRatioCorrecting = false;
   private overlayBounds: Electron.Rectangle | null = null;
   // ── Overlay auxiliary windows (hug-at-rest, phase 2) ────────────────────
   // The TopPill and the resize toggle live in their OWN tiny BrowserWindows,
@@ -259,8 +278,19 @@ export class WindowHelper {
     const primaryDisplay = screen.getPrimaryDisplay();
     const workArea = primaryDisplay.workAreaSize;
     const maxAllowedWidth = Math.floor(workArea.width * 0.9);
-    const newWidth = Math.min(width, maxAllowedWidth);
-    const newHeight = Math.ceil(height);
+    let newWidth = Math.min(width, maxAllowedWidth);
+    let newHeight = Math.ceil(height);
+
+    // setAspectRatio constrains USER drags only — Electron explicitly does not
+    // apply it to programmatic setBounds/setSize. So any programmatic launcher
+    // resize has to land on-ratio itself, or the 3:2 lock would hold for the
+    // mouse and silently break here.
+    if (activeWindow === this.launcherWindow) {
+      const locked = clampSizeToAspectRatio(newWidth, newHeight);
+      newWidth = locked.width;
+      newHeight = locked.height;
+    }
+
     const maxX = workArea.width - newWidth;
     const newX = Math.min(Math.max(currentX, 0), maxX);
 
@@ -389,9 +419,10 @@ export class WindowHelper {
     const primaryDisplay = screen.getPrimaryDisplay();
     const workArea = primaryDisplay.workArea;
 
-    // Fixed dimensions per user request
-    const width = 1200;
-    const height = 800;
+    // The launcher is freely resizable but SHAPE-LOCKED to 3:2 (see
+    // electron/utils/launcherAspect.ts). 1200x800 is that ratio.
+    const width = LAUNCHER_DEFAULT_WIDTH;
+    const height = LAUNCHER_DEFAULT_HEIGHT;
 
     // Calculate centered X, and top-centered Y (5% from top)
     const x = Math.round(workArea.x + (workArea.width - width) / 2);
@@ -407,8 +438,10 @@ export class WindowHelper {
       height: height,
       x: x,
       y: y,
-      minWidth: 600,
-      minHeight: 400,
+      // Min size is 3:2 as well (600x400). A non-3:2 minimum would fight the
+      // aspect lock at the smallest corner drag.
+      minWidth: LAUNCHER_MIN_WIDTH,
+      minHeight: LAUNCHER_MIN_HEIGHT,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -509,6 +542,19 @@ export class WindowHelper {
     }
 
     this.launcherWindow.setContentProtection(this.contentProtection);
+
+    // 3:2 SHAPE LOCK. The user can scale the launcher freely between the 3:2
+    // minimum (600x400) and the screen, but every user drag stays 3:2 — the OS
+    // constrains the live resize itself (NSWindow.aspectRatio on macOS,
+    // WM_SIZING on Windows; electron.d.ts tags platform-limited APIs with
+    // `@platform` and setAspectRatio carries none, i.e. both platforms).
+    //
+    // No `extraSize`: the launcher is frameless on Windows and `hiddenInset` on
+    // macOS, so content size == frame size and there is no chrome to exclude.
+    //
+    // This lives here, not in a one-shot init, because the 'closed' handler
+    // nulls launcherWindow — a recreated launcher must re-apply the lock.
+    this.launcherWindow.setAspectRatio(LAUNCHER_ASPECT_RATIO);
 
     // A/B KILL-SWITCH (2026-07-10): NATIVELY_DISABLE_ONBOARDING_ORCH=1 appends
     // ?noorch=1, which makes App.tsx skip orch.start() entirely (no drain loop,
@@ -899,6 +945,30 @@ export class WindowHelper {
         const bounds = this.launcherWindow.getBounds();
         this.launcherSize = { width: bounds.width, height: bounds.height };
         this.appState.settingsWindowHelper.reposition(bounds);
+
+        // Catch-all for every size the OS imposes WITHOUT going through a
+        // WM_SIZING drag — where setAspectRatio does not apply. Measured on
+        // Windows 11: native maximize lands 1536x864 (16:9) on a 16:9 display,
+        // i.e. Win+Up / title-bar double-click / snap escape the lock unless
+        // corrected here. Live corner drags are already on-ratio, so this is a
+        // no-op for them.
+        this.enforceLauncherAspectRatio();
+
+        // A user drag while zoomed leaves the zoom state stale (the window is
+        // no longer at the zoom bounds), which would show a "restore" icon for
+        // a window that isn't zoomed. Drop the flag as soon as the size moves
+        // off the zoom size; the toggle then reads as "maximize" again.
+        if (this.launcherZoomed && !this.launcherRatioCorrecting) {
+          const zoomed = zoomedLauncherBounds(this.getDisplayWorkArea(bounds));
+          if (
+            Math.abs(bounds.width - zoomed.width) > 2 ||
+            Math.abs(bounds.height - zoomed.height) > 2
+          ) {
+            this.launcherZoomed = false;
+            this.launcherRestoreBounds = null;
+            this.emitLauncherMaximizedState(false);
+          }
+        }
       }
     });
 
@@ -927,20 +997,34 @@ export class WindowHelper {
         }
       });
 
-      // Sync maximize state to renderer so WindowControls stays in sync (Windows/Linux only)
+      // Sync maximize state to renderer so WindowControls stays in sync (Windows/Linux only).
+      // maximizeWindow() no longer calls native maximize()/unmaximize() (it does
+      // a 3:2 zoom instead), so these now only fire for OS-initiated maximizes
+      // such as Win+Up or edge snap. Keep them so that state doesn't desync —
+      // and clear our zoom flag, since the OS just took over the size.
       this.launcherWindow.on('maximize', () => {
         const launcher = this.launcherWindow;
-      if (launcher && !launcher.isDestroyed()) {
-        this.appState.recordNativeOomOutboundIpc(launcher.webContents.id, 'window-maximized-changed', [true]);
-        launcher.webContents.send('window-maximized-changed', true);
-      }
+        // enforceLauncherAspectRatio() converts an OS maximize into the 3:2
+        // zoom box; while that correction runs it owns the zoom state.
+        if (this.launcherRatioCorrecting) return;
+        this.launcherZoomed = false;
+        this.launcherRestoreBounds = null;
+        if (launcher && !launcher.isDestroyed()) {
+          this.appState.recordNativeOomOutboundIpc(launcher.webContents.id, 'window-maximized-changed', [true]);
+          launcher.webContents.send('window-maximized-changed', true);
+        }
       });
       this.launcherWindow.on('unmaximize', () => {
         const launcher = this.launcherWindow;
-      if (launcher && !launcher.isDestroyed()) {
-        this.appState.recordNativeOomOutboundIpc(launcher.webContents.id, 'window-maximized-changed', [false]);
-        launcher.webContents.send('window-maximized-changed', false);
-      }
+        // Our own correction calls unmaximize() on the way to the 3:2 zoom box;
+        // that is not the user leaving the zoomed state.
+        if (this.launcherRatioCorrecting) return;
+        this.launcherZoomed = false;
+        this.launcherRestoreBounds = null;
+        if (launcher && !launcher.isDestroyed()) {
+          this.appState.recordNativeOomOutboundIpc(launcher.webContents.id, 'window-maximized-changed', [false]);
+          launcher.webContents.send('window-maximized-changed', false);
+        }
       });
     }
 
@@ -951,6 +1035,10 @@ export class WindowHelper {
       // Reset so a later launcher recreation doesn't inherit a stale "preview
       // active" flag with no corresponding transparent/vibrancy-off window.
       this.launcherOpacityPreviewActive = false;
+      // Same for the 3:2 zoom state — a recreated launcher starts at the
+      // default 3:2 size, not zoomed, with no restore bounds to return to.
+      this.launcherZoomed = false;
+      this.launcherRestoreBounds = null;
       // If launcher closes, we should probably quit app or close overlay
       if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
         this.overlayWindow.close();
@@ -1052,9 +1140,14 @@ export class WindowHelper {
     return this.isWindowVisible;
   }
 
+  // "Maximized" for the launcher means EITHER our ratio-preserving zoom (the
+  // WindowControls button path, which never calls native maximize) or a real
+  // OS-initiated maximize (Win+Up / snap). Reporting only isMaximized() would
+  // leave the restore icon permanently wrong once zoom replaced maximize.
   public isMainWindowMaximized(): boolean {
     const win = this.launcherWindow;
-    return !!win && !win.isDestroyed() && win.isMaximized();
+    if (!win || win.isDestroyed()) return false;
+    return this.launcherZoomed || win.isMaximized();
   }
 
   public hideMainWindow(): void {
@@ -2260,14 +2353,102 @@ export class WindowHelper {
     win.minimize();
   }
 
+  // "Maximize" for the launcher is a RATIO-PRESERVING ZOOM: the largest 3:2 box
+  // that fits the work area, centered. Native maximize() fills the work area
+  // exactly (whatever shape that is) and Electron does not apply the aspect
+  // ratio to programmatic sizing, so using it would be the one gesture that
+  // escapes the 3:2 lock on both platforms.
+  //
+  // Because we no longer call maximize()/unmaximize(), the native
+  // 'maximize'/'unmaximize' events don't fire for this path — we emit
+  // 'window-maximized-changed' ourselves so WindowControls' icon stays correct
+  // on macOS (where those listeners aren't even registered) and on Windows.
   public maximizeWindow(): void {
     const win = this.launcherWindow;
     if (!win || win.isDestroyed()) return;
-    if (win.isMaximized()) {
-      win.unmaximize();
+
+    // An OS-initiated maximize (Win+Up, snap) can still have happened; unwind it
+    // first so we're never both natively maximized and zoomed.
+    if (win.isMaximized()) win.unmaximize();
+
+    if (this.launcherZoomed) {
+      const restore = this.launcherRestoreBounds;
+      if (restore) win.setBounds(restore);
+      this.launcherZoomed = false;
+      this.launcherRestoreBounds = null;
     } else {
-      win.maximize();
+      this.launcherRestoreBounds = win.getBounds();
+      const workArea = this.getDisplayWorkArea(win.getBounds());
+      win.setBounds(zoomedLauncherBounds(workArea));
+      this.launcherZoomed = true;
     }
+
+    this.emitLauncherMaximizedState(this.launcherZoomed);
+  }
+
+  // Last line of defence for the 3:2 lock.
+  //
+  // setAspectRatio only constrains sizes that go through the OS resize-drag
+  // path (WM_SIZING on Windows, NSWindow.aspectRatio on macOS). Anything that
+  // sets a size directly — native maximize (Win+Up, title-bar double-click),
+  // Aero Snap, a display change, our own setBounds — bypasses it. Verified on
+  // Windows 11: a maximize on a 16:9 display yields 1536x864, ratio 1.7778.
+  //
+  // So whenever the launcher ends up off-ratio, put it back:
+  //   • maximized → unmaximize and use the ratio-preserving zoom box instead
+  //     (the largest 3:2 box in the work area), which is what "maximize" means
+  //     for this window.
+  //   • otherwise → shrink onto 3:2 in place, keeping the origin.
+  private enforceLauncherAspectRatio(): void {
+    const win = this.launcherWindow;
+    if (!win || win.isDestroyed()) return;
+    if (this.launcherRatioCorrecting) return;
+
+    const bounds = win.getBounds();
+    if (bounds.width <= 0 || bounds.height <= 0) return;
+    const ratio = bounds.width / bounds.height;
+    // Tolerance covers integer rounding at small sizes; a real violation
+    // (16:9 vs 3:2) is ~0.28 off, far outside this.
+    if (Math.abs(ratio - LAUNCHER_ASPECT_RATIO) <= 0.01) return;
+
+    this.launcherRatioCorrecting = true;
+    try {
+      if (win.isMaximized()) {
+        this.launcherRestoreBounds = this.launcherRestoreBounds ?? {
+          ...bounds,
+          width: LAUNCHER_DEFAULT_WIDTH,
+          height: LAUNCHER_DEFAULT_HEIGHT,
+        };
+        win.unmaximize();
+        win.setBounds(zoomedLauncherBounds(this.getDisplayWorkArea(bounds)));
+        this.launcherZoomed = true;
+        this.emitLauncherMaximizedState(true);
+      } else {
+        const locked = clampSizeToAspectRatio(bounds.width, bounds.height);
+        win.setBounds({
+          x: bounds.x,
+          y: bounds.y,
+          width: locked.width,
+          height: locked.height,
+        });
+      }
+    } finally {
+      // Released on the next tick, not synchronously: the unmaximize/setBounds
+      // above can emit their 'unmaximize'/'resize' events slightly after the
+      // call returns, and those handlers must still see the guard.
+      setTimeout(() => {
+        this.launcherRatioCorrecting = false;
+      }, 0);
+    }
+  }
+
+  private emitLauncherMaximizedState(isMaximized: boolean): void {
+    const win = this.launcherWindow;
+    if (!win || win.isDestroyed()) return;
+    this.appState.recordNativeOomOutboundIpc(win.webContents.id, 'window-maximized-changed', [
+      isMaximized,
+    ]);
+    win.webContents.send('window-maximized-changed', isMaximized);
   }
 
   public closeWindow(): void {
