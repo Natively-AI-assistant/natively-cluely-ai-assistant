@@ -2237,7 +2237,16 @@ body {
   will-change: transform;
 }
 
-.aurora-focus:focus {
+/* `.aurora-focus-active` is the scripted twin of `:focus`.
+   On Windows the overlay input can never take real DOM focus — the window is
+   WS_EX_NOACTIVATE and mousedown is preventDefault'd, because focusing it would
+   steal the meeting app's foreground (typing arrives via the stealth keyboard
+   hook instead). Without this class the input would look permanently unfocused
+   there, while macOS — whose panel CAN hold key focus — shows this aurora glow
+   on click. Applying the class while a stealth session is live reproduces the
+   macOS appearance exactly. Keep every `:focus` rule below paired with it. */
+.aurora-focus:focus,
+.aurora-focus.aurora-focus-active {
   animation: aurora 900ms cubic-bezier(0.22, 1, 0.36, 1);
   outline: none;
   transform: translateY(-0.5px) translateZ(0);
@@ -2246,7 +2255,8 @@ body {
   will-change: transform;
 }
 
-[data-interface-theme="liquid-glass"] .aurora-focus:focus {
+[data-interface-theme="liquid-glass"] .aurora-focus:focus,
+[data-interface-theme="liquid-glass"] .aurora-focus.aurora-focus-active {
   animation-name: aurora-theme;
   background:
     linear-gradient(180deg,
@@ -2257,7 +2267,8 @@ body {
   will-change: transform, filter;
 }
 
-[data-interface-theme="modern"] .aurora-focus:focus {
+[data-interface-theme="modern"] .aurora-focus:focus,
+[data-interface-theme="modern"] .aurora-focus.aurora-focus-active {
   animation-name: aurora-theme;
   background: rgba(255, 255, 255, 0.13) !important;
   will-change: transform, filter;
@@ -2266,7 +2277,8 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .aurora-focus,
   .aurora-focus:hover,
-  .aurora-focus:focus {
+  .aurora-focus:focus,
+  .aurora-focus.aurora-focus-active {
     transition: background-color 200ms ease, border-color 200ms ease;
     transform: none;
     animation: none;
