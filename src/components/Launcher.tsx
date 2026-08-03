@@ -764,12 +764,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             </button>
 
                                             {/* Detectable Toggle Pill */}
-                                            <div className={`flex items-center gap-3 border rounded-full px-3 py-1.5 min-w-[140px] transition-colors ${isLight ? 'bg-bg-elevated border-border-muted shadow-sm' : 'bg-[#101011] border-border-muted'}`}>
+                                            <div className={`flex items-center gap-3 border rounded-full px-3 py-1.5 min-w-[140px] shrink-0 transition-colors ${isLight ? 'bg-bg-elevated border-border-muted shadow-sm' : 'bg-[#101011] border-border-muted'}`}>
                                                 {isDetectable ? (
                                                     <Ghost
                                                         size={14}
                                                         strokeWidth={2}
-                                                        className="text-text-secondary transition-colors"
+                                                        className="text-text-secondary transition-colors shrink-0"
                                                     />
                                                 ) : (
                                                     <svg
@@ -778,7 +778,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                         viewBox="0 0 24 24"
                                                         fill="none"
                                                         xmlns="http://www.w3.org/2000/svg"
-                                                        className="transition-colors"
+                                                        className="transition-colors shrink-0"
                                                     >
                                                         <path
                                                             d="M12 2C7.58172 2 4 5.58172 4 10V22L7 19L9.5 21.5L12 19L14.5 21.5L17 19L20 22V10C20 5.58172 16.4183 2 12 2Z"
@@ -790,13 +790,13 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                 )}
                                                 <span className="text-xs font-medium flex-1 transition-colors text-text-secondary">
                                                     {isDetectable ? t("Detectable") : t("Undetectable")}
-                                                 </span>
-                                                 <div
-                                                     className={`w-8 h-4 rounded-full relative transition-colors cursor-pointer ${!isDetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch'}`}
-                                                     onClick={toggleDetectable}
-                                                 >
-                                                     <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all ${!isDetectable ? 'left-[18px]' : 'left-0.5'}`} />
-                                                 </div>
+                                                </span>
+                                                <div
+                                                    className={`w-8 h-4 rounded-full p-0.5 flex items-center shrink-0 transition-colors cursor-pointer ${!isDetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch'}`}
+                                                    onClick={toggleDetectable}
+                                                >
+                                                    <div className={`w-3 h-3 rounded-full bg-white shadow-sm transition-transform ${!isDetectable ? 'translate-x-4' : 'translate-x-0'}`} />
+                                                </div>
                                              </div>
 
                                              {/* What's New Pill */}
