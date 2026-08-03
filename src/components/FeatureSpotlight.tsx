@@ -180,7 +180,7 @@ export const FeatureSpotlight: React.FC = () => {
                                 <h2
                                     className={`drop-shadow-sm tracking-tight mb-0 transition-all duration-300 group-hover:brightness-105 ${isSupport ? 'translate-y-1.5' : ''}`}
                                     style={{
-                                        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text"',
+                                        fontFamily: 'var(--font-system)',
                                         fontSize: (isPremium || isSupport) ? '30px' : '26px',
                                         fontWeight: 500,
                                         lineHeight: 1.1,
@@ -195,7 +195,7 @@ export const FeatureSpotlight: React.FC = () => {
                                 <p
                                     className={`antialiased mb-2 ${isSupport ? 'translate-y-1.5' : ''}`} // Standardized mb-2 for equal spacing
                                     style={{
-                                        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text"',
+                                        fontFamily: 'var(--font-system)',
                                         fontSize: (isPremium || isSupport) ? '16px' : '15px',
                                         fontWeight: 400,
                                         lineHeight: 1.4,
