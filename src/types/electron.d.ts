@@ -43,6 +43,13 @@ export interface ElectronAPI {
     callback: (state: Record<string, unknown>) => void
   ) => () => void
   sendOverlayUiAction?: (action: { type: string }) => Promise<void>
+  // Managed group drag (macOS + Windows): the pill moves the whole group.
+  sendOverlayGroupDrag?: (delta: {
+    dx?: number
+    dy?: number
+    phase?: 'start' | 'move' | 'end'
+  }) => Promise<void>
+  isOverlayGroupDragManaged?: () => Promise<boolean>
   onOverlayUiAction?: (callback: (action: { type: string }) => void) => () => void
   sendOverlayToggleAnchor?: (payload: { panelRight: number }) => Promise<void>
   setOverlayHoverInteractive?: (interactive: boolean) => Promise<void>

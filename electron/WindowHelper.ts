@@ -58,6 +58,54 @@ export class WindowHelper {
   // positioning; without the guard, overlay→pill and pill→overlay mirroring
   // would feed back into each other.
   private auxSyncing = false;
+  // ── Welded overlay group (macOS) ────────────────────────────────────────
+  // When enabled, the pill and toggle become real AppKit CHILD windows of the
+  // overlay (setParentWindow). AppKit then moves them with the parent inside
+  // the SAME window-server transaction, so the group physically cannot come
+  // apart — which the event-mirroring fallback can never achieve, because the
+  // follower is always one compositor transaction behind the natively-dragged
+  // window.
+  //
+  // Measured on Electron 43 / macOS (see the probes in the session that added
+  // this): children follow the parent by the exact same delta; moving a CHILD
+  // does NOT move the parent and fires ZERO parent 'move' events (so the
+  // "AppKit child-window double-move feedback" this file previously warned
+  // about does not arise once the manual mirroring below is skipped);
+  // alwaysOnTop / contentProtection / visibleOnAllWorkspaces all survive
+  // parenting; and parenting applied at creation survives hide/show cycles.
+  //
+  // ASYMMETRY THAT MATTERS: parent.hide() DOES hide the children, but
+  // parent.show() does NOT re-show them. applyOverlayAuxVisibility() is what
+  // covers that, so it is required whether or not this is enabled.
+  //
+  // macOS only: on win32 setParentWindow is OWNER semantics — owned windows do
+  // not move with the owner — so Windows keeps the event-mirroring path
+  // untouched.
+  //
+  // Kill switch: NATIVELY_OVERLAY_WINDOW_GROUP=0 falls back to mirroring.
+  private overlayGroupWelded = false;
+  // ── Managed group drag (macOS AND Windows) ──────────────────────────────
+  // Distinct from welding, which is the macOS-only AppKit mechanism above.
+  // "Drag-managed" means the PILL no longer uses an OS drag region: it streams
+  // pointer deltas to main, which moves the group. Both platforms need this,
+  // for different reasons:
+  //   • macOS: the pill is an AppKit CHILD, and a natively-dragged child moves
+  //     alone (propagation is parent→child only), so it must drag its parent.
+  //   • Windows: there is no weld to break, but `-webkit-app-region: drag`
+  //     enters the modal move loop (WM_SYSCOMMAND/SC_MOVE), which occupies the
+  //     message pump for the duration of the drag — the follower window's
+  //     moves get serviced around that loop instead of at refresh rate. Moving
+  //     every window ourselves, from one tick, bypasses the modal loop
+  //     entirely and puts all the moves in the same DWM composition frame.
+  // Kill switch: NATIVELY_OVERLAY_GROUP_DRAG=0 restores the OS drag region.
+  private overlayGroupDragManaged = false;
+  // True between a pill drag's first delta and its release. Suppresses the
+  // settle-clamp so it cannot fire mid-drag (the 'moved' event is emitted for
+  // our own programmatic setPosition calls too).
+  private overlayGroupDragging = false;
+  // Shell origin captured at drag start; every frame's target is derived from
+  // it plus the pointer's TOTAL offset, so a clamped frame drops nothing.
+  private groupDragOrigin: { x: number; y: number } | null = null;
   // Renderer-reported "there are messages" flag — the toggle is only shown
   // once there is content (mirrors the old `messages.length > 0` gate).
   private toggleHasContent = false;
@@ -1017,6 +1065,11 @@ export class WindowHelper {
       this.toggleWindow?.setOpacity(0);
     }
     this.launcherWindow?.hide();
+    // Hide the aux chrome explicitly and BEFORE the overlay body. This path
+    // feeds screenshot capture, which waits a fixed 80ms after hide() for the
+    // compositor to flush; an event-chained pill hide spends part of that
+    // budget on an extra hop and can leak the pill into the captured frame.
+    this.applyOverlayAuxVisibility(false);
     this.overlayWindow?.hide();
     this.lastLauncherShowInactive = null;
     this.isWindowVisible = false;
@@ -1301,6 +1354,27 @@ export class WindowHelper {
     this.pillWindow = new BrowserWindow(auxSettings(true));
     this.toggleWindow = new BrowserWindow(auxSettings(false));
 
+    // Weld the group via real AppKit child windows (macOS only) — see the
+    // overlayGroupWelded field comment for the measured semantics. Applied
+    // here, at creation, while all three are still hidden: verified to take
+    // effect on first show and to survive later hide/show cycles.
+    this.overlayGroupWelded = isMac && process.env.NATIVELY_OVERLAY_WINDOW_GROUP !== '0';
+    if (this.overlayGroupWelded) {
+      this.pillWindow.setParentWindow(this.overlayWindow);
+      this.toggleWindow.setParentWindow(this.overlayWindow);
+      console.log('[WindowHelper] Overlay group welded (pill/toggle are child windows)');
+    }
+    // Managed drag is wanted on BOTH desktop platforms (see the field comment).
+    // On macOS it is implied by welding — a welded pill MUST drag its parent —
+    // so it cannot be switched off independently there without tearing the
+    // group apart on the first drag.
+    this.overlayGroupDragManaged =
+      this.overlayGroupWelded ||
+      (process.platform === 'win32' && process.env.NATIVELY_OVERLAY_GROUP_DRAG !== '0');
+    console.log(
+      `[WindowHelper] Overlay group drag: managed=${this.overlayGroupDragManaged} welded=${this.overlayGroupWelded}`,
+    );
+
     const auxPairs: Array<[BrowserWindow, string]> = [
       [this.pillWindow, 'overlay-pill'],
       [this.toggleWindow, 'overlay-toggle'],
@@ -1346,8 +1420,23 @@ export class WindowHelper {
 
     // Group sync — see the coordination model comment above.
     this.overlayWindow.on('move', () => {
-      if (!this.auxSyncing) this.positionOverlayAuxWindows();
+      // Welded: AppKit already moved the children in the same transaction as
+      // the parent. Re-positioning them here would be a second, LATER move —
+      // exactly the one-transaction lag this mode exists to remove — and
+      // during a native drag it would fight the window-server drag loop.
+      if (!this.overlayGroupWelded && !this.auxSyncing) this.positionOverlayAuxWindows();
       this.repositionOverlayPopovers();
+    });
+    // Welded mode gives up per-frame pill clamping (the pill can no longer be
+    // clamped independently without unwelding it from the shell), so re-assert
+    // the work-area constraint on the WHOLE group once the drag settles.
+    // macOS 'moved' fires after the move completes, so this costs nothing
+    // mid-drag. Moving the shell carries the children with it, preserving the
+    // weld — which is the point: the group clamps as one entity.
+    this.overlayWindow.on('moved', () => {
+      if (this.overlayGroupWelded && !this.auxSyncing && !this.overlayGroupDragging) {
+        this.clampOverlayGroupIntoWorkArea();
+      }
     });
     this.overlayWindow.on('resize', () => {
       if (!this.auxSyncing) this.positionOverlayAuxWindows();
@@ -1384,6 +1473,13 @@ export class WindowHelper {
     });
 
     this.pillWindow.on('move', () => {
+      // Drag-managed (macOS and Windows): the pill's OS drag region is off and
+      // it drives the group through moveOverlayGroupTo instead, so a user drag
+      // never lands here — only our own setBounds calls do. Reverse-mirroring
+      // those would move the overlay from a move we just made, which on macOS
+      // double-moves the welded child (the "double-move feedback" the old
+      // comment warned about) and on Windows fights the managed drag.
+      if (this.overlayGroupDragManaged) return;
       if (this.auxSyncing) return;
       const pill = this.pillWindow;
       const overlay = this.overlayWindow;
@@ -1427,11 +1523,21 @@ export class WindowHelper {
       // when the user drags the shell to the top of the screen. Clamping
       // keeps the End-meeting/Show buttons reachable (the pill then overlaps
       // the shell's top edge instead of vanishing).
-      const px = Math.min(
-        Math.max(Math.round(o.x + (o.width - pw) / 2), workArea.x),
-        workArea.x + workArea.width - pw,
-      );
-      const py = Math.max(o.y - WindowHelper.PILL_GAP - ph, workArea.y);
+      // Do NOT clamp the pill independently while welded, or while a managed
+      // group drag is in flight: displacing it relative to the shell is
+      // precisely the "group came apart" artifact those modes remove. The same
+      // constraint is enforced on the whole group instead — continuously by
+      // AppKit when welded, and at drag release by
+      // clampOverlayGroupIntoWorkArea(). Outside those cases (the legacy
+      // mirroring path) the independent clamp still applies, since there the
+      // pill genuinely can outlive the shell's work area.
+      const rigidToShell = this.overlayGroupWelded || this.overlayGroupDragging;
+      const idealX = Math.round(o.x + (o.width - pw) / 2);
+      const idealY = o.y - WindowHelper.PILL_GAP - ph;
+      const px = rigidToShell
+        ? idealX
+        : Math.min(Math.max(idealX, workArea.x), workArea.x + workArea.width - pw);
+      const py = rigidToShell ? idealY : Math.max(idealY, workArea.y);
       this.auxSyncing = true;
       try {
         pill.setBounds({ x: px, y: py, width: pw, height: ph });
@@ -1467,19 +1573,201 @@ export class WindowHelper {
     toggle.setBounds({ x, y, width: S, height: S });
   }
 
-  // Mirror overlay visibility onto the aux windows. showInactive() always —
-  // the aux chrome must never steal focus from the user's foreground app.
+  // ── Welded-group geometry ────────────────────────────────────────────────
+  // The group's true top edge is the PILL's top, not the shell's: the pill
+  // sits PILL_GAP above the shell. Both operations below move only the SHELL
+  // (the parent) — AppKit carries the pill and toggle along in the same
+  // transaction, so the group never comes apart.
+
+  // Where the shell may sit so that the whole group stays inside the work
+  // area. Returns the clamped shell origin for a requested one.
+  private clampedGroupOrigin(x: number, y: number): { x: number; y: number } {
+    const overlay = this.overlayWindow;
+    if (!overlay || overlay.isDestroyed()) return { x, y };
+    const o = overlay.getBounds();
+    const workArea = this.getDisplayWorkArea({ ...o, x, y });
+    const pillH = this.pillSize.height;
+    // Top: leave room for the pill above the shell, so the End-meeting and
+    // Show buttons can never slide under the menu bar.
+    const minY = workArea.y + WindowHelper.PILL_GAP + pillH;
+    const maxY = workArea.y + workArea.height - o.height;
+    // Horizontal: the shell is the widest member, so clamping it covers the
+    // pill (narrower, centered). The toggle is allowed to overhang — it is
+    // decorative chrome and already tucks inward via positionToggleWindow.
+    const minX = workArea.x;
+    const maxX = workArea.x + workArea.width - o.width;
+    return {
+      x: Math.round(Math.min(Math.max(x, minX), Math.max(minX, maxX))),
+      y: Math.round(Math.min(Math.max(y, minY), Math.max(minY, maxY))),
+    };
+  }
+
+  private clampOverlayGroupIntoWorkArea(): void {
+    const overlay = this.overlayWindow;
+    if (!overlay || overlay.isDestroyed()) return;
+    const o = overlay.getBounds();
+    const { x, y } = this.clampedGroupOrigin(o.x, o.y);
+    if (x === o.x && y === o.y) return;
+    this.auxSyncing = true;
+    try {
+      overlay.setPosition(x, y);
+      this.overlayBounds = overlay.getBounds();
+      this.positionToggleWindow();
+    } finally {
+      this.auxSyncing = false;
+    }
+  }
+
+  // Pill renderer → main: drag the GROUP by a pointer delta.
+  //
+  // In welded mode the pill's `-webkit-app-region: drag` is disabled: a child
+  // window dragged natively moves ALONE (AppKit propagates parent→child, never
+  // child→parent), which would tear the group apart — the exact bug this mode
+  // fixes. So the pill drags its PARENT instead, and the children ride along
+  // for free. The trade is that a pill drag now costs a renderer→main hop, so
+  // the whole group trails the cursor slightly; it can no longer come apart,
+  // which is what "one entity" has to mean.
+  // ANCHOR-BASED, not delta-based, and CLAMPED every frame. Both choices are
+  // load-bearing and were arrived at by measurement:
+  //
+  //  • Anchoring (target = origin-at-drag-start + total pointer offset) is what
+  //    makes per-frame clamping safe. With deltas, a clamped frame silently
+  //    drops movement, so the window desyncs from the cursor and jumps when the
+  //    pointer comes back — the rubber-band. With an anchor there is nothing to
+  //    drop: the moment the pointer returns to a legal position the target is
+  //    legal again, exactly in step with the hand.
+  //  • Clamping every frame keeps BOTH windows inside the work area, which is
+  //    what actually prevents the group from walking apart. macOS refuses to
+  //    place a window fully off-screen, and the shell and pill hit that limit
+  //    at different moments (different widths), so any scheme that lets them
+  //    leave the screen accumulates a permanent offset — measured at ~295px
+  //    over a long drag, with BOTH delta-offsetting and re-deriving. Never
+  //    going off-screen is the only version that holds on a platform whose
+  //    constraining behaviour we cannot test.
+  //
+  // Clamping continuously costs no reachable end state: endOverlayGroupDrag
+  // already snapped the group fully into the work area on release, so this
+  // only removes an illegal transient.
+  public beginOverlayGroupDrag(): void {
+    if (!this.overlayGroupDragManaged) return;
+    const overlay = this.overlayWindow;
+    if (!overlay || overlay.isDestroyed()) return;
+    const o = overlay.getBounds();
+    this.groupDragOrigin = { x: o.x, y: o.y };
+    this.overlayGroupDragging = true;
+  }
+
+  public moveOverlayGroupTo(offsetX: number, offsetY: number): void {
+    if (!this.overlayGroupDragManaged) return;
+    const overlay = this.overlayWindow;
+    if (!overlay || overlay.isDestroyed() || !overlay.isVisible()) return;
+    if (!Number.isFinite(offsetX) || !Number.isFinite(offsetY)) return;
+    // A move without a start (renderer reloaded mid-drag) anchors here.
+    if (!this.groupDragOrigin) this.beginOverlayGroupDrag();
+    const origin = this.groupDragOrigin;
+    if (!origin) return;
+    const target = this.clampedGroupOrigin(origin.x + offsetX, origin.y + offsetY);
+    const o = overlay.getBounds();
+    if (target.x === o.x && target.y === o.y) return;
+    this.overlayGroupDragging = true;
+    this.auxSyncing = true;
+    try {
+      overlay.setPosition(target.x, target.y);
+      const moved = overlay.getBounds();
+      this.overlayBounds = moved;
+      // WELDED (macOS): AppKit already carried the pill in the same
+      // transaction — touching it here would DOUBLE the delta.
+      // NOT WELDED (Windows): nothing carries it, so re-derive its position
+      // from the shell's ACTUAL bounds every frame.
+      //
+      // Re-derive, do NOT accumulate deltas. Applying "the delta the shell just
+      // moved" to the pill's own position looks equivalent and is not: if the
+      // OS constrains either window (macOS pins a window being driven fully
+      // off-screen; the two windows hit that limit at different moments
+      // because they have different widths), a delta offset banks the error
+      // permanently and the group walks apart — measured at 294px over a long
+      // drag. Re-deriving makes every frame self-correcting: one constrained
+      // frame is a transient, not a permanent offset.
+      if (!this.overlayGroupWelded) this.positionOverlayAuxWindows();
+      // The toggle is recomputed from the shell's bounds on both platforms:
+      // its offset tracks the panel's live right edge (the width spring), so a
+      // raw delta would freeze it mid-animation.
+      this.positionToggleWindow();
+    } finally {
+      this.auxSyncing = false;
+    }
+    this.repositionOverlayPopovers();
+  }
+
+  public endOverlayGroupDrag(): void {
+    if (!this.overlayGroupDragManaged) return;
+    this.overlayGroupDragging = false;
+    this.groupDragOrigin = null;
+    this.clampOverlayGroupIntoWorkArea();
+    // Settle point: re-place the children from the shell's final bounds, so a
+    // drag that ran into a screen-edge constraint cannot leave the offsets
+    // stale (see applyOverlayAuxVisibility for why this is needed and why it
+    // cannot feed back into the parent).
+    this.positionOverlayAuxWindows();
+    this.repositionOverlayPopovers();
+  }
+
+  // Tells the pill renderer whether to run its own drag (and therefore switch
+  // OFF its OS drag region). True on macOS (welded) and Windows (modal-loop
+  // bypass); false only when a kill switch is set.
+  public isOverlayGroupDragManaged(): boolean {
+    return this.overlayGroupDragManaged;
+  }
+
+  public isOverlayGroupWelded(): boolean {
+    return this.overlayGroupWelded;
+  }
+
+  // Drive the aux chrome's visibility directly. showInactive() always — the
+  // aux chrome must never steal focus from the user's foreground app.
+  //
+  // Every show/hide call site calls this EXPLICITLY, in the same synchronous
+  // block as the overlay's own show/hide, rather than relying on the overlay's
+  // 'show'/'hide' events alone. Those events are the backstop (they still fire
+  // for OS-driven and third-party visibility changes), but as the primary
+  // mechanism they cost an extra step: switchToLauncher hides the overlay
+  // AFTER showing the launcher, so an event-driven pill hide landed one hop
+  // later still — leaving the always-on-top pill stranded on top of the
+  // already-painted launcher ("the pill disappears after the launcher
+  // appears"). Passing `want` explicitly also lets a caller hide the chrome
+  // while the overlay is still visible, which the derived form cannot express.
+  private applyOverlayAuxVisibility(want: boolean): void {
+    if (want) this.positionOverlayAuxWindows();
+    const apply = (win: BrowserWindow | null, show: boolean) => {
+      if (!win || win.isDestroyed()) return;
+      if (show && !win.isVisible()) win.showInactive();
+      else if (!show && win.isVisible()) win.hide();
+    };
+    apply(this.pillWindow, want);
+    apply(this.toggleWindow, want && this.toggleHasContent);
+    // Re-assert exact geometry AFTER the show, not just before it.
+    //
+    // Measured: macOS constrains a window's frame back onto the screen when it
+    // is ORDERED IN, for a position that was set while it was hidden. (A
+    // VISIBLE window is not constrained — it can be moved far off-screen
+    // freely, which is why a live drag does not drift.) The overlay is hidden
+    // and re-shown constantly (Cmd+B, meeting start/end), and it can be parked
+    // partly off-screen before a hide — so the shell can silently shift on
+    // show while the children, being hidden, do not follow. That leaves the
+    // welded offsets stale.
+    //
+    // Re-placing children from the parent's ACTUAL post-show bounds makes the
+    // group self-correcting. Safe by construction: moving a child never moves
+    // the parent and fires no parent 'move' event (measured), so this cannot
+    // feed back.
+    if (want) this.positionOverlayAuxWindows();
+  }
+
+  // Mirror overlay visibility onto the aux windows (derives `want` from the
+  // overlay's live visibility — safe only when the overlay is not mid-swap).
   private syncOverlayAuxVisibility(): void {
     const overlay = this.overlayWindow;
-    const overlayVisible = !!overlay && !overlay.isDestroyed() && overlay.isVisible();
-    if (overlayVisible) this.positionOverlayAuxWindows();
-    const apply = (win: BrowserWindow | null, want: boolean) => {
-      if (!win || win.isDestroyed()) return;
-      if (want && !win.isVisible()) win.showInactive();
-      else if (!want && win.isVisible()) win.hide();
-    };
-    apply(this.pillWindow, overlayVisible);
-    apply(this.toggleWindow, overlayVisible && this.toggleHasContent);
+    this.applyOverlayAuxVisibility(!!overlay && !overlay.isDestroyed() && overlay.isVisible());
   }
 
   // Pill renderer reports its w-fit content size (ResizeObserver → IPC).
@@ -1548,11 +1836,16 @@ export class WindowHelper {
       // setAlwaysOnTop is already set at creation; a focus() call alone is safe.
       this.overlayWindow.focus();
     }
+    // Explicit, same-block aux show — see switchToOverlay.
+    this.applyOverlayAuxVisibility(true);
   }
 
   // Hide overlay directly without switching to launcher.
   // Used by IPC handlers to hide the overlay independently.
   public hideOverlay(): void {
+    // Aux chrome first, in the same block: the pill/toggle are always-on-top,
+    // so a body-then-pill sequence leaves them briefly floating alone.
+    this.applyOverlayAuxVisibility(false);
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
       this.overlayWindow.hide();
     }
@@ -1700,6 +1993,19 @@ export class WindowHelper {
       this.overlayBounds = this.overlayWindow.getBounds();
       this.appState.recordNativeOomOutboundIpc(this.overlayWindow.webContents.id, 'ensure-expanded', []);
       this.overlayWindow.webContents.send('ensure-expanded');
+      // `ensure-expanded` guarantees the overlay renderer comes up expanded,
+      // but the PILL only learns that after a renderer→main→pill round trip,
+      // and its collapse gate is a 0.22s opacity fade (OverlayAuxWindows).
+      // The overlay window/renderer is reused across meetings, so a session
+      // that ended collapsed (Cmd+B) leaves the pill's cached state at
+      // expanded:false — it would then show at opacity 0 and fade in a quarter
+      // second AFTER the body ("the pill appears at a different time than the
+      // main body"). Pre-apply the same expansion to the cached state and push
+      // it now, so the pill's first painted frame is already expanded.
+      this.setOverlayUiState({
+        ...((this.lastOverlayUiState as Record<string, unknown> | null) ?? {}),
+        expanded: true,
+      });
 
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).
       if (process.platform === 'win32' && this.contentProtection) {
@@ -1711,6 +2017,12 @@ export class WindowHelper {
         this.toggleWindow?.setOpacity(0);
         if (inactive) this.overlayWindow.showInactive();
         else this.overlayWindow.show();
+        // Bring the aux chrome up in the SAME block as the body, while it is
+        // still shielded at opacity 0 — the timer below un-shields all three
+        // together. Showing it here rather than waiting for the overlay's
+        // 'show' event keeps pill and body on one visual transition; doing it
+        // after the timer would flash the pill through content protection.
+        this.applyOverlayAuxVisibility(true);
         this.overlayWindow.setContentProtection(true);
         // Small delay to ensure Windows DWM processes the flag before making it opaque
 
@@ -1742,6 +2054,10 @@ export class WindowHelper {
         }
         if (inactive) this.overlayWindow.showInactive();
         else this.overlayWindow.show();
+        // Same synchronous block as the body's show (see the win32 branch) so
+        // pill and shell land on one compositor commit instead of the body
+        // first and the pill an event-hop later.
+        this.applyOverlayAuxVisibility(true);
         // Only grab focus for explicit user-initiated shows (not shortcut/ghost shows)
         if (!inactive) this.overlayWindow.focus();
       }
@@ -1785,6 +2101,17 @@ export class WindowHelper {
       console.log('[WindowHelper] Launcher already visible; skipping duplicate show');
       return;
     }
+
+    // Hide the overlay's floating chrome FIRST — before the launcher show.
+    // The pill and toggle are always-on-top windows; the launcher is a regular
+    // one, so any frame in which both are up paints the pill OVER the launcher.
+    // Chaining their hide off the overlay's 'hide' event put them two steps
+    // behind the launcher show (show launcher → hide overlay → 'hide' → hide
+    // pill), which is exactly the reported "pill lingers after Stop drops us
+    // on the launcher". Hiding them here does NOT open a no-window-visible gap
+    // (which is what "Show Launcher FIRST" guards against): the overlay body
+    // is still up until the "Hide Overlay SECOND" block below.
+    this.applyOverlayAuxVisibility(false);
 
     // Show Launcher FIRST
     if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
