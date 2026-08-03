@@ -6,6 +6,16 @@ const path = require('path');
 const nativeModulePath = path.join(__dirname, '..', 'native-module');
 const buildAllMacTargets = process.env.NATIVELY_BUILD_ALL_MAC_ARCHES === '1';
 
+// Ensure Cargo binary directory (~/.cargo/bin) is in PATH if cargo is installed there
+const cargoBinDir = path.join(os.homedir(), '.cargo', 'bin');
+if (fs.existsSync(cargoBinDir)) {
+  const pathDelimiter = os.platform() === 'win32' ? ';' : ':';
+  const currentPath = process.env.PATH || '';
+  if (!currentPath.split(pathDelimiter).includes(cargoBinDir)) {
+    process.env.PATH = `${cargoBinDir}${pathDelimiter}${currentPath}`;
+  }
+}
+
 function verifyArtifacts(expectedArtifacts) {
   const missing = expectedArtifacts.filter((file) => !fs.existsSync(path.join(nativeModulePath, file)));
 
@@ -129,7 +139,6 @@ if (os.platform() === 'darwin') {
 
 } else {
   console.log(`Building for current platform: ${os.platform()}`);
-  runCommand('npx napi build --platform --release');
 
   const artifactMap = {
     win32: {
@@ -145,6 +154,58 @@ if (os.platform() === 'darwin') {
   };
 
   const expectedArtifacts = artifactMap[os.platform()]?.[os.arch()];
+
+  // Windows only: unblock the artifact copy when the app is running.
+  //
+  // Windows locks a loaded DLL against being written or deleted, so if Natively
+  // (or an electron dev instance) has the .node loaded, `napi build` dies at the
+  // very end with an opaque "Internal Error: Failed to copy artifact" — after a
+  // successful compile, which makes it look like a Rust failure. It is not; it
+  // is file locking.
+  //
+  // A loaded DLL CAN still be renamed, though (the running process keeps using
+  // it through its open handle — this is how self-updaters work). So move the
+  // old artifact aside and let napi write a fresh one. The stale copy is deleted
+  // when nothing holds it any more, which is usually the next build.
+  //
+  // macOS/Linux never hit this (they permit unlinking an in-use dylib), so this
+  // whole step is win32-gated and their behaviour is unchanged.
+  if (os.platform() === 'win32' && expectedArtifacts) {
+    for (const file of fs.readdirSync(nativeModulePath)) {
+      if (!file.includes('.node.stale-')) continue;
+      try {
+        fs.unlinkSync(path.join(nativeModulePath, file));
+      } catch {
+        // Still loaded by a live process — a later run will get it.
+      }
+    }
+    for (const artifact of expectedArtifacts) {
+      const artifactPath = path.join(nativeModulePath, artifact);
+      if (!fs.existsSync(artifactPath)) continue;
+      const stalePath = `${artifactPath}.stale-${Date.now()}`;
+      try {
+        fs.renameSync(artifactPath, stalePath);
+      } catch (err) {
+        console.warn(
+          `Warning: could not move the previous ${artifact} aside (${err.code || err.message}).\n` +
+            '         If the build fails with "Failed to copy artifact", close Natively and retry.'
+        );
+        continue;
+      }
+      try {
+        fs.unlinkSync(stalePath);
+      } catch {
+        // Expected while the app is running: the DLL is still mapped. Harmless —
+        // it is out of the way, gitignored, and removed by a later build.
+        console.log(
+          `Note: ${artifact} is in use (Natively is running); moved it aside so the build can proceed.`
+        );
+      }
+    }
+  }
+
+  runCommand('npx napi build --platform --release');
+
   if (expectedArtifacts) {
     verifyArtifacts(expectedArtifacts);
   }

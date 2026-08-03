@@ -206,6 +206,10 @@ release/
 target/
 native-module/target/
 native-module/*.node
+# Windows locks a loaded .node against overwrite, so build-native.js moves the
+# previous artifact aside before rebuilding (see the win32 branch there). The
+# leftover is deleted once nothing holds it — usually on the next build.
+native-module/*.node.stale-*
 
 .github/RepoGuide.md
 
