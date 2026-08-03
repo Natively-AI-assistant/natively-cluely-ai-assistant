@@ -166,6 +166,22 @@ describe('native module absent: activateWithApiKey must not clobber a perpetual 
       assert.equal(result.success, false);
       assert.equal(result.skipped, true, `${provider} license must be preserved, not overwritten`);
       assert.deepEqual(fs.readFileSync(LICENSE_PATH), before, 'license.enc was modified');
+
+      // The skip MUST carry a reason here. Without a native module this stored
+      // license grants nothing (readStoredLicense rejects it), so refusing the
+      // API key leaves the user with Pro from neither credential. A bare
+      // `skipped` made activateLicense() render the empty error as "Failed to
+      // activate with API key" — blaming the one credential that is fine — and
+      // made the set-natively-api-key handler show nothing at all.
+      assert.ok(
+        result.error,
+        `${provider}: an unverifiable license must explain why Pro is inactive`,
+      );
+      assert.doesNotMatch(
+        result.error,
+        /API key/i,
+        'the message must not blame the API key; the native module is the fault',
+      );
     });
   }
 

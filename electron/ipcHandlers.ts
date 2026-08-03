@@ -6539,9 +6539,24 @@ export function initializeIpcHandlers(appState: AppState): void {
               if (!win.isDestroyed())
                 win.webContents.send('license-status-changed', { isPremium: true });
             });
-          } else if (result.skipped) {
+          } else if (result.skipped && !result.error) {
+            // Benign skip: the stored perpetual license is verified and already
+            // granting Pro, so there is nothing to tell the user.
             console.log(
               '[IPC] set-natively-api-key: existing Gumroad/Dodo license preserved — Pro not overwritten.',
+            );
+          } else if (result.skipped) {
+            // Skip WITH an error: the perpetual license could not be verified
+            // (native module absent), so it grants nothing AND the API key was
+            // refused — the user has Pro from neither credential. This is a
+            // support-visible fault, not the benign case above; do not bury it
+            // at log level. NOTE: still not surfaced in the UI — the
+            // license-status-changed payload is typed { isPremium, plan? } and
+            // has no channel for a reason string. Users hitting this via the
+            // license box DO see it (activateLicense returns result.error).
+            console.warn(
+              '[IPC] set-natively-api-key: Pro inactive —',
+              result.error,
             );
           } else {
             console.log('[IPC] set-natively-api-key: Pro not activated —', result.error);
