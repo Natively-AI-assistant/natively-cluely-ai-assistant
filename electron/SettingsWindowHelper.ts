@@ -1,6 +1,7 @@
 import { BrowserWindow, screen, app } from "electron"
 import { WindowHelper } from "./WindowHelper"
 import path from "node:path"
+import { attachNoActivate } from "./utils/windowsFocusPolicy"
 
 const isDev = process.env.NODE_ENV === "development"
 
@@ -228,6 +229,14 @@ export class SettingsWindowHelper {
         }
 
         this.settingsWindow = new BrowserWindow(windowSettings)
+        // Windows counterpart of the NSPanel stealth attributes applied below
+        // on macOS: WS_EX_NOACTIVATE so opening/clicking the settings popover
+        // mid-meeting never steals foreground focus from the meeting app.
+        // Typing in its fields is granted transiently by the preload focusin
+        // bridge (see windowsFocusPolicy). Dismissal does not rely on 'blur'
+        // for the never-focused case — the overlay popover click-catcher
+        // handles outside clicks on all platforms. No-op on macOS/Linux.
+        attachNoActivate(this.settingsWindow)
 
         if (process.platform === "darwin") {
             this.settingsWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
