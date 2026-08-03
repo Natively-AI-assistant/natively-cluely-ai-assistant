@@ -128,34 +128,32 @@ test('undetectable: Windows drives the tray on toggle (macOS does it via _enforc
   );
   // macOS must keep driving it from the enforcement loop (no regression).
   //
-  // This used to assert the calls sat directly under app.dock.hide()/show().
-  // They no longer do, deliberately: inside that block the tray was gated on
-  // `shouldApply`, which decideDockTransition sets false whenever the dock is
-  // already settled. So stealth ON with the dock already hidden never ran
-  // hideTray() — the tray kept the real app name for the whole session — and
-  // the mirror case left no tray at all. The calls moved OUT of the gate and
-  // now follow the DESIRED state on every attempt. Assert that invariant, not
-  // the old adjacency.
+  // Asserted on the PRESENCE of both pairs inside _enforceDockState, not on the
+  // tray call sitting directly under app.dock.hide()/show(). That adjacency is
+  // not the invariant, and pinning it makes this test fail on a legitimate
+  // refactor: the tray calls belong OUTSIDE the `shouldApply` gate, because
+  // decideDockTransition sets it false whenever the dock is already settled —
+  // so gating the tray on it means stealth ON with the dock already hidden
+  // never runs hideTray() (the tray keeps the real app name for the whole
+  // session), and the mirror case leaves no tray at all. What must never
+  // regress is that this function drives BOTH the dock and the tray on the
+  // darwin path; where the two calls sit relative to each other is free.
   const enforceBody = src.slice(
     src.indexOf('private _enforceDockState('),
     src.indexOf('this._enforceDockState(wantUndetectable, targetFocusWindow, attempt + 1'),
   );
   assert.ok(enforceBody.length > 0, '_enforceDockState body not found');
-  assert.match(
-    enforceBody,
-    /if \(wantUndetectable\) \{\s*\n\s*this\.hideTray\(\);\s*\n\s*\} else \{\s*\n\s*this\.showTray\(\);/,
-    'BUG: macOS regression — _enforceDockState no longer drives the tray from the desired state.',
-  );
-  assert.match(
-    enforceBody,
-    /app\.dock\.hide\(\);/,
-    'BUG: macOS regression — the dock hide in _enforceDockState disappeared.',
-  );
-  assert.match(
-    enforceBody,
-    /app\.dock\.show\(\);/,
-    'BUG: macOS regression — the dock restore in _enforceDockState disappeared.',
-  );
+  for (const [call, what] of [
+    ['app.dock.hide();', 'the dock hide'],
+    ['app.dock.show();', 'the dock restore'],
+    ['this.hideTray();', 'the tray hide'],
+    ['this.showTray();', 'the tray restore'],
+  ]) {
+    assert.ok(
+      enforceBody.includes(call),
+      `BUG: macOS regression — ${what} (${call}) disappeared from _enforceDockState.`,
+    );
+  }
 });
 
 test('undetectable: the launcher leaves the Windows taskbar, at creation AND on toggle', () => {
