@@ -257,12 +257,25 @@ test('typing without focus is wired to the native stealth hook on BOTH desktop p
     /mgr\.isAvailable\(\)[\s\S]{0,80}mgr\.toggle\(\)/,
     'BUG: chat:focusInput must toggle the stealth tap whenever available (macOS AND Windows).',
   );
+  // The overlay must never be focused UNCONDITIONALLY (that steals the meeting
+  // app's foreground on Windows). But the no-native-tap fallback DOES need
+  // overlay.focus() on macOS/Linux — the panel must become key for the DOM
+  // input to receive keystrokes there. So: no setTypingFocus at all, and any
+  // overlay.focus() must be win32-guarded.
   assert.doesNotMatch(
     focusInputBlock,
-    /overlay\.focus\(\)|setTypingFocus/,
-    'BUG: chat:focusInput must NOT focus the overlay — focusing a WS_EX_NOACTIVATE window steals ' +
-      'foreground focus, the regression this feature removes.',
+    /setTypingFocus/,
+    'BUG: setTypingFocus (the focus-to-type bridge) must be gone.',
   );
+  const focusCalls = focusInputBlock.match(/overlay\.focus\(\)/g) ?? [];
+  for (const _ of focusCalls) {
+    assert.match(
+      focusInputBlock,
+      /process\.platform !== 'win32'\) overlay\.focus\(\)/,
+      'BUG: overlay.focus() in chat:focusInput must be win32-guarded — unconditional focus steals ' +
+        "the meeting app's foreground on Windows, but macOS/Linux need it for the no-tap fallback.",
+    );
+  }
 });
 
 // ── macOS-default parity of the engaged session ─────────────────────────────
@@ -420,8 +433,8 @@ test('the Windows native hook stops stealth on Alt+Tab / any app switch (no clic
   );
   assert.match(
     rust,
-    /UnhookWinEvent\(fg_hook\)/,
-    'BUG: the WinEvent hook must be released on session cleanup.',
+    /UnhookWinEvent\(self\.fg\)/,
+    'BUG: the WinEvent hook must be released on session cleanup (now via the HookGuard Drop).',
   );
 });
 
@@ -510,7 +523,7 @@ test('main registers real stealth-tap handlers on Windows (not the non-desktop n
   // The gate that decides real-vs-stub must include win32.
   assert.match(
     mainSource,
-    /process\.platform === 'darwin' \|\| process\.platform === 'win32'\) \{[\s\S]{0,600}stealth-tap:start'/,
+    /process\.platform === 'darwin' \|\| process\.platform === 'win32'\) \{[\s\S]{0,1600}stealth-tap:start'/,
     'BUG: stealth-tap:* handlers must be registered for win32 with the real manager, or ' +
       'stealthTapStart() no-ops and click-to-type never engages the hook.',
   );
