@@ -127,16 +127,33 @@ test('undetectable: Windows drives the tray on toggle (macOS does it via _enforc
       'never appears for a session that started undetectable, and never returns after toggling off.',
   );
   // macOS must keep driving it from the enforcement loop (no regression).
-  assert.match(
-    src,
-    /app\.dock\.show\(\);\s*\n\s*this\.showTray\(\);/,
-    'BUG: macOS regression — the dock/tray restore in _enforceDockState disappeared.',
+  //
+  // Asserted on the PRESENCE of both pairs inside _enforceDockState, not on the
+  // tray call sitting directly under app.dock.hide()/show(). That adjacency is
+  // not the invariant, and pinning it makes this test fail on a legitimate
+  // refactor: the tray calls belong OUTSIDE the `shouldApply` gate, because
+  // decideDockTransition sets it false whenever the dock is already settled —
+  // so gating the tray on it means stealth ON with the dock already hidden
+  // never runs hideTray() (the tray keeps the real app name for the whole
+  // session), and the mirror case leaves no tray at all. What must never
+  // regress is that this function drives BOTH the dock and the tray on the
+  // darwin path; where the two calls sit relative to each other is free.
+  const enforceBody = src.slice(
+    src.indexOf('private _enforceDockState('),
+    src.indexOf('this._enforceDockState(wantUndetectable, targetFocusWindow, attempt + 1'),
   );
-  assert.match(
-    src,
-    /app\.dock\.hide\(\);\s*\n\s*this\.hideTray\(\);/,
-    'BUG: macOS regression — the dock/tray hide in _enforceDockState disappeared.',
-  );
+  assert.ok(enforceBody.length > 0, '_enforceDockState body not found');
+  for (const [call, what] of [
+    ['app.dock.hide();', 'the dock hide'],
+    ['app.dock.show();', 'the dock restore'],
+    ['this.hideTray();', 'the tray hide'],
+    ['this.showTray();', 'the tray restore'],
+  ]) {
+    assert.ok(
+      enforceBody.includes(call),
+      `BUG: macOS regression — ${what} (${call}) disappeared from _enforceDockState.`,
+    );
+  }
 });
 
 test('undetectable: the launcher leaves the Windows taskbar, at creation AND on toggle', () => {
