@@ -2,12 +2,14 @@
 //
 // macOS: overlay/pill/toggle/popovers are non-activating NSPanels
 // (type:'panel' + becomesKeyOnlyIfNeeded via applyStealthToWindow) — clicking
-// them never steals focus from the user's meeting app.
-// Windows: the equivalent is WS_EX_NOACTIVATE via setFocusable(false), applied
-// by utils/windowsFocusPolicy, with a transient typing grant so the chat input
-// still works. Reference acceptance check: with the overlay above
-// https://www.proginosko.com/test/WindowFocusEvents.html, clicking overlay
-// buttons must fire NO blur in the browser.
+// them never steals focus, and typing is captured by a CGEventTap so the
+// window never becomes key (no blur even while typing).
+// Windows: the mouse half is WS_EX_NOACTIVATE via setFocusable(false) (this
+// module); the keyboard half is a WH_KEYBOARD_LL hook exposing the same
+// StealthKeyboardTap the JS speaks (native-module/src/keyboard_hook_windows.rs)
+// so the overlay is NEVER focused. Reference acceptance check: with the overlay
+// above https://www.proginosko.com/test/WindowFocusEvents.html, clicking
+// overlay buttons AND clicking the input to type must fire NO blur.
 //
 // Platform is injected (no process.platform mutation), so BOTH branches run
 // on either OS.
@@ -27,7 +29,6 @@ const {
   isClickActivatingPlatform,
   attachNoActivate,
   isNoActivateManaged,
-  setTypingFocus,
 } = require(path.join(repoRoot, 'dist-electron/electron/utils/windowsFocusPolicy.js'));
 
 function fakeWindow() {
@@ -41,9 +42,6 @@ function fakeWindow() {
     },
     setFocusable(f) {
       calls.push(['setFocusable', f]);
-    },
-    focus() {
-      calls.push(['focus']);
     },
     on(event, cb) {
       const arr = listeners.get(event) ?? [];
@@ -69,7 +67,6 @@ test('darwin: attach is a no-op — the mac panel path must stay untouched', () 
   assert.equal(attachNoActivate(win, 'darwin'), false);
   assert.deepEqual(win.calls, [], 'must not touch focusable on macOS');
   assert.equal(isNoActivateManaged(win), false);
-  assert.equal(setTypingFocus(win, true, 'darwin'), false);
 });
 
 test('win32: attach applies WS_EX_NOACTIVATE (setFocusable(false)) immediately', () => {
@@ -79,68 +76,61 @@ test('win32: attach applies WS_EX_NOACTIVATE (setFocusable(false)) immediately',
   assert.equal(isNoActivateManaged(win), true);
 });
 
-test('win32: typing grant flips focusable on + focuses; release flips it back', () => {
+test('win32: the window is NEVER focused — the policy is permanent, not a typing grant', () => {
+  // Regression guard for the earlier "focus while typing" design that caused
+  // the exact blur the user reported. The module must expose no focus path.
+  const mod = require(path.join(repoRoot, 'dist-electron/electron/utils/windowsFocusPolicy.js'));
+  assert.equal(
+    typeof mod.setTypingFocus,
+    'undefined',
+    'BUG: setTypingFocus must not exist — focusing the overlay to type is what stole focus. ' +
+      'Typing without focus is handled by the WH_KEYBOARD_LL hook, not by focusing the window.',
+  );
   const win = fakeWindow();
   attachNoActivate(win, 'win32');
-  win.calls.length = 0;
-
-  assert.equal(setTypingFocus(win, true, 'win32'), true);
-  assert.deepEqual(win.calls, [['setFocusable', true], ['focus']]);
-
-  win.calls.length = 0;
-  assert.equal(setTypingFocus(win, false, 'win32'), true);
-  assert.deepEqual(win.calls, [['setFocusable', false]]);
+  // Only ever setFocusable(false) — never true.
+  assert.ok(
+    win.calls.every(([m, arg]) => m !== 'setFocusable' || arg === false),
+    'BUG: attachNoActivate must never call setFocusable(true)',
+  );
 });
 
-test('win32: typing grant self-reverts on blur and hide — a finished typing session can never leave the window click-activating', () => {
+test('win32: blur/hide re-assert focusable=false (defensive against a stray focus)', () => {
   for (const event of ['blur', 'hide']) {
     const win = fakeWindow();
     attachNoActivate(win, 'win32');
-    setTypingFocus(win, true, 'win32');
     win.calls.length = 0;
     win.emit(event);
     assert.deepEqual(
       win.calls,
       [['setFocusable', false]],
-      `'${event}' must restore the no-activate state`,
+      `'${event}' must re-assert the no-activate state`,
     );
   }
 });
 
-test('win32: unmanaged windows are refused — WeakSet membership is the IPC sender authorization', () => {
-  // The preload bridge is installed in EVERY window; a launcher renderer (or a
-  // compromised one) sending overlay-typing-focus must not be able to change
-  // its own focusability.
-  const launcher = fakeWindow();
-  assert.equal(setTypingFocus(launcher, true, 'win32'), false);
-  assert.deepEqual(launcher.calls, []);
-});
-
-test('destroyed windows are ignored by attach and grant', () => {
+test('destroyed windows are ignored by attach, and the revert never touches a dead window', () => {
   const win = fakeWindow();
   win.destroyed = true;
   assert.equal(attachNoActivate(win, 'win32'), false);
-  assert.equal(setTypingFocus(win, true, 'win32'), false);
   assert.deepEqual(win.calls, []);
 
-  // Destruction AFTER attach: the blur/hide revert must not touch a dead window.
   const win2 = fakeWindow();
   attachNoActivate(win2, 'win32');
   win2.calls.length = 0;
   win2.destroyed = true;
   win2.emit('blur');
-  assert.deepEqual(win2.calls, []);
+  assert.deepEqual(win2.calls, [], 'revert must guard isDestroyed()');
 });
 
 // ── Source assertions: the wiring ────────────────────────────────────────────
-// The policy is worthless if the windows stop opting in, or if another code
-// path re-arms click-activation.
 
 const read = (rel) => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
 const windowHelperSource = read('electron/WindowHelper.ts');
+const mainSource = read('electron/main.ts');
+const stealthMgrSource = read('electron/services/StealthKeyboardManager.ts');
 const preloadSource = read('electron/preload.ts');
 const ipcHandlersSource = read('electron/ipcHandlers.ts');
-const mainSource = read('electron/main.ts');
 
 test('overlay, pill and toggle windows are placed under the no-activate policy at creation', () => {
   for (const win of ['this.overlayWindow', 'this.pillWindow', 'this.toggleWindow']) {
@@ -148,8 +138,7 @@ test('overlay, pill and toggle windows are placed under the no-activate policy a
       windowHelperSource,
       new RegExp(`attachNoActivate\\(${win.replace(/[.$]/g, '\\$&')}\\)`),
       `BUG: ${win} must call attachNoActivate() right after construction — without it, every ` +
-        'click on that window activates Natively on Windows and steals foreground focus from ' +
-        'the meeting app (macOS is protected separately by type:"panel").',
+        'click on that window activates Natively on Windows and steals foreground focus.',
     );
   }
 });
@@ -158,21 +147,16 @@ test('the overlay-anchored popovers (settings / model selector) opt in too', () 
   assert.match(
     read('electron/SettingsWindowHelper.ts'),
     /attachNoActivate\(this\.settingsWindow\)/,
-    'BUG: the settings popover opens mid-meeting; without attachNoActivate() clicking it ' +
-      'steals focus on Windows (mac parity: applyStealthToWindow).',
+    'BUG: the settings popover must call attachNoActivate() or clicking it steals focus on Windows.',
   );
   assert.match(
     read('electron/ModelSelectorWindowHelper.ts'),
     /attachNoActivate\(this\.window\)/,
-    'BUG: the model selector opens mid-meeting; without attachNoActivate() clicking it ' +
-      'steals focus on Windows (mac parity: applyStealthToWindow).',
+    'BUG: the model selector must call attachNoActivate() or clicking it steals focus on Windows.',
   );
 });
 
 test('the hover-gate interaction policy must not re-arm click-activation on managed windows', () => {
-  // syncOverlayInteractionPolicy() runs on every hover boundary crossing and
-  // historically called setFocusable(true) unconditionally — on Windows that
-  // silently strips WS_EX_NOACTIVATE the moment the pointer touches the panel.
   const body = windowHelperSource.slice(
     windowHelperSource.indexOf('public syncOverlayInteractionPolicy('),
     windowHelperSource.indexOf('public setOverlayHoverInteractive('),
@@ -182,50 +166,55 @@ test('the hover-gate interaction policy must not re-arm click-activation on mana
     .split('\n')
     .filter((l) => !l.trim().startsWith('//'))
     .filter((l) => /setFocusable\(true\)/.test(l));
-  // Every setFocusable(true) inside the policy must sit behind an
-  // isNoActivateManaged() guard (checked structurally: the guard appears
-  // before each call within the same statement block).
   const guards = body.match(/isNoActivateManaged\(/g) ?? [];
   assert.ok(
     guards.length >= unguarded.length && unguarded.length > 0,
     'BUG: every setFocusable(true) in syncOverlayInteractionPolicy must be guarded by ' +
-      '!isNoActivateManaged(...) — an unguarded call re-arms click-activation on Windows ' +
-      'and overlay clicks steal foreground focus again.',
+      '!isNoActivateManaged(...) — an unguarded call re-arms click-activation on Windows.',
   );
 });
 
-test('preload installs the win32 typing bridge (focusin/pointerdown → overlay-typing-focus)', () => {
-  const bridge = preloadSource.slice(
-    preloadSource.indexOf('installWindowsTypingFocusBridge'),
+test('the removed typing-focus bridge is gone (preload + ipc) — it was the blur cause', () => {
+  assert.doesNotMatch(
+    preloadSource,
+    /overlay-typing-focus|installWindowsTypingFocusBridge/,
+    'BUG: the preload typing-focus bridge must be removed — focusing to type stole focus.',
   );
-  assert.ok(bridge.length > 0, 'typing bridge not found in preload');
-  assert.match(
-    bridge,
-    /process\.platform !== 'win32'\) return/,
-    'BUG: the bridge must be win32-only — on macOS the NSPanel handles typing focus natively.',
-  );
-  assert.match(
-    bridge,
-    /ipcRenderer\.send\('overlay-typing-focus'/,
-    'BUG: the bridge must request the grant over the overlay-typing-focus channel.',
-  );
-  for (const ev of ['focusin', 'focusout', 'pointerdown']) {
-    assert.match(
-      bridge,
-      new RegExp(`addEventListener\\(\\s*'${ev}'`),
-      `BUG: the bridge must listen for '${ev}' — focusin grants, focusout releases, and ` +
-        'pointerdown re-grants after an OS blur left the DOM caret in place (no focusin re-fires then).',
-    );
-  }
-});
-
-test('main process wires the bridge: IPC handler + chat:focusInput shortcut grant', () => {
-  assert.match(
+  assert.doesNotMatch(
     ipcHandlersSource,
-    /safeOn\('overlay-typing-focus'[\s\S]{0,200}setTypingFocus\(/,
-    'BUG: ipcHandlers must route overlay-typing-focus through setTypingFocus() — its managed-window ' +
-      'check is the sender authorization.',
+    /overlay-typing-focus|setTypingFocus/,
+    'BUG: the overlay-typing-focus IPC handler must be removed.',
   );
+});
+
+test('typing without focus is wired to the native stealth hook on BOTH desktop platforms', () => {
+  // StealthKeyboardManager must load the native tap on win32 too (not darwin-only).
+  const createTap = stealthMgrSource.slice(
+    stealthMgrSource.indexOf('private createTapInstance('),
+    stealthMgrSource.indexOf('private callNativePermissionCheck('),
+  );
+  assert.ok(createTap.length > 0, 'createTapInstance() not found');
+  assert.match(
+    createTap,
+    /process\.platform !== 'darwin' && process\.platform !== 'win32'/,
+    "BUG: createTapInstance must allow win32 — the Windows WH_KEYBOARD_LL hook exports the same " +
+      'StealthKeyboardTap; gating on darwin-only leaves Windows with no keystroke capture.',
+  );
+
+  // WindowHelper must register the overlay as the captured-key sink on win32.
+  const reg = windowHelperSource.slice(
+    windowHelperSource.indexOf('Register the overlay as the sole recipient'),
+    windowHelperSource.indexOf('Register the overlay as the sole recipient') + 900,
+  );
+  assert.match(
+    reg,
+    /process\.platform === 'darwin' \|\| process\.platform === 'win32'/,
+    'BUG: the overlay must be registered with StealthKeyboardManager on Windows too, or captured ' +
+      'keystrokes have no sink (and would fan out to all windows if the guard were dropped).',
+  );
+
+  // chat:focusInput must toggle the native tap on any platform where it is
+  // available (not darwin-gated) and must NOT focus the overlay as a fallback.
   const focusInputBlock = mainSource.slice(
     mainSource.indexOf("actionId === 'chat:focusInput'"),
     mainSource.indexOf("actionId === 'chat:whatToAnswer'"),
@@ -233,8 +222,23 @@ test('main process wires the bridge: IPC handler + chat:focusInput shortcut gran
   assert.ok(focusInputBlock.length > 0, 'chat:focusInput handler not found');
   assert.match(
     focusInputBlock,
-    /setTypingFocus\(overlay, true\)/,
-    'BUG: the chat:focusInput fallback must grant typing focus before overlay.focus() — with ' +
-      'WS_EX_NOACTIVATE a bare focus() is a no-op and the shortcut would type into nothing.',
+    /mgr\.isAvailable\(\)[\s\S]{0,80}mgr\.toggle\(\)/,
+    'BUG: chat:focusInput must toggle the stealth tap whenever available (macOS AND Windows).',
+  );
+  assert.doesNotMatch(
+    focusInputBlock,
+    /overlay\.focus\(\)|setTypingFocus/,
+    'BUG: chat:focusInput must NOT focus the overlay — focusing a WS_EX_NOACTIVATE window steals ' +
+      'foreground focus, the regression this feature removes.',
+  );
+});
+
+test('main registers real stealth-tap handlers on Windows (not the non-desktop no-op stubs)', () => {
+  // The gate that decides real-vs-stub must include win32.
+  assert.match(
+    mainSource,
+    /process\.platform === 'darwin' \|\| process\.platform === 'win32'\) \{[\s\S]{0,600}stealth-tap:start'/,
+    'BUG: stealth-tap:* handlers must be registered for win32 with the real manager, or ' +
+      'stealthTapStart() no-ops and click-to-type never engages the hook.',
   );
 });

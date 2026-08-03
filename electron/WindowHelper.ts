@@ -675,8 +675,9 @@ export class WindowHelper {
     // Windows counterpart of the mac panel treatment above: WS_EX_NOACTIVATE
     // (setFocusable(false)) so clicking the overlay/buttons never activates
     // Natively — the user's meeting app keeps foreground focus, exactly like
-    // becomesKeyOnlyIfNeeded on macOS. Typing is granted transiently via the
-    // preload focusin bridge → setTypingFocus(). No-op on macOS/Linux.
+    // becomesKeyOnlyIfNeeded on macOS. The window is NEVER focused; typing goes
+    // through the WH_KEYBOARD_LL stealth hook (StealthKeyboardManager), same as
+    // the macOS CGEventTap. No-op on macOS/Linux.
     if (attachNoActivate(this.overlayWindow)) {
       // Startup breadcrumb: lets a debug log positively confirm the running
       // process has the no-activate build (a stale process is the #1 cause of
@@ -689,10 +690,13 @@ export class WindowHelper {
     // fully interactive — silently breaking passthrough until the next toggle.
     this.syncOverlayInteractionPolicy();
 
-    // Register the overlay as the sole recipient of CGEventTap captured-key
+    // Register the overlay as the sole recipient of stealth captured-key
     // broadcasts. Without this, captured keystrokes fan out to ALL windows
-    // (settings, cropper, etc.) — silent privacy/security exposure.
-    if (process.platform === 'darwin') {
+    // (settings, cropper, etc.) — silent privacy/security exposure. Applies on
+    // BOTH desktop platforms now: macOS CGEventTap and the Windows
+    // WH_KEYBOARD_LL hook route keystrokes through the same manager, so the
+    // overlay must be the registered sink on Windows too.
+    if (process.platform === 'darwin' || process.platform === 'win32') {
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
@@ -1148,9 +1152,9 @@ export class WindowHelper {
       // Windows: skip — the overlay is under the no-activate policy
       // (attachNoActivate → WS_EX_NOACTIVATE). setFocusable(true) here would
       // re-arm click-activation and every overlay click would steal foreground
-      // focus from the meeting app. Mouse interactivity does not need
-      // focusable on Windows; typing focus is granted transiently by
-      // setTypingFocus() via the preload focusin bridge.
+      // focus from the meeting app. Mouse interactivity does not need focusable
+      // on Windows; typing is captured by the WH_KEYBOARD_LL stealth hook
+      // without the window ever being focused (StealthKeyboardManager).
       if (!isNoActivateManaged(this.overlayWindow)) {
         this.overlayWindow.setFocusable(true);
       }
