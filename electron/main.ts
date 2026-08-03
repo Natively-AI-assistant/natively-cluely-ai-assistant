@@ -111,18 +111,6 @@ try {
       `(platform=${process.platform} release=${os.release()} override=${fontationsOverride ?? 'auto'})`
     );
   }
-  // BISECT (NATIVELY_DISABLE_WINDOW_ANIMATIONS=1): turns off Chromium's native
-  // window open/close/minimize/maximize animations on Windows. Diagnostic for
-  // the launcher maximize/restore flicker — if the transition is clean with
-  // this on, the animation is the thing that composites badly, not our sizing
-  // code. Must be appended before app ready, hence here rather than in
-  // WindowHelper. Diagnostic only; delete with the other bisect flags.
-  if (process.env.NATIVELY_DISABLE_WINDOW_ANIMATIONS === '1') {
-    app.commandLine.appendSwitch('wm-window-animations-disabled');
-    console.log(
-      '[Bisect] wm-window-animations-disabled applied (NATIVELY_DISABLE_WINDOW_ANIMATIONS=1)',
-    );
-  }
 } catch {
   // Never let the mitigation itself break boot. Worst case: Fontations stays
   // enabled and the (rare) font crash remains possible — the render-process-gone
