@@ -6658,6 +6658,21 @@ export class AppState {
       this.windowHelper.syncOverlayInteractionPolicy();
       this.settingsWindowHelper.syncActivationPolicy();
       this.modelSelectorWindowHelper.syncActivationPolicy();
+      // The tray must follow undetectable state on Windows too. On macOS the
+      // _enforceDockState loop hides the tray alongside the dock and restores
+      // both on the way out — but that loop returns immediately off darwin, and
+      // it holds the ONLY showTray()/hideTray() call sites besides startup. So
+      // nothing drove the tray on Windows: launching with undetectable ON never
+      // created it, and toggling back OFF never created it either, leaving the
+      // user with no tray menu (show window / quit) until they restarted in
+      // normal mode. hideTray() is null-guarded and showTray() is idempotent,
+      // so this is safe to call on every real state change.
+      if (state) this.hideTray();
+      else this.showTray();
+      // Undetectable also means "no taskbar button" — the launcher is the only
+      // window without skipTaskbar (it needs one in normal mode). macOS achieves
+      // the equivalent by dropping the Dock tile.
+      this.windowHelper.syncLauncherTaskbarForStealth();
     }
 
     // Persist state via SettingsManager
