@@ -7266,6 +7266,27 @@ Provide only the answer, nothing else.`;
         });
     }
 
+    // WINDOWS: seed availability at mount so the FIRST input click engages the
+    // hook. On macOS `isCgEventTapAvailableRef` flips true only after the first
+    // active broadcast (the hotkey) — fine there, because clicking the input
+    // without the tap still types (the NSPanel becomes key). On Windows the
+    // overlay is WS_EX_NOACTIVATE and is NEVER focused, so without this the
+    // first click would engage nothing and keystrokes would go to the meeting
+    // app — a silently dead input until the user found Ctrl+Shift+Space. Gated
+    // to win32 so macOS behaviour is untouched. Stays false when the native
+    // hook is absent (stale binary) so blockInputFocus doesn't preventDefault a
+    // click that then has no input path at all.
+    if (window.electronAPI?.platform === 'win32' && window.electronAPI?.stealthTapAvailable) {
+      window.electronAPI
+        .stealthTapAvailable()
+        .then((ok) => {
+          if (ok) isCgEventTapAvailableRef.current = true;
+        })
+        .catch(() => {
+          /* fail closed — leave the input clickable via the normal path */
+        });
+    }
+
     const onMouseDown = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
       const isStealthEngageTarget = Boolean(target?.closest?.('[data-stealth-engage="true"]'));

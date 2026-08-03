@@ -25,6 +25,14 @@ pub mod stealth_window;
 #[cfg(target_os = "macos")]
 pub mod keyboard_tap;
 
+// Windows counterpart of keyboard_tap (macOS CGEventTap): a WH_KEYBOARD_LL
+// low-level hook exposing the IDENTICAL napi surface (StealthKeyboardTap +
+// is_accessibility_granted), so StealthKeyboardManager and the renderer's
+// stealth-key-captured contract are cross-platform. Lets the user type into
+// the overlay without the window taking OS focus (no meeting-app blur).
+#[cfg(target_os = "windows")]
+pub mod keyboard_hook_windows;
+
 use crate::audio_config::{CHUNK_BATCH_COUNT, CHUNK_BATCH_TIMEOUT_MS, DSP_POLL_MS};
 use crate::resampler::Resampler;
 use crate::silence_suppression::{FrameAction, SilenceSuppressionConfig, SilenceSuppressor};

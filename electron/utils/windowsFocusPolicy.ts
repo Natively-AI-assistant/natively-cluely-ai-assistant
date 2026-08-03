@@ -12,17 +12,15 @@
 // app-region drags all work), but a click no longer activates the HWND — the
 // foreground app (Zoom, browser, IDE) keeps focus and never fires blur.
 //
-// The one thing WS_EX_NOACTIVATE removes is keyboard input: typing requires
-// real activation. So the policy is two-state:
-//   • at rest: focusable=false → clicks are non-activating (parity with the
-//     mac panel's becomesKeyOnlyIfNeeded "clicks don't promote to key");
-//   • typing:  when the renderer reports that an editable element wants the
-//     caret (focusin/pointerdown on an input — see the preload bridge),
-//     setTypingFocus(win, true) flips focusable on and focuses the window —
-//     the same moment the mac panel WOULD become key ("only if needed");
-//   • the grant self-reverts on the window's own blur/hide (attach wires
-//     this), so a finished typing session can never leave the window in the
-//     click-activating state.
+// The window stays non-activating PERMANENTLY — it is never focused. This is a
+// stricter, simpler policy than an earlier "focus only while typing" attempt:
+// focusing to type is exactly what stole focus (the meeting app blurred the
+// instant the caret landed). Typing without focus is instead handled the same
+// way as macOS — a native keystroke hook (WH_KEYBOARD_LL, see
+// native-module/src/keyboard_hook_windows.rs) siphons keys and the renderer
+// injects the characters, so the window never has to become foreground. This
+// module's only job is the no-activate mouse policy; keyboard input lives in
+// StealthKeyboardManager.
 //
 // Pure module by design: no electron import, platform injectable — both
 // platform branches are unit-testable from either OS (see
@@ -32,7 +30,6 @@
 export interface NoActivateWindowLike {
   isDestroyed(): boolean;
   setFocusable(focusable: boolean): void;
-  focus(): void;
   on(event: 'blur' | 'hide', listener: () => void): unknown;
 }
 
@@ -42,14 +39,16 @@ export function isClickActivatingPlatform(platform: NodeJS.Platform): boolean {
 }
 
 // Windows currently under the no-activate policy. WeakSet: entries die with
-// their window, and membership doubles as the allowlist for the renderer's
-// typing-focus IPC (only attached windows may be made focusable by it).
+// their window. Membership gates the hover-gate's setFocusable(true) so it
+// cannot silently re-arm click-activation on a managed window.
 const managed = new WeakSet<object>();
 
 /**
  * Put a window under the no-activate policy (win32 only; no-op elsewhere).
  * Call once, right after construction, while the window is still hidden so
- * WS_EX_NOACTIVATE is in place before the first show.
+ * WS_EX_NOACTIVATE is in place before the first show. The window is never
+ * focused thereafter; a defensive blur/hide handler re-asserts focusable=false
+ * in case any other code path (or Electron internals) flips it.
  * Returns true if the policy was applied.
  */
 export function attachNoActivate(
@@ -60,9 +59,9 @@ export function attachNoActivate(
   if (!win || win.isDestroyed()) return false;
   managed.add(win);
   win.setFocusable(false);
-  // Self-reverting typing grant: however focus was gained (typing bridge,
-  // chat:focusInput shortcut), losing it or hiding must land back on
-  // non-activating, or the next meeting click would steal foreground again.
+  // Defensive re-assert: if anything ever flips focusable on (a stray focus(),
+  // an Electron internal), losing focus or hiding restores the non-activating
+  // state, so the next meeting click can never steal foreground focus.
   const revert = () => {
     if (!win.isDestroyed()) win.setFocusable(false);
   };
@@ -74,26 +73,4 @@ export function attachNoActivate(
 /** True if attachNoActivate() was applied to this window. */
 export function isNoActivateManaged(win: object | null | undefined): boolean {
   return !!win && managed.has(win);
-}
-
-/**
- * Transient typing grant for a managed window: focusable+focused while an
- * editable element holds the caret, back to non-activating when it lets go.
- * Ignores unmanaged windows (launcher etc.) and non-win32 platforms.
- * Returns true if the state was applied.
- */
-export function setTypingFocus(
-  win: (NoActivateWindowLike & object) | null | undefined,
-  active: boolean,
-  platform: NodeJS.Platform = process.platform,
-): boolean {
-  if (!isClickActivatingPlatform(platform)) return false;
-  if (!win || win.isDestroyed() || !managed.has(win)) return false;
-  if (active) {
-    win.setFocusable(true);
-    win.focus();
-  } else {
-    win.setFocusable(false);
-  }
-  return true;
 }
