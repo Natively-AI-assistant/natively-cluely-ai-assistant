@@ -40,6 +40,13 @@ const PI_CSS = `
         --pi-accent: var(--periwinkle-300);
         --pi-on-accent: var(--periwinkle-on-accent-dark);
         --pi-accent-subtle: color-mix(in srgb, var(--periwinkle-300) 8%, transparent);
+        /* Smoked variant of --pi-accent-subtle, for the cover-letter sheet. The
+           25% black scrim takes the composited sheet from rgb(30,29,35) to
+           rgb(23,22,27) over the #111 panel — ~0.76x, i.e. 25% darker, while
+           staying ~6 levels above the panel so the sheet still reads as a
+           distinct surface. Own token, not a change to --pi-accent-subtle,
+           which badges and other cards still use at full brightness. */
+        --pi-letter-bg: color-mix(in srgb, var(--periwinkle-300) 6%, rgba(0,0,0,0.25));
         --pi-accent-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
         --pi-accent-icon: var(--periwinkle-400);
         --pi-badge-text: var(--pi-accent);
@@ -79,6 +86,10 @@ const PI_CSS = `
         --pi-accent: var(--periwinkle-600);
         --pi-on-accent: var(--periwinkle-on-accent-light);
         --pi-accent-subtle: color-mix(in srgb, var(--periwinkle-600) 8%, transparent);
+        /* Same 25% scrim as dark mode, over this theme's accent: the sheet goes
+           from rgb(245,241,252) to rgb(187,185,192) on white — also ~0.76x.
+           Body text still clears AA on it at 5.3:1. */
+        --pi-letter-bg: color-mix(in srgb, var(--periwinkle-600) 6%, rgba(0,0,0,0.25));
         --pi-accent-border: color-mix(in srgb, var(--periwinkle-600) 16%, transparent);
         --pi-accent-icon: var(--periwinkle-700);
         --pi-badge-text: var(--pi-accent);
@@ -2441,7 +2452,7 @@ export function ProfileIntelligenceSettings({
                     Each placeholder rect breathes; the card shell stays solid. */}
                 {showSkeleton && (
                     <div>
-                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--pi-badge-border)', background: 'var(--pi-accent-subtle)' }}>
+                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--pi-badge-border)', background: 'var(--pi-letter-bg)' }}>
                             {/* Header row */}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid var(--pi-badge-border)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2522,7 +2533,7 @@ export function ProfileIntelligenceSettings({
                 {showOutput && (
                     <div style={{ opacity: coverLetterGenerating ? 0.45 : 1, transition: 'opacity 0.3s', pointerEvents: coverLetterGenerating ? 'none' : 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {/* Single continuous letter card — prose, not discrete step-cards like negotiation */}
-                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--pi-badge-border)', background: 'var(--pi-accent-subtle)' }}>
+                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--pi-badge-border)', background: 'var(--pi-letter-bg)' }}>
                             {/* Card header */}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid var(--pi-badge-border)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
