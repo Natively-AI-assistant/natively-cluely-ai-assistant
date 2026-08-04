@@ -13,6 +13,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
 import { vividDarkCodeTheme } from '../lib/codeTheme';
+import { splitGistLine } from '../lib/displayMarkup';
 
 registerPrismLanguages();
 
@@ -334,6 +335,23 @@ function parseCodingTemplate(answer: string): CodingSection[] | null {
     return sections;
 }
 
+// GFM table renderers, defined once and shared by every ReactMarkdown surface in
+// this file. Tailwind's preflight zeroes cell padding, so columns need explicit
+// gaps (right padding) and a hairline under the header. The min-w-0 wrapper is
+// what makes a wide table scroll instead of stretching the column it sits in,
+// and `code-scroll` keeps that scrollbar discreet — see the .code-scroll block
+// in index.css for why the global scrollbar rule does not cover this case.
+// `tableClass` is the only thing that varies between surfaces (font size).
+const makeTableComponents = (tableClass: string) => ({
+    table: ({ node, ...props }: any) => (
+        <div className="code-scroll w-full min-w-0 overflow-x-auto mb-2 last:mb-0">
+            <table className={`border-collapse ${tableClass}`} {...props} />
+        </div>
+    ),
+    th: ({ node, ...props }: any) => <th className="text-left align-top font-semibold text-text-primary pr-5 last:pr-0 pb-1.5 border-b border-border-muted" {...props} />,
+    td: ({ node, ...props }: any) => <td className="text-left align-top text-text-secondary tabular-nums pr-5 last:pr-0 py-1" {...props} />,
+});
+
 // Shared markdown renderer config — used by both CodingAnswerBlock and plain answers.
 const mdComponents = {
     h1: ({ node, ...props }: any) => <p className="text-[15px] text-text-secondary font-semibold leading-relaxed mb-2" {...props} />,
@@ -344,6 +362,7 @@ const mdComponents = {
     ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mb-2 space-y-1.5" {...props} />,
     li: ({ node, ...props }: any) => <li className="text-[15px] text-text-secondary font-normal leading-relaxed" {...props} />,
     strong: ({ node, ...props }: any) => <strong className="font-semibold text-text-primary" {...props} />,
+    ...makeTableComponents('text-[13.5px] leading-relaxed'),
     a: ({ node, ...props }: any) => <a target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:text-accent-hover underline underline-offset-2 transition-colors duration-150" {...props} />,
     pre: ({ children }: any) => <div className="mb-3 last:mb-0">{children}</div>,
     code: ({ node, className, children, ...props }: any) => {
@@ -590,13 +609,6 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
                                             />
                                         )}
                                         <span className="relative z-10">{pill.label}</span>
-                                        {/* Chevron signals panel OPEN vs closed (not which pill) */}
-                                        {isActive && (
-                                            <ChevronDown
-                                                className="relative z-10 w-3 h-3 text-text-tertiary transition-transform duration-200 ease-out rotate-180"
-                                                strokeWidth={2.5}
-                                            />
-                                        )}
                                     </button>
                                 );
                             })}
@@ -656,7 +668,7 @@ const UsageInteraction: React.FC<{
     useEffect(() => { seenInteractionIds.add(id); }, [id]);
 
     const codingSections = interaction.answer ? parseCodingTemplate(interaction.answer) : null;
-    const answerPlain = interaction.answer ? markdownToPlainText(interaction.answer) : '';
+    const answerPlain = interaction.answer ? markdownToPlainText(splitGistLine(interaction.answer).body) : '';
 
     const enter = (offset: { x?: number; y?: number }, delay: number) => {
         // Repeat views are always instant. First view: full slide-in normally,
@@ -671,7 +683,16 @@ const UsageInteraction: React.FC<{
             {/* User question — contained bubble, enters from the right, selectable */}
             {interaction.question && (
                 <div className="group/q flex flex-col items-end">
-                    <motion.div {...enter({ x: 8 }, staggerDelay)} className="bg-accent-primary text-white px-5 py-2.5 rounded-2xl rounded-tr-sm max-w-[80%] text-[15px] leading-relaxed shadow-sm select-text">
+                    {/* Fill, gradient, glow and foreground all come from .bubble-user (index.css)
+                        rather than utilities — a gradient cannot live in the background-color that
+                        bg-[var(...)] compiles to. It also replaces shadow-sm, whose plain black
+                        shadow is invisible on the dark pane and muddies the tinted glow. Not
+                        the accent tokens directly: --bubble-user-* points AT the accent but stays a
+                        separate pair, so the bubble can be retuned without moving every button and
+                        focus ring with it. White text on the dark-mode fill is 2.21:1 — an
+                        accepted but severe AA shortfall, recorded in
+                        PeriwinkleContrastGuard.test.mjs. */}
+                    <motion.div {...enter({ x: 8 }, staggerDelay)} className="bubble-user px-5 py-2.5 rounded-2xl rounded-tr-sm max-w-[80%] text-[15px] leading-relaxed select-text">
                         {interaction.question}
                     </motion.div>
                     <span className="mt-1 pr-1 text-[11px] text-text-tertiary select-none cursor-default opacity-0 translate-y-1 group-hover/q:opacity-100 group-hover/q:translate-y-0 transition-all duration-[160ms] ease-out">
@@ -690,11 +711,19 @@ const UsageInteraction: React.FC<{
                         <div className="text-text-secondary text-[15px] leading-relaxed max-w-none select-text">
                             {codingSections
                                 ? <CodingAnswerBlock sections={codingSections} firstView={firstView} />
-                                : (
-                                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                                        {cleanMarkdown(interaction.answer || '')}
-                                    </ReactMarkdown>
-                                )}
+                                : (() => {
+                                    // Teleprompter gist: persisted answers can end with a
+                                    // [[GIST]] line — render it as a summary chip, not text.
+                                    const { body: gistBody, gist: gistLine } = splitGistLine(interaction.answer || '');
+                                    return (
+                                        <>
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                                                {cleanMarkdown(gistBody)}
+                                            </ReactMarkdown>
+                                            {gistLine && <div className="overlay-gist-chip">{gistLine}</div>}
+                                        </>
+                                    );
+                                })()}
                         </div>
                         {/* Answer action bar — bottom-left, revealed on hover/focus-within */}
                         <div className="flex items-center gap-2 mt-2 opacity-0 translate-y-1 [@media(hover:hover)]:group-hover/a:opacity-100 [@media(hover:hover)]:group-hover/a:translate-y-0 group-focus-within/a:opacity-100 group-focus-within/a:translate-y-0 [@media(hover:none)]:opacity-100 transition-all duration-[160ms] ease-out select-none">
@@ -1143,16 +1172,23 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
     };
 
 
+    // Dark theme sits on the elevated grey (#151515) rather than the near-black
+    // --bg-secondary, matching the Launcher hero section. Light theme is unchanged.
     return (
-        <div className="h-full w-full flex flex-col bg-bg-secondary text-text-secondary font-sans overflow-hidden">
+        <div className={`h-full w-full flex flex-col ${isLight ? 'bg-bg-secondary' : 'bg-bg-elevated'} text-text-secondary font-sans overflow-hidden`}>
             {/* Main Content */}
-            <main className="flex-1 overflow-y-auto custom-scrollbar">
-                <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1, duration: 0.3 }}
-                    className="max-w-4xl mx-auto px-8 py-8 pb-32" // Added pb-32 for floating footer clearance
-                >
+            <main className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+                {/* Pinned header — date, title and the tab row stay put; only tab content scrolls.
+                    Kept inside <main> (rather than hoisted above it) so it shares the scroll box's
+                    content width: a two-container split would offset this column from the one below
+                    by the scrollbar width on platforms with classic (non-overlay) scrollbars. */}
+                <div className={`sticky top-0 z-20 ${isLight ? 'bg-bg-secondary' : 'bg-bg-elevated'}`}>
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1, duration: 0.3 }}
+                        className="max-w-4xl mx-auto px-8 pt-8 pb-8"
+                    >
                     {/* Meta Info & Actions Row */}
                     <div className="flex items-start justify-between mb-6">
                         <div className="w-full pr-4">
@@ -1177,8 +1213,14 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
 
                     {/* Tabs */}
                     {/* Designing Tabs to match reference 1:1 (Dark Pill Container) */}
-                    <div className="flex items-center justify-between mb-8">
-                        <div className={`p-1 rounded-xl inline-flex items-center gap-0.5 ${isLight ? 'bg-[#E5E5EA] border border-black/[0.04]' : 'bg-[#121214] border border-white/[0.08]'}`}>
+                    {/* Spacing below the tab row lives on the sticky wrapper's pb-8, not a margin
+                        here — a trailing child margin collapses out of the sticky box and would
+                        leave a 32px strip the header background doesn't paint. */}
+                    <div className="flex items-center justify-between">
+                        {/* Dark well deepened from #121214 to #0D0D0F: against the old near-black
+                            surface it read as a raised container, but on the elevated grey it was
+                            within ~3 levels of the page and the control lost its shape. */}
+                        <div className={`p-1 rounded-xl inline-flex items-center gap-0.5 ${isLight ? 'bg-[#E5E5EA] border border-black/[0.04]' : 'bg-[#0D0D0F] border border-white/[0.08]'}`}>
                             {['summary', 'transcript', 'usage'].map((tab) => (
                                 <button
                                     key={tab}
@@ -1210,7 +1252,15 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                             {isCopied ? t('Copied') : activeTab === 'summary' ? t('Copy full summary') : activeTab === 'transcript' ? t('Copy full transcript') : t('Copy usage')}
                         </button>
                     </div>
+                    </motion.div>
+                </div>
 
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1, duration: 0.3 }}
+                    className="max-w-4xl mx-auto px-8 pb-32" // pb-32 for floating footer clearance
+                >
                     {/* Tab Content */}
                     <div className="space-y-8">
                         {/* Using standard divs for content, framer motion for layout */}
@@ -1231,6 +1281,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             li: ({ node, ...props }) => <li className="text-sm text-text-secondary" {...props} />,
                                             strong: ({ node, ...props }) => <strong className="font-semibold text-text-primary" {...props} />,
                                             a: ({ node, ...props }) => <a className="text-accent-primary hover:underline" {...props} />,
+                                            ...makeTableComponents('text-sm leading-relaxed'),
                                         }}
                                     >
                                         {meeting.detailedSummary?.overview || ''}

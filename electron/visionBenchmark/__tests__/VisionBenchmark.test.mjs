@@ -168,16 +168,17 @@ test('report generation exports expected files without binary request data', asy
   await fs.rm(dir, { recursive: true });
 });
 
-test('benchmark IPC is registered only behind the explicit developer flag', async () => {
-  const source = await fs.readFile(path.resolve('electron/visionBenchmark/ipc.ts'), 'utf8');
-  assert.match(source, /NATIVELY_ENABLE_BENCHMARKS !== 'true'\) return/);
+test('benchmark stays CLI-only and exposes no app-facing IPC surface', async () => {
+  const files = await fs.readdir(path.resolve('electron/visionBenchmark'));
+  assert.ok(!files.includes('ipc.ts'), 'the in-app benchmark surface was removed; do not reintroduce it');
+  for (const file of files.filter((name) => name.endsWith('.ts'))) {
+    const source = await fs.readFile(path.resolve('electron/visionBenchmark', file), 'utf8');
+    assert.doesNotMatch(source, /ipcMain|safeHandle/, `${file} must not register IPC handlers`);
+  }
 });
 
 test('benchmark credentials use GEMINI_API_KEY_1 exclusively', async () => {
-  const ipcSource = await fs.readFile(path.resolve('electron/visionBenchmark/ipc.ts'), 'utf8');
   const cliSource = await fs.readFile(path.resolve('electron/visionBenchmark/cli.ts'), 'utf8');
-  assert.match(ipcSource, /process\.env\.GEMINI_API_KEY_1/);
   assert.match(cliSource, /process\.env\.GEMINI_API_KEY_1/);
-  assert.doesNotMatch(ipcSource, /getGeminiApiKey|process\.env\.GEMINI_API_KEY(?!_1)|process\.env\.GOOGLE_API_KEY/);
-  assert.doesNotMatch(cliSource, /process\.env\.GEMINI_API_KEY(?!_1)|process\.env\.GOOGLE_API_KEY/);
+  assert.doesNotMatch(cliSource, /getGeminiApiKey|process\.env\.GEMINI_API_KEY(?!_1)|process\.env\.GOOGLE_API_KEY/);
 });

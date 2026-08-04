@@ -1,11 +1,13 @@
 # Vision Model Benchmark
 
-`Vision Model Benchmark` is an internal screenshot-to-answer benchmark for Natively's Gemini path. It has a developer-only Settings surface and a CLI. The benchmark is isolated from normal chat, screenshot capture, prompt selection, and provider fallback behavior.
+`Vision Model Benchmark` is an internal screenshot-to-answer benchmark for Natively's Gemini path. It is a CLI-only developer tool. The benchmark is isolated from normal chat, screenshot capture, prompt selection, and provider fallback behavior.
+
+The benchmark originally shipped with a developer-only Settings tab. That surface was removed on 2026-08-01: its main-process handlers were never registered, so the tab never functioned, and the renderer's unconditional `vision-benchmark:info` probe logged a `No handler registered` error on every launch. The CLI is the supported entry point.
 
 ## Architecture
 
 - `electron/visionBenchmark/` contains shared configuration, prompt selection, in-memory image processing, Gemini streaming, metrics, statistics, cancellation, quality checks, IPC, and report export.
-- `src/components/settings/VisionModelBenchmark.tsx` is the developer UI.
+- `electron/visionBenchmark/cli.ts` is the entry point, built to `dist-electron/electron/visionBenchmark/cli.js`.
 - `vision-benchmark.models.json` is the benchmark-only fallback model configuration.
 - `electron/visionBenchmark/__tests__/VisionBenchmark.test.mjs` uses mocked streams. Normal tests make no paid API calls.
 
@@ -15,13 +17,7 @@ The supplied master-prompt repository was compared with the checked-in prompt so
 
 ## Developer gate
 
-Start Natively with:
-
-```bash
-NATIVELY_ENABLE_BENCHMARKS=true npm run app:dev
-```
-
-Open Settings and select **Vision Benchmark**. When the variable is absent or anything other than the exact string `true`, the IPC handlers are not registered and the navigation item is not rendered.
+None is needed. The benchmark is not reachable from the running app at all — it has no IPC surface and no renderer code. It runs only when a developer explicitly invokes the CLI (see **CLI** below).
 
 ## Credentials and secrets
 
@@ -51,13 +47,13 @@ Environment names:
 
 Because repository IDs have first precedence, an environment value applies only when that label is absent from the repository registry. An unavailable ID is never replaced: its run fails as `invalid_model`, the rejected ID stays visible, and the remaining models continue.
 
-## UI usage
+## Run settings
 
-Choose or drag a PNG, JPEG, or WebP screenshot. Select models, a prompt source, a Natively mode, and the run settings. The prompt preview displays the exact system and user channels, character counts, screenshot status, and SHA-256 hash. Provider-reported input usage is the authoritative token count after a request; no approximate tokenizer is presented as exact.
+Supply a PNG, JPEG, or WebP screenshot, then select models, a prompt source, a Natively mode, and the run settings. Provider-reported input usage is the authoritative token count after a request; no approximate tokenizer is presented as exact.
 
 Defaults are 10 measured runs, 2 warm-ups, minimal thinking, temperature 0, high resolution, sequential execution, warm client reuse, and randomized model order. Sequential execution reduces cross-request network distortion.
 
-The live view shows progress, each response, reasoning text when exposed, a sanitized event trace, comparison statistics, and seven 1–5 manual quality ratings. Automated checks are deterministic hygiene checks only; they do not claim semantic correctness. A judge-model interface can be added later without changing the run schema, but no judge calls are made by default.
+Automated checks are deterministic hygiene checks only; they do not claim semantic correctness. The seven 1–5 manual quality ratings remain in the run schema and can be filled in after a run, but there is no longer an interactive surface for entering them. A judge-model interface can be added without changing the run schema; no judge calls are made by default.
 
 ## CLI
 

@@ -2,12 +2,21 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
     Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star, Sparkles,
-    User, CheckCircle, ArrowUpRight, ChevronRight, Paperclip, Plus, FileText,
+    User, CheckCircle, ArrowUpRight, ChevronRight, Paperclip, FileText,
     GraduationCap, FolderKanban, Layers, Mail, MessageSquare,
 } from 'lucide-react';
 import { PremiumUpgradeModal } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
+import { CHECKOUT_URLS } from '../config/urls';
+
+const openExternal = (url: string) => {
+    if ((window as any).electronAPI?.openExternal) {
+        (window as any).electronAPI.openExternal(url);
+    } else {
+        window.open(url, '_blank', 'noopener,noreferrer');
+    }
+};
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const PI_CSS = `
@@ -28,19 +37,26 @@ const PI_CSS = `
         --pi-input-border: rgba(255,255,255,0.10);
         --pi-danger: #ef4444;
         --pi-danger-bg: rgba(239,68,68,0.12);
-        --pi-accent: var(--orchid-300);
-        --pi-on-accent: var(--orchid-on-accent-dark);
-        --pi-accent-subtle: color-mix(in srgb, var(--orchid-300) 8%, transparent);
-        --pi-accent-border: color-mix(in srgb, var(--orchid-300) 20%, transparent);
-        --pi-accent-icon: var(--orchid-400);
+        --pi-accent: var(--periwinkle-300);
+        --pi-on-accent: var(--periwinkle-on-accent-dark);
+        --pi-accent-subtle: color-mix(in srgb, var(--periwinkle-300) 8%, transparent);
+        /* Smoked variant of --pi-accent-subtle, for the cover-letter sheet. The
+           25% black scrim takes the composited sheet from rgb(30,29,35) to
+           rgb(23,22,27) over the #111 panel — ~0.76x, i.e. 25% darker, while
+           staying ~6 levels above the panel so the sheet still reads as a
+           distinct surface. Own token, not a change to --pi-accent-subtle,
+           which badges and other cards still use at full brightness. */
+        --pi-letter-bg: color-mix(in srgb, var(--periwinkle-300) 6%, rgba(0,0,0,0.25));
+        --pi-accent-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
+        --pi-accent-icon: var(--periwinkle-400);
         --pi-badge-text: var(--pi-accent);
         --pi-badge-border: var(--pi-accent-border);
-        --pi-cta-accent-text: var(--orchid-400);
-        --pi-cta-accent-border: color-mix(in srgb, var(--orchid-300) 30%, transparent);
+        --pi-cta-accent-text: var(--periwinkle-400);
+        --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-300) 30%, transparent);
         --pi-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
         --pi-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-        --pi-input-border-focus: color-mix(in srgb, var(--orchid-300) 40%, transparent);
-        --pi-input-bg-focus: color-mix(in srgb, var(--orchid-300) 4%, transparent);
+        --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-300) 40%, transparent);
+        --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-300) 4%, transparent);
         --pi-cta-bg: #ffffff;
         --pi-cta-text: #141414;
         --pi-cta-ring: rgba(0,0,0,0.08);
@@ -67,17 +83,24 @@ const PI_CSS = `
         --pi-item-hover: rgba(0,0,0,0.03);
         --pi-item-active: rgba(0,0,0,0.06);
         --pi-input-border: rgba(0,0,0,0.10);
-        --pi-accent: var(--orchid-600);
-        --pi-on-accent: var(--orchid-on-accent-light);
-        --pi-accent-subtle: color-mix(in srgb, var(--orchid-600) 8%, transparent);
-        --pi-accent-border: color-mix(in srgb, var(--orchid-600) 16%, transparent);
-        --pi-accent-icon: var(--orchid-700);
+        --pi-accent: var(--periwinkle-600);
+        --pi-on-accent: var(--periwinkle-on-accent-light);
+        --pi-accent-subtle: color-mix(in srgb, var(--periwinkle-600) 8%, transparent);
+        /* NO black scrim here. Dark mode's 25% smoke, applied over white, lands
+           on rgb(187,185,192) — a muddy grey slab, which is what it looked like
+           when it shipped. A light theme expresses "deeper surface" by taking
+           the tint up, not the luminance down, so this deepens the periwinkle
+           wash from 8% to 14%: rgb(237,230,249), ~18 levels under the page, and
+           still unmistakably lavender rather than grey. */
+        --pi-letter-bg: color-mix(in srgb, var(--periwinkle-600) 14%, transparent);
+        --pi-accent-border: color-mix(in srgb, var(--periwinkle-600) 16%, transparent);
+        --pi-accent-icon: var(--periwinkle-700);
         --pi-badge-text: var(--pi-accent);
         --pi-badge-border: var(--pi-accent-border);
-        --pi-cta-accent-text: var(--orchid-700);
-        --pi-cta-accent-border: color-mix(in srgb, var(--orchid-600) 24%, transparent);
-        --pi-input-border-focus: color-mix(in srgb, var(--orchid-600) 40%, transparent);
-        --pi-input-bg-focus: color-mix(in srgb, var(--orchid-600) 4%, transparent);
+        --pi-cta-accent-text: var(--periwinkle-700);
+        --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
+        --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
+        --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-600) 4%, transparent);
         --pi-cta-bg: #000000;
         --pi-cta-text: #ffffff;
         --pi-cta-ring: rgba(255,255,255,0.10);
@@ -188,10 +211,10 @@ const PI_CSS = `
     .pi-content-box:focus-within {
         border-color: var(--pi-input-border-focus);
         background: var(--pi-input-bg-focus);
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--orchid-300) 12%, transparent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--periwinkle-300) 12%, transparent);
     }
     .pi-root[data-theme='light'] .pi-content-box:focus-within {
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--orchid-600) 12%, transparent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--periwinkle-600) 12%, transparent);
     }
 
     /* ── Textarea / Input ── */
@@ -356,7 +379,7 @@ const PI_CSS = `
         border-radius: var(--pi-r-md); margin-bottom: 6px;
     }
     .pi-upload-btn {
-        display: flex; align-items: center; gap: 7;
+        display: flex; align-items: center; gap: 7px;
         padding: 7px 18px; background: var(--pi-btn-bg);
         border: 1px solid var(--pi-btn-border); border-radius: 20px;
         color: var(--pi-primary); font-size: 12px; font-weight: 500;
@@ -366,15 +389,6 @@ const PI_CSS = `
     .pi-upload-btn:hover:not(:disabled) { background: var(--pi-btn-bg-hover); }
     .pi-upload-btn:active:not(:disabled) { transform: scale(0.97); }
     .pi-upload-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .pi-add-file-btn {
-        display: flex; align-items: center; gap: 6;
-        background: none; border: none; cursor: pointer;
-        color: var(--pi-tertiary); font-size: 12px; font-family: inherit;
-        padding: 6px 2px; margin-top: 2px;
-        transition: color 180ms var(--pi-ease-out), transform 140ms var(--pi-ease-out);
-    }
-    .pi-add-file-btn:hover { color: var(--pi-primary); }
-    .pi-add-file-btn:active { transform: scale(0.97); }
 
     /* ── Sub-list staggered reveal ── */
     .pi-stagger > .pi-list-item:nth-child(1) { animation-delay: 0ms; }
@@ -604,10 +618,10 @@ const PI_GATE_FEATURES: Array<{
     // ellipsize instead of crowding the card). Keep these short; verify with
     // the pi-gate screenshot/measurement script before lengthening any of them
     // again.
-    { key: 'profile', label: 'Profile', desc: 'Every skill and role — mapped.', hex: '#34d399', Icon: FileText, col: '3 / 5', row: '1 / 2', type: 'wide' },
+    { key: 'profile', label: 'Profile', desc: 'Every skill and role mapped.', hex: '#34d399', Icon: FileText, col: '3 / 5', row: '1 / 2', type: 'wide' },
     { key: 'company', label: 'Company Intel', hex: '#fbbf24', Icon: Building2, col: '3 / 4', row: '2 / 3', type: 'small' },
     { key: 'cover', label: 'Cover Letter', hex: '#fb7185', Icon: Mail, col: '4 / 5', row: '2 / 3', type: 'small' },
-    { key: 'talking', label: 'Talking Points', desc: 'Every fit gap — answered.', hex: '#f472b6', Icon: MessageSquare, col: '1 / 3', row: '3 / 4', type: 'wide' },
+    { key: 'talking', label: 'Talking Points', desc: 'Every fit gap answered.', hex: '#f472b6', Icon: MessageSquare, col: '1 / 3', row: '3 / 4', type: 'wide' },
     { key: 'search', label: 'Web Search', desc: 'Live research, on demand.', hex: '#38bdf8', Icon: Globe, col: '3 / 5', row: '3 / 4', type: 'wide' },
 ];
 
@@ -791,8 +805,7 @@ const PI_GATE_CSS = `
     }
 `;
 
-function ProfileIntelligenceProGate({ onUnlock, onOpenNativelyAPI, onClose }: {
-    onUnlock: () => void;
+function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
     onOpenNativelyAPI?: () => void;
     onClose?: () => void;
 }) {
@@ -966,7 +979,7 @@ function ProfileIntelligenceProGate({ onUnlock, onOpenNativelyAPI, onClose }: {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button className="pig-cta-group" onClick={onUnlock}>
+                    <button className="pig-cta-group" onClick={() => openExternal(CHECKOUT_URLS.apiMax)}>
                         Unlock Pro
                         <div className="pig-cta-icon-ring">
                             <ArrowUpRight size={14} strokeWidth={2.5} />
@@ -1012,8 +1025,22 @@ export function ProfileIntelligenceSettings({
     const [profileUploading, setProfileUploading] = useState(false);
     const [profileUploadStatus, setProfileUploadStatus] = useState<string | undefined>(undefined);
     const [profileError, setProfileError] = useState('');
+    // Nothing sets `cancelled` any more — the X button used to, but that only
+    // silenced this renderer while main finished the ingest anyway. Retained as
+    // a no-op guard so the upload paths keep their shape; don't go hunting for
+    // the writer.
     const profileAbortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
     const [profileData, setProfileData] = useState<any>(null);
+    // Set when this mount ADOPTED an ingest that was already running in main —
+    // i.e. the user uploaded, closed the panel, and reopened it. There is no
+    // local promise to resume from (the old one's continuation died with the
+    // previous mount), so the poll below is the only thing that can finalize it.
+    const profileDetachedRef = useRef(false);
+    // Bumped whenever a detached ref is set. The refs themselves cannot start the
+    // poll below — ref writes do not re-render — and relying on the accompanying
+    // setUploading(true) to do it only works while `uploading` happens to be
+    // false at that moment. This makes adoption an explicit render signal.
+    const [adoptTick, setAdoptTick] = useState(0);
 
     // ── Hero stat (static rounded value, no count-up) ────────────────────────
     const heroYearsRounded = (profileStatus.totalExperienceYears != null && Number.isFinite(profileStatus.totalExperienceYears))
@@ -1025,6 +1052,7 @@ export function ProfileIntelligenceSettings({
     const [jdUploadStatus, setJdUploadStatus] = useState<string | undefined>(undefined);
     const [jdError, setJdError] = useState('');
     const jdAbortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
+    const jdDetachedRef = useRef(false);
 
     // Tavily
     const [tavilyApiKey, setTavilyApiKey] = useState('');
@@ -1070,7 +1098,26 @@ export function ProfileIntelligenceSettings({
                 writePremiumCache(!!live, premiumPlan);
             }).catch(() => {}).finally(() => setLicenseLoaded(true));
         }
-        window.electronAPI?.profileGetStatus?.().then(setProfileStatus).catch(() => {});
+        // Adopt any ingest still running in main. Closing the panel unmounts this
+        // component but does NOT cancel the upload — main runs it to completion —
+        // so on reopen we re-derive the indexing state instead of rendering the
+        // empty upload slot (which invited a duplicate upload of the same file).
+        window.electronAPI?.profileGetStatus?.().then((status: any) => {
+            setProfileStatus(status);
+            if (status?.resume_indexing_in_flight) {
+                profileDetachedRef.current = true;
+                setProfileUploading(true);
+                setProfileUploadStatus('processing');
+            }
+            if (status?.jd_indexing_in_flight) {
+                jdDetachedRef.current = true;
+                setJdUploading(true);
+                setJdUploadStatus('processing');
+            }
+            if (status?.resume_indexing_in_flight || status?.jd_indexing_in_flight) {
+                setAdoptTick(t => t + 1);
+            }
+        }).catch(() => {});
         window.electronAPI?.profileGetProfile?.().then((data: any) => {
             setProfileData(data);
             if (data?.coverLetter) setCoverLetter(data.coverLetter);
@@ -1099,6 +1146,71 @@ export function ProfileIntelligenceSettings({
         }).catch(() => {});
     }, []);
 
+    // Finalize an ADOPTED ingest. Only runs for uploads this mount inherited —
+    // when doResumeUpload/doJdUpload own the request their awaited promise
+    // already reports the outcome, so polling would double-handle it.
+    useEffect(() => {
+        if (!profileDetachedRef.current && !jdDetachedRef.current) return;
+        let stopped = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const finish = (
+            setUploading: (v: boolean) => void,
+            setStatus: (v: string | undefined) => void,
+            ok: boolean,
+        ) => {
+            setUploading(false);
+            setStatus(ok ? 'ready' : 'failed');
+            // NOT guarded by `stopped`: clearing `uploading` re-runs this effect
+            // and tears it down, so a stopped-guard here would leave the badge
+            // pinned on ready/failed forever. Matches the local-upload path,
+            // which fires the same unguarded reset.
+            setTimeout(() => setStatus(undefined), 3000);
+        };
+        const tick = async () => {
+            try {
+                const st: any = await window.electronAPI?.profileGetStatus?.();
+                if (stopped || !st) return;
+                const resumeSettled = profileDetachedRef.current && !st.resume_indexing_in_flight;
+                const jdSettled = jdDetachedRef.current && !st.jd_indexing_in_flight;
+
+                // Load the profile BEFORE clearing `uploading`. Both empty-slot
+                // guards are `!<has data> && !<uploading>`, and the JD one reads
+                // profileData.hasActiveJD — a different source than the status
+                // flags. Clearing `uploading` first leaves a render where neither
+                // holds and the panel flashes the empty upload slot: exactly the
+                // symptom this whole change removes.
+                const data = (resumeSettled || jdSettled)
+                    ? await window.electronAPI?.profileGetProfile?.()
+                    : null;
+                if (stopped) return;
+                if (data) setProfileData(data);
+                setProfileStatus(st);
+
+                if (resumeSettled) {
+                    profileDetachedRef.current = false;
+                    const ok = Boolean(st.hasProfile);
+                    // A background ingest that failed would otherwise land the
+                    // user on a bare empty slot with no explanation — the local
+                    // upload path sets profileError here, so this one must too.
+                    if (!ok) setProfileError('Indexing failed. Please upload the file again.');
+                    finish(setProfileUploading, setProfileUploadStatus, ok);
+                }
+                if (jdSettled) {
+                    jdDetachedRef.current = false;
+                    // Judge by the same field the JD empty-slot guard renders on.
+                    const ok = Boolean(data?.hasActiveJD ?? st.jd_structured_extraction_complete);
+                    if (!ok) setJdError('Indexing failed. Please upload the file again.');
+                    finish(setJdUploading, setJdUploadStatus, ok);
+                }
+            } catch { /* transient IPC failure — keep polling */ }
+            if (!stopped && (profileDetachedRef.current || jdDetachedRef.current)) {
+                timer = setTimeout(tick, 1500);
+            }
+        };
+        timer = setTimeout(tick, 1500);
+        return () => { stopped = true; if (timer) clearTimeout(timer); };
+    }, [profileUploading, jdUploading, adoptTick]);
+
     const handleRemoveTavilyKey = async () => {
         if (!confirm('Remove your Tavily API key?')) return;
         try {
@@ -1113,6 +1225,7 @@ export function ProfileIntelligenceSettings({
     const doResumeUpload = async (filePath: string) => {
         const token = { cancelled: false };
         profileAbortRef.current = token;
+        profileDetachedRef.current = false; // this mount owns the request
         setProfileError(''); setProfileUploading(true); setProfileUploadStatus('uploading');
         try {
             setProfileUploadStatus('processing');
@@ -1146,6 +1259,7 @@ export function ProfileIntelligenceSettings({
     const doJdUpload = async (filePath: string) => {
         const token = { cancelled: false };
         jdAbortRef.current = token;
+        jdDetachedRef.current = false; // this mount owns the request
         setJdError(''); setJdUploading(true); setJdUploadStatus('uploading');
         try {
             setJdUploadStatus('processing');
@@ -1200,12 +1314,25 @@ export function ProfileIntelligenceSettings({
     // Section renderers
     // ─────────────────────────────────────────────────────────────────────────
 
+    // Context Intelligence V3: source authority replaces the Persona Engine
+    // global override (§6) — same gate SettingsPopup applies to Profile Mode.
+    // Under V3 this toggle changed nothing on the wired surfaces; a control
+    // that implies control it doesn't have is worse than none.
+    const [ciV3Enabled, setCiV3Enabled] = React.useState(false);
+    React.useEffect(() => {
+        (window.electronAPI as any)?.answerPolicyGet?.({ templateType: 'general' })
+            .then((st: any) => setCiV3Enabled(Boolean(st?.v3Enabled)))
+            .catch(() => setCiV3Enabled(false));
+    }, []);
+
     const renderIdentity = () => {
         const isActive = profileStatus.profileMode && hasProfileAccess;
         const isDisabled = !profileStatus.hasProfile || !hasProfileAccess;
         return (
         <>
-            {/* Persona Engine toggle card */}
+            {/* Persona Engine toggle card — hidden under Context Intelligence
+                V3 (source authority replaces the global override, §6). */}
+            {!ciV3Enabled && (
             <div
                 className="pi-toggle-card"
                 data-on={isActive ? 'true' : 'false'}
@@ -1235,9 +1362,24 @@ export function ProfileIntelligenceSettings({
                     <div className="pi-toggle-thumb" />
                 </div>
             </div>
+            )}
 
-            {/* Resume */}
-            <h3 className="pi-section-label">Resume</h3>
+            {/* Resume — header + descriptor, same shape as Company Intel's so the
+                two sections read as one product. The descriptor says what the file
+                *powers*; the faint hint inside the dropzone stays the CTA. Three
+                type levels (hero / secondary / tertiary) keep them from colliding.
+                It deliberately does NOT enumerate "roles, projects, skills" — in the
+                filled state the snapshot card directly below renders exactly those,
+                and the line would read as that card's caption instead of the
+                section's descriptor. Kept to a single line: at 12px the content
+                column is wide enough that one sentence never wraps, so the header
+                block stays a tight two-line unit above the card. */}
+            <div style={{ marginBottom: 10 }}>
+                <h3 className="pi-section-label" style={{ margin: 0 }}>Resume</h3>
+                <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                    Grounds every answer in what you've actually done, instead of generic advice.
+                </p>
+            </div>
             {!profileStatus.hasProfile && !profileUploading ? (
                 <FileUploadEmpty
                     hint="Add your resume as real-time context."
@@ -1256,19 +1398,21 @@ export function ProfileIntelligenceSettings({
                         <PIIndexBadge status={profileUploadStatus} />
                         <button
                             className="pi-press-soft"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
-                            onMouseEnter={e => (e.currentTarget.style.color = 'var(--pi-danger)')}
+                            disabled={profileUploading}
+                            title={profileUploading
+                                ? 'Indexing — this finishes in the background and cannot be stopped. Delete it once it completes.'
+                                : 'Delete resume'}
+                            style={{ background: 'none', border: 'none', cursor: profileUploading ? 'not-allowed' : 'pointer', opacity: profileUploading ? 0.4 : 1, color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
+                            onMouseEnter={e => { if (!profileUploading) e.currentTarget.style.color = 'var(--pi-danger)'; }}
                             onMouseLeave={e => (e.currentTarget.style.color = 'var(--pi-tertiary)')}
                             onClick={async () => {
-                                if (profileUploading) {
-                                    profileAbortRef.current.cancelled = true;
-                                    setProfileUploading(false);
-                                    setProfileUploadStatus(undefined);
-                                    setProfileStatus({ hasProfile: false, profileMode: false });
-                                    const cancelData = await window.electronAPI?.profileGetProfile?.();
-                                    setProfileData(cancelData ?? null);
-                                    return;
-                                }
+                                // Previously this set profileAbortRef.cancelled and rendered
+                                // { hasProfile: false } — but that flag only silences this
+                                // renderer. Main runs ingestDocument to completion and then
+                                // enables knowledge mode, so "cancel" produced a UI claiming
+                                // no profile while the resume was in fact saved and live.
+                                // The button is disabled mid-ingest rather than lying.
+                                if (profileUploading) return;
                                 if (!confirm('Delete your resume and its extracted data?')) return;
                                 try {
                                     await window.electronAPI?.profileDelete?.();
@@ -1329,11 +1473,6 @@ export function ProfileIntelligenceSettings({
                             </div>
                         );
                     })()}
-                    {!profileUploading && (
-                        <button className="pi-add-file-btn" onClick={browseResume}>
-                            <Plus size={12} /> Replace file
-                        </button>
-                    )}
                 </div>
             )}
             {profileError && (
@@ -1342,8 +1481,15 @@ export function ProfileIntelligenceSettings({
                 </div>
             )}
 
-            {/* Job Description */}
-            <h3 className="pi-section-label">Job Description</h3>
+            {/* Job Description — same header + descriptor pattern. Company Intel
+                keys off this JD's extracted company name, so the descriptor names
+                that downstream payoff rather than restating the upload CTA. */}
+            <div style={{ marginBottom: 10 }}>
+                <h3 className="pi-section-label" style={{ margin: 0 }}>Job Description</h3>
+                <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                    Frames answers around what this specific role asks for, and powers Company Intel.
+                </p>
+            </div>
             {!profileData?.hasActiveJD && !jdUploading ? (
                 <FileUploadEmpty
                     hint="Add a job description as real-time context."
@@ -1364,16 +1510,17 @@ export function ProfileIntelligenceSettings({
                         <PIIndexBadge status={jdUploadStatus} />
                         <button
                             className="pi-press-soft"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
-                            onMouseEnter={e => (e.currentTarget.style.color = 'var(--pi-danger)')}
+                            disabled={jdUploading}
+                            title={jdUploading
+                                ? 'Indexing — this finishes in the background and cannot be stopped. Delete it once it completes.'
+                                : 'Delete job description'}
+                            style={{ background: 'none', border: 'none', cursor: jdUploading ? 'not-allowed' : 'pointer', opacity: jdUploading ? 0.4 : 1, color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
+                            onMouseEnter={e => { if (!jdUploading) e.currentTarget.style.color = 'var(--pi-danger)'; }}
                             onMouseLeave={e => (e.currentTarget.style.color = 'var(--pi-tertiary)')}
                             onClick={async () => {
-                                if (jdUploading) {
-                                    jdAbortRef.current.cancelled = true;
-                                    setJdUploading(false);
-                                    setJdUploadStatus(undefined);
-                                    return;
-                                }
+                                // Same lie as the resume X — the abort flag only silenced
+                                // this renderer while main finished the JD ingest.
+                                if (jdUploading) return;
                                 try {
                                     await window.electronAPI?.profileDeleteJD?.();
                                     const data = await window.electronAPI?.profileGetProfile?.();
@@ -1403,7 +1550,7 @@ export function ProfileIntelligenceSettings({
                                     )}
                                 </div>
                                 {jd.compensation_hint && (
-                                    <div style={{ fontSize: 11, fontWeight: 600, color: '#34d399' }}>{jd.compensation_hint}</div>
+                                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--pi-hero)' }}>{jd.compensation_hint}</div>
                                 )}
                                 {reqs.length > 0 && (
                                     <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -1425,11 +1572,6 @@ export function ProfileIntelligenceSettings({
                             </div>
                         );
                     })()}
-                    {!jdUploading && (
-                        <button className="pi-add-file-btn" onClick={browseJD}>
-                            <Plus size={12} /> Replace file
-                        </button>
-                    )}
                 </div>
             )}
             {jdError && (
@@ -1437,6 +1579,31 @@ export function ProfileIntelligenceSettings({
                     {jdError}
                 </div>
             )}
+
+            {/* Scope note — applies to BOTH files above, so it closes the section
+                rather than sitting under either card. Deliberately borderless: a
+                third bordered box after two would read as another upload target.
+                11px/tertiary puts it below the cards' own hint text in the type
+                hierarchy, which is what a footnote should be.
+
+                The two named modes are the ONLY ones whose policy opts into
+                profile hydration — MODE_POLICIES.profileSources is non-empty for
+                'looking-for-work' and 'technical-interview' and [] for general,
+                sales, recruiting, team-meet, lecture and seminar (see
+                electron/context-intelligence/policies/mode-policy-registry.ts).
+                Custom modes fall back to 'general', so they get nothing either.
+                If that registry gains a profile-aware mode, this line must move
+                with it. */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginTop: 2 }}>
+                <Info size={12} style={{ color: 'var(--pi-tertiary)', flexShrink: 0, marginTop: 1 }} />
+                <p style={{ fontSize: 11, color: 'var(--pi-tertiary)', margin: 0, lineHeight: 1.5 }}>
+                    Used only in{' '}
+                    <span style={{ color: 'var(--pi-secondary)', fontWeight: 500 }}>Looking for work</span>{' '}
+                    and{' '}
+                    <span style={{ color: 'var(--pi-secondary)', fontWeight: 500 }}>Technical Interview</span>{' '}
+                    modes. Other modes never receive them.
+                </p>
+            </div>
 
         </>
         );
@@ -2013,14 +2180,9 @@ export function ProfileIntelligenceSettings({
                                 <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Work Culture</div>
                                 <div style={{ border: '1px solid var(--pi-border)', borderRadius: 8, padding: '12px 14px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--pi-border)' }}>
-                                        <div>
-                                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                                                <span style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--pi-hero)', fontVariantNumeric: 'tabular-nums' }}>{companyDossier.culture_ratings.overall?.toFixed(1)}</span>
-                                                <span style={{ fontSize: 14, color: 'var(--pi-tertiary)' }}> / 5</span>
-                                            </div>
-                                            {companyDossier.culture_ratings.review_count && (
-                                                <div style={{ fontSize: 10, color: 'var(--pi-tertiary)', marginTop: 4 }}>{companyDossier.culture_ratings.review_count}</div>
-                                            )}
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                                            <span style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--pi-hero)', fontVariantNumeric: 'tabular-nums' }}>{companyDossier.culture_ratings.overall?.toFixed(1)}</span>
+                                            <span style={{ fontSize: 14, color: 'var(--pi-tertiary)' }}> / 5</span>
                                         </div>
                                         <StarRating value={companyDossier.culture_ratings.overall} size={14} />
                                     </div>
@@ -2293,7 +2455,7 @@ export function ProfileIntelligenceSettings({
                     Each placeholder rect breathes; the card shell stays solid. */}
                 {showSkeleton && (
                     <div>
-                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--pi-badge-border)', background: 'var(--pi-accent-subtle)' }}>
+                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--pi-badge-border)', background: 'var(--pi-letter-bg)' }}>
                             {/* Header row */}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid var(--pi-badge-border)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2374,7 +2536,7 @@ export function ProfileIntelligenceSettings({
                 {showOutput && (
                     <div style={{ opacity: coverLetterGenerating ? 0.45 : 1, transition: 'opacity 0.3s', pointerEvents: coverLetterGenerating ? 'none' : 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {/* Single continuous letter card — prose, not discrete step-cards like negotiation */}
-                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--pi-badge-border)', background: 'var(--pi-accent-subtle)' }}>
+                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--pi-badge-border)', background: 'var(--pi-letter-bg)' }}>
                             {/* Card header */}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid var(--pi-badge-border)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2469,20 +2631,10 @@ export function ProfileIntelligenceSettings({
     if (!hasProfileAccess) {
         if (!licenseLoaded) return null;
         return (
-            <>
-                <ProfileIntelligenceProGate
-                    onUnlock={() => setIsPremiumModalOpen(true)}
-                    onOpenNativelyAPI={onOpenNativelyAPI}
-                    onClose={onClose}
-                />
-                <PremiumUpgradeModal
-                    isOpen={isPremiumModalOpen}
-                    onClose={() => setIsPremiumModalOpen(false)}
-                    isPremium={isPremium}
-                    onActivated={handlePremiumActivated}
-                    onDeactivated={handlePremiumDeactivated}
-                />
-            </>
+            <ProfileIntelligenceProGate
+                onOpenNativelyAPI={onOpenNativelyAPI}
+                onClose={onClose}
+            />
         );
     }
 

@@ -220,6 +220,114 @@ export function cleanNoteText(value: unknown, max = 240): string {
   return cleanString(value).replace(FENCE_RE, '').replace(FILLER_RE, '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Meeting title shape guard
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The title is the one summary field with no schema validator behind it and the
+// widest UI surface (history rows, window titles, email subjects). The prompt
+// asks for three to six words, but that is advice, not a bound — a model that
+// answers the transcript instead of naming it writes its whole reply into the
+// title column. Two real rows, 2026-08-02:
+//
+//   197 chars  "I'm Natively, an AI assistant developed by Evin John. I help you ..."
+//    60 chars  "A third-party GraphQL client is a separate tool, service, or"
+//
+// So the bound lives here, in code, and is deliberately prompt-agnostic: it has
+// to hold whichever prompt system produced the text. The caps sit above the
+// prompt's 3-6 words so a title that already obeys the contract is never
+// touched — this only fires when generation has already gone wrong.
+//
+// Applied to GENERATED titles only. Calendar- and user-supplied titles are the
+// user's own words and keep whatever length they have.
+export const MEETING_TITLE_MAX_WORDS = 8;
+export const MEETING_TITLE_MAX_CHARS = 70;
+
+// Spoken-answer furniture the composer can append to any output. A [[GIST]]
+// line renders as a summary chip on screen; glued onto a title it is noise.
+const GIST_MARKER = '[[GIST]]';
+// "Title:", "Meeting title -", "Here's the title:", "Suggested title —", ...
+const TITLE_PREAMBLE_RE = /^(?:here(?:'s|\s+is|\s+are)\s+)?(?:the\s+|a\s+|an\s+)?(?:suggested\s+|proposed\s+|meeting\s+|concise\s+)*title\s*[:\-–—]\s*/i;
+// Double quotes go everywhere, not just at the ends — stripping only a wrapping
+// pair turns `Review of "Project Falcon"` into an unbalanced `Review of "Project
+// Falcon`. The prompt bans quotation marks in titles outright, and the call site
+// this replaced stripped every `"`, so parity and correctness agree here.
+const DOUBLE_QUOTES_RE = /["“”«»]/g;
+// Single quotes only when they wrap, so `Sam's 1:1` keeps its apostrophe.
+const WRAPPING_SINGLE_QUOTES_RE = /^['‘’]+|['‘’]+$/g;
+// A title that ends on a connective was cut mid-thought; the stub reads worse
+// than dropping it. Only ever applied to text this function truncated — an
+// author who genuinely named a meeting "Sync On" keeps it.
+const DANGLING_WORD_RE = /[\s,]+(?:and|or|but|with|for|to|of|in|on|at|by|from|as|the|a|an)$/i;
+
+export function cleanMeetingTitle(
+  value: unknown,
+  opts?: { maxWords?: number; maxChars?: number },
+): string {
+  const maxWords = opts?.maxWords ?? MEETING_TITLE_MAX_WORDS;
+  const maxChars = opts?.maxChars ?? MEETING_TITLE_MAX_CHARS;
+
+  let text = String(value ?? '').replace(NUL_RE, '');
+
+  const gistAt = text.indexOf(GIST_MARKER);
+  if (gistAt >= 0) text = text.slice(0, gistAt);
+
+  // An over-explaining model puts the title on the first line and its reasoning
+  // underneath. Take the first line that has content.
+  text = text.replace(FENCE_RE, '');
+  text = text.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? '';
+
+  const stripQuotes = (s: string) => s.replace(DOUBLE_QUOTES_RE, '').replace(WRAPPING_SINGLE_QUOTES_RE, '');
+
+  text = stripQuotes(cleanString(
+    text
+      .replace(/\*+/g, '')
+      .replace(/`/g, '')
+      .replace(/^#+\s*/, ''),
+  ));
+
+  text = stripQuotes(cleanString(text.replace(TITLE_PREAMBLE_RE, ''))).trim();
+  if (!text) return '';
+
+  let words = text.split(' ');
+  let truncated = false;
+
+  // Prose rather than a title: keep the first sentence before clamping, so the
+  // cut lands on a thought boundary instead of mid-clause. Gated on already
+  // being over budget so "Sync with Dr. Patel" is never cut at "Dr.".
+  if (words.length > maxWords) {
+    const firstSentence = text.split(/(?<=[.!?])\s+/)[0]?.trim() ?? '';
+    const sentenceWords = firstSentence ? firstSentence.split(' ') : [];
+    if (sentenceWords.length >= 2 && sentenceWords.length < words.length) {
+      words = sentenceWords;
+      truncated = true;
+    }
+  }
+
+  if (words.length > maxWords) {
+    words = words.slice(0, maxWords);
+    truncated = true;
+  }
+  let out = words.join(' ');
+
+  if (out.length > maxChars) {
+    out = out.slice(0, maxChars);
+    const lastSpace = out.lastIndexOf(' ');
+    // Only break on a word boundary when one exists late enough to leave a
+    // readable title; a single over-long token is cut hard instead.
+    if (lastSpace > maxChars / 2) out = out.slice(0, lastSpace);
+    truncated = true;
+  }
+
+  out = out.replace(/[\s.,;:!?\-–—]+$/g, '').trim();
+  if (truncated) {
+    while (DANGLING_WORD_RE.test(out)) out = out.replace(DANGLING_WORD_RE, '').trim();
+    out = out.replace(/[\s.,;:!?\-–—]+$/g, '').trim();
+  }
+
+  return out;
+}
+
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.max(min, Math.min(max, value));

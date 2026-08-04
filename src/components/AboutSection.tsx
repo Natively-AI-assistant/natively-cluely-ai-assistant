@@ -57,7 +57,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
     };
 
     return (
-        <div className="space-y-6 animated fadeIn pb-10">
+        <div className="space-y-6 animated fadeIn pb-10" data-settings-stagger>
             {/* Header */}
             <div>
                 <h3 className="text-lg font-bold text-text-primary mb-1">{t('About Natively')}</h3>

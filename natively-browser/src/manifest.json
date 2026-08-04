@@ -8,6 +8,8 @@
   "permissions": ["activeTab", "scripting", "storage", "alarms", "tabs"],
   "host_permissions": ["http://127.0.0.1/*", "http://localhost/*", "ws://127.0.0.1/*"],
   "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*",
     "https://leetcode.com/*",
     "https://leetcode.cn/*",
     "https://www.hackerrank.com/*",

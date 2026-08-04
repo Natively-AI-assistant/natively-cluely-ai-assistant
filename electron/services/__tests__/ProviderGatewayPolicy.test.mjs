@@ -110,8 +110,14 @@ test('IPC handlers expose get/set provider-data-scopes and broadcast updates', (
 
   assert.match(ipc, /safeHandle\(['"]get-provider-data-scopes['"]/);
   assert.match(ipc, /safeHandle\(['"]set-provider-data-scopes['"]/);
-  assert.match(ipc, /webContents\.send\('provider-data-scopes-changed', sanitized\)/);
-  assert.match(ipc, /SettingsManager\.getInstance\(\)\.set\('providerDataScopes'/);
+  // 2026-08-01: the handler no longer rebuilds the policy from the incoming
+  // payload (`sanitized`), which deleted any key the sender did not repeat and
+  // silently erased the enforced `code_execution` scope. It merges over the
+  // stored policy and broadcasts the merged result — broadcasting the incoming
+  // payload would reintroduce the erasure on the renderer's next write.
+  assert.match(ipc, /webContents\.send\('provider-data-scopes-changed', merged\)/);
+  assert.match(ipc, /const merged = mergeProviderDataScopes\(settings\.get\('providerDataScopes'\), scopes\)/);
+  assert.match(ipc, /settings\.set\('providerDataScopes', merged/);
 });
 
 test('preload and renderer types expose provider data scope controls', () => {

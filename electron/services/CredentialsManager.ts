@@ -79,6 +79,35 @@ export interface StoredCredentials {
     openaiPreferredModel?: string;
     claudePreferredModel?: string;
     deepseekPreferredModel?: string;
+    /**
+     * Provider ids the user switched off in Settings → AI Providers. A disabled
+     * provider keeps its stored credential but contributes no models to the
+     * picker and is never chosen as a routing fallback.
+     */
+    disabledProviders?: string[];
+    /**
+     * Per-provider allow-list of model ids that may appear in the picker, keyed
+     * by provider id. Absent or EMPTY means "no filter" — every model that
+     * provider offers stays selectable. There is deliberately no "none" value:
+     * hiding a provider entirely is what `disabledProviders` is for, so no
+     * sentinel model id ever reaches persisted state.
+     */
+    cloudEnabledModels?: Record<string, string[]>;
+    /**
+     * Last-known model list discovered from the configured LiteLLM proxy.
+     * Cached so the model picker can render without a network round-trip —
+     * discovery is an explicit user action (`refresh-litellm-models`).
+     */
+    litellmModels?: string[];
+    /**
+     * Per-provider model catalog, as last discovered from that provider's API.
+     * Persisted because the allow-list below references these ids: without it the
+     * catalog dies on a settings-tab switch and the stored allow-list would point
+     * at models the card can no longer render.
+     */
+    cloudFetchedModels?: Record<string, { id: string; label: string }[]>;
+    /** When each provider's catalog was last fetched (epoch ms), for staleness. */
+    cloudFetchedAt?: Record<string, number>;
     // Free trial state
     trialToken?: string;   // server-issued signed token (natively_trial_…)
     trialExpiresAt?: string;   // ISO timestamp — local copy for startup check
@@ -135,10 +164,16 @@ export class CredentialsManager {
     }
 
     public static getInstance(): CredentialsManager {
-        if (!CredentialsManager.instance) {
-            CredentialsManager.instance = new CredentialsManager();
+        // Instance anchored on globalThis (22 dist bundles carry a copy of this
+        // class). The nasty direction is key DELETION: with per-bundle
+        // instances, a revoked key kept being served from a stale copy's
+        // decrypted snapshot until restart. One process, one credential truth.
+        const g = globalThis as unknown as Record<string, CredentialsManager | undefined>;
+        if (!g.__nativelyCredentialsManagerV1__) {
+            g.__nativelyCredentialsManagerV1__ = CredentialsManager.instance ?? new CredentialsManager();
         }
-        return CredentialsManager.instance;
+        CredentialsManager.instance = g.__nativelyCredentialsManagerV1__;
+        return g.__nativelyCredentialsManagerV1__;
     }
 
     /**
@@ -359,6 +394,62 @@ export class CredentialsManager {
 
     public getNativelyApiKey(): string | undefined {
         return this.credentials.nativelyApiKey;
+    }
+
+    public getDisabledProviders(): string[] {
+        return this.credentials.disabledProviders || [];
+    }
+
+    public setDisabledProviders(providers: string[]): void {
+        this.credentials.disabledProviders = providers;
+        this.saveCredentials();
+        console.log(`[CredentialsManager] Disabled providers updated (${providers.length})`);
+    }
+
+    /** Empty array means "no filter" — all of this provider's models are allowed. */
+    public getCloudEnabledModels(provider: string): string[] {
+        return this.credentials.cloudEnabledModels?.[provider] || [];
+    }
+
+    public setCloudEnabledModels(provider: string, models: string[]): boolean {
+        if (!this.credentials.cloudEnabledModels) this.credentials.cloudEnabledModels = {};
+        this.credentials.cloudEnabledModels[provider] = models;
+        const persisted = this.saveCredentials();
+        console.log(`[CredentialsManager] Enabled models for ${provider}: ${models.length || 'all'}`);
+        return persisted;
+    }
+
+    /** Cached LiteLLM proxy model ids. Empty until a discovery has succeeded. */
+    public getCloudFetchedModels(provider: string): { id: string; label: string }[] {
+        return this.credentials.cloudFetchedModels?.[provider] || [];
+    }
+
+    public getAllCloudFetchedModels(): Record<string, { id: string; label: string }[]> {
+        return this.credentials.cloudFetchedModels || {};
+    }
+
+    public getCloudFetchedAt(): Record<string, number> {
+        return this.credentials.cloudFetchedAt || {};
+    }
+
+    public setCloudFetchedModels(provider: string, models: { id: string; label: string }[], fetchedAt: number): boolean {
+        if (!this.credentials.cloudFetchedModels) this.credentials.cloudFetchedModels = {};
+        if (!this.credentials.cloudFetchedAt) this.credentials.cloudFetchedAt = {};
+        this.credentials.cloudFetchedModels[provider] = models;
+        this.credentials.cloudFetchedAt[provider] = fetchedAt;
+        const persisted = this.saveCredentials();
+        console.log(`[CredentialsManager] Cached ${models.length} model(s) for ${provider}`);
+        return persisted;
+    }
+
+    public getLitellmModels(): string[] {
+        return this.credentials.litellmModels || [];
+    }
+
+    public setLitellmModels(models: string[]): void {
+        this.credentials.litellmModels = models;
+        this.saveCredentials();
+        console.log(`[CredentialsManager] LiteLLM model cache updated (${models.length} model(s))`);
     }
 
     public getAllCredentials(): StoredCredentials {

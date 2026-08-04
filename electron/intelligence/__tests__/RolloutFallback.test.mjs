@@ -36,6 +36,9 @@ const DEFAULT_ON_KEYS = new Set([
   'contextOsRecapFollowupEnabled',
   'contextOsEvidencePackEnabled',
   'contextOsMemorySafetyEnabled',
+  // Prompt System v2 — promoted default-ON 2026-08-02 (benchmark campaign;
+  // see the intelligenceFlags.ts promotion comment).
+  'promptSystemV2',
 ]);
 
 const expectedDefault = (key) => DEFAULT_ON_KEYS.has(key) ? true : false;

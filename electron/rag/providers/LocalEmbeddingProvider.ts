@@ -166,6 +166,21 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
           this.latchNonRecoverableLoadError(`Worker exited with code ${code} before model loaded`);
         }
       });
+
+      // Do not let this worker hold the Node event loop open.
+      //
+      // MUST be after the listeners above: attaching a 'message' listener
+      // re-references the underlying MessagePort, so an unref() next to
+      // `new Worker()` is undone by the following line.
+      //
+      // Electron's main process is anchored by `app` and its windows, so this
+      // cannot cause a premature exit. Under `node --test` there is no anchor,
+      // and a referenced worker made every importing test file pass its
+      // assertions and then never exit — blocking the whole suite.
+      // See docs/context-intelligence-v3/01_INVESTIGATION_REPORT.md F21.
+      // Optional call: test doubles substitute a mock Worker that does not
+      // implement unref(). A hard call throws there and disables the model.
+      this.worker.unref?.();
     }
     return this.worker;
   }

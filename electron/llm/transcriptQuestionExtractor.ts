@@ -67,6 +67,13 @@ const GREETING_ONLY = /^(hi|hello|hey|good (morning|afternoon|evening)|how are y
 // (e.g. "how did you architect the parking-lot allocation service?") is unaffected.
 const SOCIAL_PLEASANTRY = /\b(trouble |any (trouble|problem)s? )?(finding|find) (the office|us|parking|the parking|your way|this place|the building)\b|\bfind (us|the office|parking|the building|your way|this place)\s+(ok(ay)?|alright|all right)\b|\bhow (was|is|'?s) your (weekend|day|morning|week|commute|drive|trip|flight)\b|\bhow (are|'?re) you (doing|feeling|holding up)\b|\bhow'?s the weather\b|\bdid you (get|grab|have) (any |some )?(coffee|water|tea|lunch)\b|\b(traffic|parking|weather|commute) (was|is|been)\b|\bhow was the (traffic|commute|drive|trip|flight|parking)\b/i;
 
+// An imperative ask appearing ANYWHERE in the turn, not just sentence-initially.
+// INTERROGATIVE_LEAD is ^-anchored on purpose (it feeds confidence scoring), but
+// the answerability floor must not reject a genuine ask merely because it is
+// preceded by a clause: "One more question — tell me about levee." is the exact
+// shape campaign2 fix#5 (2026-07-17) was written to keep selecting.
+const IMPERATIVE_ASK = /\b(tell me|walk me|describe|explain|give me|show me|share|talk about|let'?s talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
+
 // Interrogative signal: a question mark, or a leading wh-/aux question word.
 const QUESTION_MARK = /\?/;
 const INTERROGATIVE_LEAD = /^(\s*)(what|who|why|where|when|which|how|whose|whom|can|could|would|will|do|did|does|are|is|were|was|have|has|had|tell me|walk me|describe|explain|give me|share|let'?s talk about|talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
@@ -269,13 +276,40 @@ export function extractLatestQuestion(
     // to empty/too-short or is a whole-turn greeting.
     const ignoredTranscriptNoise: string[] = [];
     const cleaned = cleanTranscript(turns);
-    const cleanedKey = new Set(cleaned.map(c => `${c.timestamp}:${c.role}`));
-    for (const turn of turns) {
-        if (!cleanedKey.has(`${turn.timestamp}:${turn.role}`)) {
+
+    // Map every cleaned turn back to the RAW turn it came from, by ORIGINAL
+    // INDEX rather than by timestamp.
+    //
+    // The previous implementation keyed a Set on `${timestamp}:${role}` and
+    // looked turns up with `turns.find(t => t.timestamp === …)` — two different
+    // key shapes for the same relation. Streaming STT regularly emits several
+    // turns inside the same millisecond, so the timestamp-only lookup returned
+    // the FIRST turn sharing that millisecond rather than the one being
+    // examined, which silently defeated the raw-text greeting guard below.
+    // cleanTranscript preserves order and only ever drops turns, so a single
+    // forward pointer recovers the exact correspondence and is collision-proof.
+    const rawIndexOfCleaned: number[] = [];
+    {
+        let p = 0;
+        for (const c of cleaned) {
+            while (p < turns.length && !(turns[p].role === c.role && turns[p].timestamp === c.timestamp)) p++;
+            rawIndexOfCleaned.push(p < turns.length ? p : -1);
+            p++;
+        }
+    }
+    const keptRaw = new Set(rawIndexOfCleaned.filter(i => i >= 0));
+    turns.forEach((turn, i) => {
+        if (!keptRaw.has(i)) {
             const trimmed = turn.text.trim();
             if (trimmed) ignoredTranscriptNoise.push(trimmed);
         }
-    }
+    });
+    /** Raw (uncleaned) text for a cleaned-array index, falling back to cleaned. */
+    const rawTextAt = (cleanedIdx: number): string => {
+        const ri = rawIndexOfCleaned[cleanedIdx];
+        const raw = ri >= 0 ? turns[ri]?.text?.trim() : '';
+        return raw || cleaned[cleanedIdx]?.text?.trim() || '';
+    };
 
     // Background window: the most recent few cleaned turns, oldest-first.
     const window = cleaned.slice(-windowTurns);
@@ -314,7 +348,7 @@ export function extractLatestQuestion(
         // isn't mistaken for a real (fragmentary, meaningless) question now
         // that this loop stops at the first non-greeting turn instead of
         // continuing to search for a more question-shaped one.
-        const original = turns.find(t => t.timestamp === turn.timestamp)?.text?.trim() || text;
+        const original = rawTextAt(i) || text;
         if (GREETING_ONLY.test(text) || GREETING_ONLY.test(original)) {
             ignoredTranscriptNoise.push(turn.text.trim());
             continue;
@@ -329,9 +363,26 @@ export function extractLatestQuestion(
         return { ...empty, relevantTranscriptWindow, ignoredTranscriptNoise };
     }
 
-    const latestQuestion = chosen.text.trim();
-    const hasMark = QUESTION_MARK.test(latestQuestion);
-    const hasLead = INTERROGATIVE_LEAD.test(latestQuestion);
+    // SHAPE SCORING runs on the CLEANED text; the EMITTED question is the RAW
+    // interviewer utterance.
+    //
+    // These must be different strings. cleanText() lowercases everything and
+    // strips leading/trailing discourse markers *including their punctuation*,
+    // so emitting the cleaned text handed downstream consumers a mangled
+    // question: "PostgreSQL"/"Kafka"/"React" arrived case-flattened in the
+    // retrieval query and the prompt, and "…for three years, right?" lost its
+    // terminal '?' along with the stripped "right". Both the résumé lookup
+    // (toCandidateFraming → orchestrator.processQuestion) and the model prompt
+    // consume the returned string, so both were degraded.
+    //
+    // Scoring stays on the cleaned text deliberately: INTERROGATIVE_LEAD is
+    // anchored at ^, so a raw "Um, what is your name?" would lose its lead
+    // signal and drop from 0.95 to 0.4 confidence. Cleaning exists to make the
+    // heuristics robust — it is a FILTER, not a transformation of the output.
+    const scoringText = chosen.text.trim();
+    const latestQuestion = rawTextAt(chosenIdx) || scoringText;
+    const hasMark = QUESTION_MARK.test(scoringText) || QUESTION_MARK.test(latestQuestion);
+    const hasLead = INTERROGATIVE_LEAD.test(scoringText);
 
     // Follow-up detection: demonstrative-only ask, a STRONG explicit backward-
     // reference marker (unambiguous regardless of sentence length), or a WEAK
@@ -340,10 +391,32 @@ export function extractLatestQuestion(
     // refer back to.
     const priorTurns = cleaned.slice(0, chosenIdx);
     const hasPrior = priorTurns.length > 0;
-    const isFollowUp = hasPrior && (
-        DEMONSTRATIVE_FOLLOW_UP.test(latestQuestion) ||
-        STRONG_FOLLOW_UP_MARKERS.test(latestQuestion) ||
-        (WEAK_FOLLOW_UP_MARKERS.test(latestQuestion) && latestQuestion.split(/\s+/).length <= FOLLOW_UP_WORD_CAP)
+    // ANSWERABILITY FLOOR. Selection is recency-first and has no question-shape
+    // requirement (deliberately — see the comment above the walk-back loop), so
+    // a purely evaluative interviewer turn can become "the question":
+    //
+    //   interviewer: "Tell me about your distributed systems work."
+    //   user:        "Sure, I built a sharded event bus…"
+    //   interviewer: "Interesting, that sounds pretty solid."
+    //
+    // The last turn carries no '?', no interrogative lead and no imperative
+    // ask, but the bare word "that" matched WEAK_FOLLOW_UP_MARKERS under the
+    // 14-word cap, so it was labelled follow_up — which floors confidence at
+    // 0.7 (below), clearing the 0.6 grounding gate in IntelligenceEngine — and
+    // pickSalientToken's fallback produced followUpTarget "second.", so the
+    // résumé was queried with "Tell me about my second."
+    //
+    // A weak demonstrative alone is not evidence of a question. Require real
+    // interrogative or imperative shape, or an explicit backward reference.
+    const isAnswerable = hasMark || hasLead
+        || IMPERATIVE_ASK.test(scoringText)
+        || DEMONSTRATIVE_FOLLOW_UP.test(scoringText)
+        || STRONG_FOLLOW_UP_MARKERS.test(scoringText);
+
+    const isFollowUp = hasPrior && isAnswerable && (
+        DEMONSTRATIVE_FOLLOW_UP.test(scoringText) ||
+        STRONG_FOLLOW_UP_MARKERS.test(scoringText) ||
+        (WEAK_FOLLOW_UP_MARKERS.test(scoringText) && scoringText.split(/\s+/).length <= FOLLOW_UP_WORD_CAP)
     );
 
     // Follow-up target: the most recent salient noun phrase from a prior turn.
@@ -360,7 +433,7 @@ export function extractLatestQuestion(
         for (let i = priorTurns.length - 1; i >= 0; i--) {
             if (priorTurns[i].role === 'interviewer') continue;
             const cand = priorTurns[i].text;
-            const original = turns.find(t => t.timestamp === priorTurns[i].timestamp)?.text || cand;
+            const original = rawTextAt(i) || cand;
             const found = pickSalientToken(original);
             if (found) { followUpTarget = found; break; }
             const words = cand.split(/\s+/).filter(w => w.length > 4 && !CAPITALIZED_STOPWORDS.has(w.toLowerCase()));
@@ -371,7 +444,7 @@ export function extractLatestQuestion(
             for (let i = priorTurns.length - 1; i >= 0; i--) {
                 if (priorTurns[i].role !== 'interviewer') continue;
                 const cand = priorTurns[i].text;
-                const original = turns.find(t => t.timestamp === priorTurns[i].timestamp)?.text || cand;
+                const original = rawTextAt(i) || cand;
                 const found = pickSalientToken(original);
                 if (found) { followUpTarget = found; break; }
                 const words = cand.split(/\s+/).filter(w => w.length > 4 && !CAPITALIZED_STOPWORDS.has(w.toLowerCase()));
@@ -380,7 +453,7 @@ export function extractLatestQuestion(
         }
     }
 
-    const questionType: ExtractedQuestionType = isFollowUp ? 'follow_up' : classifyType(latestQuestion);
+    const questionType: ExtractedQuestionType = isFollowUp ? 'follow_up' : classifyType(scoringText);
 
     // Confidence: explicit '?' + interrogative lead is strongest. A bare
     // imperative ask ("tell me about your projects") with a lead but no '?' is
@@ -396,8 +469,16 @@ export function extractLatestQuestion(
     // substantive classified type (a real question bundled after the pleasantry,
     // e.g. "...found us okay? Great — walk me through your last project."), in
     // which case classifyType already returned something other than 'general'.
-    if (SOCIAL_PLEASANTRY.test(latestQuestion) && questionType === 'general') {
+    if (SOCIAL_PLEASANTRY.test(scoringText) && questionType === 'general') {
         confidence = Math.min(confidence, 0.5);
+    }
+
+    // Answerability floor (see isAnswerable above): a turn with no question
+    // shape at all must not clear the 0.6 grounding gate, and must not carry a
+    // salient-token guess that would become a fabricated retrieval query.
+    if (!isAnswerable) {
+        confidence = Math.min(confidence, 0.3);
+        followUpTarget = '';
     }
 
     return {

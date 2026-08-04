@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Command, Monitor, Mic, Settings, Zap, Key, User, Play, Image, ArrowUp, FileText, Sparkles, Search, ChevronUp, Copy,
-    FileJson, MessageSquare, Briefcase, Eye, EyeOff, Ghost, ChevronDown, ChevronRight, HelpCircle, Upload, CheckCircle2,
+    FileJson, MessageSquare, Briefcase, Eye, EyeOff, Ghost, ChevronDown, HelpCircle, Upload, CheckCircle2,
     RefreshCw, Trash2, Check, ExternalLink, Volume2, Globe, Brain, Cpu, Calendar, Star, CreditCard, X, Pencil, Lightbulb,
     SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid, Smartphone, Wifi, Lock, DollarSign, Building2
 } from 'lucide-react';
 import { SiOpenai, SiGoogle } from 'react-icons/si';
+import { AccordionSection } from '../ui/AccordionSection';
 import { useShortcuts } from '../../hooks/useShortcuts';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { isMac, getModifierSymbol } from '../../utils/platformUtils';
@@ -760,52 +761,6 @@ const ElevenLabsPermissionsMock = () => {
     );
 };
 
-// ----------------------
-// Reusable Components
-// ----------------------
-
-interface AccordionSectionProps {
-    title: string;
-    icon: React.ReactNode;
-    children: React.ReactNode;
-    defaultOpen?: boolean;
-}
-
-const AccordionSection: React.FC<AccordionSectionProps> = ({ title, icon, children, defaultOpen = false }) => {
-    const [isOpen, setIsOpen] = useState(defaultOpen);
-
-    return (
-        <div className={`border rounded-xl mb-4 overflow-hidden transition-all duration-200 bg-bg-card border-border-subtle shadow-sm`}>
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className={`w-full flex items-center justify-between p-4 transition-colors hover:bg-bg-item-surface group`}
-            >
-                <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-bg-item-surface border border-border-subtle group-hover:border-border-muted transition-colors text-text-secondary`}>
-                        {icon}
-                    </div>
-                    <span className={`font-semibold text-sm text-text-primary`}>{title}</span>
-                </div>
-                {isOpen ? <ChevronDown className="w-5 h-5 text-text-tertiary" /> : <ChevronRight className="w-5 h-5 text-text-tertiary" />}
-            </button>
-            <AnimatePresence>
-                {isOpen && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2, ease: 'easeOut' }}
-                    >
-                        <div className={`p-5 border-t border-border-subtle text-sm leading-relaxed text-text-secondary`}>
-                            {children}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
-    );
-};
-
 const SetupGuide = () => {
     const cmd = getModifierSymbol('cmd');
     const shift = getModifierSymbol('shift');
@@ -905,11 +860,17 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                 </p>
             </header>
 
-            <div className="flex-1 space-y-2">
+            {/* Stagger lives here, not on the root above: the root is just
+                header + this, so staggering it would cascade two items. These
+                18 children (15 AccordionSections) are all plain elements —
+                AccordionSection's root is a plain div, and every motion.* in
+                this file belongs to a Mock*Anim demo inside a COLLAPSED
+                accordion body, so nothing is mounted to collide with. */}
+            <div className="flex-1 space-y-2" data-settings-stagger>
 
                 {onNavigate && (
                     <div
-                        onClick={() => onNavigate('natively-api')}
+                        onClick={() => onNavigate('plans')}
                         className="mb-6 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
                     >
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 flex-1">

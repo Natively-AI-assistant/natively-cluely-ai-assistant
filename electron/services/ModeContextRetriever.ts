@@ -1,4 +1,5 @@
 import { Mode, ModeReferenceFile } from './ModesManager';
+import { wordsOf } from './modes/lexicalTokens';
 import { ModeHybridRetriever, ModeRetrievedContext as HybridContext } from './modes/ModeHybridRetriever';
 import { VectorStore } from '../rag/VectorStore';
 import { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
@@ -174,23 +175,8 @@ const DOC_GROUNDED_STOPWORDS = new Set([
     // questions hinge on these exact terms.
 ]);
 
-function wordsOf(text: string): string[] {
-    return text
-        .toLowerCase()
-        // English possessive: collapse "Green's" → "green", "interviewer's" →
-        // "interviewer". Symmetrically strips the `'s` suffix on both query
-        // and chunk so a query about "interviewer's complexity" still matches
-        // a file that says "Interviewer prefers …", and a query about
-        // "Green's function" matches a file that says "Green's function".
-        .replace(/['’]s\b/g, '')
-        // Remaining in-word apostrophes (contractions like "don't", "can't"):
-        // drop them so the word stays one token ("dont", "cant") rather than
-        // being split into a dropped single-char fragment.
-        .replace(/['’]/g, '')
-        .replace(/[^a-z0-9\s-]/g, ' ')
-        .split(/\s+/)
-        .filter(word => word.length > 2);
-}
+// Tokenizer lives in ./modes/lexicalTokens so the two retrievers cannot drift.
+
 
 /**
  * Levenshtein distance with early exit when distance > maxDist.

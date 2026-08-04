@@ -50,14 +50,24 @@ async function downloadModels() {
     env.cacheDir = modelsDir;
     
     try {
+        // dtype MUST be explicit on transformers.js v3 (we ship 3.8.1). v2 defaulted to
+        // the quantized variant and honored `quantized: true`; v3 ignores that flag and
+        // defaults to fp32, so a bare `pipeline(...)` call writes onnx/model.onnx while
+        // REQUIRED_MODEL_FILES below — and electron/services/LocalFallbackAssets.ts, and
+        // scripts/verify-packaged-local-assets.mjs — all require onnx/model_quantized.onnx.
+        // Left implicit, every clean install silently produces the wrong filename and the
+        // build dies at verify:packaged-local-assets. 'q8' is what maps to
+        // model_quantized.onnx; see the same reasoning at electron/rag/LocalReranker.ts.
+        const QUANTIZED = { dtype: 'q8' };
+
         // 1. Embedding model (RAG)
-        console.log('[download-models] Downloading Xenova/all-MiniLM-L6-v2...');
-        await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+        console.log('[download-models] Downloading Xenova/all-MiniLM-L6-v2 (q8)...');
+        await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', QUANTIZED);
         console.log('[download-models] all-MiniLM-L6-v2 downloaded.');
 
         // 2. Zero-shot classification model (Intent Classifier)
-        console.log('[download-models] Downloading Xenova/mobilebert-uncased-mnli...');
-        await pipeline('zero-shot-classification', 'Xenova/mobilebert-uncased-mnli');
+        console.log('[download-models] Downloading Xenova/mobilebert-uncased-mnli (q8)...');
+        await pipeline('zero-shot-classification', 'Xenova/mobilebert-uncased-mnli', QUANTIZED);
         console.log('[download-models] mobilebert-uncased-mnli downloaded.');
 
         // 3. Cross-encoder reranker (smart-retrieval Phase 1/3 — confidence-gated

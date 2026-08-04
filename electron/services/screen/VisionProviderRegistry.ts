@@ -186,13 +186,30 @@ function codex(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): V
   const cliPath = (creds.getAllCredentials() as any)?.codexCliPath as string | undefined;
   // Codex CLI vision capability is not yet verified across builds — we configure
   // the provider as available but the vision flag is conservative. See ROADMAP.
+  //
+  // SAFETY — READ BEFORE FLIPPING `supportsVision` TO TRUE.
+  // `isLocal: true` below is a ROUTING hint (no API key, runs via a local CLI
+  // binary), NOT a statement about where the pixels go. Codex CLI sends to
+  // chatgpt.com/backend-api/codex/responses — it is a CLOUD vision provider.
+  //
+  // VisionProviderFallbackChain implements `private_vision` as "skip every
+  // provider where isLocal !== true", so the moment `supportsVision` becomes
+  // true this entry becomes a private_vision-eligible CLOUD destination, and
+  // the Settings copy "Use a local vision model (Ollama) only. Cloud vision is
+  // never called." becomes false on the one screenshot path that is wired.
+  //
+  // This is inert TODAY only because `supportsVision: false` and `invoke`
+  // throws. If you enable CLI vision, you MUST also set `isLocal: false` (or
+  // give the chain a separate `isOnDevice` predicate). Note
+  // electron/llm/visionPolicy.ts deliberately does NOT share this predicate —
+  // its `isLocalVisionProvider()` is Ollama-only for exactly this reason.
   return {
     id: 'codex_cli',
     displayName: 'Codex CLI',
     modelId: (creds.getAllCredentials() as any)?.codexCliModel,
     isLocal: true,
     isConfigured: !!cliPath,
-    supportsVision: false, // unverified; flip to true when CLI vision is confirmed end-to-end
+    supportsVision: false, // unverified; see SAFETY above before flipping — also set isLocal:false
     scopeAllowsScreenshots: true,
     hint: 'codex',
     invoke: async () => { throw new Error('Codex CLI vision unverified — capability disabled'); },

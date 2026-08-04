@@ -12,40 +12,41 @@ interface ResizeToggleProps {
   /** Mirrors the panel's data-interface-theme so CSS variable overrides apply. */
   interfaceTheme?: string;
   /**
-   * Live right-offset motion value so the button tracks the panel's top-right
-   * corner as the width spring animates. Computed in NativelyInterface from the
-   * live shellWidth so the button sits in the side gutter just OUTSIDE the
-   * panel's right edge. When provided, overrides the className's right positioning.
+   * Right offset (px from the window's right edge). A live MotionValue when the
+   * button shares a window with animating content; a plain number when the
+   * button is the sole occupant of its own aux window (OverlayToggleWindow).
+   * When provided, overrides the className's right positioning.
    */
-  rightOffset?: MotionValue<number>;
+  rightOffset?: MotionValue<number> | number;
   /**
-   * Live top-offset motion value (px from the viewport top) so the button aligns
-   * with the panel CARD's top edge — which sits below the TopPill + gap, not at
-   * the window top. Measured from the panel rect in NativelyInterface. When
-   * provided, overrides the className's top positioning.
+   * Top offset (px from the window's top edge) — same MotionValue-or-number
+   * contract as rightOffset. When provided, overrides the className's top
+   * positioning.
    */
-  topOffset?: MotionValue<number>;
+  topOffset?: MotionValue<number> | number;
 }
 
 /**
- * Standalone resize toggle that lives OUTSIDE the main panel body as a fixed
- * floating pill anchored to the top-right corner of the Electron window.
+ * Standalone resize toggle. It renders in its OWN tiny aux BrowserWindow
+ * (OverlayAuxWindows.tsx `OverlayToggleWindow`, `?window=overlay-toggle`),
+ * which the main process positions just outside the shell panel's live
+ * top-right corner (WindowHelper.positionToggleWindow, driven by the
+ * renderer's sendOverlayToggleAnchor stream).
  *
- * Why outside the panel:
- *  - The main panel has overflow-hidden + rounded corners; an absolute button
- *    inside it could be clipped. More importantly, the user wants a clearly
- *    detached, independent control — the same pattern as macOS window controls
- *    sitting outside the content area.
- *  - Electron content-protection (`setContentProtection`) applies to the whole
- *    BrowserWindow, so this element inherits screen-capture protection for free.
- *  - Stealth pass-through: the hover hit-test in NativelyInterface includes this
- *    button's rect (via forwarded ref) so hovering it keeps the window interactive
- *    and the stealth passthrough path still wins when undetectable is on.
+ * Why its own window:
+ *  - A clearly detached, independent control — the same pattern as macOS
+ *    window controls sitting outside the content area — without forcing the
+ *    main overlay window to reserve a transparent gutter for it.
+ *  - Electron content-protection (`setContentProtection`) applies per
+ *    BrowserWindow; the aux window is in the protection list, so this element
+ *    inherits screen-capture protection.
+ *  - Stealth passthrough is applied to the aux window by
+ *    syncOverlayInteractionPolicy when undetectable mode is on.
  *
- * The button is `position: fixed`; its `top`/`right` are driven by the
- * topOffset/rightOffset motion values so it hugs the PANEL card's top-right
- * corner (which sits below the TopPill), not the bare window corner. It falls
- * back to a static `top-3 right-3` when those offsets are not supplied.
+ * The button is `position: fixed`; its `top`/`right` offsets center it inside
+ * the 36px aux window (plain numbers there). MotionValues are still accepted
+ * for any host that animates the offsets. Falls back to `top-3 right-3` when
+ * no offsets are supplied.
  */
 const ResizeToggle = forwardRef<HTMLButtonElement, ResizeToggleProps>(
   function ResizeToggle({ expanded, onToggle, appearance, interfaceTheme, rightOffset, topOffset }, ref) {

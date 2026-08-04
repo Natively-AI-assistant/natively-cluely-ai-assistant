@@ -55,8 +55,27 @@ test('ModeHybridRetriever: dedup key falls back to per-chunk (not per-file) when
   assert.match(hybridSrc, /`\$\{candidate\.sourceId\}#chunk\$\{candidate\.chunkIndex\}`/);
 });
 
-test('ModeHybridRetriever: non-doc-grounded dedup still keys by sourceId only (unchanged default-mode behavior)', () => {
-  assert.match(hybridSrc, /const key = forceDocumentGrounding \? this\.dedupeGroupKey\(candidate\) : candidate\.sourceId;/);
+test('ModeHybridRetriever: dedup keys by chunk for EVERY caller (2026-07-31)', () => {
+  // This test previously pinned the opposite — `forceDocumentGrounding ?
+  // dedupeGroupKey(candidate) : candidate.sourceId` — as "unchanged default-mode
+  // behavior". That default was measured as broken: keying by sourceId keeps ONE
+  // best chunk per file, so a mode whose reference file is a 66-page PDF
+  // retrieved exactly one chunk regardless of topK, and the fact being asked
+  // about was usually not in it (1 chunk vs 12 on a real thesis; the answer moved
+  // from unreachable to rank 2).
+  //
+  // It is the same failure the dedupeGroupKey docblock already describes — fixed
+  // for doc-grounded callers and left live for everyone else.
+  assert.match(hybridSrc, /const key = this\.dedupeGroupKey\(candidate\);/);
+  assert.doesNotMatch(hybridSrc, /forceDocumentGrounding \? this\.dedupeGroupKey\(candidate\) : candidate\.sourceId/);
+});
+
+test('ModeHybridRetriever: the SECTION_CAP two-pass is unconditional, since every caller now keeps siblings', () => {
+  // The cap and the chunk-level dedup are a PAIR: siblings surviving dedup is
+  // only safe because the cap stops one section monopolising top-K. Applying the
+  // dedup change without this one would trade a recall bug for a diversity bug.
+  assert.doesNotMatch(hybridSrc, /if \(forceDocumentGrounding\) \{\s*const perSection/);
+  assert.match(hybridSrc, /SECTION_CAP/);
 });
 
 test('ModeHybridRetriever: the retrieve() call site passes forceDocumentGrounding into deduplicateChunks', () => {
