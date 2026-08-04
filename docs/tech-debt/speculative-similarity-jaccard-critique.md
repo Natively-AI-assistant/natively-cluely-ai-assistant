@@ -124,12 +124,12 @@ This keeps the fast path (clear prefix match, clearly different topic) at zero c
 export async function speculativeSimilarity(
     speculativeQuestion: string,
     finalQuestion: string,
-): Promise<{ score: number; method: 'jaccard' | 'sbert' }> {
+): Promise<{ accepted: boolean; score: number; method: 'jaccard' | 'sbert' }> {
     const jScore = jaccardWithContainment(speculativeQuestion, finalQuestion);
 
     // Fast exits — no embedding needed
-    if (jScore < 0.3)  return { score: jScore, method: 'jaccard' };
-    if (jScore > 0.92) return { score: jScore, method: 'jaccard' };
+    if (jScore < 0.3)  return { accepted: false, score: jScore, method: 'jaccard' };
+    if (jScore > 0.92) return { accepted: true, score: jScore, method: 'jaccard' };
 
     // Ambiguous zone — run semantic check
     const [embA, embB] = await Promise.all([
@@ -137,16 +137,17 @@ export async function speculativeSimilarity(
         embeddingWorker.embed(finalQuestion),
     ]);
     const cosine = cosineSimilarity(embA, embB);
-    return { score: cosine, method: 'sbert' };
+    const SBERT_THRESHOLD = 0.65;
+    return { accepted: cosine >= SBERT_THRESHOLD, score: cosine, method: 'sbert' };
 }
 ```
 
 ```ts
 // In handleSuggestionTrigger (IntelligenceEngine.ts):
-const { score, method } = await speculativeSimilarity(this.speculativeText, trigger.lastQuestion);
-console.log(`[IntelligenceEngine] Speculative check (${method}): ${score.toFixed(2)}`);
+const { accepted, score, method } = await speculativeSimilarity(this.speculativeText, trigger.lastQuestion);
+console.log(`[IntelligenceEngine] Speculative check (${method}): score=${score.toFixed(2)} accepted=${accepted}`);
 
-if (score >= SPECULATIVE_SIMILARITY_THRESHOLD) {
+if (accepted) {
     // accept
 } else {
     // restart generation
