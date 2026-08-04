@@ -33,9 +33,22 @@ Covers:
 - Why token-overlap similarity fails on semantically opposite questions (strengths/weaknesses, success/failure)
 - Why stop words inflate scores on interview questions
 - Recommended fix: Sentence-BERT (`all-MiniLM-L6-v2`, 22MB) hybrid — Jaccard fast-exit for clear cases, SBERT for the ambiguous zone
-- Implementation sketch reusing the existing `IntentClassifier.ts` worker pattern
+- Implementation sketch reusing the existing `LocalEmbeddingProvider` worker infrastructure
 
 **Priority fix**: Hybrid Jaccard + SBERT gate · Calibrate thresholds against a test set of interview question antonym pairs
+
+---
+
+### 3. [`replace-placeholder-corruption-bug.md`](./replace-placeholder-corruption-bug.md)
+**Scope**: `electron/llm/answerPolish.ts` (line 480) and `electron/llm/postProcessor.ts` (lines 85, 88, 133, 134)
+
+Covers:
+- How post-processing restores code and math segments using `.replace()` with raw string replacements.
+- The Javascript string replacement parsing vulnerability for untrusted outputs containing `$` symbols (like bash arguments `$1`, jQuery/regex `$&`, and math tokens).
+- How it causes wrong answers by corrupting code/math formatting and leaking internal tokens.
+- Trivial fix: wrap string variables in callback functions `() => value` in `replace()` calls.
+
+**Priority fix**: Update all post-processing restoration loops to callback-based replacements.
 
 ---
 
@@ -54,6 +67,7 @@ The documents are intentionally **read-only findings** — no production code wa
 
 | Issue | Severity | Document |
 |-------|----------|----------|
+| Unsafe String Replacement / Code Placeholder Corruption | 🔴 Critical | Placeholder Corruption Bug |
 | Post-stream repair cascade (up to 14s added latency) | 🔴 Critical | Architecture Critique §1.2 |
 | `runWhatShouldISay` ~2,400 lines, untestable | 🔴 Critical | Architecture Critique §1.1 |
 | Disabled relevance guard still runs NLI on every answer | 🟡 Medium | Architecture Critique §2.1 |
