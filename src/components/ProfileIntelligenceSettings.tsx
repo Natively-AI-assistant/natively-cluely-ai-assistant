@@ -86,10 +86,13 @@ const PI_CSS = `
         --pi-accent: var(--periwinkle-600);
         --pi-on-accent: var(--periwinkle-on-accent-light);
         --pi-accent-subtle: color-mix(in srgb, var(--periwinkle-600) 8%, transparent);
-        /* Same 25% scrim as dark mode, over this theme's accent: the sheet goes
-           from rgb(245,241,252) to rgb(187,185,192) on white — also ~0.76x.
-           Body text still clears AA on it at 5.3:1. */
-        --pi-letter-bg: color-mix(in srgb, var(--periwinkle-600) 6%, rgba(0,0,0,0.25));
+        /* NO black scrim here. Dark mode's 25% smoke, applied over white, lands
+           on rgb(187,185,192) — a muddy grey slab, which is what it looked like
+           when it shipped. A light theme expresses "deeper surface" by taking
+           the tint up, not the luminance down, so this deepens the periwinkle
+           wash from 8% to 14%: rgb(237,230,249), ~18 levels under the page, and
+           still unmistakably lavender rather than grey. */
+        --pi-letter-bg: color-mix(in srgb, var(--periwinkle-600) 14%, transparent);
         --pi-accent-border: color-mix(in srgb, var(--periwinkle-600) 16%, transparent);
         --pi-accent-icon: var(--periwinkle-700);
         --pi-badge-text: var(--pi-accent);
