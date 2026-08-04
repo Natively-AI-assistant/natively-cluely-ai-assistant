@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
     Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star, Sparkles,
-    User, CheckCircle, ArrowUpRight, ChevronRight, Paperclip, Plus, FileText,
+    User, CheckCircle, ArrowUpRight, ChevronRight, Paperclip, FileText,
     GraduationCap, FolderKanban, Layers, Mail, MessageSquare,
 } from 'lucide-react';
 import { PremiumUpgradeModal } from '../premium';
@@ -375,15 +375,6 @@ const PI_CSS = `
     .pi-upload-btn:hover:not(:disabled) { background: var(--pi-btn-bg-hover); }
     .pi-upload-btn:active:not(:disabled) { transform: scale(0.97); }
     .pi-upload-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .pi-add-file-btn {
-        display: flex; align-items: center; gap: 6px;
-        background: none; border: none; cursor: pointer;
-        color: var(--pi-tertiary); font-size: 12px; font-family: inherit;
-        padding: 6px 2px; margin-top: 2px;
-        transition: color 180ms var(--pi-ease-out), transform 140ms var(--pi-ease-out);
-    }
-    .pi-add-file-btn:hover { color: var(--pi-primary); }
-    .pi-add-file-btn:active { transform: scale(0.97); }
 
     /* ── Sub-list staggered reveal ── */
     .pi-stagger > .pi-list-item:nth-child(1) { animation-delay: 0ms; }
@@ -1468,11 +1459,6 @@ export function ProfileIntelligenceSettings({
                             </div>
                         );
                     })()}
-                    {!profileUploading && (
-                        <button className="pi-add-file-btn" onClick={browseResume}>
-                            <Plus size={12} /> Replace file
-                        </button>
-                    )}
                 </div>
             )}
             {profileError && (
@@ -1550,7 +1536,7 @@ export function ProfileIntelligenceSettings({
                                     )}
                                 </div>
                                 {jd.compensation_hint && (
-                                    <div style={{ fontSize: 11, fontWeight: 600, color: '#34d399' }}>{jd.compensation_hint}</div>
+                                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--pi-hero)' }}>{jd.compensation_hint}</div>
                                 )}
                                 {reqs.length > 0 && (
                                     <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -1572,11 +1558,6 @@ export function ProfileIntelligenceSettings({
                             </div>
                         );
                     })()}
-                    {!jdUploading && (
-                        <button className="pi-add-file-btn" onClick={browseJD}>
-                            <Plus size={12} /> Replace file
-                        </button>
-                    )}
                 </div>
             )}
             {jdError && (
@@ -2185,14 +2166,9 @@ export function ProfileIntelligenceSettings({
                                 <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Work Culture</div>
                                 <div style={{ border: '1px solid var(--pi-border)', borderRadius: 8, padding: '12px 14px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--pi-border)' }}>
-                                        <div>
-                                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                                                <span style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--pi-hero)', fontVariantNumeric: 'tabular-nums' }}>{companyDossier.culture_ratings.overall?.toFixed(1)}</span>
-                                                <span style={{ fontSize: 14, color: 'var(--pi-tertiary)' }}> / 5</span>
-                                            </div>
-                                            {companyDossier.culture_ratings.review_count && (
-                                                <div style={{ fontSize: 10, color: 'var(--pi-tertiary)', marginTop: 4 }}>{companyDossier.culture_ratings.review_count}</div>
-                                            )}
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                                            <span style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--pi-hero)', fontVariantNumeric: 'tabular-nums' }}>{companyDossier.culture_ratings.overall?.toFixed(1)}</span>
+                                            <span style={{ fontSize: 14, color: 'var(--pi-tertiary)' }}> / 5</span>
                                         </div>
                                         <StarRating value={companyDossier.culture_ratings.overall} size={14} />
                                     </div>
