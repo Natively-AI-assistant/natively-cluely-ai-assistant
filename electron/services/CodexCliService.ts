@@ -398,8 +398,9 @@ export class CodexCliService {
           const mimeType = IMAGE_MIME_BY_EXT[ext] || 'image/png';
           const dataUrl = `data:${mimeType};base64,${imageData.toString('base64')}`;
           contentItems.push({
-            type: 'image_url',
-            image_url: { url: dataUrl },
+            type: 'input_image',
+            image_url: dataUrl,
+            detail: 'auto'
           });
         } catch (e: any) {
           // Non-fatal: skip unreadable images (already validated at IPC
