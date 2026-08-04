@@ -33,7 +33,6 @@ import { AlertCircle, RefreshCw } from "lucide-react"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
 import { isMac } from "./utils/platformUtils"
-import { useResolvedTheme } from "./hooks/useResolvedTheme"
 import { trackAppOpen } from "./lib/toasterGating"
 import {
   JDAwarenessToaster,
@@ -201,9 +200,6 @@ const App: React.FC = () => {
   const managerDialogRef = useRef<HTMLDivElement>(null);
   const managerOpenerRef = useRef<HTMLElement | null>(null);
   const reduceManagerMotion = useReducedMotion() ?? false;
-  // mode="wait" below leaves this shell exposed between panels — it must track
-  // theme or light mode flashes the shell's dark base color during the swap.
-  const managerPanelTheme = useResolvedTheme();
 
   const rememberManagerOpener = useCallback(() => {
     const activeElement = document.activeElement;
@@ -1059,10 +1055,8 @@ const App: React.FC = () => {
                         style={{
                           willChange: 'transform, opacity',
                           transformOrigin: 'center',
-                          boxShadow: '0 24px 64px -24px rgba(0,0,0,0.72), 0 8px 24px -16px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)',
-                          background: managerPanelTheme === 'light' ? '#ffffff' : '#141414',
                         }}
-                        className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-white/10"
+                        className="manager-panel-shell w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-border-muted bg-bg-elevated"
                       >
                         <AnimatePresence mode="wait" initial={false}>
                         <motion.div

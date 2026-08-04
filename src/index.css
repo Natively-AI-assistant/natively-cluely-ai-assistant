@@ -6236,17 +6236,62 @@ html[data-platform="linux"] body {
 .markdown-content td {
   font-variant-numeric: tabular-nums;
 }
+/* ── Manager panel shell ─────────────────────────────────────────────────────
+   AnimatePresence mode="wait" leaves this shell exposed between panels, so it
+   needs a real background (bg-bg-elevated) AND a shadow that reads in both
+   themes — the dark ring is white at 5%, which is invisible on the light
+   surface it now sits on. */
+.manager-panel-shell {
+  box-shadow:
+    0 24px 64px -24px rgba(0, 0, 0, 0.72),
+    0 8px 24px -16px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+[data-theme='light'] .manager-panel-shell {
+  box-shadow:
+    0 24px 64px -24px rgba(0, 0, 0, 0.18),
+    0 8px 24px -16px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.06);
+}
 /* ── Usage-section code block: thin horizontal scrollbar, revealed on hover ──
    The global scrollbar is hidden (width:0). The code hero needs a discreet
    horizontal scrollbar so long lines are reachable; it stays near-invisible
-   until the card is hovered. Scoped to .code-scroll so nothing else changes. */
-.code-scroll {
+   until the card is hovered.
+
+   Also applied to overflowing GFM tables. The global rule sets WIDTH only, and
+   a horizontal bar is sized by HEIGHT, so without this a wide table renders
+   Chromium's full default bar. `.markdown-content table` is in the selector
+   because ReactMarkdown emits a bare <table> on those surfaces; wrapper-div
+   scrollers (MeetingDetails) take the class directly.
+
+   Measured, Electron 43.1.0 / Chrome 150, macOS:
+     • no rule           → 16px of reserved layout
+     • webkit block only →  6px
+     • scrollbar-* only  →  0px  ← the standard properties WIN when both are
+       present, so the ::-webkit-scrollbar block below is inert on this engine.
+       It is kept as a fallback for engines that lack the standard properties.
+     • :hover            → paints NOTHING on macOS. Overlay scrollbars are
+       system-drawn and appear only during an actual scroll gesture, so the
+       hover rules below are effectively Windows-only. Do not read them as the
+       reason the bar looks discreet on a Mac — that is the platform default.
+
+   Windows: Chromium has no overlay scrollbars, so `scrollbar-width: thin`
+   reserves a real gutter (~8-11px) with a transparent thumb until hover.
+   Better than the 16px default bar, but NOT zero — unverified on hardware. */
+.code-scroll,
+.markdown-content table {
   scrollbar-width: thin;                       /* Firefox */
   scrollbar-color: transparent transparent;
   transition: scrollbar-color 200ms ease;
 }
-.code-scroll:hover {
+.code-scroll:hover,
+.markdown-content table:hover {
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+/* Light theme: the white thumb above is invisible on a light surface. */
+[data-theme='light'] .code-scroll:hover,
+[data-theme='light'] .markdown-content table:hover {
+  scrollbar-color: rgba(0, 0, 0, 0.22) transparent;
 }
 .code-scroll::-webkit-scrollbar {
   height: 6px;

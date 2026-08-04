@@ -33,6 +33,7 @@
     "test:modes:collect-fixtures": "RUN_INTERNET_FIXTURE_COLLECTION=1 node --test electron/services/__tests__/ModeFixtureIntegrity.test.mjs",
     "test:modes:e2e": "RUN_NATIVELY_API_E2E=1 npm run test:modes",
     "test:modes:long": "node --test electron/services/__tests__/ModeLongSession.test.mjs",
+    "test:css": "./node_modules/.bin/electron tests/css/table-scrollbar.check.mjs",
     "test:e2e": "npx playwright test",
     "test:e2e:headed": "npx playwright test --headed",
     "test:e2e:parity": "ELECTRON_E2E=1 ELECTRON_APP_PORT=${ELECTRON_APP_PORT:-5173} npx playwright test tests/e2e/parity-gaps-evidence.spec.ts",

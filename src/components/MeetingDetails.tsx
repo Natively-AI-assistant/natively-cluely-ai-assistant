@@ -335,6 +335,23 @@ function parseCodingTemplate(answer: string): CodingSection[] | null {
     return sections;
 }
 
+// GFM table renderers, defined once and shared by every ReactMarkdown surface in
+// this file. Tailwind's preflight zeroes cell padding, so columns need explicit
+// gaps (right padding) and a hairline under the header. The min-w-0 wrapper is
+// what makes a wide table scroll instead of stretching the column it sits in,
+// and `code-scroll` keeps that scrollbar discreet — see the .code-scroll block
+// in index.css for why the global scrollbar rule does not cover this case.
+// `tableClass` is the only thing that varies between surfaces (font size).
+const makeTableComponents = (tableClass: string) => ({
+    table: ({ node, ...props }: any) => (
+        <div className="code-scroll w-full min-w-0 overflow-x-auto mb-2 last:mb-0">
+            <table className={`border-collapse ${tableClass}`} {...props} />
+        </div>
+    ),
+    th: ({ node, ...props }: any) => <th className="text-left align-top font-semibold text-text-primary pr-5 last:pr-0 pb-1.5 border-b border-border-muted" {...props} />,
+    td: ({ node, ...props }: any) => <td className="text-left align-top text-text-secondary tabular-nums pr-5 last:pr-0 py-1" {...props} />,
+});
+
 // Shared markdown renderer config — used by both CodingAnswerBlock and plain answers.
 const mdComponents = {
     h1: ({ node, ...props }: any) => <p className="text-[15px] text-text-secondary font-semibold leading-relaxed mb-2" {...props} />,
@@ -345,17 +362,7 @@ const mdComponents = {
     ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mb-2 space-y-1.5" {...props} />,
     li: ({ node, ...props }: any) => <li className="text-[15px] text-text-secondary font-normal leading-relaxed" {...props} />,
     strong: ({ node, ...props }: any) => <strong className="font-semibold text-text-primary" {...props} />,
-    // GFM tables (dry-run traces): preflight zeroes cell padding, so columns
-    // butt together without these. Gaps via right padding, hairline under the
-    // header; wide tables scroll inside the min-w-0 wrapper instead of
-    // stretching the answer column (same trick as CodeHero below).
-    table: ({ node, ...props }: any) => (
-        <div className="w-full min-w-0 overflow-x-auto mb-2 last:mb-0">
-            <table className="border-collapse text-[13.5px] leading-relaxed" {...props} />
-        </div>
-    ),
-    th: ({ node, ...props }: any) => <th className="text-left align-top font-semibold text-text-primary pr-5 last:pr-0 pb-1.5 border-b border-border-muted" {...props} />,
-    td: ({ node, ...props }: any) => <td className="text-left align-top text-text-secondary tabular-nums pr-5 last:pr-0 py-1" {...props} />,
+    ...makeTableComponents('text-[13.5px] leading-relaxed'),
     a: ({ node, ...props }: any) => <a target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:text-accent-hover underline underline-offset-2 transition-colors duration-150" {...props} />,
     pre: ({ children }: any) => <div className="mb-3 last:mb-0">{children}</div>,
     code: ({ node, className, children, ...props }: any) => {
@@ -1274,15 +1281,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             li: ({ node, ...props }) => <li className="text-sm text-text-secondary" {...props} />,
                                             strong: ({ node, ...props }) => <strong className="font-semibold text-text-primary" {...props} />,
                                             a: ({ node, ...props }) => <a className="text-accent-primary hover:underline" {...props} />,
-                                            // GFM tables: preflight zeroes cell padding (`prose` is a
-                                            // no-op — no typography plugin), so columns need real gaps.
-                                            table: ({ node, ...props }) => (
-                                                <div className="w-full min-w-0 overflow-x-auto mb-2 last:mb-0">
-                                                    <table className="border-collapse text-sm leading-relaxed" {...props} />
-                                                </div>
-                                            ),
-                                            th: ({ node, ...props }) => <th className="text-left align-top font-semibold text-text-primary pr-5 last:pr-0 pb-1.5 border-b border-border-muted" {...props} />,
-                                            td: ({ node, ...props }) => <td className="text-left align-top text-text-secondary tabular-nums pr-5 last:pr-0 py-1" {...props} />,
+                                            ...makeTableComponents('text-sm leading-relaxed'),
                                         }}
                                     >
                                         {meeting.detailedSummary?.overview || ''}
