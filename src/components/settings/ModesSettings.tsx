@@ -16,7 +16,6 @@ interface ModesSettingsProps {
   onClose?: () => void;
   isPremium?: boolean;
   isLoaded?: boolean;
-  isTrialActive?: boolean;
   onOpenNativelyAPI?: () => void;
 }
 

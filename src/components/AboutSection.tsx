@@ -1,8 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { useT } from '../i18n';
 import {
     Github, Twitter, Shield, Cpu, Database,
-    Heart, Linkedin, Instagram, Mail, MicOff, Star, Bug, Globe, Sparkles, Zap, Camera, LayoutGrid, User, Volume2, Activity, MessageSquare, Link, Smartphone, Calendar, ListTodo, Users, WifiOff, Send
+    Linkedin, Instagram, Mail, MicOff, Bug, Globe, Sparkles, Zap, Camera, LayoutGrid, User, Volume2, Activity, MessageSquare, Link, Smartphone, Calendar, ListTodo, Users, WifiOff, Send
 } from 'lucide-react';
 import evinProfile from '../assets/evin.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -13,40 +13,9 @@ interface AboutSectionProps { }
 export const AboutSection: React.FC<AboutSectionProps> = () => {
     const t = useT();
     const isLight = useResolvedTheme() === 'light';
-    const donationClickTimeRef = useRef<number | null>(null);
-
-    // Initial check for donation status not needed for visuals anymore (since we removed key input)
-    // but we might want to hide the support button if donated? 
-    // User said "wont show if the user open the donate button" -> this refers to the toaster.
-    // For About section, usually validation/support button stays but maybe changes text?
-    // I'll keep it as is, just the logic change.
-
-    useEffect(() => {
-        const handleFocus = async () => {
-            if (donationClickTimeRef.current) {
-                const elapsed = Date.now() - donationClickTimeRef.current;
-                if (elapsed > 20000) { // 20 seconds
-                    console.log("User returned after >20s. Marking as donated.");
-                    await window.electronAPI?.setDonationComplete();
-                    donationClickTimeRef.current = null; // Reset
-                } else {
-                    console.log("User returned too quickly (<20s). Not confirming donation.");
-                    donationClickTimeRef.current = null;
-                }
-            }
-        };
-
-        window.addEventListener('focus', handleFocus);
-        return () => window.removeEventListener('focus', handleFocus);
-    }, []);
 
     const handleOpenLink = (e: React.MouseEvent<HTMLAnchorElement>, url: string) => {
         e.preventDefault();
-
-        // Special handling for donation link
-        if (url.includes('buymeacoffee.com')) {
-            donationClickTimeRef.current = Date.now();
-        }
 
         // Use backend shell.openExternal
         if (window.electronAPI?.openExternal) {
@@ -324,36 +293,20 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                         </div>
                     </div>
 
-                    {/* 2. Star & Report */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <a
-                            href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant"
-                            onClick={(e) => handleOpenLink(e, "https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant")}
-                            className="bg-bg-item-surface border border-border-subtle rounded-xl p-5 transition-all group flex items-center gap-4 h-full hover:bg-white/10"
-                        >
-                            <div className="w-10 h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center text-yellow-500 shrink-0 group-hover:scale-110 transition-transform">
-                                <Star size={20} className="transition-all group-hover:fill-current" />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary">{t('Star on GitHub')}</h5>
-                                <p className="text-xs text-text-secondary mt-0.5">{t('Love Natively? Support us by starring the repo.')}</p>
-                            </div>
-                        </a>
-
-                        <a
-                            href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/issues"
-                            onClick={(e) => handleOpenLink(e, "https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/issues")}
-                            className="bg-bg-item-surface border border-border-subtle rounded-xl p-5 transition-all group flex items-center gap-4 h-full hover:bg-white/10"
-                        >
-                            <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500 shrink-0 group-hover:scale-110 transition-transform">
-                                <Bug size={20} />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary">{t('Report an Issue')}</h5>
-                                <p className="text-xs text-text-secondary mt-0.5">{t('Found a bug? Let us know so we can fix it.')}</p>
-                            </div>
-                        </a>
-                    </div>
+                    {/* 2. Report an Issue */}
+                    <a
+                        href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/issues"
+                        onClick={(e) => handleOpenLink(e, "https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/issues")}
+                        className="bg-bg-item-surface border border-border-subtle rounded-xl p-5 transition-all group flex items-center gap-4 h-full hover:bg-white/10"
+                    >
+                        <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500 shrink-0 group-hover:scale-110 transition-transform">
+                            <Bug size={20} />
+                        </div>
+                        <div>
+                            <h5 className="text-sm font-bold text-text-primary">{t('Report an Issue')}</h5>
+                            <p className="text-xs text-text-secondary mt-0.5">{t('Found a bug? Let us know so we can fix it.')}</p>
+                        </div>
+                    </a>
 
                     {/* 3. Get in Touch */}
                     <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -373,26 +326,6 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                         >
                             <Mail size={14} />
                             {t('Contact Me')}
-                        </a>
-                    </div>
-
-                    {/* 4. Support */}
-                    <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 flex flex-col md:flex-row items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-pink-500/10 flex items-center justify-center text-pink-500 shadow-sm shadow-pink-500/5">
-                                <Heart size={18} fill="currentColor" className="opacity-80" />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary">{t('Support Development')}</h5>
-                                <p className="text-xs text-text-secondary mt-0.5">{t('Natively is independent source-available software.')}</p>
-                            </div>
-                        </div>
-                        <a
-                            href="https://buymeacoffee.com/evinjohnn"
-                            onClick={(e) => handleOpenLink(e, "https://buymeacoffee.com/evinjohnn")}
-                            className="whitespace-nowrap px-4 py-2 bg-text-primary hover:bg-white/90 text-bg-main text-xs font-bold rounded-lg transition-all shadow hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0"
-                        >
-                            {t('Support Project')}
                         </a>
                     </div>
                 </div>

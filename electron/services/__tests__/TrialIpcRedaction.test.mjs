@@ -11,24 +11,12 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
-test('trial IPC handlers do not return raw trial tokens to the renderer', () => {
+test('trial IPC handlers stay registered but never return raw trial tokens', () => {
   const source = read('electron/ipcHandlers.ts');
-  const startStart = source.search(/safeHandle\(['"]trial:start['"]/);
-  const statusStart = source.search(/safeHandle\(['"]trial:status['"]/, startStart);
-  const startHandler = source.slice(startStart, statusStart);
-  const localStart = source.search(/safeHandle\(['"]trial:get-local['"]/);
-  const convertStart = source.search(/safeHandle\(['"]trial:convert['"]/, localStart);
-  const localHandler = source.slice(localStart, convertStart);
+  assert.match(source, /safeHandle\(['"]trial:start['"]/);
+  assert.match(source, /safeHandle\(['"]trial:get-local['"]/);
+  assert.match(source, /trial_disabled/);
 
-  assert.ok(startStart >= 0, 'trial:start handler should exist');
-  assert.ok(localStart >= 0, 'trial:get-local handler should exist');
-  assert.match(startHandler, /const \{ trial_token, \.\.\.safeData \} = data/);
-  assert.match(startHandler, /return \{ ok: true, \.\.\.safeData, hasToken: Boolean\(data\.trial_token\) \}/);
-  assert.doesNotMatch(startHandler, /return \{ ok: true, \.\.\.data \}/);
-  assert.doesNotMatch(localHandler, /trialToken:\s*token/);
-});
-
-test('renderer trial type definitions exclude token-bearing fields', () => {
   const preload = read('electron/preload.ts');
   const electronTypes = read('src/types/electron.d.ts');
   const combined = `${preload}\n${electronTypes}`;

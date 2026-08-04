@@ -55,7 +55,7 @@ export function getAppOpensCount(): number {
  * @deprecated Prefer the OnboardingOrchestrator's stage catalog. This legacy helper
  * is retained only for backward compatibility with existing call sites.
  *
- * @param toasterId Unique identifier for the toaster (e.g. 'trial_promo', 'support', 'permissions', or ad IDs)
+ * @param toasterId Unique identifier for the toaster (e.g. 'trial_promo', 'permissions', or ad IDs)
  * @returns true if allowed, false if gated
  */
 export function isToasterAllowed(toasterId: string): boolean {

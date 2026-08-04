@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
-    Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star, Sparkles,
-    User, CheckCircle, ArrowUpRight, Paperclip, Plus, FileText,
+    Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star,
+    User, CheckCircle, Paperclip, Plus, FileText,
     GraduationCap, FolderKanban, Layers, Mail,
 } from 'lucide-react';
-import { PremiumUpgradeModal } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
 
@@ -420,32 +419,6 @@ const StarRating = ({ value, size = 11 }: { value: number; size?: number }) => {
     );
 };
 
-// ─── Premium cache ────────────────────────────────────────────────────────────
-const PI_PREMIUM_CACHE_KEY = 'pi:isPremium';
-const PI_PREMIUM_PLAN_CACHE_KEY = 'pi:premiumPlan';
-const readPremiumCache = () => {
-    if (typeof window === 'undefined') return { isPremium: false, plan: '' };
-    try {
-        return {
-            isPremium: window.localStorage.getItem(PI_PREMIUM_CACHE_KEY) === '1',
-            plan: window.localStorage.getItem(PI_PREMIUM_PLAN_CACHE_KEY) ?? '',
-        };
-    } catch { return { isPremium: false, plan: '' }; }
-};
-const writePremiumCache = (isPremium: boolean, plan: string) => {
-    if (typeof window === 'undefined') return;
-    try {
-        if (isPremium) {
-            window.localStorage.setItem(PI_PREMIUM_CACHE_KEY, '1');
-            if (plan) window.localStorage.setItem(PI_PREMIUM_PLAN_CACHE_KEY, plan);
-            else window.localStorage.removeItem(PI_PREMIUM_PLAN_CACHE_KEY);
-        } else {
-            window.localStorage.removeItem(PI_PREMIUM_CACHE_KEY);
-            window.localStorage.removeItem(PI_PREMIUM_PLAN_CACHE_KEY);
-        }
-    } catch { /**/ }
-};
-
 // ─── Divider ──────────────────────────────────────────────────────────────────
 const Divider = () => (
     <div style={{ height: 1, background: 'var(--pi-border)', margin: '24px 0' }} />
@@ -538,17 +511,15 @@ const PIIndexBadge: React.FC<{ status?: string }> = ({ status }) => {
 interface FileUploadEmptyProps {
     hint: string;
     uploading: boolean;
-    hasAccess: boolean;
     onBrowse: () => void;
-    onNeedUpgrade: () => void;
 }
-const FileUploadEmpty = ({ hint, uploading, hasAccess, onBrowse, onNeedUpgrade }: FileUploadEmptyProps) => (
+const FileUploadEmpty = ({ hint, uploading, onBrowse }: FileUploadEmptyProps) => (
     <div className="pi-file-empty" style={{ gap: 12 }}>
-        <p style={{ fontSize: 12, color: 'var(--pi-tertiary)', margin: 0 }}>{hint}{!hasAccess ? ' Requires Pro.' : ''}</p>
+        <p style={{ fontSize: 12, color: 'var(--pi-tertiary)', margin: 0 }}>{hint}</p>
         <button
             className="pi-upload-btn"
             disabled={uploading}
-            onClick={() => { if (!hasAccess) { onNeedUpgrade(); return; } onBrowse(); }}
+            onClick={onBrowse}
         >
             {uploading
                 ? <><RefreshCw size={13} className="pi-spinner" /> Processing…</>
@@ -572,12 +543,8 @@ export function ProfileIntelligenceSettings({
 }: {
     onClose: () => void;
 }) {
-    const cachedPremium = readPremiumCache();
-    const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
-    const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
-    const [isTrialActive] = useState(false);
-    const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
-    const hasProfileAccess = isPremium || isTrialActive;
+    // License bypass (ADR 0001): Pro UI is available without Unlock / trial upsell gates.
+    const hasProfileAccess = true;
     const theme = useResolvedTheme();
 
     const [activeSection, setActiveSection] = useState('identity');
@@ -640,21 +607,6 @@ export function ProfileIntelligenceSettings({
     }, [activeSection]);
 
     useEffect(() => {
-        if (window.electronAPI?.licenseGetDetails) {
-            window.electronAPI.licenseGetDetails().then((details: any) => {
-                const live = !!details?.isPremium;
-                const plan = details?.plan ?? '';
-                setIsPremium(live);
-                if (plan) setPremiumPlan(plan);
-                else if (!live) setPremiumPlan('');
-                writePremiumCache(live, plan);
-            }).catch(() => {});
-        } else {
-            window.electronAPI?.licenseCheckPremium?.().then((live: boolean) => {
-                setIsPremium(!!live);
-                writePremiumCache(!!live, premiumPlan);
-            }).catch(() => {});
-        }
         window.electronAPI?.profileGetStatus?.().then(setProfileStatus).catch(() => {});
         window.electronAPI?.profileGetProfile?.().then((data: any) => {
             setProfileData(data);
@@ -827,9 +779,7 @@ export function ProfileIntelligenceSettings({
                 <FileUploadEmpty
                     hint="Add your resume as real-time context."
                     uploading={profileUploading}
-                    hasAccess={hasProfileAccess}
                     onBrowse={browseResume}
-                    onNeedUpgrade={() => setIsPremiumModalOpen(true)}
                 />
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
@@ -933,9 +883,7 @@ export function ProfileIntelligenceSettings({
                 <FileUploadEmpty
                     hint="Add a job description as real-time context."
                     uploading={jdUploading}
-                    hasAccess={hasProfileAccess}
                     onBrowse={browseJD}
-                    onNeedUpgrade={() => setIsPremiumModalOpen(true)}
                 />
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
@@ -2023,13 +1971,6 @@ export function ProfileIntelligenceSettings({
         coverletter: renderCoverLetter,
     };
 
-    // ── CTA class ─────────────────────────────────────────────────────────────
-    const ctaClass = [
-        'pi-cta',
-        isTrialActive && !isPremium  ? 'pi-cta--trial'   : '',
-        !isPremium && !isTrialActive  ? 'pi-cta--shimmer' : '',
-    ].filter(Boolean).join(' ');
-
     return (
         <div
             className="pi-root"
@@ -2088,27 +2029,6 @@ export function ProfileIntelligenceSettings({
                         </div>
                     ))}
                 </div>
-
-                {/* CTA footer */}
-                <div style={{ padding: '12px', borderTop: '1px solid var(--pi-border)', flexShrink: 0 }}>
-                    <button
-                        onClick={() => setIsPremiumModalOpen(true)}
-                        className={ctaClass}
-                        style={{ width: '100%' }}
-                        aria-label={isPremium ? 'Manage Pro' : 'Unlock Pro'}
-                    >
-                        <span style={{ flex: 1, textAlign: 'left', position: 'relative', zIndex: 1 }}>
-                            {isPremium ? 'Manage Pro' : isTrialActive ? 'Upgrade' : 'Unlock Pro'}
-                        </span>
-                        <div className="pi-cta-ring">
-                            {isPremium
-                                ? <CheckCircle size={13} strokeWidth={2.5} />
-                                : isTrialActive
-                                    ? <Sparkles size={13} strokeWidth={2.5} />
-                                    : <ArrowUpRight size={13} strokeWidth={2.5} />}
-                        </div>
-                    </button>
-                </div>
             </div>
 
             {/* ── Right panel ── */}
@@ -2120,28 +2040,6 @@ export function ProfileIntelligenceSettings({
                     </div>
                 </div>
             </div>
-
-            <PremiumUpgradeModal
-                isOpen={isPremiumModalOpen}
-                onClose={() => setIsPremiumModalOpen(false)}
-                isPremium={isPremium}
-                onActivated={async () => {
-                    setIsPremium(true);
-                    try {
-                        const details = await window.electronAPI?.licenseGetDetails?.();
-                        const plan = details?.plan ?? '';
-                        if (plan) setPremiumPlan(plan);
-                        writePremiumCache(true, plan);
-                    } catch { writePremiumCache(true, premiumPlan); }
-                    const status = await window.electronAPI?.profileGetStatus?.();
-                    if (status) setProfileStatus(status);
-                }}
-                onDeactivated={() => {
-                    setIsPremium(false); setPremiumPlan('');
-                    writePremiumCache(false, '');
-                    setProfileStatus(prev => ({ ...prev, profileMode: false }));
-                }}
-            />
         </div>
     );
 }

@@ -62,11 +62,11 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
         };
     }
 
-    // 3. Trial expired — NativelyPro fatal code
+    // 3. Trial expired — should not occur on this fork (trial auth hard-disabled)
     if (lower.includes('trial_expired')) {
         return {
-            title: 'Trial Expired',
-            body: 'Your Natively Pro trial has ended. Upgrade your plan to continue using STT.',
+            title: 'STT Unavailable',
+            body: 'Natively trial authentication is disabled. Configure a BYOK STT provider or API key in Settings.',
             category: 'auth',
         };
     }

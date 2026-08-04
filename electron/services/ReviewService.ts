@@ -20,7 +20,6 @@ import fs from "fs"
 import path from "path"
 import { loadNativeModule } from "../audio/nativeModuleLoader"
 
-const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || "https://api.natively.software").replace(/\/+$/, "")
 const REVIEW_STATE_FILE = "review-state.json"
 
 const PROMPT_FIRST_SESSION_THRESHOLD = 3
@@ -177,7 +176,8 @@ export class ReviewService {
     //    network round trip; the backend is authoritative). ───────────────
 
     shouldShowPrompt(): { eligible: boolean; reason: string } {
-        return shouldShowPromptLocal(this.state)
+        // Hard-disabled — commercial-surface-strip / ticket 05.
+        return { eligible: false, reason: 'review_disabled' }
     }
 
     markShown() {
@@ -219,84 +219,23 @@ export class ReviewService {
         return { ...this.state }
     }
 
-    /** Sync the local ledger with the server's view of the world. Useful
-     *  on app launch so a "Don't show again" from another install sticks. */
-    async syncWithBackend(apiKey: string | null, hardwareId: string | null): Promise<void> {
-        try {
-            const headers: Record<string, string> = {}
-            if (apiKey) headers["x-natively-key"] = apiKey
-            const params = new URLSearchParams()
-            if (hardwareId) params.set("hwid", hardwareId)
-            const url = `${NATIVELY_API_URL}/api/reviews/prompt-state?${params}`
-            const res = await fetch(url, { method: "GET", headers, signal: AbortSignal.timeout(8000) })
-            if (!res.ok) return
-            const data = await res.json()
-            if (!data?.state) return
-            const remote = data.state
-            // CRITICAL FIX (audit HIGH #7): when the backend reports MORE
-            // restrictive dismissal state than local, mirror everything —
-            // not just the boolean flags. Without this, a user who dismissed
-            // on another install (via a shared HWID) would be re-prompted
-            // here because local `last_dismissed_at` was null.
-            const remoteDismissedAtMs = remote.last_dismissed_at ? new Date(remote.last_dismissed_at).getTime() : 0
-            const localDismissedAtMs = this.state.last_dismissed_at ? new Date(this.state.last_dismissed_at).getTime() : 0
-            const remoteHasNewerDismissal = !!remoteDismissedAtMs && remoteDismissedAtMs > localDismissedAtMs
-            if (remote.has_reviewed || remote.dont_show_again || (remote.dismissed_count || 0) > (this.state.dismissed_count || 0) || remoteHasNewerDismissal) {
-                this.state.has_reviewed = !!remote.has_reviewed
-                this.state.dont_show_again = !!remote.dont_show_again
-                this.state.dismissed_count = Math.max(this.state.dismissed_count, remote.dismissed_count || 0)
-                this.state.next_eligible_at = remote.next_eligible_at
-                // Mirror the MOST RECENT dismissal timestamp so the redisplay
-                // 7-day window is anchored to the latest user interaction.
-                if (remoteHasNewerDismissal) {
-                    this.state.last_dismissed_at = remote.last_dismissed_at
-                }
-                this.scheduleWrite()
-            }
-        } catch {
-            // Best-effort sync; never block startup on it.
-        }
+    /** Sync disabled — commercial-surface-strip / ticket 05 (no Natively reviews phone-home). */
+    async syncWithBackend(_apiKey: string | null, _hardwareId: string | null): Promise<void> {
+        return
     }
 
-    /** Fire-and-forget usage sync after a session ends. */
-    async reportUsage(apiKey: string | null, hardwareId: string | null, usageMs: number): Promise<void> {
-        try {
-            const headers: Record<string, string> = { "Content-Type": "application/json" }
-            if (apiKey) headers["x-natively-key"] = apiKey
-            await fetch(`${NATIVELY_API_URL}/api/reviews/prompt-state`, {
-                method: "POST",
-                headers,
-                body: JSON.stringify({
-                    hardware_id: hardwareId,
-                    // Backend treats usage_ms as an INCREMENT. Send only this
-                    // session's elapsed delta, never the cumulative local total.
-                    event: { type: "session", usage_ms: Math.max(0, usageMs) },
-                }),
-                signal: AbortSignal.timeout(8000),
-            })
-        } catch {
-            // Best-effort.
-        }
+    /** Usage sync disabled — commercial-surface-strip / ticket 05. */
+    async reportUsage(_apiKey: string | null, _hardwareId: string | null, _usageMs: number): Promise<void> {
+        return
     }
 
-    async reportEvent(apiKey: string | null, hardwareId: string | null, event: Record<string, unknown>): Promise<void> {
-        try {
-            const headers: Record<string, string> = { "Content-Type": "application/json" }
-            if (apiKey) headers["x-natively-key"] = apiKey
-            await fetch(`${NATIVELY_API_URL}/api/reviews/prompt-state`, {
-                method: "POST",
-                headers,
-                body: JSON.stringify({ hardware_id: hardwareId, event }),
-                signal: AbortSignal.timeout(8000),
-            })
-        } catch {
-            // Best-effort.
-        }
+    async reportEvent(_apiKey: string | null, _hardwareId: string | null, _event: Record<string, unknown>): Promise<void> {
+        return
     }
 
-    // ── API call helpers used by the modal ─────────────────────────────────
+    // ── API call helpers used by the modal (hard no-ops — ticket 05) ───────
 
-    async submitReview(apiKey: string | null, hardwareId: string | null, payload: {
+    async submitReview(_apiKey: string | null, _hardwareId: string | null, _payload: {
         rating: number
         review_text: string | null
         app_version: string
@@ -304,72 +243,21 @@ export class ReviewService {
         build_channel: string
         email: string | null
     }): Promise<{ ok: boolean; id?: string; error?: string; status?: number }> {
-        try {
-            const headers: Record<string, string> = { "Content-Type": "application/json" }
-            if (apiKey) headers["x-natively-key"] = apiKey
-            const body = JSON.stringify({ ...payload, hardware_id: hardwareId })
-            const res = await fetch(`${NATIVELY_API_URL}/api/reviews`, {
-                method: "POST",
-                headers,
-                body,
-                signal: AbortSignal.timeout(15_000),
-            })
-            const data = await res.json().catch(() => ({}))
-            if (!res.ok || !data?.ok) {
-                return { ok: false, error: data?.errors?.[0] || data?.error || `http_${res.status}`, status: res.status }
-            }
-            return { ok: true, id: data.id }
-        } catch (err: any) {
-            return { ok: false, error: err?.message || "network_error" }
-        }
+        return { ok: false, error: 'review_disabled' }
     }
 
-    async updateTestimonial(apiKey: string | null, hardwareId: string | null, reviewId: string, payload: {
+    async updateTestimonial(_apiKey: string | null, _hardwareId: string | null, _reviewId: string, _payload: {
         name: string | null
         role: string | null
         company: string | null
         can_use_publicly: boolean
         display_name_publicly: boolean
     }): Promise<{ ok: boolean; error?: string; status?: number }> {
-        try {
-            const headers: Record<string, string> = { "Content-Type": "application/json" }
-            if (apiKey) headers["x-natively-key"] = apiKey
-            const body = JSON.stringify({ ...payload, hardware_id: hardwareId })
-            const res = await fetch(`${NATIVELY_API_URL}/api/reviews/${reviewId}/testimonial-details`, {
-                method: "PATCH",
-                headers,
-                body,
-                signal: AbortSignal.timeout(15_000),
-            })
-            const data = await res.json().catch(() => ({}))
-            if (!res.ok || !data?.ok) {
-                return { ok: false, error: data?.errors?.[0] || data?.error || `http_${res.status}`, status: res.status }
-            }
-            return { ok: true }
-        } catch (err: any) {
-            return { ok: false, error: err?.message || "network_error" }
-        }
+        return { ok: false, error: 'review_disabled' }
     }
 
-    async getPromptState(apiKey: string | null, hardwareId: string | null): Promise<{ ok: boolean; state?: ReviewPromptLocalState; eligible?: boolean; reason?: string }> {
-        try {
-            const headers: Record<string, string> = {}
-            if (apiKey) headers["x-natively-key"] = apiKey
-            const params = new URLSearchParams()
-            if (hardwareId) params.set("hwid", hardwareId)
-            const url = `${NATIVELY_API_URL}/api/reviews/prompt-state?${params}`
-            const res = await fetch(url, { method: "GET", headers, signal: AbortSignal.timeout(8000) })
-            if (!res.ok) return { ok: false }
-            const data = await res.json()
-            return {
-                ok: true,
-                state: data.state,
-                eligible: !!data.eligible,
-                reason: data.reason,
-            }
-        } catch {
-            return { ok: false }
-        }
+    async getPromptState(_apiKey: string | null, _hardwareId: string | null): Promise<{ ok: boolean; state?: ReviewPromptLocalState; eligible?: boolean; reason?: string }> {
+        return { ok: false, eligible: false, reason: 'review_disabled' }
     }
 }
 

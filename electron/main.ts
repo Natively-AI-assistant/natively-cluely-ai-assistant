@@ -7070,20 +7070,9 @@ async function initializeApp() {
   // Initialize IPC handlers before window creation
   initializeIpcHandlers(appState)
 
-  // Start the in-app review session ledger. This is intentionally main-process
-  // owned so renderer reloads don't double-count app sessions. Also sync the
-  // backend prompt-state once so cross-install dismissals/reviews are honored.
-  try {
-    const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
-    const reviewService = ReviewService.getInstance();
-    reviewService.recordSessionStart();
-    const apiKey = getReviewApiKey();
-    getReviewHardwareId()
-      .then((hwid: string | null) => reviewService.syncWithBackend(apiKey, hwid))
-      .catch(() => {});
-  } catch (err) {
-    console.warn('[Init] ReviewService recordSessionStart failed (non-fatal):', err);
-  }
+  // ReviewService boot ledger / backend sync removed — commercial-surface-strip
+  // ticket 05. In-app review prompts and Natively reviews API phone-home are
+  // hard-disabled; review:* IPC handlers return review_disabled no-ops.
 
   // Generic, provider-agnostic local-model download service. Owns the
   // in-flight state for Whisper (today) and any future local model family
@@ -7729,22 +7718,8 @@ if (process.env.THINKING_MATRIX === '1') {
     // can exit before any async kill completes.
     stopAppManagedHindsight('before-quit');
 
-    // Review-prompt service: close any in-flight session so total_usage_ms
-    // captures this run, then flush the debounced state write (250ms window)
-    // synchronously so a user dismissing the prompt 100ms before quit isn't
-    // re-prompted on next launch. Idempotent with the renderer's
-    // beforeunload path (which also calls review:flush-session).
-    try {
-      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
-      const reviewService = ReviewService.getInstance();
-      const totals = reviewService.beforeQuit();
-      if (totals.counted) {
-        const apiKey = getReviewApiKey();
-        getReviewHardwareId()
-          .then((hwid: string | null) => reviewService.reportUsage(apiKey, hwid, totals.usage_ms))
-          .catch(() => {});
-      }
-    } catch { /* optional */ }
+    // Review-prompt flush removed — commercial-surface-strip ticket 05.
+    // review:* IPC and ReviewService network helpers are hard no-ops.
 
     // Local-model download service: synchronously flush the in-flight state
     // map to disk and terminate every live worker. Without this, a quit

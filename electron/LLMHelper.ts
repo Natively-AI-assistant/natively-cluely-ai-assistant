@@ -2851,16 +2851,12 @@ const isMultimodal = !!(imagePaths?.length);
     const endpointUrl = `${NATIVELY_API_URL}/v1/chat`;
     const requestId = makeRequestId('nat_json');
     const requestStartedAt = nowMs();
-    // When the key is the trial sentinel, authenticate with the real trial token
-    // instead — the server validates x-trial-token, not __trial__ as an API key.
+    // Trial sentinel auth is hard-disabled on this fork (ADR 0002).
     const headers: any = { 'Content-Type': 'application/json', 'X-Request-Id': requestId };
     if (e2eLocalToken) {
       headers['x-natively-local-test'] = e2eLocalToken;
     } else if (nativelyKey === TRIAL_SENTINEL_KEY) {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const trialToken = CredentialsManager.getInstance().getTrialToken();
-      if (!trialToken) throw new Error('Trial token not found');
-      headers['x-trial-token'] = trialToken;
+      throw new Error('Natively trial auth is disabled on this build');
     } else {
       headers['x-natively-key'] = nativelyKey;
     }
@@ -5764,7 +5760,7 @@ const isMultimodal = !!(imagePaths?.length);
     let responseStatus: number | null = null;
     let providerModel: string | null = null;
 
-    // When the key is the trial sentinel, authenticate with the real trial token.
+    // Trial sentinel auth is hard-disabled on this fork (ADR 0002).
     const streamHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'text/event-stream',
@@ -5773,10 +5769,7 @@ const isMultimodal = !!(imagePaths?.length);
     if (e2eLocalToken) {
       streamHeaders['x-natively-local-test'] = e2eLocalToken;
     } else if (nativelyKey === TRIAL_SENTINEL_KEY) {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const trialToken = CredentialsManager.getInstance().getTrialToken();
-      if (!trialToken) throw new Error('Trial token not found');
-      streamHeaders['x-trial-token'] = trialToken;
+      throw new Error('Natively trial auth is disabled on this build');
     } else {
       streamHeaders['x-natively-key'] = nativelyKey;
     }

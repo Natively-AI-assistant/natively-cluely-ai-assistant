@@ -59,11 +59,15 @@ test('WIRING: manual path prepends the OKF block and gates on coding/forbidden',
   assert.match(src, /!isCodingChat &&/, 'coding excluded from profile retrieval');
 });
 
-test('WIRING: both trial-wipe paths carry the profile OKF PII backstop', () => {
+test('WIRING: trial wipe paths are hard-disabled (no profile OKF PII wipe via trial IPC)', () => {
   const src = fs.readFileSync(path.join(repoRoot, 'electron/ipcHandlers.ts'), 'utf8');
-  const backstops = src.match(/ProfilePackBuilder.*getInstance\(\)\.deleteAllProfilePacks\(\)/g) || [];
-  // trial:end-byok + trial:wipe-profile-data both have a backstop (2 occurrences).
-  assert.ok(backstops.length >= 2, `both trial-wipe paths call deleteAllProfilePacks (found ${backstops.length})`);
+  const endByokStart = src.search(/safeHandle\(['"]trial:end-byok['"]/);
+  const wipeStart = src.search(/safeHandle\(['"]trial:wipe-profile-data['"]/);
+  const wipeEnd = src.search(/safeHandle\(['"]get-custom-providers['"]/, wipeStart);
+  assert.ok(endByokStart >= 0 && wipeStart > endByokStart);
+  const trialWipeRegion = src.slice(endByokStart, wipeEnd);
+  assert.doesNotMatch(trialWipeRegion, /deleteAllProfilePacks/);
+  assert.match(trialWipeRegion, /trial_disabled/);
 });
 
 test('MEDIUM: reserved profile mode cannot be activated via ModesManager.setActiveMode', guard, async () => {
