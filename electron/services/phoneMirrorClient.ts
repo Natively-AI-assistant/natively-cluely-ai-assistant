@@ -233,6 +233,19 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         color: var(--accent-2); border-color: rgba(85,166,255,0.28);
         background: rgba(85,166,255,0.05);
       }
+      .stealth-row {
+        display: flex; gap: 6px;
+      }
+      .stealth-btn {
+        flex: 1; height: 34px; padding: 0 8px;
+        border-radius: 8px; border: 1px solid var(--line-soft);
+        background: rgba(255,255,255,0.04); color: var(--muted);
+        font-size: 11.5px; font-weight: 700; letter-spacing: 0.2px;
+      }
+      .stealth-btn.enter { color: var(--accent); border-color: rgba(108,240,214,0.35); }
+      .stealth-btn.exit { color: var(--accent-2); border-color: rgba(85,166,255,0.3); }
+      .stealth-btn.end { color: #ff8f8f; border-color: rgba(255,120,120,0.35); }
+      .stealth-btn:disabled { opacity: 0.45; }
       /* Chat input row */
       .input-row {
         display: flex; gap: 8px; align-items: center;
@@ -317,6 +330,11 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           <button class="qa-btn" data-action="followUp" type="button">Follow Up</button>
           <button class="qa-btn" data-action="dynamicAction4" type="button">Recap</button>
           <button class="qa-btn screenshot-btn" id="screenshotBtn" type="button" title="Capture desktop screenshot for AI prompt">📷 Capture</button>
+        </div>
+        <div class="stealth-row" id="stealthRow">
+          <button class="stealth-btn enter" id="stealthEnterBtn" type="button" title="Hide desktop overlay; keep answers on this phone">Enter stealth</button>
+          <button class="stealth-btn exit" id="stealthExitBtn" type="button" title="Show desktop overlay again">Exit stealth</button>
+          <button class="stealth-btn end" id="stealthEndBtn" type="button" title="End the desktop session">End session</button>
         </div>
         <!-- Chat input -->
         <div class="input-row">
@@ -637,6 +655,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         let reconnectTimer = null;
         let reconnectDelay = 800;
         let wakeLock = null;
+        let stealthActive = false;
 
         function showToast(text) {
           toast.textContent = text;
@@ -646,10 +665,13 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
 
         function setConnected(isConnected) {
           status.classList.toggle('connected', isConnected);
-          statusText.textContent = isConnected ? 'Connected' : 'Offline';
-          subtitle.textContent = isConnected ? 'Live mirror active' : 'Reconnecting…';
+          statusText.textContent = isConnected ? (stealthActive ? 'Stealth' : 'Connected') : 'Offline';
+          subtitle.textContent = isConnected
+            ? (stealthActive ? 'Two-device stealth active' : 'Live mirror active')
+            : 'Reconnecting…';
           sendBtn.disabled = !isConnected;
           document.querySelectorAll('.qa-btn').forEach(function (b) { b.disabled = !isConnected; });
+          document.querySelectorAll('.stealth-btn').forEach(function (b) { b.disabled = !isConnected; });
         }
 
         function fmtTime(value) {
@@ -832,12 +854,19 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           // Ack events from stealth operations (screenshot captured, etc.)
           if (ev.type === 'ack') {
             showToast(ev.message || ev.action);
-            // For screenshot acks, also add a small card to the feed.
-            if (ev.action === 'screenshot') {
+            const action = String(ev.action || '');
+            if (action === 'screenshot') {
               const id = 'ack-' + Date.now() + '-' + (++messageIdCounter);
               messages.push({ id, type: 'screenshot-queued', createdAt: new Date().toISOString() });
               render();
               scrollToLatest(true);
+            } else if (action.indexOf('two-device-stealth:') === 0) {
+              const op = action.slice('two-device-stealth:'.length);
+              if (op === 'enter') stealthActive = true;
+              else if (op === 'exit' || op === 'end' || op === 'noop') {
+                if (op === 'exit' || op === 'end') stealthActive = false;
+              }
+              setConnected(!!(socket && socket.readyState === 1));
             }
             return;
           }
@@ -917,6 +946,18 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           showToast('Capturing…');
         });
 
+        function sendTwoDeviceStealth(op) {
+          sendCommand({ type: 'two-device-stealth', op: op });
+        }
+        document.getElementById('stealthEnterBtn').addEventListener('click', function () {
+          sendTwoDeviceStealth('enter');
+        });
+        document.getElementById('stealthExitBtn').addEventListener('click', function () {
+          sendTwoDeviceStealth('exit');
+        });
+        document.getElementById('stealthEndBtn').addEventListener('click', function () {
+          sendTwoDeviceStealth('end');
+        });
         // Utility buttons
         document.getElementById('clearButton').addEventListener('click', () => {
           messages.length = 0; live = null; render();

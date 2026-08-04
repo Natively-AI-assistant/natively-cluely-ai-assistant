@@ -81,6 +81,8 @@ export const PhoneMirrorSettings: React.FC = () => {
   const [busy, setBusy] = useState<null | 'enable' | 'disable' | 'lan' | 'rotate'>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [adbCopied, setAdbCopied] = useState(false);
+  const [loopbackCopied, setLoopbackCopied] = useState(false);
   // Companion browser-extension pairing: countdown (seconds left) while the 60s
   // one-click /pair window is open after "Connect browser extension".
   const [armCountdown, setArmCountdown] = useState(0);
@@ -223,6 +225,28 @@ export const PhoneMirrorSettings: React.FC = () => {
     }
   }, [info.primaryUrl]);
 
+  const onCopyAdb = useCallback(async () => {
+    if (!info.port) return;
+    try {
+      await navigator.clipboard.writeText(`adb reverse tcp:${info.port} tcp:${info.port}`);
+      setAdbCopied(true);
+      setTimeout(() => setAdbCopied(false), 1200);
+    } catch (_) {
+      /* noop */
+    }
+  }, [info.port]);
+
+  const onCopyLoopback = useCallback(async () => {
+    if (!info.loopbackUrl) return;
+    try {
+      await navigator.clipboard.writeText(info.loopbackUrl);
+      setLoopbackCopied(true);
+      setTimeout(() => setLoopbackCopied(false), 1200);
+    } catch (_) {
+      /* noop */
+    }
+  }, [info.loopbackUrl]);
+
   // Clear the countdown interval on unmount.
   useEffect(() => {
     return () => {
@@ -360,7 +384,7 @@ export const PhoneMirrorSettings: React.FC = () => {
                       <div className="text-text-primary text-xs leading-snug">
                         {info.exposeOnLan
                           ? 'Open the camera app and point at the code.'
-                          : 'LAN access is off. Turn it on, or open the URL on this computer.'}
+                          : 'LAN is off — use USB (adb reverse) below, or turn on Allow LAN for Wi‑Fi QR.'}
                       </div>
                     </div>
                     <div>
@@ -389,6 +413,59 @@ export const PhoneMirrorSettings: React.FC = () => {
                         </button>
                       </div>
                     </div>
+                    {info.loopbackUrl && (
+                      <div className="rounded-md border border-border-subtle bg-bg-item-surface/60 px-2.5 py-2 space-y-1.5">
+                        <div className="text-text-secondary text-[10px] uppercase tracking-wider">
+                          USB path (Android) — no Allow LAN
+                        </div>
+                        <p className="text-text-primary text-[11px] leading-snug">
+                          Plug in the phone, enable USB debugging, then run:
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 min-w-0 truncate font-mono text-[11px] px-2 py-1.5 rounded-md bg-bg-main border border-border-subtle text-text-primary">
+                            {`adb reverse tcp:${info.port} tcp:${info.port}`}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={onCopyAdb}
+                            className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium bg-bg-item-active text-text-primary hover:bg-bg-item-active/70 transition-colors"
+                          >
+                            {adbCopied ? (
+                              <>
+                                <Check size={12} /> Copied
+                              </>
+                            ) : (
+                              <>
+                                <Copy size={12} /> Copy
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        <p className="text-text-secondary text-[11px] leading-snug">
+                          On the phone browser open the loopback URL:
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 min-w-0 truncate font-mono text-[11px] px-2 py-1.5 rounded-md bg-bg-main border border-border-subtle text-text-primary">
+                            {info.loopbackUrl}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={onCopyLoopback}
+                            className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium bg-bg-item-active text-text-primary hover:bg-bg-item-active/70 transition-colors"
+                          >
+                            {loopbackCopied ? (
+                              <>
+                                <Check size={12} /> Copied
+                              </>
+                            ) : (
+                              <>
+                                <Copy size={12} /> Copy
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     {info.exposeOnLan && info.lanUrls.length > 1 && (
                       <details className="text-[11px]">
                         <summary className="text-text-secondary cursor-pointer hover:text-text-primary">

@@ -11,6 +11,10 @@ import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manag
 import { AppState } from './main';
 import { CodexCliService } from './services/CodexCliService';
 import { PhoneMirrorService } from './services/PhoneMirrorService';
+import {
+  TwoDeviceStealthSession,
+  type TwoDeviceStealthHost,
+} from './services/TwoDeviceStealthSession';
 import { sanitizeContextEnvelope } from './services/browser-context/sanitize';
 import { formatEnvelopeForPrompt } from './services/browser-context/formatEnvelopeForPrompt';
 import { BrowserMetadataClassifierService } from './services/browser-context/BrowserMetadataClassifierService';
@@ -10221,6 +10225,38 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch (e: any) {
         console.error('[PhoneMirror] phone screenshot request failed:', e);
         PhoneMirrorService.getInstance().publishAck('screenshot', 'Screenshot failed');
+      }
+    } else if (cmd.type === 'two-device-stealth') {
+      // Two-device stealth: hide/restore desktop overlay while Phone Mirror stays up.
+      // Does not unregister stealth global hotkeys (host never touches KeybindManager).
+      const phoneMirror = PhoneMirrorService.getInstance();
+      const session = TwoDeviceStealthSession.getInstance();
+      const helper = appState.getWindowHelper();
+      const host: TwoDeviceStealthHost = {
+        getUndetectable: () => appState.getUndetectable(),
+        setUndetectable: (on) => appState.setUndetectable(on),
+        isOverlayVisible: () => {
+          const w = helper.getOverlayWindow();
+          return !!(w && !w.isDestroyed() && w.isVisible());
+        },
+        hideOverlay: () => helper.hideOverlay(),
+        showOverlay: () => helper.showOverlay(),
+        endMeeting: () => appState.endMeeting(),
+      };
+      try {
+        const result =
+          cmd.op === 'enter'
+            ? session.enter(host)
+            : cmd.op === 'exit'
+              ? session.exit(host)
+              : await session.end(host);
+        phoneMirror.publishAck(`two-device-stealth:${result.action}`, result.message);
+      } catch (e: any) {
+        console.error('[PhoneMirror] two-device-stealth failed:', e);
+        phoneMirror.publishAck(
+          `two-device-stealth:${cmd.op}`,
+          e?.message || 'Two-device stealth failed',
+        );
       }
     }
   });

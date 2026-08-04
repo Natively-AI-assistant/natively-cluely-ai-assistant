@@ -8,8 +8,12 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { SettingsManager } from './SettingsManager';
 import { CredentialsManager } from './CredentialsManager';
 import { PHONE_MIRROR_HTML } from './phoneMirrorClient';
+import { parsePhoneCommand, type PhoneCommand } from './phoneMirrorCommands';
 import { DOM_CONTEXT_MAX_CHARS } from '../config/constants';
 import { sanitizeContextEnvelope } from './browser-context/sanitize';
+
+export type { PhoneCommand } from './phoneMirrorCommands';
+export { parsePhoneCommand } from './phoneMirrorCommands';
 
 export interface PhoneMirrorInfo {
   running: boolean;
@@ -52,12 +56,6 @@ export type StreamEvent =
   | { type: 'error'; streamId: string; message: string }
   | { type: 'assistant'; id: string; content: string; label: string; createdAt: string }
   | { type: 'ack'; action: string; message: string };
-
-/** Command sent from the phone browser to the desktop. */
-export type PhoneCommand =
-  | { type: 'chat'; message: string }
-  | { type: 'action'; action: string }
-  | { type: 'screenshot' };
 
 /**
  * Metadata the companion extension sends alongside a captured DOM (drives the
@@ -1407,26 +1405,14 @@ export class PhoneMirrorService {
         // true when it consumed the frame.
         if (this.handleExtensionFrame(ws, c)) return;
 
-        let validated: PhoneCommand | null = null;
-        if (
-          c.type === 'chat' &&
-          typeof c.message === 'string' &&
-          c.message.trim().length > 0 &&
-          c.message.length <= 2000
-        ) {
-          validated = { type: 'chat', message: c.message.trim() };
-        } else if (
-          c.type === 'action' &&
-          typeof c.action === 'string' &&
-          /^[a-zA-Z:_-]{1,64}$/.test(c.action)
-        ) {
-          validated = { type: 'action', action: c.action };
-        } else if (c.type === 'screenshot') {
-          validated = { type: 'screenshot' };
-        }
+        const validated = parsePhoneCommand(c);
 
         if (validated) {
-          console.log(`[PhoneMirror] phone command: ${validated.type}`);
+          const label =
+            validated.type === 'two-device-stealth'
+              ? `${validated.type}:${validated.op}`
+              : validated.type;
+          console.log(`[PhoneMirror] phone command: ${label}`);
           this.emitPhoneCommand(validated);
         }
       } catch (_) {
