@@ -8,6 +8,15 @@ import {
 import { PremiumUpgradeModal } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
+import { CHECKOUT_URLS } from '../config/urls';
+
+const openExternal = (url: string) => {
+    if ((window as any).electronAPI?.openExternal) {
+        (window as any).electronAPI.openExternal(url);
+    } else {
+        window.open(url, '_blank', 'noopener,noreferrer');
+    }
+};
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const PI_CSS = `
@@ -604,10 +613,10 @@ const PI_GATE_FEATURES: Array<{
     // ellipsize instead of crowding the card). Keep these short; verify with
     // the pi-gate screenshot/measurement script before lengthening any of them
     // again.
-    { key: 'profile', label: 'Profile', desc: 'Every skill and role — mapped.', hex: '#34d399', Icon: FileText, col: '3 / 5', row: '1 / 2', type: 'wide' },
+    { key: 'profile', label: 'Profile', desc: 'Every skill and role mapped.', hex: '#34d399', Icon: FileText, col: '3 / 5', row: '1 / 2', type: 'wide' },
     { key: 'company', label: 'Company Intel', hex: '#fbbf24', Icon: Building2, col: '3 / 4', row: '2 / 3', type: 'small' },
     { key: 'cover', label: 'Cover Letter', hex: '#fb7185', Icon: Mail, col: '4 / 5', row: '2 / 3', type: 'small' },
-    { key: 'talking', label: 'Talking Points', desc: 'Every fit gap — answered.', hex: '#f472b6', Icon: MessageSquare, col: '1 / 3', row: '3 / 4', type: 'wide' },
+    { key: 'talking', label: 'Talking Points', desc: 'Every fit gap answered.', hex: '#f472b6', Icon: MessageSquare, col: '1 / 3', row: '3 / 4', type: 'wide' },
     { key: 'search', label: 'Web Search', desc: 'Live research, on demand.', hex: '#38bdf8', Icon: Globe, col: '3 / 5', row: '3 / 4', type: 'wide' },
 ];
 
@@ -791,8 +800,7 @@ const PI_GATE_CSS = `
     }
 `;
 
-function ProfileIntelligenceProGate({ onUnlock, onOpenNativelyAPI, onClose }: {
-    onUnlock: () => void;
+function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
     onOpenNativelyAPI?: () => void;
     onClose?: () => void;
 }) {
@@ -966,7 +974,7 @@ function ProfileIntelligenceProGate({ onUnlock, onOpenNativelyAPI, onClose }: {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button className="pig-cta-group" onClick={onUnlock}>
+                    <button className="pig-cta-group" onClick={() => openExternal(CHECKOUT_URLS.apiMax)}>
                         Unlock Pro
                         <div className="pig-cta-icon-ring">
                             <ArrowUpRight size={14} strokeWidth={2.5} />
@@ -2633,20 +2641,10 @@ export function ProfileIntelligenceSettings({
     if (!hasProfileAccess) {
         if (!licenseLoaded) return null;
         return (
-            <>
-                <ProfileIntelligenceProGate
-                    onUnlock={() => setIsPremiumModalOpen(true)}
-                    onOpenNativelyAPI={onOpenNativelyAPI}
-                    onClose={onClose}
-                />
-                <PremiumUpgradeModal
-                    isOpen={isPremiumModalOpen}
-                    onClose={() => setIsPremiumModalOpen(false)}
-                    isPremium={isPremium}
-                    onActivated={handlePremiumActivated}
-                    onDeactivated={handlePremiumDeactivated}
-                />
-            </>
+            <ProfileIntelligenceProGate
+                onOpenNativelyAPI={onOpenNativelyAPI}
+                onClose={onClose}
+            />
         );
     }
 
