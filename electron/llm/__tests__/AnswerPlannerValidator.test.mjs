@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { classifyIntent, planAnswer, validateAnswerStructure } from '../../../dist-electron/electron/llm/index.js';
+import { classifyIntent, planAnswer, validateAnswerStructure, formatAnswerPlanForPrompt } from '../../../dist-electron/electron/llm/index.js';
 
 const planFor = (question, source = 'what_to_answer') => planAnswer({
   question,
@@ -46,6 +46,19 @@ test('planAnswer detects terse DSA questions as dsa_question_answer', () => {
 test('planAnswer detects system design and debugging answer types', () => {
   assert.equal(planFor('Design a scalable notification system').answerType, 'system_design_answer');
   assert.equal(planFor('How would you debug this production exception?').answerType, 'debugging_question_answer');
+});
+
+test('system_design STRICT RESPONSE TEMPLATE uses Delivery Framework one-slice (not old multi-section dump)', () => {
+  const plan = planFor('Design a service similar to ticketmaster', 'manual');
+  assert.equal(plan.answerType, 'system_design_answer');
+  const contract = formatAnswerPlanForPrompt(plan, false);
+  assert.match(contract, /Delivery Framework/i);
+  assert.match(contract, /ONE Delivery Framework slice/i);
+  assert.match(contract, /Core Entities/i);
+  assert.match(contract, /Requirements/i);
+  assert.doesNotMatch(contract, /Use exactly these sections/i);
+  assert.doesNotMatch(contract, /Clarify Requirements:/);
+  assert.doesNotMatch(plan.responseTemplate, /Follow-up Points:/);
 });
 
 test('planAnswer routes identity and JD-fit questions with isolated context', () => {

@@ -1,0 +1,8 @@
+regression:
+  min_pass_rate: 1.0
+  trials: 1
+capability:
+  min_pass_rate: 0.0
+  track: true
+gate_on:
+  - regression
