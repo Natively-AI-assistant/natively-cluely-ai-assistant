@@ -93,12 +93,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Rewrite the https URL to inject the token. Configured on the local
-          # repo only, so it never leaks into the runner's global config.
-          git config --local url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf "https://github.com/"
-          # Path-limited on purpose — see the checkout comment above.
-          git submodule update --init --force -- premium
-          git config --local --unset-all url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf
+          # `git -c`, NOT `git config --local`. The submodule clone runs as a
+          # SUBPROCESS, and a --local rewrite on the superproject does not reach
+          # it — the first attempt used --local and the runner fell straight
+          # through to an interactive credential prompt:
+          #   fatal: could not read Username for 'https://github.com'
+          # `-c` is exported through GIT_CONFIG_PARAMETERS, so the child git
+          # inherits it. Verified both ways against a local repro.
+          #
+          # It also keeps the token out of .git/config entirely: nothing is
+          # written to disk, so there is no cleanup step that could be skipped
+          # by an earlier failure and leave a credential behind in the workspace.
+          #
+          # Path-limited to `premium` on purpose — see the checkout comment above.
+          git -c url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf="https://github.com/" \
+              submodule update --init --force -- premium
+          # Prove the checkout really produced the file the typecheck needs,
+          # rather than an empty directory that fails 200 lines later.
           test -f premium/electron/knowledge/CompanyResearchEngine.ts
 
       - name: Setup Node.js
@@ -247,12 +258,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Rewrite the https URL to inject the token. Configured on the local
-          # repo only, so it never leaks into the runner's global config.
-          git config --local url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf "https://github.com/"
-          # Path-limited on purpose — see the checkout comment above.
-          git submodule update --init --force -- premium
-          git config --local --unset-all url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf
+          # `git -c`, NOT `git config --local`. The submodule clone runs as a
+          # SUBPROCESS, and a --local rewrite on the superproject does not reach
+          # it — the first attempt used --local and the runner fell straight
+          # through to an interactive credential prompt:
+          #   fatal: could not read Username for 'https://github.com'
+          # `-c` is exported through GIT_CONFIG_PARAMETERS, so the child git
+          # inherits it. Verified both ways against a local repro.
+          #
+          # It also keeps the token out of .git/config entirely: nothing is
+          # written to disk, so there is no cleanup step that could be skipped
+          # by an earlier failure and leave a credential behind in the workspace.
+          #
+          # Path-limited to `premium` on purpose — see the checkout comment above.
+          git -c url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf="https://github.com/" \
+              submodule update --init --force -- premium
+          # Prove the checkout really produced the file the typecheck needs,
+          # rather than an empty directory that fails 200 lines later.
           test -f premium/electron/knowledge/CompanyResearchEngine.ts
 
       - name: Setup Node.js
