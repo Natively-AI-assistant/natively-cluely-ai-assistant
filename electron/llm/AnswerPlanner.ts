@@ -193,6 +193,12 @@ export interface PlanAnswerInput {
    * Optional — absent keeps the mode-blind behavior byte-for-byte.
    */
   activeMode?: ActiveModeInfo | null;
+  /**
+   * SD route sticky (ADR 0004): when sticky SD session is armed (problemKey open),
+   * non-coding/non-DSA turns promote to system_design_answer so speakable DF applies
+   * mid-interview. Optional — absent keeps prior turn-by-turn classification.
+   */
+  sdSessionOpen?: boolean;
 }
 
 // Derives from the single canonical CODING_CONTRACT (codingContract.ts) so the
@@ -624,6 +630,10 @@ const CODING_PATTERNS = [
 
 const SYSTEM_DESIGN_PATTERNS = [
   /\bsystem design\b|\bdesign (a|an|the)\b/i,
+  // Title / gerund forms (sd-route-title-form): "Designing a Scalable Ticketing
+  // Platform", "Design scalable notification system" — do not require a/an/the.
+  /\bdesigning\b[^.?!]{0,80}\b(scalable|distributed|system|service|platform|architecture|ticketing|notification|shortener)\b/i,
+  /\bdesign\b[^.?!]{0,40}\b(scalable|distributed)\b[^.?!]{0,40}\b(system|service|platform|architecture)\b/i,
   // Bare technology nouns (scalable / scale / architecture / distributed) only
   // signal a SYSTEM-DESIGN ASK when paired with a design/build imperative. Without
   // this guard, a candidate EXPERIENCE probe that merely mentions the technology —
@@ -636,6 +646,10 @@ const SYSTEM_DESIGN_PATTERNS = [
   // still matches via the design verb.
   /\b(design|architect|build|scale|structure|lay ?out)\b[^.?!]{0,40}\b(scalable|architecture|distributed|high[- ]?throughput|fault[- ]?toleran\w+)\b/i,
   /\b(scalable|distributed|high[- ]?throughput)\b[^.?!]{0,40}\b(system|service|architecture|design)\b[^.?!]{0,40}\b(design|build|architect|handle|scale to|support)\b/i,
+  // like-X / similar-to product clones (sd-route-positive)
+  /\b(design|build)\b[^.?!]{0,60}\b(service|system|platform)\b[^.?!]{0,40}\b(like|similar to)\b/i,
+  // scale-ask (sd-route-scale-ask): how would you scale/architect a named system
+  /\bhow would you\b[^.?!]{0,40}\b(scale|architect|design)\b[^.?!]{0,60}\b(system|service|platform|checkout|architecture|cache|queue|pipeline)\b/i,
   /\brate limiter\b|\burl shortener\b|\bchat system\b|\bnotification system\b/i,
 ];
 
@@ -2680,6 +2694,18 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // and follow-up referents instead of collapsing every turn to lecture_answer.
     const docShape = classifyDocumentQuestionShape(question, input.extractedQuestion?.isFollowUp ? input.extractedQuestion?.followUpTarget || 'prior' : undefined);
     answerType = docShape === 'broad_overview' ? 'lecture_answer' : docShape;
+  }
+
+  // SD route sticky (ADR 0004): armed sticky SD session promotes non-coding /
+  // non-DSA turns to system_design_answer so speakable DF + strip apply mid-interview.
+  if (
+    input.sdSessionOpen === true
+    && !isCodingAnswerType(answerType)
+    && !hasWriteCodeVerb
+    && !includesAny(textNoTechStack, DSA_PATTERNS)
+    && answerType !== 'debugging_question_answer'
+  ) {
+    answerType = 'system_design_answer';
   }
 
   const speakerPerspective = input.speakerPerspective

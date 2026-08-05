@@ -48,6 +48,45 @@ test('planAnswer detects system design and debugging answer types', () => {
   assert.equal(planFor('How would you debug this production exception?').answerType, 'debugging_question_answer');
 });
 
+test('sd-routing matrix — title-form, like-X, scale-ask, false friends', () => {
+  assert.equal(planFor('Designing a Scalable Ticketing Platform').answerType, 'system_design_answer');
+  assert.equal(planFor('Design a service similar to ticketmaster', 'manual').answerType, 'system_design_answer');
+  assert.equal(planFor('how would you scale our checkout?').answerType, 'system_design_answer');
+
+  assert.notEqual(planFor('how many years have you worked on distributed systems?').answerType, 'system_design_answer');
+  assert.notEqual(planFor('implement a rate limiter in python').answerType, 'system_design_answer');
+  assert.notEqual(planFor('explain rate limiting').answerType, 'system_design_answer');
+  // Natively product-about only when the product is named — keep non-SD
+  const natively = planFor('what is the architecture of Natively?');
+  assert.notEqual(natively.answerType, 'system_design_answer');
+});
+
+test('sd-routing sticky session promotes clarifiers to system_design_answer', () => {
+  const clarifier = planAnswer({
+    question: 'what about consistency vs availability?',
+    source: 'what_to_answer',
+    speakerPerspective: 'interviewer',
+    sdSessionOpen: true,
+  });
+  assert.equal(clarifier.answerType, 'system_design_answer');
+
+  const codingPivot = planAnswer({
+    question: 'can you solve two sum?',
+    source: 'what_to_answer',
+    speakerPerspective: 'interviewer',
+    sdSessionOpen: true,
+  });
+  assert.equal(codingPivot.answerType, 'dsa_question_answer');
+
+  const unarmed = planAnswer({
+    question: 'what about consistency vs availability?',
+    source: 'what_to_answer',
+    speakerPerspective: 'interviewer',
+    sdSessionOpen: false,
+  });
+  assert.notEqual(unarmed.answerType, 'system_design_answer');
+});
+
 test('system_design STRICT RESPONSE TEMPLATE uses Delivery Framework one-slice (not old multi-section dump)', () => {
   const plan = planFor('Design a service similar to ticketmaster', 'manual');
   assert.equal(plan.answerType, 'system_design_answer');
