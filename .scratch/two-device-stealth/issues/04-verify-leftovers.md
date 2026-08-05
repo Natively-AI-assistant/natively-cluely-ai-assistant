@@ -1,22 +1,20 @@
-# 04 — Two-device stealth verify + leftovers
+# 04 — iPhone-first two-device stealth (Safari)
 
-**What to build:** Walk the `two-device-stealth-v1-done` checklist end-to-end on Android USB (or documented simulator of adb reverse + phone browser), fix leftover copy contradictions (“watch only”, i18n LAN-only strings), and confirm stealth globals + extension orthogonality still hold.
+**What to build:** Make two-device stealth **reliably usable on iPhone first**. Primary path: same Wi‑Fi (or Mac↔iPhone USB Personal Hotspot / Internet Sharing network) → Allow LAN → open Mirror in Safari → Enter stealth. There is **no** iOS equivalent of `adb reverse`; do not block on USB-localhost. Android USB remains a later ticket.
 
-**Blocked by:** 01 — Two-device stealth session via phone command; 02 — Phone Mirror web UI for two-device stealth; 03 — Android USB adb-reverse pairing UX
+**Blocked by:** 01 — Two-device stealth session via phone command; 02 — Phone Mirror web UI for two-device stealth
 
-**Surfaces:** electron, ui, docs/help
+**Surfaces:** ui (PhoneMirrorSettings, Help), docs; light electron only if LAN/USB-iface discovery copy needs it
 
-**FE can start?:** n/a — integration/verify ticket
+**FE can start?:** yes
 
-**Status:** ready-for-agent — manual Android device walkthrough remaining; automated contracts cover 01–03
+**Status:** ready-for-agent
 
 **Parent:** [PRD — Two-device stealth](../PRD.md)
 
-- [ ] Android (or equivalent) opens Mirror via adb reverse without Allow LAN
-- [ ] Enter stealth hides desktop overlay while answers still stream to phone
-- [ ] Chat, quick actions, screenshot shutter work during stealth
-- [ ] Exit restores desktop UI; End tears down cleanly
-- [ ] Optional LAN QR still works
-- [ ] Stealth global hotkeys still registered after enter
-- [ ] Extension still pairs/captures without being required for phone stealth
-- [x] Blatant “viewer-only” / LAN-only copy fixed where it contradicts phone-control-surface (Help + Sync USB panel)
+- [x] Sync / Help lead with **iPhone** steps (Enable Mirror → Allow LAN → scan QR / open URL in Safari → Enter stealth)
+- [x] Android `adb reverse` copy is clearly secondary / “later / advanced,” not the headline path
+- [ ] iPhone Safari can connect, stream answers, Enter/Exit stealth, End session
+- [x] Optional note for USB cable users: enable Internet Sharing / hotspot so phone can reach Mac LAN IP (not localhost)
+- [ ] Stealth globals still registered; extension still optional
+- [x] Android USB E2E deferred (see ticket 05)

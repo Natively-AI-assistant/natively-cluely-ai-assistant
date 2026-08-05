@@ -111,8 +111,9 @@ Success = `two-device-stealth-v1-done`: Android via adb reverse without Allow LA
 
 - Glossary name for the UX is **two-device stealth** — do not overload desktop “stealth typing” / “More Stealth” opacity.
 - Prior InterviewMan in this repo meant SD prompt / retention competitor; this PRD means InterviewMan **Stealth Mode** product analogy only.
-- Soft checkpoint: no separate EDD required; grill already locked decisions.
-- Next: `.scratch/two-device-stealth/issues/` tracer tickets, then `/implement` on the frontier (solo default; ticket 01 first).
+- **Priority update (2026-08-04):** **iPhone first** via Allow LAN / Safari (ticket 04). Android `adb reverse` deferred (ticket 05). iOS has no localhost USB reverse.
+- Soft checkpoint: no separate EDD required; grill already locked decisions (except platform priority above).
+- Next: ticket 04 iPhone E2E, then PR / code-review; ticket 05 Android later.
 
 ## Seams check (to-spec)
 

@@ -1748,7 +1748,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 <Smartphone size={14} /> Stream Natively to Your Phone
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Phone Mirror is a local control surface on your phone: live answers, chat, quick actions, screenshot shutter, and <strong>two-device stealth</strong> (hide the desktop overlay while the phone stays primary). Prefer USB on Android so you do not need Allow LAN.
+                                Phone Mirror is a local control surface on your phone: live answers, chat, quick actions, screenshot shutter, and <strong>two-device stealth</strong> (hide the desktop overlay while the phone stays primary). <strong>iPhone first:</strong> use same Wi‑Fi + Allow LAN + Safari.
                             </p>
                         </div>
 
@@ -1759,9 +1759,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 </h4>
                                 <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                     <li>Open <strong>Settings → Sync</strong> and enable Phone Mirror</li>
-                                    <li><strong>USB (Android):</strong> run <code className="font-mono">adb reverse tcp:&lt;port&gt; tcp:&lt;port&gt;</code>, then open the loopback URL on the phone — no Allow LAN</li>
-                                    <li><strong>Wi‑Fi:</strong> flip Allow LAN and scan the QR (trusted networks only)</li>
-                                    <li>On the phone: <strong>Enter stealth</strong> to hide the desktop overlay; Exit restores; End ends the session</li>
+                                    <li><strong>iPhone:</strong> turn on <strong>Allow LAN</strong>, scan the QR (or paste the URL) in Safari, then tap <strong>Enter stealth</strong></li>
+                                    <li>USB tip: Internet Sharing / hotspot can share a link — still open the LAN URL, not localhost (iOS has no adb reverse)</li>
+                                    <li><strong>Android USB (later):</strong> <code className="font-mono">adb reverse</code> + loopback URL without Allow LAN</li>
                                 </ul>
                             </div>
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">

@@ -25,14 +25,20 @@ test('phone Mirror client exposes enter/exit/end two-device stealth controls', (
   assert.match(src, /sendTwoDeviceStealth\('end'\)/);
 });
 
-test('Sync settings documents Android adb reverse without requiring LAN', () => {
+test('Sync settings lead with iPhone LAN path; Android USB is advanced', () => {
   const src = fs.readFileSync(
     path.join(root, 'src/components/settings/PhoneMirrorSettings.tsx'),
     'utf8',
   );
+  assert.match(src, /iPhone/);
+  assert.match(src, /Allow LAN/);
+  assert.match(src, /Advanced — Android USB/);
   assert.match(src, /adb reverse tcp:\$\{info\.port\} tcp:\$\{info\.port\}/);
-  assert.match(src, /USB path \(Android\)/);
-  assert.match(src, /no Allow LAN/);
   assert.match(src, /info\.loopbackUrl/);
   assert.match(src, /onCopyAdb/);
+  assert.doesNotMatch(
+    src,
+    /USB path \(Android\) — no Allow LAN/,
+    'Android USB must not be the headline panel anymore',
+  );
 });

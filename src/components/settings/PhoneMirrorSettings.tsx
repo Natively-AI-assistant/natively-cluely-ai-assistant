@@ -314,7 +314,7 @@ export const PhoneMirrorSettings: React.FC = () => {
       <header>
         <h3 className="text-lg font-bold text-text-primary mb-1">{t('Sync')}</h3>
         <p className="text-xs text-text-secondary mb-5">
-          Mirror answers to your phone. Capture browser tabs to your answers.
+          Mirror answers to your phone (iPhone Safari via Wi‑Fi first). Capture browser tabs to your answers.
         </p>
       </header>
 
@@ -383,8 +383,8 @@ export const PhoneMirrorSettings: React.FC = () => {
                       </div>
                       <div className="text-text-primary text-xs leading-snug">
                         {info.exposeOnLan
-                          ? 'Open the camera app and point at the code.'
-                          : 'LAN is off — use USB (adb reverse) below, or turn on Allow LAN for Wi‑Fi QR.'}
+                          ? 'iPhone: open Camera and scan, or paste the URL in Safari. Then tap Enter stealth.'
+                          : 'For iPhone: turn on Allow LAN (same Wi‑Fi), then scan the QR in Safari. Android USB is optional below.'}
                       </div>
                     </div>
                     <div>
@@ -413,13 +413,19 @@ export const PhoneMirrorSettings: React.FC = () => {
                         </button>
                       </div>
                     </div>
+                    {info.exposeOnLan && (
+                      <p className="text-text-secondary text-[11px] leading-snug">
+                        USB cable tip: Mac Internet Sharing (or iPhone hotspot) can put both on one link — still use the LAN URL above, not localhost. iOS has no adb-style reverse.
+                      </p>
+                    )}
                     {info.loopbackUrl && (
-                      <div className="rounded-md border border-border-subtle bg-bg-item-surface/60 px-2.5 py-2 space-y-1.5">
-                        <div className="text-text-secondary text-[10px] uppercase tracking-wider">
-                          USB path (Android) — no Allow LAN
-                        </div>
+                      <details className="rounded-md border border-border-subtle bg-bg-item-surface/60 px-2.5 py-2">
+                        <summary className="text-text-secondary text-[10px] uppercase tracking-wider cursor-pointer hover:text-text-primary select-none">
+                          Advanced — Android USB (adb reverse)
+                        </summary>
+                        <div className="mt-2 space-y-1.5">
                         <p className="text-text-primary text-[11px] leading-snug">
-                          Plug in the phone, enable USB debugging, then run:
+                          Optional later path. Plug in Android, enable USB debugging, then run:
                         </p>
                         <div className="flex items-center gap-2">
                           <code className="flex-1 min-w-0 truncate font-mono text-[11px] px-2 py-1.5 rounded-md bg-bg-main border border-border-subtle text-text-primary">
@@ -464,7 +470,8 @@ export const PhoneMirrorSettings: React.FC = () => {
                             )}
                           </button>
                         </div>
-                      </div>
+                        </div>
+                      </details>
                     )}
                     {info.exposeOnLan && info.lanUrls.length > 1 && (
                       <details className="text-[11px]">
