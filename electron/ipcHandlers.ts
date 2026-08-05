@@ -8,7 +8,8 @@ import * as path from 'path';
 import { AudioDevices } from './audio/AudioDevices';
 import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
 import { AppState } from './main';
-import { CodexCliService } from './services/CodexCliService';
+import { CodexCliService, isCodexAuthError } from './services/CodexCliService';
+import { describeServiceAccountRejection } from './services/googleServiceAccount';
 import { PhoneMirrorService } from './services/PhoneMirrorService';
 import { sanitizeContextEnvelope } from './services/browser-context/sanitize';
 import { formatEnvelopeForPrompt } from './services/browser-context/formatEnvelopeForPrompt';
@@ -5096,7 +5097,14 @@ export function initializeIpcHandlers(appState: AppState): void {
             piTelemetry.emit('pi_provider_error_classified', { kind: klass.kind, outage: klass.isOutage, retryable: klass.retryable, surface: 'manual' });
             if (answerPlan.profileContextPolicy === 'required' && !fullResponse.trim()
                 && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
-              const safe = "The model failed before generating an answer, so I won't guess from your profile. Please try again.";
+              // Codex auth failures are the one provider error the user can act
+              // on directly, and the generic text below sends them looking for a
+              // model problem instead of a sign-in. Surfaced verbatim because
+              // both strings are app-authored (isCodexAuthError matches the
+              // exported constants) — never echo arbitrary provider text here.
+              const safe = isCodexAuthError(streamError)
+                ? streamError.message
+                : "The model failed before generating an answer, so I won't guess from your profile. Please try again.";
               finalGenerationMode = 'provider_error_no_answer';
               sessionWriteDecision = decideSessionWritePolicy({
                 finalGenerationMode,
@@ -9776,12 +9784,25 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       const filePath = result.filePaths[0];
 
-      // Update backend state immediately
-      appState.updateGoogleCredentials(filePath);
+      // Update backend state immediately. Persist ONLY if the file validated —
+      // storing an unusable path is what produced the ENOENT crash loop, since
+      // the failure surfaces later from inside the Speech SDK.
+      const verdict = appState.updateGoogleCredentials(filePath);
+      if (!verdict.usable) {
+        return { success: false, error: describeServiceAccountRejection(verdict.reason) };
+      }
 
-      // Persist the path for future sessions
+      // Persist the path for future sessions. setGoogleServiceAccountPath
+      // returns whether the write reached disk — reporting success on a failed
+      // write would show the filename as saved and lose it on restart.
       const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setGoogleServiceAccountPath(filePath);
+      if (!CredentialsManager.getInstance().setGoogleServiceAccountPath(filePath)) {
+        return {
+          success: false,
+          error: 'The key file is valid, but saving it failed. It will work until you quit. '
+            + 'Check that the app can write to its data folder, then try again.',
+        };
+      }
 
       return { success: true, path: filePath };
     } catch (error: any) {

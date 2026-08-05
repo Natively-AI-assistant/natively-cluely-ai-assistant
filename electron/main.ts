@@ -17,6 +17,12 @@ import dns from "dns"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { autoUpdater } from "electron-updater"
 
+import {
+  classifyServiceAccountFile,
+  describeServiceAccountRejection,
+  type ServiceAccountVerdict,
+} from "./services/googleServiceAccount"
+
 // Override global dns.lookup to resolve macOS system resolver issues with api.natively.software
 const originalLookup = dns.lookup;
 dns.lookup = function(hostname: any, options: any, callback: any) {
@@ -6146,7 +6152,32 @@ export class AppState {
 
 
 
-  public updateGoogleCredentials(keyPath: string): void {
+  /**
+   * Adopt a Google service-account key file for Speech-to-Text.
+   *
+   * Adopts NOTHING unless the file parses as a real service-account key.
+   * `new SpeechClient({ keyFilename })` does not validate at construction — a
+   * bad path throws later, from inside the STT stream and again from the
+   * `before-quit` teardown, which reads as a fatal app crash rather than a bad
+   * setting. Validating here keeps a stale, mistyped or wrong-JSON path from
+   * ever reaching the SDK, and leaves any previously-working credential in
+   * place instead of clobbering it with a broken one.
+   *
+   * The verdict is returned rather than a bare boolean so callers can tell a
+   * POSITIVE rejection ("this json is an OAuth client secret") from a failure
+   * to read ("the volume is not mounted"). Callers must not delete persisted
+   * state on the latter — see googleServiceAccount.ts.
+   */
+  public updateGoogleCredentials(keyPath: string): ServiceAccountVerdict {
+    const verdict = classifyServiceAccountFile(keyPath);
+    if (!verdict.usable) {
+      console.error(
+        `[AppState] Ignoring Google Service Account path (${verdict.reason}`
+        + `${verdict.detail ? `: ${verdict.detail}` : ''}): ${keyPath}`,
+      );
+      return verdict;
+    }
+
     console.log(`[AppState] Updating Google Credentials to: ${keyPath}`);
     // Set global environment variable so new instances pick it up
     process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
@@ -6158,6 +6189,7 @@ export class AppState {
     if (this.googleSTT_User) {
       this.googleSTT_User.setCredentials(keyPath);
     }
+    return verdict;
   }
 
   public setRecognitionLanguage(key: string): void {
@@ -7479,16 +7511,67 @@ async function initializeApp() {
   const { sendAnonymousInstallPing } = require('./services/InstallPingManager');
   sendAnonymousInstallPing();
 
-  // Load stored Google Service Account path (for Speech-to-Text)
-  // Fall back to GOOGLE_APPLICATION_CREDENTIALS env var (set in terminal but not Spotlight)
-  const storedServiceAccountPath = CredentialsManager.getInstance().getGoogleServiceAccountPath()
-    || process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (storedServiceAccountPath) {
-    console.log("[Init] Loading stored Google Service Account path");
-    appState.updateGoogleCredentials(storedServiceAccountPath);
-    // Persist env-var path so Spotlight launches also work going forward
-    if (!CredentialsManager.getInstance().getGoogleServiceAccountPath()) {
-      CredentialsManager.getInstance().setGoogleServiceAccountPath(storedServiceAccountPath);
+  // Load the Google Service Account key for Speech-to-Text: the persisted path
+  // first, then GOOGLE_APPLICATION_CREDENTIALS (set in a terminal but not for a
+  // Spotlight launch).
+  //
+  // Each candidate is tried IN TURN, not picked with `||` and then validated.
+  // A `||` picks the store's value whenever it is non-empty — including when it
+  // is stale — so a user with a moved key file and a WORKING env var would have
+  // the env var never evaluated and (worse, in the previous revision of this
+  // block) deleted. Trying them in order means a bad first candidate costs
+  // nothing.
+  //
+  // Eviction is limited to DEFINITE rejections. "Cannot read it" is not "it is
+  // gone": a key on an unmounted external volume or an unconnected network share
+  // reports ENOENT exactly like a deleted file, and deleting the stored path
+  // there would destroy a credential that comes back when the volume mounts.
+  // See googleServiceAccount.ts.
+  {
+    const cm = () => CredentialsManager.getInstance();
+    const candidates: Array<{ source: 'store' | 'env'; path: string }> = [];
+    const storedPath = cm().getGoogleServiceAccountPath();
+    const envPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    if (storedPath) candidates.push({ source: 'store', path: storedPath });
+    if (envPath && envPath !== storedPath) candidates.push({ source: 'env', path: envPath });
+
+    let adoptedPath: string | null = null;
+    for (const candidate of candidates) {
+      const verdict = appState.updateGoogleCredentials(candidate.path);
+      if (verdict.usable) {
+        console.log(`[Init] Loaded Google Service Account path from the ${candidate.source}`);
+        adoptedPath = candidate.path;
+        break;
+      }
+      // Definite rejection → drop it so the next boot doesn't retry a path we
+      // KNOW is wrong (this is what evicts the .env.example placeholder that
+      // older builds persisted). Indefinite → leave everything alone.
+      if (verdict.definite) {
+        console.warn(
+          `[Init] Discarding unusable Google Service Account path from the ${candidate.source} `
+          + `(${verdict.reason}): ${describeServiceAccountRejection(verdict.reason)}`,
+        );
+        if (candidate.source === 'store') {
+          cm().setGoogleServiceAccountPath('');
+        } else {
+          delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+        }
+      } else {
+        console.warn(
+          `[Init] Google Service Account path from the ${candidate.source} is not readable right now; `
+          + 'keeping it for the next launch (it may be on a volume that is not mounted yet)',
+        );
+      }
+    }
+
+    if (adoptedPath) {
+      // Persist an env-var-sourced path so Spotlight launches also work later.
+      if (cm().getGoogleServiceAccountPath() !== adoptedPath) {
+        cm().setGoogleServiceAccountPath(adoptedPath);
+      }
+      // Keep the env var in sync with what we actually adopted, so the Google
+      // SDK's own ADC lookup cannot pick a different (rejected) file.
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = adoptedPath;
     }
   }
 

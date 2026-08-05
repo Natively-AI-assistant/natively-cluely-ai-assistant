@@ -1031,6 +1031,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [sttSaving, setSttSaving] = useState(false);
     const [sttSaved, setSttSaved] = useState(false);
     const [googleServiceAccountPath, setGoogleServiceAccountPath] = useState<string | null>(null);
+    // Why the picker rejected the last pick. Without this a rejected file is
+    // indistinguishable from a cancelled dialog — the field just stays empty.
+    const [googleServiceAccountError, setGoogleServiceAccountError] = useState('');
     const [hasNativelyKey, setHasNativelyKey] = useState(initialHasNativelyKey);
     const [hasStoredSttGroqKey, setHasStoredSttGroqKey] = useState(false);
     const [hasStoredSttOpenaiKey, setHasStoredSttOpenaiKey] = useState(false);
@@ -2692,6 +2695,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 const result = await window.electronAPI?.selectServiceAccount?.();
                                                                 if (result?.success && result.path) {
                                                                     setGoogleServiceAccountPath(result.path);
+                                                                    setGoogleServiceAccountError('');
+                                                                } else if (result && !result.cancelled) {
+                                                                    // A rejected pick must say WHY. Silently doing nothing
+                                                                    // reads as "Settings is broken" and the user retries
+                                                                    // the same wrong file.
+                                                                    setGoogleServiceAccountError(result.error || t('That file is not a usable Google service-account key.'));
                                                                 }
                                                             }}
                                                             className="px-3 py-2 bg-bg-input hover:bg-bg-elevated border border-border-subtle rounded-lg text-xs font-medium text-text-primary transition-colors flex items-center gap-2"
@@ -2699,6 +2708,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <Upload size={14} /> {t('Select File')}
                                                         </button>
                                                     </div>
+                                                    {googleServiceAccountError && (
+                                                        <p className="text-xs text-red-400 mt-2">{googleServiceAccountError}</p>
+                                                    )}
                                                     <p className="text-[10px] text-text-tertiary mt-2">
                                                         {t('Required for Google Cloud Speech-to-Text.')}
                                                     </p>

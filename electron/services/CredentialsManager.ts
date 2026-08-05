@@ -159,6 +159,26 @@ export class CredentialsManager {
     /** Memoized AES-256 key for the app-managed fallback (derived once per process). */
     private fallbackKey?: Buffer;
 
+    /**
+     * Set when a keyring file EXISTS but would not decrypt/parse at load, so
+     * `this.credentials` does not reflect what is on disk.
+     *
+     * This is the load→save half of the guard. Skipping the boot-time migrate-up
+     * is not enough on its own: `saveCredentials()` writes the WHOLE credential
+     * object, so the first ordinary write of a degraded session (a Codex OAuth
+     * refresh, any settings write) would re-encrypt an empty-or-partial object
+     * over the intact keyring file and destroy every stored key. The failure is
+     * silent and unrecoverable when no fallback exists.
+     *
+     * decryptString throws for TRANSIENT reasons too — a locked macOS keychain,
+     * a denied access prompt, a roaming DPAPI profile that has not synced — so
+     * the right move is to preserve the file and let the next healthy launch
+     * read it, not to overwrite it from a degraded in-memory view.
+     *
+     * Cleared by an explicit user-initiated overwrite (see allowDegradedOverwrite).
+     */
+    private keyringUnreadable = false;
+
     private constructor() {
         // Load on construction after app ready
     }
@@ -284,12 +304,18 @@ export class CredentialsManager {
     }
 
     public setCodexOAuthTokens(tokens: { accessToken: string; refreshToken: string; idToken?: string; expiresAt: number; email?: string; accountId?: string; lastRefreshAt?: number }): void {
+        // ChatGPT OAuth ROTATES the refresh token on every refresh. If we accept
+        // a rotation in memory but fail to persist it, the session keeps working
+        // off CodexOAuthService's own cache and the loss only surfaces at the
+        // next launch as an invalid_grant re-auth. Refuse up front instead.
+        if (this.refuseWriteWhileDegraded('set Codex OAuth tokens')) return;
         this.credentials.codexOAuthTokens = { ...tokens };
         this.saveCredentials();
         console.log('[CredentialsManager] Codex OAuth tokens updated');
     }
 
     public clearCodexOAuthTokens(): void {
+        if (this.refuseWriteWhileDegraded('clear Codex OAuth tokens')) return;
         this.credentials.codexOAuthTokens = undefined;
         this.saveCredentials();
         console.log('[CredentialsManager] Codex OAuth tokens cleared');
@@ -321,9 +347,19 @@ export class CredentialsManager {
         // broken state (key cleared then re-entered via a path that skipped auto-promote,
         // or credentials restored from backup). Silently restore to 'natively' so STT works.
         if (provider === 'none' && this.credentials.nativelyApiKey) {
+            // The in-memory heal is safe and useful even when the store is
+            // degraded (STT works this session), so it is NOT gated. Only the
+            // PERSIST is skipped — writing would either be refused anyway or,
+            // worse, log a success the disk never saw. Deliberately not routed
+            // through refuseWriteWhileDegraded(): this is a derived value, not
+            // a user edit, so there is nothing to report and nothing lost.
             this.credentials.sttProvider = 'natively';
-            this.saveCredentials();
-            console.log('[CredentialsManager] Self-healed sttProvider: none→natively (Natively key present)');
+            if (this.keyringUnreadable) {
+                console.log('[CredentialsManager] Self-healed sttProvider in memory only (credential store is degraded)');
+            } else {
+                this.saveCredentials();
+                console.log('[CredentialsManager] Self-healed sttProvider: none→natively (Natively key present)');
+            }
             return 'natively';
         }
         return provider;
@@ -401,6 +437,7 @@ export class CredentialsManager {
     }
 
     public setDisabledProviders(providers: string[]): void {
+        if (this.refuseWriteWhileDegraded('set disabled providers')) return;
         this.credentials.disabledProviders = providers;
         this.saveCredentials();
         console.log(`[CredentialsManager] Disabled providers updated (${providers.length})`);
@@ -412,6 +449,7 @@ export class CredentialsManager {
     }
 
     public setCloudEnabledModels(provider: string, models: string[]): boolean {
+        if (this.refuseWriteWhileDegraded('set cloud enabled models')) return false;
         if (!this.credentials.cloudEnabledModels) this.credentials.cloudEnabledModels = {};
         this.credentials.cloudEnabledModels[provider] = models;
         const persisted = this.saveCredentials();
@@ -433,6 +471,7 @@ export class CredentialsManager {
     }
 
     public setCloudFetchedModels(provider: string, models: { id: string; label: string }[], fetchedAt: number): boolean {
+        if (this.refuseWriteWhileDegraded('set cloud fetched models')) return false;
         if (!this.credentials.cloudFetchedModels) this.credentials.cloudFetchedModels = {};
         if (!this.credentials.cloudFetchedAt) this.credentials.cloudFetchedAt = {};
         this.credentials.cloudFetchedModels[provider] = models;
@@ -447,6 +486,7 @@ export class CredentialsManager {
     }
 
     public setLitellmModels(models: string[]): void {
+        if (this.refuseWriteWhileDegraded('set litellm models')) return;
         this.credentials.litellmModels = models;
         this.saveCredentials();
         console.log(`[CredentialsManager] LiteLLM model cache updated (${models.length} model(s))`);
@@ -497,6 +537,7 @@ export class CredentialsManager {
     // =========================================================================
 
     public setGeminiApiKey(key: string): void {
+        if (this.refuseWriteWhileDegraded('set gemini api key')) return;
         const trimmed = (key || '').trim();
         this.credentials.geminiApiKey = trimmed || undefined;
         this.saveCredentials();
@@ -504,6 +545,7 @@ export class CredentialsManager {
     }
 
     public setGroqApiKey(key: string): void {
+        if (this.refuseWriteWhileDegraded('set groq api key')) return;
         const trimmed = (key || '').trim();
         this.credentials.groqApiKey = trimmed || undefined;
         this.saveCredentials();
@@ -511,6 +553,7 @@ export class CredentialsManager {
     }
 
     public setOpenaiApiKey(key: string): void {
+        if (this.refuseWriteWhileDegraded('set openai api key')) return;
         const trimmed = (key || '').trim();
         this.credentials.openaiApiKey = trimmed || undefined;
         this.saveCredentials();
@@ -518,6 +561,7 @@ export class CredentialsManager {
     }
 
     public setClaudeApiKey(key: string): void {
+        if (this.refuseWriteWhileDegraded('set claude api key')) return;
         const trimmed = (key || '').trim();
         this.credentials.claudeApiKey = trimmed || undefined;
         this.saveCredentials();
@@ -525,6 +569,7 @@ export class CredentialsManager {
     }
 
     public setDeepseekApiKey(key: string): void {
+        if (this.refuseWriteWhileDegraded('set deepseek api key')) return;
         const trimmed = key.trim();
         this.credentials.deepseekApiKey = trimmed || undefined;
         this.saveCredentials();
@@ -538,6 +583,7 @@ export class CredentialsManager {
      * NOT persisted (per-session, LAN-exposed) and is intentionally separate.
      */
     public setPhoneMirrorToken(token: string): void {
+        if (this.refuseWriteWhileDegraded('set phone mirror token')) return;
         this.credentials.phoneMirrorToken = token || undefined;
         this.saveCredentials();
         console.log('[CredentialsManager] Extension pairing token updated');
@@ -550,6 +596,7 @@ export class CredentialsManager {
      * Passing an empty baseURL clears everything, disabling the provider.
      */
     public setLitellmConfig(apiKey: string, baseURL: string, maxTokens?: number): void {
+        if (this.refuseWriteWhileDegraded('set litellm config')) return;
         const trimmedURL = (baseURL || '').trim();
         const trimmedKey = (apiKey || '').trim();
         if (!trimmedURL) {
@@ -571,13 +618,27 @@ export class CredentialsManager {
         console.log('[CredentialsManager] LiteLLM config updated');
     }
 
-    public setGoogleServiceAccountPath(filePath: string): void {
-        this.credentials.googleServiceAccountPath = filePath;
-        this.saveCredentials();
-        console.log('[CredentialsManager] Google Service Account path updated');
+    /**
+     * Returns saveCredentials()'s boolean (true = the write actually reached
+     * disk), per the convention documented on the STT key setters below, so the
+     * IPC layer can surface a REAL error instead of a false "Saved".
+     */
+    public setGoogleServiceAccountPath(filePath: string): boolean {
+        if (this.refuseWriteWhileDegraded('set google service account path')) return false;
+        // Empty/whitespace normalizes to `undefined`, not `''` — same convention as
+        // the STT key setters below, so the key is absent from the persisted JSON
+        // rather than present-and-empty. Callers clear the path by passing ''.
+        const trimmed = (filePath || '').trim();
+        this.credentials.googleServiceAccountPath = trimmed || undefined;
+        const persisted = this.saveCredentials();
+        console.log(trimmed
+            ? `[CredentialsManager] Google Service Account path updated (persisted=${persisted})`
+            : `[CredentialsManager] Google Service Account path cleared (persisted=${persisted})`);
+        return persisted;
     }
 
     public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper'): boolean {
+        if (this.refuseWriteWhileDegraded('set stt provider')) return false;
         this.credentials.sttProvider = provider;
         const persisted = this.saveCredentials();
         console.log(`[CredentialsManager] STT Provider set to: ${provider}`);
@@ -593,6 +654,7 @@ export class CredentialsManager {
     // reload — matching `setNativelyApiKey` / `setDeepseekApiKey`. The Remove button
     // (which calls these with `''`) still correctly clears the stored key.
     public setDeepgramApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set deepgram api key')) return false;
         const trimmed = (key || '').trim();
         this.credentials.deepgramApiKey = trimmed || undefined;
         const persisted = this.saveCredentials();
@@ -601,6 +663,7 @@ export class CredentialsManager {
     }
 
     public setGroqSttApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set groq stt api key')) return false;
         const trimmed = (key || '').trim();
         this.credentials.groqSttApiKey = trimmed || undefined;
         const persisted = this.saveCredentials();
@@ -609,6 +672,7 @@ export class CredentialsManager {
     }
 
     public setOpenAiSttApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set open ai stt api key')) return false;
         const trimmed = (key || '').trim();
         this.credentials.openAiSttApiKey = trimmed || undefined;
         const persisted = this.saveCredentials();
@@ -617,6 +681,7 @@ export class CredentialsManager {
     }
 
     public setOpenAiSttBaseUrl(url: string): void {
+        if (this.refuseWriteWhileDegraded('set open ai stt base url')) return;
         // Store undefined (not empty string) when clearing, so callers can fall back
         // to the default api.openai.com endpoint with a simple truthiness check.
         const trimmed = url.trim();
@@ -626,12 +691,14 @@ export class CredentialsManager {
     }
 
     public setGroqSttModel(model: string): void {
+        if (this.refuseWriteWhileDegraded('set groq stt model')) return;
         this.credentials.groqSttModel = model;
         this.saveCredentials();
         console.log(`[CredentialsManager] Groq STT Model set to: ${model}`);
     }
 
     public setElevenLabsApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set eleven labs api key')) return false;
         const trimmed = (key || '').trim();
         this.credentials.elevenLabsApiKey = trimmed || undefined;
         const persisted = this.saveCredentials();
@@ -640,6 +707,7 @@ export class CredentialsManager {
     }
 
     public setAzureApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set azure api key')) return false;
         const trimmed = (key || '').trim();
         this.credentials.azureApiKey = trimmed || undefined;
         const persisted = this.saveCredentials();
@@ -648,12 +716,14 @@ export class CredentialsManager {
     }
 
     public setAzureRegion(region: string): void {
+        if (this.refuseWriteWhileDegraded('set azure region')) return;
         this.credentials.azureRegion = region;
         this.saveCredentials();
         console.log(`[CredentialsManager] Azure Region set to: ${region}`);
     }
 
     public setIbmWatsonApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set ibm watson api key')) return false;
         const trimmed = (key || '').trim();
         this.credentials.ibmWatsonApiKey = trimmed || undefined;
         const persisted = this.saveCredentials();
@@ -662,12 +732,14 @@ export class CredentialsManager {
     }
 
     public setIbmWatsonRegion(region: string): void {
+        if (this.refuseWriteWhileDegraded('set ibm watson region')) return;
         this.credentials.ibmWatsonRegion = region;
         this.saveCredentials();
         console.log(`[CredentialsManager] IBM Watson Region set to: ${region}`);
     }
 
     public setSonioxApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set soniox api key')) return false;
         const trimmed = (key || '').trim();
         this.credentials.sonioxApiKey = trimmed || undefined;
         const persisted = this.saveCredentials();
@@ -676,6 +748,7 @@ export class CredentialsManager {
     }
 
     public setTavilyApiKey(key: string): void {
+        if (this.refuseWriteWhileDegraded('set tavily api key')) return;
         // Store undefined (not empty string) when removing, so hasKey() checks stay consistent
         this.credentials.tavilyApiKey = key.trim() || undefined;
         this.saveCredentials();
@@ -683,6 +756,7 @@ export class CredentialsManager {
     }
 
     public setSttLanguage(language: string): void {
+        if (this.refuseWriteWhileDegraded('set stt language')) return;
         this.credentials.sttLanguage = language;
         this.saveCredentials();
         console.log(`[CredentialsManager] STT Language set to: ${language}`);
@@ -713,17 +787,20 @@ export class CredentialsManager {
     }
 
     public setAiResponseLanguage(language: string): void {
+        if (this.refuseWriteWhileDegraded('set ai response language')) return;
         this.credentials.aiResponseLanguage = language;
         this.saveCredentials();
         console.log(`[CredentialsManager] AI Response Language set to: ${language}`);
     }
     public setDefaultModel(model: string): void {
+        if (this.refuseWriteWhileDegraded('set default model')) return;
         this.credentials.defaultModel = model;
         this.saveCredentials();
         console.log(`[CredentialsManager] Default Model set to: ${model}`);
     }
 
     public setNativelyApiKey(key: string): void {
+        if (this.refuseWriteWhileDegraded('set natively api key')) return;
         const trimmed = key.trim();
         this.credentials.nativelyApiKey = trimmed || undefined;
 
@@ -769,6 +846,7 @@ export class CredentialsManager {
     }
 
     public setPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', modelId: string): void {
+        if (this.refuseWriteWhileDegraded('set preferred model')) return;
         const key = `${provider}PreferredModel` as keyof StoredCredentials;
         (this.credentials as any)[key] = modelId;
         this.saveCredentials();
@@ -776,6 +854,7 @@ export class CredentialsManager {
     }
 
     public saveCustomProvider(provider: CustomProvider): void {
+        if (this.refuseWriteWhileDegraded('save custom provider')) return;
         if (!this.credentials.customProviders) {
             this.credentials.customProviders = [];
         }
@@ -791,6 +870,7 @@ export class CredentialsManager {
     }
 
     public deleteCustomProvider(id: string): void {
+        if (this.refuseWriteWhileDegraded('delete custom provider')) return;
         if (!this.credentials.customProviders) return;
         this.credentials.customProviders = this.credentials.customProviders.filter(p => p.id !== id);
         this.saveCredentials();
@@ -802,6 +882,7 @@ export class CredentialsManager {
     }
 
     public saveCurlProvider(provider: CurlProvider): void {
+        if (this.refuseWriteWhileDegraded('save curl provider')) return;
         if (!this.credentials.curlProviders) {
             this.credentials.curlProviders = [];
         }
@@ -816,6 +897,7 @@ export class CredentialsManager {
     }
 
     public deleteCurlProvider(id: string): void {
+        if (this.refuseWriteWhileDegraded('delete curl provider')) return;
         if (!this.credentials.curlProviders) return;
         this.credentials.curlProviders = this.credentials.curlProviders.filter(p => p.id !== id);
         this.saveCredentials();
@@ -840,6 +922,7 @@ export class CredentialsManager {
     }
 
     public setTrialToken(token: string, expiresAt: string, startedAt: string): void {
+        if (this.refuseWriteWhileDegraded('set trial token')) return;
         this.credentials.trialToken = token;
         this.credentials.trialExpiresAt = expiresAt;
         this.credentials.trialStartedAt = startedAt;
@@ -849,6 +932,7 @@ export class CredentialsManager {
     }
 
     public clearTrialToken(): void {
+        if (this.refuseWriteWhileDegraded('clear trial token')) return;
         delete this.credentials.trialToken;
         delete this.credentials.trialExpiresAt;
         delete this.credentials.trialStartedAt;
@@ -992,6 +1076,59 @@ export class CredentialsManager {
      * to decide whether to warn.
      */
     private saveCredentials(): boolean {
+        // REFUSE to write over a keyring file we could not read at load.
+        // `this.credentials` is empty-or-partial in that state, and this method
+        // serializes the whole object, so writing would replace intact stored
+        // keys with nothing. The read failure may well be transient (locked
+        // keychain, denied prompt, unsynced roaming profile), so the file is
+        // preserved for the next launch instead. See `keyringUnreadable`.
+        //
+        // Returns false — the same contract as an unwritable disk — so the STT
+        // key handlers surface a real error rather than a false "Saved".
+        if (this.keyringUnreadable) {
+            console.error(
+                '[CredentialsManager] Refusing to save: the stored credential file could not be read this '
+                + 'session, so saving would overwrite it with an incomplete set. RECOVERY: quit and reopen the '
+                + 'app with your keychain unlocked (on Windows, signed in to the profile that saved the keys) — '
+                + 'a launch that can read the file clears this automatically and nothing is lost.',
+            );
+            return false;
+        }
+        return this.writeCredentials();
+    }
+
+    /**
+     * Reject a mutation BEFORE it touches `this.credentials`.
+     *
+     * 21 of the setters on this class are `void` — they mutate in-memory state,
+     * call saveCredentials(), and discard the result. Before the degraded-store
+     * guard existed, saveCredentials() effectively always succeeded, so that was
+     * harmless. Now it can refuse, and a `void` setter would leave the in-memory
+     * value diverged from disk: Settings would show a key as saved that vanishes
+     * on restart, and worse, CodexOAuthService caches its own copy of a rotated
+     * refresh token in memory — so an unpersisted rotation reads as fine until
+     * the next launch forces a re-auth.
+     *
+     * Every setter therefore calls this FIRST and returns without mutating when
+     * it says no. Rejecting before the mutation (rather than reporting after) is
+     * what keeps memory and disk in agreement on every path, including the ones
+     * that cannot report a failure.
+     */
+    private refuseWriteWhileDegraded(op: string): boolean {
+        if (!this.keyringUnreadable) return false;
+        console.error(
+            `[CredentialsManager] Refusing "${op}": the stored credential file could not be read this session. `
+            + 'The change was NOT applied in memory either, so what you see still matches what is on disk. '
+            + 'RECOVERY: quit and reopen the app with your keychain unlocked (on Windows, signed in to the '
+            + 'profile that saved the keys).',
+        );
+        return true;
+    }
+
+    /** The actual write. Split from saveCredentials() so the degraded check has
+     *  exactly one home and cannot be bypassed by a future caller. */
+    private writeCredentials(): boolean {
+
         // Try the OS keyring first. When safeStorage is available, this is the
         // preferred path. On Windows the underlying DPAPI can still throw after
         // isEncryptionAvailable() returns true (e.g. policy restrictions, roaming
@@ -1081,7 +1218,42 @@ export class CredentialsManager {
         }
     }
 
+    /**
+     * Deliberately discard an unreadable keyring file and start fresh.
+     *
+     * Kept explicit and user-initiated because it destroys whatever the
+     * unreadable file held — the automatic behaviour is always to preserve it,
+     * since the read failure is often transient.
+     *
+     * NOT YET WIRED TO ANY UI. There is deliberately no IPC handler for this: a
+     * one-click "wipe my credentials" is the wrong first thing to hand someone
+     * whose keychain is merely locked, and the recovery that loses nothing is a
+     * restart. It exists so the escape hatch is a decision already made (and
+     * tested) if a support case ever needs it. `isCredentialStoreDegraded()` is
+     * the read-only half and is the one to surface first if this state ever
+     * shows up in the wild — a Settings banner explaining why saving is off.
+     */
+    public resetDegradedCredentialStore(): void {
+        if (!this.keyringUnreadable) return;
+        console.warn('[CredentialsManager] Discarding the unreadable keyring file at explicit user request');
+        this.removeKeyringFile();
+        this.keyringUnreadable = false;
+    }
+
+    /** True when the credential store could not be read this session and writes are being refused. */
+    public isCredentialStoreDegraded(): boolean {
+        return this.keyringUnreadable;
+    }
+
     private loadCredentials(): void {
+        // True when the keyring reported itself AVAILABLE but the keyring file
+        // still failed to decrypt/parse. Distinct from "keyring unavailable":
+        // an unavailable keyring is a stable platform state, whereas a failed
+        // decrypt may be transient, so the two lead to different write-back
+        // behaviour in step 2. See the migrate-up comment there.
+        let keyringReadFailed = false;
+        // Recomputed from scratch on every load (init() may run more than once).
+        this.keyringUnreadable = false;
         try {
             // 1) Encrypted keyring file is authoritative when the keyring is available.
             //    However, if a previous saveCredentials() hit the fallback path AND the
@@ -1143,27 +1315,38 @@ export class CredentialsManager {
 
                 if (keyringAvailable && fs.existsSync(CREDENTIALS_PATH)) {
                     const encrypted = fs.readFileSync(CREDENTIALS_PATH);
-                    const decrypted = safeStorage.decryptString(encrypted);
+                    let keyringSuccess = false;
                     try {
+                        const decrypted = safeStorage.decryptString(encrypted);
                         const parsed = JSON.parse(decrypted);
                         if (typeof parsed === 'object' && parsed !== null) {
                             this.credentials = parsed;
                             console.log('[CredentialsManager] Loaded encrypted credentials');
+                            keyringSuccess = true;
                         } else {
                             throw new Error('Decrypted credentials is not a valid object');
                         }
-                    } catch (parseError) {
-                        console.error('[CredentialsManager] Failed to parse decrypted credentials — file may be corrupted. Starting fresh:', parseError);
-                        this.credentials = {};
+                    } catch (keyringReadError) {
+                        console.error('[CredentialsManager] Failed to read/decrypt keyring credentials. Falling through to app-managed fallback:', keyringReadError);
+                        keyringReadFailed = true;
                     }
-                    // Keyring is authoritative — clean up any stale fallback + plaintext.
-                    this.removeFallbackFile();
-                    this.removePlaintextFile();
-                    return;
+
+                    if (keyringSuccess) {
+                        // Keyring is authoritative — clean up any stale fallback + plaintext.
+                        this.removeFallbackFile();
+                        this.removePlaintextFile();
+                        return;
+                    }
                 }
-                // Keyring file exists but keyring is unavailable: fall through to try
-                // the app-managed fallback below (we cannot decrypt the keyring file).
-                console.warn('[CredentialsManager] Encrypted credentials present but keyring unavailable; trying app-managed fallback');
+                // Either the keyring is unavailable, or it is available but the file
+                // would not decrypt/parse. Both fall through to the app-managed
+                // fallback below; `keyringReadFailed` distinguishes them for the
+                // migrate-up decision in step 2.
+                console.warn(
+                    keyringReadFailed
+                        ? '[CredentialsManager] Encrypted credentials present but unreadable; trying app-managed fallback'
+                        : '[CredentialsManager] Encrypted credentials present but keyring unavailable; trying app-managed fallback',
+                );
             }
 
             // 2) App-managed encrypted fallback.
@@ -1185,9 +1368,35 @@ export class CredentialsManager {
 
                 // Migrate up: if the keyring is now available, re-persist via safeStorage
                 // (saveCredentials prefers the keyring and deletes the fallback).
+                //
+                // NOT when we got here because the keyring file failed to decrypt.
+                // safeStorage.decryptString can throw for reasons that are TRANSIENT
+                // and have nothing to do with the file being corrupt — a locked
+                // macOS keychain, a denied keychain-access prompt, a roaming DPAPI
+                // profile that has not synced yet. Migrating up in that state would
+                // overwrite intact keyring data with whatever the fallback holds,
+                // which may be older (the staleness guard above only removes the
+                // keyring when the fallback is NEWER, so an older fallback reaches
+                // here untouched). Silently reverting a user to a previous set of
+                // credentials is worse than running this session off the fallback
+                // and leaving the keyring alone: the next successful boot recovers
+                // everything.
+                //
+                // Writes are then refused for the rest of the session
+                // (`keyringUnreadable` → saveCredentials returns false). Note this
+                // has to be a FULL refusal, not "write to the fallback only and
+                // leave the keyring alone": the mtime staleness guard at the top of
+                // this method removes the keyring whenever the fallback is NEWER, so
+                // a fallback-only write would make the NEXT boot delete the very
+                // keyring file we are preserving here.
                 let keyringNow = false;
                 try { keyringNow = safeStorage.isEncryptionAvailable(); } catch { keyringNow = false; }
-                if (keyringNow && Object.keys(this.credentials).length > 0) {
+                if (keyringReadFailed) {
+                    this.keyringUnreadable = true;
+                    console.warn('[CredentialsManager] Running from the app-managed fallback because the keyring file would not decrypt. '
+                        + 'Leaving the keyring file untouched in case the failure was transient — some recently-saved credentials may be missing '
+                        + 'this session, and saves are disabled until a launch that can read it.');
+                } else if (keyringNow && Object.keys(this.credentials).length > 0) {
                     console.log('[CredentialsManager] Keyring now available — migrating fallback credentials to keyring');
                     this.saveCredentials();
                 }
@@ -1197,10 +1406,34 @@ export class CredentialsManager {
 
             // 3) Nothing stored. Clean up any legacy plaintext file regardless.
             this.removePlaintextFile();
-            console.log('[CredentialsManager] No stored credentials found');
+            if (keyringReadFailed) {
+                // NOT a fresh install: there IS a keyring file, it just would not
+                // decrypt, and there is no fallback to recover from. This is the
+                // most dangerous shape of the degraded state — `credentials` is
+                // EMPTY, so an unguarded save would replace every stored key with
+                // nothing and leave no copy anywhere. Refuse writes and keep the
+                // file for a launch that can read it.
+                this.keyringUnreadable = true;
+                console.warn(
+                    '[CredentialsManager] Keyring credentials unreadable and no fallback present — starting with empty '
+                    + 'credentials this session. The existing credential file is preserved and saves are DISABLED so it '
+                    + 'cannot be overwritten; restart after unlocking your keychain / signing in to your profile.',
+                );
+            } else {
+                console.log('[CredentialsManager] No stored credentials found');
+            }
         } catch (error) {
+            // The catch-all also lands here with a partial/empty `credentials`
+            // while a credential file may still exist on disk. Same reasoning as
+            // above: refuse writes rather than risk overwriting it.
             console.error('[CredentialsManager] Failed to load credentials:', error);
             this.credentials = {};
+            try {
+                if (fs.existsSync(CREDENTIALS_PATH) || fs.existsSync(FALLBACK_PATH)) {
+                    this.keyringUnreadable = true;
+                    console.warn('[CredentialsManager] A credential file exists but the load failed — saves are DISABLED this session to protect it');
+                }
+            } catch { /* best-effort */ }
         }
     }
 }

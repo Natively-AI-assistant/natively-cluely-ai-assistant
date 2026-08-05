@@ -1493,6 +1493,14 @@ export class LLMHelper {
 
   private async generateWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal): Promise<string> {
     if (!this.isCodexAvailable()) throw new Error('Codex CLI transport is disabled or ChatGPT is signed out.');
+    // Codex routes to chatgpt.com/backend-api — it is a CLOUD provider, and it
+    // needs the same local-only last boundary every other cloud provider has.
+    // The vision chain already omits it when isLocalOnlyMode is set, but that
+    // is a list-BUILD exclusion; this is the boundary that holds for any path
+    // reaching the transport another way. (VisionProviderRegistry marks Codex
+    // isLocal:true as a routing hint meaning "no API key" — that hint must
+    // never be mistaken for "stays on this device". See visionPolicy.ts.)
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     // Codex had NO boundary at all. It is the sharpest case: visionPolicy.ts
     // keeps it out of isLocalVisionProvider precisely because it routes to
     // chatgpt.com/backend-api, so a screenshot going out here is a cloud send
@@ -1523,6 +1531,14 @@ export class LLMHelper {
 
   private async *streamWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal): AsyncGenerator<string, void, unknown> {
     if (!this.isCodexAvailable()) throw new Error('Codex CLI transport is disabled or ChatGPT is signed out.');
+    // Codex routes to chatgpt.com/backend-api — it is a CLOUD provider, and it
+    // needs the same local-only last boundary every other cloud provider has.
+    // The vision chain already omits it when isLocalOnlyMode is set, but that
+    // is a list-BUILD exclusion; this is the boundary that holds for any path
+    // reaching the transport another way. (VisionProviderRegistry marks Codex
+    // isLocal:true as a routing hint meaning "no API key" — that hint must
+    // never be mistaken for "stays on this device". See visionPolicy.ts.)
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     // See generateWithCodexCli. This is a generator, so the check runs on the
     // first next() rather than at call time — still strictly before any byte
     // reaches CodexCliService.stream, which is the property that matters.
@@ -4949,6 +4965,22 @@ let isMultimodal = !!(imagePaths?.length);
         cloud.push({ id: 'natively', name: 'Natively API', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
           open: (sig) => this.streamWithNatively(userContent, systemPrompt, imagePaths, sig) });
       }
+      // isCodexAvailable() — NOT `codexCliConfig.enabled` — is the gate every
+      // other Codex call site uses. It additionally covers the disabled-provider
+      // kill switch and "is ChatGPT actually signed in". streamWithCodexCli
+      // throws on both, so a looser gate here would not leak anything, but it
+      // would seat a provider that is guaranteed to fail: one wasted attempt
+      // per request, a bogus unhealthy mark in visionHealth, and a misleading
+      // "Codex CLI failed" line in the logs.
+      //
+      // TTFT: Codex is a reasoning model behind an OAuth hop, so it gets the
+      // Pro budget rather than the flash one. A timeout still records it
+      // unhealthy and deprioritizes it on later requests — see the note in
+      // orderVisionByHealth if that proves too tight in practice.
+      if (this.isCodexAvailable()) {
+        cloud.push({ id: 'codex-cli', name: `Codex CLI (${this.codexCliConfig.model})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithCodexCli(userContent, systemPrompt, false, imagePaths, sig) });
+      }
     }
 
     // Local providers (always available, including in local-only mode).
@@ -4989,8 +5021,10 @@ let isMultimodal = !!(imagePaths?.length);
       const front: VisionStreamProvider[] = [];
       if (this.useOllama) { const o = local.find(p => p.id === 'ollama'); if (o) front.push(o); }
       if (this.customProvider) { const c = local.find(p => p.id === 'custom'); if (c) front.push(c); }
+      if (this.isCodexCliModel(this.currentModelId)) { const cdx = cloud.find(p => p.id === 'codex-cli'); if (cdx) front.push(cdx); }
       const backLocal = local.filter(p => !front.includes(p));
-      ordered = [...front, ...orderVisionByHealth(cloud, this.visionHealth, nowMs), ...backLocal];
+      const backCloud = cloud.filter(p => !front.includes(p));
+      ordered = [...front, ...orderVisionByHealth(backCloud, this.visionHealth, nowMs), ...backLocal];
     }
 
     if (ordered.length === 0) {
