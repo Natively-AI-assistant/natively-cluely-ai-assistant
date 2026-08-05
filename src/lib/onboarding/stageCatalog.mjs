@@ -120,6 +120,7 @@ export const STAGES = [
 export const QUIET_WINDOW_STAGE = {
   id: 'quiet_window',
   order: 99,
+  onceEver: true,
   isGateOnly: true,
   triggers: {},
   customPredicate: (ctx) => ctx.turnCount - (ctx.completed._turnCountAtQuietStart ?? 0) >= 3,

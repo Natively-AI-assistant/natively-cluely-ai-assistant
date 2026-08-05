@@ -419,11 +419,15 @@ export class OnboardingOrchestrator {
         continue;
       }
 
-      // Match shouldShowToaster(): completion only suppresses once-ever stages.
-      // Cooldown/re-eligibility stages must still contribute their next deadline
-      // or they can become eligible after an otherwise idle session with no timer
-      // left to dispatch them.
-      if (config.onceEver && ctx.completed[id] && !config.reEligibility?.(ctx.userState, ctx.completed)) continue;
+      // Match shouldShowToaster(): completion only suppresses once-ever / gate-only
+      // stages. Cooldown/re-eligibility stages must still contribute their next
+      // deadline or they can become eligible after an otherwise idle session with
+      // no timer left to dispatch them.
+      if (
+        (config.onceEver || config.isGateOnly) &&
+        ctx.completed[id] &&
+        !config.reEligibility?.(ctx.userState, ctx.completed)
+      ) continue;
       if (config.requiresStages?.some(dep => !ctx.completed[dep] && !ctx.skipped.has(dep))) continue;
 
       const triggers = config.triggers;
@@ -481,7 +485,14 @@ export class OnboardingOrchestrator {
           // Gate-only stages auto-complete when they would dispatch. They
           // never render UI; their only purpose is to gate downstream stages.
           if (config.isGateOnly) {
+            // Defense: never re-complete an already-completed gate. Without
+            // this, a gate missing `onceEver` (quiet_window pre-fix) called
+            // completeToaster → notify → delay-0 tick in a tight loop and
+            // froze the launcher on the splash logo.
+            if (ctx.completed[id]) continue;
             this.completeToaster(id, false);
+            // Refresh ctx.completed so subsequent iterations see the write.
+            ctx.completed[id] = this.state.completed[id];
             progressMade = true;
             continue;
           }
@@ -504,8 +515,14 @@ export class OnboardingOrchestrator {
     // 1. Hard skip — user-state
     if (config.skipWhen?.(ctx.userState)) return false;
 
-    // 2. Already done forever (onceEver + completed and not re-eligible)
-    if (config.onceEver && ctx.completed[id] && !config.reEligibility?.(ctx.userState, ctx.completed)) {
+    // 2. Already done forever (onceEver/gate-only + completed and not re-eligible)
+    // Gate-only stages must be treated like onceEver: re-completing them every
+    // tick caused a notify/delay-0 busy-loop that froze the launcher splash.
+    if (
+      (config.onceEver || config.isGateOnly) &&
+      ctx.completed[id] &&
+      !config.reEligibility?.(ctx.userState, ctx.completed)
+    ) {
       return false;
     }
 

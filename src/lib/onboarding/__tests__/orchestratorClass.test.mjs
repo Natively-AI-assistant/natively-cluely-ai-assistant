@@ -416,3 +416,44 @@ test('deadline scheduler re-evaluates completed cooldown stages in an otherwise 
     'the elapsed-cooldown stage must dispatch without waiting for an unrelated event',
   );
 });
+
+// Stuck-at-logo regression (2026-08-05): a persisted queue containing
+// quiet_window (gate-only) whose customPredicate is already true used to
+// completeToaster → notify → delay-0 tick forever — freezing the launcher on
+// the splash logo while native RSS climbed to multi-GB.
+test('LEAK GUARD: completed quiet_window gate must not busy-loop completeToaster', () => {
+  localStorage.clear();
+  timerQueue = [];
+  mockNow = 0;
+
+  const orch = new OnboardingOrchestrator();
+  const state = orch._getState();
+  // Simulate a real profile after commercial-surface-strip: quiet_window sits
+  // in the queue, turnCount already past the gate, and the stage was completed
+  // on a prior tick.
+  state.queue = ['quiet_window'];
+  state.turnCount = 10;
+  state.completed._turnCountAtQuietStart = 0;
+  state.completed.quiet_window = Date.now() - 1_000;
+  orch._setStateForTests(state);
+
+  const quiet = ALL_STAGES.find((s) => s.id === 'quiet_window');
+  assert.ok(quiet, 'quiet_window must be registered in ALL_STAGES');
+  assert.equal(quiet.onceEver, true, 'quiet_window must be onceEver (busy-loop guard)');
+  assert.equal(quiet.isGateOnly, true);
+
+  orch.start([quiet]);
+  orch.emit({ type: 'launcher:mounted' });
+  orch.emit({ type: 'foreground:change', isForeground: true });
+
+  let guard = 0;
+  while (!drainIsIdle() && guard < 20) {
+    flushOneFrame();
+    guard += 1;
+  }
+  assert.ok(
+    drainIsIdle(),
+    `completed quiet_window must not busy-loop (still pending after ${guard} flushes)`,
+  );
+  assert.ok(guard < 5, `drain must settle quickly (took ${guard} flushes)`);
+});
