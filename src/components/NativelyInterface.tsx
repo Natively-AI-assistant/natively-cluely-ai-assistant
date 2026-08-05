@@ -75,6 +75,17 @@ const ANSWER_PANEL_INTENTS = new Set([
   'shorten',
 ]);
 
+const QUICK_ACTION_LABELS: Record<string, string> = {
+  what_to_say: 'What should I say?',
+  recap: 'Recap',
+  follow_up_questions: 'Follow-up questions',
+  clarify: 'Clarify',
+  code_hint: 'Code hint',
+  brainstorm: 'Brainstorm',
+  'follow_up:shorten': 'Shorten',
+  'follow_up:rephrase': 'Rephrase',
+};
+
 const CardCopyButton = ({
   text,
   onCopy,

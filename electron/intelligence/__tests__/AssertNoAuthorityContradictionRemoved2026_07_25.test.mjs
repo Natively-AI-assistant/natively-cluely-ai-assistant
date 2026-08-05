@@ -17,6 +17,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -31,11 +32,17 @@ test('no source file repo-wide imports/calls assertNoAuthorityContradiction', ()
   // not the removal note's prose mention of the identifier in
   // integration.ts's comment, and excludes this test file's own text.
   const usagePattern = 'assertNoAuthorityContradiction[,}(]';
+  // premium/electron is optional (private submodule); only grep paths that exist.
+  const grepRoots = ['electron', 'src'].filter((p) =>
+    fs.existsSync(path.join(repoRoot, p)),
+  );
+  const premiumElectron = path.join(repoRoot, 'premium/electron');
+  if (fs.existsSync(premiumElectron)) grepRoots.push('premium/electron');
   let output;
   try {
     output = execFileSync(
       'grep',
-      ['-rlE', usagePattern, 'electron', 'src', 'premium/electron'],
+      ['-rlE', usagePattern, ...grepRoots],
       { cwd: repoRoot, encoding: 'utf8' },
     );
   } catch (err) {

@@ -9,7 +9,7 @@ interface FeatureSlide {
     id: string;
     headline: string;
     subtitle: string;
-    type?: 'feature' | 'premium';
+    type?: 'feature' | 'highlight';
     actionLabel?: string;
     url?: string;
     eyebrow?: string;
@@ -26,7 +26,7 @@ const FEATURES: FeatureSlide[] = [
         subtitle: 'Answers, tailored to you',
         bullets: ['Repo aware explanations', 'System design interview specialization'],
         footer: 'Designed to work silently during live interviews.',
-        type: 'premium',
+        type: 'highlight',
     },
 ];
 
@@ -48,7 +48,7 @@ export const FeatureSpotlight: React.FC = () => {
 
     const currentFeature = FEATURES[currentIndex];
     const isInterested = interestState[currentFeature.id] || false;
-    const isPremium = currentFeature.type === 'premium';
+    const isHighlighted = currentFeature.type === 'highlight';
 
     // --- Auto-Advance Logic ---
 
@@ -102,9 +102,9 @@ export const FeatureSpotlight: React.FC = () => {
             {/* 2. Content Area (Centered) */}
             <div className="relative z-10 w-full h-full text-center">
 
-                {/* Ambient Glow for Premium Slide */}
+                {/* Ambient glow for highlighted slide */}
                 <AnimatePresence>
-                    {currentFeature.type === 'premium' && (
+                    {currentFeature.type === 'highlight' && (
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -154,11 +154,11 @@ export const FeatureSpotlight: React.FC = () => {
                                     className={`drop-shadow-sm tracking-tight mb-0 transition-all duration-300 group-hover:brightness-105`}
                                     style={{
                                         fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text"',
-                                        fontSize: isPremium ? '30px' : '26px',
+                                        fontSize: isHighlighted ? '30px' : '26px',
                                         fontWeight: 500,
                                         lineHeight: 1.1,
-                                        color: isPremium ? '#E6C46A' : '#ffffff',
-                                        textShadow: isPremium ? '0px 1px 1px rgba(0, 0, 0, 0.1)' : 'none',
+                                        color: isHighlighted ? '#E6C46A' : '#ffffff',
+                                        textShadow: isHighlighted ? '0px 1px 1px rgba(0, 0, 0, 0.1)' : 'none',
                                     }}
                                 >
                                     {currentFeature.headline}
@@ -169,7 +169,7 @@ export const FeatureSpotlight: React.FC = () => {
                                     className={`antialiased mb-2`}
                                     style={{
                                         fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text"',
-                                        fontSize: isPremium ? '16px' : '15px',
+                                        fontSize: isHighlighted ? '16px' : '15px',
                                         fontWeight: 400,
                                         lineHeight: 1.4,
                                         color: '#F5F7FA',
@@ -201,7 +201,7 @@ export const FeatureSpotlight: React.FC = () => {
                                         <p
                                             className="opacity-65 font-medium tracking-wide"
                                             style={{
-                                                fontSize: isPremium ? '13px' : '15px',
+                                                fontSize: isHighlighted ? '13px' : '15px',
                                                 color: '#F5F7FA'
                                             }}
                                         >
@@ -212,7 +212,7 @@ export const FeatureSpotlight: React.FC = () => {
 
 
                                 {/* Primary Action Button - Moved inside structure for equal spacing */}
-                                {!isPremium && (
+                                {!isHighlighted && (
                                     <motion.button
                                         onClick={handleActionClick}
                                         whileHover="hover"

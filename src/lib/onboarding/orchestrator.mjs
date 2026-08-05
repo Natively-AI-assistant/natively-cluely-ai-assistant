@@ -74,7 +74,6 @@ export function shouldShowToaster(config, ctx) {
  * that build a Ctx without the full class. Pure data, safe to export.
  */
 export const DEFAULT_USER_STATE = {
-  isPremium: false,
   hasProfile: false,
   hasNativelyKey: false,
   hasTrialToken: false,

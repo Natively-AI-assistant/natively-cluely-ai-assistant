@@ -2340,7 +2340,7 @@ ANSWER DIRECTLY:`;
   // context-block injection into a downstream LLM call. Default to true if
   // ModesManager is unavailable so we never regress modes that legitimately
   // use the intercept (looking-for-work, sales, recruiting, general).
-  private isPremiumKnowledgeInterceptAllowed(): boolean {
+  private isKnowledgeInterceptAllowed(): boolean {
     let ModesManager: any;
     try {
       ({ ModesManager } = require('./services/ModesManager'));
@@ -2349,7 +2349,7 @@ ANSWER DIRECTLY:`;
     }
 
     try {
-      return ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed();
+      return ModesManager.getInstance().isKnowledgeInterceptAllowed();
     } catch (_err) {
       return false;
     }
@@ -2676,7 +2676,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           // ("I don't have access to your resume"). Mirrors the intro-response
           // bypass above. Coaching/negotiation still requires the mode gate.
           const knowledgeInterceptAllowed = knowledgeResult
-            && (this.isPremiumKnowledgeInterceptAllowed() || knowledgeResult.factualRecall === true);
+            && (this.isKnowledgeInterceptAllowed() || knowledgeResult.factualRecall === true);
           if (knowledgeResult && knowledgeInterceptAllowed) {
             // Live negotiation coaching short-circuit — bypass second LLM call.
             // Coaching payload travels on the dedicated handler channel, NOT
@@ -5329,7 +5329,7 @@ let isMultimodal = !!(imagePaths?.length);
         // team-meet/lecture modes and the base assistant answers in third person.
         const knowledgeInterceptAllowedStream = knowledgeResult
           && profileInjectionAllowed
-          && (this.isPremiumKnowledgeInterceptAllowed() || knowledgeResult.factualRecall === true);
+          && (this.isKnowledgeInterceptAllowed() || knowledgeResult.factualRecall === true);
         if (knowledgeResult && knowledgeInterceptAllowedStream) {
           // Live negotiation coaching short-circuit — bypass second LLM call.
           // Coaching payload travels on the dedicated handler channel, NOT

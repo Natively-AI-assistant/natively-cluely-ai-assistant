@@ -19,6 +19,7 @@ import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
+import { NativelyLogoMark } from './NativelyLogoMark';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { isMac } from '../utils/platformUtils';
@@ -33,6 +34,8 @@ import {
 } from '../lib/overlayAppearance';
 import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import { KeyRecorder } from './ui/KeyRecorder';
+import GlassEffectLayer from './ui/GlassEffectLayer';
+import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
 import icon from './icon.png';
 
 // ---------------------------------------------------------------------------
@@ -381,7 +384,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
    direction rather than guessing. Keep in sync with the <nav> below. */
 const SETTINGS_NAV_ORDER = [
     'general',
-    'plans',
+    'natively-api',
     'ai-providers',
     'skills',
     'calendar',
@@ -410,10 +413,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const { t, lang, setLang } = useLanguage();
     const [activeTab, setActiveTab] = useState(initialTab);
 
-    // Sync active tab when modal opens (natively-pro storefront removed — map to BYOK API keys)
+    // Sync active tab when modal opens (legacy plans/natively-pro aliases → BYOK API keys)
     useEffect(() => {
         if (isOpen && initialTab) {
-            setActiveTab(initialTab === 'natively-pro' ? 'natively-api' : initialTab);
+            setActiveTab(
+                initialTab === 'natively-pro' || initialTab === 'plans'
+                    ? 'natively-api'
+                    : initialTab,
+            );
 
 
         }
@@ -485,7 +492,68 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         };
     }, [showVerboseToast]);
 
+    /* ---------------------------------------------------------------- */
+    /* Section transition                                                */
+    /* ---------------------------------------------------------------- */
+    const reduceMotion = useReducedMotion() ?? false;
 
+    /* 'natively-api' renders the same panel content. Keying on activeTab would
+       remount and drop internal state during those switches. */
+    const panelKey = activeTab === 'natively-api' ? 'natively-api' : activeTab;
+
+    /* Read the previous key during render, write it in an effect — mutating a
+       ref while rendering double-fires under StrictMode. */
+    const prevPanelKeyRef = useRef(panelKey);
+    const prevPanelIdx = SETTINGS_NAV_ORDER.indexOf(prevPanelKeyRef.current);
+    const curPanelIdx = SETTINGS_NAV_ORDER.indexOf(panelKey);
+    const panelDirection = (prevPanelIdx === -1 || curPanelIdx === -1 || curPanelIdx >= prevPanelIdx) ? 1 : -1;
+    useEffect(() => { prevPanelKeyRef.current = panelKey; }, [panelKey]);
+
+    /* The modal wrapper already springs in on open (scale 0.94→1, y 20→0).
+       Letting the panel play its own enter animation on that same frame stacks
+       two motions on the same pixels and reads as a wobble, so the panel
+       animates only on a genuine section CHANGE. `isOpen` false→true renders
+       once with this still false; the effect arms it afterwards. */
+    const settingsWasOpenRef = useRef(false);
+    useEffect(() => { settingsWasOpenRef.current = isOpen; }, [isOpen]);
+
+    /* Set by the initialTab sync effect below when Settings is deep-linked open
+       to a non-default section, and cleared once that section has rendered. */
+    const suppressPanelAnimRef = useRef(false);
+    useEffect(() => { suppressPanelAnimRef.current = false; }, [panelKey]);
+
+    const animatePanel = settingsWasOpenRef.current && isOpen && !suppressPanelAnimRef.current;
+
+    /* The scroll container outlives the section swap, so without this a tab
+       switched to from a scrolled position would open mid-page. Layout effect,
+       not effect: reset before paint or the old offset flashes. */
+    const panelScrollRef = useRef<HTMLDivElement>(null);
+    useLayoutEffect(() => {
+        if (panelScrollRef.current) panelScrollRef.current.scrollTop = 0;
+    }, [panelKey]);
+
+    /* Active state is painted by ONE shared pill that projects between items
+       (layoutId), so the item itself must not carry `bg-bg-item-active` — an
+       instant background under a moving pill cancels the movement out. */
+    const navItemClass = (active: boolean, size = 'text-sm') =>
+        `w-full text-left px-3 py-2 rounded-lg ${size} font-medium flex items-center gap-3 relative isolate transition-colors duration-150 ease-out ${active
+            ? 'text-text-primary'
+            : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`;
+
+    /* `isolate` on the button + `-z-10` here puts the pill above the button's
+       own background box but below its inline content (icon + label), so the
+       label stays readable without wrapping every child in a z-indexed span.
+       layoutId resolves GLOBALLY in framer-motion — this id must stay unique
+       across the app. `initial={false}` so it doesn't fly in from nowhere on
+       first paint. Spring matches the existing pill in MeetingDetails.tsx. */
+    const navActivePill = (
+        <motion.span
+            layoutId="settingsNavActivePill"
+            className="absolute inset-0 -z-10 rounded-lg bg-bg-item-active"
+            initial={false}
+            transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
+        />
+    );
 
     useEffect(() => {
         if (window.electronAPI?.onUndetectableChanged) {
@@ -1548,8 +1616,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <Monitor size={16} /> {t('General')}
                                     </button>
                                     <button
-                                        onClick={() => setActiveTab('plans')}
-                                        className={navItemClass(activeTab === 'plans' || activeTab === 'natively-api' || activeTab === 'natively-pro')}
+                                        onClick={() => setActiveTab('natively-api')}
+                                        className={navItemClass(activeTab === 'natively-api')}
                                     >
                                         <NativelyLogoMark size={16} className={activeTab === 'natively-api' ? 'text-blue-500' : 'text-blue-500/70'} />
                                         <span>Natively API</span>

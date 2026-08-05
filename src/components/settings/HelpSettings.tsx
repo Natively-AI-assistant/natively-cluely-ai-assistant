@@ -870,7 +870,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                 {onNavigate && (
                     <div
-                        onClick={() => onNavigate('plans')}
+                        onClick={() => onNavigate('natively-api')}
                         className="mb-6 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
                     >
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 flex-1">
@@ -1459,12 +1459,12 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
 
 
-                <AccordionSection title="7. Pro Intelligence" icon={<Star className="w-4 h-4" />}>
+                <AccordionSection title="7. Profile Intelligence" icon={<Star className="w-4 h-4" />}>
                     <div className="space-y-6">
                         {/* Profile */}
                         <div>
-                            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-4">
-                                <h4 className="text-[13px] font-semibold text-amber-500 flex items-center gap-2 mb-1">
+                            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl mb-4">
+                                <h4 className="text-[13px] font-semibold text-emerald-500 flex items-center gap-2 mb-1">
                                     <User size={14} /> Profile Intelligence System
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
@@ -1486,14 +1486,14 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                                 <div className="p-4 rounded-xl border bg-accent-subtle border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <CreditCard className="w-4 h-4 text-accent-primary" /> Pro Requirement
+                                        <FileText className="w-4 h-4 text-accent-primary" /> Getting started
                                     </h4>
                                     <p className="text-[11px] text-text-secondary mb-2">
-                                        This is a Natively Pro feature.
+                                        Profile Intelligence is available without a paid license on this build.
                                     </p>
                                     <ol className="text-[11px] text-text-secondary space-y-1 list-decimal pl-4 mb-0">
-                                        <li>Get a License at <button onClick={() => { (window as any).electronAPI?.openExternal('https://natively.software/') }} className="text-accent-primary hover:underline font-semibold">natively.software</button></li>
-                                        <li>Drop your Resume PDF in the UI to activate injection.</li>
+                                        <li>Open Profile Intelligence from the launcher.</li>
+                                        <li>Drop your résumé PDF to ground answers in your background.</li>
                                     </ol>
                                 </div>
                             </div>

@@ -17,9 +17,8 @@
 //   #1 reconfigureSttProvider is serialized via `_sttReconfigureChain` — the
 //      actual work lives in `_doReconfigureSttProvider`, and concurrent callers
 //      are queued so the critical section is never re-entered.
-//   #2 the renderer no longer double-fires setSttProvider/setDefaultModel.
-//   #3 the ~8s Pro license activation is detached from the key-save critical
-//      path (not awaited inline).
+//   #2 the renderer no longer double-fires setSttProvider/setDefaultModel, and
+//      the main process refreshes the settings UI itself after a key save/clear.
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -78,7 +77,7 @@ describe('Fix #1: reconfigureSttProvider is serialized (source contract)', () =>
   it('the real teardown/rebuild lives in _doReconfigureSttProvider', () => {
     const doStart = mainSrc.indexOf('private async _doReconfigureSttProvider(');
     assert.ok(doStart >= 0, 'BUG: _doReconfigureSttProvider (the serialized worker) is missing.');
-    const doBody = mainSrc.slice(doStart, doStart + 2000);
+    const doBody = mainSrc.slice(doStart, doStart + 2500);
     assert.match(
       doBody,
       /setupSystemAudioPipeline/,
@@ -178,39 +177,13 @@ describe('Fix #2: renderer no longer double-fires; server compensates the UI ref
     // provider after a key save/clear.
     const start = ipcSrc.indexOf("safeHandle('set-natively-api-key'");
     assert.ok(start >= 0, 'set-natively-api-key handler must exist');
-    const end = ipcSrc.indexOf("safeHandle('get-natively-pricing'", start);
+    const end = ipcSrc.indexOf("safeHandle('get-natively-usage'", start);
     const handlerBody = ipcSrc.slice(start, end > start ? end : start + 4000);
     assert.match(
       handlerBody,
-      /send\(\s*['"]credentials-changed['"]\s*\)/,
-      "BUG: set-natively-api-key no longer broadcasts 'credentials-changed'. The Settings STT " +
+      /broadcastCredentialsChanged\(\)/,
+      "BUG: set-natively-api-key no longer refreshes credentials. The Settings STT " +
         'dropdown will show a stale provider after the Natively key is saved or cleared.',
-    );
-  });
-});
-
-describe('Fix #3: Pro license activation stays awaited inline (no detached billing race)', () => {
-  it('activateWithApiKey is awaited inline, not detached in a fire-and-forget IIFE', () => {
-    const start = ipcSrc.indexOf("safeHandle('set-natively-api-key'");
-    assert.ok(start >= 0, 'set-natively-api-key handler must exist');
-    const end = ipcSrc.indexOf("safeHandle('get-natively-pricing'", start);
-    const handlerBody = ipcSrc.slice(start, end > start ? end : start + 4000);
-
-    // The inline await is the backpressure that serializes rapid set→clear:
-    // it keeps the renderer button disabled until the license mutation lands,
-    // so a fire-and-forget activate can't store a license AFTER a clear's
-    // deactivate (entitlement leak). LicenseManager has no cross-call mutex,
-    // so the await is the only thing preventing the ordering race.
-    assert.match(
-      handlerBody,
-      /await\s+LicenseManager\.getInstance\(\)\.activateWithApiKey/,
-      'BUG: activateWithApiKey must be awaited inline in the handler.',
-    );
-    assert.ok(
-      !/void\s*\(async\s*\(\s*\)\s*=>/.test(handlerBody),
-      'BUG: the license activation was detached into a fire-and-forget IIFE. That removes the ' +
-        'renderer backpressure and opens a set→clear ordering race (Pro left active with no key). ' +
-        'Keep it awaited inline; the crash fix is handled by reconfigureSttProvider serialization.',
     );
   });
 });

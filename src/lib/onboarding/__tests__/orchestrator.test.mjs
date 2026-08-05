@@ -11,7 +11,6 @@ import { shouldShowToaster } from '../orchestrator.mjs';
 import { STAGES } from '../stageCatalog.mjs';
 
 const DEFAULT_USER_STATE = {
-  isPremium: false,
   hasProfile: false,
   hasNativelyKey: false,
   hasTrialToken: false,
@@ -100,26 +99,6 @@ test('full happy-path sequence progresses through prereqs', () => {
   // Stage 5: trial_promo — permanently skipped (commercial-surface-strip / ticket 03)
   ctx = makeCtx({ completed, skipped: skippedSet, homepageMountedFor: 7_000 });
   assert.equal(shouldShowToaster(stageById['trial_promo'], ctx), false);
-});
-
-test('premium user skips trial/ads but still gets profile/modes/perms/extension', () => {
-  const userState = { ...DEFAULT_USER_STATE, isPremium: true };
-  const completed = {};
-  const skippedSet = new Set();
-
-  // Permissions — fires (always, first launch)
-  let ctx = makeCtx({ completed, skipped: skippedSet, userState, homepageMountedFor: 3_000 });
-  assert.equal(shouldShowToaster(stageById['permissions'], ctx), true);
-  completed['permissions'] = 1;
-
-  // Browser extension — fires if not connected
-  ctx = makeCtx({ completed, skipped: skippedSet, userState, homepageMountedFor: 6_000 });
-  assert.equal(shouldShowToaster(stageById['browser_extension'], ctx), true);
-
-  // Profile intelligence — fires (profile, not premium, is the skipper)
-  ctx = makeCtx({ completed, skipped: skippedSet, userState, homepageMountedFor: 5_000 });
-  // Wait — premium should skip profile_intelligence too. Verify.
-  assert.equal(shouldShowToaster(stageById['profile_intelligence'], ctx), false);
 });
 
 test('linux user: browser_extension skipped, profile_intelligence downstream stage can fire', () => {

@@ -54,7 +54,7 @@ export const STAGES = [
       requiresMeetingInactive: true,
     },
     requiresStages: ['browser_extension'],
-    skipWhen: (s) => s.hasProfile || s.isPremium || s.seenProfileOnboarding,
+    skipWhen: (s) => s.hasProfile || s.seenProfileOnboarding,
   },
   {
     id: 'modes_manager',

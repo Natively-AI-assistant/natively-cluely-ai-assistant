@@ -77,7 +77,6 @@ export const STAGES: StageConfig[] = [
     requiresStages: ['browser_extension'],
     skipWhen: (s) =>
       s.hasProfile ||
-      s.isPremium ||
       s.seenProfileOnboarding,
   },
 
@@ -186,7 +185,6 @@ export const QUIET_WINDOW_STAGE: StageConfig = {
   // pegged the launcher renderer's main thread and grew its RSS to ~9 GB before
   // an exitCode-5 OOM crash (2026-07-19). It resolves exactly once (3 user turns
   // after trial_promo), so once-ever is also the correct semantics.
-  onceEver: true,
   triggers: {},
   customPredicate: (ctx: Ctx) => {
     const baseline = ctx.completed['_turnCountAtQuietStart'] ?? 0;

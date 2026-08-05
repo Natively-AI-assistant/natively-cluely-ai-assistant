@@ -30,11 +30,6 @@ import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity 
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
 import { isMac } from "./utils/platformUtils"
 import { trackAppOpen } from "./lib/toasterGating"
-import {
-  JDAwarenessToaster,
-  ProfileFeatureToaster,
-  useAdCampaigns
-} from './premium'
 import { analytics } from "./lib/analytics/analytics.service"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import ModesSettings from "./components/settings/ModesSettings"
@@ -237,10 +232,6 @@ const App: React.FC = () => {
     dialog.addEventListener('keydown', onKeyDown);
     return () => dialog.removeEventListener('keydown', onKeyDown);
   }, [activeManagerPanel]);
-  const [isPremiumActive, setIsPremiumActive] = useState(false);
-  const [hasLoadedLicense, setHasLoadedLicense] = useState(false);
-  const [planDetails, setPlanDetails] = useState<{ isPremium: boolean; plan?: string; provider?: string }>({ isPremium: false });
-
   // Overlay opacity — only meaningful when isOverlayWindow, but stored centrally
   // so it can be initialized once from localStorage and updated via IPC.
   const [overlayOpacity, setOverlayOpacity] = useState<number>(() => {
@@ -257,11 +248,6 @@ const App: React.FC = () => {
   const [hasProfile, setHasProfile] = useState(false);
   const [isLauncherMainView, setIsLauncherMainView] = useState(true);
 
-  // Initialize Ads Campaign Manager
-  const [appStartTime] = useState<number>(Date.now());
-  const [lastMeetingEndTime, setLastMeetingEndTime] = useState<number | null>(null);
-  const [isProcessingMeeting, setIsProcessingMeeting] = useState<boolean>(false);
-  
   // Ollama Auto-Pull State
   const [ollamaPullStatus, setOllamaPullStatus] = useState<'idle' | 'downloading' | 'complete' | 'failed'>('idle');
   const [ollamaPullPercent, setOllamaPullPercent] = useState<number>(0);
@@ -311,13 +297,6 @@ const App: React.FC = () => {
       ? { opacity: 0, transition: { duration: 0 } }
       : { opacity: 0, x: -6, transition: { duration: 0.14, ease: MANAGER_EASE } },
   };
-  const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup && !isSettingsOpen && !isManagerOpen && isLauncherMainView;
-
-  // Gate useAdCampaigns behind orchestrator eligibility. Ads only self-schedule
-  // when (a) the orchestrator is ready (no other toaster active) and (b) the
-  // `ads` stage's prerequisites have been met. We approximate (b) with the
-  // simple "no orchestrated toaster is active" gate — useAdCampaigns has its
-  // own eligibility logic for which ad to show.
   const orch = (isLauncherWindow || isDefault) ? getOrchestrator() : null;
   // Stable subscribe/snapshot refs for useSyncExternalStore — without these,
   // .bind() creates a new function on every render, causing the store to
@@ -331,20 +310,6 @@ const App: React.FC = () => {
     [orch],
   );
   const orchState = useSyncExternalStore(orchSubscribe, orchSnapshot);
-  const orchestratorAllowsAds = orchState
-    ? orchState.activeToasterId === null
-    : false;
-
-  const { activeAd, dismissAd } = useAdCampaigns(
-    planDetails,
-    hasProfile,
-    isAppReady,
-    appStartTime,
-    lastMeetingEndTime,
-    isProcessingMeeting,
-    hasNativelyApi,
-    orchestratorAllowsAds
-  );
 
   // Start the onboarding orchestrator (launcher window only). Stages are
   // registered lazily; the drain loop only runs while foreground + homepage
@@ -384,16 +349,15 @@ const App: React.FC = () => {
     };
   }, [isLauncherWindow, isDefault, isolateOnboarding]);
 
-  // Push user-state patches to the orchestrator as plan/profile state evolves.
+  // Push user-state patches to the orchestrator as profile/API state evolves.
   useEffect(() => {
     setOrchestratorUserState({
-      isPremium: isPremiumActive,
       hasProfile,
       hasNativelyKey: hasNativelyApi,
       // Trial chrome stripped — never report an active trial token to orchestrator.
       hasTrialToken: false,
     });
-  }, [isPremiumActive, hasProfile, hasNativelyApi]);
+  }, [hasProfile, hasNativelyApi]);
 
   // Pause the orchestrator while a foreground settings surface is open so
   // toasters never appear over the user's settings interaction.
@@ -487,28 +451,8 @@ const App: React.FC = () => {
       fallbackLocal();
     }
 
-    // Basic status check for campaign targeting
+    // Basic status check (profile presence for onboarding)
     window.electronAPI?.profileGetStatus?.().then(s => setHasProfile(s?.hasProfile || false)).catch(() => {});
-    // Load full plan details for targeted ad delivery (plan tier + provider).
-    window.electronAPI?.licenseGetDetails?.()
-      .then(details => {
-        setPlanDetails(details ?? { isPremium: false });
-        setIsPremiumActive(details?.isPremium ?? false);
-        setHasLoadedLicense(true);
-      })
-      .catch(() => {
-        // Fallback: async premium check if licenseGetDetails is unavailable
-        const premiumCheck = window.electronAPI?.licenseCheckPremiumAsync ?? window.electronAPI?.licenseCheckPremium;
-        if (premiumCheck) {
-          premiumCheck().then((active: boolean) => {
-            setIsPremiumActive(active);
-            setPlanDetails({ isPremium: active });
-            setHasLoadedLicense(true);
-          }).catch(() => setHasLoadedLicense(true));
-        } else {
-          setHasLoadedLicense(true);
-        }
-      });
 
     // Also check for Natively API key
     window.electronAPI?.getStoredCredentials?.()
@@ -563,12 +507,6 @@ const App: React.FC = () => {
     });
 
     // Listen for meeting processing completion to trigger post-meeting ads
-    const removeMeetingsListener = window.electronAPI?.onMeetingsUpdated?.(() => {
-      console.log("[App.tsx] Meetings updated (processing finished), starting ad delay timer");
-      setIsProcessingMeeting(false);
-      setLastMeetingEndTime(Date.now());
-    });
-
     // Listen for Ollama Auto-Pull Progress
     let removeProgress: (() => void) | undefined;
     let removeComplete: (() => void) | undefined;
@@ -613,20 +551,11 @@ const App: React.FC = () => {
       });
     }
 
-    // Listen for real-time license status changes (activation, revocation, deactivation)
-    const removeLicenseListener = window.electronAPI?.onLicenseStatusChanged?.((data) => {
-      setIsPremiumActive(data.isPremium);
-      setPlanDetails(prev => ({ ...prev, isPremium: data.isPremium, ...(data.plan ? { plan: data.plan } : {}) }));
-      setHasLoadedLicense(true);
-    });
-
     return () => {
-      if (removeMeetingsListener) removeMeetingsListener();
       if (removeProgress) removeProgress();
       if (removeComplete) removeComplete();
       if (removeWarning) removeWarning();
       if (removeReindexProgress) removeReindexProgress();
-      if (removeLicenseListener) removeLicenseListener();
       if (removeOpenSettingsTab) removeOpenSettingsTab();
     }
   }, []);
@@ -748,8 +677,6 @@ const App: React.FC = () => {
   const handleEndMeeting = () => {
     console.log("[App.tsx] handleEndMeeting triggered");
     analytics.trackMeetingEnded();
-    setIsProcessingMeeting(true);
-
     // Local bookkeeping that does not depend on the main process.
     const startStr = localStorage.getItem('natively_last_meeting_start');
     if (startStr) {
@@ -971,14 +898,10 @@ const App: React.FC = () => {
                           {activeManagerPanel === 'modes' ? (
                             <ModesSettings
                               onClose={closeManagerPanel}
-                              isPremium={isPremiumActive}
-                              isLoaded={hasLoadedLicense}
-                              onOpenNativelyAPI={() => openSettingsExclusive('natively-api')}
                             />
                           ) : (
                             <ProfileIntelligenceSettings
                               onClose={closeManagerPanel}
-                              onOpenNativelyAPI={() => openSettingsExclusive('plans')}
                             />
                           )}
                         </motion.div>
@@ -1078,21 +1001,6 @@ const App: React.FC = () => {
           </OrchestratorProvider>
         )}
 
-      {/* Feature-awareness toasters (premium submodule stubs when skip-premium) */}
-      {!isolateModals && isLauncherMainView && (
-        <>
-          <ProfileFeatureToaster
-            isOpen={activeAd === 'profile'}
-            onDismiss={dismissAd}
-            onSetupProfile={() => openProfileExclusive()}
-          />
-          <JDAwarenessToaster
-            isOpen={activeAd === 'jd'}
-            onDismiss={dismissAd}
-            onSetupJD={() => openProfileExclusive()}
-          />
-        </>
-      )}
     </div>
     </ErrorBoundary>
   )

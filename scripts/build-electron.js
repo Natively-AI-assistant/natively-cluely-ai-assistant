@@ -30,12 +30,6 @@ if (fs.existsSync(electronDir)) {
   entryPoints.push(...findTs(electronDir).map(f => path.relative(rootDir, f)));
 }
 
-// Also include premium electron files if they exist
-const premiumDir = path.resolve(rootDir, 'premium/electron');
-if (fs.existsSync(premiumDir)) {
-  entryPoints.push(...findTs(premiumDir).map(f => path.relative(rootDir, f)));
-}
-
 const start = Date.now();
 
 build({

@@ -59,13 +59,13 @@ test('E2E enable-pro does not plant fake trial tokens', () => {
   const body = source.slice(start, end > start ? end : start + 800);
   assert.doesNotMatch(body, /setTrialToken\s*\(/);
   assert.doesNotMatch(body, /e2e-trial-token/);
-  assert.match(body, /isProOrTrialActive\s*\(/);
+  assert.match(body, /isProfileFeatureAvailable\s*\(/);
 });
 
-test('product identity remains Natively; license bypass intact', () => {
+test('product identity remains Natively; profile features unlocked', () => {
   const pkg = JSON.parse(read('package.json'));
   assert.match(String(pkg.productName || pkg.name), /Natively/i);
   const ipc = read('electron/ipcHandlers.ts');
-  const gate = ipc.slice(ipc.indexOf('const isProOrTrialActive'), ipc.indexOf('const isProOrTrialActive') + 280);
-  assert.match(gate, /return true/);
+  const gate = ipc.slice(ipc.indexOf('const isProfileFeatureAvailable'), ipc.indexOf('const isProfileFeatureAvailable') + 280);
+  assert.match(gate, /=>\s*true/);
 });

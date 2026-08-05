@@ -1,34 +1,19 @@
-/**
- * Regression for the intro name-lead fix (E2E MiniMax campaign, autopilot pass).
- * generateCandidateIntro previously instructed the model to "just jump straight
- * in", so grounded intros OMITTED the candidate's name ("I'm currently working
- * as a…" instead of "I'm Marcus, …"). The prompt now REQUIRES leading with the
- * name, and the catch-fallback leads with it too. Source-level assertion (the
- * live generation is exercised by the E2E harness).
- */
-import { test, describe } from 'node:test';
-import assert from 'node:assert/strict';
+// OSS / skip-premium gate: original suite lives in IntroNameLeadGenerator2026_07_03.premium-impl.mjs.
+// Loads only when private premium build output exists under dist-electron/premium.
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { test } from 'node:test';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(__dirname, '../../..');
-const src = fs.readFileSync(path.join(repoRoot, 'premium/electron/knowledge/ContextAssembler.ts'), 'utf8');
-
-describe('generateCandidateIntro leads with the candidate name', () => {
-  const fn = src.slice(src.indexOf('function generateCandidateIntro'), src.indexOf('function generateCandidateIntro') + 4200);
-  test('the generation prompt requires opening with the name', () => {
-    assert.match(fn, /OPEN WITH THE CANDIDATE'?S NAME/i, 'explicit name-lead rule present');
-    assert.match(fn, /self-INTRODUCTION; omitting the name is wrong/i, 'rationale present');
-  });
-  test('the GOOD example pattern leads with the name', () => {
-    assert.match(fn, /"I'm \[Name\]/, 'good example opens with I\'m [Name]');
-  });
-  test('the old "just jump straight in" (name-skipping) instruction is gone', () => {
-    assert.doesNotMatch(fn, /just jump straight in/i, 'the name-skipping opener must be removed');
-  });
-  test('the catch-fallback also leads with the first name', () => {
-    assert.match(fn, /I'm \$\{first\}/, 'fallback prefixes the first name');
-  });
-});
+let root = __dirname;
+for (let i = 0; i < 12; i++) {
+  if (fs.existsSync(path.join(root, 'package.json')) && fs.existsSync(path.join(root, 'electron'))) break;
+  root = path.dirname(root);
+}
+const premiumDist = path.join(root, 'dist-electron', 'premium');
+if (!fs.existsSync(premiumDist)) {
+  test('skipped — dist-electron/premium absent (OSS / skip-premium)', { skip: true }, () => {});
+} else {
+  await import(pathToFileURL(path.join(__dirname, 'IntroNameLeadGenerator2026_07_03.premium-impl.mjs')).href);
+}

@@ -142,10 +142,10 @@ test('main process does not phone home via ReviewService on boot/quit', () => {
   assert.doesNotMatch(main, /reportUsage\s*\(/);
 });
 
-test('premium useAdCampaigns stub remains no-op (skip-premium)', () => {
-  const premium = read('src/premium/index.tsx');
-  assert.match(premium, /activeAd:\s*null/);
-  assert.match(premium, /nullAdCampaigns/);
-  // Must not reintroduce a hard import of premium/src/useAdCampaigns as a required module.
-  assert.doesNotMatch(premium, /from\s+['"].*premium\/src\/useAdCampaigns/);
+test('premium ad scaffolding is gone (skip-premium)', () => {
+  assert.equal(fs.existsSync(path.join(root, 'src/premium/index.tsx')), false);
+  const app = read('src/App.tsx');
+  assert.doesNotMatch(app, /from\s+['"]\.\/premium['"]/);
+  assert.doesNotMatch(app, /useAdCampaigns/);
+  assert.doesNotMatch(app, /AdToaster|DonationToaster|ReviewToaster/);
 });

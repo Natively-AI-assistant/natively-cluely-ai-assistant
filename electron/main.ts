@@ -1245,7 +1245,7 @@ interface ScreenshotCaptureSession {
   restoreWithoutFocus: boolean;
 }
 
-// Premium: Knowledge modules loaded conditionally
+// Knowledge modules are loaded defensively so startup can degrade cleanly.
 let KnowledgeOrchestratorClass: any = null;
 let KnowledgeDatabaseManagerClass: any = null;
 // Phase 1: shared comp-evidence detector for transcript-aware intent routing.
@@ -1253,14 +1253,10 @@ let textHasCompEvidence: ((text: string) => boolean) | null = null;
 try {
     KnowledgeOrchestratorClass = require('./knowledge/KnowledgeOrchestrator').KnowledgeOrchestrator;
     KnowledgeDatabaseManagerClass = require('./knowledge/KnowledgeDatabaseManager').KnowledgeDatabaseManager;
-    // Transcript-aware comp-evidence detector is a premium-only surface; in the
-    // OSS build it stays null and setConversationContextProvider degrades to
+    // The transcript-aware comp-evidence detector is not part of this build. It
+    // stays null and setConversationContextProvider degrades to
     // returning no hint (the negotiation feature is inert here anyway).
-    try {
-        textHasCompEvidence = require('../premium/electron/knowledge/NegotiationConversationTracker').textHasCompEvidence;
-    } catch {
-        textHasCompEvidence = null;
-    }
+    textHasCompEvidence = null;
 } catch {
     console.log('[Main] Knowledge modules not available — profile intelligence disabled.');
 }
@@ -1779,7 +1775,7 @@ export class AppState {
         if (actionId === 'general:toggle-visibility') {
           this.toggleMainWindow();
         } else if (actionId === 'general:toggle-mouse-passthrough') {
-          // Adapted from public PR #113 — verify premium interaction
+          // Adapted from public PR #113.
           this.toggleOverlayMousePassthrough();
         } else if (actionId === 'general:take-screenshot') {
           // Route to renderer via global-shortcut so the renderer handles the
@@ -1975,9 +1971,7 @@ export class AppState {
 
     // Restore toggle states that live in LLMHelper memory.
     // This MUST happen here — not inside initializeRAGManager() — so that
-    // it runs unconditionally regardless of whether premium modules are available.
-    // Previously, groqFastTextMode restore was inside the KnowledgeOrchestrator
-    // block which silently skips when premium modules are absent.
+    // it runs unconditionally even when knowledge modules are unavailable.
     {
       const llmHelper = this.processingHelper.getLLMHelper();
       if (settingsManager.get('groqFastTextMode')) {
@@ -2565,7 +2559,7 @@ export class AppState {
           })();
         }
 
-        // Phase 1: transcript-aware intent hint. The orchestrator (premium) has
+        // Phase 1: transcript-aware intent hint. The orchestrator has
         // no SessionTracker reference (package boundary), so the app layer reads
         // the rolling ~180s transcript here and hands back a lightweight verdict.
         // We inspect only the last 1-2 INTERVIEWER turns for comp evidence — NOT
@@ -3202,7 +3196,7 @@ export class AppState {
       // The answer path above (handleTranscript / RAG feed) is unaffected.
       this.sendThrottledTranscript(payload);
 
-      // Feed final recruiter (system audio) transcripts to the premium
+      // Feed final recruiter (system audio) transcripts to the optional
       // negotiation tracker. Issue #272: gate by active mode template so the
       // tracker never accumulates negotiation state in modes where salary is
       // out of scope (technical-interview, team-meet, lecture). Output gating
@@ -3213,7 +3207,7 @@ export class AppState {
         let trackerFeedAllowed = true;
         try {
           const { ModesManager } = require('./services/ModesManager');
-          trackerFeedAllowed = ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed();
+          trackerFeedAllowed = ModesManager.getInstance().isKnowledgeInterceptAllowed();
         } catch (_err) {
           // fail open — preserve existing behaviour for modes that need the tracker
         }
@@ -7070,7 +7064,7 @@ export class AppState {
     this._enforceDockState(true, focusWindow, 0, maxAttempts);
   }
 
-  // --- Mouse Passthrough (Adapted from public PR #113 — verify premium interaction) ---
+  // --- Mouse Passthrough (adapted from public PR #113) ---
   private overlayMousePassthrough: boolean = false;
 
   public setOverlayMousePassthrough(state: boolean): void {

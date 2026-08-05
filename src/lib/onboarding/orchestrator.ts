@@ -72,7 +72,6 @@ export interface OrchestratorState {
 }
 
 export interface UserState {
-  isPremium: boolean;
   hasProfile: boolean;
   hasNativelyKey: boolean;
   hasTrialToken: boolean;
@@ -147,7 +146,6 @@ type Listener = (state: OrchestratorState) => void;
 // ─── UserState default ────────────────────────────────────────────
 
 export const DEFAULT_USER_STATE: UserState = {
-  isPremium: false,
   hasProfile: false,
   hasNativelyKey: false,
   hasTrialToken: false,

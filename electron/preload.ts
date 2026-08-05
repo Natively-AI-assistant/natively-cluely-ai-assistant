@@ -153,25 +153,6 @@ interface ElectronAPI {
     can_use_publicly: boolean;
     display_name_publicly: boolean;
   }) => Promise<{ ok: boolean; error?: string; status?: number }>;
-  getNativelyPricing: () => Promise<{
-    ok: boolean;
-    currency?: string;
-    fetchedAt?: string;
-    stale?: boolean;
-    products?: Record<string, {
-      id: string;
-      dodoProductId: string;
-      name: string;
-      amount: number | null;
-      currency: string;
-      formattedPrice: string | null;
-      interval: 'month' | 'year' | 'lifetime';
-      checkoutUrl: string;
-      coupon: { code: string; eligible: boolean; discountPercent: number; reason?: string };
-    }>;
-    error?: string;
-    status?: number;
-  }>;
   getNativelyUsage: (force?: boolean) => Promise<{
     ok: boolean;
     plan?: string;
@@ -1480,7 +1461,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     can_use_publicly: boolean;
     display_name_publicly: boolean;
   }) => ipcRenderer.invoke('review:update-testimonial', payload),
-  getNativelyPricing: () => ipcRenderer.invoke('get-natively-pricing'),
   getNativelyUsage: (force?: boolean) => ipcRenderer.invoke('get-natively-usage', force ? { force: true } : undefined),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
 
@@ -2508,21 +2488,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('fetch-provider-models', provider, apiKey),
   setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', modelId: string) =>
     ipcRenderer.invoke('set-provider-preferred-model', provider, modelId),
-
-  // License Management
-  licenseActivate: (key: string) => ipcRenderer.invoke('license:activate', key),
-  licenseCheckPremium: () => ipcRenderer.invoke('license:check-premium'),
-  licenseGetDetails: () => ipcRenderer.invoke('license:get-details'),
-  licenseCheckPremiumAsync: () => ipcRenderer.invoke('license:check-premium-async'),
-  licenseDeactivate: () => ipcRenderer.invoke('license:deactivate'),
-  licenseGetHardwareId: () => ipcRenderer.invoke('license:get-hardware-id'),
-  onLicenseStatusChanged: (callback: (data: { isPremium: boolean; plan?: string }) => void) => {
-    const subscription = (_: any, data: { isPremium: boolean; plan?: string }) => callback(data);
-    ipcRenderer.on('license-status-changed', subscription);
-    return () => {
-      ipcRenderer.removeListener('license-status-changed', subscription);
-    };
-  },
 
   onModesActiveCleared: (callback: () => void) => {
     const subscription = () => callback();

@@ -16,8 +16,7 @@
   },
   "include": [
     "**/*.ts",
-    "**/*.js",
-    "../premium/electron/**/*.ts"
+    "**/*.js"
   ],
   "exclude": [
     "db/seedDemo.ts",

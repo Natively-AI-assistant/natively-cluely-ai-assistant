@@ -535,7 +535,7 @@ export class ModesManager {
      * meet, and lecture — modes where premium-flavored interjections overwrite
      * the user's expected answer. Defaults to true when no mode is active.
      */
-    public isPremiumKnowledgeInterceptAllowed(): boolean {
+    public isKnowledgeInterceptAllowed(): boolean {
         const mode = this.getActiveMode();
         if (!mode) return true;
         return !ModesManager.PREMIUM_INTERCEPT_INCOMPATIBLE_TEMPLATES.has(mode.templateType);

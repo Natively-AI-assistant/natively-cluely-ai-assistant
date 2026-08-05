@@ -318,32 +318,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     return escapeXmlText(clipped);
   };
 
-  /**
-   * Returns true if the user has an active premium license OR an unexpired free trial.
-   * Used to gate profile intelligence features (resume upload, JD upload, company research, etc.).
-   */
-  const isProOrTrialActive = (): boolean => {
-    // Source-available build: premium/trial gate bypassed — all pro features unlocked.
-    return true;
-  };
-
-  // Clears premium-only context when the pro license is lost.
-  const clearActiveModeOnLicenseLoss = (): void => {
-    try {
-      // Through ModesManager, not DatabaseManager, so the active-mode snapshot
-      // is invalidated with the write. Clearing the row directly left every
-      // answer surface still holding the premium mode it had cached — the
-      // context this function exists to remove.
-      const { ModesManager } = require('./services/ModesManager');
-      ModesManager.getInstance().setActiveMode(null);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('modes-active-cleared');
-      });
-      console.log('[IPC] Premium-only context cleared due to license loss');
-    } catch (e) {
-      /* non-fatal */
-    }
-  };
+  const isProfileFeatureAvailable = (): boolean => true;
 
   // --- NEW Test Helper ---
   safeHandle('test-release-fetch', async () => {
@@ -392,89 +367,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (err: any) {
       console.error('[IPC] dev:thinking-budget-bench failed:', err);
       return { ok: false, error: String(err?.message || err) };
-    }
-  });
-
-  safeHandle('license:activate', async (event, key: string) => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      const result = await LicenseManager.getInstance().activateLicense(key);
-      if (result?.success) {
-        BrowserWindow.getAllWindows().forEach((win) => {
-          if (!win.isDestroyed())
-            win.webContents.send('license-status-changed', { isPremium: true });
-        });
-      }
-      return result;
-    } catch (err: any) {
-      // Only show generic message if the premium module itself is missing.
-      // activateLicense() returns {success:false, error} for all expected failures
-      // (bad key, network error, etc.) — it should never throw in normal operation.
-      console.error('[IPC] license:activate unexpected error:', err);
-      return { success: false, error: 'Premium features not available in this build.' };
-    }
-  });
-  safeHandle('license:check-premium', async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return LicenseManager.getInstance().isPremium();
-    } catch {
-      return false;
-    }
-  });
-
-  safeHandle('license:get-details', async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return LicenseManager.getInstance().getLicenseDetails();
-    } catch {
-      return { isPremium: false };
-    }
-  });
-  // Async variant: performs Dodo server-side revocation check on startup.
-  // Returns false only if the server definitively revokes the key.
-  // Network errors fail-open (returns cached sync result).
-  safeHandle('license:check-premium-async', async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return await LicenseManager.getInstance().isPremiumAsync();
-    } catch {
-      return false;
-    }
-  });
-  safeHandle('license:deactivate', async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      // deactivate() is async — it calls the Dodo server to free the activation slot
-      // before removing the local license file. Must be awaited.
-      await LicenseManager.getInstance().deactivate();
-      // Auto-disable knowledge mode when license is removed
-      try {
-        const orchestrator = appState.getKnowledgeOrchestrator();
-        if (orchestrator) {
-          orchestrator.setKnowledgeMode(false);
-          console.log('[IPC] Knowledge mode auto-disabled due to license deactivation');
-        }
-      } catch (e) {
-        /* ignore */
-      }
-      // Notify all windows so the license UI (ProGate, settings) refreshes immediately
-      clearActiveModeOnLicenseLoss();
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed())
-          win.webContents.send('license-status-changed', { isPremium: false });
-      });
-    } catch {
-      /* LicenseManager not available */
-    }
-    return { success: true };
-  });
-  safeHandle('license:get-hardware-id', async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return LicenseManager.getInstance().getHardwareId();
-    } catch {
-      return 'unavailable';
     }
   });
 
@@ -6474,8 +6366,6 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ── Usage cache (60-second TTL, keyed by API key) ──────────────────────────
   const _usageCache = new Map<string, { data: any; ts: number }>();
   const USAGE_CACHE_TTL_MS = 60_000;
-  const _pricingCache = new Map<string, { data: any; ts: number }>();
-  const PRICING_CACHE_TTL_MS = 5 * 60_000;
 
   safeHandle('set-natively-api-key', async (_, apiKey: string) => {
     try {
@@ -6515,88 +6405,6 @@ export function initializeIpcHandlers(appState: AppState): void {
       // race — so the broadcast now has to happen here, at the source of truth.)
       broadcastCredentialsChanged();
 
-      // Auto-activate Natively Pro for pro/max/ultra API plans.
-      // Skips silently if the user already has a Gumroad/Dodo lifetime license.
-      //
-      // This is awaited inline — NOT detached. The await is what serializes a
-      // rapid set→clear (or clear→set) sequence: it keeps the renderer's
-      // "Saving…" state (and the disabled button) active until the license
-      // mutation completes, so the user physically cannot fire the conflicting
-      // call mid-flight. Detaching it removed that backpressure and opened an
-      // ordering race where a fire-and-forget activate could land its
-      // storeLicense AFTER a clear's deactivate, leaving Pro active with no key
-      // (an entitlement leak), since LicenseManager has no cross-call mutex.
-      // The crash/hang this whole change set fixes is closed by the
-      // reconfigureSttProvider serialization alone; this activation already ran
-      // strictly AFTER reconfigure completed (never concurrent with it), so
-      // there is nothing to gain by detaching it and a billing bug to lose.
-      if (apiKey) {
-        try {
-          const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-          const result = await LicenseManager.getInstance().activateWithApiKey(apiKey);
-          if (result.success) {
-            console.log('[IPC] set-natively-api-key: Pro auto-activated via API plan.');
-            // Notify all windows so the license UI refreshes immediately
-            BrowserWindow.getAllWindows().forEach((win) => {
-              if (!win.isDestroyed())
-                win.webContents.send('license-status-changed', { isPremium: true });
-            });
-          } else if (result.skipped && !result.error) {
-            // Benign skip: the stored perpetual license is verified and already
-            // granting Pro, so there is nothing to tell the user.
-            console.log(
-              '[IPC] set-natively-api-key: existing Gumroad/Dodo license preserved — Pro not overwritten.',
-            );
-          } else if (result.skipped) {
-            // Skip WITH an error: the perpetual license could not be verified
-            // (native module absent), so it grants nothing AND the API key was
-            // refused — the user has Pro from neither credential. This is a
-            // support-visible fault, not the benign case above; do not bury it
-            // at log level. NOTE: still not surfaced in the UI — the
-            // license-status-changed payload is typed { isPremium, plan? } and
-            // has no channel for a reason string. Users hitting this via the
-            // license box DO see it (activateLicense returns result.error).
-            console.warn(
-              '[IPC] set-natively-api-key: Pro inactive —',
-              result.error,
-            );
-          } else {
-            console.log('[IPC] set-natively-api-key: Pro not activated —', result.error);
-          }
-        } catch (e: any) {
-          // LicenseManager not available in this build — non-fatal
-          console.warn(
-            '[IPC] set-natively-api-key: LicenseManager unavailable for Pro auto-activation:',
-            e?.message,
-          );
-        }
-      } else {
-        // API key was cleared — deactivate any natively_api Pro license so premium is revoked.
-        try {
-          const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-          const lm = LicenseManager.getInstance();
-          // Only deactivate if the stored license is from a natively_api subscription.
-          // Never touch Gumroad/Dodo lifetime licenses here.
-          const details = lm.getLicenseDetails();
-          if (details.isPremium && details.provider === 'natively_api') {
-            await lm.deactivate();
-            console.log(
-              '[IPC] set-natively-api-key: key cleared — natively_api Pro license deactivated.',
-            );
-            clearActiveModeOnLicenseLoss();
-            BrowserWindow.getAllWindows().forEach((win) => {
-              if (!win.isDestroyed())
-                win.webContents.send('license-status-changed', { isPremium: false });
-            });
-          }
-        } catch (e: any) {
-          console.warn(
-            '[IPC] set-natively-api-key: LicenseManager unavailable for Pro deactivation on key clear:',
-            e?.message,
-          );
-        }
-      }
-
       return { success: true };
     } catch (error: any) {
       console.error('Error saving Natively API key:', error);
@@ -6604,29 +6412,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     } finally {
       // Always bust the cache when the key changes so the next usage fetch is fresh
       _usageCache?.clear();
-    }
-  });
-
-  safeHandle('get-natively-pricing', async () => {
-    try {
-      const cached = _pricingCache.get('pricing');
-      if (cached && Date.now() - cached.ts < PRICING_CACHE_TTL_MS) {
-        return cached.data;
-      }
-
-      const res = await fetch('https://api.natively.software/v1/pricing', {
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as any;
-        return { ok: false, error: body.error || 'request_failed', status: res.status };
-      }
-      const data = (await res.json()) as any;
-      const result = { ok: true, ...data };
-      _pricingCache.set('pricing', { data: result, ts: Date.now() });
-      return result;
-    } catch (error: any) {
-      return { ok: false, error: error.message || 'network_error' };
     }
   });
 
@@ -9917,12 +9702,12 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:upload-resume', async (_, filePath: string) => {
     try {
-      // Premium gate: require active license or free trial for profile features
-      if (!isProOrTrialActive()) {
+      // Feature availability check: require active license or free trial for profile features
+      if (!isProfileFeatureAvailable()) {
         return {
           success: false,
           error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
+            'Profile Intelligence is unavailable.',
         };
       }
       const resolvedPath = consumeSelectedProfilePath(filePath);
@@ -9998,7 +9783,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // upload slot and invites a duplicate upload. NOT covered by
       // aot_pipeline_running: that is JD-side and, per the comment above,
       // deliberately excluded from the resume readiness signal.
-      const { DocType: StatusDocType } = require('../premium/electron/knowledge/types');
+      const { DocType: StatusDocType } = require('./knowledge/types');
       return {
         hasProfile: status.hasResume,
         profileMode: status.activeMode,
@@ -10026,12 +9811,12 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:set-mode', async (_, enabled: boolean) => {
     try {
-      // Premium gate: only allow enabling profile mode with active license or free trial
-      if (enabled && !isProOrTrialActive()) {
+      // Feature availability check: only allow enabling profile mode with active license or free trial
+      if (enabled && !isProfileFeatureAvailable()) {
         return {
           success: false,
           error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
+            'Profile Intelligence is unavailable.',
         };
       }
       const orchestrator = appState.getKnowledgeOrchestrator();
@@ -10129,12 +9914,12 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:upload-jd', async (_, filePath: string) => {
     try {
-      // Premium gate
-      if (!isProOrTrialActive()) {
+      // Feature availability check
+      if (!isProfileFeatureAvailable()) {
         return {
           success: false,
           error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
+            'Profile Intelligence is unavailable.',
         };
       }
       const resolvedPath = consumeSelectedProfilePath(filePath);
@@ -10194,7 +9979,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // never wipes the corpus. Consumes a path registered by profile:select-file
   // (same nonce trust boundary as the resume/JD uploads). This does NOT scrape
   // any site; content acquisition is a manual step the user performs. Supports
-  // the same PDF/DOCX/TXT/MD formats via SafeDocumentTextExtractor. NOT premium-
+  // the same PDF/DOCX/TXT/MD formats via SafeDocumentTextExtractor. NOT feature-
   // gated in the same way as profile:* — lessons are persistent/global — but we
   // still require the knowledge engine to be initialized.
   safeHandle('knowledge:ingest-lesson', async (_, filePath: string) => {
@@ -10222,13 +10007,13 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // OKF Profile Intelligence — Phase 3 (2026-07-02): export the candidate
   // profile OKF Knowledge Pack as a real OKF v0.1 Markdown bundle. EXPLICIT user
-  // action ONLY (never automatic), premium-gated like every other profile:*
+  // action ONLY (never automatic), feature-gated like every other profile:*
   // handler, and behind okfProfileMarkdownExport. The bundle is written to a
   // user-visible, timestamped folder under Downloads. OkfConformance runs BEFORE
   // any file is written — a non-conformant bundle is refused, never shipped.
   safeHandle('knowledge:export-profile-pack', async () => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
       const { isOkfProfileMarkdownExportEnabled } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
       if (!isOkfProfileMarkdownExportEnabled()) return { success: false, error: 'export_flag_off' };
 
@@ -10270,13 +10055,13 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // OKF Profile Intelligence — Phase 5 (2026-07-02): read-only Knowledge Pack
-  // inspector data for the (flag-gated) UI. Premium + okfProfileKnowledgeUi
+  // inspector data for the (flag-gated) UI. Feature availability + okfProfileKnowledgeUi
   // gated. Returns pack summaries / a single pack's cards with evidence. No
   // mutation — regenerate goes through the normal ingest path; export has its
   // own handler above.
   safeHandle('knowledge:list-profile-packs', async () => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required', packs: [] };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable', packs: [] };
       const { isOkfProfileKnowledgeUiEnabled } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
       if (!isOkfProfileKnowledgeUiEnabled()) return { success: false, error: 'ui_flag_off', packs: [] };
       const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
@@ -10293,7 +10078,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('knowledge:get-profile-pack', async (_, kind: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
       const { isOkfProfileKnowledgeUiEnabled } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
       if (!isOkfProfileKnowledgeUiEnabled()) return { success: false, error: 'ui_flag_off' };
       const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
@@ -10319,49 +10104,30 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('profile:research-company', async (_, companyName: string) => {
     try {
       console.log(`[CompanyIntel-research] invoked for companyName="${companyName}"`);
-      // Premium gate
-      if (!isProOrTrialActive()) {
+      // Feature availability check
+      if (!isProfileFeatureAvailable()) {
         return {
           success: false,
           error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
+            'Profile Intelligence is unavailable.',
         };
       }
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
-      const engine = orchestrator.getCompanyResearchEngine();
+      const engine = orchestrator.getCompanyResearchEngine?.();
+      if (!engine || typeof engine.researchCompany !== 'function') {
+        return {
+          success: false,
+          error: 'Company research is not available in this build.',
+        };
+      }
 
-      // Wire search provider: Tavily (user key) → Natively API (fallback) → none (LLM-only)
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-      const tavilyApiKey = cm.getTavilyApiKey();
-      if (tavilyApiKey) {
-        const {
-          TavilySearchProvider,
-        } = require('../premium/electron/knowledge/TavilySearchProvider');
-        engine.setSearchProvider(new TavilySearchProvider(tavilyApiKey));
-      } else {
-        const nativelyKey = cm.getNativelyApiKey();
-        if (nativelyKey) {
-          const {
-            NativelySearchProvider,
-          } = require('../premium/electron/knowledge/NativelySearchProvider');
-          // Trial sentinel must not install trial-token search auth (ADR 0002).
-          if (nativelyKey === TRIAL_SENTINEL_KEY) {
-            console.warn(
-              '[IPC] Company research: ignoring trial sentinel key (trial auth disabled)',
-            );
-          } else {
-            engine.setSearchProvider(
-              new NativelySearchProvider(nativelyKey),
-            );
-            console.log(
-              '[IPC] Company research: using Natively API search (no Tavily key configured)',
-            );
-          }
-        }
+      // Shared resolver (OSS: always null — private search providers removed).
+      const { resolveCompanySearchProvider } = require('./services/resolveCompanySearchProvider');
+      if (typeof engine.setSearchProvider === 'function') {
+        engine.setSearchProvider(resolveCompanySearchProvider());
       }
 
       // Build full JD context so the dossier is tailored to the exact role
@@ -10391,12 +10157,12 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:generate-negotiation', async (_, force: boolean = false) => {
     try {
-      // Premium gate
-      if (!isProOrTrialActive()) {
+      // Feature availability check
+      if (!isProfileFeatureAvailable()) {
         return {
           success: false,
           error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
+            'Profile Intelligence is unavailable.',
         };
       }
       const orchestrator = appState.getKnowledgeOrchestrator();
@@ -10429,12 +10195,12 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:generate-cover-letter', async (_, force: boolean = false) => {
     try {
-      // Premium gate
-      if (!isProOrTrialActive()) {
+      // Feature availability check
+      if (!isProfileFeatureAvailable()) {
         return {
           success: false,
           error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
+            'Profile Intelligence is unavailable.',
         };
       }
       const orchestrator = appState.getKnowledgeOrchestrator();
@@ -10548,7 +10314,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // "Out of date" banner on the user. The service is single-flight and
       // attempts each source state at most once, so a failing analysis cannot
       // loop. License-gated like manual analyse — this spends tokens.
-      if (report?.outdated && isProOrTrialActive() && service.maybeAutoRefresh()) {
+      if (report?.outdated && isProfileFeatureAvailable() && service.maybeAutoRefresh()) {
         const sender = event.sender;
         const started = Date.now();
         const pump = setInterval(() => {
@@ -10589,10 +10355,10 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('roleInsight:analyse', async (event, options: { jobUrl?: string; skipExternalVerification?: boolean } = {}) => {
     try {
-      if (!isProOrTrialActive()) {
+      if (!isProfileFeatureAvailable()) {
         return {
           success: false,
-          error: 'Pro license required. Please activate a license key to use Role Insight.',
+          error: 'Role Insight is unavailable.',
         };
       }
       const service = getRoleInsightService();
@@ -10660,7 +10426,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('roleInsight:apply-correction', async (_, args: any) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'Feature unavailable.' };
       const service = getRoleInsightService();
       if (!service) return { success: false, error: 'Role Insight is not available.' };
       if (!args?.analysisId || !args?.kind) return { success: false, error: 'Invalid correction request.' };
@@ -10684,7 +10450,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('roleInsight:answer-clarification', async (_, args: any) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'Feature unavailable.' };
       const service = getRoleInsightService();
       if (!service) return { success: false, error: 'Role Insight is not available.' };
       if (!args?.analysisId || !args?.requirementId || !args?.answer) {
@@ -10709,7 +10475,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Intelligence evidence, so the UI can gate it behind an explicit second step.
   safeHandle('roleInsight:save-to-profile', async (_, args: any) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'Feature unavailable.' };
       const service = getRoleInsightService();
       if (!service) return { success: false, error: 'Role Insight is not available.' };
       if (!args?.analysisId || !args?.requirementId || !args?.claim) {
@@ -10734,7 +10500,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('roleInsight:paste-jd', async (_, text: string) => {
     let tempPath: string | null = null;
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'Feature unavailable.' };
       if (typeof text !== 'string' || text.trim().length < 200) {
         return { success: false, error: 'Paste the full job description — this looks too short to analyse.' };
       }
@@ -10750,7 +10516,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const resolved = consumeSelectedProfilePath(tempPath);
       if (!resolved) return { success: false, error: 'Could not stage the pasted job description.' };
 
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = require('./knowledge/types');
       const result = await orchestrator.ingestDocument(resolved, DocType.JD);
       if (result?.success) {
         try {
@@ -10772,62 +10538,21 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  // Import a job description from a URL via Tavily extraction, then ingest it
-  // through the normal path. Fails with a clear message rather than silently
-  // falling back, so the user knows the URL was not read.
+  // JD URL extraction previously used private JdSourceResolver + Tavily.
+  // Without the private submodule, direct users to paste the description.
   safeHandle('roleInsight:import-jd-url', async (_, url: string) => {
-    let tempPath: string | null = null;
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'Feature unavailable.' };
       if (typeof url !== 'string' || !/^https?:\/\//i.test(url.trim())) {
         return { success: false, error: 'Enter a valid job posting URL starting with http:// or https://' };
       }
-      const orchestrator = appState.getKnowledgeOrchestrator();
-      if (!orchestrator) return { success: false, error: 'Knowledge engine not initialized.' };
-
-      const { resolveCompanySearchProvider } = require('./services/resolveCompanySearchProvider');
-      const provider = resolveCompanySearchProvider();
-      if (!provider || typeof provider.extractUrl !== 'function') {
-        return {
-          success: false,
-          error: 'Reading a job URL needs a Tavily API key. Add one under Tavily Search, or paste the job description instead.',
-        };
-      }
-
-      const { resolveFromUrl } = require('../premium/electron/knowledge/roleInsight/JdSourceResolver');
-      const resolvedJd = await resolveFromUrl(url.trim(), provider, '');
-      if (!resolvedJd) {
-        return {
-          success: false,
-          error: 'That page could not be read. Paste the job description text instead.',
-        };
-      }
-
-      const os = require('os');
-      const fsp = require('fs/promises');
-      tempPath = path.join(os.tmpdir(), `natively-jd-${Date.now()}.txt`);
-      await fsp.writeFile(tempPath, resolvedJd.text, 'utf8');
-      registerSelectedProfilePath(tempPath);
-      const staged = consumeSelectedProfilePath(tempPath);
-      if (!staged) return { success: false, error: 'Could not stage the imported job description.' };
-
-      const { DocType } = require('../premium/electron/knowledge/types');
-      const result = await orchestrator.ingestDocument(staged, DocType.JD);
-      if (result?.success) {
-        try {
-          orchestrator.setKnowledgeMode(true);
-          const { SettingsManager } = require('./services/SettingsManager');
-          SettingsManager.getInstance().set('knowledgeMode', true);
-        } catch { /* non-fatal */ }
-      }
-      return { ...result, sourceUrl: url.trim() };
+      return {
+        success: false,
+        error: 'Reading a job URL is not available in this build. Paste the job description text instead.',
+      };
     } catch (error: any) {
       console.error('[IPC] roleInsight:import-jd-url error:', error);
       return { success: false, error: error.message };
-    } finally {
-      if (tempPath) {
-        try { require('fs').unlinkSync(tempPath); } catch { /* best effort */ }
-      }
     }
   });
 
@@ -10962,7 +10687,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:create', async (_, params: { name: string; templateType: string }) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
       const { ModesManager } = require('./services/ModesManager');
       const mode = ModesManager.getInstance().createMode({
         name: params.name,
@@ -10994,7 +10719,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       },
     ) => {
       try {
-        if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+        if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
         if (!params?.brief || typeof params.brief !== 'string' || params.brief.trim().length < 8) {
           return { success: false, error: 'brief_too_short' };
         }
@@ -11055,13 +10780,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         const mgr = ModesManager.getInstance();
         // Gate: changing templateType to a non-general template requires pro.
         // Also gate if the existing mode is already non-general (editing a pro mode requires pro).
-        if (!isProOrTrialActive()) {
+        if (!isProfileFeatureAvailable()) {
           if (updates.templateType && updates.templateType !== 'general') {
-            return { success: false, error: 'pro_required' };
+            return { success: false, error: 'feature_unavailable' };
           }
           const existing = mgr.getModes().find((m: any) => m.id === id);
           if (existing && existing.templateType !== 'general') {
-            return { success: false, error: 'pro_required' };
+            return { success: false, error: 'feature_unavailable' };
           }
         }
         mgr.updateMode(id, updates);
@@ -11110,8 +10835,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // for any non-general mode and gates on pro via the surrounding UI,
       // but the IPC must enforce the same gate so a hand-crafted payload
       // can't bypass. Mirror modes:set-active: general modes are free, all
-      // others require pro/trial.
-      if (input.templateType !== 'general' && !isProOrTrialActive()) {
+      // others require feature access.
+      if (input.templateType !== 'general' && !isProfileFeatureAvailable()) {
         return null;
       }
       const { ModesManager } = require('./services/ModesManager');
@@ -11240,7 +10965,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:delete', async (_, id: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
       const { ModesManager } = require('./services/ModesManager');
       ModesManager.getInstance().deleteMode(id);
       return { success: true };
@@ -11258,8 +10983,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         const targetMode = ModesManager.getInstance()
           .getModes()
           .find((m: any) => m.id === id);
-        if (targetMode && targetMode.templateType !== 'general' && !isProOrTrialActive()) {
-          return { success: false, error: 'pro_required' };
+        if (targetMode && targetMode.templateType !== 'general' && !isProfileFeatureAvailable()) {
+          return { success: false, error: 'feature_unavailable' };
         }
       }
       const { ModesManager } = require('./services/ModesManager');
@@ -11418,7 +11143,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     // profile:upload-resume already uses correctly.
     let selectedPath: string | undefined;
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [
@@ -11451,7 +11176,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:delete-reference-file', async (_, id: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
       const { ModesManager } = require('./services/ModesManager');
       ModesManager.getInstance().deleteReferenceFile(id);
       return { success: true };
@@ -11522,7 +11247,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('knowledge:regenerate-pack', async (_, params: { fileId: string; modeId: string; fileName: string }) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
       const { isOkfKnowledgeUiEnabled } = require('./intelligence/intelligenceFlags');
       if (!isOkfKnowledgeUiEnabled()) return { success: false, error: 'okf_knowledge_ui_disabled' };
       const { ModesManager } = require('./services/ModesManager');
@@ -11548,7 +11273,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('knowledge:export-pack', async (_, fileId: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
       const { isOkfMarkdownExportEnabled } = require('./intelligence/intelligenceFlags');
       if (!isOkfMarkdownExportEnabled()) return { success: false, error: 'okf_markdown_export_disabled' };
       const { KnowledgeManager } = require('./services/knowledge/KnowledgeManager');
@@ -11580,13 +11305,13 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // ── OKF Knowledge Card edit/approval (Phase 6) ──────────────────
-  // All handlers require both Pro AND okfUserEditableCards — the flag is
-  // the feature gate, isProOrTrialActive is the existing paywall each
-  // reference-file-touching handler already applies.
+  // All handlers require both the profile feature AND okfUserEditableCards —
+  // the flag gates the capability, and isProfileFeatureAvailable is the shared
+  // check each reference-file-touching handler already applies.
 
   safeHandle('knowledge:edit-card', async (_, params: { cardId: string; title?: string; body?: string; entities?: string[]; tags?: string[] }) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
       const { isOkfUserEditableCardsEnabled } = require('./intelligence/intelligenceFlags');
       if (!isOkfUserEditableCardsEnabled()) return { success: false, error: 'okf_user_editable_cards_disabled' };
       const { editCard } = require('./services/knowledge/OkfCardEditor');
@@ -11600,7 +11325,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('knowledge:approve-card', async (_, cardId: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
       const { isOkfUserEditableCardsEnabled } = require('./intelligence/intelligenceFlags');
       if (!isOkfUserEditableCardsEnabled()) return { success: false, error: 'okf_user_editable_cards_disabled' };
       const { approveCard } = require('./services/knowledge/OkfCardEditor');
@@ -11614,7 +11339,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('knowledge:reject-card', async (_, cardId: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
       const { isOkfUserEditableCardsEnabled } = require('./intelligence/intelligenceFlags');
       if (!isOkfUserEditableCardsEnabled()) return { success: false, error: 'okf_user_editable_cards_disabled' };
       const { rejectCard } = require('./services/knowledge/OkfCardEditor');
@@ -11628,7 +11353,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('knowledge:restore-card-version', async (_, params: { cardId: string; versionId: string }) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
       const { isOkfUserEditableCardsEnabled } = require('./intelligence/intelligenceFlags');
       if (!isOkfUserEditableCardsEnabled()) return { success: false, error: 'okf_user_editable_cards_disabled' };
       const { restoreCardVersion } = require('./services/knowledge/OkfCardEditor');
@@ -11668,7 +11393,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     'modes:add-note-section',
     async (_, modeId: string, title: string, description: string) => {
       try {
-        if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+        if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
         const { ModesManager } = require('./services/ModesManager');
         const section = ModesManager.getInstance().addNoteSection({ modeId, title, description });
         return { success: true, section };
@@ -11683,7 +11408,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     'modes:update-note-section',
     async (_, id: string, updates: { title?: string; description?: string }) => {
       try {
-        if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+        if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
         const { ModesManager } = require('./services/ModesManager');
         ModesManager.getInstance().updateNoteSection(id, updates);
         return { success: true };
@@ -11696,7 +11421,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:delete-note-section', async (_, id: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
       const { ModesManager } = require('./services/ModesManager');
       ModesManager.getInstance().deleteNoteSection(id);
       return { success: true };
@@ -11708,7 +11433,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:remove-all-note-sections', async (_, modeId: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProfileFeatureAvailable()) return { success: false, error: 'feature_unavailable' };
       const { ModesManager } = require('./services/ModesManager');
       ModesManager.getInstance().removeAllNoteSections(modeId);
       return { success: true };
@@ -13009,7 +12734,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     // License bypass already returns true; do not plant trial tokens (ADR 0002).
     safeHandle('__e2e__:enable-pro', async () => {
       try {
-        return { success: true, pro: isProOrTrialActive() };
+        return { success: true, pro: isProfileFeatureAvailable() };
       } catch (e: any) {
         return { success: false, error: e.message };
       }

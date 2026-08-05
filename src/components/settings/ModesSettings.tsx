@@ -14,9 +14,6 @@ interface ModeRow {
 
 interface ModesSettingsProps {
   onClose?: () => void;
-  isPremium?: boolean;
-  isLoaded?: boolean;
-  onOpenNativelyAPI?: () => void;
 }
 
 const TEMPLATE_TYPES: Array<{ value: string; label: string }> = [

@@ -50,7 +50,6 @@ test('INVARIANT: every gate-only stage is onceEver — stageCatalog.ts (producti
 // ─── Fixtures ──────────────────────────────────────────────────────
 
 const DEFAULT_USER_STATE = {
-  isPremium: false,
   hasProfile: false,
   hasNativelyKey: false,
   hasTrialToken: false,
@@ -158,15 +157,6 @@ test('profile_intelligence: skipped when hasProfile', () => {
   assert.equal(show('profile_intelligence', ctx), false);
 });
 
-test('profile_intelligence: skipped when isPremium', () => {
-  const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, isPremium: true },
-    completed: { permissions: 1, browser_extension: 2 },
-    homepageMountedFor: 5_000,
-  });
-  assert.equal(show('profile_intelligence', ctx), false);
-});
-
 test('profile_intelligence: blocked by missing browser_extension prerequisite', () => {
   const ctx = makeCtx({
     completed: { permissions: 1 },
@@ -220,7 +210,7 @@ test('trial_promo: permanently skipped regardless of key/token/premium state', (
   };
   assert.equal(show('trial_promo', makeCtx({
     ...base,
-    userState: { ...DEFAULT_USER_STATE, hasNativelyKey: false, hasTrialToken: false, isPremium: false },
+    userState: { ...DEFAULT_USER_STATE, hasNativelyKey: false, hasTrialToken: false },
   })), false);
   assert.equal(show('trial_promo', makeCtx({
     ...base,

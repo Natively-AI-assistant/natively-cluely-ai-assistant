@@ -215,7 +215,6 @@ export interface ElectronAPI {
     can_use_publicly: boolean;
     display_name_publicly: boolean;
   }) => Promise<{ ok: boolean; error?: string; status?: number }>
-  getNativelyPricing: () => Promise<{ ok: boolean; currency?: string; fetchedAt?: string; stale?: boolean; products?: Record<string, { id: string; dodoProductId: string; name: string; amount: number | null; currency: string; formattedPrice: string | null; interval: 'month' | 'year' | 'lifetime'; checkoutUrl: string; coupon: { code: string; eligible: boolean; discountPercent: number; reason?: string } }>; error?: string; status?: number }>
   getNativelyUsage: (force?: boolean) => Promise<{ ok: boolean; error?: string; plan?: string; quota?: { transcription: { used: number; limit: number; remaining: number }; ai: { used: number; limit: number; remaining: number }; search: { used: number; limit: number; remaining: number }; resets_at: string }; member_since?: string }>
   getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; disabledProviders?: string[]; cloudEnabledModels?: Record<string, string[]>; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
   // Permissions
@@ -622,16 +621,6 @@ export interface ElectronAPI {
   // Dynamic Model Discovery
   fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey: string) => Promise<{ success: boolean; models?: {id: string, label: string}[]; error?: string }>
   setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', modelId: string) => Promise<void>
-
-  // License Management
-  licenseActivate: (key: string) => Promise<{ success: boolean; error?: string }>
-  licenseCheckPremium: () => Promise<boolean>
-  licenseGetDetails: () => Promise<{ isPremium: boolean; plan?: string; provider?: string }>
-  /** Async startup check — calls Dodo validate endpoint to detect server-side revocations. */
-  licenseCheckPremiumAsync: () => Promise<boolean>
-  onLicenseStatusChanged: (callback: (data: { isPremium: boolean, plan?: string }) => void) => () => void
-  licenseDeactivate: () => Promise<void>
-  licenseGetHardwareId: () => Promise<string>
 
   // Overlay Opacity (Stealth Mode)
   setOverlayOpacity: (opacity: number) => Promise<void>;
