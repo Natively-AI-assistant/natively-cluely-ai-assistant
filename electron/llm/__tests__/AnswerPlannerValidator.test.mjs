@@ -93,6 +93,83 @@ test('sd-routing sticky session promotes clarifiers to system_design_answer', ()
   assert.notEqual(unarmed.answerType, 'system_design_answer');
 });
 
+test('sd-route-sticky-exclusions: nego/identity/meeting-admin do not sticky-promote', () => {
+  const nego = planAnswer({
+    question: 'what is your salary expectation?',
+    source: 'what_to_answer',
+    speakerPerspective: 'interviewer',
+    sdSessionOpen: true,
+  });
+  assert.equal(nego.answerType, 'negotiation_answer');
+
+  const identity = planAnswer({
+    question: 'introduce yourself',
+    source: 'what_to_answer',
+    speakerPerspective: 'interviewer',
+    sdSessionOpen: true,
+  });
+  assert.equal(identity.answerType, 'identity_answer');
+
+  const meeting = planAnswer({
+    question: 'hmm interesting',
+    source: 'what_to_answer',
+    speakerPerspective: 'interviewer',
+    sdSessionOpen: true,
+  });
+  assert.notEqual(meeting.answerType, 'system_design_answer');
+  assert.equal(meeting.answerType, 'general_meeting_answer');
+});
+
+test('sd-route-llm-parallel: lets design career is not SD', () => {
+  assert.notEqual(
+    planFor("let's design your career path").answerType,
+    'system_design_answer',
+  );
+});
+
+test('sd-route-llm-parallel: Tier A.2 openers promote via SD intention', () => {
+  assert.equal(
+    planFor('sketch the architecture on the whiteboard').answerType,
+    'system_design_answer',
+  );
+  assert.equal(
+    planFor('walk me through the high level design').answerType,
+    'system_design_answer',
+  );
+  assert.equal(
+    planFor("let's design a notification system").answerType,
+    'system_design_answer',
+  );
+});
+
+test('sd-route-llm-parallel: injected intention promotes miss; below threshold does not; never demotes regex SD', () => {
+  const promoted = planAnswer({
+    question: 'what about consistency vs availability?',
+    source: 'what_to_answer',
+    speakerPerspective: 'interviewer',
+    sdSessionOpen: false,
+    sdIntention: { sdIntention: true, confidence: 0.9 },
+  });
+  assert.equal(promoted.answerType, 'system_design_answer');
+
+  const below = planAnswer({
+    question: 'what about consistency vs availability?',
+    source: 'what_to_answer',
+    speakerPerspective: 'interviewer',
+    sdSessionOpen: false,
+    sdIntention: { sdIntention: true, confidence: 0.5 },
+  });
+  assert.notEqual(below.answerType, 'system_design_answer');
+
+  const regexHit = planAnswer({
+    question: 'Design a scalable notification system',
+    source: 'what_to_answer',
+    speakerPerspective: 'interviewer',
+    sdIntention: { sdIntention: false, confidence: 0.99 },
+  });
+  assert.equal(regexHit.answerType, 'system_design_answer');
+});
+
 test('system_design STRICT RESPONSE TEMPLATE uses Delivery Framework one-slice (not old multi-section dump)', () => {
   const plan = planFor('Design a service similar to ticketmaster', 'manual');
   assert.equal(plan.answerType, 'system_design_answer');
