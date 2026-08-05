@@ -5,6 +5,10 @@
   "description": "Natively is a meeting notes app that uses AI to generate notes from your meetings.",
   "scripts": {
     "clean": "rimraf dist dist-electron",
+    "workspace:prune": "node scripts/workspace-prune.js",
+    "workspace:prune:dry": "node scripts/workspace-prune.js --dry-run",
+    "workspace:prune:features": "node scripts/workspace-prune.js --features",
+    "test:workspace-prune": "node --test scripts/__tests__/workspace-prune.test.mjs",
     "dev": "vite",
     "build": "npm run clean && tsc && vite build",
     "build:electron": "node scripts/build-electron.js",

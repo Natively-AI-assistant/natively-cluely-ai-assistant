@@ -483,3 +483,8 @@ benchmark-results/
 
 # Unbuilt feature PRDs — planning documents, never shipped to the public repo
 /upcoming/
+
+# Matt / agent session artifacts (see scripts/workspace-prune.js)
+_workspace/
+.scratch/**/debug/
+.scratch/**/smoke/

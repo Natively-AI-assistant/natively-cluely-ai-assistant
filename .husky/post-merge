@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# After merge/pull: drop ephemeral agent junk (debug/archive/code-review).
+# Never touches grill ledger or .scratch feature tickets (use npm run workspace:prune:features).
+node scripts/workspace-prune.js --quiet || true
