@@ -16,6 +16,7 @@ import os from "os"
 import dns from "dns"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { autoUpdater } from "electron-updater"
+import { ensureNativeModuleAbi } from "./utils/nativeModuleGuard"
 
 // Override global dns.lookup to resolve macOS system resolver issues with api.natively.software
 const originalLookup = dns.lookup;
@@ -116,6 +117,20 @@ try {
   // enabled and the (rare) font crash remains possible — the render-process-gone
   // auto-reload handler recovers it.
 }
+
+// ============================================================================
+// SINGLE-INSTANCE LOCK (must be top-level, before native ABI recovery).
+// A second Electron launch must exit BEFORE ensureNativeModuleAbi() can rebuild
+// or relaunch — otherwise two processes fight over native rebuilds and leave
+// duplicate dock/tray ghosts. Variable name locked by NativeAbiGuardStartupOrder.
+// ============================================================================
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  console.log('[Main] Another instance is already running. Exiting this instance.');
+  // Synchronous hard exit — app.quit()/exit before whenReady can be deferred.
+  process.exit(0);
+}
+ensureNativeModuleAbi();
 
 /**
  * Whether THIS build carries a real Developer ID signature.
@@ -6862,22 +6877,7 @@ export class AppState {
 
 async function initializeApp() {
   logStartupPhase('initializeApp:start');
-  // 1. Enforce single instance — prevent duplicate dock icons from leftover processes.
-  // In development mode with hot-reload this is still safe because electron is restarted
-  // by the build step, not re-launched by concurrently while the old process is alive.
-  const gotLock = app.requestSingleInstanceLock();
-  logStartupPhase('single-instance-lock', { gotLock });
-  if (!gotLock) {
-    console.log('[Main] Another instance is already running. Exiting this instance.');
-    // Use app.exit(0) — app.quit() before whenReady can be deferred or no-op'd
-    // (it tries to close all windows first, but none exist yet), leaving the
-    // duplicate process alive long enough to register a second tray icon on
-    // macOS Tahoe + Spotlight launches. exit() terminates immediately and
-    // cannot be intercepted by before-quit handlers.
-    app.exit(0);
-    return;
-  }
-
+  // Single-instance lock was acquired at module load (before ensureNativeModuleAbi).
   // When a duplicate launch is attempted (e.g. user invokes Spotlight again
   // while Natively is running), focus and recenter the existing window so the
   // launch is visibly handled instead of silently absorbed.
