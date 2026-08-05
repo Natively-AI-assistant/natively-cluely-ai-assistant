@@ -71,6 +71,7 @@
     "eval:meeting-notes": "npm run build:electron && cross-env NODE_NO_WARNINGS=1 node benchmarks/meeting-notes/run_meeting_notes_eval.mjs",
     "eval:speakable-sd": "node scripts/run-evals-speakable-sd.mjs",
     "eval:speakable-sd:live": "cross-env SPEAKABLE_SD_EVAL_LIVE=1 node scripts/run-evals-speakable-sd.mjs",
+    "eval:sd-routing": "node scripts/run-evals-sd-routing.mjs",
     "test:electron": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron --test \"electron/services/__tests__/**/*.test.mjs\"",
     "benchmark:answer-quality": "cross-env NODE_NO_WARNINGS=1 BENCHMARK_MODEL=gemini-3.1-flash-lite node benchmarks/profile-intelligence/run_best_in_class_eval.ts",
     "benchmark:live-replay:50": "cross-env NODE_NO_WARNINGS=1 NATIVELY_ENABLE_LIVE_SESSION_MEMORY=on node benchmarks/profile-intelligence/run_live_session_replay_eval.ts",

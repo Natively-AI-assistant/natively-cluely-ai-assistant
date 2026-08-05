@@ -1583,6 +1583,14 @@ export class IntelligenceEngine extends EventEmitter {
             const intentResult = await intentPromise;
             trace.mark('intent_classified', { intent: intentResult.intent, confidence: intentResult.confidence });
 
+            // ADR 0004: sticky SD session (open problemKey) promotes answerType
+            // before template/speakable strip — read prior artifact, not post-prepare.
+            const priorSdArtifact = this.session.getSdRequirementsArtifact?.() ?? null;
+            const sdSessionOpen = deriveSdSessionAuthority({
+                artifact: priorSdArtifact,
+                modeId: this.getActiveModeId(),
+            }).sessionOpen;
+
             const answerPlanRaw = planAnswer({
                 question: question || extractedQuestion.latestQuestion || lastInterviewerTurn,
                 source: question ? 'manual_input' : 'what_to_answer',
@@ -1595,6 +1603,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // snapshot below, so the answer contract and the prompt can no longer
                 // be built from two different modes within one request.
                 activeMode: snapshotModeInfo,
+                sdSessionOpen,
             });
 
             // SD Requirements grilling gate (live path): SessionTracker working
@@ -3136,11 +3145,17 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             const activeModeInfo = this.getActiveModeInfo();
+            const priorSdArtifact = this.session.getSdRequirementsArtifact?.() ?? null;
+            const sdSessionOpen = deriveSdSessionAuthority({
+                artifact: priorSdArtifact,
+                modeId: this.getActiveModeId(),
+            }).sessionOpen;
             const answerPlanRaw = planAnswer({
                 question,
                 source: 'manual_input',
                 speakerPerspective: 'user',
                 activeMode: activeModeInfo,
+                sdSessionOpen,
             });
             const sdPrepared = this.applySdRequirementsGate(answerPlanRaw, question);
             const answerPlan = sdPrepared.answerPlan;
