@@ -8,13 +8,14 @@ on:
   # since it was added completed with zero jobs, so no PR has actually been
   # smoke-tested. Verified: three most recent runs each report total_count 0.
   #
-  # Moving it makes the workflow PARSE; it does not yet make it PASS. Both jobs
-  # need the private `premium` submodule (electron/tsconfig.json includes
+  # Moving it made the workflow PARSE. Making it PASS additionally required the
+  # private `premium` submodule (electron/tsconfig.json includes
   # '../premium/electron/**/*.ts', and esbuild bundles require('../premium/…')
-  # calls), which actions/checkout cannot fetch with the default token. Until a
-  # PAT with read access to natively-premium is added as SUBMODULE_TOKEN and the
-  # checkout steps get `submodules: true` + `token:`, expect the jobs to fail at
-  # a named step — which is visible and actionable, unlike a run with zero jobs.
+  # calls) — see the checkout steps below, which fetch it explicitly.
+  #
+  # Note the earlier plan recorded here (`submodules: true` + `token:`) does NOT
+  # work in this repo: the tree has an undescribed `natively-api` gitlink that
+  # makes the recursive submodule init abort before `premium` is ever cloned.
   schedule:
     - cron: '0 9 * * 1' # Every Monday at 09:00 UTC
 
@@ -41,6 +42,64 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # NOT `submodules: true`. The tree carries TWO gitlinks — `premium` and
+          # `natively-api` — but .gitmodules only describes `premium`.
+          # `submodules: true` runs `git submodule update --init --recursive`,
+          # which aborts on the undescribed one:
+          #
+          #   fatal: No url found for submodule path 'natively-api' in .gitmodules
+          #
+          # and it aborts BEFORE cloning `premium`, so the checkout would fail
+          # while still leaving the directory empty. The explicit step below is
+          # path-limited to `premium` and therefore unaffected by the orphan.
+          #
+          # persist-credentials keeps the checkout token in .git/config so the
+          # submodule clone can reuse the header rewrite configured below.
+          persist-credentials: true
+
+      # `premium` is a PRIVATE submodule (Natively-AI-assistant/natively-premium)
+      # that both build steps genuinely need: electron/tsconfig.json includes
+      # ../premium/electron/**/*.ts, and esbuild bundles require('../premium/…')
+      # calls. Without it every run dies at the first typecheck with
+      #   TS2307: Cannot find module '../../premium/electron/knowledge/CompanyResearchEngine'
+      # which is what every run of this workflow has done since it was added.
+      #
+      # GITHUB_TOKEN cannot read another private repo, so a token with access is
+      # required. Absent one, this step is SKIPPED rather than failed: the job
+      # then dies at the typecheck exactly as it does today, which is no worse
+      # than the status quo and keeps the reason visible in the step list.
+      #
+      # Two steps, because a step's own `env:` is NOT in scope for its `if:`.
+      # This one publishes the availability as an output the next step can gate
+      # on, without ever putting the secret itself in a condition.
+      - name: Detect submodule token
+        id: submodule_token
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+        shell: bash
+        run: |
+          if [ -n "${SUBMODULE_TOKEN:-}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No SUBMODULE_TOKEN/GH_APP_TOKEN; the private premium submodule cannot be fetched and the typecheck step will fail on TS2307."
+          fi
+
+      - name: Checkout premium submodule
+        if: steps.submodule_token.outputs.available == 'true'
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Rewrite the https URL to inject the token. Configured on the local
+          # repo only, so it never leaks into the runner's global config.
+          git config --local url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf "https://github.com/"
+          # Path-limited on purpose — see the checkout comment above.
+          git submodule update --init --force -- premium
+          git config --local --unset-all url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf
+          test -f premium/electron/knowledge/CompanyResearchEngine.ts
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -137,6 +196,64 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # NOT `submodules: true`. The tree carries TWO gitlinks — `premium` and
+          # `natively-api` — but .gitmodules only describes `premium`.
+          # `submodules: true` runs `git submodule update --init --recursive`,
+          # which aborts on the undescribed one:
+          #
+          #   fatal: No url found for submodule path 'natively-api' in .gitmodules
+          #
+          # and it aborts BEFORE cloning `premium`, so the checkout would fail
+          # while still leaving the directory empty. The explicit step below is
+          # path-limited to `premium` and therefore unaffected by the orphan.
+          #
+          # persist-credentials keeps the checkout token in .git/config so the
+          # submodule clone can reuse the header rewrite configured below.
+          persist-credentials: true
+
+      # `premium` is a PRIVATE submodule (Natively-AI-assistant/natively-premium)
+      # that both build steps genuinely need: electron/tsconfig.json includes
+      # ../premium/electron/**/*.ts, and esbuild bundles require('../premium/…')
+      # calls. Without it every run dies at the first typecheck with
+      #   TS2307: Cannot find module '../../premium/electron/knowledge/CompanyResearchEngine'
+      # which is what every run of this workflow has done since it was added.
+      #
+      # GITHUB_TOKEN cannot read another private repo, so a token with access is
+      # required. Absent one, this step is SKIPPED rather than failed: the job
+      # then dies at the typecheck exactly as it does today, which is no worse
+      # than the status quo and keeps the reason visible in the step list.
+      #
+      # Two steps, because a step's own `env:` is NOT in scope for its `if:`.
+      # This one publishes the availability as an output the next step can gate
+      # on, without ever putting the secret itself in a condition.
+      - name: Detect submodule token
+        id: submodule_token
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+        shell: bash
+        run: |
+          if [ -n "${SUBMODULE_TOKEN:-}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No SUBMODULE_TOKEN/GH_APP_TOKEN; the private premium submodule cannot be fetched and the typecheck step will fail on TS2307."
+          fi
+
+      - name: Checkout premium submodule
+        if: steps.submodule_token.outputs.available == 'true'
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Rewrite the https URL to inject the token. Configured on the local
+          # repo only, so it never leaks into the runner's global config.
+          git config --local url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf "https://github.com/"
+          # Path-limited on purpose — see the checkout comment above.
+          git submodule update --init --force -- premium
+          git config --local --unset-all url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf
+          test -f premium/electron/knowledge/CompanyResearchEngine.ts
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
