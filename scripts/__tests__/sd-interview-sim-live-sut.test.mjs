@@ -136,4 +136,25 @@ describe('sd-interview-sim liveSut helpers', () => {
     assert.match(CASUAL_SD_TONE_INSTRUCTION, /Requirements Draft/i);
     assert.match(FULL_RAW_SD_TONE_INSTRUCTION, /Requirements Draft/i);
   });
+
+  test('speakable SD tone: one DF slice, ban DSA scaffolds / impl fences; ASCII HLD kept', () => {
+    const {
+      CASUAL_SD_TONE_INSTRUCTION,
+      FULL_RAW_SD_TONE_INSTRUCTION,
+      CANDIDATE_ASCII_HLD_INSTRUCTION,
+    } = require('../lib/sd-interview-sim/liveSut.js');
+    for (const instr of [CASUAL_SD_TONE_INSTRUCTION, FULL_RAW_SD_TONE_INSTRUCTION]) {
+      assert.match(instr, /one Delivery Framework slice per turn/i);
+      assert.match(instr, /##\s*Approach/i);
+      assert.match(instr, /##\s*Dry Run/i);
+      assert.match(instr, /##\s*Complexity/i);
+      assert.match(instr, /```python/i);
+      assert.match(instr, /Do not emit mermaid/i);
+      assert.ok(instr.includes(CANDIDATE_ASCII_HLD_INSTRUCTION));
+    }
+    assert.match(FULL_RAW_SD_TONE_INSTRUCTION, /full length/i);
+    assert.match(FULL_RAW_SD_TONE_INSTRUCTION, /caveman/i);
+    assert.match(FULL_RAW_SD_TONE_INSTRUCTION, /tradeoff/i);
+    assert.doesNotMatch(FULL_RAW_SD_TONE_INSTRUCTION, /collaborative, short/);
+  });
 });

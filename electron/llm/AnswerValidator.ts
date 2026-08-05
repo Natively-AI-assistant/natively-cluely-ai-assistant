@@ -1,4 +1,4 @@
-import type { AnswerType } from './AnswerPlanner';
+import { isCodingAnswerType, type AnswerType } from './AnswerPlanner';
 import { CODING_SECTIONS as CANONICAL_CODING_SECTIONS } from './codingContract';
 import type { ExplicitCodingContract } from './codingFollowup';
 
@@ -52,9 +52,33 @@ const hasComplexity = (answer: string): boolean =>
   /\bTime(?:\s+Complexity)?\s*:?\s*(?:`|\$|\\\()?\s*O\s*\(/i.test(answer)
   && /\bSpace(?:\s+Complexity)?\s*:?\s*(?:`|\$|\\\()?\s*O\s*\(/i.test(answer);
 
-const isCodingType = (answerType: AnswerType): boolean =>
-  answerType === 'coding_question_answer' || answerType === 'dsa_question_answer';
+/**
+ * Ambiguous plan types that a coding FOLLOW-UP may still carry after promotion
+ * onto the coding chat path (bug #6). Only these may remap to DSA validation.
+ * Explicit non-coding types — especially system_design_answer — must never.
+ */
+const CODING_PROMOTION_REMAP_TYPES: ReadonlySet<AnswerType> = new Set([
+  'follow_up_answer',
+  'unknown_answer',
+]);
 
+/**
+ * Resolve which answerType to pass to validateAnswerStructure.
+ * Coding/DSA keep their type. A forced coding path (manual chat follow-up
+ * promotion) may remap only ambiguous follow_up/unknown plans to DSA.
+ * system_design_answer and other explicit non-coding types NEVER remap —
+ * speakable-sd ticket 02 / ADR 0003.
+ */
+export const resolveStructureValidationType = (
+  answerType: AnswerType,
+  opts?: { forceCodingPath?: boolean },
+): AnswerType => {
+  if (isCodingAnswerType(answerType)) return answerType;
+  if (opts?.forceCodingPath && CODING_PROMOTION_REMAP_TYPES.has(answerType)) {
+    return 'dsa_question_answer';
+  }
+  return answerType;
+};
 const startsWithCodeLikeContent = (answer: string): boolean => {
   const trimmed = answer.trimStart();
   return /^```/.test(trimmed)
@@ -404,7 +428,7 @@ export const validateAnswerStructure = (
   // only sanity-check the user's REQUESTED shape and never rewrite into six sections.
   explicitContract: ExplicitCodingContract = null,
 ): AnswerValidationResult => {
-  if (!isCodingType(answerType)) {
+  if (!isCodingAnswerType(answerType)) {
     return {
       ok: true,
       missingSections: [],

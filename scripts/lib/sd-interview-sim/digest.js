@@ -111,6 +111,30 @@ function detectReviewTags(bundle) {
     tags.add('full_raw');
   }
 
+  // Speakable-SD acceptance (ticket 06): soft regression flags for overnight digests.
+  const DSA_HEADING_RE =
+    /^[ \t]*#{1,3}[ \t]*(?:\*\*)?[ \t]*(?:Approach|Technique(?:[ \t]*\/[ \t]*Data Structure(?:[ \t]*\/[ \t]*Algorithm Used)?)?|Data Structure|Algorithm Used|Code|Dry Run|Complexity|Interviewer Follow-up Points|Follow-up Points|Follow-ups)(?:\*\*)?[ \t]*(?::|[-–—])?[ \t]*$/im;
+  const IMPL_FENCE_RE =
+    /```(?:python|javascript|typescript|java|go|sql|cpp|c\+\+|c|rust|ruby|kotlin|swift|php|csharp|cs)\b/i;
+  const REPAIR_MARKER_RE =
+    /_\(repaired\)_|Missing (?:Code|Dry Run|Complexity) section|## (?:Code|Dry Run|Complexity)\s*\n\s*(?:\(missing\)|_missing_|\.\.\.|…)/i;
+
+  if (assistants.some((t) => DSA_HEADING_RE.test(t.text || ''))) {
+    tags.add('dsa_scaffold_bleed');
+  }
+  if (
+    turns.some(
+      (t) =>
+        String(t.role || '').toLowerCase() === 'interviewer' &&
+        IMPL_FENCE_RE.test(t.text || ''),
+    )
+  ) {
+    tags.add('interviewer_impl_fence');
+  }
+  if (assistants.some((t) => REPAIR_MARKER_RE.test(t.text || ''))) {
+    tags.add('dsa_repair_marker');
+  }
+
   return [...tags].sort();
 }
 

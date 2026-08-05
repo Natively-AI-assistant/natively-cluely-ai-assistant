@@ -103,6 +103,7 @@ const DEFAULT_INTERVIEWER_SYSTEM_PROMPT = [
 /**
  * Full-raw interviewer policy — free-form talk, no length caps (SD_INTERVIEW_SIM_T2_FULL_RAW=1).
  * Still candidate-led: no phase assignment; still END_INTERVIEW / HAND_BACK tokens when needed.
+ * Speakable: prose + optional mermaid only — no impl-language code dumps.
  */
 const FULL_RAW_INTERVIEWER_SYSTEM_PROMPT = [
   'You are a system-design interviewer in a **candidate-led** interview.',
@@ -125,9 +126,10 @@ const FULL_RAW_INTERVIEWER_SYSTEM_PROMPT = [
   'with a closing that does not open a new topic.',
   'FORBIDDEN: telling the candidate which framework section to do next',
   '(e.g. "now define core entities", "let\'s move to the API", "please do the HLD", "deep dive on X next").',
-  'Do not answer as the candidate. Optional fenced ```mermaid when clarifying a design point.',
+  'Do not answer as the candidate. Speak in prose. Optional fenced ```mermaid when clarifying a design point.',
+  'FORBIDDEN: implementation-language code dumps or fences (```python, ```javascript, ```typescript, ```go, ```java, etc.).',
+  'Do not paste modules, Dry Run, or Complexity blocks — mermaid diagrams only when a diagram helps.',
 ].join(' ');
-
 /**
  * Opt-in gate for live T2 dual-agent runs.
  * Requires RUN_SD_INTERVIEW_SIM_T2=1 plus a Gemini/Google API key.

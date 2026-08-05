@@ -42,6 +42,34 @@ describe('sd-interview-sim SPEC 08 full-loop defaults', () => {
     assert.doesNotMatch(FULL_RAW_SD_TONE_INSTRUCTION, /collaborative, short/);
   });
 
+  test('FULL_RAW + casual SUT tone ban DSA scaffolds / impl fences and push one DF slice', () => {
+    for (const instr of [CASUAL_SD_TONE_INSTRUCTION, FULL_RAW_SD_TONE_INSTRUCTION]) {
+      assert.match(instr, /one Delivery Framework slice per turn/i);
+      assert.match(instr, /##\s*Approach/i);
+      assert.match(instr, /##\s*Code/i);
+      assert.match(instr, /##\s*Dry Run/i);
+      assert.match(instr, /##\s*Complexity/i);
+      assert.match(instr, /implementation-language|impl(?:ementation)?[- ]language/i);
+      assert.match(instr, /```python/i);
+      assert.match(instr, /```(?:text|ascii)/i);
+    }
+    // FULL_RAW = no-caveman / full sentences / tradeoffs — not multi-phase essay dump
+    assert.match(FULL_RAW_SD_TONE_INSTRUCTION, /caveman/i);
+    assert.match(FULL_RAW_SD_TONE_INSTRUCTION, /tradeoff/i);
+    assert.match(FULL_RAW_SD_TONE_INSTRUCTION, /not an essay|not .{0,40}essay dump|every .{0,40}phase/i);
+    assert.doesNotMatch(FULL_RAW_SD_TONE_INSTRUCTION, /collaborative, short/);
+  });
+
+  test('FULL_RAW interviewer bans impl-language code; mermaid still allowed', () => {
+    assert.match(FULL_RAW_INTERVIEWER_SYSTEM_PROMPT, /```mermaid/i);
+    assert.match(
+      FULL_RAW_INTERVIEWER_SYSTEM_PROMPT,
+      /FORBIDDEN[\s\S]{0,200}(?:implementation-language|impl(?:ementation)?[- ]language|```python)/i,
+    );
+    assert.match(FULL_RAW_INTERVIEWER_SYSTEM_PROMPT, /```python/i);
+    assert.doesNotMatch(FULL_RAW_INTERVIEWER_SYSTEM_PROMPT, /collaborative, short/);
+  });
+
   test('candidate tone forbids mermaid and requires ASCII HLD diagram', () => {
     for (const instr of [CASUAL_SD_TONE_INSTRUCTION, FULL_RAW_SD_TONE_INSTRUCTION]) {
       assert.match(instr, /ASCII/i);

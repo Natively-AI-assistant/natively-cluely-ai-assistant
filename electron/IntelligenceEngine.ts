@@ -20,6 +20,7 @@ import {
     LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub,
     isProviderTransportError,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE,
+    applySpeakableSdIfNeeded, mayCompressToSpeakable,
     buildProfileJitPrompt, decideSessionWritePolicy,
     prepareSdRequirementsForAnswerPlan,
     deriveSdSessionAuthority,
@@ -2560,12 +2561,23 @@ export class IntelligenceEngine extends EventEmitter {
             if (!isCoding && finalWtaAnswer) {
                 try {
                     let cleaned = cleanAnswerArtifacts(finalWtaAnswer); // strips meta-preamble + schema stub + bullets
-                    SCAFFOLD_LABEL_RE.lastIndex = 0;
-                    if (SCAFFOLD_LABEL_RE.test(cleaned)) {
-                        const speakable = compressToSpeakable(cleaned);
-                        if (speakable.trim().length >= 40) cleaned = speakable;
+                    // Speakable SD (ticket 04): strip DSA bleed; never compressToSpeakable on SD.
+                    // Always accept the strip result when type is SD (even if empty) — do not
+                    // re-emit scaffolded dumps that shrunk below the generic polish floor.
+                    if (answerPlan.answerType === 'system_design_answer') {
+                        cleaned = applySpeakableSdIfNeeded(answerPlan.answerType, cleaned);
+                        if (cleaned !== finalWtaAnswer) finalWtaAnswer = cleaned;
+                    } else {
+                        SCAFFOLD_LABEL_RE.lastIndex = 0;
+                        if (
+                          SCAFFOLD_LABEL_RE.test(cleaned)
+                          && mayCompressToSpeakable(answerPlan.answerType)
+                        ) {
+                            const speakable = compressToSpeakable(cleaned);
+                            if (speakable.trim().length >= 40) cleaned = speakable;
+                        }
+                        if (cleaned.trim().length >= 10 && cleaned !== finalWtaAnswer) finalWtaAnswer = cleaned;
                     }
-                    if (cleaned.trim().length >= 10 && cleaned !== finalWtaAnswer) finalWtaAnswer = cleaned;
                 } catch { /* cleanup never blocks the answer */ }
             }
             try {

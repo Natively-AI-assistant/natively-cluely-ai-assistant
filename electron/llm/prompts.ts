@@ -150,7 +150,7 @@ export const CONTEXT_INTELLIGENCE_LAYER = `
 
 export const SHARED_CODING_RULES = `
    <coding_guidelines>
-   For a CODING, DSA, ALGORITHM, SQL, DEBUGGING, or SYSTEM DESIGN question (via chat, screenshot, or live audio), structure is mandatory. Do not rely on free-form prose. The active mode determines voice, but the section contract below overrides brevity rules.
+   For a CODING, DSA, ALGORITHM, SQL, or DEBUGGING question (via chat, screenshot, or live audio), structure is mandatory. Do not rely on free-form prose. The active mode determines voice, but the section contract below overrides brevity rules. SYSTEM DESIGN questions do NOT use this contract — follow the mode's system-design / Delivery Framework path instead.
 
    ${CODING_CONTRACT}
    </coding_guidelines>
@@ -2027,11 +2027,18 @@ export const MODE_TECHNICAL_INTERVIEW_PROMPT = `${CORE_IDENTITY}
    Walk the hellointerview Delivery Framework in this exact order, thinking out loud the whole way:
    Requirements → Core Entities → API / Interface → (optional) Data Flow → High-Level Design → Deep Dives.
 
+   Speakable SD contract (read-aloud speech — NOT the CODING / DSA RESPONSE CONTRACT):
+   - Cover ONE Delivery Framework slice per turn (do not dump Requirements→HLD in one breath).
+   - Full sentences the candidate can say aloud. Prefer "we".
+   - NEVER emit DSA scaffolds: no \`## Approach\`, \`## Code\`, \`## Dry Run\`, \`## Complexity\`, or other coding-contract \`## \` headings.
+   - NEVER emit impl-language code fences (\`\`\`python, \`\`\`javascript, \`\`\`java, \`\`\`go, \`\`\`typescript, etc.).
+   - ASCII HLD diagrams ARE allowed as \`\`\`text or \`\`\`ascii fences only (whiteboard-portable boxes/arrows).
+
    1. Requirements — pin down functional first ("the core things it has to do are…"), then non-functional: scale/QPS, latency targets, consistency vs availability, durability, read/write ratio. State assumptions out loud if the interviewer didn't give numbers.
    2. Core Entities — name the main data objects the system revolves around (the nouns everything hangs off).
    3. API / Interface — the endpoints or method signatures that satisfy each functional requirement.
    4. Data Flow (ONLY for data-processing-heavy systems — pipelines, analytics, streaming) — trace how data moves stage to stage. Skip this entirely for standard CRUD / product designs.
-   5. High-Level Design — the component architecture that satisfies the API; the primary boxes and arrows.
+   5. High-Level Design — the component architecture that satisfies the API; the primary boxes and arrows. When drawing HLD, use a \`\`\`text or \`\`\`ascii fence — never impl-language code.
    6. Deep Dives — drill into bottlenecks, failure modes, and each non-functional requirement in turn.
    </system_design>
 
@@ -2070,7 +2077,7 @@ export const MODE_TECHNICAL_INTERVIEW_PROMPT = `${CORE_IDENTITY}
    OUTPUT SHAPE — always one of:
    - CLARIFY: One first-person clarification question/sentence. No code block.
    - CODE ANSWER: follow the CODING / DSA RESPONSE CONTRACT above (the six \`## \` headings, in order — ## Approach / ## Technique / Data Structure / Algorithm Used / ## Code / ## Dry Run / ## Complexity / ## Interviewer Follow-up Points).
-   - SYSTEM DESIGN: Requirements → Core Entities → API / Interface → (optional) Data Flow → High-Level Design → Deep Dives.
+   - SYSTEM DESIGN: Delivery Framework prose for ONE slice (Requirements → Core Entities → API / Interface → optional Data Flow → High-Level Design → Deep Dives). No DSA \`## \` scaffolds; no impl-language fences; \`\`\`text / \`\`\`ascii HLD OK.
    - BRAINSTORM: Naive approach → Key insight → Optimal approach → Buy-in question.
    - HINT: 1-3 sentences. Observation → minimal nudge → next goal.
    - BEHAVIORAL: First-person story, ≤30 seconds. Outcome in one sentence.

@@ -17,6 +17,7 @@ import {
   shouldScaffold,
   validateCodingMarkdown,
   validateAnswerStructure,
+  resolveStructureValidationType,
   repairCodingMarkdown,
   renderCodingAnswerMarkdown,
   buildCodingScaffold,
@@ -379,12 +380,76 @@ describe('validateCodingMarkdown rejects malformed answers', () => {
 });
 
 // ── 7. validateAnswerStructure is a no-op for non-coding types ───────────────
+// Speakable-sd ticket 02: DSA repair (Code / Dry Run / Complexity / O(?) markers)
+// must NEVER run for system_design_answer or other non-coding types — even when
+// the model bled DSA headings into the SD transcript.
+const DSA_BLEED_ANSWER = `## Approach
+We start with requirements for a URL shortener.
+
+## Technique / Data Structure / Algorithm Used
+Consistent hashing and a key-value store.
+
+## Code
+\`\`\`python
+def shorten(url):
+    return "abc"
+\`\`\`
+
+## Dry Run
+Input example.com → abc.
+
+## Complexity
+Time Complexity: O(1)
+Space Complexity: O(n)
+
+## Interviewer Follow-up Points
+- Hot keys
+`;
+
 describe('validateAnswerStructure gating', () => {
   test('non-coding answer types are not forced into the coding contract', () => {
     const v = validateAnswerStructure('identity_answer', 'My name is Alex.');
     assert.equal(v.ok, true);
     assert.deepEqual(v.missingSections, []);
+    assert.equal(v.repaired, undefined, 'non-coding must not emit repaired');
   });
+
+  test('system_design_answer never emits DSA repair even when answer has DSA scaffolds', () => {
+    const v = validateAnswerStructure('system_design_answer', DSA_BLEED_ANSWER);
+    assert.equal(v.ok, true, 'SD must pass structure validation without repair');
+    assert.equal(v.repaired, undefined, 'SD must not receive a repaired six-section template');
+    assert.deepEqual(v.missingSections, []);
+    // Contrast: the same body under DSA type WOULD be rewritten into a scaffold.
+    const asDsa = validateAnswerStructure('dsa_question_answer', DSA_BLEED_ANSWER);
+    assert.ok(asDsa.repaired || asDsa.ok, 'DSA path still validates/repairs the same body');
+  });
+
+  test('system_design_answer with bare speakable prose is not repaired', () => {
+    const prose = 'We should clarify functional requirements first: short links, custom aliases, and analytics.';
+    const v = validateAnswerStructure('system_design_answer', prose);
+    assert.equal(v.ok, true);
+    assert.equal(v.repaired, undefined);
+  });
+
+  test('other non-coding types never get DSA six-section repair', () => {
+    for (const answerType of [
+      'technical_concept_answer',
+      'debugging_question_answer',
+      'behavioral_interview_answer',
+      'lecture_answer',
+      'follow_up_answer',
+    ]) {
+      const v = validateAnswerStructure(answerType, 'just prose, no sections');
+      assert.equal(v.ok, true, `${answerType} must not fail coding structure`);
+      assert.equal(v.repaired, undefined, `${answerType} must not emit repaired`);
+      if (v.repaired) {
+        assert.doesNotMatch(v.repaired, /## Code/);
+        assert.doesNotMatch(v.repaired, /## Dry Run/);
+        assert.doesNotMatch(v.repaired, /## Complexity/);
+      }
+    }
+  });
+
   test('dsa answer type enforces the contract', () => {
     // Six-section enforcement moved to dsa_question_answer. coding_question_answer
     // (general implementation) only requires a code block; prose-only is rejected
@@ -392,6 +457,46 @@ describe('validateAnswerStructure gating', () => {
     const v = validateAnswerStructure('dsa_question_answer', 'just prose, no sections');
     assert.equal(v.ok, false);
     assert.ok(v.repaired);
+    assert.match(v.repaired, /## Approach/);
+    assert.match(v.repaired, /## Code/);
+    assert.match(v.repaired, /## Dry Run/);
+    assert.match(v.repaired, /## Complexity/);
+  });
+});
+
+// Speakable-sd ticket 02: ipcHandlers used to remap ANY non-coding plan to
+// dsa_question_answer when isCodingChat was promoted. That must never happen for
+// system_design_answer (or other explicit non-coding types).
+describe('resolveStructureValidationType — coding-path remapping gate', () => {
+  test('coding/DSA types pass through unchanged', () => {
+    assert.equal(resolveStructureValidationType('dsa_question_answer', { forceCodingPath: true }), 'dsa_question_answer');
+    assert.equal(resolveStructureValidationType('coding_question_answer', { forceCodingPath: false }), 'coding_question_answer');
+  });
+
+  test('follow_up / unknown on forced coding path remap to DSA (bug #6 promotion)', () => {
+    assert.equal(resolveStructureValidationType('follow_up_answer', { forceCodingPath: true }), 'dsa_question_answer');
+    assert.equal(resolveStructureValidationType('unknown_answer', { forceCodingPath: true }), 'dsa_question_answer');
+  });
+
+  test('system_design_answer NEVER remaps to DSA even on forced coding path', () => {
+    assert.equal(
+      resolveStructureValidationType('system_design_answer', { forceCodingPath: true }),
+      'system_design_answer',
+    );
+    const validationType = resolveStructureValidationType('system_design_answer', { forceCodingPath: true });
+    const v = validateAnswerStructure(validationType, DSA_BLEED_ANSWER);
+    assert.equal(v.repaired, undefined, 'remapped-as-SD must not DSA-repair');
+  });
+
+  test('other explicit non-coding types never remap to DSA on forced coding path', () => {
+    for (const t of ['identity_answer', 'technical_concept_answer', 'behavioral_interview_answer', 'lecture_answer']) {
+      assert.equal(resolveStructureValidationType(t, { forceCodingPath: true }), t, t);
+    }
+  });
+
+  test('without forceCodingPath, non-coding types stay themselves', () => {
+    assert.equal(resolveStructureValidationType('system_design_answer'), 'system_design_answer');
+    assert.equal(resolveStructureValidationType('follow_up_answer'), 'follow_up_answer');
   });
 });
 

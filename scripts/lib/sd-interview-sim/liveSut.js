@@ -18,6 +18,18 @@ const CANDIDATE_ASCII_HLD_INSTRUCTION = [
 ].join(' ');
 
 /**
+ * Speakable SD output contract for T2 SUT tone overlays (docs/speakable-sd/CONTEXT.md).
+ * Shared by casual + FULL_RAW — one DF slice, no DSA scaffolds / impl fences; ASCII HLD OK.
+ */
+const SPEAKABLE_SD_CANDIDATE_CONTRACT = [
+  'Speak one Delivery Framework slice per turn — do not dump Requirements through Deep Dives in one monologue.',
+  'FORBIDDEN: DSA RESPONSE CONTRACT scaffolds (## Approach, ## Technique, ## Code, ## Dry Run, ## Complexity,',
+  '## Interviewer Follow-up Points).',
+  'FORBIDDEN: implementation-language code fences (```python, ```javascript, ```typescript, ```go, ```java, etc.).',
+  'The only allowed code fences are ASCII HLD diagrams in ```text or ```ascii.',
+].join(' ');
+
+/**
  * Soft always-on anti-rewind line (SPEC 14). Stronger post-gate nudge is appended
  * by IntelligenceEngine when sdProblemKey is pinned and sdPhase=post_requirements.
  */
@@ -36,6 +48,7 @@ const CASUAL_SD_TONE_INSTRUCTION = [
   'Walk the hellointerview Delivery Framework in order as you go',
   '(Requirements → Core Entities → API → HLD → Deep Dives). Do not wait for the interviewer',
   'to tell you which section is next.',
+  SPEAKABLE_SD_CANDIDATE_CONTRACT,
   'If the interviewer asks a clarifier: answer it briefly, then resume the showcase',
   'at the next unfinished phase.',
   NO_REQUIREMENTS_REWIND_SOFT,
@@ -45,15 +58,19 @@ const CASUAL_SD_TONE_INSTRUCTION = [
 ].join('\n');
 
 /**
- * Full-raw candidate instruction — no shortening (SD_INTERVIEW_SIM_T2_FULL_RAW=1).
+ * Full-raw candidate instruction — no-caveman / tradeoffs OK (SD_INTERVIEW_SIM_T2_FULL_RAW=1).
+ * Not an essay dump of every Delivery Framework phase in one turn.
  */
 const FULL_RAW_SD_TONE_INSTRUCTION = [
   'You are the candidate. You lead the system-design showcase.',
   'Walk the hellointerview Delivery Framework in order as you go',
   '(Requirements → Core Entities → API → HLD → Deep Dives). Do not wait for the interviewer',
   'to tell you which section is next.',
+  SPEAKABLE_SD_CANDIDATE_CONTRACT,
   'Speak freely and at full length — complete sentences, full paragraphs, real tradeoff discussion.',
   'Do NOT shorten, summarize into bullets-only, or use telegram/caveman style.',
+  'FULL_RAW means no caveman and tradeoff prose is welcome — not an essay dump that covers every',
+  'Delivery Framework phase at once; still one Delivery Framework slice per turn.',
   'Prefer "we". Hedge lightly when uncertain.',
   'If the interviewer asks a clarifier: answer it thoroughly first, then resume the showcase',
   'at the next unfinished phase. Include scale numbers and failure modes when they help.',
@@ -61,7 +78,6 @@ const FULL_RAW_SD_TONE_INSTRUCTION = [
   'No stiff corporate filler.',
   CANDIDATE_ASCII_HLD_INSTRUCTION,
 ].join('\n');
-
 /**
  * @param {AsyncIterable<string>|AsyncGenerator<string>|string|null|undefined} streamOrText
  * @returns {Promise<string>}
@@ -230,6 +246,7 @@ module.exports = {
   CASUAL_SD_TONE_INSTRUCTION,
   FULL_RAW_SD_TONE_INSTRUCTION,
   CANDIDATE_ASCII_HLD_INSTRUCTION,
+  SPEAKABLE_SD_CANDIDATE_CONTRACT,
   NO_REQUIREMENTS_REWIND_SOFT,
   collectAnswer,
   estimateSpendFromText,

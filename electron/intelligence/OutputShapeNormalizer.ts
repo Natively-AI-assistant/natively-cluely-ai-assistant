@@ -26,6 +26,7 @@ import {
   varySpokenOpening,
   type RepetitionVerdict,
 } from '../llm/answerPolish';
+import { applySpeakableSdIfNeeded, mayCompressToSpeakable } from '../llm/speakableSd';
 import { humanizeForAnswerType } from '../llm/humanLikeness';
 import type { AnswerType } from '../llm/AnswerPlanner';
 
@@ -72,10 +73,17 @@ export function normalizeOutputShape(input: NormalizeInput): NormalizeResult {
       applied.push('cleaned_artifacts');
     }
 
+    // Speakable SD (ticket 04): strip DSA scaffolds / impl fences; never compressToSpeakable.
+    const sdPolished = applySpeakableSdIfNeeded(input.answerType, text);
+    if (sdPolished !== text) {
+      text = sdPolished;
+      applied.push('speakable_sd_strip');
+    }
+
     SCAFFOLD_LABEL_RE.lastIndex = 0;
     const hasVisibleScaffold = SCAFFOLD_LABEL_RE.test(text);
     const structureRequested = STRUCTURE_STYLES.has((input.answerStyle ?? 'default'));
-    if (hasVisibleScaffold && !structureRequested) {
+    if (hasVisibleScaffold && !structureRequested && mayCompressToSpeakable(input.answerType)) {
       const speakable = compressToSpeakable(text);
       if (speakable.length >= 40) {
         text = speakable;
@@ -120,7 +128,7 @@ export function applyAnswerContract(
 
   try {
     repetition = input.guard.check(text, input.answerType, input.question);
-    if (repetition.repeated && !input.isCoding) {
+    if (repetition.repeated && !input.isCoding && mayCompressToSpeakable(input.answerType)) {
       const speakable = compressToSpeakable(text);
       if (
         speakable.length >= 40 &&

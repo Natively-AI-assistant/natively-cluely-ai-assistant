@@ -46,6 +46,30 @@ describe('sd-interview-sim digest', () => {
     assert.ok(tags.includes('candidate_rewind'));
   });
 
+  test('detectReviewTags flags DSA scaffold bleed, repair markers, interviewer impl fences', () => {
+    const tags = detectReviewTags({
+      provenance: { full_raw: true },
+      turns: [
+        {
+          role: 'assistant',
+          text: '## Approach\nWe start with requirements.\n## Code\n```python\nx=1\n```',
+        },
+        {
+          role: 'interviewer',
+          text: 'Here is a sketch:\n```python\ndef clarify():\n  pass\n```',
+        },
+        {
+          role: 'assistant',
+          text: '## Dry Run\n_(repaired)_ Missing Complexity section.',
+        },
+      ],
+    });
+    assert.ok(tags.includes('dsa_scaffold_bleed'));
+    assert.ok(tags.includes('interviewer_impl_fence'));
+    assert.ok(tags.includes('dsa_repair_marker'));
+    assert.ok(tags.includes('full_raw'));
+  });
+
   test('buildDigestMarkdown includes meta tags and turn headings', () => {
     const md = buildDigestMarkdown({
       run_id: 'demo-1',

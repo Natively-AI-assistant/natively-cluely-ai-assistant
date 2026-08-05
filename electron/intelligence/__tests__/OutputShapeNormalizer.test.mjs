@@ -41,6 +41,31 @@ describe('OutputShapeNormalizer.normalizeOutputShape', () => {
     assert.equal(r.text, code);
   });
 
+  test('system_design_answer strips DSA scaffolds and skips compressToSpeakable', () => {
+    const sdBleed = [
+      '## Approach',
+      'We pin functional requirements for the URL shortener first, then entities.',
+      '```python',
+      'def shorten(url):',
+      '    return hash(url)',
+      '```',
+      '```ascii',
+      '[Client] -> [API]',
+      '```',
+    ].join('\n');
+    const r = normalizeOutputShape({
+      answer: sdBleed,
+      answerStyle: 'default',
+      answerType: 'system_design_answer',
+    });
+    assert.doesNotMatch(r.text, /^##\s*Approach\b/m);
+    assert.doesNotMatch(r.text, /```python/);
+    assert.match(r.text, /```ascii/);
+    assert.match(r.text, /functional requirements/i);
+    assert.ok(r.applied.includes('speakable_sd_strip'));
+    assert.ok(!r.applied.includes('compressed_to_speakable'));
+  });
+
   test('never throws on empty input', () => {
     assert.doesNotThrow(() => normalizeOutputShape({ answer: '' }));
     assert.equal(normalizeOutputShape({ answer: '' }).changed, false);
