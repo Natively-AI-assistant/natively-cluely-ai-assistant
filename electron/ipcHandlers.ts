@@ -630,6 +630,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     appState.getWindowHelper().setOverlayHoverInteractive(!!interactive);
   });
 
+
   // Any Natively window → main: dismiss the overlay dropdowns (settings /
   // model selector). Fired by the click-catcher window (a click landed
   // OUTSIDE every Natively window), the aux pill/toggle windows, and the

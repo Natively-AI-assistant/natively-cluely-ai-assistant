@@ -316,7 +316,7 @@ import {
 import { NegotiationCoachingCard } from '../premium';
 import type { DynamicActionPayload } from '../types/electron';
 import { getCodexCliModelDisplayName } from '../utils/modelUtils';
-import { getModifierSymbol, isMac } from '../utils/platformUtils';
+import { getModifierSymbol, isMac, isWindows } from '../utils/platformUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { OverlayBanner, OverlayBannerButton } from './ui/OverlayBanner';
@@ -7156,7 +7156,15 @@ Provide only the answer, nothing else.`;
         case 36: // Return
         case 76: // Numpad Enter
           handleManualSubmitRef.current();
-          window.electronAPI.stealthTapStop().catch(() => {});
+          // macOS parity: on macOS the input holds real DOM focus, so submitting
+          // leaves the caret in the box and the user can type the next message
+          // immediately. Windows can't hold focus — the stealth hook IS the
+          // input path — so ending the session on Enter would send the next
+          // keystrokes to the meeting app instead. Keep it engaged; the session
+          // still ends on Esc, a click outside Natively, or an app switch.
+          if (!isWindows) {
+            window.electronAPI.stealthTapStop().catch(() => {});
+          }
           return;
         case 51: // Backspace — delete one char
           setInputValue((prev) => prev.slice(0, -1));
@@ -7263,6 +7271,27 @@ Provide only the answer, nothing else.`;
         })
         .catch(() => {
           /* fail open — keep default */
+        });
+    }
+
+    // WINDOWS: seed availability at mount so the FIRST input click engages the
+    // hook. On macOS `isCgEventTapAvailableRef` flips true only after the first
+    // active broadcast (the hotkey) — fine there, because clicking the input
+    // without the tap still types (the NSPanel becomes key). On Windows the
+    // overlay is WS_EX_NOACTIVATE and is NEVER focused, so without this the
+    // first click would engage nothing and keystrokes would go to the meeting
+    // app — a silently dead input until the user found Ctrl+Shift+Space. Gated
+    // to win32 so macOS behaviour is untouched. Stays false when the native
+    // hook is absent (stale binary) so blockInputFocus doesn't preventDefault a
+    // click that then has no input path at all.
+    if (window.electronAPI?.platform === 'win32' && window.electronAPI?.stealthTapAvailable) {
+      window.electronAPI
+        .stealthTapAvailable()
+        .then((ok) => {
+          if (ok) isCgEventTapAvailableRef.current = true;
+        })
+        .catch(() => {
+          /* fail closed — leave the input clickable via the normal path */
         });
     }
 
@@ -8504,7 +8533,17 @@ Provide only the answer, nothing else.`;
                     // the CGEventTap, so typing routes through that path.
                     onMouseDown={blockInputFocus}
                     readOnly={stealthTapActive}
-                    className={`w-full border rounded-xl pl-3 pr-10 py-2.5 text-[13px] leading-relaxed ${inputClass} ${stealthTapActive ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
+                    // Engaged-session appearance. On macOS the input takes real
+                    // DOM focus on click (the panel can hold key focus without
+                    // activating), so it shows the aurora glow and the green
+                    // ring only appears in the explicitly hotkey-engaged tap
+                    // mode. Windows can never focus this input — doing so would
+                    // steal the meeting app's foreground — so it would otherwise
+                    // sit permanently unfocused-looking AND permanently green,
+                    // since every click there engages the stealth hook. Drive
+                    // the same aurora glow with a class instead, and drop the
+                    // green, so both platforms look identical on click.
+                    className={`w-full border rounded-xl pl-3 pr-10 py-2.5 text-[13px] leading-relaxed ${inputClass} ${stealthTapActive && isWindows ? 'aurora-focus-active' : ''} ${stealthTapActive && !isWindows ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
                     style={appearance.inputStyle}
                   />
 

@@ -53,6 +53,9 @@ export class StealthKeyboardManager {
     /// listener (intentionally or accidentally during development), it
     /// would silently receive every user keystroke. Scoping prevents this.
     private overlayWebContents: Electron.WebContents | null = null;
+    /// The overlay BrowserWindow, kept alongside its webContents so start() can
+    /// enforce "hook engaged ⟹ overlay visible" on Windows (see start()).
+    private overlayWindow: BrowserWindow | null = null;
     private overlayBoundsProvider: (() => OverlayBoundsInput | null) | null = null;
     /// Monotonic counter incremented on every setOverlayWindow call. The
     /// 'closed' listener captures the token at registration time and only
@@ -67,6 +70,26 @@ export class StealthKeyboardManager {
     // a stuck tap can't eat keystrokes into the void if the renderer crashes
     // or the user wandered away. Tunable per UX feedback.
     private static readonly IDLE_TIMEOUT_MS = 10_000;
+    // Windows runs a LONG backstop instead of the 10s idle window.
+    //
+    // macOS parity: on macOS the input holds real DOM focus, which never times
+    // out — you can pause to think for a minute and keep typing. The 10s timer
+    // only applies to macOS's explicitly hotkey-engaged tap mode. On Windows
+    // every click engages the hook (it is the only input path), so a 10s window
+    // would silently redirect your typing to the meeting app mid-thought.
+    //
+    // Not removed outright: unlike macOS DOM focus, the Windows hook SWALLOWS
+    // keystrokes system-wide, so a session that somehow outlives its exits would
+    // eat every keypress. The real exits (Esc, click outside Natively, app
+    // switch — see keyboard_hook_windows.rs) are comprehensive and fire in
+    // milliseconds; this is only a last-resort backstop.
+    private static readonly IDLE_TIMEOUT_WIN32_MS = 5 * 60_000;
+
+    private static idleTimeoutMs(): number {
+        return process.platform === 'win32'
+            ? StealthKeyboardManager.IDLE_TIMEOUT_WIN32_MS
+            : StealthKeyboardManager.IDLE_TIMEOUT_MS;
+    }
 
     private constructor() {
         this.tap = this.createTapInstance();
@@ -130,8 +153,10 @@ export class StealthKeyboardManager {
         const myToken = ++this.overlayRegistrationToken;
         if (!win) {
             this.overlayWebContents = null;
+            this.overlayWindow = null;
             return;
         }
+        this.overlayWindow = !win.isDestroyed() ? win : null;
         // ROUND 2 FIX (#5): Issue a fresh registration token so any
         // previously-registered window's 'closed' handler can detect that
         // it's been superseded and skip the null-out. Identity comparison
@@ -144,17 +169,71 @@ export class StealthKeyboardManager {
             // the closure of an older window must NOT touch the field.
             if (this.overlayRegistrationToken === myToken) {
                 this.overlayWebContents = null;
+                this.overlayWindow = null;
+                // The sink is gone — stop capturing. Without this, a hook
+                // engaged when the overlay window is destroyed would keep
+                // swallowing keystrokes system-wide with nowhere to deliver
+                // them, until the idle backstop. Idempotent if already stopped.
+                if (this.active) this.stop();
             }
         });
     }
 
-    /** True if the native module shipped with stealth-tap support. */
+    /**
+     * True if stealth typing is usable right now.
+     *
+     * Beyond "the binary shipped with the tap", Windows must also decline when a
+     * CJK IME is the active keyboard layout: the WH_KEYBOARD_LL hook swallows
+     * keystrokes before IMM32/TSF can compose them, and the text it substitutes
+     * comes from ToUnicodeEx, which does no composition. Engaging it for those
+     * users suppresses the candidate window and limits them to raw Latin.
+     *
+     * Reporting unavailable routes them through the already-tested no-hook
+     * fallback: the overlay is left focusable (see windowsFocusPolicy's
+     * availability gate) and typing works through real DOM focus, at the cost of
+     * the click taking foreground focus. macOS makes the same trade for the same
+     * reason via ImeDetector.shouldAutoEngageStealthTap().
+     *
+     * NOTE: sampled per call, but the no-activate window policy that consumes it
+     * is applied at window creation — so switching INTO an IME mid-session does
+     * not retroactively make the overlay focusable. Restarting picks it up.
+     */
     public isAvailable(): boolean {
+        if (!this.nativeAvailable) return false;
+        if (process.platform === 'win32' && this.isImeActive()) return false;
+        return true;
+    }
+
+    /** True if the binary supports the tap, ignoring the IME gate. */
+    public isNativeTapPresent(): boolean {
         return this.nativeAvailable;
+    }
+
+    /**
+     * Windows CJK-IME probe. Falls back to `false` (no IME) when the export is
+     * missing, so a binary predating this check keeps today's behaviour rather
+     * than disabling stealth typing for everyone.
+     */
+    private isImeActive(): boolean {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { loadNativeModule } = require('../audio/nativeModuleLoader');
+            const native = loadNativeModule();
+            return typeof native?.isImeKeyboardActive === 'function'
+                ? !!native.isImeKeyboardActive()
+                : false;
+        } catch {
+            return false;
+        }
     }
 
     /** True if Accessibility is granted right now. */
     public isPermissionGranted(): boolean {
+        // Windows: a WH_KEYBOARD_LL hook needs no OS permission. Route through
+        // the native isAccessibilityGranted() (returns true on win32) rather
+        // than a JS constant, so the check reflects the actual loaded binary:
+        // a stale binary without the hook has no such export → false.
+        if (process.platform === 'win32') return this.callNativePermissionCheck();
         if (process.platform !== 'darwin') return false;
         // Prefer Electron's systemPreferences (well-supported, no rebuild
         // required). Fall back to the native module's check if Electron's
@@ -172,6 +251,8 @@ export class StealthKeyboardManager {
      * Settings, then restart the app for the tap to bind).
      */
     public requestPermission(): boolean {
+        // Windows needs no permission for the keyboard hook — report granted.
+        if (process.platform === 'win32') return this.nativeAvailable;
         if (process.platform !== 'darwin') return false;
         try {
             // Pass true to surface the prompt. macOS shows the standard
@@ -216,6 +297,19 @@ export class StealthKeyboardManager {
     public start(): boolean {
         if (!this.tap) return false;
         if (this.active) return true;
+
+        // Windows invariant: the hook is engaged ONLY while the overlay is
+        // visible. The hook swallows keystrokes system-wide, so engaging it with
+        // the overlay hidden (e.g. the hotkey pressed in launcher mode, or after
+        // Ctrl+B) would eat the user's keystrokes with no visible indicator and
+        // nowhere to deliver them. Refuse in that case. macOS is unchanged — its
+        // panel-based path predates this and has no equivalent hazard.
+        if (
+            process.platform === 'win32' &&
+            (!this.overlayWindow || this.overlayWindow.isDestroyed() || !this.overlayWindow.isVisible())
+        ) {
+            return false;
+        }
 
         // ROUND 2 FIX (#12): Flip active=true BEFORE tap.start() so the
         // first captured callback (which can fire on the worker thread the
@@ -329,7 +423,7 @@ export class StealthKeyboardManager {
             // walked away or context-switched. Disengage so subsequent typing
             // goes to whatever they're now focused on, not into a hidden tap.
             if (this.active) this.stop();
-        }, StealthKeyboardManager.IDLE_TIMEOUT_MS);
+        }, StealthKeyboardManager.idleTimeoutMs());
     }
 
     private clearIdleTimer(): void {
@@ -351,7 +445,11 @@ export class StealthKeyboardManager {
     // ─── internals ───────────────────────────────────────────────────────
 
     private createTapInstance(): any | null {
-        if (process.platform !== 'darwin') return null;
+        // macOS: CGEventTap. Windows: WH_KEYBOARD_LL low-level hook. Both native
+        // modules export an identical `StealthKeyboardTap` class (see
+        // native-module/src/keyboard_tap.rs and keyboard_hook_windows.rs), so
+        // this loader is platform-agnostic below. Linux has no stealth path.
+        if (process.platform !== 'darwin' && process.platform !== 'win32') return null;
         try {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { loadNativeModule } = require('../audio/nativeModuleLoader');
