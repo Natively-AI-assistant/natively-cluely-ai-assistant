@@ -673,10 +673,16 @@ export class ScreenshotHelper {
       if (this.view === "queue") {
         screenshotPath = path.join(this.screenshotDir, `${uuidv4()}.png`)
         console.log(`[ScreenshotHelper] Using queue directory: ${screenshotPath}`);
-        if (process.platform === 'darwin') {
+        // Both desktop platforms capture via desktopCapturer, and BOTH must
+        // forward preferredDisplay. main.ts already resolves the display the
+        // overlay / meeting is on (getTargetDisplayForFullScreenshot) and passes
+        // it in; the old win32 branch dropped the argument, so the capture fell
+        // through to screen.getPrimaryDisplay() and a multi-monitor Windows user
+        // silently sent the model their PRIMARY screen instead of the one the
+        // meeting was on. (Selective/cropper capture was unaffected — it passes
+        // an explicit area, which routes through getDisplayContainingRect.)
+        if (process.platform === 'darwin' || process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
-        } else if (process.platform === 'win32') {
-          await this.captureWithDesktopCapturer(screenshotPath);
         } else {
           await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
         }
@@ -696,10 +702,16 @@ export class ScreenshotHelper {
       } else {
         screenshotPath = path.join(this.extraScreenshotDir, `${uuidv4()}.png`)
         console.log(`[ScreenshotHelper] Using extra screenshots directory: ${screenshotPath}`);
-        if (process.platform === 'darwin') {
+        // Both desktop platforms capture via desktopCapturer, and BOTH must
+        // forward preferredDisplay. main.ts already resolves the display the
+        // overlay / meeting is on (getTargetDisplayForFullScreenshot) and passes
+        // it in; the old win32 branch dropped the argument, so the capture fell
+        // through to screen.getPrimaryDisplay() and a multi-monitor Windows user
+        // silently sent the model their PRIMARY screen instead of the one the
+        // meeting was on. (Selective/cropper capture was unaffected — it passes
+        // an explicit area, which routes through getDisplayContainingRect.)
+        if (process.platform === 'darwin' || process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
-        } else if (process.platform === 'win32') {
-          await this.captureWithDesktopCapturer(screenshotPath);
         } else {
           await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
         }

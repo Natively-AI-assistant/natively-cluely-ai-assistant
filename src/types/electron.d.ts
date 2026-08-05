@@ -56,6 +56,23 @@ export interface ElectronAPI {
     width: number
     height: number
   }) => Promise<void>
+  // Overlay aux windows (pill / resize toggle) coordination
+  sendOverlayUiState?: (state: Record<string, unknown>) => Promise<void>
+  onOverlayUiState?: (
+    callback: (state: Record<string, unknown>) => void
+  ) => () => void
+  sendOverlayUiAction?: (action: { type: string }) => Promise<void>
+  // Managed group drag (macOS + Windows): the pill moves the whole group.
+  sendOverlayGroupDrag?: (delta: {
+    dx?: number
+    dy?: number
+    phase?: 'start' | 'move' | 'end'
+  }) => Promise<void>
+  isOverlayGroupDragManaged?: () => Promise<boolean>
+  onOverlayUiAction?: (callback: (action: { type: string }) => void) => () => void
+  sendOverlayToggleAnchor?: (payload: { panelRight: number }) => Promise<void>
+  setOverlayHoverInteractive?: (interactive: boolean) => Promise<void>
+  dismissOverlayPopovers?: (opts?: { settings?: boolean; model?: boolean }) => Promise<void>
   onToggleExpand: (callback: () => void) => () => void
   getRecognitionLanguages: () => Promise<Record<string, any>>
   getScreenshots: () => Promise<Array<{ path: string; preview: string }>>
@@ -95,6 +112,7 @@ export interface ElectronAPI {
 
   analyzeImageFile: (path: string) => Promise<void>
   quitApp: () => Promise<void>
+  restartApp: () => Promise<void>
   toggleWindow: () => Promise<void>
   showWindow: (inactive?: boolean) => Promise<void>
   hideWindow: () => Promise<void>
@@ -134,8 +152,10 @@ export interface ElectronAPI {
   onOpenSettingsTab: (callback: (tab: string) => void) => () => void
 
   // LLM Model Management
-  getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli"; model: string; isOllama: boolean }>
+  getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli"; /** @deprecated use `modelId` for selection, `displayName` for UI */ model: string; modelId: string; displayName: string; isOllama: boolean }>
   getAvailableOllamaModels: () => Promise<string[]>
+  /** Whether a denied data scope would actually be handled on-device. */
+  getLocalFallbackStatus: () => Promise<{ text: boolean; vision: boolean }>
   getProviderStatuses: () => Promise<any[]>
   getProviderStatus: (id: string) => Promise<any | null>
   onProviderStatusChanged: (callback: (status: any) => void) => () => void
@@ -158,6 +178,11 @@ export interface ElectronAPI {
   setDeepseekApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => Promise<{ success: boolean; error?: string }>
   getAvailableLiteLLMModels: () => Promise<string[]>
+  refreshLiteLLMModels: () => Promise<string[]>
+  getCloudFetchedModels: () => Promise<{ models: Record<string, { id: string; label: string }[]>; fetchedAt: Record<string, number> }>
+  getDisabledProviders: () => Promise<string[]>
+  setDisabledProviders: (providers: string[]) => Promise<{ success: boolean; error?: string }>
+  setCloudEnabledModels: (provider: string, models: string[]) => Promise<{ success: boolean; error?: string }>
   setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   // ── In-app review / testimonial prompt ─────────────────────────────────
   reviewGetPromptState: () => Promise<{
@@ -191,8 +216,8 @@ export interface ElectronAPI {
     display_name_publicly: boolean;
   }) => Promise<{ ok: boolean; error?: string; status?: number }>
   getNativelyPricing: () => Promise<{ ok: boolean; currency?: string; fetchedAt?: string; stale?: boolean; products?: Record<string, { id: string; dodoProductId: string; name: string; amount: number | null; currency: string; formattedPrice: string | null; interval: 'month' | 'year' | 'lifetime'; checkoutUrl: string; coupon: { code: string; eligible: boolean; discountPercent: number; reason?: string } }>; error?: string; status?: number }>
-  getNativelyUsage: () => Promise<{ ok: boolean; error?: string; plan?: string; quota?: { transcription: { used: number; limit: number; remaining: number }; ai: { used: number; limit: number; remaining: number }; search: { used: number; limit: number; remaining: number }; resets_at: string }; member_since?: string }>
-  getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
+  getNativelyUsage: (force?: boolean) => Promise<{ ok: boolean; error?: string; plan?: string; quota?: { transcription: { used: number; limit: number; remaining: number }; ai: { used: number; limit: number; remaining: number }; search: { used: number; limit: number; remaining: number }; resets_at: string }; member_since?: string }>
+  getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; disabledProviders?: string[]; cloudEnabledModels?: Record<string, string[]>; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
   // Permissions
   checkPermissions:     () => Promise<{ microphone: 'granted'|'denied'|'not-determined'|'restricted'; screen: 'granted'|'denied'|'not-determined'|'restricted'; platform: string }>
   requestMicPermission: () => Promise<boolean>
@@ -253,10 +278,13 @@ export interface ElectronAPI {
   getSttLanguage: () => Promise<string>
   getAiResponseLanguage: () => Promise<string>
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void
-  onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
+  // `titleKey` is the i18n key for the warning banner's heading (main.ts
+  // permissionTitleKey). Optional: emitters that predate it, and the in-app
+  // TCC-repair result path, send no title and the banner falls back to a
+  // generic one.
+  onSystemAudioPermissionDenied: (callback: (message: string, titleKey?: string) => void) => () => void
   onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => () => void
-  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean }) => void) => () => void
-  onAudioInputAutoSwitched: (callback: (payload: { from: string; to: string; reason: string; message?: string }) => void) => () => void
+  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean; titleKey?: string }) => void) => () => void
 
   // STT Status Events
   onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
@@ -303,7 +331,7 @@ export interface ElectronAPI {
   getActionButtonMode: () => Promise<'recap' | 'brainstorm'>
   setActionButtonMode: (mode: 'recap' | 'brainstorm') => Promise<{ success: boolean }>
   onActionButtonModeChanged: (callback: (mode: 'recap' | 'brainstorm') => void) => () => void
-  onModeChanged: (callback: (data: { id: string | null; name: string | null }) => void) => () => void
+  onModeChanged: (callback: (data: { id: string | null; name: string | null; fileCount?: number; indexedCount?: number }) => void) => () => void
 
   // Modes
   modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string; referenceFileCount: number }>>
@@ -319,7 +347,7 @@ export interface ElectronAPI {
   modesUploadReferenceFile: (modeId: string) => Promise<{ success: boolean; file?: any; cancelled?: boolean; error?: string }>
   modesDeleteReferenceFile: (id: string) => Promise<{ success: boolean; error?: string }>
   modesGetReferenceFileStatus: (modeId: string) => Promise<{ success: boolean; statuses?: Array<{ fileId: string; fileName: string; status: string; chunkCount: number }>; error?: string }>
-  onModeFileIndexStatus: (callback: (data: { modeId: string; fileId?: string }) => void) => () => void
+  onModeFileIndexStatus: (callback: (data: { modeId: string; fileId: string; phase: 'indexing' | 'done' }) => void) => () => void
   onKnowledgeIndexProgress: (callback: (data: { fileId: string; status: string; startedAt?: number; finishedAt?: number; error?: string }) => void) => () => void
   knowledgeListPacks: (modeId: string) => Promise<{ success: boolean; packs: Array<{ id: string; sourceId: string; fileName: string; cardCount: number; entityCount: number; relationCount: number; packVersion: number; updatedAt: string }>; error?: string }>
   knowledgeGetPack: (fileId: string) => Promise<{ success: boolean; pack: any | null; error?: string }>
@@ -339,6 +367,8 @@ export interface ElectronAPI {
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string; code?: string }>
   endMeeting: () => Promise<{ success: boolean; error?: string }>
+  debugInjectTranscript: (segments: Array<{ speaker?: string; text: string; timestamp?: number; confidence?: number }>)
+    => Promise<{ success: boolean; injected?: number; error?: string }>
   finalizeMicSTT: () => Promise<void>
   getRecentMeetings: () => Promise<Array<{ id: string; title: string; date: string; duration: string; summary: string }>>
   getMeetingDetails: (id: string) => Promise<any>
@@ -348,6 +378,11 @@ export interface ElectronAPI {
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>
   getIntelligenceFlags: () => Promise<Array<{ key: string; enabled: boolean; setting: string; env: string; default: boolean }>>
   setIntelligenceFlag: (key: string, value: boolean | null) => Promise<{ success: boolean; enabled?: boolean; error?: string }>
+  getContextDebugConfig: () => Promise<{ level: 'off' | 'standard' | 'verbose'; levelSource: 'environment' | 'setting' | 'default'; contentInclusion: boolean; storedLevel?: 'off' | 'standard' | 'verbose'; logDirectory?: string | null; currentFile?: string | null; error?: string }>
+  setContextDebugLevel: (level: 'off' | 'standard' | 'verbose') => Promise<{ ok: boolean; error?: string }>
+  openContextDebugFolder: () => Promise<{ ok: boolean; error?: string }>
+  clearContextDebugLogs: () => Promise<{ ok: boolean; removed?: number; error?: string }>
+  exportContextDebugSession: () => Promise<{ ok: boolean; path?: string; error?: string }>
   getHindsightConfig: () => Promise<{ baseUrl: string; hasApiKey: boolean; autoStart: boolean; serverCommand: string; llmProvider: string; available: boolean; mode: 'local' | 'cloud'; synthetic: boolean; explicitlyDisabled: boolean; authFailed: boolean }>
   setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => Promise<{ success: boolean; healthy?: boolean; error?: string }>
   testHindsightConnection: () => Promise<{ healthy: boolean; error?: string }>
@@ -370,7 +405,7 @@ export interface ElectronAPI {
   // Intelligence Mode Events
   onIntelligenceAssistUpdate: (callback: (data: { insight: string }) => void) => () => void
   onIntelligenceSuggestedAnswerToken: (callback: (data: { token: string; question: string; confidence: number }) => void) => () => void
-  onIntelligenceSuggestedAnswer: (callback: (data: { answer: string; question: string; confidence: number }) => void) => () => void
+  onIntelligenceSuggestedAnswer: (callback: (data: { answer: string; question: string; confidence: number; generationId?: number; sourceLabel?: string; emittedAt?: number }) => void) => () => void
   onIntelligenceSuggestedAnswerDiscard: (callback: (data: { reason: string }) => void) => () => void
   // Verified code execution (background): ✓ badge + corrected message.
   onIntelligenceCodeVerified: (callback: (data: { question: string; passed: number; total: number; language: string }) => void) => () => void
@@ -398,7 +433,7 @@ export interface ElectronAPI {
   streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean }) => Promise<void>
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => () => void
   onGeminiStreamDone: (callback: (data?: { finalText?: string; streamId?: number }) => void) => () => void
-  onGeminiStreamError: (callback: (error: string) => void) => () => void;
+  onGeminiStreamError: (callback: (error: string, meta?: { streamId?: number | null; source?: string }) => void) => () => void;
 
   // NOTE: onSkillsChanged broadcast subscription was removed. Skills are
   // toggled only via delete; the picker refreshes on Settings unmount, and
@@ -526,6 +561,10 @@ export interface ElectronAPI {
   resetKeybinds: () => Promise<Array<{ id: string; label: string; accelerator: string; isGlobal: boolean; defaultAccelerator: string }>>
   onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => () => void
   onKeybindRegistrationFailed: (callback: (data: { id: string; accelerator: string }) => void) => () => void
+  onKeybindRegistrationSucceeded: (callback: (data: { id: string; accelerator: string }) => void) => () => void
+  /** Snapshot of currently-failing registrations, for renderers that mount after the boot-time pass. */
+  getKeybindRegistrationFailures: () => Promise<Array<{ id: string; accelerator: string }>>
+
   onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void
 
   // CGEventTap-backed stealth typing (macOS only — graceful degradation elsewhere)
@@ -597,10 +636,16 @@ export interface ElectronAPI {
   // Overlay Opacity (Stealth Mode)
   setOverlayOpacity: (opacity: number) => Promise<void>;
   onOverlayOpacityChanged: (callback: (opacity: number) => void) => () => void;
+  setLauncherOpacityPreview: (active: boolean) => Promise<void>;
 
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+
+  // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
+  getAmbientChatEnabled: () => Promise<boolean>;
+  setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
+
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;
   getMeetingRetention: () => Promise<'forever' | '7d' | '30d' | 'never'>;

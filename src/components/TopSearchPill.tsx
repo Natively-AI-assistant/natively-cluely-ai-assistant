@@ -199,7 +199,10 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                     setSelectedIndex(prev => Math.max(prev - 1, -1));
                 } else if (e.key === 'Enter') {
                     e.preventDefault();
-                    handleSelect(selectedIndex);
+                    // No item hovered/arrow-selected yet (selectedIndex is -1 right
+                    // after typing) — default Enter to the AI Query option (index 0),
+                    // which is the primary action and already shows the raw query.
+                    handleSelect(selectedIndex < 0 ? 0 : selectedIndex);
                 }
             }
         };

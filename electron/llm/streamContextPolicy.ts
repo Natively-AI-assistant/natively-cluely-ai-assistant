@@ -48,6 +48,31 @@ export interface StreamRouteOptions {
    * narrows it to `ContextOsGenerationContext` at the use site. Absent → legacy.
    */
   contextOsGeneration?: unknown;
+  /**
+   * Grounding-campaign3 (2026-07-23): the t0-pinned mode id captured at request
+   * start. When set, LLMHelper's always-on document-grounded retrieval reads the
+   * SAME mode the request was planned against, even across awaits where the live
+   * `ModesManager` singleton might have flipped. Without this pin, a mid-
+   * request `modes:set-active` could leak a different mode's document content
+   * into an answer the contract declares is scoped to the first mode. Absent
+   * → legacy live singleton reads (see security audit 2026-07-23).
+   */
+  pinnedModeId?: string | null;
+  /**
+   * Context Intelligence V3 (2026-07-31): this stream's prompts were composed
+   * END-TO-END by the V3 decision layer — one frozen TurnDecision, scope/
+   * version/claim-authority-filtered evidence, one composed prompt. When true,
+   * LLMHelper must TRANSPORT the prompt, not rewrite it:
+   *   - no always-on document-grounded re-retrieval (the 4517 block) — that
+   *     injection is unpinned by V3's source authority and rides in around the
+   *     filtered evidence;
+   *   - no Context OS govern substitution — replacing V3's composed user
+   *     prompt with an EvidencePack puts two governance layers on one turn,
+   *     the exact F2 duplication the rebuild exists to end;
+   *   - no document-grounded system/user reshaping of the composed prompts.
+   * Absent → legacy behavior, all of the above still applies.
+   */
+  v3Owned?: boolean;
 }
 
 /**

@@ -34,6 +34,9 @@ export class EmbeddingPipeline {
     /** Set of meeting IDs that have been downgraded to local fallback after primary provider exhaustion. */
     private fallbackMeetings = new Set<string>();
     private db: Database.Database;
+    /** Set at shutdown: the drain loop exits at the next safe point and no new
+     *  work is accepted, so no embedding write can race the DB close. */
+    private stopped = false;
     private vectorStore: VectorStore;
     private isProcessing = false;
     private initPromise: Promise<void> | null = null;
@@ -230,6 +233,10 @@ export class EmbeddingPipeline {
      * Called when meeting ends
      */
     async queueMeeting(meetingId: string): Promise<void> {
+        if (this.stopped) {
+            console.log('[EmbeddingPipeline] Stopped — refusing new work during shutdown.');
+            return;
+        }
         // Get chunks without embeddings
         const chunks = this.vectorStore.getChunksWithoutEmbeddings(meetingId);
 
@@ -317,7 +324,21 @@ export class EmbeddingPipeline {
      * meeting is transparently downgraded to LocalEmbeddingProvider (on-device)
      * and its queue is reset so it re-embeds from scratch at the correct dimensions.
      */
+    /**
+     * Stop accepting and processing work (lifecycle fix, 2026-08-01). The
+     * pipeline's while-loop awaits network calls and backoff delays; between
+     * any of those awaits the before-quit handler used to close the shared
+     * better-sqlite3 handle, and the resumed loop's next db.prepare() raced a
+     * closed — or emergency-closed, uncheckpointed — database. Items in flight
+     * stay 'processing' and are recovered on next launch by processQueue's
+     * existing stuck-item reset.
+     */
+    stop(): void {
+        this.stopped = true;
+    }
+
     async processQueue(): Promise<void> {
+        if (this.stopped) return;
         if (this.isProcessing) {
             console.log('[EmbeddingPipeline] Already processing queue');
             return;
@@ -348,6 +369,7 @@ export class EmbeddingPipeline {
             const { ForegroundGate } = require('../services/ForegroundGate') as typeof import('../services/ForegroundGate');
             while (true) {
                 await ForegroundGate.waitUntilIdle();
+                if (this.stopped) break;
                 // Fetch next pending item. Items marked for local fallback (retry_count = -1)
                 // are also eligible, so we use a broad filter.
                 const pending = this.db.prepare(`
@@ -393,14 +415,20 @@ export class EmbeddingPipeline {
                         await this.embedMeetingSummary(pending.meeting_id, activeProvider);
                     }
 
+                    // The embed call awaited above may have outlived a shutdown;
+                    // never write to a database that may already be closed. The
+                    // item stays 'processing' and is recovered next launch.
+                    if (this.stopped) break;
+
                     // Mark as completed
                     this.db.prepare(`
-                        UPDATE embedding_queue 
+                        UPDATE embedding_queue
                         SET status = 'completed', processed_at = ?
                         WHERE id = ?
                     `).run(new Date().toISOString(), pending.id);
 
                 } catch (error: any) {
+                    if (this.stopped) break;
                     const newRetryCount = (pending.retry_count === -1 ? 0 : pending.retry_count) + 1;
                     console.error(
                         `[EmbeddingPipeline] Error processing queue item ${pending.id} ` +

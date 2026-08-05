@@ -3,6 +3,7 @@ logs
 .env
 STATUS.md
 left.md
+.audit
 performance-audit-report.md
 FIXES.md
 /.env
@@ -208,6 +209,10 @@ release/
 target/
 native-module/target/
 native-module/*.node
+# Windows locks a loaded .node against overwrite, so build-native.js moves the
+# previous artifact aside before rebuilding (see the win32 branch there). The
+# leftover is deleted once nothing holds it — usually on the next build.
+native-module/*.node.stale-*
 
 .github/RepoGuide.md
 
@@ -317,7 +322,12 @@ dodopayments.llm
 ANSWER_QUALITY_FINAL_REPORT.md
 ANSWER_QUALITY_EVAL_REPORT.md
 profile.md
-electron-builder.signed.cjs
+# NOT ignored: electron-builder.signed.cjs is the production build config that
+# `npm run dist:signed` loads. It was swept into this block of scratch reports and
+# then deleted by the "remove tracked files per updated .gitignore" cleanup, which
+# broke every signed build with ENOENT. It holds NO secrets — the notarytool
+# credential lives in the macOS keychain; only the profile NAME and the (public)
+# Team ID appear in the file, and the signing identity is auto-discovered.
 REMAINING_ISSUES_FIX_REPORT.md
 LONG_SESSION_MEMORY_TEST_REPORT.md
 MANUAL_CHAT_PROFILE_FIX_REPORT.md
@@ -408,3 +418,68 @@ traces/sd-interview-sim/*
 # User-submitted crash reports / debug logs (device + session diagnostics — never commit)
 user log/
 *.ips
+
+# --- branch-integration safety hardening (2026-07-23) ---
+# Third-party dispute / billing evidence dirs — never push
+/dispute-evidence-*/
+/dispute-evidence-*
+/dispute_evidence/
+scripts/*evidence*.py
+scripts/combine_*_single_file.py
+# Autopilot campaign prompts — internal docs, not source
+/HANDOFF*.md
+/NATIVELY_CONTEXT_SYSTEM_SIMPLIFICATION_PROMPT.md
+# Generated Vite build output that mirrors src/**/*.{tsx,ts}
+/src/**/*.js
+
+# --- User requested exclusions (2026-07-23) ---
+PRODUCTION_HARDENING_FINAL_REPORT.md
+loop.md
+loop2.md
+AUDIT_AI_CONTEXT_OWNERSHIP.md
+AUDIT_ARCHITECTURE_MAP.md
+AUDIT_AUDIO_REALTIME_PIPELINE.md
+AUDIT_BACKEND_SECURITY_STABILITY.md
+AUDIT_DEPENDENCIES_PACKAGING.md
+AUDIT_ELECTRON_SECURITY.md
+AUDIT_ERROR_OBSERVABILITY.md
+AUDIT_FRONTEND_STATE_REACT.md
+AUDIT_MEMORY_AND_LOOPS.md
+AUDIT_PRIVACY_SECRETS_LOGGING.md
+AUDIT_VERIFICATION_REPORT.md
+campaign-log.md
+campaign2-log.md
+campaign3-log.md
+contextauthresearchdoc.md
+test/
+test-fixtures/
+traces/
+traces2/
+traces3/
+--help/
+.remember/
+fixtures/
+# ...but NOT test fixtures that suites import. The blanket `fixtures/` above swept up
+# electron/**/__tests__/fixtures/*, which the "remove tracked files per updated
+# .gitignore" cleanup then deleted — leaving 4 test files importing modules that no
+# longer existed. Both lines are required and must stay in this order: git will not
+# descend into an excluded directory, so the directory itself has to be re-included
+# before its contents can be.
+!electron/**/__tests__/fixtures/
+!electron/**/__tests__/fixtures/**
+tools/
+
+# Vision benchmark source documentation + generated reports
+!docs/
+docs/*
+!docs/VISION_MODEL_BENCHMARK.md
+benchmark-results/
+
+
+# Role Insight visual harness — generated artifacts (regenerate with
+# `electron scripts/dump-role-insight-fixture.mjs` + `node scripts/role-insight-harness/build.mjs`)
+/scripts/.role-insight-fixture.json
+/scripts/role-insight-harness/dist/
+
+# Unbuilt feature PRDs — planning documents, never shipped to the public repo
+/upcoming/

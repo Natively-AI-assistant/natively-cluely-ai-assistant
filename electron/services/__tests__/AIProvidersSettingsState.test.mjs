@@ -37,7 +37,11 @@ describe('AIProvidersSettings credential synchronization', () => {
     assert.match(source, /const \[litellmModels, setLitellmModels\] = useState<string\[\]>\(\[\]\)/, 'LiteLLM model list state should exist');
     assert.match(source, /if\s*\(!hasStoredKey\.litellm\)\s*\{\s*setLitellmModels\(\[\]\);\s*return;/, 'LiteLLM models should clear when proxy is removed');
     assert.match(source, /getAvailableLiteLLMModels/, 'configured LiteLLM proxy should populate selectable models');
-    assert.match(source, /id: `litellm\/\$\{model\}`/, 'LiteLLM options should use the runtime litellm/<model> id shape');
+    // Matches the id SHAPE, not the statement it sits in: the id is built on its own
+    // line now so the allow-list filter can test it before the push. Pinning the
+    // `id: ...` property form made this fail on a refactor that never changed the id.
+    assert.match(source, /`litellm\/\$\{model\}`/, 'LiteLLM options should use the runtime litellm/<model> id shape');
+    assert.match(source, /if \(!isModelEnabled\('litellm', id\)\) return;/, 'LiteLLM options should honour the cloudEnabledModels allow-list');
   });
 
   test('loadCredentials clears LiteLLM form fields when another window removes the proxy', () => {

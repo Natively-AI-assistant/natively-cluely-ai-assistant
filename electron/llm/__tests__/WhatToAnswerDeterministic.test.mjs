@@ -1,11 +1,15 @@
 // electron/llm/__tests__/WhatToAnswerDeterministic.test.mjs
 //
-// Provider-free unit coverage for the DETERMINISTIC output builders that are the
-// what-to-answer safety net (test-engineer review 2026-06-05, Gaps 1-3): the
-// intro builder, the live latency fallback, and the first-person rewrites. These
-// run in CI without a provider and catch the exact regressions (dropped .replace
-// → second-person voice; missing intro → "I'm Natively" leak; empty fallback →
-// blank live answer) that otherwise only the provider-gated benchmark would find.
+// Provider-free unit coverage for the DETERMINISTIC evidence-selection builders
+// that are the what-to-answer safety net (test-engineer review 2026-06-05,
+// Gaps 1-3): the intro route, the fast-path list routes, and the Issue-7 direct
+// profile routes. Since the Full-JIT policy (2026-07-07/08, commit 6e6189b4),
+// `tryBuildManualProfileFastPathAnswer` (an alias of `selectManualProfileEvidence`)
+// only SELECTS structured evidence for a downstream JIT prompt — it no longer
+// renders a final `.answer` string, and `buildLiveFallbackAnswer` is a permanent
+// stub that always returns null (provider failures must not fall back to canned
+// profile prose). These tests assert against that current evidence-selection
+// shape instead of the old rendered-string contract.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -33,14 +37,12 @@ const PROFILE = {
   education: [{ institution: 'Test University', degree: 'BTech CSE' }],
 };
 const JD = { title: 'Data Analyst', role: 'Data Analyst' };
-const NATIVELY = /\b(i am|i'?m)\s+(natively|an? (ai )?assistant|a language model)\b/i;
-const SECOND_PERSON = /^(your |you are)\b/i;
 
 const fp = (q, profile = PROFILE, jd = null) =>
   tryBuildManualProfileFastPathAnswer({ question: q, profile, jobDescription: jd, source: 'what_to_answer' });
 
-// ── Gap 2: formatIntro / INTRO branch ────────────────────────────────────────
-describe('WTA intro: deterministic first-person, never Natively', () => {
+// ── Gap 2: intro route (identity_answer evidence selection) ──────────────────
+describe('WTA intro: deterministic identity_answer evidence, never a rendered assistant identity', () => {
   const introPhrasings = [
     'Tell me about yourself.',
     'Give me a quick introduction.',
@@ -52,69 +54,96 @@ describe('WTA intro: deterministic first-person, never Natively', () => {
     'Can you summarize who you are as a candidate?',
   ];
   for (const q of introPhrasings) {
-    test(`"${q}" → grounded first-person intro`, () => {
+    test(`"${q}" → grounded identity_answer evidence selection`, () => {
       const r = fp(q);
-      assert.ok(r && r.answer, `expected a deterministic answer for "${q}"`);
-      assert.match(r.answer, /^I'm Test Candidate/, 'must open first-person with the name');
-      assert.doesNotMatch(r.answer, NATIVELY, 'must not leak Natively/AI-assistant identity');
-      assert.doesNotMatch(r.answer, SECOND_PERSON, 'must not be second-person');
-      assert.doesNotMatch(r.answer, /\bEvin is\b|\bThe candidate\b/i, 'must not be third-person');
+      assert.ok(r, `expected an evidence selection for "${q}"`);
+      assert.equal(r.answerType, 'identity_answer');
+      assert.equal(r.answerShape, 'identity_answer');
+      assert.equal(r.answer, undefined, 'Full-JIT policy: must not render a final answer string');
+      assert.equal(r.usedDeterministicFastPath, false);
+      assert.equal(r.finalGenerationMode, 'jit_llm');
+      assert.equal(r.profileFactsReady, true);
+      assert.ok(r.items.some((f) => f.field === 'identity.name' && f.value === 'Test Candidate'));
+      assert.ok(r.selectedContextLayers.includes('stable_identity'));
+      assert.ok(r.excludedContextLayers.includes('assistant_identity'), 'must exclude the assistant-identity layer');
+      assert.deepEqual(r.selectedExperiences, [
+        { company: 'Acme Robotics', role: 'AI & Full Stack Engineer Intern' },
+        { company: 'Beta Labs', role: 'Software Engineer Intern' },
+      ]);
     });
   }
-  test('intro returns null (→ LLM) when no name is loaded', () => {
+
+  test('intro omits the identity.name fact (but still selects evidence) when no name is loaded', () => {
     const noName = { ...PROFILE, identity: {}, name: undefined };
     const r = fp('Tell me about yourself.', noName);
-    // formatIntro returns '' → branch yields no route; some other branch may also
-    // decline. Either way it must NOT produce a broken "I'm undefined".
-    if (r && r.answer) assert.doesNotMatch(r.answer, /undefined|I'm \./);
+    assert.ok(r, 'evidence selection must still proceed from experience/projects/skills');
+    assert.equal(r.answerType, 'identity_answer');
+    assert.ok(!r.items.some((f) => f.field === 'identity.name'), 'must not fabricate a name fact');
+    assert.deepEqual(r.selectedEntities, []);
   });
-  test('manual mode NOW uses the deterministic first-person intro (2026-06-06b)', () => {
+
+  test('manual mode selects the SAME deterministic identity_answer evidence (2026-06-06b)', () => {
     // Release 2026-06-06b: the real manual-chat log showed plain "introduce
     // yourself" / "introduce yourseld" reaching the LLM and answering "I'm
-    // Natively, an AI assistant". With a profile loaded, manual intro now uses the
-    // same deterministic first-person intro as WTA — it can never leak the
-    // assistant identity or refuse.
+    // Natively, an AI assistant". With a profile loaded, manual intro now routes
+    // through the same deterministic evidence selection as WTA — the JIT prompt
+    // builder downstream can never be handed the assistant identity instead.
     for (const q of ['Tell me about yourself.', 'introduce yourself', 'introduce yourseld', 'hey man introduce yourself']) {
       const r = tryBuildManualProfileFastPathAnswer({ question: q, profile: PROFILE, jobDescription: null, source: 'manual_input' });
-      assert.ok(r && r.answer, `manual "${q}" should fast-path to the deterministic intro`);
-      assert.match(r.answer, /^I'm Test Candidate/, `manual "${q}" must be the first-person candidate intro`);
-      assert.doesNotMatch(r.answer, NATIVELY, `manual "${q}" must not leak Natively/AI-assistant`);
+      assert.ok(r, `manual "${q}" should fast-path to deterministic evidence selection`);
+      assert.equal(r.answerType, 'identity_answer', `manual "${q}" must select identity_answer evidence`);
+      assert.ok(r.excludedContextLayers.includes('assistant_identity'), `manual "${q}" must exclude assistant identity`);
     }
   });
 });
 
-// ── Gap 3: first-person rewrites for what_to_answer ──────────────────────────
-describe('WTA fast-path: first-person voice for list routes', () => {
-  const cases = [
-    ['What is your name?', /^My name is /],
-    ['What projects have you done?', /^My projects include /],
-    ['What are your skills?', /^My skills include /],
-    ['What is your work experience?', /^My experience includes /],
-  ];
-  for (const [q, re] of cases) {
-    test(`"${q}" → first-person`, () => {
-      const r = fp(q);
-      assert.ok(r && r.answer, `expected answer for "${q}"`);
-      assert.match(r.answer, re, `expected first-person form for "${q}", got: ${r && r.answer}`);
-      assert.doesNotMatch(r.answer, /^Your /, 'must not be second-person');
-    });
-  }
-  test('JD-fit fast-path is first-person ("I fit", not "You fit")', () => {
+// ── Gap 3: fast-path list routes (evidence selection, not rendered strings) ──
+describe('WTA fast-path: list-route evidence selection', () => {
+  test('"What is your name?" → identity_answer with only the name fact', () => {
+    const r = fp('What is your name?');
+    assert.equal(r.answerType, 'identity_answer');
+    assert.deepEqual(r.selectedEntities, ['Test Candidate']);
+    assert.deepEqual(r.sourceRefs, ['identity:name']);
+    assert.ok(r.items.every((f) => f.field === 'identity.name'));
+  });
+
+  test('"What projects have you done?" → project_answer with both projects', () => {
+    const r = fp('What projects have you done?');
+    assert.equal(r.answerType, 'project_answer');
+    assert.equal(r.answerShape, 'project_answer');
+    assert.deepEqual(r.selectedProjects, PROFILE.projects);
+    assert.deepEqual(r.sourceRefs, ['project:Flagship', 'project:SidePro']);
+  });
+
+  test('"What are your skills?" → skills_answer with the full skill list', () => {
+    const r = fp('What are your skills?');
+    assert.equal(r.answerType, 'skills_answer');
+    assert.deepEqual(r.selectedSkills, ['Python', 'SQL', 'TypeScript', 'React']);
+    assert.deepEqual(r.sourceRefs, ['skills']);
+  });
+
+  test('"What is your work experience?" → experience_answer with both roles', () => {
+    const r = fp('What is your work experience?');
+    assert.equal(r.answerType, 'experience_answer');
+    assert.deepEqual(r.selectedExperiences, PROFILE.experience);
+    assert.deepEqual(r.sourceRefs, ['experience:Acme Robotics', 'experience:Beta Labs']);
+  });
+
+  test('JD-fit questions defer to the LLM (no deterministic fast path)', () => {
     const r = fp('Why are you a good fit for this role?', PROFILE, JD);
-    if (r && r.answer) assert.doesNotMatch(r.answer, /^You fit/i);
+    assert.equal(r, null, 'jd_fit questions must not fast-path deterministically');
   });
 });
 
-// ── Gap 1: buildLiveFallbackAnswer (the latency safety net) ──────────────────
-describe('buildLiveFallbackAnswer: latency fallback contract', () => {
+// ── Gap 1: buildLiveFallbackAnswer is a permanent Full-JIT-policy stub ───────
+describe('buildLiveFallbackAnswer: Full-JIT policy — always defers, never renders canned prose', () => {
   const callFb = (answerType, profile = PROFILE) =>
     buildLiveFallbackAnswer({ question: 'anything', answerType, profile, jobDescription: JD });
 
-  test('returns null for NON-profile routes (no profile in forbidden surfaces)', () => {
-    for (const at of ['coding_question_answer', 'dsa_question_answer', 'technical_concept_answer',
-      'system_design_answer', 'debugging_question_answer', 'general_meeting_answer',
-      'lecture_answer', 'sales_answer', 'negotiation_answer']) {
-      assert.equal(callFb(at), null, `${at} must NOT get a profile fallback`);
+  test('returns null for every answer type, profile-backed or not (2026-07-07 Full-JIT policy)', () => {
+    for (const at of ['coding_question_answer', 'identity_answer', 'profile_fact_answer', 'project_answer',
+      'skills_answer', 'experience_answer', 'jd_fit_answer', 'behavioral_interview_answer']) {
+      assert.equal(callFb(at), null, `${at} must never fall back to canned profile prose`);
     }
   });
 
@@ -122,27 +151,10 @@ describe('buildLiveFallbackAnswer: latency fallback contract', () => {
     assert.equal(callFb('jd_fit_answer', {}), null);
     assert.equal(callFb('identity_answer', null), null);
   });
-
-  test('returns a NON-EMPTY first-person answer for every profile route', () => {
-    for (const at of ['identity_answer', 'profile_fact_answer', 'project_answer',
-      'project_followup_answer', 'skills_answer', 'skill_experience_answer',
-      'experience_answer', 'jd_fit_answer', 'behavioral_interview_answer']) {
-      const a = callFb(at);
-      assert.ok(a && a.trim().length > 0, `${at} must yield a non-empty fallback`);
-      assert.doesNotMatch(a, NATIVELY, `${at} fallback must not leak Natively`);
-      assert.doesNotMatch(a, /^Your |\bYou are\b/i, `${at} fallback must be first-person, got: ${a}`);
-    }
-  });
-
-  test('behavioral fallback (no fast-path) still produces grounded first-person content', () => {
-    const a = callFb('behavioral_interview_answer');
-    assert.ok(a && /^I'm |^I /.test(a), `expected first-person, got: ${a}`);
-    assert.doesNotMatch(a, /I don't have specific past experience loaded/);
-  });
 });
 
-// Issue 7: expanded deterministic fast-path coverage for common direct questions.
-describe('Issue 7: direct-profile fast paths (instant, grounded)', () => {
+// Issue 7: expanded deterministic evidence-selection coverage for direct questions.
+describe('Issue 7: direct-profile fast paths (instant, grounded evidence selection)', () => {
   const profile = {
     identity: { name: 'Test Candidate' },
     experience: [{ company: 'Acme', role: 'Engineer' }],
@@ -151,30 +163,56 @@ describe('Issue 7: direct-profile fast paths (instant, grounded)', () => {
     education: [{ institution: 'Test University', degree: 'BTech CSE' }],
   };
   const fp = (q) => tryBuildManualProfileFastPathAnswer({ question: q, profile, jobDescription: { title: 'Data Analyst' }, source: 'manual_input' });
-  const covered = [
-    'What do you currently do?', 'What companies have you worked with?',
-    'What programming languages do you know?', 'What are your main skills?',
-    'Where did you study?', 'What is your educational background?',
-    'What is your experience with SQL?',
-  ];
-  for (const q of covered) {
-    test(`"${q}" → deterministic fast-path (no LLM)`, () => {
-      const r = fp(q);
-      assert.ok(r && r.answer && r.answer.trim().length > 0, `expected a fast-path answer for "${q}"`);
-      assert.equal(r.providerUsed, false);
-    });
-  }
-  test('skill-experience fast path is GROUNDED (SQL → names the project that uses it)', () => {
-    const r = fp('What is your experience with SQL?');
-    assert.match(r.answer, /SQL/i);
-    assert.match(r.answer, /Proj1/);
+
+  test('"What do you currently do?" → experience_answer (Acme/Engineer)', () => {
+    const r = fp('What do you currently do?');
+    assert.equal(r.answerType, 'experience_answer');
+    assert.deepEqual(r.selectedExperiences, [{ company: 'Acme', role: 'Engineer' }]);
+    assert.deepEqual(r.sourceRefs, ['experience:Acme']);
   });
+
+  test('"What companies have you worked with?" → same experience_answer evidence', () => {
+    const r = fp('What companies have you worked with?');
+    assert.equal(r.answerType, 'experience_answer');
+    assert.deepEqual(r.selectedExperiences, [{ company: 'Acme', role: 'Engineer' }]);
+  });
+
+  test('"What programming languages do you know?" defers to the LLM (no structured .skills.languages)', () => {
+    // ASKS_SPECIFICALLY_ABOUT_LANGUAGES_RE matches and requires profile.skills.languages;
+    // this fixture only has skills_flat, so it must defer rather than fabricate.
+    const r = fp('What programming languages do you know?');
+    assert.equal(r, null);
+  });
+
+  test('"What are your main skills?" → skills_answer preserving skills_flat order', () => {
+    const r = fp('What are your main skills?');
+    assert.equal(r.answerType, 'skills_answer');
+    assert.deepEqual(r.selectedSkills, ['Python', 'SQL', 'React', 'TypeScript']);
+  });
+
+  test('"Where did you study?" → profile_fact_answer with education evidence', () => {
+    const r = fp('Where did you study?');
+    assert.equal(r.answerType, 'profile_fact_answer');
+    assert.deepEqual(r.selectedEducation, [{ institution: 'Test University', degree: 'BTech CSE' }]);
+    assert.deepEqual(r.sourceRefs, ['education:Test University']);
+  });
+
+  test('"What is your educational background?" → same profile_fact_answer education evidence', () => {
+    const r = fp('What is your educational background?');
+    assert.equal(r.answerType, 'profile_fact_answer');
+    assert.deepEqual(r.selectedEducation, [{ institution: 'Test University', degree: 'BTech CSE' }]);
+  });
+
+  test('"What is your experience with SQL?" → skill_experience_answer, GROUNDED to the project that uses it', () => {
+    const r = fp('What is your experience with SQL?');
+    assert.equal(r.answerType, 'skill_experience_answer');
+    assert.deepEqual(r.selectedSkills, ['SQL']);
+    assert.ok(r.items.some((f) => f.field === 'skill.projects' && f.value.includes('Proj1')), 'must name the grounding project');
+    assert.deepEqual(r.sourceRefs, ['skill:SQL', 'project:Proj1']);
+  });
+
   test('a skill NOT in the profile defers to the LLM (no hallucination)', () => {
     const r = fp('What is your experience with Kubernetes?');
-    assert.ok(!r || !r.answer, 'must not fabricate experience with an absent skill');
-  });
-  test('"educational background" → education (not experience)', () => {
-    const r = fp('What is your educational background?');
-    assert.match(r.answer, /education|B\.?Tech|Test University/i);
+    assert.equal(r, null, 'must not fabricate experience with an absent skill');
   });
 });

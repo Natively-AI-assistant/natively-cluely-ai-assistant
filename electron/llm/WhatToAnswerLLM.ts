@@ -1,6 +1,7 @@
 import { LLMHelper } from "../LLMHelper";
 import { UNIVERSAL_WHAT_TO_ANSWER_PROMPT } from "./prompts";
 import { TINY_WHAT_TO_ANSWER_PROMPT } from "./tinyPrompts";
+import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
 import { estimateTokens } from "./modelCapabilities";
 import { TemporalContext } from "./TemporalContextBuilder";
 import { IntentResult } from "./IntentClassifier";
@@ -156,6 +157,9 @@ export class WhatToAnswerLLM {
         // so the two are now derived from the same t0 decision. Optional →
         // absent for existing callers/tests (backward compatible).
         requestSnapshot?: WhatToAnswerRequestSnapshot,
+        // The request-owned WTA controller. A newer WTA trigger aborts it so the
+        // provider request ends rather than continuing as a hidden stale stream.
+        abortSignal?: AbortSignal,
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
         let tStart = 0, tIntent = 0, tTemporal = 0, tMode = 0, tTrunc = 0, tPrompt = 0, tStreamStart = 0;
@@ -218,10 +222,18 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 initialContextOsGeneration?.govern
                 && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled'),
             );
-            let governedEvidencePack: import('../intelligence/context-os').EvidencePack | null = null;
+            // A multi-family coordinator may have already resolved one bounded
+            // packet before this generator begins. Preserve that exact packet by
+            // identity: re-running EvidenceResolver here would discard profile/JD
+            // items, create a second factual authority, and race the active mode.
+            // Legacy document-only WTA contexts arrive without a pack and retain
+            // the existing resolver path below.
+            let governedEvidencePack: import('../intelligence/context-os').EvidencePack | null =
+                initialContextOsGeneration?.evidencePack ?? null;
             // Skill mode owns the system prompt — skip the (potentially expensive
-            // hybrid retrieval) mode-context block fetch entirely.
-            if (!activeSkill) {
+            // hybrid retrieval) mode-context block fetch entirely. A pre-resolved
+            // governed packet likewise skips legacy/raw retrieval.
+            if (!activeSkill && !governedEvidencePack) {
                 try {
                     const modesManager = this.getModesManager();
                     // Phase 4 — prefer async hybrid retrieval (FTS + vector with
@@ -587,12 +599,30 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 }
             }
 
+            // Code-review finding (2026-07-28): mirrors the DOM budget-estimate fix
+            // right above — buildScreenContextBlock now also runs
+            // escapePromptInjection with forceRedactOnInjection=true (Phase 3
+            // security fix), so it can collapse to INJECTION_REDACTION_MESSAGE just
+            // like the DOM block. Without this, a screen-content injection pattern
+            // (real or false-positive) would inflate assemblerBudget as if the full
+            // ~2000-char extracted text survived, over-truncating workingTranscript
+            // for no reason. NOTE: this file's ScreenContext type (from
+            // ScreenContextService.ts) only has `ocrText` — unlike
+            // PromptAssembler.ts's richer ScreenContext (extractedText/
+            // visibleSummary/ocrText), so ocrText is the correct (and only) field
+            // to read here; no fallback-order gap applies to this call site.
+            const screenText = screenContext?.ocrText || '';
+            const screenTokenEstimate = screenText
+                ? (PromptAssembler.hasPromptInjection(escapeUserContent(screenText))
+                    ? estimateTokens(INJECTION_REDACTION_MESSAGE) + 100
+                    : estimateTokens(screenText) + 100)
+                : 0;
             const assemblerBudget = 2000
                 + estimateTokens(intentContext || '')
                 + estimateTokens(modeContextBlock)
                 + estimateTokens(pinnedModeInstructions)
                 + estimateTokens(effectiveCandidateProfile || '')
-                + estimateTokens(screenContext?.ocrText || '')
+                + screenTokenEstimate
                 + domTokenEstimate
                 + estimateTokens((temporalContext?.previousResponses || []).join('\n'));
             const reservedForFit =
@@ -615,13 +645,35 @@ ANSWER SHAPE: ${intentResult.answerShape}
 
             if (MEASURE) tMode = performance.now();
 
-            const basePrompt = this.llmHelper.getPromptTier() === 'tiny'
-                ? TINY_WHAT_TO_ANSWER_PROMPT
-                : UNIVERSAL_WHAT_TO_ANSWER_PROMPT;
+            // Prompt System v2 (flag promptSystemV2): the composed core+mode+action
+            // prompt already carries the active mode's contract, so the legacy
+            // ## ACTIVE MODE template suffix (23–45k chars) must NOT be appended
+            // on top — that would both duplicate the mode role and reintroduce
+            // the formatting rules v2 replaces. An active SKILL block still
+            // appends (skills are orthogonal to the mode/action contracts).
+            // Flag off → legacy constants + suffix, byte-for-byte unchanged.
+            const v2BasePrompt = resolveV2SystemPrompt({
+                action: 'what_to_say',
+                tier: v2TierForPromptTier(this.llmHelper.getPromptTier()),
+                // Pinned mode instructions ("Real-time prompt") ride the SYSTEM
+                // prompt under v2 — they are user configuration, and the v2 turn
+                // envelope below would otherwise demote them to untrusted
+                // evidence. (On the rare governed turn where the envelope does
+                // not fire they also appear via the legacy assembler — a benign
+                // duplication of config text, never of facts.)
+                customInstructions: pinnedModeInstructions || undefined,
+                // Universal coding contract: a live coding question gets the
+                // contract in ANY mode, not only technical-interview.
+                codingTask: isCodingAnswerType(answerPlan?.answerType as AnswerType),
+            });
+            const basePrompt = v2BasePrompt
+                ?? (this.llmHelper.getPromptTier() === 'tiny'
+                    ? TINY_WHAT_TO_ANSWER_PROMPT
+                    : UNIVERSAL_WHAT_TO_ANSWER_PROMPT);
 
             const finalPromptOverride = activeSkill
                 ? `${basePrompt}\n\n## ACTIVE SKILL\n${activeSkill.promptBlock}`
-                : modePromptSuffix
+                : (modePromptSuffix && !v2BasePrompt)
                     ? `${basePrompt}\n\n## ACTIVE MODE\n${modePromptSuffix}`
                     : basePrompt;
 
@@ -634,6 +686,9 @@ ANSWER SHAPE: ${intentResult.answerShape}
             let typedModeContext = modeContextBlock;
             let typedCandidateProfile = effectiveCandidateProfile;
             let transcriptForPrompt = workingTranscript;
+            // Set when the Context OS pack governs this turn (v2 turn envelope
+            // must stand down — its escaping would corrupt the rendered pack).
+            let cogGovernedTurn = false;
             try {
                 const _cog = requestSnapshot?.contextOsGeneration as import('../intelligence/context-os').ContextOsGenerationContext | undefined;
                 const { isIntelligenceFlagEnabled } = require('../intelligence/intelligenceFlags');
@@ -653,6 +708,10 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     if (!rendered) throw new Error('governed WTA EvidencePack did not render');
                     typedModeContext = rendered;
                     typedCandidateProfile = '';
+                    // The rendered pack is structured XML the final-prompt
+                    // validator checks verbatim — the v2 turn envelope must NOT
+                    // re-escape it (see the envelope gate below).
+                    cogGovernedTurn = true;
                     // A reference-file-owned WTA turn may use transcript only for
                     // retrieval pronouns; it never enters the provider packet as facts.
                     if (_cog.contract.sourceOwner === 'reference_files') transcriptForPrompt = '';
@@ -785,16 +844,100 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 || Boolean(!documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses && temporalContext.previousResponses.length > 0);
             if (hasProfileHistory) packetScopes.push('profile_history');
             // Coding/DSA answers get a small reasoning budget for correctness;
-            // everything else streams with thinking off (fastest TTFT). abortSignal
-            // is undefined here (WTA uses generation-id supersession, not a signal).
+            // everything else streams with thinking off (fastest TTFT). The WTA
+            // request signal is threaded to LLMHelper so generation supersession
+            // terminates the provider stream, not just its visible token delivery.
             // Optional-safe: older/stub helpers may not expose the resolver.
             const wtaThinkingBudget = this.llmHelper.thinkingBudgetForAnswerType?.(
                 Boolean(answerPlan && isCodingAnswerType(answerPlan.answerType)),
             );
-            const wtaRouteOptions = governedEvidencePack && requestSnapshot?.contextOsGeneration
-                ? { answerType: answerPlan?.answerType, contextOsGeneration: requestSnapshot.contextOsGeneration }
-                : { answerType: answerPlan?.answerType };
-            for await (const token of this.llmHelper.streamChat(packet.userMessage, imagePaths, undefined, finalPromptOverride, true, true, packetScopes, undefined, wtaThinkingBudget, wtaRouteOptions)) {
+            // Grounding-campaign3 (2026-07-23): thread the RESOLVED pack, not the
+            // local `governedEvidencePack` variable. A multi-family coordinator
+            // pre-built `_cog.evidencePack` for a non-doc-grounded turn skips the
+            // `governedEvidenceResolutionStarted` branch above, so this gate was
+            // silently dropping `contextOsGeneration` and skipping the final-prompt
+            // validator in LLMHelper. Reuse the same `pack` constant rendered into
+            // the prompt for parity with the governance block.
+            const governedWtaContextOs = requestSnapshot?.contextOsGeneration as
+                import('../intelligence/context-os').ContextOsGenerationContext | undefined;
+            const resolvedGovernedPack: import('../intelligence/context-os').EvidencePack | null = (
+                governedWtaContextOs && governedWtaContextOs.govern
+                    ? (governedEvidencePack ?? governedWtaContextOs.evidencePack ?? null)
+                    : null
+            );
+            const wtaRouteOptions = resolvedGovernedPack && governedWtaContextOs
+                ? {
+                    answerType: answerPlan?.answerType,
+                    contextOsGeneration: governedWtaContextOs,
+                    // Grounding-campaign3 (2026-07-23): thread the t0 mode pin so
+                    // LLMHelper._streamChatInner's always-on document-grounded
+                    // retrieval reads the SAME mode the request was planned
+                    // against. Without this, a mid-request mode switch could
+                    // leak a different mode's documents into the answer.
+                    pinnedModeId: requestSnapshot?.modeUniqueId ?? null,
+                }
+                : {
+                    answerType: answerPlan?.answerType,
+                    pinnedModeId: requestSnapshot?.modeUniqueId ?? null,
+                };
+            // CONTEXT INTELLIGENCE V3 (Phase 6) — prompt substitution, transport intact.
+            //
+            // When the frozen snapshot carries a V3-composed prompt, THAT is what the
+            // provider sees: the orchestrator already decided sources, scope, version
+            // and claim requirements, and re-wrapping its output in the legacy
+            // assembly would re-inject exactly the ungoverned context V3 excluded.
+            // Everything around the call — streaming, deadlines, supersession,
+            // cancellation, token accounting — is byte-for-byte the legacy transport,
+            // which is the point: the decision layer is swapped, the delivery is not.
+            const _v3p = (requestSnapshot as any)?.v3Prompt;
+            // ── PROMPT SYSTEM V2 TURN ENVELOPE (flag promptSystemV2) ─────────
+            // When the v2 system prompt drives this turn (and neither V3 nor a
+            // Context OS pack owns it), the user content is the v2 envelope the
+            // benchmark's integrated arm measured: ranked evidence first, recent
+            // transcript next, the newest turn and typed request LAST. Built
+            // from the SAME post-governance inputs the legacy assembler would
+            // consume — no new retrieval, no routing change. Screen OCR keeps
+            // the assembler's injection-redaction posture. Any missing piece
+            // (no extracted question) or any throw → legacy packet, unchanged.
+            let _v2TurnUser: string | null = null;
+            try {
+                if (v2BasePrompt && !_v3p && !cogGovernedTurn && answerPlan?.question?.trim()) {
+                    const { buildTurnContentV2 } = require('./promptSystemV2') as typeof import('./promptSystemV2');
+                    const screenText = screenContext?.ocrText || '';
+                    const screenForEnvelope = screenText
+                        ? (PromptAssembler.hasPromptInjection(escapeUserContent(screenText))
+                            ? INJECTION_REDACTION_MESSAGE
+                            : screenText)
+                        : '';
+                    const evidence = [
+                        typedCandidateProfile?.trim() ? { kind: 'profile' as const, content: typedCandidateProfile, source: 'candidate_profile' } : null,
+                        typedModeContext?.trim() ? { kind: 'reference_file' as const, content: typedModeContext, source: 'mode_reference_material' } : null,
+                        screenForEnvelope.trim() ? { kind: 'screen' as const, content: screenForEnvelope, source: 'screen_ocr' } : null,
+                        processedDomContext?.trim() ? { kind: 'browser_dom' as const, content: processedDomContext, source: 'browser' } : null,
+                        (!documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses && temporalContext.previousResponses?.length)
+                            ? { kind: 'other' as const, content: temporalContext.previousResponses.join('\n'), source: 'prior_assistant_responses' } : null,
+                    ].filter((e): e is NonNullable<typeof e> => e !== null);
+                    _v2TurnUser = buildTurnContentV2({
+                        evidence,
+                        recentTranscript: transcriptForPrompt || undefined,
+                        currentTurn: answerPlan.question,
+                        directRequest: intentContext || undefined,
+                    });
+                }
+            } catch (v2TurnErr: any) {
+                console.warn('[WhatToAnswerLLM] v2 turn envelope skipped (non-fatal):', v2TurnErr?.message);
+                _v2TurnUser = null;
+            }
+            const _wtaUserMessage = _v3p?.user ?? _v2TurnUser ?? packet.userMessage;
+            const _wtaSystemPrompt = _v3p?.system ?? finalPromptOverride;
+            if (_v3p) console.log('[WhatToAnswerLLM] V3 prompt in effect (Phase 6 wiring)');
+            // v3Owned: when the V3 prompt is in effect, the Context OS govern
+            // block in LLMHelper must NOT substitute its EvidencePack for the
+            // composed user prompt — that spliced two governance layers into one
+            // turn (V3's system prompt + Context OS's user pack, V3's user
+            // prompt discarded). Only set when _v3p actually rides this stream.
+            const _wtaRoute = _v3p ? { ...wtaRouteOptions, v3Owned: true } : wtaRouteOptions;
+            for await (const token of this.llmHelper.streamChat(_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, _wtaRoute)) {
                 if (MEASURE) {
                     const now = performance.now();
                     if (!tFirstToken) tFirstToken = now;

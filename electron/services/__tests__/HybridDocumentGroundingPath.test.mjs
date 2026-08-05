@@ -143,3 +143,18 @@ test('IntelligenceEngine wires document-grounded WTA validation and repair', () 
   assert.match(src, /doc_grounded_repair_applied/, 'WTA must have a successful document-grounded repair path');
   assert.match(src, /doc_grounded_safe_refusal_after_repair_reject/, 'WTA must fail closed when repair cannot be trusted');
 });
+
+test('IntelligenceEngine WTA repair has a non-regression length floor (root-cause fix, 2026-07-23)', () => {
+  const src = read('electron/IntelligenceEngine.ts');
+  assert.match(src, /wtaRepairIsLengthDowngrade/, 'WTA repair acceptance must check for a length-downgrade regression vs the pre-repair answer');
+  assert.match(
+    src,
+    /repairedTrim\.length < wtaOriginalForCompare\.length \* 0\.6/,
+    'the length-downgrade check must compare the repaired answer against the ORIGINAL pre-repair answer length',
+  );
+  assert.match(
+    src,
+    /!wtaRepairIsLengthDowngrade[\s\S]{0,400}validateDocumentGroundedAnswer/,
+    'the length-downgrade guard must gate repair acceptance alongside the fabrication/artifact checks',
+  );
+});

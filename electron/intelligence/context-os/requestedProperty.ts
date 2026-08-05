@@ -133,13 +133,70 @@ export const PROPERTY_RULES: readonly PropertyRule[] = [
       /\bbacked\s+by\b/i,
     ],
   },
+  // These are separate properties rather than one physical-specification bucket:
+  // a weight row must never prove a voltage/dimensions/power question. Every
+  // question pattern therefore requires either an explicit field label or a
+  // physical-device anchor, avoiding ML meanings such as weight decay, network
+  // depth, and embedding dimensions.
+  {
+    property: 'physical_weight',
+    questionPatterns: [
+      /\bhow\s+much\b[^.?!]{0,40}\bweigh(?:s|ed)?\b/i,
+      /\b(?:total|net|gross|physical)\s+(?:weight|mass)\b/i,
+      /\bhow\s+much\s+(?:is|was)\s+(?:the\s+)?(?:total|net|gross|physical\s+)?(?:weight|mass)\b/i,
+      /\b(?:weight|mass)\s+of\s+(?:the\s+)?(?:robot|device|drone|vehicle|machine|unit|equipment)\b/i,
+      /\b(?:robot|device|drone|vehicle|machine|unit|equipment)\s+(?:weight|mass)\b/i,
+    ],
+    evidencePatterns: [
+      /\b(?:(?:total|net|gross)\s+)?(?:weight|mass)\b(?:\s*\([^)]{1,24}\))?\s*(?::|-|is|was|of)?\s*(?:approximately|about|around|up\s+to)?\s*\d[\d,]*(?:\.\d+)?\s*(?:kg|kilograms?|g|grams?|lbs?|pounds?)\b/i,
+      /\bweighs?\b[^.?!]{0,48}\b(?:approximately|about|around)?\s*\d[\d,]*(?:\.\d+)?\s*(?:kg|kilograms?|g|grams?|lbs?|pounds?)\b/i,
+    ],
+  },
+  {
+    property: 'physical_dimensions',
+    questionPatterns: [
+      /\bphysical\s+dimensions?\b/i,
+      /\bdimensions?\s+of\s+(?:the\s+)?(?:robot|device|drone|vehicle|machine|unit|equipment)\b/i,
+      /\b(?:height|width|length|depth)\s+of\s+(?:the\s+)?(?:robot|device|drone|vehicle|machine|unit|equipment)\b/i,
+      /\b(?:robot|device|drone|vehicle|machine|unit|equipment)\s+(?:dimensions?|height|width|length|depth)\b/i,
+    ],
+    evidencePatterns: [
+      /\b(?:overall\s+)?dimensions?\b(?:\s*\([^)]{1,24}\))?\s*(?::|-|are|is)?\s*\d[\d,]*(?:\.\d+)?\s*(?:(?:mm|millimet(?:er|re)s?|cm|centimet(?:er|re)s?|m|met(?:er|re)s?|in(?:ches)?)\b\s*(?:[x×]\s*\d[\d,]*(?:\.\d+)?\s*(?:mm|millimet(?:er|re)s?|cm|centimet(?:er|re)s?|m|met(?:er|re)s?|in(?:ches)?)\b){1,2}|(?:[x×]\s*\d[\d,]*(?:\.\d+)?\s*){1,2}(?:mm|millimet(?:er|re)s?|cm|centimet(?:er|re)s?|m|met(?:er|re)s?|in(?:ches)?)\b)/i,
+      /\b(?:height|width|length|depth)\b(?:\s*\((?:mm|millimet(?:er|re)s?|cm|centimet(?:er|re)s?|m|met(?:er|re)s?|in(?:ches)?)\))?\s*(?::|-|is|was|of)?\s*\d[\d,]*(?:\.\d+)?\s*(?:mm|millimet(?:er|re)s?|cm|centimet(?:er|re)s?|m|met(?:er|re)s?|in(?:ches)?)?\b/i,
+    ],
+  },
+  {
+    property: 'working_voltage',
+    questionPatterns: [
+      /\bworking\s+voltage\b/i,
+      /\b(?:operating|supply)\s+voltage\b/i,
+      /\bvoltage\s+of\s+(?:the\s+)?(?:robot|device|drone|vehicle|machine|unit|equipment)\b/i,
+    ],
+    evidencePatterns: [
+      /\b(?:working|operating|supply)\s+voltage\b(?:\s*\((?:v|volts?)\)\s*(?::|-|is|was|of)?\s*\d[\d,]*(?:\.\d+)?|\s*(?::|-|is|was|of)?\s*\d[\d,]*(?:\.\d+)?\s*(?:v|volts?)\b)/i,
+      /\b(?:operates?|runs?)\s+at\s+\d[\d,]*(?:\.\d+)?\s*(?:v|volts?)\b/i,
+    ],
+  },
+  {
+    property: 'power_requirement',
+    questionPatterns: [
+      /\b(?:power\s+(?:consumption|requirement|rating)|rated\s+power)\b/i,
+      /\bpower\s+of\s+(?:the\s+)?(?:robot|device|drone|vehicle|machine|unit|equipment)\b/i,
+    ],
+    evidencePatterns: [
+      /\b(?:power\s+(?:consumption|requirement|rating)|rated\s+power)\b(?:\s*\([^)]{1,24}\))?\s*(?::|-|is|was|of)?\s*(?:up\s+to\s+)?\d[\d,]*(?:\.\d+)?\s*(?:w|watts?)\b/i,
+      /\bdraws?\s+(?:up\s+to\s+)?\d[\d,]*(?:\.\d+)?\s*(?:w|watts?)\b/i,
+    ],
+  },
   {
     property: 'cost_or_price',
     questionPatterns: [
       /\bcost(?:s)?\b/i,
       /\bprice(?:s|d)?\b/i,
       /\bbudget\b/i,
-      /\bhow\s+much\s+(?:did|does|is|was|to)\b/i,
+      // Do not claim physical "How much does it weigh?" questions merely
+      // because they share the conversational "how much does" prefix.
+      /\bhow\s+much\s+(?!(?:did|does|is|was)\b[^.?!]{0,40}\bweigh(?:s|ed)?\b)(?:did|does|is|was|to)\b/i,
       /\bexpensive\b/i,
       /[₹$€£]\s?\d/,
       /\b(?:usd|inr|eur)\b/i,
@@ -309,6 +366,19 @@ export const PROPERTY_RULES: readonly PropertyRule[] = [
       /\bactuators?\b/i,
       /\bwhat\s+(?:robot|device|equipment)\b/i,
     ],
+    // Campaign 2 longsession (2026-07-19, run-032/033 forensics): this list
+    // was written for robotics-thesis hardware ("sensors", "actuators",
+    // "boards") and had ZERO ML/compute-hardware vocabulary — "what hardware
+    // did they train on?" against an ML paper whose evidence literally says
+    // "Eight NVIDIA P100 GPUs" matched none of these patterns, so
+    // itemSupportsProperty/deriveEvidenceSufficiency's propertySatisfied
+    // check failed even though the correct fact was retrieved with high
+    // confidence, producing a false "not directly mentioned" refusal
+    // (electron/intelligence/context-os/propertyEvidenceValidator.ts) on a
+    // genuinely well-grounded answer. Adding compute-hardware terms here is
+    // the same category of fix as training_time's existing "gpu hours"
+    // evidence pattern a few rules below — generic vocabulary, no
+    // document-specific values.
     evidencePatterns: [
       /\bhardware\b/i,
       /\bsensors?\b/i,
@@ -317,6 +387,12 @@ export const PROPERTY_RULES: readonly PropertyRule[] = [
       /\brobots?\b/i,
       /\bdevices?\b/i,
       /\bboards?\b/i,
+      /\bgpus?\b/i,
+      /\btpus?\b/i,
+      /\bcpus?\b/i,
+      /\baccelerators?\b/i,
+      /\bnvidia\b/i,
+      /\bp100s?\b|\bv100s?\b|\ba100s?\b|\bh100s?\b/i,
     ],
   },
   {

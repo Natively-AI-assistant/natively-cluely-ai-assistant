@@ -12,9 +12,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 
-const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../..');
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const TOP = path.join(repoRoot, 'build/entitlements.mac.plist');
 const INHERIT = path.join(repoRoot, 'build/entitlements.mac.inherit.plist');
 

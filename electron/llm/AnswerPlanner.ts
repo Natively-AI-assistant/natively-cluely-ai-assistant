@@ -550,7 +550,7 @@ const TECHNICAL_SUBJECT_PATTERNS = [
   /\b(eventual consistency|strong consistency|consistency model|cap theorem|consensus|quorum|paxos|raft|two[- ]?phase commit)\b/i,
   /\b(amortized|complexity|big[- ]?o|asymptotic|np[- ]?complete)\b/i,
   /\b(closure|hoisting|prototype|garbage collection|event loop|promise|async)\b/i,
-  /\b(rest|graphql|grpc|microservice|monolith|cache|caching|cdn|load balanc|rate limit\w*|rate[- ]?limiter|message queue|pub[- ]?sub|webhook|idempoten\w*|backpressure|circuit breaker)\b/i,
+  /\b(rest|restful|graphql|graph\s*ql|apis?|grpc|microservice|monolith|cache|caching|cdn|load balanc|rate limit\w*|rate[- ]?limiter|message queue|pub[- ]?sub|webhook|idempoten\w*|backpressure|circuit breaker)\b/i,
   /\b(encryption|hashing|oauth|jwt|tls|ssl|cors|xss|csrf|sql injection)\b/i,
   /\b(pointer|reference|stack|heap|recursion|iteration|polymorphism|inheritance)\b/i,
   // Frameworks / cloud / data-eng subjects that appear in "explain X" concept
@@ -561,7 +561,93 @@ const TECHNICAL_SUBJECT_PATTERNS = [
   /\b(indexing|pandas|numpy|spark|hadoop|etl|dataframe)\b/i,
   /\b(a\/b test|ab test|retention|cohort|regression|classification|clustering)\b/i,
 ];
-const isLikelyTechnicalConcept = (text: string): boolean => includesAny(text, TECHNICAL_SUBJECT_PATTERNS);
+// CI/CD and related devops terms (live-confirmed leak, 2026-07-27): "what is
+// CI/CD" fell through to unknown_answer (profileContextPolicy: 'allowed')
+// instead of technical_concept_answer (forbidden) — a downstream relevance-
+// match then injected profile context because the profile happens to contain
+// devops-adjacent terms. Deliberately kept OUT of TECHNICAL_SUBJECT_PATTERNS
+// itself (not merged into the array above) — that array is also consulted
+// directly by the project_followup_answer negation guard below (~line 2535,
+// `!includesAny(textNoTechStack, TECHNICAL_SUBJECT_PATTERNS)`), and a code-
+// review pass confirmed live that merging it there misroutes genuine own-
+// project follow-ups ("how did you handle CI/CD?", "why did you choose
+// jenkins?") away from project_followup_answer/required. This array is only
+// consulted by isLikelyTechnicalConcept below, which the negation guard does
+// NOT use (same reason "framework"/RC-2's typo-tolerant list is excluded
+// from that guard — see the guard's own comment).
+const DEVOPS_CICD_PATTERNS = [
+  /\b(ci[\s/]*cd|continuous integration|continuous (delivery|deployment)|devops|jenkins|github actions|gitlab[- ]?ci|build pipeline)\b/i,
+];
+// Software-engineering concept vocabulary (live-confirmed leak, 2026-07-27,
+// n=20 harness run): "what is dependency injection" fell through to
+// unknown_answer (profileContextPolicy: 'allowed') instead of
+// technical_concept_answer (forbidden), and the full candidate profile
+// (~10.6K chars) was injected into a request that has nothing to do with the
+// candidate — confirmed via promptAuditLatest.hasRawCandidateProfile, 5/5
+// reps. A vocabulary sweep against sibling "what is X" phrasing found 12 more
+// common OOP/design-pattern/testing/infra terms with the identical gap.
+// Deliberately kept OUT of TECHNICAL_SUBJECT_PATTERNS (same reason as
+// DEVOPS_CICD_PATTERNS above): that array also feeds the project_followup_answer
+// negation guard below (~line 2547), and merging there would misroute genuine
+// own-project follow-ups ("how did you apply dependency injection in your
+// project?") away from project_followup_answer/required. Consulted only by
+// isLikelyTechnicalConcept, which the negation guard does not use.
+const SOFTWARE_ENGINEERING_CONCEPT_PATTERNS = [
+  /\b(dependency injection|inversion of control|ioc)\b/i,
+  // Code-review fix (2026-07-27): the original singular-only forms
+  // (`design pattern`, `factory pattern`, `observer pattern`, `memory leak`,
+  // `monorepo`) never matched plural phrasing ("what are design patterns",
+  // "what causes memory leaks") — the exact bug class this array exists to
+  // close, live-confirmed via before/after classification.
+  /\b(design patterns?|singletons?|factory patterns?|observer patterns?|solid principles?)\b/i,
+  /\b(memory leaks?|load balanc\w*)\b/i,
+  /\b(unit test\w*|\btdd\b|test[- ]?driven development|monorepos?)\b/i,
+];
+// BEHAVIORAL-PAST-EXPERIENCE GUARD (shared). A past-tense candidate frame
+// ("tell me about a time you fixed a memory leak", "describe how you improved
+// test coverage with unit testing at your last job") must defer away from a
+// forbidden-profile technical/debugging lane into behavioral/skill-experience
+// routing — the candidate is telling a STAR story about their own past, not
+// asking for a neutral definition. Originally inline in the debugging-question
+// branch only (manual regression 2026-06-12, stress seq_056; narrower verb
+// list: solved/fixed/faced/debugged/handled/dealt with/encountered/resolved/
+// found). Factored out and widened (2026-07-27, RC-9 code review): the
+// SOFTWARE_ENGINEERING_CONCEPT_PATTERNS vocabulary expansion above (design
+// pattern, load balancing, unit testing, etc.) widened the technical_concept
+// branch's surface into far more common behavioral-interview phrasing than the
+// old DSA-only terms did ("describe a time you set up load balancing under
+// pressure", "describe a design pattern you introduced to fix a messy
+// codebase", "describe how you improved test coverage with unit testing at
+// your last job") — none of which the original narrow verb list caught, since
+// none of those questions use "solved/fixed/faced/...". Both branches now
+// share this wider guard so they can't drift out of sync.
+const PAST_TENSE_STORY_FRAME_RE = /\b(tell me about|describe|share|give me an example of)\b.{0,60}\b(you|you'?ve|u)\b.{0,80}\b(solved|fixed|faced|debugged|handled|dealt with|encountered|resolved|found|improved|introduced|set up|built|designed|used|implemented|created|adopted|migrated|optimi[sz]ed|refactored|chose|architected)\b/i;
+const HARDEST_BUG_STORY_FRAME_RE = /\b(hardest|toughest|most difficult|trickiest|worst)\b.{0,30}\b(bug|error|issue|crash)\b.{0,40}\b(you|you'?ve|your career|you ever)\b/i;
+const isPastTensePersonalExperienceFrame = (text: string): boolean =>
+  PAST_TENSE_STORY_FRAME_RE.test(text) || HARDEST_BUG_STORY_FRAME_RE.test(text);
+// Typo-tolerant technical vocabulary (RC-2 fix): a one-edit-distance misspelling
+// of a common technical term ("qraphql") should route the same as the correctly
+// spelled term, rather than falling through to classifyUnmatchedFallback's
+// unknown_answer (which had no relevance-gated profile policy — see RC-1). Only
+// terms >= 4 chars are fuzzed by includesPlannerTerm, so short acronyms like
+// "api" rely on the exact TECHNICAL_SUBJECT_PATTERNS entry above instead.
+// "mutex" deliberately excluded (code-review 2026-07-27): levenshtein1('mute',
+// 'mutex') is true, and "mute" is a common word in a live-meeting/interview
+// product's transcripts — the exact `\bmutex\b` pattern in
+// TECHNICAL_SUBJECT_PATTERNS above already covers the correctly-spelled term.
+const TYPO_TOLERANT_TECHNICAL_TERMS = [
+  'graphql', 'database', 'algorithm', 'javascript', 'typescript', 'kubernetes',
+  'docker', 'postgres', 'postgresql', 'mongodb', 'redis', 'kafka',
+  'microservice', 'recursion', 'encryption', 'deadlock', 'semaphore',
+  'concurrency', 'asynchronous', 'polymorphism', 'inheritance', 'websocket',
+  'idempotent', 'middleware', 'endpoint', 'authentication', 'authorization',
+  'serverless', 'container', 'framework', 'compiler', 'interpreter',
+];
+const isLikelyTechnicalConcept = (text: string): boolean =>
+  includesAny(text, TECHNICAL_SUBJECT_PATTERNS)
+  || includesAny(text, DEVOPS_CICD_PATTERNS)
+  || includesAny(text, SOFTWARE_ENGINEERING_CONCEPT_PATTERNS)
+  || TYPO_TOLERANT_TECHNICAL_TERMS.some((term) => includesPlannerTerm(text, term));
 
 const DSA_PATTERNS = [
   /\btwo\s*sum\b/i,
@@ -863,7 +949,9 @@ const PROJECT_LINK_PATTERNS = [
   // "it's a source-available project right [share it]" — the user is angling for the
   // link. A BARE "is it source available" (no share/link cue) is a product-about
   // yes/no and is handled by PRODUCT_ABOUT instead, so require a share/right cue.
-  /\b(its|it'?s|so its|so it'?s)\s+an?\s+open[- ]?source\b|\bopensource (porject|project)\b|\bopen[- ]?source\b.{0,20}\bright\b/i,
+  // "source available" (a distinct, real licensing term from "open-source") is
+  // included alongside open-source in every alternative below.
+  /\b(its|it'?s|so its|so it'?s)\s+an?\s+(open[- ]?source|source[- ]?available)\b|\b(opensource|source[- ]?available) (porject|project)\b|\b(open[- ]?source|source[- ]?available)\b.{0,20}\bright\b/i,
   /\bwhy (can'?t|cant|wont|won'?t) (you )?share\b/i,    // "why can't you share, it's source available"
 ];
 
@@ -921,12 +1009,12 @@ const PRODUCT_ABOUT_PATTERNS = [
   /\bhow(?:'?s| is| does)\s+(natively|nativley|nativly|it|the (app|product|backend|architecture|frontend|stack))\b/i,
   /\bwhat\s+(do you think about|about)\s+(natively|nativley|nativly)\b/i,
   /\bwhat (tech|technolog|stack|languages?|framework)\w*\s+(does|do)\s+(natively|nativley|it|this)\b/i,
-  /\bis (natively|nativley|it|this)\s+(local|cloud|open[- ]?source|privacy|low[- ]?distraction|on[- ]?device|transparent|accessib)\w*/i,
+  /\bis (natively|nativley|it|this)\s+(local|cloud|open[- ]?source|source[- ]?available|privacy|low[- ]?distraction|on[- ]?device|transparent|accessib)\w*/i,
   /\b(natively|nativley|nativly)'?s\s+(backend|architecture|stack|frontend|core)\b/i,
   // Safe product-attribute / behavior probes ("is it low-distraction?", "does it
   // process locally?", "is it privacy-first?", "does it use Ollama?", "what part
   // uses Rust?") — these are about the PRODUCT, grounded in loaded metadata.
-  /\b(is|are) (it|this|they)\s+(local|cloud[- ]?based|open[- ]?source|privacy[- ]?first|low[- ]?distraction|on[- ]?device|free|paid|safe|secure)\b/i,
+  /\b(is|are) (it|this|they)\s+(local|cloud[- ]?based|open[- ]?source|source[- ]?available|privacy[- ]?first|low[- ]?distraction|on[- ]?device|free|paid|safe|secure)\b/i,
   /\b(does|do)\s+(it|this|natively|nativley)\s+(process|run|store|work|use|have|support|need)\b/i,
   /\b(what|which) part (of (natively|nativley|it|the app))?\s*(uses|is in|runs|handles|does)\b|\b(does|do) (it|natively) (use|have) (a )?(backend|server|database|ollama|rust|electron|local)\b/i,
   // "what uses Rust", "what runs on Electron", "what's written in Go" — asking which
@@ -1054,6 +1142,12 @@ const JD_FIT_PATTERNS = [
   // description", "tailor it to the JD") — a role-fit answer grounded in the JD
   // (Issue 7). The salary negation is handled separately so this stays jd_fit.
   /\b(use|using|with|from|tailor (it|the answer) to|against) (the )?(jd|job description)\b/i,
+  // "The JD calls for/requires X — how do you stack/measure up (there)?" — an
+  // explicit JD-requirement comparison (grounding-campaign2 fix, 2026-07-17).
+  // Matches both the raw idiom ("stack up") and its textNoTechStack-neutralized
+  // form ("measure up") so this fires whichever text this list happens to be
+  // tested against. Resume+JD grounded self-assessment, not a generic concept.
+  /\b(jd|role|position|job) (calls for|requires|wants|needs|is (looking|asking) for)\b.{0,80}\bhow (do|does|would) (you|i) (stack|measure)(s|ed)?\s+up\b/i,
 ];
 
 // GAP / weakness-for-the-role asks (release 2026-06-09). These must produce an HONEST
@@ -1187,7 +1281,20 @@ const SKILL_EXPERIENCE_PATTERNS = [
   // PEOPLE / a TEAM" is a behavioral STORY, not a skill — the negative lookahead lets those
   // fall through to BEHAVIORAL_PATTERNS (code-review caveat 2026-06-16). A tech object after
   // managed/handled (e.g. "have you managed a database/cluster") still routes to skills.
-  new RegExp(`\\bhave you (ever )?(?:(?:managed|handled|led)\\b(?!\\s+(?:a\\s+|an\\s+|the\\s+|your\\s+|some\\s+|any\\s+)?${PEOPLE_OR_CONFLICT_OBJECT}\\b)|(?:used|worked with|worked on|built|built with|written|coded in|programmed in|implemented|done|created|analy[sz]ed|normali[sz]ed|deployed|designed))\\b`, 'i'),
+  //
+  // Grounding-campaign2 fix (2026-07-17): "what scale have you OPERATED it at?"
+  // (script-a press A14, canonical: "What scale have you operated Kubernetes
+  // at?") fell through this whole pattern list — "operated" was missing from
+  // the verb group — and ended up at `general_meeting_answer` (forbids
+  // resume), giving candidateProfileChars:0 for a clearly candidate-directed
+  // operational-scale question. Live-confirmed on the real backend
+  // (test/harness-longsession script-a run-018): the answer was 92 ALL-CAPS
+  // words with no résumé grounding at all — a distinct symptom from the
+  // "stack up" idiom bugs (fix#14/#15/#17), but the same root shape (a
+  // legitimate candidate-experience verb missing from a keyword list).
+  // Added operated/run/scaled/maintained — common "have you run/scaled/
+  // maintained X at scale" interview phrasings for infra/ops experience.
+  new RegExp(`\\bhave you (ever )?(?:(?:managed|handled|led)\\b(?!\\s+(?:a\\s+|an\\s+|the\\s+|your\\s+|some\\s+|any\\s+)?${PEOPLE_OR_CONFLICT_OBJECT}\\b)|(?:used|worked with|worked on|built|built with|written|coded in|programmed in|implemented|done|created|analy[sz]ed|normali[sz]ed|deployed|designed|operated|run|scaled|maintained))\\b`, 'i'),
   /\bdo you (know|have experience (with|in)|use)\b/i,
   /\bare you (familiar|comfortable|proficient|experienced) (with|in)\b/i,
   // "Are you good/strong/skilled at X?", "are you any good with React?" — a
@@ -1736,7 +1843,12 @@ const templateFor = (answerType: AnswerType): string => {
   }
 };
 
-const requiredLayersFor = (answerType: AnswerType, documentGroundedCustomModeActive = false): ContextLayer[] => {
+// Exported (Phase 6 Slice 2, context-rebuild, 2026-07-25) so the exhaustiveness
+// test for isLayerAllowed's fail-closed prior_assistant_responses rule
+// (contextRoute.ts) can iterate every real AnswerType directly instead of
+// reverse-engineering a question per type. Pure, deterministic, no behavior
+// change from exporting.
+export const requiredLayersFor = (answerType: AnswerType, documentGroundedCustomModeActive = false): ContextLayer[] => {
   switch (answerType) {
     case 'identity_answer':
       return ['stable_identity', 'resume'];
@@ -1829,7 +1941,8 @@ const requiredLayersFor = (answerType: AnswerType, documentGroundedCustomModeAct
   }
 };
 
-const forbiddenLayersFor = (answerType: AnswerType): ContextLayer[] => {
+// Exported for the same reason as requiredLayersFor above.
+export const forbiddenLayersFor = (answerType: AnswerType): ContextLayer[] => {
   switch (answerType) {
     case 'identity_answer':
       return ['jd', 'negotiation', 'reference_files'];
@@ -1839,7 +1952,17 @@ const forbiddenLayersFor = (answerType: AnswerType): ContextLayer[] => {
     case 'system_design_answer':
     case 'debugging_question_answer':
       // Spec §8.3: generic coding/technical answers must NOT use any profile.
-      return ['resume', 'jd', 'negotiation', 'custom_context', 'reference_files'];
+      // RC3 fix (Phase 6 Slice 2, context-rebuild, 2026-07-25): also forbid
+      // prior_assistant_responses. Before this fix, these five answer types
+      // appeared in NEITHER forbiddenLayersFor NOR requiredLayersFor for this
+      // layer, so isLayerAllowed's fail-open default
+      // (`!plan.forbiddenContextLayers.includes(layer)`, contextRoute.ts)
+      // silently ALLOWED it — an unrelated prior turn's content (e.g. a
+      // résumé/JD-fit answer) could leak into a subsequent, unrelated
+      // coding/technical question's prompt. See
+      // docs/context-rebuild/03_ROOT_CAUSES.md RC3 and
+      // 04_TARGET_ARCHITECTURE.md §8.
+      return ['resume', 'jd', 'negotiation', 'custom_context', 'reference_files', 'prior_assistant_responses'];
     case 'skill_experience_answer':
     case 'skills_answer':
     case 'profile_fact_answer':
@@ -2248,9 +2371,23 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   // Neutralize "tech stack" / "technology stack" AND bare "full-stack" so the
   // DSA `\bstack\b` data-structure pattern can't fire on them ("you said full
   // stack, but this is data analyst" must not become a stack/DSA question).
+  // Grounding-campaign2 fix (2026-07-17): "how do you stack up (there/against
+  // the JD)?" is the comparison IDIOM ("measure up"), not the data-structure
+  // noun — but the bare `\bstack\b` in DSA_PATTERNS/TECHNICAL_SUBJECT_PATTERNS
+  // matched it anyway, misrouting a JD-fit self-assessment question ("The JD
+  // calls for 8+ years and deep Go or Java expertise — how do you stack up
+  // there?") into technical_concept_answer. That answer type FORBIDS the
+  // resume/jd context layers (it's meant for "what is Redis?"-style neutral
+  // explanations), so the candidate's own profile/JD never reached the prompt
+  // and the model answered from CORE_IDENTITY's blanket "reveal internals"
+  // refusal instead ("I can't share that information.") — live-confirmed on
+  // run-014/verify_fix10 (press A9). Neutralize the idiom the same way the
+  // tech-stack/full-stack phrases are neutralized above, before any DSA/
+  // technical-concept pattern sees the text.
   const textNoTechStack = text
     .replace(/\b(tech|technology|technical)\s+stack\b/g, 'techstack')
-    .replace(/\bfull[- ]?stack\b/g, 'fullstack');
+    .replace(/\bfull[- ]?stack\b/g, 'fullstack')
+    .replace(/\bstack(s|ed)?\s+up\b/g, 'measure$1 up');
   const extractedType = input.extractedQuestion?.questionType;
   const documentGroundedCustomModeActive = input.activeMode?.documentGroundedCustomModeActive === true;
   const explicitDocumentModeCodingAsk = /\b(write|implement|code|coding interview|dsa|dry run|time complexity|space complexity|big[-\s]?o|algorithm(?:ic)?|solution code|source code)\b/i.test(text);
@@ -2503,7 +2640,16 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
              && (followUpHasProjectContext(input, question)
                  || (!includesAny(textNoTechStack, DSA_PATTERNS)
                      && !includesAny(text, CODING_PATTERNS)
-                     && !isLikelyTechnicalConcept(textNoTechStack)))) {
+                     // Scoped to the exact TECHNICAL_SUBJECT_PATTERNS check only
+                     // (NOT the typo-tolerant isLikelyTechnicalConcept) — code-review
+                     // finding (2026-07-27): the broadened typo-tolerant matcher added
+                     // for RC-2 (see isLikelyTechnicalConcept above) includes exact
+                     // trigger words like "framework"/"api" that weren't guarded
+                     // before, and this negation would then wrongly exclude a genuine
+                     // project follow-up like "what frameworks did you use in your
+                     // project?" from project_followup routing (recreating the same
+                     // unknown_answer-leak bug class for a different question shape).
+                     && !includesAny(textNoTechStack, TECHNICAL_SUBJECT_PATTERNS)))) {
     // Phase 5: a drill-in on a project already on the table ("how is it built?",
     // "what was your role?", "what tech stack did you use?", "hardest part?",
     // "why did you build it?", "what did you learn?"). These are PROFILE questions
@@ -2574,8 +2720,9 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
              // (profile forbidden, neutral voice) where the model answered
              // "I'm Natively, an AI assistant. I don't have personal
              // experiences." A past-tense candidate frame defers to BEHAVIORAL.
-             && !/\b(tell me about|describe|share|give me an example of)\b.{0,60}\b(you|you'?ve|u)\b.{0,60}\b(solved|fixed|faced|debugged|handled|dealt with|encountered|resolved|found)\b/i.test(text)
-             && !/\b(hardest|toughest|most difficult|trickiest|worst)\b.{0,30}\b(bug|error|issue|crash)\b.{0,40}\b(you|you'?ve|your career|you ever)\b/i.test(text)) {
+             // Now shared with the technical_concept branch below — see
+             // isPastTensePersonalExperienceFrame's definition above.
+             && !isPastTensePersonalExperienceFrame(text)) {
     answerType = 'debugging_question_answer';
   } else if (isHypotheticalTech(text) && !hasWriteCodeVerb) {
     // HYPOTHETICAL application — "how would you use GraphQL?", "how would you
@@ -2605,11 +2752,31 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     answerType = 'technical_concept_answer';
   } else if (includesAny(text, TECHNICAL_CONCEPT_PATTERNS) &&
              !includesAny(text, CODING_PATTERNS) &&
-             (includesAny(textNoTechStack, DSA_PATTERNS) || isLikelyTechnicalConcept(text))) {
+             (includesAny(textNoTechStack, DSA_PATTERNS) || isLikelyTechnicalConcept(textNoTechStack)) &&
+             // BEHAVIORAL-PAST-EXPERIENCE GUARD (RC-9 code review, 2026-07-27):
+             // same guard as the debugging branch above. "describe a time you
+             // set up load balancing under pressure" / "describe how you
+             // improved test coverage with unit testing at your last job" are
+             // STAR stories about the candidate's own past, not neutral concept
+             // asks — live-confirmed to wrongly lose profile access (was
+             // behavioral_interview_answer/skill_experience/jd_fit before the
+             // SOFTWARE_ENGINEERING_CONCEPT_PATTERNS vocabulary expansion widened
+             // this branch's surface, technical_concept_answer/forbidden after,
+             // with no guard). Without this, the wider vocabulary above
+             // regresses exactly the class of question this guard was invented
+             // to protect, just via new terms instead of "bug".
+             !isPastTensePersonalExperienceFrame(text)) {
     // "Explain BFS", "what is a deadlock", "difference between TCP and UDP" —
     // generic technical CONCEPT, NO profile (spec Case F). Checked before
     // DSA/coding: a DSA noun with explain/what-is framing and NO coding verb is a
     // concept, not a coding task.
+    // Grounding-campaign2 fix (2026-07-17): use the SAME textNoTechStack (which
+    // now also neutralizes the "stack up" idiom, see its definition above) that
+    // the DSA_PATTERNS check on this line already uses — isLikelyTechnicalConcept
+    // wraps TECHNICAL_SUBJECT_PATTERNS, which independently contains a bare
+    // \bstack\b, so calling it against the raw `text` let "how do you stack up
+    // there?" slip through this branch even after the DSA_PATTERNS check itself
+    // was fixed.
     answerType = 'technical_concept_answer';
   } else if (includesAny(textNoTechStack, DSA_PATTERNS)) {
     // Named DSA problem ("two sum", "reverse a linked list", "solve two sum").
@@ -2691,7 +2858,13 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // context and cascades into route/voice failures. Route it to the nearest
     // SAFE profile answer type. Generic non-candidate questions still go to
     // unknown (profileContextPolicy 'allowed', no forced profile).
-    const fb = classifyUnmatchedFallback(text, input);
+    // Grounding-campaign2 fix (2026-07-17): pass textNoTechStack, not raw
+    // text — classifyUnmatchedFallback's own project-vs-jd_fit lean (below)
+    // has the SAME bare \bstack\b collision as DSA_PATTERNS/
+    // TECHNICAL_SUBJECT_PATTERNS above ("how do you stack up there?" tripped
+    // its project_answer branch via the "stack" keyword instead of the
+    // intended jd_fit_answer route for a JD-comparison question).
+    const fb = classifyUnmatchedFallback(textNoTechStack, input);
     answerType = fb;
     // MODE PRIOR (PI v3, W1): nothing explicit matched AND the profile-aware
     // fallback landed on a floor type (unknown/general). In a sales call that

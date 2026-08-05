@@ -18,6 +18,12 @@ import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier
 import { autoUpdater } from "electron-updater"
 import { ensureNativeModuleAbi } from "./utils/nativeModuleGuard"
 
+import {
+  classifyServiceAccountFile,
+  describeServiceAccountRejection,
+  type ServiceAccountVerdict,
+} from "./services/googleServiceAccount"
+
 // Override global dns.lookup to resolve macOS system resolver issues with api.natively.software
 const originalLookup = dns.lookup;
 dns.lookup = function(hostname: any, options: any, callback: any) {
@@ -785,6 +791,11 @@ type MacScreenCaptureCapability = {
   effectiveDenied: boolean;
   sourceCount: number;
   message?: string;
+  // i18n key for the banner heading that belongs with `message` (see
+  // permissionTitleKey). Carried alongside so the several
+  // `sendSystemAudioPermissionDenied(cap.message ?? …)` call sites don't have
+  // to re-derive which reason produced the message.
+  titleKey?: string;
   error?: string;
 };
 
@@ -797,6 +808,32 @@ function rememberSystemAudioPermissionWarning(message: string): void {
 function clearSystemAudioPermissionWarning(): void {
   latestSystemAudioPermissionWarning = null;
 }
+
+/**
+ * Lightweight cache for screen recording capability checks to prevent the 6+
+ * independent call sites from racing each other and showing conflicting banners.
+ *
+ * Root cause of false-positive "permission denied" banners on packaged builds:
+ * macOS Screen Recording permission grants (unlike mic/camera) often do NOT
+ * immediately update the in-process TCC cache when granted via System Settings
+ * while the app is running. The OS may require a full app restart before both
+ * systemPreferences.getMediaAccessStatus('screen') AND desktopCapturer.getSources()
+ * see the fresh grant. This cache prevents repeated checks from flooding the
+ * user with banners, and provides a clear "granted but needs restart" message
+ * when we detect the discrepancy.
+ *
+ * TTL: 3 seconds — short enough that a user who grants permission via System
+ * Settings and immediately returns to the app will see a fresh check within
+ * moments, but long enough that the 6 call sites during a single meeting-start
+ * sequence (system-audio pipeline setup, meeting start, resume-capture, etc.)
+ * all share the same result and can't disagree moment-to-moment.
+ */
+type CachedCapability = {
+  result: MacScreenCaptureCapability;
+  timestamp: number;
+};
+let screenCapabilityCache: CachedCapability | null = null;
+const SCREEN_CAPABILITY_CACHE_TTL_MS = 3000;
 
 /**
  * B5: Whether the dev-mode TCC bypass is enabled.
@@ -824,33 +861,58 @@ function getMacScreenCaptureStatus(): MacScreenCaptureStatus {
   }
 
   try {
-    return systemPreferences.getMediaAccessStatus('screen') as MacScreenCaptureStatus;
+    const status = systemPreferences.getMediaAccessStatus('screen') as MacScreenCaptureStatus;
+    console.log(`[Main] Screen recording permission status: ${status} (packaged=${app.isPackaged})`);
+    return status;
   } catch (error) {
     console.error('[Main] Failed to check screen recording permission:', error);
     return 'not-determined';
   }
 }
 
-async function resolveMacScreenCaptureCapability(context: string): Promise<MacScreenCaptureCapability> {
+async function resolveMacScreenCaptureCapability(context: string, options?: { bypassCache?: boolean }): Promise<MacScreenCaptureCapability> {
+  const isMac = process.platform === 'darwin';
+
+  // Check cache first (unless explicitly bypassed)
+  if (!options?.bypassCache && screenCapabilityCache) {
+    const age = Date.now() - screenCapabilityCache.timestamp;
+    if (age < SCREEN_CAPABILITY_CACHE_TTL_MS) {
+      console.log(`[Main] Using cached screen capability result (age=${age}ms) for context: ${context}`);
+      return screenCapabilityCache.result;
+    }
+  }
+
   const status = getMacScreenCaptureStatus();
 
-  const isMac = process.platform === 'darwin';
   // B5: Mirror getMacScreenCaptureStatus's opt-in bypass policy. Default in
   // dev is to run the full capability resolution so devs see the real path.
   if (!isMac || isDevTccBypassEnabled()) {
     clearSystemAudioPermissionWarning();
-    return { status, capturable: true, effectiveDenied: false, sourceCount: 0 };
+    const result = { status, capturable: true, effectiveDenied: false, sourceCount: 0 };
+    screenCapabilityCache = { result, timestamp: Date.now() };
+    return result;
   }
 
   if (isMac && status === 'restricted') {
     const message = formatPermissionMessage('mac-screen-recording-restricted');
     rememberSystemAudioPermissionWarning(message);
-    return { status, capturable: false, effectiveDenied: true, sourceCount: 0, message };
+    const result = {
+      status,
+      capturable: false,
+      effectiveDenied: true,
+      sourceCount: 0,
+      message,
+      titleKey: permissionTitleKey('mac-screen-recording-restricted'),
+    };
+    screenCapabilityCache = { result, timestamp: Date.now() };
+    return result;
   }
 
   if (status !== 'denied') {
     clearSystemAudioPermissionWarning();
-    return { status, capturable: true, effectiveDenied: false, sourceCount: 0 };
+    const result = { status, capturable: true, effectiveDenied: false, sourceCount: 0 };
+    screenCapabilityCache = { result, timestamp: Date.now() };
+    return result;
   }
 
   try {
@@ -859,7 +921,7 @@ async function resolveMacScreenCaptureCapability(context: string): Promise<MacSc
         types: ['screen'],
         thumbnailSize: { width: 1, height: 1 },
       }),
-      5000,
+      15000,
       `screen-capture-probe-timeout-${context}`,
     );
     const sourceCount = sources.filter((source) => source.id.startsWith('screen:')).length;
@@ -867,25 +929,42 @@ async function resolveMacScreenCaptureCapability(context: string): Promise<MacSc
 
     if (capturable) {
       clearSystemAudioPermissionWarning();
-      console.warn(`[Main] Screen Recording status is denied during ${context}, but capture probe succeeded; continuing without permission banner.`);
+      console.warn(`[Main] Screen Recording status is denied during ${context}, but capture probe succeeded (sourceCount=${sourceCount}); continuing without permission banner.`);
     } else {
-      rememberSystemAudioPermissionWarning(formatPermissionMessage('screen-recording-denied'));
+      const message = formatPermissionMessage('screen-recording-denied');
+      rememberSystemAudioPermissionWarning(message);
+      logDevScreenTccBypassHint();
+      console.warn(`[Main] Screen Recording capture probe returned 0 screens during ${context} (status=denied, packaged=${app.isPackaged}) — showing permission banner.`);
     }
 
-    return { status, capturable, effectiveDenied: !capturable, sourceCount };
+    const result = {
+      status,
+      capturable,
+      effectiveDenied: !capturable,
+      sourceCount,
+      ...(capturable ? {} : { titleKey: permissionTitleKey('screen-recording-denied') }),
+    };
+    screenCapabilityCache = { result, timestamp: Date.now() };
+    return result;
   } catch (error: any) {
     // Did the timeout fire?
     if (error?.message?.includes('screen-capture-probe-timeout')) {
       const message = formatPermissionMessage('screen-recording-denied');
       rememberSystemAudioPermissionWarning(message + ' (probe timed out)');
+      logDevScreenTccBypassHint();
       console.warn(`[Main] Screen Recording capture probe timed out during ${context} — treating as denied.`);
-      return { status, capturable: false, effectiveDenied: true, sourceCount: 0, message, error: error.message };
+      const result = { status, capturable: false, effectiveDenied: true, sourceCount: 0, message, titleKey: permissionTitleKey('screen-recording-denied'), error: error.message };
+      screenCapabilityCache = { result, timestamp: Date.now() };
+      return result;
     }
     const errorMessage = error instanceof Error ? error.message : String(error);
     const message = formatPermissionMessage('screen-recording-denied');
     rememberSystemAudioPermissionWarning(message);
+    logDevScreenTccBypassHint();
     console.warn(`[Main] Screen Recording capture probe failed during ${context}: ${errorMessage}`);
-    return { status, capturable: false, effectiveDenied: true, sourceCount: 0, message, error: errorMessage };
+    const result = { status, capturable: false, effectiveDenied: true, sourceCount: 0, message, titleKey: permissionTitleKey('screen-recording-denied'), error: errorMessage };
+    screenCapabilityCache = { result, timestamp: Date.now() };
+    return result;
   }
 }
 
@@ -914,36 +993,155 @@ function formatPermissionMessage(reason: PermissionReason, extra?: { device?: st
   const isMac = process.platform === 'darwin';
   switch (reason) {
     case 'screen-recording-denied':
-      return isMac
-        ? 'Screen Recording permission denied. Interviewer audio will not be captured. Enable in System Settings → Privacy & Security → Screen Recording, then restart the app.'
-        : 'System audio capture is unavailable. Interviewer audio will not be captured. Check your audio device routing in Settings and restart the meeting.';
+      if (!isMac) {
+        return "Interviewer audio won't be captured. Check your output device routing in Settings, then restart the meeting.";
+      }
+      // macOS: differentiate dev builds from packaged builds because TCC grants
+      // are per (bundle-id, code-signature) tuple — granting to a signed packaged
+      // build does NOT grant to the unsigned dev build (and vice versa).
+      if (!app.isPackaged) {
+        // The dev bypass env var deliberately does NOT appear in this string.
+        // A shell variable is addressed to someone reading a terminal, not to
+        // someone reading a ~510px overlay banner — it is printed to the
+        // console instead (logDevScreenTccBypassHint, below). Bodies here are
+        // budgeted at ~2 lines at 11px and must never restate their own title
+        // (see permissionTitleKey).
+        return 'Dev builds need their own grant. Enable Natively under Privacy & Security → Screen Recording, then restart.';
+      }
+      return "Interviewer audio won't be captured. Enable Natively under Privacy & Security → Screen Recording, then restart.";
     case 'mac-screen-recording-restricted':
       if (!isMac) return formatPermissionMessage('system-audio-stuck');
-      return 'Screen Recording is restricted by device policy. Interviewer audio will not be captured. Contact your administrator to allow screen capture for Natively.';
+      return 'Device policy blocks screen capture. Ask your administrator to allow Natively.';
     case 'mac-screen-recording-revoked-rebuild':
       // Defense-in-depth: even though all call sites must be darwin-gated
       // (the `mac-` prefix marks this constraint), if a future contributor
       // calls this from a cross-platform path we degrade gracefully rather
       // than leak macOS UI strings to Windows users.
       if (!isMac) return formatPermissionMessage('system-audio-stuck');
-      return 'System audio is being captured but every sample is silent. This usually means macOS Screen Recording permission needs to be re-granted to this build of Natively. Open System Settings → Privacy & Security → Screen Recording, toggle Natively off and back on, then restart the app. (If you recently rebuilt or updated, the previous grant may not apply.)';
+      return 'System audio is arriving silent. Toggle Natively off and on under Privacy & Security → Screen Recording, then restart.';
     case 'mic-denied':
       return isMac
-        ? 'Microphone access denied. Please allow microphone access in System Settings → Privacy & Security → Microphone, then restart Natively.'
-        : 'Microphone access denied. Please allow microphone access in Settings → Privacy → Microphone, then restart Natively.';
+        ? 'Enable Natively under Privacy & Security → Microphone, then restart.'
+        : 'Enable Natively under Settings → Privacy → Microphone, then restart.';
     case 'mic-zero-fill':
       return isMac
-        ? 'Microphone is producing silent audio. Check that the device is unmuted and that macOS Microphone permission is granted to Natively in System Settings → Privacy & Security → Microphone.'
-        : 'Microphone is producing silent audio. Check that the device is unmuted and that Natively has microphone access in Settings → Privacy → Microphone.';
+        ? "Check the device isn't muted, and that Natively is enabled under Privacy & Security → Microphone."
+        : "Check the device isn't muted, and that Natively is enabled under Settings → Privacy → Microphone.";
     case 'mac-same-device-input-output':
       // Defense-in-depth: see comment on `mac-screen-recording-revoked-rebuild`.
       // The CoreAudio Process Tap same-device limitation is macOS-specific;
       // on Windows WASAPI loopback works fine on the same device as the mic.
       if (!isMac) return formatPermissionMessage('system-audio-stuck');
-      return `Silent capture detected — input and output are the same device (${extra?.device ?? 'unknown'}). macOS cannot tap a device while it is also the active microphone. Switch input to built-in mic or output to built-in speakers.`;
+      return `macOS can't tap ${extra?.device ?? 'this device'} while it's also the active mic. Switch input to the built-in mic, or output to the built-in speakers.`;
     case 'system-audio-stuck':
-      return 'No audio detected on system output for 8s. If your meeting app is using a different output device (Bluetooth headset, virtual cable, second monitor), switch it to your default output, or restart the meeting after switching.';
+      return 'If your meeting app outputs to a different device (headset, virtual cable, second display), switch it to your default output.';
   }
+}
+
+/**
+ * Sibling of `formatPermissionMessage`: the i18n KEY for the banner title that
+ * belongs with each message. Kept separate — rather than folded into that
+ * helper's return type — because `formatPermissionMessage` must keep returning
+ * a bare `string`; it is used as an Error message elsewhere in this file.
+ *
+ * A key, not a rendered string, so the renderer can call `t(titleKey)`. Titles
+ * are localised today; moving them into main.ts as bare English would silently
+ * drop them from i18n. Bodies remain English-only, as they already are.
+ *
+ * NOTE: this cannot be a flat `Record<PermissionReason, string>` —
+ * `screen-recording-denied` carries three distinct titles (Windows, macOS dev,
+ * macOS packaged), so it branches on exactly the same conditions as
+ * `formatPermissionMessage`'s switch. Keep the two in lockstep: no title may
+ * be a restatement of the first sentence of its body.
+ */
+function permissionTitleKey(reason: PermissionReason): string {
+  const isMac = process.platform === 'darwin';
+  switch (reason) {
+    case 'screen-recording-denied':
+      if (!isMac) return 'System Audio Unavailable';
+      if (!app.isPackaged) return 'Screen Recording Blocked (Dev Build)';
+      return 'Screen Recording Blocked';
+    case 'mac-screen-recording-restricted':
+      if (!isMac) return permissionTitleKey('system-audio-stuck');
+      return 'Screen Recording Restricted';
+    case 'mac-screen-recording-revoked-rebuild':
+      if (!isMac) return permissionTitleKey('system-audio-stuck');
+      return 'Screen Recording Grant Expired';
+    case 'mic-denied':
+      return 'Microphone Blocked';
+    case 'mic-zero-fill':
+      return 'Microphone Is Silent';
+    case 'mac-same-device-input-output':
+      if (!isMac) return permissionTitleKey('system-audio-stuck');
+      return 'Input and Output Are the Same Device';
+    case 'system-audio-stuck':
+      return 'No System Audio for 8s';
+  }
+}
+
+/**
+ * Dev-only: force the permission banner to render so it can be styled and
+ * reviewed without actually revoking a TCC grant.
+ *
+ *   NATIVELY_DEV_FORCE_PERMISSION_BANNER=1        → screen-recording-denied
+ *   NATIVELY_DEV_FORCE_PERMISSION_BANNER=mic-denied  → any PermissionReason
+ *
+ * Gated on `!app.isPackaged` exactly like isDevTccBypassEnabled(), so it can
+ * never fire in a shipped build even if the variable is somehow set. Copy and
+ * title come from the real formatPermissionMessage/permissionTitleKey pair
+ * rather than a hardcoded string, so what you see while testing is what a
+ * genuinely-denied user sees.
+ *
+ * Unlike the real emitters this is NOT darwin-gated: the banner also serves
+ * Windows (`screen-recording-denied` has a non-mac branch), and forcing it
+ * there is the only way to eyeball that copy on a Mac dev machine.
+ */
+const FORCEABLE_PERMISSION_REASONS: readonly PermissionReason[] = [
+  'screen-recording-denied',
+  'mac-screen-recording-restricted',
+  'mac-screen-recording-revoked-rebuild',
+  'mic-denied',
+  'mic-zero-fill',
+  'mac-same-device-input-output',
+  'system-audio-stuck',
+];
+
+function maybeForceDevPermissionBanner(appState: AppState): void {
+  const raw = process.env.NATIVELY_DEV_FORCE_PERMISSION_BANNER;
+  if (!raw || app.isPackaged) return;
+
+  const requested = raw === '1' ? 'screen-recording-denied' : raw;
+  const reason = FORCEABLE_PERMISSION_REASONS.find((r) => r === requested);
+  if (!reason) {
+    console.warn(
+      `[DevBanner] Unknown NATIVELY_DEV_FORCE_PERMISSION_BANNER=${raw}. Expected 1 or one of: ${FORCEABLE_PERMISSION_REASONS.join(', ')}`,
+    );
+    return;
+  }
+
+  // The renderer subscribes on mount; initializeApp can complete before the
+  // overlay's listener is attached, so delay past first paint. Same 800ms the
+  // startup TCC prompt uses for the same reason.
+  setTimeout(() => {
+    console.warn(`[DevBanner] Forcing permission banner: ${reason} (dev only)`);
+    appState.sendSystemAudioPermissionDenied(
+      formatPermissionMessage(reason, { device: 'MacBook Pro Speakers' }),
+      permissionTitleKey(reason),
+    );
+  }, 1500);
+}
+
+/**
+ * The dev-only TCC bypass hint. It used to sit inline in the overlay banner
+ * body, where it consumed a line of a two-line budget and was addressed to the
+ * wrong reader: a shell variable is only actionable in a terminal. Printed to
+ * the console at the denial site instead.
+ */
+function logDevScreenTccBypassHint(): void {
+  if (process.platform !== 'darwin' || app.isPackaged) return;
+  console.log(
+    '[TCC] Dev bypass available: set NATIVELY_DEV_BYPASS_SCREEN_TCC=1 to skip the Screen Recording check in dev builds.',
+  );
 }
 
 console.log = (...args: any[]) => {
@@ -1076,6 +1274,7 @@ import { OllamaManager } from './services/OllamaManager'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
+import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
 
 // Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
 // for a copied-profile native OOM investigation. It is inert unless explicitly enabled.
@@ -1187,6 +1386,7 @@ export class AppState {
   private _ragProcessingInFlight: Set<string> = new Set();
   private _isQuitting: boolean = false;
   private _verboseLogging: boolean = false;
+  private _ambientChatEnabled: boolean = false;
   // Tracks whether STT sample-rate has been applied for the current capture
   // session. Reset on every reconfigureAudio / new pipeline build so the next
   // first-chunk handler reads the freshly-detected native rate.
@@ -1241,7 +1441,52 @@ export class AppState {
     this.disguiseMode = normalizeDisguiseMode(settingsManager.get('disguiseMode'));
     this._verboseLogging = settingsManager.get('verboseLogging') ?? true;
     setVerboseLoggingFlag(this._verboseLogging);
-    console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}`);
+    this._ambientChatEnabled = settingsManager.get('ambientChatEnabled') ?? false;
+    console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}, ambientChatEnabled=${this._ambientChatEnabled}`);
+
+    // Context Intelligence debug logging (Developer settings). Bind the level
+    // reader + log directory once; precedence (env > setting) and the
+    // production content-mode rejection live in debug-config itself. The log
+    // directory is the platform application-log dir (~/Library/Logs/<app> on
+    // macOS) — spec'd location, kept out of userData so "clear logs" can never
+    // touch app data.
+    try {
+      const { bindContextDebugConfig, describeContextDebugConfig } = require('./context-intelligence/debug/debug-config');
+      const { bindContextDebugLogDirectory } = require('./context-intelligence/debug/jsonl-writer');
+      bindContextDebugConfig({
+        readStoredLevel: () => {
+          try { return SettingsManager.getInstance().get('contextDebugLevel'); } catch { return undefined; }
+        },
+        isProductionBuild: app.isPackaged,
+      });
+      bindContextDebugLogDirectory(path.join(app.getPath('logs'), 'context-debug'));
+      const dbg = describeContextDebugConfig();
+      if (dbg.level !== 'off') {
+        console.log(`[CONTEXT_DEBUG] level=${dbg.level} (source: ${dbg.levelSource})`);
+      }
+      if (dbg.contentInclusion) {
+        console.warn('[CONTEXT_DEBUG_WARNING] Full local evidence logging is enabled. Logs may contain sensitive personal data.');
+      }
+    } catch (e) {
+      console.warn('[AppState] context-debug binding failed (logging disabled):', (e as Error)?.message);
+    }
+
+    // Teach the no-activate window policy how to detect the native stealth
+    // typing hook, BEFORE any window is created. On Windows the policy makes the
+    // overlay unfocusable, which is only safe when there's a hook to type
+    // through; if the hook is missing (no rebuilt binary, unsupported arch, EDR
+    // block) the policy falls back to a focusable window so the input still
+    // works (with a blur) instead of being dead. No-op off win32.
+    setStealthHookAvailabilityProvider(() => {
+      if (process.platform !== 'win32') return false;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+        return StealthKeyboardManager.getInstance().isAvailable();
+      } catch {
+        return false;
+      }
+    });
 
     // 2. Initialize Helpers with loaded state
     this.windowHelper = new WindowHelper(this)
@@ -1453,36 +1698,70 @@ export class AppState {
       ipcMain.handle(channel, fn);
     };
     registerStealthHandler('get-system-audio-permission-warning', () => latestSystemAudioPermissionWarning);
-    if (process.platform === 'darwin') {
+    // Stealth typing is now available on BOTH desktop platforms: macOS via
+    // CGEventTap, Windows via a WH_KEYBOARD_LL hook (both expose the same
+    // native StealthKeyboardTap). The manager + renderer contract are
+    // platform-agnostic; only the IME-probe handlers below are macOS-specific.
+    if (process.platform === 'darwin' || process.platform === 'win32') {
       const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
       const stealth = StealthKeyboardManager.getInstance();
+      // Only the overlay renderer may ENGAGE the system-wide keyboard hook.
+      // stealth-tap:start had no sender check, so any renderer (settings,
+      // cropper, model-selector) — or a compromised one — could turn on
+      // keystroke capture. Keystrokes still only ever flow to the overlay (see
+      // StealthKeyboardManager.overlayWebContents scoping), so this is a
+      // start-authority gate, not a read gate; but engaging capture is itself a
+      // capability that belongs to the overlay alone. stop() stays ungated —
+      // disengaging is always safe.
+      const isFromOverlay = (event: any): boolean => {
+        const overlay = this.windowHelper?.getOverlayWindow?.();
+        return !!overlay && !overlay.isDestroyed() && overlay.webContents.id === event?.sender?.id;
+      };
       registerStealthHandler('stealth-tap:available', () => stealth.isAvailable());
       registerStealthHandler('stealth-tap:open-settings', () => { stealth.openSettings(); });
       registerStealthHandler('stealth-tap:stop', () => { stealth.stop(); });
-      registerStealthHandler('stealth-tap:start', () => stealth.start());
-      // IME users (Pinyin, Hangul, Kanji, …) cannot compose under the tap
-      // because CGEventTap fires below TIS. Renderer consults this before
-      // click-to-engage so it can fall back to plain DOM focus when an IME
-      // is in play. See electron/services/ImeDetector.ts for the rationale.
-      registerStealthHandler('stealth-tap:should-auto-engage', () => {
-        const { shouldAutoEngageStealthTap } = require('./services/ImeDetector');
-        return shouldAutoEngageStealthTap();
-      });
-      // Force a fresh IME probe and return the refined value. Renderer calls
-      // this on window focus so users who add a Pinyin/Hangul source mid-
-      // session don't silently break CJK composition the next time the tap
-      // would auto-engage (the cached value from mount-time would be stale).
-      registerStealthHandler('stealth-tap:refresh-ime', () => {
-        const { refreshImeDetection, shouldAutoEngageStealthTap } = require('./services/ImeDetector');
-        refreshImeDetection();
-        return shouldAutoEngageStealthTap();
-      });
+      registerStealthHandler('stealth-tap:start', (event: any) =>
+        isFromOverlay(event) ? stealth.start() : false,
+      );
+      if (process.platform === 'darwin') {
+        // IME users (Pinyin, Hangul, Kanji, …) cannot compose under the tap
+        // because CGEventTap fires below TIS. Renderer consults this before
+        // click-to-engage so it can fall back to plain DOM focus when an IME
+        // is in play. See electron/services/ImeDetector.ts for the rationale.
+        registerStealthHandler('stealth-tap:should-auto-engage', () => {
+          const { shouldAutoEngageStealthTap } = require('./services/ImeDetector');
+          return shouldAutoEngageStealthTap();
+        });
+        // Force a fresh IME probe and return the refined value. Renderer calls
+        // this on window focus so users who add a Pinyin/Hangul source mid-
+        // session don't silently break CJK composition the next time the tap
+        // would auto-engage (the cached value from mount-time would be stale).
+        registerStealthHandler('stealth-tap:refresh-ime', () => {
+          const { refreshImeDetection, shouldAutoEngageStealthTap } = require('./services/ImeDetector');
+          refreshImeDetection();
+          return shouldAutoEngageStealthTap();
+        });
+      } else {
+        // Windows: same decision as macOS, different probe. The WH_KEYBOARD_LL
+        // hook swallows keystrokes before IMM32/TSF can compose them, so a CJK
+        // IME user who auto-engaged would lose the candidate window and be
+        // limited to raw Latin. isAvailable() folds in the native
+        // isImeKeyboardActive() probe, so declining here routes them through the
+        // no-hook fallback (focusable overlay, real DOM focus, typing works with
+        // a focus change) instead of silently mangling their input.
+        //
+        // Both handlers re-read on every call, so switching layouts mid-session
+        // is reflected for the renderer's gating. (The window's no-activate
+        // policy is fixed at creation — see StealthKeyboardManager.isAvailable.)
+        registerStealthHandler('stealth-tap:should-auto-engage', () => stealth.isAvailable());
+        registerStealthHandler('stealth-tap:refresh-ime', () => stealth.isAvailable());
+      }
     } else {
       registerStealthHandler('stealth-tap:available', () => false);
       registerStealthHandler('stealth-tap:open-settings', () => {});
       registerStealthHandler('stealth-tap:stop', () => {});
       registerStealthHandler('stealth-tap:start', () => false);
-      // Non-darwin: returns true so the renderer's stealthAutoEngageOkRef
+      // Non-desktop: returns true so the renderer's stealthAutoEngageOkRef
       // stays true and the explicit isCgEventTapAvailableRef guard (added in
       // PR #250) is what actually gates blockInputFocus. Inverted relative
       // to availability on purpose — see ImeDetector.ts:67.
@@ -1522,6 +1801,7 @@ export class AppState {
           // asleep, Phone Mirror off — fall back to a screenshot automatically so
           // the gesture always does something. See natively-browser/README.md.
           let captured = false;
+          let domFailureReason = '';
           try {
             const svc = PhoneMirrorService.getInstance();
             // MV3 race fix: the extension's service worker may have been idle-killed
@@ -1540,47 +1820,88 @@ export class AppState {
                 // "Page context" pill and uses it on the next answer).
                 console.log('[Main] DOM capture delivered to overlay');
               } else {
+                domFailureReason = String(result.reason || 'unknown');
                 console.log('[Main] DOM capture unavailable (', result.reason, ') — falling back to screenshot');
               }
+            } else {
+              domFailureReason = 'browser extension not connected';
             }
           } catch (e: any) {
+            domFailureReason = String(e?.message || e);
             console.warn('[Main] DOM capture error — falling back to screenshot:', e?.message || e);
           }
           if (!captured) {
-            await this.captureScreenAndProcess();
+            // Both legs of this fallback can fail, and the screenshot's throw used
+            // to propagate to the outer handler and mask the DOM reason entirely —
+            // the user saw an unrelated "Failed to capture screen" (or, since that
+            // handler only logs, nothing at all). Report BOTH causes together, and
+            // name the actionable one: a host that was never granted is fixed by
+            // one click in the extension popup, not by screen-recording settings.
+            try {
+              await this.captureScreenAndProcess();
+            } catch (shotErr: any) {
+              const needsHost = /must request permission to access this host|Cannot access contents of/i.test(domFailureReason);
+              console.error(
+                '[Main] Capture failed on BOTH paths.\n' +
+                  `  • Page context: ${domFailureReason || 'unavailable'}\n` +
+                  `  • Screenshot:   ${shotErr?.message || shotErr}\n` +
+                  (needsHost
+                    ? '  → Chrome has not granted this site to the extension. Click the Natively\n' +
+                      '    extension icon and press Capture once to grant it (one site, one click).\n'
+                    : '') +
+                  '  → Screenshot capture additionally requires Screen Recording permission\n' +
+                  '    (System Settings › Privacy & Security › Screen Recording).',
+              );
+            }
           }
 
         // --- STEALTH SHORTCUTS: no focus, no show, pure IPC dispatch ---
 
         // Chat actions — fire into the renderer without focusing the window
         } else if (actionId === 'chat:focusInput') {
-          // Toggle CGEventTap-backed stealth typing mode. While engaged, every
-          // keystroke is captured at the OS event-pipeline layer and routed to
-          // the renderer; the foreground app (Zoom/browser/etc.) does NOT
-          // receive any key events and never loses key/frontmost status. This
-          // is the only path that delivers true Cluely-grade undetectability
-          // on macOS — NSPanel-nonactivating gets us 90% there, the tap closes
-          // the remaining gap (the panel never even has to become key-window).
-          //
-          // Falls back to plain panel.focus() if the native tap is unavailable
-          // (no rebuild yet, no Accessibility permission, or non-macOS).
+          // Toggle stealth typing mode. While engaged, every keystroke is
+          // captured at the OS input layer and routed to the renderer; the
+          // foreground app (Zoom/browser/etc.) does NOT receive any key events
+          // and never loses key/frontmost status. macOS uses a CGEventTap;
+          // Windows uses a WH_KEYBOARD_LL hook — both close the gap that a
+          // window-focus-based input path would open (the meeting app blurring
+          // the instant the overlay took focus). See StealthKeyboardManager.
+          // Platform-agnostic: the native module exports the same
+          // StealthKeyboardTap on macOS and Windows. isAvailable() is false only
+          // if the binary predates this feature (needs `npm run build:native`),
+          // on Linux, or (win32) while a CJK IME is active.
+          const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+          const mgr = StealthKeyboardManager.getInstance();
+          // Capture the engaged state BEFORE showMainWindow: in launcher mode
+          // showMainWindow routes through switchToLauncher, which stops stealth,
+          // so a toggle() afterward would ALWAYS see inactive and always start
+          // (never disengage, and re-engage with the overlay hidden). Branch on
+          // the pre-show state instead of relying on toggle().
+          const wasStealthActive = mgr.isAvailable() && mgr.isActive();
           this.showMainWindow(true);
           const overlay = this.windowHelper.getOverlayWindow();
           this.sendToWindow(overlay, 'ensure-expanded');
-
-          if (process.platform === 'darwin') {
-            const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-            const mgr = StealthKeyboardManager.getInstance();
-            if (mgr.isAvailable()) {
-              mgr.toggle();
-              return; // tap is the input path; no need to focus the panel
-            }
+          if (mgr.isAvailable()) {
+            // start() itself refuses on win32 if the overlay isn't visible, so
+            // pressing this in launcher mode is a safe no-op there.
+            if (wasStealthActive) mgr.stop();
+            else mgr.start();
+            return; // the hook/tap is the input path; never focus the overlay
           }
 
-          // Fallback: panel-safe focus on macOS without tap, brief focus on Win.
+          // No native stealth path (stale binary, or Linux, or a CJK IME made
+          // isAvailable() false). Surface the input and focus the window so the
+          // user can actually type — EXCEPT on Windows, where the overlay is
+          // WS_EX_NOACTIVATE and focusing it would steal the meeting app's
+          // foreground (the regression this feature removes; there the user
+          // rebuilds the native module to get capture). On macOS this focus()
+          // is what promotes the non-activating panel to key window so the DOM
+          // input receives keystrokes — dropping it unconditionally (as an
+          // earlier revision did) broke the macOS no-tap fallback and left
+          // Linux, which always takes this branch, unable to focus at all.
           if (overlay && !overlay.isDestroyed()) {
             this.sendToWindow(overlay, 'global-shortcut', { action: 'focusInput' });
-            overlay.focus();
+            if (process.platform !== 'win32') overlay.focus();
           }
         } else if (
           actionId === 'chat:whatToAnswer' ||
@@ -1918,8 +2239,12 @@ export class AppState {
     this.sendToMeetingSurfaces('audio-capture-failed', payload);
   }
 
-  public sendSystemAudioPermissionDenied(message: string): void {
-    this.sendToMeetingSurfaces('system-audio-permission-denied', message);
+  // `titleKey` is the i18n key for the banner heading (see permissionTitleKey).
+  // Passed as a second IPC argument rather than by wrapping `message` in an
+  // object so the channel's existing payload type is unchanged for any older
+  // renderer bundle still on the one-argument callback signature.
+  public sendSystemAudioPermissionDenied(message: string, titleKey?: string): void {
+    this.sendToMeetingSurfaces('system-audio-permission-denied', message, titleKey);
   }
 
   public broadcast(channel: string, ...args: any[]): void {
@@ -1956,13 +2281,6 @@ export class AppState {
       const { ModesManager } = require('./services/ModesManager');
       const modesManager = ModesManager.getInstance();
       await modesManager.retryAllLexicalOnlyFiles().catch(() => { /* logged inside */ });
-      // Capture which modes actually had retry-eligible files BEFORE the retry,
-      // so we only nudge those renderers to re-fetch status (LOW #8) instead of
-      // broadcasting a no-op 'done' to every mode on every pipeline-ready event.
-      const affectedModeIds: string[] = modesManager.getModesWithRetryEligibleFiles();
-      for (const modeId of affectedModeIds) {
-        this.broadcast('mode-file-index-status', { modeId, phase: 'done' });
-      }
     }).catch(() => { /* provider unavailable — lexical fallback remains valid */ })
       .finally(() => { this.modeReferenceRetryPromise = null; });
   }
@@ -2092,6 +2410,16 @@ export class AppState {
         ModesManager.getInstance().setSharedEmbeddingPipeline(modeEmbeddingPipeline);
         this.scheduleModeReferenceIndexRetry();
 
+        // Context Intelligence V3: hand the engine LAZY access to the meeting
+        // retriever. IntelligenceManager was constructed before this block, so a
+        // provider closure is passed rather than the instance — it also means a
+        // later RAGManager re-init is picked up without re-wiring.
+        try {
+          this.intelligenceManager?.setRagRetrieverProvider?.(
+            () => this.ragManager?.getRetriever() ?? null,
+          );
+        } catch (e) { console.warn('[AppState] V3 meeting retriever wiring skipped:', e); }
+
         console.log('[AppState] RAGManager initialized');
       }
     } catch (error) {
@@ -2106,6 +2434,15 @@ export class AppState {
       if (sqliteDb && KnowledgeDatabaseManagerClass && KnowledgeOrchestratorClass) {
         const knowledgeDb = new KnowledgeDatabaseManagerClass(sqliteDb);
         this.knowledgeOrchestrator = new KnowledgeOrchestratorClass(knowledgeDb);
+
+        // Role Insight owns its own tables in the same SQLite file. It needs the
+        // raw handle, which KnowledgeDatabaseManager does not expose, so it is
+        // attached here. Guarded: a failure disables only Role Insight.
+        try {
+          this.knowledgeOrchestrator.attachRoleInsight?.(sqliteDb);
+        } catch (e) {
+          console.warn('[AppState] Role Insight attach skipped:', e);
+        }
 
         // Wire up LLM functions
         const llmHelper = this.processingHelper.getLLMHelper();
@@ -2130,6 +2467,17 @@ export class AppState {
           this.knowledgeOrchestrator.setLiveCoachingContentFn(async (contents: any[]) => {
             return await llmHelper.generateContentStructured(joinContents(contents), { preferFast: true });
           });
+        }
+
+        // Company-research search provider (Tavily key → Natively API → none),
+        // resolved per AOT run so keys added/changed mid-session take effect.
+        // Same cascade the manual profile:research-company handler uses; without
+        // this the JD-upload AOT pipeline always fell back to LLM-only dossiers.
+        if (typeof this.knowledgeOrchestrator.setSearchProviderResolver === 'function') {
+          const {
+            resolveCompanySearchProvider,
+          } = require('./services/resolveCompanySearchProvider');
+          this.knowledgeOrchestrator.setSearchProviderResolver(resolveCompanySearchProvider);
         }
 
         // Embedding function — lazily delegate to the cascaded EmbeddingPipeline
@@ -2822,7 +3170,11 @@ export class AppState {
         text: segment.text,
         timestamp: Date.now(),
         final: segment.isFinal,
-        confidence: segment.confidence
+        confidence: segment.confidence,
+        // Defect B (2026-08-01): this is the ONLY real spoken-audio seam —
+        // provenance 'stt' makes these segments memory-eligible; typed chat
+        // and assistant answers (other origins) are excluded from extraction.
+        origin: 'stt'
       });
 
       // Feed final transcript to JIT RAG indexer
@@ -3078,6 +3430,7 @@ export class AppState {
         this.sendAudioCaptureFailed( {
           channel: 'system',
           message: msg,
+          titleKey: permissionTitleKey('mac-same-device-input-output'),
           attempt: 0,
           maxAttempts: 3,
           terminal: decision.terminal,
@@ -3275,11 +3628,6 @@ export class AppState {
               // recreates the mic capture, so defer it off the data handler to
               // avoid re-entrancy on the live stream.
               console.warn(`${prefix}Mic native rate ${nativeRate}Hz indicates Bluetooth HFP (degraded). Auto-switching to built-in mic "${builtIn.name}".`);
-              this.broadcast('audio-input-auto-switched', {
-                from: 'Bluetooth mic',
-                to: builtIn.name,
-                reason: 'bluetooth-hfp-avoided',
-              });
               const outputId = this._lastRequestedOutputDeviceId;
               setImmediate(() => {
                 if (this.isMeetingActive && this.microphoneCapture === capture) {
@@ -3328,6 +3676,7 @@ export class AppState {
           this.sendAudioCaptureFailed( {
             channel: 'mic',
             message: formatPermissionMessage('mic-zero-fill'),
+            titleKey: permissionTitleKey('mic-zero-fill'),
             attempt: 0,
             maxAttempts: 3,
             terminal: false,
@@ -3369,7 +3718,7 @@ export class AppState {
       if (screenCapability.effectiveDenied) {
         const message = screenCapability.message ?? formatPermissionMessage('screen-recording-denied');
         console.warn('[Main] Screen Recording permission denied at pipeline setup. Tearing down any stale system audio capture; meeting will run mic-only.');
-        this.sendSystemAudioPermissionDenied(message);
+        this.sendSystemAudioPermissionDenied(message, screenCapability.titleKey ?? permissionTitleKey('screen-recording-denied'));
         this.broadcastDeviceSelection({
           kind: 'output',
           requested: null,
@@ -3661,7 +4010,10 @@ export class AppState {
     try {
       const screenCapability = await resolveMacScreenCaptureCapability('resume capture restart');
       if (screenCapability.effectiveDenied) {
-        this.sendSystemAudioPermissionDenied( screenCapability.message ?? formatPermissionMessage('screen-recording-denied'));
+        this.sendSystemAudioPermissionDenied(
+          screenCapability.message ?? formatPermissionMessage('screen-recording-denied'),
+          screenCapability.titleKey ?? permissionTitleKey('screen-recording-denied'),
+        );
         this.broadcastDeviceSelection({
           kind: 'output',
           requested: this._lastRequestedOutputDeviceId || null,
@@ -3950,11 +4302,6 @@ export class AppState {
           console.warn(`[Main] I/O conflict detected (${conflict} on both sides). Auto-switching mic to "${fallback.name}".`);
           wantedInput = this.normalizeDeviceId(fallback.id);
           micAutoSwitched = true;
-          this.broadcast('audio-input-auto-switched', {
-            from: conflict,
-            to: fallback.name,
-            reason: 'same-device-conflict',
-          });
         } else {
           console.warn(`[Main] I/O conflict detected (${conflict}) but no alternate input available — system audio will likely be silent.`);
         }
@@ -4001,11 +4348,6 @@ export class AppState {
             console.warn(`[Main] Bluetooth mic ("${fromLabel}") would force HFP (low quality). Auto-switching mic to "${builtIn.name}" to keep it in A2DP.`);
             wantedInput = this.normalizeDeviceId(builtIn.id);
             micAutoSwitched = true;
-            this.broadcast('audio-input-auto-switched', {
-              from: fromLabel,
-              to: builtIn.name,
-              reason: 'bluetooth-hfp-avoided',
-            });
           } else if (!builtIn) {
             console.warn(`[Main] Bluetooth mic ("${fromLabel}") will run in HFP — no built-in mic available to switch to.`);
           }
@@ -4047,7 +4389,7 @@ export class AppState {
     if (screenCapability.effectiveDenied) {
       const message = screenCapability.message ?? formatPermissionMessage('screen-recording-denied');
       console.warn('[Main] Skipping SystemAudioCapture reconfigure — Screen Recording permission denied. Meeting will run mic-only.');
-      this.sendSystemAudioPermissionDenied( message);
+      this.sendSystemAudioPermissionDenied(message, screenCapability.titleKey ?? permissionTitleKey('screen-recording-denied'));
       this.broadcastDeviceSelection({
         kind: 'output',
         requested: wantedOutput || null,
@@ -4403,7 +4745,10 @@ export class AppState {
           return;
         }
         if (screenCapability.effectiveDenied) {
-          this.sendSystemAudioPermissionDenied( screenCapability.message ?? formatPermissionMessage('screen-recording-denied'));
+          this.sendSystemAudioPermissionDenied(
+            screenCapability.message ?? formatPermissionMessage('screen-recording-denied'),
+            screenCapability.titleKey ?? permissionTitleKey('screen-recording-denied'),
+          );
           this.broadcastDeviceSelection({
             kind: 'output',
             requested: this._lastRequestedOutputDeviceId || null,
@@ -4565,7 +4910,10 @@ export class AppState {
         return;
       }
       if (screenCapability.effectiveDenied) {
-        this.sendSystemAudioPermissionDenied( screenCapability.message ?? formatPermissionMessage('screen-recording-denied'));
+        this.sendSystemAudioPermissionDenied(
+          screenCapability.message ?? formatPermissionMessage('screen-recording-denied'),
+          screenCapability.titleKey ?? permissionTitleKey('screen-recording-denied'),
+        );
         this.broadcastDeviceSelection({
           kind: 'output',
           requested: null,
@@ -4796,7 +5144,12 @@ export class AppState {
     const isCurrentTest = () => this._audioTestEpoch === startEpoch;
 
     if (!(await ensureMacMicrophoneAccess('audio test'))) {
-      throw new Error(formatPermissionMessage('mic-denied'));
+      // The title is prepended here, not folded back into the body. Banner
+      // copy is now remedy-only ("Enable Natively under…") because the UI
+      // renders the fault as a separate title; an Error carries no title, so
+      // thrown/logged text would otherwise state a fix without ever naming
+      // what failed.
+      throw new Error(`${permissionTitleKey('mic-denied')}: ${formatPermissionMessage('mic-denied')}`);
     }
 
     const broadcastTargets = (): BrowserWindow[] =>
@@ -5100,43 +5453,51 @@ export class AppState {
       this._systemAudioRecoveryTimer = null;
     }
 
-    if (!(await ensureMacMicrophoneAccess('meeting start'))) {
-      const message = formatPermissionMessage('mic-denied');
-      this.broadcast('meeting-audio-error', message);
-      // Tag the thrown error so the renderer's start-meeting caller (still on
-      // the launcher — the overlay/meeting surface hasn't been shown yet, so
-      // the in-overlay audio banner would not be visible) can recognise this
-      // as a recoverable mic-permission denial and re-open the permissions
-      // card instead of failing silently with only a console.error. Pre-fix,
-      // a denied/revoked mic grant made "Start Natively" do nothing on screen.
-      const err = new Error(message) as Error & { code?: string; channel?: string };
-      err.code = 'mic-permission-denied';
-      err.channel = 'mic';
-      throw err;
-    }
-
-    // Check Screen Recording permission required for system audio capture
-    // (CoreAudio Global Process Tap + ScreenCaptureKit both need this).
-    // NOTE: The 'not-determined' TCC dialog is triggered once at app startup
-    // (in initializeApp) so it never pops up mid-meeting here. We only act on
-    // explicit 'denied' — in that case warn the user but let the meeting continue
-    // with microphone-only transcription.
-    if (process.platform === 'darwin') {
-      const screenCapability = await resolveMacScreenCaptureCapability('meeting start');
-      console.log(`[Main] macOS screen recording permission status: ${screenCapability.status}; capturable=${screenCapability.capturable}; sources=${screenCapability.sourceCount}`);
-      if (screenCapability.effectiveDenied) {
-        // Permission was explicitly denied — warn the user via the UI but do NOT
-        // auto-open System Settings. Forcing that window open every meeting start
-        // is extremely disruptive, especially when mic transcription is still working.
-        // The UI will show a non-blocking banner; the user can fix it deliberately.
-        const message = screenCapability.message ?? formatPermissionMessage('screen-recording-denied');
-        console.warn('[Main]', message);
-        this.sendSystemAudioPermissionDenied( message);
-        // NOTE: Do NOT call shell.openExternal() here — it hijacks focus on every meeting
-        // start. The UI banner (system-audio-permission-denied IPC event) handles this.
+    // Ambient AI Chat (Settings > General) skips mic/system audio capture
+    // entirely for the whole meeting (see the `!this._ambientChatEnabled`
+    // gate around setupSystemAudioPipeline() below) — so neither permission
+    // is ever touched in that mode. Checking/warning about them here anyway
+    // used to throw on a denied mic grant (blocking "Start Natively" outright)
+    // and always surface the "Interviewer audio will not be captured" banner,
+    // even though no audio was ever going to be captured by design.
+    if (!this._ambientChatEnabled) {
+      if (!(await ensureMacMicrophoneAccess('meeting start'))) {
+        const message = formatPermissionMessage('mic-denied');
+        // Tag the thrown error so the renderer's start-meeting caller (still on
+        // the launcher — the overlay/meeting surface hasn't been shown yet, so
+        // the in-overlay audio banner would not be visible) can recognise this
+        // as a recoverable mic-permission denial and re-open the permissions
+        // card instead of failing silently with only a console.error. Pre-fix,
+        // a denied/revoked mic grant made "Start Natively" do nothing on screen.
+        const err = new Error(message) as Error & { code?: string; channel?: string };
+        err.code = 'mic-permission-denied';
+        err.channel = 'mic';
+        throw err;
       }
-      // 'not-determined': Handled at startup. SCK/CoreAudio will trigger the TCC
-      // dialog itself when it first attempts to access screen content.
+
+      // Check Screen Recording permission required for system audio capture
+      // (CoreAudio Global Process Tap + ScreenCaptureKit both need this).
+      // NOTE: The 'not-determined' TCC dialog is triggered once at app startup
+      // (in initializeApp) so it never pops up mid-meeting here. We only act on
+      // explicit 'denied' — in that case warn the user but let the meeting continue
+      // with microphone-only transcription.
+      if (process.platform === 'darwin') {
+        const screenCapability = await resolveMacScreenCaptureCapability('meeting start');
+        console.log(`[Main] macOS screen recording permission status: ${screenCapability.status}; capturable=${screenCapability.capturable}; sources=${screenCapability.sourceCount}`);
+        if (screenCapability.effectiveDenied) {
+          // Permission was explicitly denied — warn the user via the UI but do NOT
+          // auto-open System Settings. Forcing that window open every meeting start
+          // is extremely disruptive, especially when mic transcription is still working.
+          // The UI will show a non-blocking banner; the user can fix it deliberately.
+          const message = screenCapability.message ?? formatPermissionMessage('screen-recording-denied');
+          console.warn('[Main]', message);
+          this.sendSystemAudioPermissionDenied(message, screenCapability.titleKey ?? permissionTitleKey('screen-recording-denied'));
+          // NOTE: Do NOT call shell.openExternal() here — it hijacks focus on every meeting
+          // start. The UI banner (system-audio-permission-denied IPC event) handles this.
+        }
+        // 'not-determined': Handled at startup. SCK/CoreAudio will trigger the TCC
+        // dialog itself when it first attempts to access screen content.
+      }
     }
 
     // Reset overlay position BEFORE the switch so the new meeting starts in
@@ -5263,9 +5624,40 @@ export class AppState {
         return;
       }
       try {
-        // Check for audio configuration preference
-        if (metadata?.audio) {
-          await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
+        // Ambient AI Chat (Settings > General): audio capture is the ONLY
+        // thing this setting changes. Everything else about a meeting —
+        // window, persistence, RAG, quick actions — proceeds identically;
+        // skipping reconfigureAudio()/setupSystemAudioPipeline() here just
+        // means systemAudioCapture/microphoneCapture/googleSTT/googleSTT_User
+        // stay whatever they already were (null on a clean boot or after a
+        // prior meeting's teardown), so the start() calls below are already
+        // safe no-ops via `?.` — no other code path needs to know about this.
+        if (this._ambientChatEnabled) {
+          // Loud, unambiguous marker. On 2026-07-30 this flag flipped on and
+          // every meeting for the next five hours persisted with an empty
+          // transcript and a skeleton summary — 15 meetings of silent data
+          // loss that read as "meeting notes are broken". If capture is
+          // intentionally off, the log should say so at the exact moment a
+          // meeting starts without it.
+          console.warn('[Main] Meeting starting WITHOUT audio capture — Ambient AI Chat is ON (Settings > General). Transcript, summary and usage will be empty for this meeting.');
+        }
+        if (!this._ambientChatEnabled) {
+          // Check for audio configuration preference
+          if (metadata?.audio) {
+            await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
+            if (!isCurrentMeeting()) {
+              abortStaleAudioInit();
+              return;
+            }
+            systemCaptureOwnedByInit = this.systemAudioCapture;
+            microphoneCaptureOwnedByInit = this.microphoneCapture;
+            systemSttOwnedByInit = this.googleSTT;
+            userSttOwnedByInit = this.googleSTT_User;
+            ragManagerOwnedByInit = this.ragManager;
+          }
+
+          // LAZY INIT: Ensure pipeline is ready (if not reconfigured above)
+          await this.setupSystemAudioPipeline();
           if (!isCurrentMeeting()) {
             abortStaleAudioInit();
             return;
@@ -5275,34 +5667,24 @@ export class AppState {
           systemSttOwnedByInit = this.googleSTT;
           userSttOwnedByInit = this.googleSTT_User;
           ragManagerOwnedByInit = this.ragManager;
+
+          // Start Microphone FIRST. MicrophoneCapture is lazy-init: start()
+          // constructs the cpal input stream. If we start the CoreAudio system
+          // tap first, cpal can hang inside build_input_stream while the aggregate
+          // device IO proc is already active (observed: logs stop after
+          // `[Microphone] Device: ...`). Keep launch-time mic discipline by
+          // staying lazy, but restore the pre-fix HAL ordering inside meetings.
+          this.microphoneCapture?.start();
+          this.googleSTT_User?.start();
+          userSttStartedByInit = true;
+
+          // Start System Audio after the mic stream has been constructed.
+          this.systemAudioCapture?.start();
+          this.googleSTT?.start();
+          systemSttStartedByInit = true;
+        } else {
+          console.log('[Main] Ambient AI Chat enabled — skipping mic/system audio capture and STT for this session.');
         }
-
-        // LAZY INIT: Ensure pipeline is ready (if not reconfigured above)
-        await this.setupSystemAudioPipeline();
-        if (!isCurrentMeeting()) {
-          abortStaleAudioInit();
-          return;
-        }
-        systemCaptureOwnedByInit = this.systemAudioCapture;
-        microphoneCaptureOwnedByInit = this.microphoneCapture;
-        systemSttOwnedByInit = this.googleSTT;
-        userSttOwnedByInit = this.googleSTT_User;
-        ragManagerOwnedByInit = this.ragManager;
-
-        // Start Microphone FIRST. MicrophoneCapture is lazy-init: start()
-        // constructs the cpal input stream. If we start the CoreAudio system
-        // tap first, cpal can hang inside build_input_stream while the aggregate
-        // device IO proc is already active (observed: logs stop after
-        // `[Microphone] Device: ...`). Keep launch-time mic discipline by
-        // staying lazy, but restore the pre-fix HAL ordering inside meetings.
-        this.microphoneCapture?.start();
-        this.googleSTT_User?.start();
-        userSttStartedByInit = true;
-
-        // Start System Audio after the mic stream has been constructed.
-        this.systemAudioCapture?.start();
-        this.googleSTT?.start();
-        systemSttStartedByInit = true;
 
         // Start JIT RAG live indexing
         if (this.ragManager) {
@@ -5558,7 +5940,8 @@ export class AppState {
 
         // 3. Snapshot transcript + persist placeholder + queue title/summary LLM.
         //    intelligenceManager.stopMeeting itself runs LLM in background.
-        const meetingId = await this.intelligenceManager.stopMeeting();
+        const stopResult = await this.intelligenceManager.stopMeeting();
+        const meetingId = stopResult?.meetingId ?? null;
 
         // 5. RAG cleanup — same logic as before, just inside the BG IIFE.
         if (meetingId) {
@@ -5566,7 +5949,15 @@ export class AppState {
             await ragManager.stopLiveIndexing();
             console.log('[Main] Live RAG indexing stopped.');
           }
-          await this.processCompletedMeetingForRAG(meetingId);
+          // Zero-eligible sessions (manual chat only — deep-run 2 issue 11)
+          // skip RAG entirely: the transcript re-read below has no provenance
+          // columns, so chat/assistant text would be chunked and embedded as
+          // meeting content.
+          if ((stopResult?.memoryEligibleCount ?? 1) > 0) {
+            await this.processCompletedMeetingForRAG(meetingId);
+          } else {
+            console.log('[Main] No memory-eligible transcript — skipping meeting RAG processing.');
+          }
           if (ragManager && !this.isMeetingActive) {
             ragManager.deleteMeetingData('live-meeting-current');
             console.log('[Main] JIT RAG provisional chunks cleaned up.');
@@ -5724,10 +6115,23 @@ export class AppState {
       } catch { /* non-fatal */ }
     })
 
-    this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number) => {
+    this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number, generationId?: number, sourceLabel?: string) => {
+      // Phase 4 defense-in-depth (forensic-report §6b): forward the optional
+      // generationId the engine emits. Id-less emits (legacy answerLLM path,
+      // code-hint, brainstorm) continue to ship without it — the renderer
+      // treats them as always-accepted, same as id-less token batches today.
+      // Campaign-3 (fix/answer-policy-engine, 2026-07-19, founder §2.6):
+      // forward the optional sourceLabel the engine computes from the
+      // TurnPlan. Falls back to 'General knowledge' for legacy emitters
+      // (fallback paths, code-hint, brainstorm) that don't compute it.
       flushBatchesBeforeFinal();
       const win = mainWindow()
-      this.sendToWindow(win, 'intelligence-suggested-answer', { answer, question, confidence })
+      // emittedAt (2026-07-31): WTA supersession is generation-relative only —
+      // a slow generation stays "current" through any number of manual turns
+      // and mode switches, so a minutes-old answer appeared with no marker of
+      // what it answered (the live "late CGPA answer" report). The renderer
+      // uses this stamp to drop or visibly label stale finals.
+      this.sendToWindow(win, 'intelligence-suggested-answer', { answer, question, confidence, generationId, sourceLabel: sourceLabel ?? 'General knowledge', emittedAt: Date.now() })
 
     })
 
@@ -5851,7 +6255,32 @@ export class AppState {
 
 
 
-  public updateGoogleCredentials(keyPath: string): void {
+  /**
+   * Adopt a Google service-account key file for Speech-to-Text.
+   *
+   * Adopts NOTHING unless the file parses as a real service-account key.
+   * `new SpeechClient({ keyFilename })` does not validate at construction — a
+   * bad path throws later, from inside the STT stream and again from the
+   * `before-quit` teardown, which reads as a fatal app crash rather than a bad
+   * setting. Validating here keeps a stale, mistyped or wrong-JSON path from
+   * ever reaching the SDK, and leaves any previously-working credential in
+   * place instead of clobbering it with a broken one.
+   *
+   * The verdict is returned rather than a bare boolean so callers can tell a
+   * POSITIVE rejection ("this json is an OAuth client secret") from a failure
+   * to read ("the volume is not mounted"). Callers must not delete persisted
+   * state on the latter — see googleServiceAccount.ts.
+   */
+  public updateGoogleCredentials(keyPath: string): ServiceAccountVerdict {
+    const verdict = classifyServiceAccountFile(keyPath);
+    if (!verdict.usable) {
+      console.error(
+        `[AppState] Ignoring Google Service Account path (${verdict.reason}`
+        + `${verdict.detail ? `: ${verdict.detail}` : ''}): ${keyPath}`,
+      );
+      return verdict;
+    }
+
     console.log(`[AppState] Updating Google Credentials to: ${keyPath}`);
     // Set global environment variable so new instances pick it up
     process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
@@ -5863,6 +6292,7 @@ export class AppState {
     if (this.googleSTT_User) {
       this.googleSTT_User.setCredentials(keyPath);
     }
+    return verdict;
   }
 
   public setRecognitionLanguage(key: string): void {
@@ -6241,7 +6671,7 @@ export class AppState {
     // Potential paths for tray icon
     const templatePath = path.join(resourcesPath, 'assets', 'iconTemplate.png');
     const defaultIconPath = app.isPackaged
-      ? path.join(resourcesPath, 'src/components/icon.png')
+      ? path.join(resourcesPath, 'assets', 'icon.png')
       : path.join(app.getAppPath(), 'src/components/icon.png');
 
     let iconToUse = defaultIconPath;
@@ -6396,6 +6826,21 @@ export class AppState {
       this.windowHelper.syncOverlayInteractionPolicy();
       this.settingsWindowHelper.syncActivationPolicy();
       this.modelSelectorWindowHelper.syncActivationPolicy();
+      // The tray must follow undetectable state on Windows too. On macOS the
+      // _enforceDockState loop hides the tray alongside the dock and restores
+      // both on the way out — but that loop returns immediately off darwin, and
+      // it holds the ONLY showTray()/hideTray() call sites besides startup. So
+      // nothing drove the tray on Windows: launching with undetectable ON never
+      // created it, and toggling back OFF never created it either, leaving the
+      // user with no tray menu (show window / quit) until they restarted in
+      // normal mode. hideTray() is null-guarded and showTray() is idempotent,
+      // so this is safe to call on every real state change.
+      if (state) this.hideTray();
+      else this.showTray();
+      // Undetectable also means "no taskbar button" — the launcher is the only
+      // window without skipTaskbar (it needs one in normal mode). macOS achieves
+      // the equivalent by dropping the Dock tile.
+      this.windowHelper.syncLauncherTaskbarForStealth();
     }
 
     // Persist state via SettingsManager
@@ -6671,6 +7116,16 @@ export class AppState {
     this.broadcast('verbose-logging-changed', enabled);
   }
 
+  public getAmbientChatEnabled(): boolean {
+    return this._ambientChatEnabled;
+  }
+
+  public setAmbientChatEnabled(enabled: boolean): void {
+    this._ambientChatEnabled = enabled;
+    SettingsManager.getInstance().set('ambientChatEnabled', enabled);
+    console.log(`[AppState] ambientChatEnabled set to ${enabled}`);
+  }
+
   public setDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
     mode = normalizeDisguiseMode(mode);
     this.disguiseMode = mode;
@@ -6761,7 +7216,7 @@ export class AppState {
             : path.join(app.getAppPath(), "assets/icons/win/icon.ico");
         } else {
           iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "icon.png")
+            ? path.join(process.resourcesPath, "assets/icon.png")
             : path.join(app.getAppPath(), "assets/icon.png");
         }
         break;
@@ -7133,16 +7588,67 @@ async function initializeApp() {
   const { sendAnonymousInstallPing } = require('./services/InstallPingManager');
   sendAnonymousInstallPing();
 
-  // Load stored Google Service Account path (for Speech-to-Text)
-  // Fall back to GOOGLE_APPLICATION_CREDENTIALS env var (set in terminal but not Spotlight)
-  const storedServiceAccountPath = CredentialsManager.getInstance().getGoogleServiceAccountPath()
-    || process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (storedServiceAccountPath) {
-    console.log("[Init] Loading stored Google Service Account path");
-    appState.updateGoogleCredentials(storedServiceAccountPath);
-    // Persist env-var path so Spotlight launches also work going forward
-    if (!CredentialsManager.getInstance().getGoogleServiceAccountPath()) {
-      CredentialsManager.getInstance().setGoogleServiceAccountPath(storedServiceAccountPath);
+  // Load the Google Service Account key for Speech-to-Text: the persisted path
+  // first, then GOOGLE_APPLICATION_CREDENTIALS (set in a terminal but not for a
+  // Spotlight launch).
+  //
+  // Each candidate is tried IN TURN, not picked with `||` and then validated.
+  // A `||` picks the store's value whenever it is non-empty — including when it
+  // is stale — so a user with a moved key file and a WORKING env var would have
+  // the env var never evaluated and (worse, in the previous revision of this
+  // block) deleted. Trying them in order means a bad first candidate costs
+  // nothing.
+  //
+  // Eviction is limited to DEFINITE rejections. "Cannot read it" is not "it is
+  // gone": a key on an unmounted external volume or an unconnected network share
+  // reports ENOENT exactly like a deleted file, and deleting the stored path
+  // there would destroy a credential that comes back when the volume mounts.
+  // See googleServiceAccount.ts.
+  {
+    const cm = () => CredentialsManager.getInstance();
+    const candidates: Array<{ source: 'store' | 'env'; path: string }> = [];
+    const storedPath = cm().getGoogleServiceAccountPath();
+    const envPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    if (storedPath) candidates.push({ source: 'store', path: storedPath });
+    if (envPath && envPath !== storedPath) candidates.push({ source: 'env', path: envPath });
+
+    let adoptedPath: string | null = null;
+    for (const candidate of candidates) {
+      const verdict = appState.updateGoogleCredentials(candidate.path);
+      if (verdict.usable) {
+        console.log(`[Init] Loaded Google Service Account path from the ${candidate.source}`);
+        adoptedPath = candidate.path;
+        break;
+      }
+      // Definite rejection → drop it so the next boot doesn't retry a path we
+      // KNOW is wrong (this is what evicts the .env.example placeholder that
+      // older builds persisted). Indefinite → leave everything alone.
+      if (verdict.definite) {
+        console.warn(
+          `[Init] Discarding unusable Google Service Account path from the ${candidate.source} `
+          + `(${verdict.reason}): ${describeServiceAccountRejection(verdict.reason)}`,
+        );
+        if (candidate.source === 'store') {
+          cm().setGoogleServiceAccountPath('');
+        } else {
+          delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+        }
+      } else {
+        console.warn(
+          `[Init] Google Service Account path from the ${candidate.source} is not readable right now; `
+          + 'keeping it for the next launch (it may be on a volume that is not mounted yet)',
+        );
+      }
+    }
+
+    if (adoptedPath) {
+      // Persist an env-var-sourced path so Spotlight launches also work later.
+      if (cm().getGoogleServiceAccountPath() !== adoptedPath) {
+        cm().setGoogleServiceAccountPath(adoptedPath);
+      }
+      // Keep the env var in sync with what we actually adopted, so the Google
+      // SDK's own ADC lookup cannot pick a different (rejected) file.
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = adoptedPath;
     }
   }
 
@@ -7176,7 +7682,7 @@ async function initializeApp() {
   }
 
   // DEV-ONLY: thinking MATRIX (budgets × levels) on a focused problem subset.
-  //   THINKING_MATRIX=1 THINKING_BENCH_MODEL=gemini-3.5-flash THINKING_BENCH_DATASET=$(pwd)/electron/services/dev/cf10.json npm run electron:build
+  //   THINKING_MATRIX=1 THINKING_BENCH_MODEL=gemini-3.6-flash THINKING_BENCH_DATASET=$(pwd)/electron/services/dev/cf10.json npm run electron:build
 if (process.env.THINKING_MATRIX === '1') {
     (async () => {
       try {
@@ -7423,13 +7929,20 @@ if (process.env.THINKING_MATRIX === '1') {
           // NOTE: Do NOT read afterStatus here — TCC response is async (dialog still open).
           // startMeeting() reads the status when the user actually tries to use audio.
 
-        } else if (screenStatus === 'denied') {
+        } else if (screenStatus === 'denied' && !appState.getAmbientChatEnabled()) {
+          // Ambient AI Chat (Settings > General) means meetings never capture
+          // system audio at all, so a denied Screen Recording grant is moot —
+          // skip the banner rather than warning about a capability the app
+          // isn't going to use.
           const screenCapability = await resolveMacScreenCaptureCapability('startup permission check');
           if (screenCapability.effectiveDenied) {
             // Returning user who previously denied — show the banner immediately at startup
             // so they know system audio won't work before they even start a meeting.
             console.warn('[Init] Screen recording was previously denied — notifying UI banner.');
-            appState.sendSystemAudioPermissionDenied(screenCapability.message ?? formatPermissionMessage('screen-recording-denied'));
+            appState.sendSystemAudioPermissionDenied(
+              screenCapability.message ?? formatPermissionMessage('screen-recording-denied'),
+              screenCapability.titleKey ?? permissionTitleKey('screen-recording-denied'),
+            );
           }
         } else {
           // 'granted' or 'restricted' — nothing to do for screen recording.
@@ -7444,11 +7957,16 @@ if (process.env.THINKING_MATRIX === '1') {
         try {
           const micStatus = systemPreferences.getMediaAccessStatus('microphone');
           console.log(`[Init] Microphone permission status at startup: ${micStatus}`);
-          if (micStatus === 'denied') {
+          // Ambient AI Chat never touches the mic either — see the
+          // screen-recording branch above for why these banners are skipped.
+          if (appState.getAmbientChatEnabled()) {
+            // skip — no banner
+          } else if (micStatus === 'denied') {
             console.warn('[Init] Microphone was previously denied — notifying UI banner.');
             appState.sendAudioCaptureFailed({
               channel: 'mic',
               message: formatPermissionMessage('mic-denied'),
+              titleKey: permissionTitleKey('mic-denied'),
               attempt: 0,
               maxAttempts: 0,
               terminal: true,
@@ -7507,6 +8025,8 @@ if (process.env.THINKING_MATRIX === '1') {
   });
 
   logStartupPhase('initializeApp:complete');
+
+  maybeForceDevPermissionBanner(appState);
 
   // Note: We do NOT force dock show here anymore, respecting stealth mode.
 
@@ -7690,6 +8210,14 @@ if (process.env.THINKING_MATRIX === '1') {
     console.log("App is quitting, cleaning up resources...");
     appState.setQuitting(true);
 
+    // Flush any queued context-debug JSONL writes. Best-effort and async —
+    // completed lines are already durable (append-per-record), so a hard kill
+    // loses at most the in-flight tail.
+    try {
+      const { flushContextDebugWriter } = require('./context-intelligence/debug/jsonl-writer');
+      void flushContextDebugWriter();
+    } catch { /* debug logging only */ }
+
     // Stop the default-output watcher immediately after setting the quitting
     // flag so any straggler interval tick observes _isQuitting before native
     // audio handles start tearing down.
@@ -7744,7 +8272,11 @@ if (process.env.THINKING_MATRIX === '1') {
     // cleanup (cropper.dispose, ollama.stop, phoneMirror.dispose). Those
     // can spawn their own native threads or release napi resources, which
     // would race with our worker if it's still alive.
-    if (process.platform === 'darwin') {
+    if (process.platform === 'darwin' || process.platform === 'win32') {
+      // Stop BEFORE the napi-touching cleanup below on Windows too: the Windows
+      // hook worker holds an Arc<ThreadsafeFunction> and calls into napi from a
+      // non-V8 thread exactly like the macOS tap, so a keystroke firing during
+      // V8 teardown would race the same way. (This guard was darwin-only.)
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');

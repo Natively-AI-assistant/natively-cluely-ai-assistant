@@ -8,6 +8,7 @@ import {
     type SdRequirementsSessionArtifact,
 } from './llm/sdRequirementsGate';
 import { isVerboseLogging } from './verboseLog';
+import type { AttemptId, TurnIdentity } from './llm/turnIdentity';
 
 // Canned-fallback phrases that mean the model gave up entirely, not phrases
 // that might legitimately appear inside a real answer. Matched only when the
@@ -28,6 +29,17 @@ function isCannedFallbackPhrase(text: string): boolean {
     return CANNED_FALLBACK_PHRASES.includes(normalized);
 }
 
+/**
+ * Provenance of a transcript segment (Defect B fix, 2026-08-01). Real spoken
+ * audio ('stt') is the ONLY origin that is evidence for meeting memory
+ * extraction; typed manual-chat questions, assistant answers, injected system
+ * instructions, and test fixtures share this store but must never be mined as
+ * things that "happened in the meeting". Optional so old stored segments and
+ * un-migrated callers keep working — readers fall back to a documented
+ * heuristic (see isMemoryEligibleSegment in intelligence/MeetingMemoryService).
+ */
+export type TranscriptOrigin = 'stt' | 'manual_chat' | 'assistant' | 'system_instruction' | 'test';
+
 export interface TranscriptSegment {
     marker?: string;
     speaker: string;
@@ -39,6 +51,8 @@ export interface TranscriptSegment {
     timestamp: number;
     final: boolean;
     confidence?: number;
+    /** Where this segment came from. Absent = legacy/unknown writer (see TranscriptOrigin). */
+    origin?: TranscriptOrigin;
 }
 
 export interface SuggestionTrigger {
@@ -97,6 +111,19 @@ export class SessionTracker {
     // continuity that intentionally reads the shared field is unaffected).
     // Keyed by ConversationSurface; a surface with no turns yet is simply absent.
     private lastAssistantMessageBySurface: Partial<Record<ConversationSurface, string>> = {};
+
+    // Phase 6 Slice 1 (context-rebuild, 2026-07-25) — TurnIdentity write guard.
+    // Tracks, PER SURFACE (mirroring lastAssistantMessageBySurface above — a
+    // newer commit on one surface must never reject an un-superseded write on
+    // a different surface), the highest AttemptId that has already committed
+    // an addAssistantMessage write. attemptId is minted from a single
+    // globally-monotonic counter (ipcHandlers.ts's `_chatStreamId`), so a
+    // strictly SMALLER incoming attemptId is unambiguously stale. Keyed by
+    // 'unspecified' for identity-tagged calls that pass no surface. Only
+    // consulted when the caller passes `identity` — omitting it (every
+    // existing caller, until Slice 1's ipcHandlers.ts wiring lands) is a
+    // complete no-op, exactly like `surface` being optional above.
+    private lastCommittedAttemptBySurface: Partial<Record<ConversationSurface | 'unspecified', AttemptId>> = {};
 
     // Temporal RAG: Track all assistant responses in session for anti-repetition
     private assistantResponseHistory: AssistantResponse[] = [];
@@ -407,26 +434,66 @@ export class SessionTracker {
         // a same-surface-only reader (getLastAssistantMessage(surface)) can
         // consult, without changing what the shared, cross-surface state sees.
         surface?: ConversationSurface,
-    ): void {
+        // Phase 6 Slice 1 (context-rebuild, 2026-07-25): OPTIONAL — absent
+        // means the caller hasn't been updated yet (every existing caller,
+        // today), and this write behaves exactly as before. Passing an
+        // identity additionally rejects the write if a newer attempt for the
+        // same surface has already committed (see
+        // lastCommittedAttemptBySurface above).
+        identity?: TurnIdentity,
+    ): boolean {
         console.log(`[SessionTracker] addAssistantMessage called`, { length: text.length, policy: writeDecision?.policy || 'store_conversational_only', surface: surface ?? 'unspecified' });
+
+        // TurnIdentity write guard — checked FIRST, before any other filter
+        // and before either of this method's two writes, in the SAME
+        // synchronous call (this method has no `await`, so nothing can
+        // interleave between this check and the writes below — the
+        // non-interleavable-block requirement the migration plan calls for
+        // falls out of the method already being synchronous, not from any
+        // added locking).
+        if (identity) {
+            const key = surface ?? 'unspecified';
+            const lastCommitted = this.lastCommittedAttemptBySurface[key];
+            if (lastCommitted != null && identity.attemptId < lastCommitted) {
+                console.warn(`[SessionTracker] Rejected stale-attempt assistant message`, {
+                    surface: key,
+                    attemptId: identity.attemptId,
+                    lastCommittedAttemptId: lastCommitted,
+                });
+                return false;
+            }
+        }
 
         if (writeDecision?.policy === 'do_not_store' || writeDecision?.blockedFromSessionTracker) {
             console.warn(`[SessionTracker] Blocked assistant message by write policy`, { reason: writeDecision?.reason || 'unspecified' });
-            return;
+            return false;
         }
 
         // Natively-style filtering
-        if (!text) return;
+        if (!text) return false;
+
+        // Prompt System v2 no-action sentinel (2026-08-01): [[NO_ACTION]] is a
+        // machine signal, never a message. It must not enter contextItems,
+        // fullTranscript (and therefore epoch summaries, DB transcripts, or
+        // meeting persistence), lastAssistantMessage, or response history —
+        // regardless of which of the ~23 call sites forgot to gate it.
+        try {
+            const { shouldSuppressModelOutput } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+            if (shouldSuppressModelOutput(text)) {
+                console.warn(`[SessionTracker] Suppressed no-action sentinel (never stored)`);
+                return false;
+            }
+        } catch { /* non-fatal — fall through to normal filtering */ }
 
         const cleanText = text.trim();
         if (cleanText.length < 10) {
             console.warn(`[SessionTracker] Ignored short message (<10 chars)`);
-            return;
+            return false;
         }
 
         if (isCannedFallbackPhrase(cleanText)) {
             console.warn(`[SessionTracker] Ignored fallback message`);
-            return;
+            return false;
         }
 
         this.contextItems.push({
@@ -441,7 +508,10 @@ export class SessionTracker {
             text: cleanText,
             timestamp: Date.now(),
             final: true,
-            confidence: 1.0
+            confidence: 1.0,
+            // Defect B (2026-08-01): assistant answers are NOT meeting evidence.
+            // Meeting-memory extraction filters on origin === 'stt'.
+            origin: 'assistant'
         });
 
         // Compact transcript with summarization instead of losing early context
@@ -453,6 +523,9 @@ export class SessionTracker {
         this.lastAssistantMessage = cleanText;
         if (surface) {
             this.lastAssistantMessageBySurface[surface] = cleanText;
+        }
+        if (identity) {
+            this.lastCommittedAttemptBySurface[surface ?? 'unspecified'] = identity.attemptId;
         }
 
         // Temporal RAG: Track response history for anti-repetition
@@ -470,6 +543,7 @@ export class SessionTracker {
 
         console.log(`[SessionTracker] lastAssistantMessage updated, history size: ${this.assistantResponseHistory.length}`);
         this.evictOldEntries();
+        return true;
     }
 
     /**

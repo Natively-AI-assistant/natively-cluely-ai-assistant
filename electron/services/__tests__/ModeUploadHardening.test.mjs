@@ -88,6 +88,24 @@ describe('FIX-009: shared document upload hardening', () => {
     }
   });
 
+  // Bug fix 2026-07-28 (code review): this handler's .doc branch checked
+  // `error?.path`, but the Error thrown by SafeDocumentTextExtractor's
+  // extension whitelist never sets a `.path` property, so `ext` was always
+  // '' and the friendly message could never fire — dead code masquerading
+  // as a working error path. Fixed by capturing the known selected path
+  // before the try block, the same pattern profile:upload-resume already
+  // used correctly (see the test above).
+  test('Modes reference-file handler derives .doc detection from the known selected path, not error.path', () => {
+    const modesHandler = IPC_SOURCE.slice(
+      IPC_SOURCE.indexOf("safeHandle('modes:upload-reference-file'"),
+      IPC_SOURCE.indexOf("safeHandle('modes:delete-reference-file'"),
+    );
+    assert.match(modesHandler, /let selectedPath: string \| undefined;/);
+    assert.match(modesHandler, /selectedPath = result\.filePaths\[0\];/);
+    assert.match(modesHandler, /path\.extname\(String\(selectedPath \|\| ''\)\)\.toLowerCase\(\)/);
+    assert.doesNotMatch(modesHandler, /error\?\.path/, 'must not derive the extension from the thrown error, which never has a .path property');
+  });
+
   test('build externalizes document parsers so the pdfjs worker pin works packaged', () => {
     const externalMatch = BUILD_SCRIPT.match(/external:\s*\[([\s\S]*?)\]/);
     assert.ok(externalMatch, 'build-electron.js must declare an external list');

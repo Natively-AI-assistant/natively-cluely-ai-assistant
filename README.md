@@ -85,9 +85,6 @@ Natively started as a pixel-perfect recreation of Cluely's interface — then ke
 
 ## What Users Are Saying
 
-> "This is a fantastic piece of software and you should definitely keep up the great work! This is exactly what I was looking for. I started out trying the source-available version, and because it worked so well, I decided to go ahead and buy the full premium license."  
-> — **Oskar Krzak** (⭐⭐⭐⭐⭐ via Gumroad)
-
 > "Natively is significantly faster than Cluely when it comes to response time and screen analysis. The latency is practically non-existent."  
 > — **Premium User**
 
@@ -954,7 +951,19 @@ Cluely is a $20/month cloud-based tool that stores all data on their servers. In
 
 #### Is stealth mode actually undetectable?
 
-Yes. Natively hides from the dock, disguises process names as harmless system utilities (Terminal, Activity Monitor, System Settings), and syncs state across all windows. It has been hardened across five major releases and tested against screen share detection in Zoom, Teams, and Google Meet.
+Yes. Natively hides from the dock, disguises process names as harmless system utilities (Terminal, Activity Monitor, System Settings), and syncs state across all windows. It has been hardened across five major releases and tested against screen share detection in Zoom, Teams, and Google Meet. This is best-effort, not guaranteed — on macOS 15.4+ Apple can let modern capture tools see it anyway, and a phone camera always can.
+
+#### Zoom shows my overlay in screen share — how do I fix it?
+
+Google Meet, Teams, and QuickTime hide Natively automatically — nothing to configure. Zoom is the one exception: whether it respects Natively's "don't capture me" flag depends on one setting.
+
+Go to **Zoom → Settings → Share Screen → Advanced → Screen capture mode** and choose **"Advanced capture with window filtering."**
+
+<p align="center">
+  <img src="assets/help/zoom-screen-capture-mode.png" width="560" alt="Zoom Settings → Share Screen → Screen capture mode set to Advanced capture with window filtering">
+</p>
+
+The "...with window filtering" modes tell Zoom to leave out windows that mark themselves as private, which is exactly what Natively does. **"Advanced capture without window filtering"** grabs the raw screen and will show Natively, so avoid it.
 
 #### Does Natively work on LeetCode and HackerRank?
 

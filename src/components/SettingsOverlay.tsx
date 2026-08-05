@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { useLanguage, useT } from '../i18n';
 import packageJson from '../../package.json';
 import {
@@ -7,8 +7,9 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones
 } from 'lucide-react';
+import { HiCreditCard } from 'react-icons/hi2';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
 import { HelpSettings } from './settings/HelpSettings';
@@ -18,14 +19,14 @@ import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
-import { NativelyLogoMark } from './NativelyLogoMark';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { isMac } from '../utils/platformUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import {
     clampOverlayOpacity,
     getOverlayAppearance,
+    getGlassOverlayAppearance,
     OVERLAY_OPACITY_DEFAULT,
     OVERLAY_OPACITY_MIN,
     getDefaultOverlayOpacity,
@@ -39,22 +40,43 @@ import icon from './icon.png';
 
 
 // ---------------------------------------------------------------------------
-// MockupNativelyInterface — fake in-meeting widget for the opacity preview
+// MockupNativelyInterface — fake in-meeting widget for the opacity preview.
+// Mirrors NativelyInterface.tsx's own theme resolution (isGlassTheme /
+// isModernTheme / data-interface-theme / GlassEffectLayer) so the preview
+// actually reflects whichever "Meeting Interface Style" the user has picked,
+// instead of always rendering the default theme's appearance.
 // ---------------------------------------------------------------------------
-const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
+const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: MeetingInterfaceTheme }) => {
     const t = useT();
     const resolvedTheme = useResolvedTheme();
+    const isGlassTheme = theme === 'liquid-glass';
+    const isModernTheme = theme === 'modern';
+    const shellRef = React.useRef<HTMLDivElement>(null);
     const appearance = useMemo(
-        () => getOverlayAppearance(opacity, resolvedTheme),
-        [opacity, resolvedTheme]
+        () => (isGlassTheme ? getGlassOverlayAppearance() : getOverlayAppearance(opacity, resolvedTheme)),
+        [opacity, resolvedTheme, isGlassTheme]
     );
 
     return (
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none bg-transparent">
-                {/* NativelyInterface Widget — opacity controlled by the slider */}
+        <div
+            className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none bg-transparent"
+            // The "modern" theme's CSS (index.css [data-interface-theme="modern"]
+            // .overlay-shell-surface etc.) reads --overlay-opacity directly via
+            // calc(), same as the real overlay window (see App.tsx's
+            // '--overlay-opacity' inline style) — it does NOT go through
+            // appearance.shellStyle. Without setting it here too, the modern
+            // theme's preview would silently ignore the slider entirely.
+            style={{ ['--overlay-opacity' as '--overlay-opacity']: String(opacity) } as React.CSSProperties}
+        >
+                {/* NativelyInterface Widget — opacity controlled by the slider.
+                    Shifted up enough to clear the opacity-slider-card, which
+                    stays visible (and in its normal in-flow position) during
+                    the preview — see #opacity-slider-card's z-index override
+                    in startPreviewingOpacity(). */}
                 <div
                     id="mockup-natively-interface"
-                    className="flex flex-col items-center pointer-events-none -mt-56"
+                    data-interface-theme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default'}
+                    className="flex flex-col items-center pointer-events-none -mt-96"
                 >
                     {/* TopPill Replica */}
                     <div className="flex justify-center mb-2 select-none z-50">
@@ -78,12 +100,13 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                     </div>
 
                     {/* Main Interface Window Replica */}
-                    <div className="relative w-[600px] max-w-full overlay-shell-surface overlay-text-primary backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col pt-2 pb-3" style={appearance.shellStyle}>
+                    <div ref={shellRef} className="relative w-[600px] max-w-full overlay-shell-surface overlay-text-primary backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col pt-2 pb-3" style={appearance.shellStyle}>
+                        {isGlassTheme && <GlassEffectLayer parentRef={shellRef} cornerRadius={24} />}
 
                         {/* Rolling Transcript Bar */}
                         <div className="w-full flex justify-center py-2 px-4 border-b mb-1 overlay-transcript-surface" style={appearance.transcriptStyle}>
                             <p className="text-[13px] truncate max-w-[90%] font-medium overlay-text-primary">
-                                <span className={`${resolvedTheme === 'light' ? 'text-blue-700' : 'text-blue-400'} mr-2 font-semibold`}>{t('Interviewer')}</span>
+                                <span className="overlay-text-muted mr-2 font-semibold">{t('Interviewer')}</span>
                                 <span className="opacity-95">{t('So how would you optimize the current algorithm?')}</span>
                             </p>
                         </div>
@@ -264,7 +287,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
     };
 
     const getIconStyle = (color?: string, isSelectedItem: boolean = false) => {
-        if (isSelectedItem) return 'bg-accent-primary text-white shadow-sm';
+        if (isSelectedItem) return 'bg-accent-primary text-on-accent shadow-sm';
         // For unselected items in list or trigger
         switch (color) {
             case 'blue': return 'bg-blue-500/10 text-blue-600';
@@ -282,7 +305,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
         <div ref={containerRef} className="relative z-20 font-sans">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`w-full group bg-bg-input border border-border-subtle hover:border-border-muted shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-all duration-200 outline-none focus:ring-2 focus:ring-accent-primary/20 ${isOpen ? 'ring-2 ring-accent-primary/20 border-accent-primary/50' : 'hover:shadow-md'}`}
+                className={`w-full group bg-bg-input border border-border-subtle hover:border-border-muted shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-all duration-200 outline-none focus:ring-2 focus:ring-accent-border ${isOpen ? 'ring-2 ring-accent-border border-accent-focus' : 'hover:shadow-md'}`}
             >
                 {selected ? (
                     <div className="flex items-center gap-3 overflow-hidden">
@@ -351,6 +374,25 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
     );
 };
 
+/* Sidebar order, top to bottom. Drives the DIRECTION of the panel transition:
+   moving down the sidebar enters the new panel from below, moving up enters it
+   from above, so the motion stays spatially consistent with the nav. Any id not
+   in this list (deep-links from HelpSettings) falls back to the downward
+   direction rather than guessing. Keep in sync with the <nav> below. */
+const SETTINGS_NAV_ORDER = [
+    'general',
+    'plans',
+    'ai-providers',
+    'skills',
+    'calendar',
+    'audio',
+    'keybinds',
+    'phone-mirror',
+    'intelligence',
+    'help',
+    'about',
+];
+
 interface SettingsOverlayProps {
     isOpen: boolean;
     onClose: () => void;
@@ -377,7 +419,22 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     }, [isOpen, initialTab]);
 
-    const { shortcuts, updateShortcut, resetShortcuts } = useShortcuts();
+    const { shortcuts, updateShortcut, resetShortcuts, conflicts } = useShortcuts();
+    // Small badge shown next to a shortcut row when globalShortcut.register()
+    // failed for it (another app/OS already owns that key combo). The
+    // KeyRecorder right next to it is the fix — recording a new combo
+    // re-registers and clears the flag.
+    const renderShortcutConflictBadge = (actionId: keyof typeof shortcuts) => (
+        conflicts.has(actionId) ? (
+            <span
+                className="flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-500/15 border border-amber-500/20 px-1.5 py-0.5 rounded-full shrink-0"
+                title={t('Another app on your system is already using this shortcut. Record a new key combo to fix it.')}
+            >
+                <AlertCircle size={11} />
+                {t('In use')}
+            </span>
+        ) : null
+    );
     const [isUndetectable, setIsUndetectable] = useState(false);
     const [isMousePassthrough, setIsMousePassthrough] = useState(false);
     const [disguiseMode, setDisguiseMode] = useState<'terminal' | 'settings' | 'activity' | 'none'>('none');
@@ -396,9 +453,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
 
     const [verboseLogging, setVerboseLogging] = useState(false);
+    const [ambientChatEnabled, setAmbientChatEnabled] = useState(false);
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
     const [showVerboseToast, setShowVerboseToast] = useState(false);
     const [codeVerification, setCodeVerification] = useState(false);
+    const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
     const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Close dropdown when clicking outside
@@ -412,6 +471,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             window.electronAPI?.getOverlayMousePassthrough?.().then(setIsMousePassthrough).catch(() => { });
             window.electronAPI?.getDisguise?.().then(setDisguiseMode).catch(() => { });
             window.electronAPI?.getVerboseLogging?.().then(setVerboseLogging).catch(() => { });
+            window.electronAPI?.getAmbientChatEnabled?.().then(setAmbientChatEnabled).catch(() => { });
             window.electronAPI?.getCodeVerification?.().then((v) => setCodeVerification(v === true)).catch(() => { });
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
         }
@@ -500,11 +560,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         return stored !== 'false';
     });
 
-    const [autoScroll, setAutoScroll] = useState(() => {
-        const stored = localStorage.getItem('natively_auto_scroll');
-        return stored === 'true';
-    });
-
     // Recognition Language
     const [recognitionLanguage, setRecognitionLanguage] = useState('');
     const [selectedSttGroup, setSelectedSttGroup] = useState('');
@@ -570,42 +625,70 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // The launcher window is created with `transparent: true` on every
+    // platform (see createWindow() in WindowHelper.ts) so setLauncherOpacityPreview
+    // can punch through it at runtime everywhere, not just macOS. Windows/Linux
+    // have no vibrancy API, but stripping the native backgroundColor alone is
+    // enough there to reveal the real desktop, so the DOM hide/restore below
+    // runs on all platforms.
+    const canPreviewTransparency = true;
+
     const startPreviewingOpacity = () => {
         // Bug fix #5: guard against rapid repeated calls (double pointerDown / touch events)
         if (isPreviewingOpacity) return;
 
-        // Direct DOM mutation for sub-millisecond instant hide (bypassing slow React tree diffs)
-        document.body.classList.add('disable-transitions');
+        if (canPreviewTransparency) {
+            // Direct DOM mutation for sub-millisecond instant hide (bypassing slow React tree diffs)
+            document.body.classList.add('disable-transitions');
 
-        const backdrop = document.getElementById('settings-backdrop');
-        const wrapper = document.getElementById('settings-panel-wrapper');
-        const panel = document.getElementById('settings-panel');
-        const card = document.getElementById('opacity-slider-card');
+            const backdrop = document.getElementById('settings-backdrop');
+            const wrapper = document.getElementById('settings-panel-wrapper');
+            const panel = document.getElementById('settings-panel');
+            const card = document.getElementById('opacity-slider-card');
+            const launcher = document.getElementById('launcher-container');
+            // Global banners/toasts/modals (update, quota, trial, onboarding,
+            // ad promos) — mounted as siblings of #launcher-container in
+            // App.tsx, not inside it, so they need their own hide pass or
+            // whichever one happens to be visible stays opaque on top of the
+            // "transparent" preview. See the data-opacity-preview-surface
+            // wrapper comment in App.tsx.
+            const globalSurfaces = document.querySelectorAll('[data-opacity-preview-surface]');
+
+            if (backdrop) {
+                backdrop.style.backgroundColor = 'transparent';
+                backdrop.style.backdropFilter = 'none';
+                backdrop.style.transition = 'none';
+            }
+            if (wrapper) {
+                wrapper.style.backgroundColor = 'transparent';
+                wrapper.style.border = 'none';
+                wrapper.style.boxShadow = 'none';
+            }
+            if (panel) {
+                panel.style.visibility = 'hidden';
+            }
+            if (launcher) {
+                launcher.style.visibility = 'hidden';
+            }
+            globalSurfaces.forEach((el) => {
+                (el as HTMLElement).style.visibility = 'hidden';
+            });
+
+            if (card) {
+                card.style.visibility = 'visible';
+                card.style.position = 'relative';
+                card.style.zIndex = '9999';
+            }
+
+            // Strip the launcher window's own vibrancy/background (macOS) so
+            // the areas behind the DOM we just hid show the real desktop
+            // instead of an opaque NSVisualEffectView material. See
+            // WindowHelper.setLauncherOpacityPreview() for why this can't be
+            // done with CSS alone.
+            window.electronAPI?.setLauncherOpacityPreview?.(true);
+        }
+
         const mockup = document.getElementById('settings-mockup-wrapper');
-        const launcher = document.getElementById('launcher-container');
-
-        if (backdrop) {
-            backdrop.style.backgroundColor = 'transparent';
-            backdrop.style.backdropFilter = 'none';
-            backdrop.style.transition = 'none';
-        }
-        if (wrapper) {
-            wrapper.style.backgroundColor = 'transparent';
-            wrapper.style.border = 'none';
-            wrapper.style.boxShadow = 'none';
-        }
-        if (panel) {
-            panel.style.visibility = 'hidden';
-        }
-        if (launcher) {
-            launcher.style.visibility = 'hidden';
-        }
-
-        if (card) {
-            card.style.visibility = 'visible';
-            card.style.position = 'relative';
-            card.style.zIndex = '9999';
-        }
         if (mockup) {
             mockup.style.opacity = '1';
         }
@@ -615,37 +698,50 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     };
 
     const stopPreviewingOpacity = () => {
-        // Direct DOM restoration
-        document.body.classList.remove('disable-transitions');
-        const backdrop = document.getElementById('settings-backdrop');
-        const wrapper = document.getElementById('settings-panel-wrapper');
-        const panel = document.getElementById('settings-panel');
-        const card = document.getElementById('opacity-slider-card');
+        if (canPreviewTransparency) {
+            // Direct DOM restoration
+            document.body.classList.remove('disable-transitions');
+            const backdrop = document.getElementById('settings-backdrop');
+            const wrapper = document.getElementById('settings-panel-wrapper');
+            const panel = document.getElementById('settings-panel');
+            const card = document.getElementById('opacity-slider-card');
+            const launcher = document.getElementById('launcher-container');
+            const globalSurfaces = document.querySelectorAll('[data-opacity-preview-surface]');
+
+            if (backdrop) {
+                backdrop.style.backgroundColor = '';
+                backdrop.style.backdropFilter = '';
+                backdrop.style.transition = '';
+            }
+            if (wrapper) {
+                wrapper.style.backgroundColor = '';
+                wrapper.style.border = '';
+                wrapper.style.boxShadow = '';
+            }
+            if (panel) {
+                panel.style.visibility = '';
+            }
+            if (launcher) {
+                launcher.style.visibility = '';
+            }
+            globalSurfaces.forEach((el) => {
+                (el as HTMLElement).style.visibility = '';
+            });
+
+            if (card) {
+                card.style.visibility = '';
+                card.style.position = '';
+                card.style.zIndex = '';
+            }
+
+            // Restore launcher vibrancy/background — must run on every exit
+            // path (drag release, Settings closing mid-drag, pointer-up
+            // outside the window), all of which funnel through this one
+            // function.
+            window.electronAPI?.setLauncherOpacityPreview?.(false);
+        }
+
         const mockup = document.getElementById('settings-mockup-wrapper');
-        const launcher = document.getElementById('launcher-container');
-
-        if (backdrop) {
-            backdrop.style.backgroundColor = '';
-            backdrop.style.backdropFilter = '';
-            backdrop.style.transition = '';
-        }
-        if (wrapper) {
-            wrapper.style.backgroundColor = '';
-            wrapper.style.border = '';
-            wrapper.style.boxShadow = '';
-        }
-        if (panel) {
-            panel.style.visibility = '';
-        }
-        if (launcher) {
-            launcher.style.visibility = '';
-        }
-
-        if (card) {
-            card.style.visibility = '';
-            card.style.position = '';
-            card.style.zIndex = '';
-        }
         if (mockup) {
             // Bug fix #4: restore mockup to hidden (opacity 0) rather than leaving it visible
             mockup.style.opacity = '0';
@@ -795,16 +891,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         return () => window.removeEventListener('storage', handleStorage);
     }, []);
 
-    // Sync auto-scroll setting
-    useEffect(() => {
-        const handleStorage = () => {
-            const stored = localStorage.getItem('natively_auto_scroll');
-            setAutoScroll(stored === 'true');
-        };
-        window.addEventListener('storage', handleStorage);
-        return () => window.removeEventListener('storage', handleStorage);
-    }, []);
-
     useEffect(() => {
         // Listen on both `storage` (same-window) and the IPC broadcast (cross-window)
         // so the settings pane reflects the active theme regardless of which window
@@ -866,6 +952,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [sttSaving, setSttSaving] = useState(false);
     const [sttSaved, setSttSaved] = useState(false);
     const [googleServiceAccountPath, setGoogleServiceAccountPath] = useState<string | null>(null);
+    // Why the picker rejected the last pick. Without this a rejected file is
+    // indistinguishable from a cancelled dialog — the field just stays empty.
+    const [googleServiceAccountError, setGoogleServiceAccountError] = useState('');
     const [hasNativelyKey, setHasNativelyKey] = useState(initialHasNativelyKey);
     const [hasStoredSttGroqKey, setHasStoredSttGroqKey] = useState(false);
     const [hasStoredSttOpenaiKey, setHasStoredSttOpenaiKey] = useState(false);
@@ -1417,6 +1506,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 >
                     <motion.div
                         id="settings-panel-wrapper"
+                        // Phase-1 Soft Orchid rebrand scope: any future Settings dropdown/menu
+                        // that renders via createPortal(..., document.body) will mount OUTSIDE
+                        // this data-settings-theme scope and silently fall back to the blue
+                        // brand accent — portals must be scoped to this subtree (or avoided).
+                        data-settings-theme="periwinkle"
                         initial={{ scale: 0.94, opacity: 0, y: 20 }}
                         animate={{ scale: 1, opacity: 1, y: 0 }}
                         exit={{ scale: 0.94, opacity: 0, y: 20 }}
@@ -1448,73 +1542,84 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 <nav className="mt-2 space-y-1">
                                     <button
                                         onClick={() => setActiveTab('general')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'general' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={navItemClass(activeTab === 'general')}
                                     >
+                                        {activeTab === 'general' && navActivePill}
                                         <Monitor size={16} /> {t('General')}
                                     </button>
                                     <button
-                                        onClick={() => setActiveTab('natively-api')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'natively-api' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        onClick={() => setActiveTab('plans')}
+                                        className={navItemClass(activeTab === 'plans' || activeTab === 'natively-api' || activeTab === 'natively-pro')}
                                     >
                                         <NativelyLogoMark size={16} className={activeTab === 'natively-api' ? 'text-blue-500' : 'text-blue-500/70'} />
                                         <span>Natively API</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('ai-providers')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'ai-providers' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={navItemClass(activeTab === 'ai-providers')}
                                     >
+                                        {activeTab === 'ai-providers' && navActivePill}
                                         <FlaskConical size={16} /> {t('AI Providers')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('skills')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'skills' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={navItemClass(activeTab === 'skills')}
                                     >
-                                        <Folder size={16} className={activeTab === 'skills' ? 'text-accent-primary' : 'text-text-secondary'} /> {t('Skills')}
+                                        {activeTab === 'skills' && navActivePill}
+                                        <Folder size={16} /> {t('Skills')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('calendar')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'calendar' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={navItemClass(activeTab === 'calendar')}
                                     >
+                                        {activeTab === 'calendar' && navActivePill}
                                         <Calendar size={16} /> {t('Calendar')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('audio')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'audio' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={navItemClass(activeTab === 'audio')}
                                     >
+                                        {activeTab === 'audio' && navActivePill}
                                         <Mic size={16} /> {t('Audio')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('keybinds')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'keybinds' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={navItemClass(activeTab === 'keybinds')}
                                     >
+                                        {activeTab === 'keybinds' && navActivePill}
                                         <Keyboard size={16} /> {t('Keybinds')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('phone-mirror')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'phone-mirror' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={navItemClass(activeTab === 'phone-mirror')}
                                     >
+                                        {activeTab === 'phone-mirror' && navActivePill}
                                         <Smartphone size={16} /> {t('Sync')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('intelligence')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'intelligence' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={navItemClass(activeTab === 'intelligence')}
                                     >
-                                        <Cpu size={16} className={activeTab === 'intelligence' ? 'text-accent-primary' : ''} /> {t('Intelligence')}
+                                        {activeTab === 'intelligence' && navActivePill}
+                                        <Cpu size={16} /> {t('Intelligence')}
                                     </button>
+
 
                                     <button
                                         onClick={() => setActiveTab('help')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-3 ${activeTab === 'help' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={navItemClass(activeTab === 'help', 'text-[13px]')}
                                     >
+                                        {activeTab === 'help' && navActivePill}
                                         <HelpCircle size={16} /> {t('Setup & Help')}
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('about')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'about' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                        className={navItemClass(activeTab === 'about')}
                                     >
+                                        {activeTab === 'about' && navActivePill}
                                         <Info size={16} /> {t('About')}
                                     </button>
                                 </nav>
@@ -1531,145 +1636,99 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                         </div>
 
                         {/* Content */}
-                        <div className="flex-1 bg-bg-main overflow-y-auto p-8 relative">
+                        {/* `overflow-anchor: none` — scroll anchoring defaults to
+                            `auto` on a scroll container, so when content above the
+                            viewport changes height Chromium silently adjusts
+                            scrollTop to compensate. Mid-animation it does that
+                            repeatedly, producing micro-jumps that read as choppy
+                            and are independent of frame rate. Plans & Billing
+                            animates whole regions in and out; this stops the
+                            browser fighting it. */}
+                        <div ref={panelScrollRef} className="flex-1 bg-bg-main overflow-y-auto p-8 relative" style={{ overflowAnchor: 'none' }}>
+                            {/* Section transition. Keyed on panelKey, so React remounts this
+                                subtree on a section change — which both replays this
+                                translate AND restarts the per-child `data-settings-stagger`
+                                CSS cascade inside each section (see src/index.css).
+
+                                The container owns the directional MOVE only; the children own
+                                the FADE. Fading here as well would put every child behind a
+                                second fade and mush the cascade into one flat block — the
+                                whole point of the stagger is that it stays legible.
+
+                                Enter-only by design: an AnimatePresence exit would either
+                                stack two full sections (layout jank in a scroll container) or
+                                run sequentially with mode="wait" (~2x the duration, which is
+                                exactly the sluggishness this is meant to remove).
+
+                                Deliberately NO height class and NO `relative`: a height would
+                                add p-8 to a full-height box and manufacture 64px of phantom
+                                scroll, and `relative` would re-parent absolutely-positioned
+                                descendants off the scroll container. */}
+                            <motion.div
+                                key={panelKey}
+                                initial={animatePanel ? { y: reduceMotion ? 0 : panelDirection * 10 } : false}
+                                animate={{ y: 0 }}
+                                transition={reduceMotion
+                                    ? { duration: 0 }
+                                    : { duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+                            >
                             {activeTab === 'general' && (
                                 <div className="space-y-6 animated fadeIn">
                                     <div className="space-y-3.5">
-                                        {/* UndetectableToggle */}
-                                        <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle flex items-center justify-between transition-all ${isUndetectable ? 'shadow-lg shadow-blue-500/10' : ''}`}>
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-2">
-                                                    {isUndetectable ? (
-                                                        <svg
-                                                            width="18"
-                                                            height="18"
-                                                            viewBox="0 0 24 24"
-                                                            fill="none"
-                                                            stroke="currentColor"
-                                                            strokeWidth="2"
-                                                            strokeLinecap="round"
-                                                            strokeLinejoin="round"
-                                                            className="text-text-primary"
-                                                        >
-                                                            <path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z" fill="currentColor" stroke="currentColor" />
-                                                            <path d="M9 10h.01" stroke="var(--bg-item-surface)" strokeWidth="2.5" />
-                                                            <path d="M15 10h.01" stroke="var(--bg-item-surface)" strokeWidth="2.5" />
-                                                        </svg>
-                                                    ) : (
-                                                        <Ghost size={18} className="text-text-primary" />
-                                                    )}
-                                                    <h3 className="text-lg font-bold text-text-primary">{isUndetectable ? t('Undetectable') : t('Detectable')}</h3>
-                                                </div>
-                                                <p className="text-xs text-text-secondary">
-                                                    {isUndetectable ? t('Natively is currently undetectable by screen-sharing.') : t('Natively is currently detectable by screen-sharing.')} <button onClick={() => window.electronAPI?.openExternal?.('https://natively.software/supportedapps')} className="text-blue-400 hover:underline">{t('Supported apps here')}</button>
-                                                </p>
-                                            </div>
-                                            <div
-                                                onClick={() => {
-                                                    const newState = !isUndetectable;
-                                                    setIsUndetectable(newState);
-                                                    window.electronAPI?.setUndetectable(newState);
-                                                    // Analytics: Undetectable Mode Toggle
-                                                    analytics.trackModeSelected(newState ? 'undetectable' : 'overlay');
-                                                }}
-                                                className={`w-11 h-6 rounded-full relative transition-colors ${isUndetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                            >
-                                                <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${isUndetectable ? 'translate-x-5' : 'translate-x-0'}`} />
-                                            </div>
-                                        </div>
-
-                                        {/* Mouse Passthrough Toggle — Adapted from public PR #113 */}
-                                        <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle flex items-center justify-between transition-all ${isMousePassthrough ? 'shadow-lg shadow-sky-500/10' : ''}`}>
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-2">
-                                                    <PointerOff size={18} className={isMousePassthrough ? 'text-sky-400' : 'text-text-primary'} />
-                                                    <h3 className="text-lg font-bold text-text-primary">{t('Mouse Passthrough')}</h3>
-                                                </div>
-                                                <p className="text-xs text-text-secondary">
-                                                    {t('Overlay stays visible but lets all mouse clicks pass through to the app beneath.')}
-                                                </p>
-                                            </div>
-                                            <div
-                                                onClick={() => {
-                                                    const newState = !isMousePassthrough;
-                                                    setIsMousePassthrough(newState);
-                                                    window.electronAPI?.setOverlayMousePassthrough(newState);
-                                                }}
-                                                className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${isMousePassthrough ? 'bg-sky-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                            >
-                                                <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${isMousePassthrough ? 'translate-x-5' : 'translate-x-0'}`} />
-                                            </div>
-                                        </div>
-
-                                        <div>
+                                        <div data-settings-stagger>
                                             <h3 className="text-lg font-bold text-text-primary mb-1">{t('General settings')}</h3>
                                             <p className="text-xs text-text-secondary mb-2">{t('Customize how Natively works for you')}</p>
 
                                             <div className={`rounded-xl border ${isLight ? 'bg-bg-card border-border-subtle divide-y divide-border-subtle' : 'bg-transparent border-transparent divide-y divide-border-subtle/20'}`}>
                                             <div className="space-y-0">
-                                                {/* Language */}
+                                                {/* Detectable / Undetectable */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                            <Globe size={20} />
+                                                            {isUndetectable ? (
+                                                                <svg
+                                                                    width="20"
+                                                                    height="20"
+                                                                    viewBox="0 0 24 24"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    strokeWidth="2"
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                >
+                                                                    <path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z" fill="currentColor" stroke="currentColor" />
+                                                                    <path d="M9 10h.01" stroke="var(--bg-item-surface)" strokeWidth="2.5" />
+                                                                    <path d="M15 10h.01" stroke="var(--bg-item-surface)" strokeWidth="2.5" />
+                                                                </svg>
+                                                            ) : (
+                                                                <Ghost size={20} />
+                                                            )}
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Language')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Interface language for Natively')}</p>
+                                                            <h3 className="text-sm font-bold text-text-primary">{isUndetectable ? t('Undetectable') : t('Detectable')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">
+                                                                {isUndetectable ? t('Natively is currently undetectable by screen-sharing.') : t('Natively is currently detectable by screen-sharing.')} <button onClick={() => window.electronAPI?.openExternal?.('https://natively.software/supportedapps')} className="text-accent-primary hover:underline">{t('Supported apps here')}</button>
+                                                            </p>
                                                         </div>
                                                     </div>
-
-                                                    <div className="relative" ref={langDropdownRef}>
-                                                        <button
-                                                            onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
-                                                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
-                                                        >
-                                                            <span className="text-ellipsis overflow-hidden whitespace-nowrap">
-                                                                {lang === 'en' && t('English')}
-                                                                {lang === 'ru' && t('Russian')}
-                                                                {lang === 'zh' && t('Chinese')}
-                                                                {lang === 'ja' && t('Japanese')}
-                                                                {lang === 'es' && t('Spanish')}
-                                                            </span>
-                                                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
-                                                        </button>
-
-                                                        {isLangDropdownOpen && (
-                                                            <div className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
-                                                                {[
-                                                                    { code: 'en' as const, label: t('English') },
-                                                                    { code: 'ru' as const, label: t('Russian') },
-                                                                    { code: 'zh' as const, label: t('Chinese') },
-                                                                    { code: 'ja' as const, label: t('Japanese') },
-                                                                    { code: 'es' as const, label: t('Spanish') },
-                                                                ].map((option) => (
-                                                                    <button
-                                                                        key={option.code}
-                                                                        onClick={() => {
-                                                                            setLang(option.code);
-                                                                            setIsLangDropdownOpen(false);
-                                                                        }}
-                                                                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${lang === option.code ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                                                    >
-                                                                        {lang === option.code && <Check size={12} className="text-text-primary" />}
-                                                                        <span className={lang === option.code ? 'text-text-primary' : 'text-text-secondary'}>{option.label}</span>
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        )}
+                                                    <div
+                                                        onClick={() => {
+                                                            const newState = !isUndetectable;
+                                                            setIsUndetectable(newState);
+                                                            window.electronAPI?.setUndetectable(newState);
+                                                            // Analytics: Undetectable Mode Toggle
+                                                            analytics.trackModeSelected(newState ? 'undetectable' : 'overlay');
+                                                        }}
+                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${isUndetectable ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                    >
+                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isUndetectable ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
                                                 </div>
 
                                                 {/* Open at Login */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            openOnLogin
-                                                                ? isLight
-                                                                    ? 'border-indigo-500/30 text-indigo-600 bg-indigo-50/50'
-                                                                    : 'border-indigo-500/40 text-indigo-400 bg-indigo-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Power size={20} />
                                                         </div>
                                                         <div>
@@ -1683,27 +1742,47 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             setOpenOnLogin(newState);
                                                             window.electronAPI?.setOpenAtLogin(newState);
                                                         }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors ${openOnLogin ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${openOnLogin ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                     >
-                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${openOnLogin ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${openOnLogin ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                    </div>
+                                                </div>
+
+                                                {/* Ambient AI Chat */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <Headphones size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Ambient AI Chat')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Meetings start without capturing mic or system audio')}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div
+                                                        onClick={() => {
+                                                            const newState = !ambientChatEnabled;
+                                                            setAmbientChatEnabled(newState);
+                                                            window.electronAPI?.setAmbientChatEnabled?.(newState);
+                                                        }}
+                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${ambientChatEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        role="switch"
+                                                        aria-checked={ambientChatEnabled}
+                                                        aria-label={t('Ambient AI Chat')}
+                                                    >
+                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${ambientChatEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
                                                 </div>
 
                                                 {/* Meeting Retention */}
                                                 <div className="flex items-start justify-between px-4 py-3 gap-4">
                                                     <div className="flex items-start gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            meetingRetention === 'never'
-                                                                ? isLight
-                                                                    ? 'border-emerald-500/30 text-emerald-600 bg-emerald-50/50'
-                                                                    : 'border-emerald-500/40 text-emerald-400 bg-emerald-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Shield size={20} />
                                                         </div>
                                                         <div className="flex-1">
                                                             <h3 className="text-sm font-bold text-text-primary">{t('Do not save meetings')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5 leading-normal">{t('When enabled, live assistance works but transcripts, summaries, and history are discarded when the meeting ends')}</p>
+                                                            <p className="text-xs text-text-secondary mt-0.5 leading-normal">{t('Nothing is saved after the meeting ends')}</p>
                                                         </div>
                                                     </div>
                                                     <div
@@ -1712,189 +1791,19 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             setMeetingRetention(nextRetention);
                                                             window.electronAPI?.setMeetingRetention?.(nextRetention);
                                                         }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer shrink-0 mt-2 ${meetingRetention === 'never' ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 mt-2 ${meetingRetention === 'never' ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                         role="switch"
                                                         aria-checked={meetingRetention === 'never'}
                                                         aria-label={t("Do not save meetings")}
                                                     >
-                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${meetingRetention === 'never' ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${meetingRetention === 'never' ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
                                                 </div>
-
-                                                {/* Debug Logging */}
-                                                <div className="flex items-center justify-between px-4 py-3">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            verboseLogging
-                                                                ? isLight
-                                                                    ? 'border-amber-500/30 text-amber-600 bg-amber-50/50'
-                                                                    : 'border-amber-500/40 text-amber-400 bg-amber-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
-                                                            <Terminal size={20} />
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Verbose debug logging')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Print detailed audio, STT, and pipeline diagnostics')}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div
-                                                        onClick={() => {
-                                                            const newState = !verboseLogging;
-                                                            setVerboseLogging(newState);
-                                                            window.electronAPI?.setVerboseLogging?.(newState);
-                                                            if (newState) {
-                                                                setShowVerboseToast(true);
-                                                            }
-                                                        }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${verboseLogging ? 'bg-amber-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                    >
-                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${verboseLogging ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
-                                                </div>
-
-                                                {/* Verbose logging toast */}
-                                                <AnimatePresence>
-                                                    {showVerboseToast && (
-                                                        <motion.div
-                                                            key="verbose-toast"
-                                                            initial={{ opacity: 0, y: -6, height: 0 }}
-                                                            animate={{ opacity: 1, y: 0, height: 'auto' }}
-                                                            exit={{ opacity: 0, y: -4, height: 0 }}
-                                                            transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-                                                            className="mx-4 mb-1 overflow-hidden"
-                                                        >
-                                                            <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                                                                <div className="flex items-center gap-2.5 min-w-0">
-                                                                    <Terminal size={14} className="text-amber-400 shrink-0" />
-                                                                    <p className="text-xs text-amber-200/80 leading-snug truncate">
-                                                                        Logs → <span className="font-mono text-amber-300">~/Documents/natively_debug.log</span>
-                                                                    </p>
-                                                                </div>
-                                                                <button
-                                                                    onClick={() => window.electronAPI?.openLogFile?.()}
-                                                                    className="shrink-0 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25"
-                                                                >
-                                                                    Open
-                                                                </button>
-                                                            </div>
-                                                            {/* 5-second drain bar */}
-                                                            <motion.div
-                                                                className="h-[2px] bg-amber-500/40 rounded-b-xl"
-                                                                initial={{ scaleX: 1, originX: 0 }}
-                                                                animate={{ scaleX: 0 }}
-                                                                transition={{ duration: 5, ease: 'linear', delay: 0.2 }}
-                                                            />
-                                                        </motion.div>
-                                                    )}
-                                                </AnimatePresence>
-
-                                                {/* Code Verification — runs LLM-generated code against test cases + one-shot correction */}
-                                                <div className="flex items-center justify-between px-4 py-3">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            codeVerification
-                                                                ? isLight
-                                                                    ? 'border-blue-500/30 text-blue-600 bg-blue-50/50'
-                                                                    : 'border-blue-500/40 text-blue-400 bg-blue-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
-                                                            <Code2 size={20} />
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Verify coding answers')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Run generated code against test cases and self-correct')}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div
-                                                        onClick={() => {
-                                                            const newState = !codeVerification;
-                                                            setCodeVerification(newState);
-                                                            // Swallow rejection: a missing handler (pre-rebuild) must not
-                                                            // spam the console with unhandledrejection noise like the
-                                                            // other toggle-style settings also use optional chaining.
-                                                            window.electronAPI?.setCodeVerification?.(newState)?.catch?.(() => { });
-                                                        }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${codeVerification ? 'bg-blue-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                        role="switch"
-                                                        aria-checked={codeVerification}
-                                                        aria-label={t('Verify coding answers')}
-                                                    >
-                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${codeVerification ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
-                                                </div>
-
-                                                {/* Interviewer Transcript */}
-                                                <div className="flex items-center justify-between px-4 py-3">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            showTranscript
-                                                                ? isLight
-                                                                    ? 'border-blue-500/30 text-blue-600 bg-blue-50/50'
-                                                                    : 'border-blue-500/40 text-blue-400 bg-blue-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
-                                                            <MessageSquare size={20} />
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Interviewer Transcript')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Show real-time transcription of the interviewer')}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div
-                                                        onClick={() => {
-                                                            const newState = !showTranscript;
-                                                            setShowTranscript(newState);
-                                                            localStorage.setItem('natively_interviewer_transcript', String(newState));
-                                                            window.dispatchEvent(new Event('storage'));
-                                                        }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors ${showTranscript ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                    >
-                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${showTranscript ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
-                                                </div>
-
-                                                {/* Auto Scroll */}
-                                                <div className="flex items-center justify-between px-4 py-3">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            autoScroll
-                                                                ? isLight
-                                                                    ? 'border-purple-500/30 text-purple-600 bg-purple-50/50'
-                                                                    : 'border-purple-500/40 text-purple-400 bg-purple-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
-                                                            <ArrowDown size={20} />
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Auto Scroll')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Automatically scroll to the latest message as new responses arrive')}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div
-                                                        onClick={() => {
-                                                            const newState = !autoScroll;
-                                                            setAutoScroll(newState);
-                                                            localStorage.setItem('natively_auto_scroll', String(newState));
-                                                            window.dispatchEvent(new Event('storage'));
-                                                        }}
-                                                        className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer ${autoScroll ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                    >
-                                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${autoScroll ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
-                                                </div>
-
 
                                                 {/* Theme */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            themeMode !== 'system'
-                                                                ? isLight
-                                                                    ? 'border-violet-500/30 text-violet-600 bg-violet-50/50'
-                                                                    : 'border-violet-500/40 text-violet-400 bg-violet-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Palette size={20} />
                                                         </div>
                                                         <div>
@@ -1947,13 +1856,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Meeting Interface Style */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            (meetingInterfaceTheme === 'liquid-glass' || meetingInterfaceTheme === 'modern')
-                                                                ? isLight
-                                                                    ? 'border-sky-500/30 text-sky-600 bg-sky-50/50'
-                                                                    : 'border-sky-500/40 text-sky-400 bg-sky-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Layout size={20} />
                                                         </div>
                                                         <div>
@@ -2007,57 +1910,52 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     </div>
                                                 </div>
 
-                                                    {/* AI Response Language */}
+                                                {/* Language */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                                                            aiResponseLanguage !== 'auto'
-                                                                ? isLight
-                                                                    ? 'border-teal-500/30 text-teal-600 bg-teal-50/50'
-                                                                    : 'border-teal-500/40 text-teal-400 bg-teal-500/5'
-                                                                : 'border-border-subtle text-text-tertiary'
-                                                        }`}>
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Globe size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('AI Response Language')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">
-                                                                {aiResponseLanguage === 'auto'
-                                                                    ? t('Mirrors user\'s language automatically')
-                                                                    : t('Language for AI suggestions and notes')
-                                                                }
-                                                            </p>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Language')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Interface language for Natively')}</p>
                                                         </div>
                                                     </div>
 
-                                                    <div className="relative" ref={aiLangDropdownRef}>
+                                                    <div className="relative" ref={langDropdownRef}>
                                                         <button
-                                                            onClick={() => setIsAiLangDropdownOpen(!isAiLangDropdownOpen)}
+                                                            onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
                                                             className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[110px] justify-between"
                                                         >
-                                                            <span className="capitalize text-ellipsis overflow-hidden whitespace-nowrap flex items-center gap-1">
-                                                                {aiResponseLanguage === 'auto' ? t('Auto') : aiResponseLanguage}
+                                                            <span className="text-ellipsis overflow-hidden whitespace-nowrap">
+                                                                {lang === 'en' && t('English')}
+                                                                {lang === 'ru' && t('Russian')}
+                                                                {lang === 'zh' && t('Chinese')}
+                                                                {lang === 'ja' && t('Japanese')}
+                                                                {lang === 'es' && t('Spanish')}
                                                             </span>
-                                                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isAiLangDropdownOpen ? 'rotate-180' : ''}`} />
+                                                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
                                                         </button>
 
-                                                        {/* Dropdown Menu */}
-                                                        {isAiLangDropdownOpen && (
-                                                            <div className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none max-h-60 overflow-y-auto custom-scrollbar">
-                                                                {availableAiLanguages.map((option) => (
+                                                        {isLangDropdownOpen && (
+                                                            <div className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 animated fadeIn select-none">
+                                                                {[
+                                                                    { code: 'en' as const, label: t('English') },
+                                                                    { code: 'ru' as const, label: t('Russian') },
+                                                                    { code: 'zh' as const, label: t('Chinese') },
+                                                                    { code: 'ja' as const, label: t('Japanese') },
+                                                                    { code: 'es' as const, label: t('Spanish') },
+                                                                ].map((option) => (
                                                                     <button
                                                                         key={option.code}
                                                                         onClick={() => {
-                                                                            handleAiLanguageChange(option.code);
-                                                                            setIsAiLangDropdownOpen(false);
+                                                                            setLang(option.code);
+                                                                            setIsLangDropdownOpen(false);
                                                                         }}
-                                                                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${aiResponseLanguage === option.code ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                                                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${lang === option.code ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
                                                                     >
-                                                                        {option.code === 'auto' ? (
-                                                                            <span className="font-medium">{t('Auto')}</span>
-                                                                        ) : (
-                                                                            <span className="font-medium">{option.label}</span>
-                                                                        )}
+                                                                        {lang === option.code && <Check size={12} className="text-text-primary" />}
+                                                                        <span className={lang === option.code ? 'text-text-primary' : 'text-text-secondary'}>{option.label}</span>
                                                                     </button>
                                                                 ))}
                                                             </div>
@@ -2097,7 +1995,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             updateStatus === 'checking'
                                                                 ? 'bg-bg-input text-text-tertiary border-border-subtle cursor-wait'
                                                                 : updateStatus === 'available'
-                                                                    ? 'bg-accent-primary text-white border-accent-primary hover:bg-accent-secondary shadow-lg shadow-blue-500/20'
+                                                                    ? 'bg-legacy-action-bg text-legacy-action-fg border-legacy-action-bg hover:bg-legacy-action-hover shadow-lg shadow-[var(--legacy-action-shadow)]'
                                                                     : updateStatus === 'uptodate'
                                                                         ? 'bg-green-500/10 text-green-400 border-green-500/20'
                                                                         : updateStatus === 'error'
@@ -2134,6 +2032,159 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     </button>
                                                 </div>
                                             </div>
+                                            </div>
+
+                                            <div className="pt-1">
+                                                <button
+                                                    onClick={() => setShowAdvancedSettings((s) => !s)}
+                                                    className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-text-tertiary hover:text-text-secondary transition-colors"
+                                                >
+                                                    <DisclosureChevron open={showAdvancedSettings} />
+                                                    {t('Advanced')}
+                                                </button>
+                                                <Disclosure open={showAdvancedSettings}>
+                                                <div className="mt-1">
+                                                    {/* Mouse Passthrough Toggle — Adapted from public PR #113 */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <PointerOff size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Mouse Passthrough')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {t('Pass all mouse clicks through to the app beneath.')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div
+                                                            onClick={() => {
+                                                                const newState = !isMousePassthrough;
+                                                                setIsMousePassthrough(newState);
+                                                                window.electronAPI?.setOverlayMousePassthrough(newState);
+                                                            }}
+                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${isMousePassthrough ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        >
+                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isMousePassthrough ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Debug Logging */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Terminal size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Verbose debug logging')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Print detailed audio, STT, and pipeline diagnostics')}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div
+                                                            onClick={() => {
+                                                                const newState = !verboseLogging;
+                                                                setVerboseLogging(newState);
+                                                                window.electronAPI?.setVerboseLogging?.(newState);
+                                                                if (newState) {
+                                                                    setShowVerboseToast(true);
+                                                                }
+                                                            }}
+                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${verboseLogging ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        >
+                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${verboseLogging ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Verbose logging toast */}
+                                                    <AnimatePresence>
+                                                        {showVerboseToast && (
+                                                            <motion.div
+                                                                key="verbose-toast"
+                                                                initial={{ opacity: 0, y: -6, height: 0 }}
+                                                                animate={{ opacity: 1, y: 0, height: 'auto' }}
+                                                                exit={{ opacity: 0, y: -4, height: 0 }}
+                                                                transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+                                                                className="mx-4 mb-1 overflow-hidden"
+                                                            >
+                                                                <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                                        <Terminal size={14} className="text-amber-400 shrink-0" />
+                                                                        <p className="text-xs text-amber-200/80 leading-snug truncate">
+                                                                            Logs → <span className="font-mono text-amber-300">~/Documents/natively_debug.log</span>
+                                                                        </p>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => window.electronAPI?.openLogFile?.()}
+                                                                        className="shrink-0 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25"
+                                                                    >
+                                                                        Open
+                                                                    </button>
+                                                                </div>
+                                                                {/* 5-second drain bar */}
+                                                                <motion.div
+                                                                    className="h-[2px] bg-amber-500/40 rounded-b-xl"
+                                                                    initial={{ scaleX: 1, originX: 0 }}
+                                                                    animate={{ scaleX: 0 }}
+                                                                    transition={{ duration: 5, ease: 'linear', delay: 0.2 }}
+                                                                />
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
+
+                                                    {/* Code Verification — runs LLM-generated code against test cases + one-shot correction */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Code2 size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Verify coding answers')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Run generated code against test cases and self-correct')}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div
+                                                            onClick={() => {
+                                                                const newState = !codeVerification;
+                                                                setCodeVerification(newState);
+                                                                // Swallow rejection: a missing handler (pre-rebuild) must not
+                                                                // spam the console with unhandledrejection noise like the
+                                                                // other toggle-style settings also use optional chaining.
+                                                                window.electronAPI?.setCodeVerification?.(newState)?.catch?.(() => { });
+                                                            }}
+                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${codeVerification ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                            role="switch"
+                                                            aria-checked={codeVerification}
+                                                            aria-label={t('Verify coding answers')}
+                                                        >
+                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${codeVerification ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Interviewer Transcript */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <MessageSquare size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Interviewer Transcript')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Show real-time transcription of the interviewer')}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div
+                                                            onClick={() => {
+                                                                const newState = !showTranscript;
+                                                                setShowTranscript(newState);
+                                                                localStorage.setItem('natively_interviewer_transcript', String(newState));
+                                                                window.dispatchEvent(new Event('storage'));
+                                                            }}
+                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${showTranscript ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        >
+                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${showTranscript ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                </Disclosure>
                                             </div>
 
                                                 {/* ------------------------------------------------------------------ */}
@@ -2240,11 +2291,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         analytics.trackModeSelected(`disguise_${option.id}`);
                                                     }}
                                                     className={`p-3 rounded-lg border text-left flex items-center gap-3 transition-all ${disguiseMode === option.id
-                                                        ? 'bg-accent-primary border-accent-primary text-white shadow-lg shadow-blue-500/20'
+                                                        ? 'bg-accent-primary border-accent-primary text-on-accent shadow-lg shadow-[var(--accent-shadow-20)]'
                                                         : 'bg-bg-input border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-subtle-hover'
                                                         } ${isUndetectable ? 'cursor-not-allowed' : ''}`}
                                                 >
-                                                    <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${disguiseMode === option.id ? 'bg-white/20 text-white' : 'bg-bg-item-surface text-text-secondary'
+                                                    <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${disguiseMode === option.id ? 'bg-on-accent-surface text-on-accent' : 'bg-bg-item-surface text-text-secondary'
                                                         }`}>
                                                         {option.icon}
                                                     </div>
@@ -2258,7 +2309,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             )}
 
                             {activeTab === 'ai-providers' && (
-                                <AIProvidersSettings />
+                                <AIProvidersSettings
+                                    aiResponseLanguage={aiResponseLanguage}
+                                    availableAiLanguages={availableAiLanguages}
+                                    isAiLangDropdownOpen={isAiLangDropdownOpen}
+                                    onToggleAiLangDropdown={() => setIsAiLangDropdownOpen(!isAiLangDropdownOpen)}
+                                    onSelectAiLanguage={(code) => {
+                                        handleAiLanguageChange(code);
+                                        setIsAiLangDropdownOpen(false);
+                                    }}
+                                    aiLangDropdownRef={aiLangDropdownRef}
+                                />
                             )}
                             {activeTab === 'skills' && (
                                 <SkillsSettings />
@@ -2282,7 +2343,20 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         </button>
                                     </div>
 
-                                    <div className="grid gap-6">
+                                    {/* Surfaces globalShortcut.register() failures in bulk — e.g. on
+                                        Windows, another running app (screenshot tool, clipboard
+                                        manager, IME) can silently claim a combo Natively wants,
+                                        which otherwise looks like "the hotkey just doesn't work". */}
+                                    {conflicts.size > 0 && (
+                                        <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                                            <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                                            <p className="text-xs text-amber-200/90 leading-snug">
+                                                {t("Some shortcuts below (marked \"In use\") are claimed by another app on your system and won't fire. Record a new key combo for each to fix it.")}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    <div className="grid gap-6" data-settings-stagger>
                                         {/* General Category */}
                                         <div>
                                             <h4 className="text-sm font-bold text-text-primary mb-3">{t('General')}</h4>
@@ -2292,80 +2366,104 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Eye size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Toggle Visibility')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.toggleVisibility}
-                                                        onSave={(keys) => updateShortcut('toggleVisibility', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('toggleVisibility')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.toggleVisibility}
+                                                            onSave={(keys) => updateShortcut('toggleVisibility', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><PointerOff size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Toggle Mouse Passthrough')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.toggleMousePassthrough}
-                                                        onSave={(keys) => updateShortcut('toggleMousePassthrough', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('toggleMousePassthrough')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.toggleMousePassthrough}
+                                                            onSave={(keys) => updateShortcut('toggleMousePassthrough', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><MessageSquare size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Process Screenshots')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.processScreenshots}
-                                                        onSave={(keys) => updateShortcut('processScreenshots', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('processScreenshots')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.processScreenshots}
+                                                            onSave={(keys) => updateShortcut('processScreenshots', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Sparkles size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Capture Screen & Ask AI')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.captureAndProcess}
-                                                        onSave={(keys) => updateShortcut('captureAndProcess', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('captureAndProcess')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.captureAndProcess}
+                                                            onSave={(keys) => updateShortcut('captureAndProcess', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Globe size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Capture Page (Browser)')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.capturePage}
-                                                        onSave={(keys) => updateShortcut('capturePage', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('capturePage')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.capturePage}
+                                                            onSave={(keys) => updateShortcut('capturePage', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><RotateCcw size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Reset / Cancel')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.resetCancel}
-                                                        onSave={(keys) => updateShortcut('resetCancel', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('resetCancel')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.resetCancel}
+                                                            onSave={(keys) => updateShortcut('resetCancel', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Camera size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Take Screenshot')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.takeScreenshot}
-                                                        onSave={(keys) => updateShortcut('takeScreenshot', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('takeScreenshot')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.takeScreenshot}
+                                                            onSave={(keys) => updateShortcut('takeScreenshot', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Crop size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Selective Screenshot')}</span>
                                                     </div>
-                                                    <KeyRecorder
-                                                        currentKeys={shortcuts.selectiveScreenshot}
-                                                        onSave={(keys) => updateShortcut('selectiveScreenshot', keys)}
-                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('selectiveScreenshot')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.selectiveScreenshot}
+                                                            onSave={(keys) => updateShortcut('selectiveScreenshot', keys)}
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -2395,10 +2493,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center">{item.icon}</span>
                                                             <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t(item.label)}</span>
                                                         </div>
-                                                        <KeyRecorder
-                                                            currentKeys={shortcuts[item.id as keyof typeof shortcuts]}
-                                                            onSave={(keys) => updateShortcut(item.id as any, keys)}
-                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            {renderShortcutConflictBadge(item.id as keyof typeof shortcuts)}
+                                                            <KeyRecorder
+                                                                currentKeys={shortcuts[item.id as keyof typeof shortcuts]}
+                                                                onSave={(keys) => updateShortcut(item.id as any, keys)}
+                                                            />
+                                                        </div>
                                                     </div>
                                                 ))}
                                             </div>
@@ -2419,10 +2520,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center">{item.icon}</span>
                                                             <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t(item.label)}</span>
                                                         </div>
-                                                        <KeyRecorder
-                                                            currentKeys={shortcuts[item.id as keyof typeof shortcuts]}
-                                                            onSave={(keys) => updateShortcut(item.id as any, keys)}
-                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            {renderShortcutConflictBadge(item.id as keyof typeof shortcuts)}
+                                                            <KeyRecorder
+                                                                currentKeys={shortcuts[item.id as keyof typeof shortcuts]}
+                                                                onSave={(keys) => updateShortcut(item.id as any, keys)}
+                                                            />
+                                                        </div>
                                                     </div>
                                                 ))}
                                             </div>
@@ -2432,7 +2536,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             )}
 
                             {activeTab === 'audio' && (
-                                <div className="space-y-6 animated fadeIn">
+                                <div className="space-y-6 animated fadeIn" data-settings-stagger>
                                     {/* ── Speech Provider Section ── */}
                                     <div>
                                         <h3 className="text-lg font-bold text-text-primary mb-1">{t('Speech Provider')}</h3>
@@ -2482,12 +2586,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                     }
                                                                 }}
                                                                 className={`rounded-lg px-3 py-2.5 text-left transition-all duration-200 ease-in-out active:scale-[0.98] ${groqSttModel === m.id
-                                                                    ? 'bg-blue-600 text-white shadow-md'
+                                                                    ? 'bg-accent-primary text-on-accent shadow-md'
                                                                     : 'bg-bg-input hover:bg-bg-elevated text-text-primary'
                                                                     }`}
                                                             >
                                                                 <span className="text-sm font-medium block">{m.label}</span>
-                                                                <span className={`text-[11px] transition-colors ${groqSttModel === m.id ? 'text-white/70' : 'text-text-tertiary'
+                                                                <span className={`text-[11px] transition-colors ${groqSttModel === m.id ? 'text-on-accent opacity-70' : 'text-text-tertiary'
                                                                     }`}>{m.desc}</span>
                                                             </button>
                                                         ))}
@@ -2511,6 +2615,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 const result = await window.electronAPI?.selectServiceAccount?.();
                                                                 if (result?.success && result.path) {
                                                                     setGoogleServiceAccountPath(result.path);
+                                                                    setGoogleServiceAccountError('');
+                                                                } else if (result && !result.cancelled) {
+                                                                    // A rejected pick must say WHY. Silently doing nothing
+                                                                    // reads as "Settings is broken" and the user retries
+                                                                    // the same wrong file.
+                                                                    setGoogleServiceAccountError(result.error || t('That file is not a usable Google service-account key.'));
                                                                 }
                                                             }}
                                                             className="px-3 py-2 bg-bg-input hover:bg-bg-elevated border border-border-subtle rounded-lg text-xs font-medium text-text-primary transition-colors flex items-center gap-2"
@@ -2518,6 +2628,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <Upload size={14} /> {t('Select File')}
                                                         </button>
                                                     </div>
+                                                    {googleServiceAccountError && (
+                                                        <p className="text-xs text-red-400 mt-2">{googleServiceAccountError}</p>
+                                                    )}
                                                     <p className="text-[10px] text-text-tertiary mt-2">
                                                         {t('Required for Google Cloud Speech-to-Text.')}
                                                     </p>
@@ -2773,7 +2886,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         </div>
                                     </div>
 
-                                    <div className="h-px bg-border-subtle" />
+                                    {/* Opted out of the entrance cascade: a 1px rule sliding
+                                        7px moves seven times its own height, which reads as a
+                                        glitch rather than motion. It keeps its nth-child slot,
+                                        so the block below still lands on 60ms. */}
+                                    <div className="h-px bg-border-subtle" data-stagger-skip />
 
                                     {/* ── Audio Configuration Section ── */}
                                     <div>
@@ -2917,7 +3034,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <div>
                                                                     <div className="flex items-center gap-2 mb-0.5">
                                                                         <h3 className="text-sm font-bold text-text-primary">SCK Backend</h3>
-                                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 uppercase tracking-wide">{t('Alternative')}</span>
+                                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent-muted text-accent-primary uppercase tracking-wide">{t('Alternative')}</span>
                                                                     </div>
                                                                     <p className="text-xs text-text-secondary leading-relaxed max-w-[300px]">
                                                                         {t('Use the ScreenCaptureKit backend. An optimized alternative to CoreAudio if you experience any capture issues.')}
@@ -2930,9 +3047,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                     setUseExperimentalSck(newState);
                                                                     window.localStorage.setItem('useExperimentalSckBackend', newState ? 'true' : 'false');
                                                                 }}
-                                                                className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${useExperimentalSck ? 'bg-amber-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                                className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors shrink-0 cursor-pointer ${useExperimentalSck ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                             >
-                                                                <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${useExperimentalSck ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${useExperimentalSck ? 'translate-x-5' : 'translate-x-0'}`} />
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2945,7 +3062,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
 
                             {activeTab === 'calendar' && (
-                                <div className="space-y-6 animated fadeIn h-full">
+                                <div className="space-y-6 animated fadeIn h-full" data-settings-stagger>
                                     <div>
                                         <h3 className="text-lg font-bold text-text-primary mb-2">{t('Visible Calendars')}</h3>
                                         <p className="text-xs text-text-secondary mb-4">{t('Upcoming meetings are synchronized from these calendars')}</p>
@@ -2957,7 +3074,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Connection header */}
                                                 <div className="p-6 flex items-center justify-between">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
+                                                        <div className="w-10 h-10 rounded-lg bg-bg-item-surface border border-border-subtle flex items-center justify-center text-text-primary">
                                                             <Calendar size={20} />
                                                         </div>
                                                         <div>
@@ -3219,6 +3336,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             {activeTab === 'about' && (
                                 <AboutSection />
                             )}
+                            </motion.div>
                         </div>
                     </div>
                     </motion.div>
@@ -3239,7 +3357,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 className="fixed inset-0 z-[49] pointer-events-none transition-opacity duration-150"
                 style={{ opacity: isPreviewingOpacity ? 1 : 0 }}
             >
-                <MockupNativelyInterface opacity={previewOverlayOpacity} />
+                <MockupNativelyInterface opacity={previewOverlayOpacity} theme={meetingInterfaceTheme} />
             </div>
         </AnimatePresence >
     );

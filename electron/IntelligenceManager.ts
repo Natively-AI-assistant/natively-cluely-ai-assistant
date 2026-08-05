@@ -10,6 +10,7 @@
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
 import { SessionTracker, type ConversationSurface } from './SessionTracker';
+import type { TurnIdentity } from './llm/turnIdentity';
 import { IntelligenceEngine } from './IntelligenceEngine';
 import { MeetingPersistence } from './MeetingPersistence';
 import { ScreenContext } from './services/screen/ScreenContextService';
@@ -19,7 +20,7 @@ export type { TranscriptSegment, SuggestionTrigger, ContextItem } from './Sessio
 export type { IntelligenceMode, IntelligenceModeEvents } from './IntelligenceEngine';
 export type { DynamicAction } from './services/dynamic-actions/DynamicAction';
 
-export const GEMINI_FLASH_MODEL = "gemini-3.5-flash";
+export const GEMINI_FLASH_MODEL = "gemini-3.6-flash";
 export const GEMINI_FLASH_LITE_MODEL = "gemini-3.1-flash-lite";
 
 /**
@@ -50,6 +51,16 @@ export class IntelligenceManager extends EventEmitter {
 
         // Forward all engine events through the facade
         this.forwardEngineEvents();
+    }
+
+    /**
+     * Give the engine lazy access to the meeting-RAG retriever.
+     *
+     * Called from main.ts AFTER RAGManager exists — this manager is constructed
+     * first, so a provider is passed rather than the instance.
+     */
+    setRagRetrieverProvider(provider: (() => unknown) | null): void {
+        this.engine.setRagRetrieverProvider(provider);
     }
 
     /**
@@ -132,8 +143,9 @@ export class IntelligenceManager extends EventEmitter {
         text: string,
         writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean },
         surface?: ConversationSurface,
-    ): void {
-        this.session.addAssistantMessage(text, writeDecision, surface);
+        identity?: TurnIdentity,
+    ): boolean {
+        return this.session.addAssistantMessage(text, writeDecision, surface, identity);
     }
 
     getContext(lastSeconds: number = 120) {
@@ -282,6 +294,18 @@ export class IntelligenceManager extends EventEmitter {
      */
     clearSessionContext(): void {
         this.session.clearSessionContext();
+    }
+
+    /**
+     * Supersede every in-flight live answer (2026-07-31). Called by
+     * modes:set-active: WTA supersession was generation-relative only, so a
+     * slow generation planned under mode A stayed "current" through the switch
+     * and streamed A's answer into a UI showing mode B. engine.reset() bumps
+     * currentGenerationId (breaking every active stream's guard) and aborts
+     * the WTA cancellation token.
+     */
+    supersedeLiveAnswers(): void {
+        this.engine.reset();
     }
 
     // ============================================

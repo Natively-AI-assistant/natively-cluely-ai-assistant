@@ -116,6 +116,8 @@ export interface BuildTurnContractForSurfaceInput {
   hasReferenceFiles: boolean;
   hasProfileFacts: boolean;
   hasLiveTranscript: boolean;
+  /** See BuildTurnContractInput.hasJobDescription (2026-07-26 bug fix). */
+  hasJobDescription?: boolean;
   userExplicitSource?: BuildTurnContractInput['userExplicitSource'];
   /** Canonical turn source decision from electron/llm/turnSourceDecision. */
   turnSourceDecision?: import('../../llm/turnSourceDecision').TurnSourceDecision | null;
@@ -126,6 +128,13 @@ export interface BuildTurnContractForSurfaceInput {
    * legacy behavior (grant everything the authority permits).
    */
   allowedExplicitSwitches?: readonly ('reference_files' | 'profile' | 'job_description' | 'transcript')[] | null;
+  /**
+   * The caller's own TurnIdentity.turnId, forwarded verbatim to
+   * SourceAuthorityKernel.build instead of letting it mint its own.
+   * Optional — every existing caller keeps the kernel's own randomUUID()
+   * mint until updated.
+   */
+  turnId?: string;
 }
 
 function normalizeSourceAuthority(value: string | null | undefined): SourceAuthority {
@@ -167,9 +176,11 @@ export function buildTurnContractForSurface(input: BuildTurnContractForSurfaceIn
     hasReferenceFiles: input.hasReferenceFiles,
     hasProfileFacts: input.hasProfileFacts,
     hasLiveTranscript: input.hasLiveTranscript,
+    hasJobDescription: input.hasJobDescription,
     userExplicitSource: input.userExplicitSource ?? null,
     turnSourceDecision: input.turnSourceDecision ?? null,
     allowedExplicitSwitches: input.allowedExplicitSwitches ?? null,
+    turnId: input.turnId,
   });
 }
 

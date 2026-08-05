@@ -21,6 +21,7 @@ const EXPECTED_MODE_TYPES = [
   'looking-for-work',
   'technical-interview',
   'lecture',
+  'seminar',
 ];
 
 const BASE_TIME = '2026-05-14T00:00:00.000Z';
@@ -122,9 +123,9 @@ beforeEach(() => {
   installDb(makeDb());
 });
 
-test('MODE_TEMPLATES enumerates exactly the seven production modes in UI order', () => {
+test('MODE_TEMPLATES enumerates every production mode in UI order', () => {
   assert.deepEqual(MODE_TEMPLATES.map(mode => mode.type), EXPECTED_MODE_TYPES);
-  assert.equal(new Set(MODE_TEMPLATES.map(mode => mode.type)).size, 7);
+  assert.equal(new Set(MODE_TEMPLATES.map(mode => mode.type)).size, EXPECTED_MODE_TYPES.length);
   for (const mode of MODE_TEMPLATES) {
     assert.equal(typeof mode.label, 'string');
     assert.ok(mode.label.length > 0);
@@ -361,6 +362,30 @@ test('active mode context JSON-encodes user-controlled strings', () => {
   assert.doesNotMatch(block, /<\/reference_file><active_mode_custom_instructions>/);
 });
 
+test('getModeSnapshot captures an immutable mode record by id', () => {
+  installDb(makeDb({
+    modes: [
+      modeRow({ id: 'sales-mode', template_type: 'sales', name: 'Sales snapshot', custom_context: 'Original instruction.', is_active: 1 }),
+      modeRow({ id: 'team-mode', template_type: 'team-meet', name: 'Team replacement', custom_context: 'Other instruction.', is_active: 0 }),
+    ],
+  }));
+
+  const snapshot = ModesManager.getInstance().getModeSnapshot('sales-mode');
+
+  assert.ok(snapshot);
+  assert.equal(snapshot.id, 'sales-mode');
+  assert.equal(snapshot.name, 'Sales snapshot');
+  assert.equal(snapshot.templateType, 'sales');
+  assert.equal(snapshot.customContext, 'Original instruction.');
+  assert.equal(Object.isFrozen(snapshot), true);
+  assert.equal(ModesManager.getInstance().getModeSnapshot('missing-mode'), null);
+  assert.throws(() => { snapshot.name = 'mutated'; }, TypeError);
+
+  db.setActiveMode('team-mode');
+  assert.equal(snapshot.id, 'sales-mode', 'a later active-mode switch must not mutate an existing snapshot');
+  assert.equal(snapshot.templateType, 'sales');
+});
+
 test('switching active mode immediately changes context and prevents stale reference leakage', () => {
   installDb(makeDb({
     modes: [
@@ -416,7 +441,7 @@ test('isPremiumKnowledgeInterceptAllowed gates the whole premium intercept by ac
   );
 
   const INTERCEPT_ALLOWED = new Set(['general', 'sales', 'recruiting', 'looking-for-work']);
-  const INTERCEPT_BLOCKED = new Set(['technical-interview', 'team-meet', 'lecture']);
+  const INTERCEPT_BLOCKED = new Set(['technical-interview', 'team-meet', 'lecture', 'seminar']);
 
   // Every production mode must land on one side of the gate — guards against
   // a future template silently inheriting the wrong default.

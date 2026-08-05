@@ -6,8 +6,15 @@
  * week") was silently dropped when the LLM extractor compressed a
  * multi-bullet project into one summary sentence. Fixed by adding an
  * optional `highlights: string[]` field (types.ts ProjectEntry,
- * StructuredExtractor RESUME_SCHEMA) and surfacing the first
- * number-bearing highlight in the fast-path single-project template.
+ * StructuredExtractor RESUME_SCHEMA) and surfacing it as structured
+ * evidence for the fast-path single-project selection.
+ *
+ * Since the Full-JIT policy (2026-07-07/08, commit 6e6189b4), this
+ * deterministic project selection no longer renders a final `.answer`
+ * string — it SELECTS the project (including `highlights`, when present)
+ * as structured evidence (`items`/`selectedProjects`) for a downstream JIT
+ * prompt to phrase. These tests assert against that evidence-selection
+ * shape instead of the old rendered-string contract.
  *
  * Requires: npm run build:electron.
  */
@@ -51,32 +58,37 @@ const NATIVELY_PROJECT_NO_HIGHLIGHTS = {
 };
 
 describe('project metric-bearing highlights are recalled when present', () => {
-  test('"How many users and stars did Natively get?" cites the real 4,000+/500+ metric', () => {
+  test('"How many users and stars did Natively get?" selects the highlights evidence with the real 4,000+/500+ metric', () => {
     const r = tryBuildManualProfileFastPathAnswer({
       question: 'How many users and stars did Natively get, and in what timeframe?',
       profile: NATIVELY_PROJECT_WITH_HIGHLIGHTS, source: 'manual_input',
     });
     assert.ok(r);
-    assert.match(r.answer, /4,000\+?/);
-    assert.match(r.answer, /500\+?/);
+    assert.equal(r.answer, undefined, 'Full-JIT policy: must not render a final answer string');
+    const highlights = r.items.find((f) => f.field === 'projects.0.highlights');
+    assert.ok(highlights, 'must select the highlights field as evidence');
+    assert.ok(highlights.value.some((h) => /4,000\+?/.test(h) && /500\+?/.test(h)));
+    assert.deepEqual(r.selectedProjects[0].highlights, NATIVELY_PROJECT_WITH_HIGHLIGHTS.projects[0].highlights);
   });
 
-  test('"Tell me about Natively" still reads cleanly with a metric highlight present', () => {
+  test('"Tell me about Natively" still selects the project evidence with a metric highlight present', () => {
     const r = tryBuildManualProfileFastPathAnswer({
       question: 'Tell me about Natively.', profile: NATIVELY_PROJECT_WITH_HIGHLIGHTS, source: 'manual_input',
     });
     assert.ok(r);
-    assert.match(r.answer, /privacy-first/i);
+    assert.equal(r.answerType, 'project_answer');
+    assert.ok(r.items.some((f) => f.field === 'projects.0.description' && /privacy-first/i.test(f.value)));
   });
 });
 
 describe('backward compatibility — profiles without `highlights` are unaffected', () => {
-  test('"Tell me about Natively" answers normally when highlights is absent', () => {
+  test('"Tell me about Natively" selects project evidence normally when highlights is absent', () => {
     const r = tryBuildManualProfileFastPathAnswer({
       question: 'Tell me about Natively.', profile: NATIVELY_PROJECT_NO_HIGHLIGHTS, source: 'manual_input',
     });
     assert.ok(r);
-    assert.match(r.answer, /privacy-first/i);
-    assert.doesNotMatch(r.answer, /undefined|null/i);
+    assert.equal(r.answerType, 'project_answer');
+    assert.ok(r.items.some((f) => f.field === 'projects.0.description' && /privacy-first/i.test(f.value)));
+    assert.ok(!r.items.some((f) => f.field === 'projects.0.highlights'), 'must not fabricate a highlights field');
   });
 });

@@ -45,6 +45,10 @@ export type PiTelemetryEvent =
   | 'pi_doc_grounded_safe_failure'
   // Round-7 Failure-3: completeness re-ask kept the original (valid but partial) answer.
   | 'pi_doc_grounded_completeness_kept_original'
+  // Root-cause fix (2026-07-23): a substantial original answer classified as a
+  // false refusal was kept because the regen didn't cleanly improve on it —
+  // non-regression floor, see ipcHandlers.ts regenIsQualityDowngrade.
+  | 'pi_doc_grounded_false_refusal_kept_original'
   // OKF Phase 0 (2026-07-01): false-refusal self-trigger guard + repair markers.
   | 'pi_doc_grounded_false_refusal_repair_attempted'
   | 'pi_doc_grounded_retrieval_summary'
@@ -58,7 +62,12 @@ export type PiTelemetryEvent =
   | 'pi_okf_profile_retrieval_blocked'
   | 'pi_okf_profile_evidence_assembled'
   | 'pi_okf_profile_export_requested'
-  | 'pi_okf_profile_export_completed';
+  | 'pi_okf_profile_export_completed'
+  // Coding-meta fix (grounding campaign H4, 2026-07-18): sanitizer skip + retry markers.
+  | 'pi_coding_skip_candidate_sanitizer'
+  | 'pi_coding_meta_retry_attempted'
+  | 'pi_coding_meta_retry_succeeded'
+  | 'pi_coding_meta_retry_no_accept';
 
 export interface PiTelemetryRecord {
   event: PiTelemetryEvent;

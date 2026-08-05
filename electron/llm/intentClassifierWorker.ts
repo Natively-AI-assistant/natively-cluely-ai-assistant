@@ -68,7 +68,19 @@ parentPort.on('message', async (msg: any) => {
       if (!pipe) {
         await ensureLoaded(msg);
       }
-      const result = await pipe(msg.text, msg.labels, { multi_label: false });
+      // Campaign 2 longsession (2026-07-19): optional hypothesisTemplate
+      // passthrough so a second caller (AnswerRelevanceChecker) can reuse
+      // this SAME worker/ONNX session for a differently-framed zero-shot
+      // check (answer-relevance entailment) without spinning up a second
+      // model load. Additive — omitted entirely by the existing
+      // IntentClassifier.ts caller, so intent classification is byte-for-
+      // byte unaffected (transformers.js defaults to "This example is {}."
+      // when the option is undefined).
+      const options: Record<string, any> = { multi_label: false };
+      if (typeof msg.hypothesisTemplate === 'string' && msg.hypothesisTemplate.length > 0) {
+        options.hypothesis_template = msg.hypothesisTemplate;
+      }
+      const result = await pipe(msg.text, msg.labels, options);
       parentPort!.postMessage({
         type: 'result',
         requestId: msg.requestId,

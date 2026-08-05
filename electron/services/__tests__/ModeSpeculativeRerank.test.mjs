@@ -55,7 +55,11 @@ const SPEC = 'NATIVELY_RAG_SPECULATIVE_RERANK';
 function multiChunkFile() {
   // Exceed the production chunk window so the reranker has multiple candidates.
   const filler = (w) => new Array(700).fill(`${w}.`).join(' ');
-  const content = [filler('intro'), filler('payload'), filler('appendix')].join(' ');
+  const content = [
+    `1. Intro\n${filler('intro')}`,
+    `2. Payload\n${filler('payload')}`,
+    `3. Appendix\n${filler('appendix')}`,
+  ].join('\n');
   return [{ id: 'fileA', modeId: 'mode1', fileName: 'doc.txt', content, createdAt: new Date().toISOString() }];
 }
 
@@ -146,6 +150,12 @@ describe('Phase 3: live-path speculative rerank', () => {
       const src = fs.readFileSync(path.resolve(__dirname, '../../llm/WhatToAnswerLLM.ts'), 'utf8');
       assert.match(src, /isRagSpeculativeRerankEnabled/);
       assert.match(src, /buildRetrievedActiveModeContextBlockHybrid\([\s\S]*?allowRerank[\s\S]*?\)/);
+    });
+
+    test('the governed EvidenceResolver also requires the speculative rollout flag', () => {
+      const src = fs.readFileSync(path.resolve(__dirname, '../../intelligence/context-os/EvidenceResolver.ts'), 'utf8');
+      assert.match(src, /isRagSpeculativeRerankEnabled/);
+      assert.match(src, /allowRerank:\s*isRagLocalRerankEnabled\(\)\s*&&\s*isRagSpeculativeRerankEnabled\(\)/);
     });
 
     test('rerank stays inside the existing raceWithBudget envelope (no new unbounded await)', () => {

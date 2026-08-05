@@ -511,7 +511,21 @@ export function sanitizeCandidateAnswer(answer: string): CandidateSanitizeResult
   const repaired = (removed.size > 0 || perspectiveFlipped) && text !== original.trim();
   // If stripping emptied the answer (the whole thing was assistant-meta) or left a
   // fragment too short to be useful, the caller must fall back deterministically.
-  const needsFallback = text.length < 15;
+  //
+  // Code-review 2026-07-18 HIGH (campaign2 longsession, wiring this into
+  // IntelligenceEngine.ts's live WTA path surfaced a pre-existing latent bug
+  // shared with the manual path's identical needsFallback branch in
+  // ipcHandlers.ts): the ORIGINAL `text.length < 15` check fires on ANY short
+  // answer, not just one that was actually meta — live-reproduced with
+  // sanitizeCandidateAnswer("Python.") returning needsFallback:true despite
+  // removedMarkers being empty (nothing was ever stripped; "Python." IS the
+  // real, correct, complete answer to e.g. "what's your primary language?").
+  // A caller treating needsFallback as "substitute a deterministic fallback"
+  // would silently discard a genuinely short-but-correct answer. Require that
+  // something was ACTUALLY removed (or the original was empty, handled by the
+  // early return above) before claiming the caller needs a fallback — an
+  // untouched short answer is not evidence of an all-meta answer.
+  const needsFallback = removed.size > 0 && text.length < 15;
   return { text, repaired, needsFallback, removedMarkers: Array.from(removed) };
 }
 

@@ -16,6 +16,7 @@ import {
     parseModeSourceContract,
     serializeModeSourceContract,
     documentGroundedFromContract,
+    strictDocumentGroundedFromContract,
     buildUserSelectedSourceContract,
 } from './modeSourceContract';
 
@@ -40,6 +41,8 @@ import {
     MODE_TEAM_MEET_PROMPT,
     MODE_LECTURE_PROMPT,
     MODE_TECHNICAL_INTERVIEW_PROMPT,
+    // Campaign-3 (2026-07-19): 8th built-in mode prompt.
+    MODE_SEMINAR_PROMPT,
     SHARED_MODE_PREFIX,
     SHARED_MODE_PREFIX_SHORT,
 } from '../llm/prompts';
@@ -51,6 +54,14 @@ import {
  */
 export const PROFILE_OKF_RESERVED_MODE_ID = '__profile_okf__';
 
+/**
+ * Where the active-mode snapshot lives so that every inlined copy of this
+ * module shares ONE cache. See ModesManager._cache for why that is required
+ * rather than merely tidy. Exported so a test can assert the shared slot
+ * exists — a per-instance regression would still pass any single-bundle test.
+ */
+export const ACTIVE_MODE_CACHE_KEY = '__nativelyActiveModeInfoCacheV1__';
+
 export type ModeTemplateType =
     | 'general'
     | 'looking-for-work'
@@ -58,7 +69,11 @@ export type ModeTemplateType =
     | 'recruiting'
     | 'team-meet'
     | 'lecture'
-    | 'technical-interview';
+    | 'technical-interview'
+    // Campaign-3 (fix/answer-policy-engine, 2026-07-19): 8th built-in mode.
+    // Strict: evidence required, off-document Qs answered general-labeled
+    // with a visible "not from your reference files" preamble.
+    | 'seminar';
 
 export interface Mode {
     id: string;
@@ -113,6 +128,12 @@ export const MODE_TEMPLATES: Array<{
     { type: 'looking-for-work',     label: 'Looking for work',     description: 'Answer interview questions with confidence and clarity.' },
     { type: 'technical-interview',  label: 'Technical Interview',  description: 'Whiteboard-style coding and system design support.' },
     { type: 'lecture',              label: 'Lecture',              description: 'Capture key concepts and content from lectures.' },
+    // Campaign-3 (2026-07-19, fix/answer-policy-engine): 8th built-in mode.
+    // "Seminar Mode" — strict file-grounded Q&A for presentations, thesis
+    // defenses, paper walkthroughs. Off-document questions are answered
+    // general-labeled with a visible "not from your reference files" preamble
+    // (NEVER a refusal — even strict profiles answer; they just label honestly).
+    { type: 'seminar',              label: 'Seminar',              description: 'Strict file-grounded Q&A: answer from your reference files; off-file questions get a visible "general knowledge" label, never a refusal.' },
 ];
 
 // Default note sections seeded when a mode is created from a template
@@ -181,9 +202,19 @@ export const TEMPLATE_NOTE_SECTIONS: Record<ModeTemplateType, Array<{ title: str
         { title: 'Referral / follow-up', description: 'Referral requests, thank-you notes, materials to send, or networking follow-up.' },
         { title: 'Next steps', description: 'Concrete next steps, owners, dates, and preparation items.' },
     ],
+    // Campaign-3 (2026-07-19): 8th built-in mode — file-grounded Q&A.
+    seminar: [
+        { title: 'Question', description: 'The question asked (verbatim or paraphrased).' },
+        { title: 'Answer from your files', description: 'The answer grounded in your reference files / slides / paper. Direct quote or close paraphrase.' },
+        { title: 'Source', description: 'Which file + section the answer came from. Cite the filename and section/heading.' },
+        { title: 'If not in your files', description: 'A short, labeled "not from your reference files" note from general knowledge — never fabricated as if from the files.' },
+        { title: 'Follow-up you might be asked', description: 'Likely follow-up questions on the same topic the audience or panel could ask next.' },
+    ],
 };
 
-const TEMPLATE_SYSTEM_PROMPTS: Record<ModeTemplateType, string> = {
+// Campaign-3 (2026-07-19): exported (was `const`) so tests + future UI
+// debugging can verify which prompt each templateType resolves to.
+export const TEMPLATE_SYSTEM_PROMPTS: Record<ModeTemplateType, string> = {
     // General = universal adaptive copilot (own prompt, not technical interview)
     general: MODE_GENERAL_PROMPT,
     'technical-interview': MODE_TECHNICAL_INTERVIEW_PROMPT,
@@ -193,6 +224,8 @@ const TEMPLATE_SYSTEM_PROMPTS: Record<ModeTemplateType, string> = {
     recruiting: MODE_RECRUITING_PROMPT,
     'team-meet': MODE_TEAM_MEET_PROMPT,
     lecture: MODE_LECTURE_PROMPT,
+    // Campaign-3 (2026-07-19): 8th built-in mode — file-grounded Q&A.
+    seminar: MODE_SEMINAR_PROMPT,
 };
 
 // Startup invariant: every MODE_*_PROMPT must begin with one of the two shared
@@ -248,6 +281,29 @@ export interface ActiveModeDocumentGroundingInfo {
      * profile suppression off one flag instead of re-deriving the four conditions.
      */
     documentGroundedCustomModeActive: boolean;
+    /**
+     * EXPLICIT strictness only (Defect C fix, 2026-08-01).
+     *
+     * `documentGroundedCustomModeActive` does double duty at ~65 call sites:
+     * source ISOLATION (keep Hindsight/OKF/profile out of document modes — the
+     * 2026-07-15 fix, correct even for a fresh default mode) and STRICT
+     * knowledge suppression (disable the generic bypass, force retrieval,
+     * block general-knowledge fallback). The template seed gives EVERY
+     * non-interview mode `reference_files_primary`, so a stock Team Meet or
+     * Lecture session — zero files, zero custom prompt — was logging
+     * "Generic bypass disabled: document-grounded custom mode active" and
+     * running the strict pipeline.
+     *
+     * This flag is TRUE only when strictness was actually chosen:
+     *   - the contract authority is `reference_files_only` (only reachable by
+     *     explicit selection or prompt migration, never by template seed), or
+     *   - a reference-files-first authority whose contract origin is NOT the
+     *     template default, with at least one real reference file attached.
+     * Attaching a file to a default mode does not flip it; changing a policy
+     * does. Knowledge-suppression call sites read THIS; isolation call sites
+     * keep the broad flag.
+     */
+    strictDocumentGroundedActive: boolean;
     modeId?: string;
     modeName?: string;
     hasCustomPrompt: boolean;
@@ -384,13 +440,45 @@ export class ModesManager {
     // The live answer path consults the active mode on EVERY turn (routing
     // prior, pinned instructions, retrieval). The mode itself changes only via
     // setActiveMode/updateMode/deleteMode, so a tiny invalidate-on-write cache
-    // removes the per-question SQLite read without any staleness risk.
-    private _activeModeInfoCache: ActiveModeInfo | null = null;
-    private _activeModeInfoCacheValid = false;
+    // removes the per-question SQLite read.
+    //
+    // The cache is stored on globalThis, NOT on the instance, and that is
+    // load-bearing rather than defensive.
+    //
+    // esbuild inlines this module into every main-process entry bundle that
+    // imports it — 14 dist files, including ipcHandlers, IntelligenceEngine and
+    // IntelligenceManager. Each inlined copy is its own module scope with its
+    // own `ModesManager.instance`, so `getInstance()` returns a DIFFERENT
+    // object per bundle. The RUNNING app loads only main.js (everything inlined
+    // once), but every harness/eval/test process that requires two or more
+    // dist-electron bundles into one heap gets split singletons — and those
+    // runtimes are where this repo's benchmark numbers come from. With the
+    // cache on the instance, a `setActiveMode` through one copy left every
+    // other copy's snapshot stale for the life of the process, and
+    // `getReferenceFiles(modeInfo.id)` keys the whole retrieval set off that
+    // snapshot. Cross-mode source isolation is exactly what this system exists
+    // to guarantee, so the cache lives where every copy can see it: globalThis
+    // is per-PROCESS however many times the module is inlined.
+    //
+    // (The 2026-07-31 LIVE contamination incident had a different, single-
+    // process mechanism — a renderer optimistic-update bug on `pro_required`
+    // rejection, plus a raw db.setActiveMode bypass in the license-loss path;
+    // both fixed the same day. This slot keeps the harness runtimes truthful
+    // and makes the class impossible if multi-bundle loading ever arrives.)
+    private static get _cache(): { info: ActiveModeInfo | null; valid: boolean } {
+        const g = globalThis as unknown as Record<string, unknown>;
+        let store = g[ACTIVE_MODE_CACHE_KEY] as { info: ActiveModeInfo | null; valid: boolean } | undefined;
+        if (!store) {
+            store = { info: null, valid: false };
+            g[ACTIVE_MODE_CACHE_KEY] = store;
+        }
+        return store;
+    }
 
     private invalidateActiveModeCache(): void {
-        this._activeModeInfoCache = null;
-        this._activeModeInfoCacheValid = false;
+        const store = ModesManager._cache;
+        store.info = null;
+        store.valid = false;
     }
 
     /**
@@ -400,11 +488,12 @@ export class ModesManager {
      * user-authored and surfaced to prompt builders.
      */
     public getActiveModeInfo(): ActiveModeInfo | null {
-        if (this._activeModeInfoCacheValid) return this._activeModeInfoCache;
+        const store = ModesManager._cache;
+        if (store.valid) return store.info;
         const mode = this.getActiveMode();
         if (mode) {
             const grounding = this.getActiveModeDocumentGroundingInfo(mode.id);
-            this._activeModeInfoCache = {
+            store.info = {
                 id: mode.id,
                 templateType: mode.templateType,
                 name: mode.name,
@@ -416,10 +505,10 @@ export class ModesManager {
                 sourceContract: grounding.sourceContract,
             };
         } else {
-            this._activeModeInfoCache = null;
+            store.info = null;
         }
-        this._activeModeInfoCacheValid = true;
-        return this._activeModeInfoCache;
+        store.valid = true;
+        return store.info;
     }
 
     // Modes where the premium knowledge intercept (negotiation coaching, intro
@@ -436,6 +525,7 @@ export class ModesManager {
         'technical-interview',
         'team-meet',
         'lecture',
+        'seminar',
     ]);
 
     /**
@@ -717,6 +807,37 @@ export class ModesManager {
         return DatabaseManager.getInstance().getReferenceFiles(modeId).map(rowToFile);
     }
 
+    /**
+     * Return one immutable mode record captured by an answer request at t0.
+     *
+     * `getActiveModeInfo()` intentionally returns a narrow planner snapshot; the
+     * governed EvidenceResolver additionally needs the mode's template/context
+     * fields. The only valid capture target is the current active mode at t0;
+     * reject a mismatched id instead of falling forward to a different active
+     * mode. This avoids a full mode-list scan on the latency-critical path.
+     */
+    public getModeSnapshot(modeId: string): Readonly<Mode> | null {
+        const mode = this.getActiveMode();
+        if (!mode || mode.id !== modeId) return null;
+        // Deep-freeze at runtime for genuine request-scoped immutability. The
+        // frozen arrays widen to `readonly T[]` which TS cannot assign back to
+        // the mutable `Mode` shape, so cast through unknown — the runtime object
+        // is strictly narrower (frozen) than the declared type, never wider.
+        const frozen = {
+            ...mode,
+            sourceContract: mode.sourceContract
+                ? Object.freeze({
+                    ...mode.sourceContract,
+                    allowedExplicitSwitches: Object.freeze([...mode.sourceContract.allowedExplicitSwitches]),
+                    groundingProfile: mode.sourceContract.groundingProfile
+                        ? Object.freeze({ ...mode.sourceContract.groundingProfile })
+                        : mode.sourceContract.groundingProfile,
+                  })
+                : null,
+        };
+        return Object.freeze(frozen) as unknown as Readonly<Mode>;
+    }
+
     public addReferenceFile(params: {
         modeId: string;
         fileName: string;
@@ -740,6 +861,15 @@ export class ModesManager {
             pageCount: params.pageCount,
             extractedPageCount: params.extractedPageCount,
         });
+        // Ingestion audit (deep-test D4, 2026-08-01): a document must not be
+        // treated as fully ingested when pages are missing. Extraction is
+        // all-or-nothing upstream, so a mismatch here means image-only/empty
+        // pages — surfaced loudly instead of discovered later as a "retrieval
+        // miss" on a fact that was never ingested.
+        if (typeof params.pageCount === 'number' && typeof params.extractedPageCount === 'number'
+            && params.extractedPageCount < params.pageCount) {
+            console.warn(`[ModesManager] INGESTION AUDIT: "${params.fileName}" parsed ${params.extractedPageCount}/${params.pageCount} pages — ${params.pageCount - params.extractedPageCount} page(s) produced no text. Facts on those pages are NOT retrievable.`);
+        }
         this.invalidateActiveModeCache();
         // OKF Phase 2/7 (2026-07-01): generate a Knowledge Pack alongside the
         // existing chunk pipeline. Heuristic v1 extraction is pure string
@@ -1162,7 +1292,8 @@ export class ModesManager {
         if (!mode) {
             return {
                 isCustom: false, hasReferenceFiles: false, documentGrounded: false,
-                documentGroundedCustomModeActive: false, hasCustomPrompt: false,
+                documentGroundedCustomModeActive: false, strictDocumentGroundedActive: false,
+                hasCustomPrompt: false,
                 sourceContract: defaultSourceContractForNewMode(),
             };
         }
@@ -1209,11 +1340,19 @@ export class ModesManager {
             sourceContract.sourceAuthority === 'reference_files_only'
             || sourceContract.sourceAuthority === 'reference_files_primary'
             || sourceContract.sourceAuthority === 'reference_files_plus_transcript';
+        // Defect C (2026-08-01): strictness must be EXPLICIT. The template seed
+        // stamps `reference_files_primary` with origin 'default_new_mode' on
+        // every non-interview mode, so the authority-only test above classifies
+        // a stock Team Meet/Lecture as a strict document-grounded custom mode.
+        // See the field's doc comment on ActiveModeDocumentGroundingInfo.
+        const strictDocumentGroundedActive =
+            strictDocumentGroundedFromContract(sourceContract, hasReferenceFiles);
         return {
             isCustom: custom,
             hasReferenceFiles,
             documentGrounded,
             documentGroundedCustomModeActive,
+            strictDocumentGroundedActive,
             modeId: mode.id,
             modeName: mode.name,
             hasCustomPrompt,

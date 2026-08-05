@@ -33,6 +33,8 @@ export {
     warmupIntentClassifier
 } from "./IntentClassifier";
 export type { ConversationIntent, IntentResult } from "./IntentClassifier";
+export { checkAnswerRelevance } from "./AnswerRelevanceChecker";
+export type { AnswerRelevanceResult } from "./AnswerRelevanceChecker";
 export { planNextAssistantAction } from "./PlannerDecision";
 export type { PlannerDecision, PlannerDecisionKind, PlannerInput } from "./PlannerDecision";
 export { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, shouldScaffold, isStealthEvasionQuestion, isJdFactualLookupNotNegotiationAdvice } from "./AnswerPlanner";
@@ -60,7 +62,7 @@ export {
 export type { SpeakabilityDecision, SpeakabilityClass, SpeakabilityTarget, ShortLengthBand, ShortBandTarget } from "./speakability";
 export { checkAnswerForCodeBugs, checkCodeCompleteness } from "./CodeSanityCheck";
 export type { CodeSanityResult, CodeSanityIssue } from "./CodeSanityCheck";
-export { AnswerDiversityGuard, cleanAnswerArtifacts, isLeakedSchemaStub, isProviderTransportError, stripMetaPreamble, compressToSpeakable, varySpokenOpening, SCAFFOLD_LABEL_RE } from "./answerPolish";
+export { AnswerDiversityGuard, cleanAnswerArtifacts, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope, isProviderTransportError, isLeakedInternalTagBlock, isLeakedAnswerArtifact, stripMetaPreamble, stripFabricatedTranscriptPreamble, isFabricatedTranscriptOnly, compressToSpeakable, varySpokenOpening, SCAFFOLD_LABEL_RE, BOLD_PSEUDO_HEADER_RE } from "./answerPolish";
 export type { RepetitionVerdict, RepetitionReason, DiversityCheckOpts } from "./answerPolish";
 export {
   toSpeakableSd,
@@ -188,6 +190,35 @@ export {
     preferDeepDiveSections,
 } from "./sdLessonScoreGate";
 export { applyModeFallback, MODE_CONTEXT_PROFILES } from "./modeProfiles";
+
+// Prompt System v2 — provider-neutral composer (flag: promptSystemV2).
+export {
+    NO_ACTION_SENTINEL,
+    shouldSuppressModelOutput,
+    couldBecomeNoActionSentinel,
+    stripLeadingNoActionSentinel,
+    GIST_MARKER,
+    splitGistLine,
+    stripDisplayMarkup,
+    buildSystemPromptV2,
+    buildTurnContentV2,
+    buildAssembledTurnContentV2,
+    hasV2TurnEnvelope,
+    recommendedGenerationProfile,
+    spokenFormatViolations,
+    isPromptSystemV2Enabled,
+    resolveV2SystemPrompt,
+    isV2ComposedPrompt,
+    getV2PromptDescriptor,
+    v2ModeForActiveMode,
+    v2TierForPromptTier,
+    CUSTOM_INSTRUCTIONS_MAX_CHARS,
+    type PromptSystemV2Mode,
+    type PromptSystemV2Action,
+    type PromptTierV2,
+    type EvidenceBlockV2,
+    type GenerationProfileV2,
+} from "./promptSystemV2";
 export type { ActiveModeInfo, ModeContextProfile, ModeTemplateType } from "./modeProfiles";
 export { resolveFollowUp, resolveFollowUpOrClarify, isBareFollowUp, isRefinementFollowUp, isSameSessionFollowUp, buildContextFreeClarification } from "./FollowUpResolver";
 export { classifyProviderError, isClarificationStall, isPermanentKeyError } from "./providerErrorClassifier";

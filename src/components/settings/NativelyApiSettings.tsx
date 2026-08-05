@@ -1,7 +1,7 @@
 import {
   AlertCircle,
   Brain,
-  CalendarClock,
+  Check,
   CheckCircle,
   Loader2,
   Mic,
@@ -34,43 +34,41 @@ interface UsageData {
 const MASKED_NATIVELY_KEY = '•'.repeat(24);
 
 // ─── Quota bar ───────────────────────────────────────────────
+// One bar colour for all three buckets. They used to be orchid / violet /
+// emerald, which made three neutral facts read as three different *kinds* of
+// thing and put a third and fourth hue on a surface that should carry one
+// accent. Colour here now means exactly one thing — amber = running low.
 function QuotaBar({
   label,
   icon: Icon,
   bucket,
-  barColor,
 }: {
   label: string;
   icon: React.ElementType;
   bucket: QuotaBucket;
-  barColor: string;
 }) {
   const pct = bucket.limit > 0 ? Math.min(100, (bucket.used / bucket.limit) * 100) : 0;
   const isHigh = pct >= 80;
+  // Percentage remaining, not the raw used/limit pair — a plan-agnostic
+  // number that reads the same way on Standard, Pro, Max, and Ultra instead
+  // of forcing a mental "45 / 500 vs 230 / 3000" comparison across tiers.
+  const pctRemaining = Math.max(0, Math.round(100 - pct));
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Icon
-            size={12}
-            className={isHigh ? 'text-amber-400' : 'text-text-tertiary'}
-            strokeWidth={1.75}
-          />
+          <Icon size={12} className="text-text-tertiary" strokeWidth={1.75} />
           <span className="text-[12px] text-text-secondary">{label}</span>
         </div>
         <span
-          className={`text-[12px] tabular-nums font-medium ${isHigh ? 'text-amber-400' : 'text-text-tertiary'}`}
+          className={`text-[12px] tabular-nums ${isHigh ? 'text-amber-500 font-medium' : 'text-text-tertiary'}`}
         >
-          {bucket.used.toLocaleString()}
-          <span className="font-normal text-text-tertiary/60">
-            {' '}
-            / {bucket.limit.toLocaleString()}
-          </span>
+          {pctRemaining}% left
         </span>
       </div>
-      <div className="h-[5px] w-full bg-bg-input rounded-full overflow-hidden">
+      <div className="h-[3px] w-full bg-bg-input rounded-full overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-700 ease-out ${isHigh ? 'bg-amber-400' : barColor}`}
+          className={`h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none ${isHigh ? 'bg-amber-500' : 'bg-accent-primary'}`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -88,21 +86,82 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
   );
 }
 
+// ─── Section label ───────────────────────────────────────────
+// One small-caps label above each container, replacing the mixture of boxed
+// headers, inline titles and uppercase micro-labels this tab used to open
+// every section with.
+function SectionLabel({ children, aside }: { children: React.ReactNode; aside?: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 px-1 mb-2">
+      <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.07em]">
+        {children}
+      </p>
+      {aside}
+    </div>
+  );
+}
+
+// ─── Price ───────────────────────────────────────────────────
+// The dominant element on a plan row: visibly larger and heavier than the
+// plan name (19px semibold vs 13px medium). It previously sat at 17px bold
+// against a 13px semibold name — near-parity, so nothing led.
+function Price({ amount, period }: { amount: string; period: string }) {
+  return (
+    <div className="flex items-baseline gap-1 shrink-0">
+      <span
+        className="text-[19px] font-semibold text-text-primary tabular-nums"
+        style={{ letterSpacing: '-0.025em' }}
+      >
+        {amount}
+      </span>
+      <span className="text-[11px] text-text-tertiary">{period}</span>
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────
 interface NativelyApiSettingsProps {
   initialIsSaved?: boolean;
+  /**
+   * Rendered between the Natively key card and the plan chooser. A slot exists
+   * because that seam is INSIDE this component, so a parent cannot reach it by
+   * reordering siblings. Used by PlansSettings to place the "Pro License
+   * Active" receipt directly under the credential box it relates to, rather
+   * than above the whole section or stranded below the pricing.
+   */
+  afterKeySection?: React.ReactNode;
 }
 
-export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initialIsSaved = false }) => {
+export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initialIsSaved = false, afterKeySection }) => {
+  const prefersReducedMotion = useReducedMotion();
   const t = useT();
-  const [apiKey, setApiKey] = useState(() => (initialIsSaved ? MASKED_NATIVELY_KEY : ''));
-  const [isSaved, setIsSaved] = useState(initialIsSaved);
-  const [isLoading, setIsLoading] = useState(!initialIsSaved);
+  // `initialIsSaved` arrives ASYNCHRONOUSLY. SettingsOverlay seeds its own
+  // `hasNativelyKey` to false and only flips it after `getStoredCredentials()`
+  // resolves, so on every open of this tab the first render says "no key" even
+  // for a subscriber. That is what made the Usage section flash: `usageData`
+  // was correctly restored from `usageCache` on the very first render, but the
+  // card is gated on `isSaved && usageData`, so it stayed hidden until the
+  // credentials round-trip landed and then popped in. The plan chooser
+  // (`!isSaved && PlansCard`) flashed the other way for the same reason.
+  //
+  // A populated `usageCache` is itself proof a key was saved: it is only ever
+  // written from a successful quota fetch, and it is nulled on BOTH removal
+  // paths (`handleClear`, and the credentials effect when no key comes back).
+  // So seeding these three from the cache is sound, and it makes the first
+  // paint of a revisit identical to the last paint of the previous visit.
+  const cachedKeyKnown = !!usageCache;
+  const [apiKey, setApiKey] = useState(() => (initialIsSaved || cachedKeyKnown ? MASKED_NATIVELY_KEY : ''));
+  const [isSaved, setIsSaved] = useState(initialIsSaved || cachedKeyKnown);
+  const [isLoading, setIsLoading] = useState(!(initialIsSaved || cachedKeyKnown));
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
-  const [usageData, setUsageData] = useState<UsageData | null>(null);
-  const [usageError, setUsageError] = useState<string | null>(null);
+  // Distinct from justSaved: a Dodo/Gumroad license key activates Pro but
+  // writes nothing to CredentialsManager — isSaved/fetchUsage must never
+  // fire for this branch, or the UI shows a "Connected" badge with an empty
+  // Usage card for a credential that was never actually stored.
+  const [justActivatedPro, setJustActivatedPro] = useState(false);
+  const [usageData, setUsageData] = useState<UsageData | null>(() => usageCache);
   const [isLoadingUsage, setIsLoadingUsage] = useState(false);
 
   const [interfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => {
@@ -129,50 +188,65 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         } else {
           setApiKey('');
           setIsSaved(false);
+          setUsageCache(null);
           setUsageData(null);
-          setUsageError(null);
         }
       } catch (e) {
         console.error('[NativelyApi]', e);
+        // Unknown is not saved. `isSaved` now starts optimistically true when a
+        // persisted usage entry exists, so without this a keychain read failure
+        // would leave a masked key in the field with no way out: `handleSave`
+        // refuses any value containing '•', so the Activate button would
+        // silently no-op. Falling back to the empty state keeps the input
+        // usable.
+        setApiKey('');
+        setIsSaved(false);
       } finally {
         setIsLoading(false);
       }
     })();
   }, []);
 
-  const fetchUsage = useCallback(async () => {
-    setIsLoadingUsage(true);
-    setUsageError(null);
+  // `silent`: revalidate in the background without the loading spinner —
+  // used when the tab re-appears and we already have last-known numbers on
+  // screen. The manual Refresh button stays non-silent so an explicit click
+  // still shows explicit spinner feedback. Either way, a failure (no quota,
+  // inactive subscription, network error) just leaves the Usage card hidden
+  // — see the `isSaved && usageData` render gate below — rather than
+  // surfacing an error card, since a saved-but-not-a-valid-API-plan key is
+  // an expected state (e.g. it's actually a Pro-only license), not a fault.
+  const fetchUsage = useCallback(async (opts: { force?: boolean; silent?: boolean } = {}) => {
+    const { force = false, silent = false } = opts;
+    if (!silent) setIsLoadingUsage(true);
     try {
-      const r = await window.electronAPI.getNativelyUsage();
+      const r = await window.electronAPI.getNativelyUsage(force);
       if (r.ok && r.quota) {
+        setUsageCache(r as UsageData);
         setUsageData(r as UsageData);
-      } else {
-        setUsageError(
-          r.error === 'subscription_inactive'
-            ? 'Subscription inactive — renew to restore access.'
-            : r.error === 'key_not_found'
-              ? 'Key not recognised by server.'
-              : r.error === 'invalid_key_format'
-                ? 'Invalid key format.'
-                : r.error === 'network_error' || r.error?.includes('fetch')
-                  ? 'Could not reach server.'
-                  : `Server error: ${r.error ?? 'unknown'}`,
-        );
       }
     } catch {
-      setUsageError('Failed to load usage.');
+      // no-op — see comment above
     } finally {
-      setIsLoadingUsage(false);
+      if (!silent) setIsLoadingUsage(false);
     }
   }, []);
 
   useEffect(() => {
-    if (isSaved && !isLoading) fetchUsage();
+    if (!isSaved || isLoading) return;
+    // First-ever load in this session (no cache yet) shows the spinner and
+    // surfaces errors normally. A re-visit with cached numbers already on
+    // screen instead revalidates silently in the background — the whole
+    // point being the user never sees a loading state for data they've
+    // already seen once this session.
+    fetchUsage({ force: true, silent: !!usageCache });
   }, [isSaved, isLoading, fetchUsage]);
 
   const handleSave = async () => {
-    if (!apiKey.trim() || apiKey.includes('•')) return;
+    const trimmed = apiKey.trim();
+    if (!trimmed || apiKey.includes('•')) return;
+    if (!trimmed.startsWith('natively_sk_')) {
+      return activateProLicense(trimmed);
+    }
     setIsSaving(true);
     setError(null);
     try {
@@ -223,6 +297,9 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   };
 
   return (
+    // LayoutGroup so the three regions below share one layout pass. See
+    // ../../lib/plansMotion for why this whole tab is FLIP rather than resizing.
+    <LayoutGroup>
     <div className="space-y-6 animated fadeIn" data-interface-theme={interfaceTheme}>
       <header className="flex items-center justify-between">
         <div>
@@ -433,5 +510,6 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         </Card>
       )}
     </div>
+    </LayoutGroup>
   );
 };

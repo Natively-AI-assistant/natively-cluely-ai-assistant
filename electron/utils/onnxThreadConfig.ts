@@ -110,10 +110,25 @@ export function getBoundedOnnxSessionOptions(): OnnxThreadBounds {
 
 export type OnnxSlotPriority = 'normal' | 'high';
 
-let inFlightNormal = 0;
-let inFlightHigh = 0;
-const waitersNormal: Array<() => void> = [];
-const waitersHigh: Array<() => void> = [];
+// The semaphore lives on globalThis, NOT at module scope: this module is
+// inlined into 32 dist bundles (whisper, embedding, reranker, RAG, main), and
+// a per-bundle copy caps sessions at 2 PER COPY — a harness co-loading three
+// ONNX consumers could run six native sessions, exactly the multi-hundred-MB
+// BFC-arena condition this gate exists to prevent. The comment above covers
+// the worker-heap dimension; this covers the bundle dimension.
+interface OnnxSemaphore {
+    inFlightNormal: number;
+    inFlightHigh: number;
+    waitersNormal: Array<() => void>;
+    waitersHigh: Array<() => void>;
+}
+const _sem: OnnxSemaphore = (() => {
+    const g = globalThis as unknown as Record<string, OnnxSemaphore | undefined>;
+    if (!g.__nativelyOnnxSemaphoreV1__) {
+        g.__nativelyOnnxSemaphoreV1__ = { inFlightNormal: 0, inFlightHigh: 0, waitersNormal: [], waitersHigh: [] };
+    }
+    return g.__nativelyOnnxSemaphoreV1__;
+})();
 
 function readMaxConcurrent(): number {
     return readIntEnv('NATIVELY_ONNX_MAX_CONCURRENT_SESSIONS', 2);
@@ -129,12 +144,12 @@ function readMinFreeGB(): number {
 function canAcquireNow(priority: OnnxSlotPriority): boolean {
     const cap = readMaxConcurrent();
     if (priority === 'high') {
-        return inFlightNormal + inFlightHigh < cap;
+        return _sem.inFlightNormal + _sem.inFlightHigh < cap;
     }
     // Normal priority: only acquire when there are no high-priority waiters
     // queued (so Whisper can grab the next slot promptly).
-    if (waitersHigh.length > 0) return false;
-    return inFlightNormal + inFlightHigh < cap;
+    if (_sem.waitersHigh.length > 0) return false;
+    return _sem.inFlightNormal + _sem.inFlightHigh < cap;
 }
 
 /**
@@ -148,28 +163,28 @@ function canAcquireNow(priority: OnnxSlotPriority): boolean {
  * acquisitions so Whisper can take the next free slot promptly.
  */
 export async function acquireOnnxSlot(priority: OnnxSlotPriority = 'normal'): Promise<() => void> {
-    const queue = priority === 'high' ? waitersHigh : waitersNormal;
+    const queue = priority === 'high' ? _sem.waitersHigh : _sem.waitersNormal;
     // Only enqueue when we're actually going to wait — otherwise stale
     // resolvers accumulate in the queue and confuse the FIFO order.
     while (!canAcquireNow(priority)) {
         const waiterP = new Promise<void>(resolve => queue.push(resolve));
         await waiterP;
     }
-    if (priority === 'high') inFlightHigh++;
-    else inFlightNormal++;
+    if (priority === 'high') _sem.inFlightHigh++;
+    else _sem.inFlightNormal++;
 
     let released = false;
     return () => {
         if (released) return;
         released = true;
-        if (priority === 'high') inFlightHigh--;
-        else inFlightNormal--;
+        if (priority === 'high') _sem.inFlightHigh--;
+        else _sem.inFlightNormal--;
         // Wake the next eligible waiter. Try high first, then normal — keeps
         // Whisper latency-critical even when embeddings are queued.
-        const nextHigh = waitersHigh.shift();
+        const nextHigh = _sem.waitersHigh.shift();
         if (nextHigh) nextHigh();
         else {
-            const nextNormal = waitersNormal.shift();
+            const nextNormal = _sem.waitersNormal.shift();
             if (nextNormal) nextNormal();
         }
     };
@@ -298,8 +313,8 @@ export function getMaxConcurrentOnnxSessions(): number {
  * test suite.
  */
 export function __resetOnnxGateForTests(): void {
-    inFlightNormal = 0;
-    inFlightHigh = 0;
-    waitersNormal.length = 0;
-    waitersHigh.length = 0;
+    _sem.inFlightNormal = 0;
+    _sem.inFlightHigh = 0;
+    _sem.waitersNormal.length = 0;
+    _sem.waitersHigh.length = 0;
 }

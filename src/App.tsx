@@ -6,6 +6,7 @@ import HindsightStatusBanner from "./components/HindsightStatusBanner"
 import SettingsPopup from "./components/SettingsPopup" // Keeping for legacy/specific window support if needed
 import Launcher from "./components/Launcher"
 import ModelSelectorWindow from "./components/ModelSelectorWindow"
+import { OverlayPillWindow, OverlayToggleWindow } from "./components/OverlayAuxWindows"
 import SettingsOverlay from "./components/SettingsOverlay"
 import StartupSequence from "./components/StartupSequence"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
@@ -78,14 +79,29 @@ const App: React.FC = () => {
   const isOverlayWindow = new URLSearchParams(window.location.search).get('window') === 'overlay';
   const isModelSelectorWindow = new URLSearchParams(window.location.search).get('window') === 'model-selector';
   const isCropperWindow = new URLSearchParams(window.location.search).get('window') === 'cropper';
+  // Overlay aux windows: the TopPill and the resize toggle live in their own
+  // tiny BrowserWindows so the main overlay window can hug the shell card
+  // exactly (no transparent-but-interactive regions).
+  const isOverlayPillWindow = new URLSearchParams(window.location.search).get('window') === 'overlay-pill';
+  const isOverlayToggleWindow = new URLSearchParams(window.location.search).get('window') === 'overlay-toggle';
   const launcherIsolation = getLauncherIsolation();
   const isolateOnboarding = launcherIsolation === 'onboarding' || launcherIsolation === 'global-surfaces';
   const isolatePermissionsToaster = launcherIsolation === 'permissions-toaster';
   const isolateModals = launcherIsolation === 'no-modals' || launcherIsolation === 'global-surfaces';
   const isolateGlobalSurfaces = launcherIsolation === 'global-surfaces';
 
-  // Default to launcher if not specified (dev mode safety)
-  const isDefault = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !isCropperWindow;
+  // Default to launcher if not specified (dev mode safety). The overlay aux
+  // windows (pill/toggle) MUST be excluded: they early-return minimal JSX, but
+  // hooks above those returns still run — without the exclusion each aux
+  // renderer would fire launcher-only effects (analytics app-open/close, the
+  // onboarding orchestrator, permission pushes) two extra times per launch.
+  const isDefault =
+    !isSettingsWindow &&
+    !isOverlayWindow &&
+    !isModelSelectorWindow &&
+    !isCropperWindow &&
+    !isOverlayPillWindow &&
+    !isOverlayToggleWindow;
 
   // Initialize Analytics
   useEffect(() => {
@@ -787,6 +803,25 @@ const App: React.FC = () => {
     );
   }
 
+  // --- OVERLAY AUX WINDOWS (pill / resize toggle) ---
+  // Deliberately minimal: no providers, no banners — just the floating chrome.
+  // State arrives over the 'overlay-ui-state' broadcast; geometry/visibility
+  // are owned by WindowHelper.
+  if (isOverlayPillWindow) {
+    return (
+      <ErrorBoundary context="OverlayPill">
+        <OverlayPillWindow />
+      </ErrorBoundary>
+    );
+  }
+  if (isOverlayToggleWindow) {
+    return (
+      <ErrorBoundary context="OverlayToggle">
+        <OverlayToggleWindow />
+      </ErrorBoundary>
+    );
+  }
+
   if (isModelSelectorWindow) {
     return (
       <ErrorBoundary context="ModelSelector">
@@ -838,7 +873,18 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary context="Launcher">
     <div className="h-full min-h-0 w-full relative bg-transparent">
-      {!isolateGlobalSurfaces && showHindsightBanner && <HindsightStatusBanner variant="floating-card" />}
+      {/* data-opacity-preview-surface: queried (via querySelectorAll, not by
+          id — there are two separate blocks below) by SettingsOverlay's
+          startPreviewingOpacity/stopPreviewingOpacity so the Interface
+          Opacity live-preview hides every global banner/toast/modal along
+          with #launcher-container, instead of leaving whichever one happens
+          to be visible (update/quota/trial banners, onboarding toasts, ad
+          promos) painted opaque on top of the "transparent" preview. */}
+      {!isolateGlobalSurfaces && showHindsightBanner && (
+        <div data-opacity-preview-surface="">
+          <HindsightStatusBanner variant="floating-card" />
+        </div>
+      )}
       <AnimatePresence>
         {showStartup ? (
           <motion.div
@@ -909,9 +955,8 @@ const App: React.FC = () => {
                         style={{
                           willChange: 'transform, opacity',
                           transformOrigin: 'center',
-                          boxShadow: '0 24px 64px -24px rgba(0,0,0,0.72), 0 8px 24px -16px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)',
                         }}
-                        className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-white/10 bg-[#141414]"
+                        className="manager-panel-shell w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-border-muted bg-bg-elevated"
                       >
                         <AnimatePresence mode="wait" initial={false}>
                         <motion.div
@@ -933,6 +978,7 @@ const App: React.FC = () => {
                           ) : (
                             <ProfileIntelligenceSettings
                               onClose={closeManagerPanel}
+                              onOpenNativelyAPI={() => openSettingsExclusive('plans')}
                             />
                           )}
                         </motion.div>
@@ -1025,12 +1071,12 @@ const App: React.FC = () => {
 
       {!isolateGlobalSurfaces && <UpdateBanner />}
 
-      {/* Orchestrated onboarding toasters (single-slot, controlled by OnboardingOrchestrator) */}
-      {!isolateOnboarding && (
-        <OrchestratorProvider>
-          <OrchestratedToasterHost />
-        </OrchestratorProvider>
-      )}
+        {/* Orchestrated onboarding toasters (single-slot, controlled by OnboardingOrchestrator) */}
+        {!isolateOnboarding && (
+          <OrchestratorProvider>
+            <OrchestratedToasterHost />
+          </OrchestratorProvider>
+        )}
 
       {/* Feature-awareness toasters (premium submodule stubs when skip-premium) */}
       {!isolateModals && isLauncherMainView && (

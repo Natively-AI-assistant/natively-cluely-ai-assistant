@@ -36,6 +36,8 @@ import type {
 } from './evidencePack';
 import { previewText } from './evidencePack';
 import { textCanProveProperty } from './requestedProperty';
+import { supportsEntity } from './evidenceSufficiency';
+import { classifyQuestion } from '../../services/knowledge/QuestionClassifier';
 
 // ── Input shape ──────────────────────────────────────────────────────────────
 
@@ -123,13 +125,19 @@ function unescapeXmlText(s: string): string {
 
 export class EvidenceOrchestrator {
   async buildEvidencePack(input: BuildEvidencePackInput): Promise<EvidencePack> {
-    const { contract, retrievers } = input;
+    const { contract, retrievers, question } = input;
     const items: EvidenceItem[] = [];
     const rejected: RejectedEvidenceItem[] = [];
+    // Root-cause fix (2026-07-23): the question's target entities, used by
+    // finalize() to compute a REAL entityMatched instead of the previous
+    // no-op alias of hasDirectEvidence. Best-effort — a classification
+    // failure must never break pack assembly.
+    let targetEntities: string[] = [];
+    try { targetEntities = classifyQuestion(question || '').targetEntities || []; } catch { targetEntities = []; }
 
     // Clarify turns never retrieve — the answer is a deterministic question.
     if (contract.sourceOwner === 'clarify') {
-      return this.finalize(contract, items, rejected);
+      return this.finalize(contract, items, rejected, targetEntities);
     }
 
     for (const key of Object.keys(RETRIEVER_KINDS) as Array<keyof EvidenceRetrievers>) {
@@ -193,7 +201,7 @@ export class EvidenceOrchestrator {
       }
     }
 
-    return this.finalize(contract, items, rejected);
+    return this.finalize(contract, items, rejected, targetEntities);
   }
 
   // ── Conversion ─────────────────────────────────────────────────────────────
@@ -271,6 +279,7 @@ export class EvidenceOrchestrator {
     contract: TurnContextContract,
     items: EvidenceItem[],
     rejected: RejectedEvidenceItem[],
+    targetEntities: string[] = [],
   ): EvidencePack {
     const factual = items.filter((i) => i.authority === 'evidence');
 
@@ -305,6 +314,19 @@ export class EvidenceOrchestrator {
       ? Math.max(...factual.map((i) => i.score.final))
       : 0;
 
+    // Real entity match (root-cause fix, 2026-07-23): entityMatched used to be
+    // `factual.length > 0` — a no-op alias of hasDirectEvidence that never
+    // actually checked whether the QUESTION's target entity appears in the
+    // evidence. With no target entities extracted (or extraction unavailable),
+    // preserve the prior permissive behavior (any direct evidence counts) so
+    // this cannot newly REJECT a turn that used to pass; with target entities
+    // present, require at least one of them to actually be supported by the
+    // evidence — the same standard evidenceSufficiency.ts's entitySatisfied
+    // already applies on the EvidenceResolver path.
+    const entityMatched = targetEntities.length === 0
+      ? factual.length > 0
+      : targetEntities.some((entity) => factual.some((i) => supportsEntity(i, entity)));
+
     const answerPolicy: AnswerPolicy = contract.sourceOwner === 'clarify'
       ? 'ask_clarification'
       : factual.length === 0
@@ -326,7 +348,7 @@ export class EvidenceOrchestrator {
       coverage: {
         hasDirectEvidence: factual.length > 0,
         propertySatisfied,
-        entityMatched: factual.length > 0,
+        entityMatched,
         sourceOwnerSatisfied,
         confidence,
       },

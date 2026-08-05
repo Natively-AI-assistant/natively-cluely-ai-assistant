@@ -414,3 +414,40 @@ export function getByPath(obj: any, path: string): any {
         .split(".")
         .reduce((o, k) => (o || {})[k], obj);
 }
+
+/**
+ * OpenAI Structured Outputs / JSON Schema mode still serializes message.content as a
+ * JSON-encoded string rather than auto-flattening it, so a responsePath pointed at
+ * that field extracts raw JSON text (e.g. '{"bullet_points": ["a", "b"]}') instead of
+ * the intended array. Detect that shape and render it as text; returns null if the
+ * string isn't JSON or doesn't match a recognizable list shape, so the caller can
+ * fall back to the raw string untouched.
+ */
+export function flattenStructuredJsonAnswer(answer: string): string | null {
+    let parsed: any;
+    try {
+        parsed = JSON.parse(answer);
+    } catch {
+        return null;
+    }
+
+    const toBulletList = (items: any[]): string =>
+        items.map(item => `- ${typeof item === 'string' ? item : JSON.stringify(item)}`).join('\n');
+
+    if (Array.isArray(parsed)) {
+        return toBulletList(parsed);
+    }
+
+    if (parsed && typeof parsed === 'object') {
+        const arrayValues = Object.values(parsed).filter(v => Array.isArray(v)) as any[][];
+        if (arrayValues.length === 1) {
+            return toBulletList(arrayValues[0]);
+        }
+        const keys = Object.keys(parsed);
+        if (keys.length === 1 && typeof parsed[keys[0]] === 'string') {
+            return parsed[keys[0]];
+        }
+    }
+
+    return null;
+}

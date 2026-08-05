@@ -1,6 +1,7 @@
 import { BrowserWindow, screen, app } from "electron"
 import { WindowHelper } from "./WindowHelper"
 import path from "node:path"
+import { attachNoActivate } from "./utils/windowsFocusPolicy"
 
 const isDev = process.env.NODE_ENV === "development"
 
@@ -35,6 +36,15 @@ export class SettingsWindowHelper {
     private offsetX: number = 0
     private offsetY: number = 0
 
+    // When opened from the MEETING OVERLAY, the anchor is stored relative to
+    // the PANEL (offsetXFromPanel is measured from the panel's left edge =
+    // overlay.x + live left margin), not the raw window — the panel animates
+    // 600↔732 centered inside the fixed overlay window, so a window-relative
+    // offset would leave the dropdown behind when the width spring runs.
+    // WindowHelper.repositionOverlayPopovers() drives repositionForOverlay()
+    // on every overlay move/resize and panel-width anchor update.
+    private overlayAnchor: { offsetXFromPanel: number; offsetY: number } | null = null
+
     private lastBlurTime: number = 0
     private ignoreBlur: boolean = false;
 
@@ -64,6 +74,19 @@ export class SettingsWindowHelper {
             const bounds = mainWindow.getBounds();
             this.offsetX = x - bounds.x;
             this.offsetY = y - (bounds.y + bounds.height);
+            // Overlay-anchored open: remember the panel-relative offset so the
+            // dropdown follows the panel through width springs, drags, and
+            // content-height growth.
+            const overlayWin = this.windowHelper?.getOverlayWindow?.();
+            if (overlayWin && mainWindow === overlayWin) {
+                const margin = this.windowHelper?.getOverlayPanelLeftMargin?.() ?? 0;
+                this.overlayAnchor = {
+                    offsetXFromPanel: x - bounds.x - margin,
+                    offsetY: y - (bounds.y + bounds.height),
+                };
+            } else {
+                this.overlayAnchor = null;
+            }
         }
 
         if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
@@ -143,6 +166,18 @@ export class SettingsWindowHelper {
         }
     }
 
+    // Overlay-anchored variant: x tracks the PANEL's left edge (overlay.x +
+    // live margin), y tracks the overlay's bottom edge. Only applies when the
+    // dropdown was opened from the overlay.
+    public repositionForOverlay(overlayBounds: Electron.Rectangle, panelLeftMargin: number): void {
+        if (!this.overlayAnchor) return;
+        if (!this.settingsWindow || !this.settingsWindow.isVisible() || this.settingsWindow.isDestroyed()) return;
+        this.settingsWindow.setPosition(
+            Math.round(overlayBounds.x + panelLeftMargin + this.overlayAnchor.offsetXFromPanel),
+            Math.round(overlayBounds.y + overlayBounds.height + this.overlayAnchor.offsetY),
+        );
+    }
+
     public closeWindow(): void {
         if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
             this.settingsWindow.hide()
@@ -151,6 +186,9 @@ export class SettingsWindowHelper {
     }
 
     private emitVisibilityChange(isVisible: boolean): void {
+        // Drive the overlay click-catcher: an overlay-anchored settings
+        // dropdown must be dismissible by clicking anywhere outside Natively.
+        this.windowHelper?.notifyOverlayPopover?.('settings', isVisible && this.overlayAnchor !== null);
         const mainWindow = this.windowHelper?.getMainWindow() ?? null;
         if (!mainWindow) {
             console.warn('[SettingsWindowHelper] settings-visibility-changed dropped — no main window bound yet.');
@@ -201,6 +239,14 @@ export class SettingsWindowHelper {
         }
 
         this.settingsWindow = new BrowserWindow(windowSettings)
+        // Windows counterpart of the NSPanel stealth attributes applied below
+        // on macOS: WS_EX_NOACTIVATE so opening/clicking the settings popover
+        // mid-meeting never steals foreground focus from the meeting app.
+        // Typing in its fields is granted transiently by the preload focusin
+        // bridge (see windowsFocusPolicy). Dismissal does not rely on 'blur'
+        // for the never-focused case — the overlay popover click-catcher
+        // handles outside clicks on all platforms. No-op on macOS/Linux.
+        attachNoActivate(this.settingsWindow)
 
         if (process.platform === "darwin") {
             this.settingsWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })

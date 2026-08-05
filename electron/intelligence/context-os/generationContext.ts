@@ -43,6 +43,18 @@ export interface ContextOsGenerationContext {
   renderedEvidenceManifest?: RenderedEvidenceManifest;
   /** Written only at the final prompt boundary; reused by E2E/audit callers. */
   finalPromptValidation?: FinalPromptEvidenceValidation;
+  /**
+   * Root-cause fix (2026-07-23): the RAW retrieved-context block
+   * (`<active_mode_retrieved_context>` string, or the typed pack rendered to
+   * its legacy XML shape) that the generation call actually used, written
+   * unconditionally by _streamChatInner regardless of whether a typed pack
+   * governs this turn. Callers that need the retrieved block for a post-
+   * stream validator (e.g. ipcHandlers.ts's doc-grounded gate) should prefer
+   * this over re-retrieving independently — a second retrieval uses
+   * different query expansion / budget params and can validate the answer
+   * against evidence it was never actually grounded in.
+   */
+  retrievedBlockRaw?: string;
 }
 
 /**

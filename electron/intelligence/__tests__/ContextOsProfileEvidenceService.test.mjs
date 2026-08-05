@@ -69,6 +69,8 @@ test('INTERVIEW: "what is my best project?" works through the facade', () => {
   const pack = service.retrieveEvidence({ question: 'What is my best project?', contract, profile: PROFILE, jobDescription: JD, answerType: 'project_answer' });
   assert.ok(pack.items.length > 0, 'expected profile evidence items');
   assert.ok(pack.items.every((i) => i.sourceOwner === 'profile'));
+  assert.ok(pack.items.some((i) => i.sourceKind === 'profile_project'),
+    `project evidence must retain its canonical profile_project kind, got: ${pack.items.map((i) => i.sourceKind).join(', ')}`);
   assert.equal(pack.coverage.sourceOwnerSatisfied, true);
 });
 
