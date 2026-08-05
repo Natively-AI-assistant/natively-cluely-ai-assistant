@@ -28,14 +28,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import Module from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-license-'));
 process.env.NATIVELY_TEST_USERDATA = USER_DATA;
 
 const LICENSE_PATH = path.join(USER_DATA, 'license.enc');
 
-// Redirect require('electron') to the stub before loading the bundle.
-const stubPath = path.resolve('electron/services/__tests__/__electron_license_stub.mjs');
+// Redirect require('electron') to the stub before loading the bundle. Resolved
+// relative to THIS file, not process.cwd() — the runner's working directory is
+// not something a test may assume.
+const stubPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '__electron_license_stub.mjs');
 const originalResolve = Module._resolveFilename;
 Module._resolveFilename = function (request, ...rest) {
   if (request === 'electron') return stubPath;
@@ -80,8 +83,36 @@ function freshManager() {
   return LicenseManager.getInstance();
 }
 
+/** A /v1/pro/verify response granting Pro — the only shape that reaches storeLicense(). */
+const PRO_VERIFY_OK = { status: 200, body: { ok: true, has_pro: true, plan: 'ultra' } };
+
+/**
+ * Run `fn` with globalThis.fetch answering /v1/pro/verify locally.
+ *
+ * A unit test must never call api.natively.software. Outside this helper fetch
+ * is replaced by a throwing stub, so any path that reaches the network fails
+ * loudly here instead of depending on a live server (and on the tester being
+ * online) to reach its verdict.
+ */
+async function withStubbedFetch({ status, body }, fn) {
+  const previous = globalThis.fetch;
+  globalThis.fetch = async () => ({ status, json: async () => body });
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = previous;
+  }
+}
+
+const originalFetch = globalThis.fetch;
 beforeEach(() => {
   fs.rmSync(LICENSE_PATH, { force: true });
+  globalThis.fetch = async (url) => {
+    throw new Error(`unexpected network call to ${url} — stub it with withStubbedFetch()`);
+  };
+});
+after(() => {
+  globalThis.fetch = originalFetch;
 });
 
 before(() => {
@@ -193,36 +224,99 @@ describe('native module absent: activateWithApiKey must not clobber a perpetual 
     assert.deepEqual(fs.readFileSync(LICENSE_PATH), before);
   });
 
-  test('protection applies only while ownership is UNVERIFIABLE, not to proven-foreign licenses', () => {
-    // With no native module we cannot tell whether a gumroad license is this
-    // user's, so we protect it. When getHardwareId IS available and the stored
-    // HWID does not match, the license is positively foreign — a stale
-    // license.enc restored from another machine's backup. It grants nothing
-    // here, and protecting it would block the user's own API-key activation
-    // with no visible error (the skip path surfaces no UI message).
-    //
-    // Asserted through peekStoredProvider directly: the native module is absent
-    // in this process, so the mismatch branch cannot be reached end-to-end here.
-    // This pins the intent so the branch is not "simplified" away later.
-    const src = fs.readFileSync(
-      path.resolve('premium/electron/services/LicenseManager.ts'),
-      'utf8',
-    );
-    const body = src.slice(src.indexOf('private peekStoredProvider'));
-    assert.match(
-      body.slice(0, 900),
-      /provider !== 'natively_api' && getHardwareId && license\.hwid !== getHardwareId\(\)/,
-      'peekStoredProvider must release protection for a provably-foreign license',
-    );
-  });
+  // The proven-foreign case — where protection must be RELEASED — needs
+  // getHardwareId available, which cannot happen in this process. It is covered
+  // behaviourally in LicenseNativeModulePresent.test.mjs. (It used to be
+  // approximated here by regex-matching LicenseManager.ts; that assertion could
+  // not fail for the right reason and is gone.)
 
   test('an existing natively_api license is NOT protected — reactivation must work', async () => {
     // Overwriting one API license with another is the supported reinstall /
     // key-rotation path; only perpetual licenses are sacred. This must reach the
     // network call rather than short-circuiting to skipped.
     writeLicense('natively_api', { plan: 'ultra' });
-    const result = await freshManager().activateWithApiKey('natively_sk_some_other_key');
+    const result = await withStubbedFetch(PRO_VERIFY_OK, () =>
+      freshManager().activateWithApiKey('natively_sk_some_other_key'),
+    );
     assert.notEqual(result.skipped, true, 'API-plan reactivation must not be skipped');
+    assert.equal(result.success, true);
+  });
+});
+
+describe('native module absent: a license.enc that cannot be decrypted', () => {
+  // Overwrite protection is decrypt-based, so a file it cannot read looks exactly
+  // like free space. Refusing on it would be worse than letting the write
+  // through: a genuinely corrupt file would lock the user out of activating at
+  // all, with no local way to clear it.
+  //
+  // An earlier attempt kept a copy of the file aside first. That is gone — it
+  // made things worse, not better (decryptable credentials left behind that a
+  // revocation never cleaned up, and an eviction rule that discarded the very
+  // license it existed to protect). The one genuinely irreplaceable thing in a
+  // replaced license is a Dodo activation slot, and that is now freed directly
+  // at the moment of a deliberate swap — see LicenseNativeModulePresent.
+  const UNDECRYPTABLE = Buffer.from('v10\x00\x01ciphertext-from-a-key-we-no-longer-have', 'utf8');
+
+  test('activation proceeds — an unreadable file must not lock the user out', async () => {
+    fs.writeFileSync(LICENSE_PATH, UNDECRYPTABLE);
+    const result = await withStubbedFetch(PRO_VERIFY_OK, () =>
+      freshManager().activateWithApiKey('natively_sk_my_key'),
+    );
+    assert.equal(result.success, true, 'a file nobody can read must not block activation');
+    assert.notEqual(result.skipped, true);
+  });
+
+  test('no stray copies are left in userData', async () => {
+    // The activation replaces license.enc and writes nothing else. Copies of an
+    // encrypted license are restorable into a working entitlement and survive
+    // every teardown path, so the directory must stay clean.
+    fs.writeFileSync(LICENSE_PATH, UNDECRYPTABLE);
+
+    await withStubbedFetch(PRO_VERIFY_OK, () =>
+      freshManager().activateWithApiKey('natively_sk_my_key'),
+    );
+
+    assert.deepEqual(
+      fs.readdirSync(USER_DATA).sort(),
+      ['license.enc'],
+      'activation left extra files behind',
+    );
+  });
+
+  test('protection is enforced at the write, after the network round trip', async () => {
+    // The overwrite decision used to be taken before an up-to-8s call to
+    // /v1/pro/verify, and it rests on whether license.enc decrypts — not a stable
+    // property. Chromium exposes a transient "temporarily unavailable" decrypt
+    // state that the synchronous safeStorage API cannot report, so a perpetual
+    // license can be unreadable when the decision is made and readable by the time
+    // the write happens. storeLicense() runs the guard itself, so there is no
+    // window to lose. The flip is staged inside the fetch stub, which runs at
+    // exactly that point.
+    fs.writeFileSync(LICENSE_PATH, UNDECRYPTABLE);
+
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      writeLicense('gumroad');
+      return { status: 200, json: async () => PRO_VERIFY_OK.body };
+    };
+
+    let result;
+    try {
+      result = await freshManager().activateWithApiKey('natively_sk_my_key');
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+
+    assert.equal(
+      result.skipped,
+      true,
+      'a perpetual license that became readable mid-activation must still be protected',
+    );
+    assert.equal(
+      JSON.parse(fs.readFileSync(LICENSE_PATH, 'utf8').replace(/^ENC:/, '')).provider,
+      'gumroad',
+      'the perpetual license was overwritten by the in-flight activation',
+    );
   });
 });
 

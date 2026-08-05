@@ -7,10 +7,15 @@
 //
 // getAppPath() deliberately points at a directory that does not exist so
 // nativeModuleLoader's candidate paths all miss and loadNativeModule() returns
-// null. That is the exact condition under test — a machine where the Rust
-// binary fails to load (unbuilt dev checkout, ASAR unpack failure, or AV
-// quarantine on Windows) — and pinning it here keeps the test deterministic on
-// machines that DO have the binary built.
+// null. That is the exact condition under test in LicenseNativeModuleAbsent —
+// a machine where the Rust binary fails to load (unbuilt dev checkout, ASAR
+// unpack failure, or AV quarantine on Windows) — and pinning it here keeps the
+// test deterministic on machines that DO have the binary built.
+//
+// LicenseNativeModulePresent reuses this same stub for the OPPOSITE state: it
+// redirects the loader's require(<abs>.node) to __native_module_stub.cjs, so the
+// candidate paths still miss on disk but the require resolves anyway. Keep this
+// file's app surface neutral — it is shared by both.
 import os from 'node:os';
 import path from 'node:path';
 

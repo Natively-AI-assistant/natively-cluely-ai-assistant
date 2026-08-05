@@ -3,6 +3,12 @@ name: Build Smoke
 on:
   pull_request:
   workflow_dispatch:
+  # MUST live here, not on the job. `schedule` is not a valid job key, and an
+  # unknown key makes GitHub reject the whole workflow at parse time — every run
+  # since it was added completed with zero jobs, so no PR has actually been
+  # smoke-tested. Verified: three most recent runs each report total_count 0.
+  schedule:
+    - cron: '0 9 * * 1' # Every Monday at 09:00 UTC
 
 jobs:
   electron-entry-smoke:
@@ -66,15 +72,35 @@ jobs:
       - name: Run src/lib unit tests
         run: npm run test:lib
 
+  # NO WINDOWS JOB, deliberately. One was drafted and removed before merge: it
+  # could not pass and could not test anything. `npm run typecheck:electron`
+  # fails on any runner without the premium submodule, because
+  # electron/tsconfig.json includes '../premium/electron/**/*.ts' and
+  # resolveCompanySearchProvider.ts imports a type from it — actions/checkout
+  # cannot fetch that private submodule with the default token. And the only
+  # Windows-runnable suite, `npm run test:lib`, silently matches zero files
+  # there: npm runs scripts through cmd.exe, which does not strip the single
+  # quotes around the node --test glob, so the step goes green having run
+  # nothing. A red-or-vacuous check is worse than an absent one — it reports
+  # coverage that does not exist.
+  #
+  # To add it for real, all three are needed:
+  #   1. a PAT with read access to natively-premium as SUBMODULE_TOKEN, and
+  #      `submodules: true` + `token:` on the checkout step;
+  #   2. double quotes (or a cross-platform glob runner) in the test:lib script;
+  #   3. a check that the postinstall native-module step produces a win32 binary.
+  # Until then, nothing validates the Windows half of this app, including the
+  # secure-storage, native-module-loading and userData-path behaviour that
+  # differs most between the two platforms.
+
   api-smoke:
-    # Runs weekly (Monday 09:00 UTC) and on demand via workflow_dispatch.
-    # Requires secrets: NATIVELY_API_KEY (or NATIVELY_TRIAL_TOKEN) set in repo.
-    # Without credentials the suite is skipped cleanly via the env gate.
+    # Runs weekly (Monday 09:00 UTC, see the schedule trigger above) and on
+    # demand via workflow_dispatch. Requires secrets: NATIVELY_API_KEY (or
+    # NATIVELY_TRIAL_TOKEN) set in repo. Without credentials the suite is
+    # skipped cleanly via the env gate.
     name: API Smoke (weekly)
     runs-on: macos-latest
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    schedule:
-      - cron: '0 9 * * 1'  # Every Monday at 09:00 UTC
 
     steps:
       - name: Checkout
