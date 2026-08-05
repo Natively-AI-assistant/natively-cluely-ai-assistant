@@ -2407,6 +2407,15 @@ export class AppState {
         const knowledgeDb = new KnowledgeDatabaseManagerClass(sqliteDb);
         this.knowledgeOrchestrator = new KnowledgeOrchestratorClass(knowledgeDb);
 
+        // Role Insight owns its own tables in the same SQLite file. It needs the
+        // raw handle, which KnowledgeDatabaseManager does not expose, so it is
+        // attached here. Guarded: a failure disables only Role Insight.
+        try {
+          this.knowledgeOrchestrator.attachRoleInsight?.(sqliteDb);
+        } catch (e) {
+          console.warn('[AppState] Role Insight attach skipped:', e);
+        }
+
         // Wire up LLM functions
         const llmHelper = this.processingHelper.getLLMHelper();
 

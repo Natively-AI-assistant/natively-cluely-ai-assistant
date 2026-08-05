@@ -3,6 +3,20 @@ name: Build Smoke
 on:
   pull_request:
   workflow_dispatch:
+  # MUST live here, not on the job. `schedule` is not a valid job key, and an
+  # unknown key makes GitHub reject the whole workflow at parse time — every run
+  # since it was added completed with zero jobs, so no PR has actually been
+  # smoke-tested. Verified: three most recent runs each report total_count 0.
+  #
+  # Moving it makes the workflow PARSE; it does not yet make it PASS. Both jobs
+  # need the private `premium` submodule (electron/tsconfig.json includes
+  # '../premium/electron/**/*.ts', and esbuild bundles require('../premium/…')
+  # calls), which actions/checkout cannot fetch with the default token. Until a
+  # PAT with read access to natively-premium is added as SUBMODULE_TOKEN and the
+  # checkout steps get `submodules: true` + `token:`, expect the jobs to fail at
+  # a named step — which is visible and actionable, unlike a run with zero jobs.
+  schedule:
+    - cron: '0 9 * * 1' # Every Monday at 09:00 UTC
 
 jobs:
   electron-entry-smoke:
@@ -112,14 +126,13 @@ jobs:
         run: npm run test:scripts
 
   api-smoke:
-    # Runs weekly (Monday 09:00 UTC) and on demand via workflow_dispatch.
-    # Requires secrets: NATIVELY_API_KEY (or NATIVELY_TRIAL_TOKEN) set in repo.
-    # Without credentials the suite is skipped cleanly via the env gate.
+    # Runs weekly (Monday 09:00 UTC, see the schedule trigger above) and on
+    # demand via workflow_dispatch. Requires secrets: NATIVELY_API_KEY (or
+    # NATIVELY_TRIAL_TOKEN) set in repo. Without credentials the suite is
+    # skipped cleanly via the env gate.
     name: API Smoke (weekly)
     runs-on: macos-latest
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    schedule:
-      - cron: '0 9 * * 1'  # Every Monday at 09:00 UTC
 
     steps:
       - name: Checkout

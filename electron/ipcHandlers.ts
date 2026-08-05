@@ -10761,6 +10761,346 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // ==========================================
+  // Role Insight IPC Handlers
+  // ==========================================
+  //
+  // Every handler resolves the service through the orchestrator and returns a
+  // structured {success,...} envelope rather than throwing, matching the rest of
+  // the Profile Intelligence surface. `error` strings here are user-facing —
+  // they render directly in the panel's error state.
+
+  const getRoleInsightService = (): any | null => {
+    const orchestrator = appState.getKnowledgeOrchestrator();
+    if (!orchestrator || typeof orchestrator.getRoleInsightService !== 'function') return null;
+    return orchestrator.getRoleInsightService();
+  };
+
+  safeHandle('roleInsight:get-status', async () => {
+    try {
+      const service = getRoleInsightService();
+      if (!service) {
+        // F10 (code review 2026-08-05): fabricating hasResume:false here made
+        // an attach failure (e.g. locked SQLite at startup) render as
+        // "No résumé yet — add it in Identity" for a user whose résumé is
+        // fine, sending them on a futile re-upload loop. Report the REAL
+        // source presence from the orchestrator and let available:false carry
+        // the actual condition.
+        let hasResume = false;
+        let hasJobDescription = false;
+        try {
+          const st = appState.getKnowledgeOrchestrator()?.getStatus?.();
+          hasResume = !!st?.hasResume;
+          hasJobDescription = !!st?.hasActiveJD;
+        } catch { /* orchestrator itself unavailable — falses are then true */ }
+        return {
+          available: false,
+          hasResume, hasJobDescription, hasAnalysis: false,
+          analysing: false, stage: null, outdated: false, outdatedReasons: [],
+          resumeName: '', jdTitle: '', jdCompany: '',
+        };
+      }
+      return { available: true, ...service.getStatus() };
+    } catch (error: any) {
+      console.error('[IPC] roleInsight:get-status error:', error);
+      return { available: false, error: error.message };
+    }
+  });
+
+  safeHandle('roleInsight:get-report', async (event, analysisId?: string) => {
+    try {
+      const service = getRoleInsightService();
+      if (!service) return { success: false, error: 'Role Insight is not available in this build.' };
+      const report = service.getReport(typeof analysisId === 'string' ? analysisId : undefined);
+
+      // Auto-refresh (2026-08-04): when the stored analysis no longer matches
+      // the live sources, re-run in the background instead of parking an
+      // "Out of date" banner on the user. The service is single-flight and
+      // attempts each source state at most once, so a failing analysis cannot
+      // loop. License-gated like manual analyse — this spends tokens.
+      if (report?.outdated && isProOrTrialActive() && service.maybeAutoRefresh()) {
+        const sender = event.sender;
+        const started = Date.now();
+        const pump = setInterval(() => {
+          try {
+            const st = service.getStatus();
+            const done = !st.analysing;
+            if (!sender.isDestroyed()) {
+              sender.send('role-insight-progress', { stage: st.stage, analysing: st.analysing });
+            }
+            // Self-clears on completion (after emitting the final
+            // analysing:false, which is the renderer's refresh signal) or on a
+            // 5-minute hard cap so a hung run can never leak the interval.
+            if (done || sender.isDestroyed() || Date.now() - started > 300_000) {
+              clearInterval(pump);
+            }
+          } catch {
+            clearInterval(pump);
+          }
+        }, 400);
+      }
+
+      return { success: true, report };
+    } catch (error: any) {
+      console.error('[IPC] roleInsight:get-report error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('roleInsight:list-history', async () => {
+    try {
+      const service = getRoleInsightService();
+      if (!service) return { success: false, error: 'Role Insight is not available.', history: [] };
+      return { success: true, history: service.listHistory(20) };
+    } catch (error: any) {
+      return { success: false, error: error.message, history: [] };
+    }
+  });
+
+  safeHandle('roleInsight:analyse', async (event, options: { jobUrl?: string; skipExternalVerification?: boolean } = {}) => {
+    try {
+      if (!isProOrTrialActive()) {
+        return {
+          success: false,
+          error: 'Pro license required. Please activate a license key to use Role Insight.',
+        };
+      }
+      const service = getRoleInsightService();
+      if (!service) return { success: false, error: 'Role Insight is not available in this build.' };
+
+      const jobUrl = typeof options?.jobUrl === 'string' && options.jobUrl.trim() ? options.jobUrl.trim() : undefined;
+
+      // Stream stage changes to the renderer so the analysing state shows real
+      // progress. Polled via get-status too, so a dropped event is not fatal.
+      const sender = event.sender;
+      const pump = setInterval(() => {
+        try {
+          if (sender.isDestroyed()) return;
+          const st = service.getStatus();
+          sender.send('role-insight-progress', { stage: st.stage, analysing: st.analysing });
+        } catch { /* renderer gone */ }
+      }, 400);
+
+      try {
+        const report = await service.analyse({
+          jobUrl,
+          skipExternalVerification: options?.skipExternalVerification === true,
+        });
+        return { success: true, report };
+      } finally {
+        // F4 (code review 2026-08-05): the interval is cleared synchronously
+        // here, so without an explicit final event no tick ever observes
+        // analysing:false — and a panel that REMOUNTED mid-run (its awaited
+        // promise died with the old mount) treats that falling edge as its
+        // only completion signal, staying stuck on the stage screen forever.
+        clearInterval(pump);
+        try {
+          if (!sender.isDestroyed()) {
+            const st = service.getStatus();
+            sender.send('role-insight-progress', { stage: st.stage, analysing: st.analysing });
+          }
+        } catch { /* renderer gone */ }
+      }
+    } catch (error: any) {
+      if (error?.name === 'AnalysisCancelledError') {
+        return { success: false, cancelled: true, error: 'Analysis cancelled.' };
+      }
+      if (error?.name === 'MissingSourceError') {
+        return { success: false, missingSources: error.missing, error: error.message };
+      }
+      const service = getRoleInsightService();
+      const diag = service?.getLastError?.()?.diagnosticId;
+      console.error('[IPC] roleInsight:analyse error:', error);
+      return {
+        success: false,
+        error: error?.message || 'The analysis could not be completed.',
+        diagnosticId: diag,
+      };
+    }
+  });
+
+  safeHandle('roleInsight:cancel', async () => {
+    try {
+      getRoleInsightService()?.cancel();
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('roleInsight:apply-correction', async (_, args: any) => {
+    try {
+      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      const service = getRoleInsightService();
+      if (!service) return { success: false, error: 'Role Insight is not available.' };
+      if (!args?.analysisId || !args?.kind) return { success: false, error: 'Invalid correction request.' };
+      const report = service.applyCorrection({
+        analysisId: String(args.analysisId),
+        requirementId: args.requirementId ? String(args.requirementId) : null,
+        kind: String(args.kind),
+        detail: typeof args.detail === 'string' ? args.detail : undefined,
+        evidenceText: typeof args.evidenceText === 'string' ? args.evidenceText : undefined,
+        priority: args.priority,
+        mandatory: args.mandatory === true,
+        evidenceId: typeof args.evidenceId === 'string' ? args.evidenceId : undefined,
+      });
+      if (!report) return { success: false, error: 'That analysis no longer exists.' };
+      return { success: true, report };
+    } catch (error: any) {
+      console.error('[IPC] roleInsight:apply-correction error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('roleInsight:answer-clarification', async (_, args: any) => {
+    try {
+      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      const service = getRoleInsightService();
+      if (!service) return { success: false, error: 'Role Insight is not available.' };
+      if (!args?.analysisId || !args?.requirementId || !args?.answer) {
+        return { success: false, error: 'Invalid clarification request.' };
+      }
+      const report = service.answerClarification({
+        analysisId: String(args.analysisId),
+        requirementId: String(args.requirementId),
+        answer: String(args.answer),
+        detail: typeof args.detail === 'string' ? args.detail : undefined,
+      });
+      if (!report) return { success: false, error: 'That analysis no longer exists.' };
+      return { success: true, report };
+    } catch (error: any) {
+      console.error('[IPC] roleInsight:answer-clarification error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Distinct from apply-correction on purpose: this is the ONLY route by which
+  // anything the user says inside Role Insight becomes permanent Profile
+  // Intelligence evidence, so the UI can gate it behind an explicit second step.
+  safeHandle('roleInsight:save-to-profile', async (_, args: any) => {
+    try {
+      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      const service = getRoleInsightService();
+      if (!service) return { success: false, error: 'Role Insight is not available.' };
+      if (!args?.analysisId || !args?.requirementId || !args?.claim) {
+        return { success: false, error: 'Invalid save request.' };
+      }
+      return await service.saveToProfile({
+        analysisId: String(args.analysisId),
+        requirementId: String(args.requirementId),
+        claim: String(args.claim),
+      });
+    } catch (error: any) {
+      console.error('[IPC] roleInsight:save-to-profile error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Paste a job description as text. Written to a temp file and pushed through
+  // the SAME orchestrator.ingestDocument path as an uploaded file, so the
+  // canonical Profile Intelligence data model is never bypassed. The temp path
+  // is registered by main (not supplied by the renderer), so the
+  // selected-path allowlist is respected rather than worked around.
+  safeHandle('roleInsight:paste-jd', async (_, text: string) => {
+    let tempPath: string | null = null;
+    try {
+      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (typeof text !== 'string' || text.trim().length < 200) {
+        return { success: false, error: 'Paste the full job description — this looks too short to analyse.' };
+      }
+      const orchestrator = appState.getKnowledgeOrchestrator();
+      if (!orchestrator) return { success: false, error: 'Knowledge engine not initialized.' };
+
+      const os = require('os');
+      const fsp = require('fs/promises');
+      tempPath = path.join(os.tmpdir(), `natively-jd-${Date.now()}.txt`);
+      await fsp.writeFile(tempPath, text, 'utf8');
+      registerSelectedProfilePath(tempPath);
+
+      const resolved = consumeSelectedProfilePath(tempPath);
+      if (!resolved) return { success: false, error: 'Could not stage the pasted job description.' };
+
+      const { DocType } = require('../premium/electron/knowledge/types');
+      const result = await orchestrator.ingestDocument(resolved, DocType.JD);
+      if (result?.success) {
+        try {
+          orchestrator.setKnowledgeMode(true);
+          const { SettingsManager } = require('./services/SettingsManager');
+          SettingsManager.getInstance().set('knowledgeMode', true);
+        } catch (e) {
+          console.warn('[IPC] roleInsight:paste-jd: failed to auto-enable knowledge mode', e);
+        }
+      }
+      return result;
+    } catch (error: any) {
+      console.error('[IPC] roleInsight:paste-jd error:', error);
+      return { success: false, error: error.message };
+    } finally {
+      if (tempPath) {
+        try { require('fs').unlinkSync(tempPath); } catch { /* best effort */ }
+      }
+    }
+  });
+
+  // Import a job description from a URL via Tavily extraction, then ingest it
+  // through the normal path. Fails with a clear message rather than silently
+  // falling back, so the user knows the URL was not read.
+  safeHandle('roleInsight:import-jd-url', async (_, url: string) => {
+    let tempPath: string | null = null;
+    try {
+      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (typeof url !== 'string' || !/^https?:\/\//i.test(url.trim())) {
+        return { success: false, error: 'Enter a valid job posting URL starting with http:// or https://' };
+      }
+      const orchestrator = appState.getKnowledgeOrchestrator();
+      if (!orchestrator) return { success: false, error: 'Knowledge engine not initialized.' };
+
+      const { resolveCompanySearchProvider } = require('./services/resolveCompanySearchProvider');
+      const provider = resolveCompanySearchProvider();
+      if (!provider || typeof provider.extractUrl !== 'function') {
+        return {
+          success: false,
+          error: 'Reading a job URL needs a Tavily API key. Add one under Tavily Search, or paste the job description instead.',
+        };
+      }
+
+      const { resolveFromUrl } = require('../premium/electron/knowledge/roleInsight/JdSourceResolver');
+      const resolvedJd = await resolveFromUrl(url.trim(), provider, '');
+      if (!resolvedJd) {
+        return {
+          success: false,
+          error: 'That page could not be read. Paste the job description text instead.',
+        };
+      }
+
+      const os = require('os');
+      const fsp = require('fs/promises');
+      tempPath = path.join(os.tmpdir(), `natively-jd-${Date.now()}.txt`);
+      await fsp.writeFile(tempPath, resolvedJd.text, 'utf8');
+      registerSelectedProfilePath(tempPath);
+      const staged = consumeSelectedProfilePath(tempPath);
+      if (!staged) return { success: false, error: 'Could not stage the imported job description.' };
+
+      const { DocType } = require('../premium/electron/knowledge/types');
+      const result = await orchestrator.ingestDocument(staged, DocType.JD);
+      if (result?.success) {
+        try {
+          orchestrator.setKnowledgeMode(true);
+          const { SettingsManager } = require('./services/SettingsManager');
+          SettingsManager.getInstance().set('knowledgeMode', true);
+        } catch { /* non-fatal */ }
+      }
+      return { ...result, sourceUrl: url.trim() };
+    } catch (error: any) {
+      console.error('[IPC] roleInsight:import-jd-url error:', error);
+      return { success: false, error: error.message };
+    } finally {
+      if (tempPath) {
+        try { require('fs').unlinkSync(tempPath); } catch { /* best effort */ }
+      }
+    }
+  });
+
+  // ==========================================
   // Tavily Search API Credentials
   // ==========================================
 

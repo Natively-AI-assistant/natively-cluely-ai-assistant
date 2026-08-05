@@ -467,3 +467,11 @@ docs/*
 !docs/VISION_MODEL_BENCHMARK.md
 benchmark-results/
 
+
+# Role Insight visual harness — generated artifacts (regenerate with
+# `electron scripts/dump-role-insight-fixture.mjs` + `node scripts/role-insight-harness/build.mjs`)
+/scripts/.role-insight-fixture.json
+/scripts/role-insight-harness/dist/
+
+# Unbuilt feature PRDs — planning documents, never shipped to the public repo
+/upcoming/
