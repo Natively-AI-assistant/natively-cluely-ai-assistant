@@ -91,13 +91,18 @@ This copy of the flag is used for conversation-history routing and WhatToAnswerL
 ```diff
 + import { documentGroundedFromContract } from '../services/modeSourceContract';
   // …
-  const documentGroundedCustomModeActive =
+- const documentGroundedCustomModeActive =
 -   input.activeMode?.documentGroundedCustomModeActive === true;
-+   documentGroundedFromContract(
-+     input.activeMode?.sourceContract,
-+     input.activeMode?.hasReferenceFiles === true,
-+   );
++ const documentGroundedCustomModeActive =
++   input.activeMode?.sourceContract != null
++     ? documentGroundedFromContract(
++         input.activeMode.sourceContract,         // non-optional after the null check
++         input.activeMode?.hasReferenceFiles === true,
++       )
++     : false;   // no contract → treat as not doc-grounded
 ```
+
+> **Why the null guard?** `input.activeMode?.sourceContract` has type `ModeSourceContract | undefined`. `documentGroundedFromContract` requires a concrete `ModeSourceContract` as its first argument and immediately reads `.sourceAuthority`, which would throw at runtime (or fail TypeScript checking) when the contract is absent. The ternary ensures the safe-guard function is only invoked when the contract exists.
 
 ### Fix B — `contextRoute.ts` (conversation-history / WTA routing)
 

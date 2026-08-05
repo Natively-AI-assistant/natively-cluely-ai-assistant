@@ -97,7 +97,10 @@ embed("Tell me about a project you led") · embed("Tell me about a time you show
   → cosine ≈ 0.82  ← correctly HIGH (synonymous intent, Jaccard would miss this)
 ```
 
----
+> **⚠️ Illustrative values only.** The cosine scores above (`≈ 0.31`, `≈ 0.89`, `≈ 0.82`) are
+> indicative estimates based on the model's known semantic geometry, not measurements against
+> this repository's production data. They should be validated against a labelled set of real
+> interview question pairs before being used to set thresholds. See *Threshold Calibration* below.
 
 ## Recommended Implementation: Hybrid Approach
 
@@ -137,6 +140,7 @@ export async function speculativeSimilarity(
         embeddingWorker.embed(finalQuestion),
     ]);
     const cosine = cosineSimilarity(embA, embB);
+    // ILLUSTRATIVE threshold — calibrate against real question pairs before shipping
     const SBERT_THRESHOLD = 0.65;
     return { accepted: cosine >= SBERT_THRESHOLD, score: cosine, method: 'sbert' };
 }
@@ -160,9 +164,14 @@ if (accepted) {
 
 ---
 
-## Threshold Calibration
+## Threshold Calibration ⚠️ (values below are illustrative — not yet measured)
 
-The current `SPECULATIVE_SIMILARITY_THRESHOLD` constant should be audited. If it's ≥ 0.7, Jaccard-inflated stop-word matches may be passing the gate. With the hybrid approach:
+The figures in this section are **starting-point estimates** derived from the illustrative
+cosine examples above. They must be validated against a representative corpus of real interview
+question pairs before being used in production. Treat `0.65` and `0.92` as hypotheses, not policy.
+
+The current `SPECULATIVE_SIMILARITY_THRESHOLD` constant should also be audited. If it's ≥ 0.7,
+Jaccard-inflated stop-word matches may be passing the gate. With the hybrid approach:
 
 - **Jaccard fast-accept threshold**: 0.92 (very conservative — only obvious prefix completions bypass SBERT)
 - **SBERT acceptance threshold**: 0.65 (raw cosine similarity)
@@ -193,9 +202,9 @@ The only thing that needs to change is how the similarity score is computed in t
 
 | Aspect | Current (Jaccard) | Recommended (Hybrid) |
 |--------|------------------|----------------------|
-| Antonym pairs (strengths/weaknesses) | ❌ ~0.72 — close to threshold | ✅ ~0.31 SBERT — correct reject |
+| Antonym pairs (strengths/weaknesses) | ❌ ~0.72 — close to threshold | ✅ ~0.31 SBERT — correct reject *(illustrative)* |
 | Prefix completion (partial → full) | ✅ Handled by containment blend | ✅ Still handled at fast-exit tier |
-| Synonymous rephrasing | ❌ ~0.42 — may incorrectly reject | ✅ ~0.82 SBERT — correct accept |
+| Synonymous rephrasing | ❌ ~0.42 — may incorrectly reject | ✅ ~0.82 SBERT — correct accept *(illustrative)* |
 | Latency (fast cases) | µs | µs (Jaccard fast exit) |
 | Latency (ambiguous zone) | µs | ~5–10ms (SBERT) |
 | Model size overhead | 0MB | +22MB (`all-MiniLM-L6-v2`) |

@@ -42,49 +42,59 @@ inline.forEach((c, i) => { s = s.replace(`  INL${i}  `, c); });
 When the first argument to `String.prototype.replace()` is a string and the second argument is a **replacement string**, JavaScript searches for special **dollar-sign replacement patterns** in that replacement string:
 
 - `$&` — Replaced by the matched substring (in this case, the placeholder token itself, e.g. `FENCE0`).
-- `$`` — Replaced by the portion of the string preceding the matched substring.
-- `$'` — Replaced by the portion of the string following the matched substring.
-- `$n` (where `n` is a digit) — Replaced by capturing groups.
+- `` $` `` — Replaced by the portion of the string **preceding** the matched substring.
+- `$'` — Replaced by the portion of the string **following** the matched substring.
+- `$n` (where `n` is a digit) — **Only expands when the search pattern is a regex with capturing groups.** With a literal string search there are no capturing groups, so `$1`, `$2`, etc. are left as-is and are **not** a vulnerability here.
 
 Because the code blocks (`f`, `c`) and math blocks (`m`) are **untrusted LLM outputs**, they frequently contain `$` characters. When these blocks contain dollar-sign patterns, JavaScript expands them during the replacement, corrupting the code block.
 
 ### Concrete Failure Examples
 
-#### 1. Shell Script / Bash Variables (`$1`, `$2`, `$n`)
-If the model outputs a Bash script containing command line arguments:
-```bash
-#!/bin/bash
-echo "First arg: $1"
-echo "Second arg: $2"
-```
-Because the replacement pattern is a literal string, `$1` and `$2` are interpreted as capture groups. Since there are no capturing groups in the literal string matches (`"FENCE0"`), `$1` and `$2` are replaced by **empty strings** or left partially unresolved depending on the engine context, corrupting the script:
-```bash
-#!/bin/bash
-echo "First arg: "
-echo "Second arg: "
+#### 1. jQuery / Code using `$&` (matched-substring expansion)
+
+If the model outputs JavaScript that uses `$&` — for example as a literal symbol in a regex explanation or a jQuery snippet:
+
+```javascript
+// LLM output inside a fenced code block:
+let result = str.replace(/foo/, "matched: $& done");
 ```
 
-#### 2. jQuery / Regex / Bash Run-in-Background (`$&`)
-If the model outputs Javascript regex code or jQuery operations using `$&` (which denotes the last match):
+When the pipeline restores ` CODE0 ` via `result.replace(" CODE0 ", block)`, JavaScript
+exands `$&` in `block` to the match string (` CODE0 ` itself), leaking the internal token
+into the rendered answer:
+
 ```javascript
-let pattern = /foo/;
-let replaced = text.replace(pattern, "bar $& baz");
-```
-During restoration, the JS engine replaces `$&` in the replacement string with the matched pattern (` CODE0 `). The output becomes corrupted, leaking the internal template marker:
-```javascript
-let pattern = /foo/;
-let replaced = text.replace(pattern, "bar  CODE0  baz");
+// Corrupted output:
+let result = str.replace(/foo/, "matched:  CODE0  done");
 ```
 
-#### 3. Math Formulas containing multiple `$` symbols
-If a math block contains variable names like `$x_1` or expressions with sub-scripts:
-```markdown
-We can see that $x_1 = a$ and $y_2 = b$.
+#### 2. Preceding-context expansion with `` $` ``
+
+If the model outputs a code block containing `` $` `` (the backtick form of the pre-match pattern),
+the replacement inserts everything in the output string that appears **before** the placeholder.
+This causes arbitrary text from the surrounding prose to be injected into the middle of the code block:
+
+```ts
+// LLM output:
+const s = `hello $\`world\``;
 ```
-The `$1` in `$x_1` is stripped, rendering the math incorrectly in the UI:
-```markdown
-We can see that $x_ = a$ and $y_2 = b$.
+
+```ts
+// Corrupted — preceding prose bled into the code block:
+const s = `hello The answer to your question is...world`;
 ```
+
+#### 3. Following-context expansion with `$'`
+
+Similarly, `$'` expands to everything **after** the matched placeholder, injecting the
+remainder of the answer string into the code block — a mirror image of the `` $` `` vulnerability.
+
+> **Note on `$n` patterns (Bash variables, math subscripts):** When `.replace()` is called
+> with a **literal string** as the first argument (as in this code), there are no regex
+> capturing groups. Per the ECMAScript specification, `$1`, `$2`, `$x_1`, etc. are therefore
+> left **entirely literal** in the replacement output. Bash scripts with `$1` / `$2` and math
+> formulas with `$x_1` are **not** corrupted by this mechanism. The only real danger patterns
+> are `$&`, `` $` ``, and `$'`.
 
 ---
 
