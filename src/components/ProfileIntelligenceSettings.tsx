@@ -3,9 +3,9 @@ import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
     Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star, Sparkles,
     User, CheckCircle, ArrowUpRight, ChevronRight, Paperclip, FileText,
-    GraduationCap, FolderKanban, Layers, Mail, MessageSquare,
+    GraduationCap, FolderKanban, Layers, Mail, MessageSquare, Target,
 } from 'lucide-react';
-import { PremiumUpgradeModal } from '../premium';
+import { PremiumUpgradeModal, RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
 import { CHECKOUT_URLS } from '../config/urls';
@@ -591,6 +591,10 @@ const FileUploadEmpty = ({ hint, uploading, hasAccess, onBrowse, onNeedUpgrade }
 const NAV_ITEMS = [
     { id: 'identity',    label: 'Identity',           Icon: User },
     { id: 'insights',    label: 'Profile',            Icon: FileText },
+    // Role Insight reads the résumé and JD that Profile owns, so it sits
+    // directly after it — ahead of the outbound artifacts (Company Intel,
+    // Cover Letter) that come later in the user's actual sequence.
+    { id: 'roleinsight', label: 'Role Insight',       Icon: Target },
     { id: 'company',     label: 'Company Intel',      Icon: Building2 },
     { id: 'coverletter', label: 'Cover Letter',       Icon: Mail },
     { id: 'tavily',      label: 'Tavily Search',      Icon: Globe },
@@ -2592,9 +2596,22 @@ export function ProfileIntelligenceSettings({
         );
     };
 
+    // Role Insight owns all of its own state; the panel only needs to know
+    // whether the user has access and how to jump to the sections that supply
+    // its sources. That keeps this already-large component from growing another
+    // dozen useState hooks.
+    const renderRoleInsight = () => (
+        <RoleInsightPanel
+            hasAccess={hasProfileAccess}
+            onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+            onGoToProfile={() => setActiveSection('identity')}
+        />
+    );
+
     const SECTION_RENDERERS: Record<string, () => React.ReactNode> = {
         identity: renderIdentity,
         insights: renderInsights,
+        roleinsight: renderRoleInsight,
         tavily: renderTavily,
         company: renderCompany,
         coverletter: renderCoverLetter,
