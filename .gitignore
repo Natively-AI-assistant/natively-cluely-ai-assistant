@@ -486,5 +486,4 @@ benchmark-results/
 
 # Matt / agent session artifacts (see scripts/workspace-prune.js)
 _workspace/
-.scratch/**/debug/
-.scratch/**/smoke/
+.scratch/
