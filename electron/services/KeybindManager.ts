@@ -1,6 +1,13 @@
 import { app, globalShortcut, Menu, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import {
+    type KeybindRegistrationFailures,
+    NO_REGISTRATION_FAILURES,
+    recordRegistrationOutcome,
+    beginFullRegistrationPass,
+    listRegistrationFailures,
+} from './keybindRegistrationState';
 
 export interface KeybindConfig {
     id: string;
@@ -69,6 +76,13 @@ export class KeybindManager {
     private onShortcutTriggeredCallbacks: ((actionId: string) => void)[] = [];
     private activeMode: 'launcher' | 'overlay' = 'launcher';
     private healthCheckTimer: NodeJS.Timeout | null = null;
+    // Ids whose globalShortcut.register() call did not take. Kept as state
+    // rather than fire-and-forget IPC because the first registration pass runs
+    // from the constructor — before any BrowserWindow exists — so every push at
+    // that point is sent to nobody. A renderer mounting later reads this via
+    // `keybinds:get-registration-failures` to seed its conflict UI. Rules live
+    // in keybindRegistrationState.ts so they can be tested without Electron.
+    private registrationFailures: KeybindRegistrationFailures = NO_REGISTRATION_FAILURES;
     // How often to poll that OS-registered shortcuts are still alive (ms).
     // 10 s is aggressive enough to recover within one poll cycle after a
     // passthrough toggle, sleep/wake, or workspace switch.
@@ -260,8 +274,56 @@ export class KeybindManager {
         this.broadcastUpdate();
     }
 
+    /**
+     * Records the outcome of one register() attempt and tells every live
+     * renderer about it.
+     *
+     * Both halves matter. The push clears or raises a badge in a Settings
+     * window that is already open; the map is what a Settings window opened
+     * *later* reads back, since the boot-time registration pass has no
+     * renderer to talk to. Emitting without recording was the original bug:
+     * a conflict present at launch produced no badge until the user happened
+     * to edit some unrelated shortcut and trigger a full re-registration.
+     */
+    private markRegistration(id: string, accelerator: string, ok: boolean): void {
+        const before = this.registrationFailures;
+        this.registrationFailures = recordRegistrationOutcome(before, id, accelerator, ok);
+
+        // Broadcast ONLY on a real change. recordRegistrationOutcome returns the
+        // same object reference when the outcome is unchanged — deliberately, so
+        // repeated identical verdicts do not churn state — and this used to
+        // ignore that. The health check re-tests every registered shortcut every
+        // 10 s, so a shortcut permanently held by another app meant an IPC
+        // message to every open window every 10 s for the life of the process,
+        // all of them telling the renderer something it already knew.
+        if (this.registrationFailures === before) return;
+
+        const channel = ok ? 'keybinds:registration-succeeded' : 'keybinds:registration-failed';
+        BrowserWindow.getAllWindows().forEach(win => {
+            if (!win.isDestroyed()) {
+                win.webContents.send(channel, { id, accelerator });
+            }
+        });
+    }
+
     public registerGlobalShortcuts() {
         globalShortcut.unregisterAll();
+        // Drop verdicts this pass is about to re-derive; KEEP verdicts for ids
+        // it will not attempt. The predicate mirrors the filter in the loop
+        // below, so the two cannot drift: an id is re-tested only if it is
+        // global, has a non-empty accelerator, and shouldRegister() allows it in
+        // the current mode. In launcher mode that excludes all of chat:*, whose
+        // recorded conflicts must survive — Settings is opened from the
+        // launcher, so that is precisely when the renderer reads the snapshot.
+        this.registrationFailures = beginFullRegistrationPass(
+            this.registrationFailures,
+            (id) => {
+                const kb = this.keybinds.get(id);
+                if (!kb) return true; // unknown id: nothing to preserve it for
+                if (!kb.isGlobal || !kb.accelerator || kb.accelerator.trim() === '') return true;
+                return this.shouldRegister(id);
+            },
+        );
 
         this.keybinds.forEach(kb => {
             if (kb.isGlobal && kb.accelerator && kb.accelerator.trim() !== '') {
@@ -277,22 +339,19 @@ export class KeybindManager {
                         // Let any stale "hotkey conflict" banner for this id clear itself
                         // (e.g. after the user rebinds it in Settings) instead of lingering
                         // until manually dismissed.
-                        BrowserWindow.getAllWindows().forEach(win => {
-                            if (!win.isDestroyed()) {
-                                win.webContents.send('keybinds:registration-succeeded', { id: kb.id, accelerator: acc });
-                            }
-                        });
+                        this.markRegistration(kb.id, acc, true);
                     } else {
                         console.warn(`[KeybindManager] Failed to register global shortcut (likely in use by OS): ${acc}`);
                         // Notify renderer so the UI can surface a warning to the user (issue #136)
-                        BrowserWindow.getAllWindows().forEach(win => {
-                            if (!win.isDestroyed()) {
-                                win.webContents.send('keybinds:registration-failed', { id: kb.id, accelerator: acc });
-                            }
-                        });
+                        this.markRegistration(kb.id, acc, false);
                     }
                 } catch (e) {
                     console.error(`[KeybindManager] Exception while registering global shortcut ${acc}:`, e);
+                    // A throw here is usually a malformed accelerator rather than an
+                    // OS conflict, but the user-visible symptom is identical — a
+                    // hotkey that never fires — so it earns the same badge. Leaving
+                    // this branch silent meant an unparseable combo showed nothing.
+                    this.markRegistration(kb.id, acc, false);
                 }
             }
         });
@@ -331,11 +390,21 @@ export class KeybindManager {
                 if (globalShortcut.isRegistered(acc)) {
                     recovered++;
                     console.warn(`[KeybindManager] Recovered lost shortcut: ${acc} -> ${kb.id}`);
+                    // Drop any conflict badge this id is still wearing. The health
+                    // check is the only thing that notices when the app that stole
+                    // the combo quits, so without this the user is told to rebind a
+                    // shortcut that already works again.
+                    this.markRegistration(kb.id, acc, true);
                 } else {
                     console.error(`[KeybindManager] Could not recover shortcut ${acc} -> ${kb.id} (OS conflict?)`);
+                    // Conversely, a shortcut lost *after* startup never went through
+                    // registerGlobalShortcuts() again, so this is the only place it
+                    // can be flagged.
+                    this.markRegistration(kb.id, acc, false);
                 }
             } catch (e) {
                 console.error(`[KeybindManager] Exception re-registering shortcut ${acc}:`, e);
+                this.markRegistration(kb.id, acc, false);
             }
         });
 
@@ -479,6 +548,16 @@ export class KeybindManager {
         console.log('[KeybindManager] Application menu updated');
     }
 
+    /**
+     * The current set of global shortcuts the OS refused, as
+     * `{ id, accelerator }` pairs. Reflects the live registration state for
+     * the *current* mode — an id skipped by shouldRegister() is not a
+     * conflict, it simply is not registered right now.
+     */
+    public getRegistrationFailures(): { id: string; accelerator: string }[] {
+        return listRegistrationFailures(this.registrationFailures);
+    }
+
     private broadcastUpdate() {
         // Notify main process listeners
         this.onUpdateCallbacks.forEach(cb => cb());
@@ -501,6 +580,13 @@ export class KeybindManager {
             console.log(`[KeybindManager] Set ${id} -> ${accelerator}`);
             this.setKeybind(id, accelerator);
             return true;
+        });
+
+        // Snapshot companion to the keybinds:registration-failed push. A
+        // renderer cannot rely on the push alone: the first registration pass
+        // happens in the constructor, long before any window exists.
+        ipcMain.handle('keybinds:get-registration-failures', () => {
+            return this.getRegistrationFailures();
         });
 
         ipcMain.handle('keybinds:reset', () => {

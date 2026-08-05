@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { acceleratorToKeys, keysToAccelerator } from '../utils/keyboardUtils';
 import { getPlatformShortcut, isMac } from '../utils/platformUtils';
 
@@ -141,6 +141,12 @@ export const useShortcuts = () => {
         });
     }, []);
 
+    // Actions a live event (or the user's own rebind) has already settled
+    // since mount. The startup snapshot below resolves asynchronously, so
+    // without this an event arriving mid-flight would be overwritten by the
+    // older snapshot it raced.
+    const pushSettledRef = useRef<Set<keyof ShortcutConfig>>(new Set());
+
     // Track shortcuts the OS/another app is refusing to hand over, so
     // Settings can flag them instead of leaving a silently dead hotkey.
     useEffect(() => {
@@ -148,6 +154,7 @@ export const useShortcuts = () => {
         const unsubscribe = window.electronAPI.onKeybindRegistrationFailed(({ id }) => {
             const action = BACKEND_ID_TO_ACTION[id];
             if (!action) return;
+            pushSettledRef.current.add(action);
             setConflicts(prev => {
                 if (prev.has(action)) return prev;
                 const next = new Set(prev);
@@ -159,12 +166,14 @@ export const useShortcuts = () => {
     }, []);
 
     // Clear the flag once a shortcut re-registers successfully (e.g. right
-    // after the user records a new combo for it).
+    // after the user records a new combo for it, or when the health check
+    // recovers a combo whose thief has since quit).
     useEffect(() => {
         if (!window.electronAPI?.onKeybindRegistrationSucceeded) return;
         const unsubscribe = window.electronAPI.onKeybindRegistrationSucceeded(({ id }) => {
             const action = BACKEND_ID_TO_ACTION[id];
             if (!action) return;
+            pushSettledRef.current.add(action);
             setConflicts(prev => {
                 if (!prev.has(action)) return prev;
                 const next = new Set(prev);
@@ -173,6 +182,43 @@ export const useShortcuts = () => {
             });
         });
         return unsubscribe;
+    }, []);
+
+    // Seed from main's current registration state.
+    //
+    // The two listeners above only see events fired while this hook is
+    // mounted, and the first registration pass runs from KeybindManager's
+    // constructor — before any BrowserWindow exists — so a conflict that was
+    // present at launch is broadcast to nobody. That is the common case: the
+    // rival app is usually already running when Natively starts. Without this
+    // snapshot the badges only ever appeared after the user edited some
+    // unrelated shortcut and incidentally triggered a full re-registration.
+    useEffect(() => {
+        if (!window.electronAPI?.getKeybindRegistrationFailures) return;
+        let cancelled = false;
+
+        (async () => {
+            try {
+                const failures = await window.electronAPI.getKeybindRegistrationFailures();
+                if (cancelled) return;
+                setConflicts(prev => {
+                    const next = new Set(prev);
+                    let changed = false;
+                    failures.forEach(({ id }) => {
+                        const action = BACKEND_ID_TO_ACTION[id];
+                        // A live event already has the last word for this action.
+                        if (!action || pushSettledRef.current.has(action) || next.has(action)) return;
+                        next.add(action);
+                        changed = true;
+                    });
+                    return changed ? next : prev;
+                });
+            } catch (error) {
+                console.error('Failed to fetch keybind registration failures:', error);
+            }
+        })();
+
+        return () => { cancelled = true; };
     }, []);
 
     // Load from Main Process on mount
@@ -201,7 +247,10 @@ export const useShortcuts = () => {
         // Optimistic update
         setShortcuts(prev => ({ ...prev, [actionId]: keys }));
         // Give the conflict badge a chance to clear right away instead of
-        // waiting on the round-trip to main and back.
+        // waiting on the round-trip to main and back. Marked as settled so a
+        // slow startup snapshot cannot resurrect the badge the user just
+        // cleared by rebinding.
+        pushSettledRef.current.add(actionId);
         setConflicts(prev => {
             if (!prev.has(actionId)) return prev;
             const next = new Set(prev);
