@@ -1,89 +1,70 @@
-# Question Log — SD answerType routing boundary
+# Question Log — Robust SD-routing llm-eval for interviewer intention
 
-**Topic:** When utterances should classify as `system_design_answer` (vs coding/DSA/experience/concept/product-about) so speakable DF + evals can hit ~99% correct routing.  
-**Mode:** C (automode)  
-**Budget:** 12  
+**Topic:** Expand `/llm-eval` (`evals/sd-routing`) so interviewer SD intention routes correctly via parallel LLM + deterministic front door (≥99.99% on versioned corpus).  
+**Mode:** C (auto — switched from A after user “ack, auto mode rest”)  
+**Budget:** 20  
+**Prior session:** archived as `archive/01_question_log-sd-route-boundary-20260805.md` (10/10 routing glossary verified)  
 **Research:** `00_context.md`, `00_code_patterns.md`, `00_memory.md`
 
 ## Branch Tree
 
-- [x] Positive SD routing signals
-- [x] Title / gerund / session-title forms
-- [x] False friend: experience probes
-- [x] False friend: coding / write-implement
-- [x] False friend: explain / what-is concept
-- [x] False friend: Natively product-about
-- [x] Ambiguous “how would you scale/architect …”
-- [x] Sticky SD once session armed
-- [x] Mechanism: regex vs hybrid LLM for ~99%
-- [x] Uncertain / no soft clarify type
+- [x] What “100%” / 99.99% means + LLM mechanism (parallel promote)
+- [x] Intention taxonomy / scenario classes to cover (`sd-eval-corpus-v1`)
+- [x] Failure harvest sources (`sd-eval-harvest`)
+- [x] Positive openers — corpus Tier A.2
+- [x] Sticky × false-friend matrix (`sd-route-sticky-exclusions`)
+- [x] Hybrid leftover LLM path — superseded by `sd-route-llm-parallel`
+- [x] Capability graduation — locked in Q1 / corpus Tier B
+- [x] Precision vs recall when uncertain (`sd-route-uncertain-precision`)
+- [x] Source / channel matrix (`sd-eval-source-matrix`)
+- [x] How routing improves (`sd-route-implement-path`)
+- [x] Classifier contract (`sd-route-classifier-contract`)
 
 ## Summary
 
 | Metric | Count |
 |--------|-------|
-| Branches | 10 |
-| Verified | 10 |
+| Branches | 11 |
+| Verified | 11 |
 | Unresolved | 0 |
 
 ## Questions
 
-### Q1 — Positive SD routing signals
-**Q:** What utterances MUST route to `system_design_answer`?  
-**A (Mode C):** `sd-route-positive` — (1) existing SYSTEM_DESIGN_PATTERNS shapes; (2) design|build + service|system|platform + like|similar to + product name. Classic-noun expansion is TDD case-by-case only.  
-**Verdict:** VERIFIED (after sharpen from VAGUE)
-
-### Q2 — Title / gerund forms
-**Q:** Is “Designing a Scalable Ticketing Platform” SD?  
-**A (Mode C):** `sd-route-title-form` — SHALL be SD; current `design (a|an|the)` misses; extend patterns (intentional router change).  
-**Verdict:** VERIFIED (after reframe as target, not current-behavior claim)
-
-### Q3 — Experience false friend
-**A:** `sd-route-not-experience` — years/tell-me-about scalable|distributed without design imperative → not SD.  
+### Q1 — 100% / LLM-from-start / 99.99%
+**A:** `sd-route-llm-parallel` — regex front door + always-on parallel LLM; promote-only; hard vetoes; ≥99.99% on versioned corpus; reopen leftover-only / capability-only fuzzy / ~99%. User rec **B**.  
 **Verdict:** VERIFIED
 
-### Q4 — Coding false friend
-**A:** `sd-route-not-coding` — write/implement/code → coding/DSA not SD.  
+### Q2 — Versioned corpus taxonomy
+**A:** `sd-eval-corpus-v1` + `sd-route-sticky-exclusions` (nego/identity/meeting-admin hard-exclude). User: yes.  
 **Verdict:** VERIFIED
 
-### Q5 — Concept false friend
-**A:** `sd-route-not-concept` — explain/what-is without design|architect → technical_concept.  
+### Q3 — Classifier contract (Mode C)
+**A:** `sd-route-classifier-contract` — binary `sd_intention` yes|no; promote iff yes ∧ conf ≥ 0.75; ≤400ms p95; timeout → no promote; prefer IntentClassifier extension; eval goldens for promote/below-threshold/veto/timeout/no-demote.  
 **Verdict:** VERIFIED
 
-### Q6 — Product-about
-**A:** `sd-route-not-product-about` — Natively architecture stays project_about before SD.  
+### Q4 — Failure harvest (Mode C)
+**A:** `sd-eval-harvest` — dogfood/sims Tier A → prior F-ROUTE bugs → unit gaps → sticky wrong-promote → ASR Tier B; ≤20 new cases first slice.  
 **Verdict:** VERIFIED
 
-### Q7 — Scale / architect how-would-you
-**A:** `sd-route-scale-ask` — how-would-you+(scale|architect|design)+system/service/product → SD; how-would-you-use tool → concept.  
+### Q5 — Uncertain precision (Mode C)
+**A:** `sd-route-uncertain-precision` — no soft-clarify; low conf/timeout → no promote (precision > recall).  
 **Verdict:** VERIFIED
 
-### Q8 — Sticky session answerType
-**A:** `sd-route-sticky` — today sticky key ≠ sticky answerType; **target:** armed SD session → non-coding turns as `system_design_answer` for speakable mid-interview.  
-**Verdict:** VERIFIED (after correcting false current-behavior claim)
-
-### Q9 — Mechanism ~99%
-**A:** `sd-route-hybrid` — deterministic front door + TDD matrix; LLM classify only low-confidence leftovers + llm-eval gate; not LLM-only.  
+### Q6 — Source matrix (Mode C)
+**A:** `sd-eval-source-matrix` — ≥1 WTA + ≥1 manual on Tier A.2 opener; fuzzy as WTA; transcript optional capability.  
 **Verdict:** VERIFIED
 
-### Q10 — Soft clarify type
-**A:** `sd-route-no-soft-clarify-type` — no new clarify answerType in v1.  
+### Q7 — Implement path (Mode C)
+**A:** `sd-route-implement-path` — TDD sticky exclusions → Tier A goldens → classifier+merge → fuzzy trials → CI; `/tdd` + `/llm-eval` then `/to-spec` or `/implement`.  
 **Verdict:** VERIFIED
 
 ## Verified glossary terms (this session)
 
-1. `sd-route-positive`
-2. `sd-route-title-form`
-3. `sd-route-not-experience`
-4. `sd-route-not-coding`
-5. `sd-route-not-concept`
-6. `sd-route-not-product-about`
-7. `sd-route-scale-ask`
-8. `sd-route-sticky`
-9. `sd-route-hybrid`
-10. `sd-route-no-soft-clarify-type`
-
-## Next (ask-matt)
-
-- Say **export** → write routing terms into `docs/speakable-sd/CONTEXT.md` (+ ADR if sticky/hybrid trade-offs warrant).
-- Then **`/to-spec`** or **`/implement`**: TDD routing matrix (title-form, like-X, scale-ask) + optional llm-eval low-confidence path per `sd-route-hybrid`.
+1. `sd-route-llm-parallel`
+2. `sd-eval-corpus-v1`
+3. `sd-route-sticky-exclusions`
+4. `sd-route-classifier-contract`
+5. `sd-eval-harvest`
+6. `sd-route-uncertain-precision`
+7. `sd-eval-source-matrix`
+8. `sd-route-implement-path`

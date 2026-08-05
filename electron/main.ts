@@ -1503,7 +1503,11 @@ export class AppState {
     this.modelSelectorWindowHelper.setContentProtection(this.isUndetectable);
     this.cropperWindowHelper.setContentProtection(this.isUndetectable);
 
-    if (process.platform === 'win32' || process.platform === 'darwin') {
+    // CLI / sim harness (sd-interview-sim REPL/T2): no BrowserWindows — skip cropper preload.
+    if (
+      process.env.NATIVELY_HEADLESS !== '1' &&
+      (process.platform === 'win32' || process.platform === 'darwin')
+    ) {
       this.cropperWindowHelper.preload();
     }
 
@@ -7746,11 +7750,29 @@ if (process.env.THINKING_MATRIX === '1') {
     }
   }
 
-  logStartupPhase('create-window:start');
-  appState.createWindow()
-  logStartupPhase('create-window:complete', {
-    windowCount: BrowserWindow.getAllWindows().length,
-  });
+  // NATIVELY_HEADLESS=1 — CLI / overnight sim harness: AppState + WTA only, no UI.
+  // Used by sd-interview-sim-repl / T2 so the REPL prompt stays in the terminal.
+  const headlessHarness = process.env.NATIVELY_HEADLESS === '1';
+
+  if (headlessHarness) {
+    console.log(
+      '[Init] NATIVELY_HEADLESS=1 — skipping BrowserWindow / tray / global shortcuts (CLI harness)',
+    );
+    if (process.platform === 'darwin') {
+      try {
+        app.dock?.hide();
+        app.setActivationPolicy('accessory');
+      } catch {
+        /* ignore */
+      }
+    }
+  } else {
+    logStartupPhase('create-window:start');
+    appState.createWindow()
+    logStartupPhase('create-window:complete', {
+      windowCount: BrowserWindow.getAllWindows().length,
+    });
+  }
 
   // Opt-in: NATIVELY_LOG_GPU_STATUS=1 logs Chromium's GPU feature status once
   // at boot (whether gpu_compositing/rasterization are 'enabled' vs.
@@ -7805,33 +7827,35 @@ if (process.env.THINKING_MATRIX === '1') {
     }
   }, Number(process.env.NATIVELY_INTENT_WARMUP_DELAY_MS || '2500'));
 
-  // DUAL-DOCK-ICON FIX (promotion half): now that the disguised name/icon are
-  // applied and the window exists, promote back to 'regular' so a SINGLE dock
-  // tile appears together with the window. Gated on darwin && !undetectable so
-  // stealth mode is never promoted (it must stay dock-tile-less). This pairs
-  // with the 'accessory' clamp in step 2a above — together they ensure the LS
-  // re-registration from app.setName()/setProcessDisplayName() happens while no
-  // tile is visible, so macOS never paints a second "Natively" icon.
-  if (process.platform === 'darwin' && !appState.getUndetectable()) {
-    app.setActivationPolicy('regular');
-  }
+  if (!headlessHarness) {
+    // DUAL-DOCK-ICON FIX (promotion half): now that the disguised name/icon are
+    // applied and the window exists, promote back to 'regular' so a SINGLE dock
+    // tile appears together with the window. Gated on darwin && !undetectable so
+    // stealth mode is never promoted (it must stay dock-tile-less). This pairs
+    // with the 'accessory' clamp in step 2a above — together they ensure the LS
+    // re-registration from app.setName()/setProcessDisplayName() happens while no
+    // tile is visible, so macOS never paints a second "Natively" icon.
+    if (process.platform === 'darwin' && !appState.getUndetectable()) {
+      app.setActivationPolicy('regular');
+    }
 
-  // Apply initial stealth state based on isUndetectable setting.
-  if (!appState.getUndetectable()) {
-    // Normal mode: show tray (dock is already showing — no need to call dock.show() again)
-    appState.showTray();
-  } else {
-    // Persisted undetectable: the pre-emptive app.dock.hide() above is NOT
-    // sufficient — createWindow() + the launcher's first show re-registers the
-    // app and re-shows the dock. Converge through the same self-verifying
-    // enforcement the runtime toggle uses, so the app comes up actually
-    // undetectable without the user having to toggle off/on. The enforcement
-    // loop re-checks app.dock.isVisible() across several retries, which also
-    // catches the dock re-show that lands at the launcher's ready-to-show.
-    appState.applyInitialUndetectableState();
+    // Apply initial stealth state based on isUndetectable setting.
+    if (!appState.getUndetectable()) {
+      // Normal mode: show tray (dock is already showing — no need to call dock.show() again)
+      appState.showTray();
+    } else {
+      // Persisted undetectable: the pre-emptive app.dock.hide() above is NOT
+      // sufficient — createWindow() + the launcher's first show re-registers the
+      // app and re-shows the dock. Converge through the same self-verifying
+      // enforcement the runtime toggle uses, so the app comes up actually
+      // undetectable without the user having to toggle off/on. The enforcement
+      // loop re-checks app.dock.isVisible() across several retries, which also
+      // catches the dock re-show that lands at the launcher's ready-to-show.
+      appState.applyInitialUndetectableState();
+    }
+    // Register global shortcuts using KeybindManager
+    KeybindManager.getInstance().registerGlobalShortcuts()
   }
-  // Register global shortcuts using KeybindManager
-  KeybindManager.getInstance().registerGlobalShortcuts()
 
   // System sleep/wake handling. macOS invalidates CoreAudio AggregateDevice
   // handles on sleep — without this the Process Tap silently stops delivering
@@ -7855,8 +7879,10 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   // Pre-create detached overlay companion windows in background for faster first open
-  appState.settingsWindowHelper.preloadWindow()
-  appState.modelSelectorWindowHelper.preloadWindow()
+  if (!headlessHarness) {
+    appState.settingsWindowHelper.preloadWindow()
+    appState.modelSelectorWindowHelper.preloadWindow()
+  }
 
   // Restore Phone Mirror service if it was enabled in a previous session.
   // Failure here is non-fatal — the user can re-enable from Settings.
@@ -7897,7 +7923,7 @@ if (process.env.THINKING_MATRIX === '1') {
   // TCC caches the decision permanently after the first response — this block
   // runs exactly ONCE on the first launch of each unique packaged binary.
   // On every subsequent launch the status is 'granted' or 'denied', and we skip.
-  if (process.platform === 'darwin') {
+  if (process.platform === 'darwin' && !headlessHarness) {
     setTimeout(async () => {
       try {
         const screenStatus = systemPreferences.getMediaAccessStatus('screen');
@@ -8032,6 +8058,9 @@ if (process.env.THINKING_MATRIX === '1') {
 
   app.on("activate", () => {
     console.log("App activated")
+    if (process.env.NATIVELY_HEADLESS === '1') {
+      return;
+    }
     if (process.platform === 'darwin') {
       // Do NOT call dock.show() while a meeting is running — the dock icon
       // appearing mid-meeting is a critical stealth failure.
@@ -8139,6 +8168,10 @@ if (process.env.THINKING_MATRIX === '1') {
       // helper (idempotent: no-ops if a launcher already exists). Keep the DB
       // OPEN so the recreated renderer is fully functional.
       try {
+        if (process.env.NATIVELY_HEADLESS === '1') {
+          logToFile('[main] render-process-gone: headless harness — not recreating window');
+          return;
+        }
         appState.createWindow();
         logToFile('[main] render-process-gone: webContents destroyed, recreated launcher window');
       } catch (e: any) {

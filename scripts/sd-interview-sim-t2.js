@@ -39,7 +39,6 @@ const os = require('node:os');
 const { execSync, spawnSync } = require('node:child_process');
 
 const repoRoot = path.resolve(__dirname, '..');
-const distRoot = path.join(repoRoot, 'dist-electron', 'electron');
 
 try {
   require('dotenv').config({ path: path.join(repoRoot, '.env') });
@@ -63,17 +62,13 @@ const {
 } = require('./lib/sd-interview-sim');
 
 const {
-  createIntelligenceSessionAdapter,
-  createLiveWhatToAnswerSut,
   liveSideChannelSnapshot,
   FULL_RAW_SD_TONE_INSTRUCTION,
 } = require('./lib/sd-interview-sim/liveSut');
 
-const {
-  resolveLessonsDir,
-  shouldIngestLessonsForT2,
-  walkLessonFiles,
-} = require('./lib/sd-interview-sim/lessonIngest');
+const { bootLiveSut: bootLiveSutShared } = require('./lib/sd-interview-sim/bootLiveSut');
+
+const { shouldIngestLessonsForT2 } = require('./lib/sd-interview-sim/lessonIngest');
 
 function resolveGitSha() {
   try {
@@ -126,7 +121,11 @@ function maybeReexecUnderElectron(forceStub, wantLiveSut) {
     [path.join(__dirname, 'sd-interview-sim-t2.js')],
     {
       stdio: 'inherit',
-      env: { ...process.env, NATIVELY_E2E: process.env.NATIVELY_E2E || '1' },
+      env: {
+        ...process.env,
+        NATIVELY_E2E: process.env.NATIVELY_E2E || '1',
+        NATIVELY_HEADLESS: process.env.NATIVELY_HEADLESS || '1',
+      },
       cwd: repoRoot,
     },
   );
@@ -150,145 +149,16 @@ function createEchoStubSut(models) {
  * @param {{ promptInstruction?: string, sdProblemKey?: string }} [sutOpts]
  */
 async function bootLiveSut(models, sutOpts = {}) {
-  if (!fs.existsSync(path.join(distRoot, 'main.js'))) {
-    throw new Error(
-      `dist-electron missing (${distRoot}). Run: npm run build:electron`,
-    );
-  }
-
-  process.env.NATIVELY_E2E = process.env.NATIVELY_E2E || '1';
-
-  const tmpUserData = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'natively-sd-interview-sim-t2-'),
-  );
-  const { app } = require('electron');
-  app.setPath('userData', tmpUserData);
-  await app.whenReady();
-
-  // eslint-disable-next-line import/no-dynamic-require, global-require
-  const mainMod = require(path.join(distRoot, 'main.js'));
-  const { AppState } = mainMod;
-  if (!AppState) {
-    throw new Error('AppState not exported from main.js — rebuild electron');
-  }
-
-  console.log('[sd-interview-sim-t2] waiting for AppState…');
-  await new Promise((r) => setTimeout(r, 3000));
-  const appState = AppState.getInstance();
-  const intelligenceManager = appState.getIntelligenceManager?.();
-  if (!intelligenceManager?.runWhatShouldISay) {
-    throw new Error('AppState.getIntelligenceManager().runWhatShouldISay unavailable');
-  }
-
-  const llm = appState.processingHelper?.getLLMHelper?.();
-  if (!llm) {
-    throw new Error('LLMHelper unavailable from processingHelper');
-  }
-
-  const { resolveGeminiApiKey } = require('./lib/sd-grounding-harness.js');
-  const geminiKey = resolveGeminiApiKey(process.env);
-  if (!geminiKey) {
-    throw new Error('live SUT requires GEMINI_API_KEY (or GOOGLE_API_KEY) in the environment');
-  }
-
-  // Prefer switchToGemini so provider pins clear Ollama/custom and rebuild the client.
-  // Re-apply after ModesManager — AppState boot can race credentials/embeddings init.
-  async function pinGemini() {
-    if (typeof llm.switchToGemini === 'function') {
-      await llm.switchToGemini(geminiKey, models.sut);
-    } else {
-      if (typeof llm.setApiKey === 'function') llm.setApiKey(geminiKey);
-      if (typeof llm.setModel === 'function') llm.setModel(models.sut);
-    }
-  }
-  await pinGemini();
-
-  // eslint-disable-next-line import/no-dynamic-require, global-require
-  const { ModesManager } = require(path.join(distRoot, 'services/ModesManager.js'));
-  const mm = ModesManager.getInstance();
-  for (const m of mm.getModes()) {
-    if (/sd.?interview.?sim|technical.?interview/i.test(m.name) && m.templateType === 'technical-interview') {
-      try {
-        mm.deleteMode(m.id);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-  const mode = mm.createMode({
-    name: 'SD Interview Sim T2',
-    templateType: 'technical-interview',
-  });
-  mm.setActiveMode(mode.id);
-  await pinGemini();
-  console.log(
-    `[sd-interview-sim-t2] live SUT ready mode=${mode.id} model=${models.sut} userData=${tmpUserData}`,
-  );
-
-  // LESSON ingest (SPEC 08) — default on for live SUT; warn+continue if missing.
-  let lessonsIngested = 0;
-  if (shouldIngestLessonsForT2(process.env)) {
-    try {
-      const lessonDir = resolveLessonsDir({ repoRoot, env: process.env });
-      if (!lessonDir) {
-        console.warn(
-          '[sd-interview-sim-t2] LESSON ingest skipped — no lessons dir ' +
-            '(set SD_LESSONS_DIR or add lessons/hellointerview-system-design)',
-        );
-      } else {
-        const orch = appState.getKnowledgeOrchestrator?.();
-        if (!orch?.ingestDocument) {
-          console.warn('[sd-interview-sim-t2] LESSON ingest skipped — KnowledgeOrchestrator unavailable');
-        } else {
-          const { DocType } = require(path.join(distRoot, 'knowledge', 'types.js'));
-          const files = walkLessonFiles(lessonDir);
-          console.log(
-            `[sd-interview-sim-t2] ingesting ${files.length} LESSON file(s) from ${lessonDir}`,
-          );
-          for (const f of files) {
-            const result = await orch.ingestDocument(f, DocType.LESSON);
-            if (result?.success) lessonsIngested += 1;
-            else {
-              console.warn(
-                `[sd-interview-sim-t2] ingest FAIL ${path.basename(f)}: ${result?.error || 'unknown'}`,
-              );
-            }
-          }
-          if (lessonsIngested > 0 && typeof orch.setKnowledgeMode === 'function') {
-            orch.setKnowledgeMode(true);
-          }
-          console.log(
-            `[sd-interview-sim-t2] LESSON ingest done: ${lessonsIngested}/${files.length} ok`,
-          );
-        }
-      }
-    } catch (err) {
-      console.warn(
-        `[sd-interview-sim-t2] LESSON ingest warn-and-continue: ${err?.message || err}`,
-      );
-    }
-  } else {
-    console.log('[sd-interview-sim-t2] LESSON ingest opted out (SD_INTERVIEW_SIM_T2_INGEST_LESSONS=0)');
-  }
-
-  const sessionTracker = createIntelligenceSessionAdapter(intelligenceManager);
-  const sut = createLiveWhatToAnswerSut({
-    intelligenceManager,
+  return bootLiveSutShared({
+    repoRoot,
+    models,
+    sutOpts,
     timeoutMs: envInt('SD_INTERVIEW_SIM_T2_SUT_TIMEOUT_MS', 90_000),
-    ...(sutOpts.promptInstruction
-      ? { promptInstruction: sutOpts.promptInstruction }
-      : {}),
-    ...(sutOpts.sdProblemKey ? { sdProblemKey: sutOpts.sdProblemKey } : {}),
+    userDataPrefix: 'natively-sd-interview-sim-t2-',
+    modeName: 'SD Interview Sim T2',
+    logPrefix: '[sd-interview-sim-t2]',
+    ingestLessons: shouldIngestLessonsForT2(process.env),
   });
-
-  return {
-    sut,
-    sessionTracker,
-    intelligenceManager,
-    tmpUserData,
-    app,
-    lessonsIngested,
-  };
 }
 
 async function main() {
