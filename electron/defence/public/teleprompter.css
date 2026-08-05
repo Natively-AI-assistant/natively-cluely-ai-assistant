@@ -1,0 +1,60 @@
+.teleprompter {
+  display: grid;
+  gap: 16px;
+}
+
+.teleprompter:empty {
+  display: none;
+}
+
+.teleprompter-card {
+  scroll-margin-top: 12px;
+  border-left: 4px solid var(--blue);
+}
+
+.teleprompter-card h3 {
+  margin: 18px 0 8px;
+  color: #cfe8ff;
+  font-size: 14px;
+}
+
+.teleprompter-question {
+  font-size: 20px;
+  line-height: 1.5;
+  font-weight: 750;
+}
+
+.teleprompter-answer {
+  font-size: 17px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.teleprompter-index {
+  font-size: 12px;
+  color: var(--blue);
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.teleprompter-intro {
+  border-left: 4px solid var(--green);
+}
+
+.output-only #inputSettings,
+.output-only #secureBanner,
+.output-only #micPanel,
+.output-only #outputStatus,
+.output-only #transcriptPanel,
+.output-only #currentQuestionPanel,
+.output-only #fastHintPanel,
+.output-only #answerPanel,
+.output-only #diagnosticsPanel,
+.output-only #sessionActions {
+  display: none !important;
+}
+
+.output-only .shell {
+  width: min(680px, 100%);
+}

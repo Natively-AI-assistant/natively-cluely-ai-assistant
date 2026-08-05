@@ -74,6 +74,17 @@ export declare class SystemAudioCapture {
 }
 
 /**
+ * Windows WASAPI application loopback for one process and its child processes.
+ * Emits 16 kHz mono signed 16-bit PCM buffers.
+ */
+export declare class WindowsProcessAudioCapture {
+  constructor(targetPid: number, includeChildren?: boolean | undefined | null)
+  getSampleRate(): number
+  start(callback: ((err: Error | null, arg: Buffer) => any)): void
+  stop(): void
+}
+
+/**
  * Apply stealth attributes to the BrowserWindow whose native handle is
  * passed in.
  *

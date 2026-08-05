@@ -14,6 +14,10 @@ use ringbuf::traits::Consumer;
 
 pub mod audio_config;
 pub mod license;
+#[cfg(not(target_os = "windows"))]
+pub mod microphone;
+#[cfg(target_os = "windows")]
+#[path = "microphone_windows.rs"]
 pub mod microphone;
 pub mod resampler;
 pub mod silence_suppression;
@@ -29,6 +33,28 @@ use crate::audio_config::{CHUNK_BATCH_COUNT, CHUNK_BATCH_TIMEOUT_MS, DSP_POLL_MS
 use crate::resampler::Resampler;
 use crate::silence_suppression::{FrameAction, SilenceSuppressionConfig, SilenceSuppressor};
 use std::time::Instant;
+
+#[cfg(target_os = "windows")]
+struct WindowsComApartment;
+
+#[cfg(target_os = "windows")]
+impl WindowsComApartment {
+    fn initialize() -> std::result::Result<Self, String> {
+        use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+
+        unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
+            .map_err(|error| format!("COM initialization failed: {error}"))?;
+        Ok(Self)
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for WindowsComApartment {
+    fn drop(&mut self) {
+        use windows::Win32::System::Com::CoUninitialize;
+        unsafe { CoUninitialize() };
+    }
+}
 
 /// Canonical pipeline sample rate. All STT providers receive audio at this rate,
 /// produced once (with proper anti-aliasing) by the rubato resampler in the DSP
@@ -190,6 +216,15 @@ impl SystemAudioCapture {
 
         // ALL init + DSP runs in background thread — start() returns INSTANTLY
         self.capture_thread = Some(thread::spawn(move || {
+            #[cfg(target_os = "windows")]
+            let _com_apartment = match WindowsComApartment::initialize() {
+                Ok(apartment) => apartment,
+                Err(error) => {
+                    eprintln!("[SystemAudioCapture] {error}");
+                    return;
+                }
+            };
+
             // 1. SpeakerInput Init (takes 5-7 seconds — runs OFF main thread)
             println!("[SystemAudioCapture] Background init starting...");
             let input = match speaker::SpeakerInput::new(device_id.clone()) {
@@ -378,6 +413,184 @@ impl SystemAudioCapture {
 }
 
 impl Drop for SystemAudioCapture {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+// ============================================================================
+// WINDOWS APPLICATION/PROCESS LOOPBACK CAPTURE
+//
+// This is a real WASAPI application-loopback source (ActivateAudioInterfaceAsync
+// with AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK), not a Live Captions, OCR,
+// clipboard, UI Automation, Stereo Mix, or whole-system capture workaround.
+// flexaudio normalizes the selected process tree directly to 16 kHz mono f32;
+// this adapter converts that stream to the signed 16-bit PCM contract used by
+// the existing TypeScript VAD and Groq WAV uploader.
+// ============================================================================
+
+#[cfg(target_os = "windows")]
+#[napi]
+pub struct WindowsProcessAudioCapture {
+    target_pid: u32,
+    include_children: bool,
+    stop_signal: Arc<AtomicBool>,
+    capture_thread: Option<thread::JoinHandle<()>>,
+}
+
+#[cfg(target_os = "windows")]
+fn validate_windows_process(target_pid: u32) -> napi::Result<()> {
+    use windows::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
+    use windows::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+
+    // Query-only access is sufficient and avoids requesting capture-unrelated
+    // rights. Access denied, a missing PID, and an exited PID are all surfaced
+    // as explicit constructor errors before a capture worker is created.
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, target_pid) }
+        .map_err(|error| {
+            napi::Error::from_reason(format!(
+                "Windows process loopback target PID {target_pid} is unavailable or access was denied: {error}"
+            ))
+        })?;
+    let mut exit_code = 0u32;
+    let query_result = unsafe { GetExitCodeProcess(handle, &mut exit_code) };
+    let _ = unsafe { CloseHandle(handle) };
+    query_result.map_err(|error| {
+        napi::Error::from_reason(format!(
+            "Windows process loopback could not query target PID {target_pid}: {error}"
+        ))
+    })?;
+    if exit_code != STILL_ACTIVE.0 as u32 {
+        return Err(napi::Error::from_reason(format!(
+            "Windows process loopback target PID {target_pid} has already exited"
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+#[napi]
+impl WindowsProcessAudioCapture {
+    #[napi(constructor)]
+    pub fn new(target_pid: u32, include_children: Option<bool>) -> napi::Result<Self> {
+        if target_pid == 0 {
+            return Err(napi::Error::from_reason(
+                "Windows process loopback requires a non-zero target PID",
+            ));
+        }
+        validate_windows_process(target_pid)?;
+        Ok(Self {
+            target_pid,
+            include_children: include_children.unwrap_or(true),
+            stop_signal: Arc::new(AtomicBool::new(false)),
+            capture_thread: None,
+        })
+    }
+
+    #[napi]
+    pub fn get_sample_rate(&self) -> u32 {
+        CANONICAL_STT_RATE
+    }
+
+    #[napi]
+    pub fn start(&mut self, callback: ThreadsafeFunction<Buffer>) -> napi::Result<()> {
+        if self.capture_thread.is_some() {
+            return Err(napi::Error::from_reason("Capture already running"));
+        }
+        if !self.include_children {
+            return Err(napi::Error::from_reason(
+                "Windows application loopback captures the target process tree; includeChildren=false is unsupported",
+            ));
+        }
+
+        self.stop_signal.store(false, Ordering::SeqCst);
+        let stop_signal = self.stop_signal.clone();
+        let target_pid = self.target_pid;
+        let tsfn = callback;
+
+        // Opening WASAPI can block briefly and therefore belongs off the JS thread.
+        self.capture_thread = Some(thread::spawn(move || {
+            let config = flexaudio::StreamConfig {
+                kind: flexaudio::SourceKind::ProcessLoopback,
+                target_pid: Some(target_pid),
+                mode: flexaudio::ProcessMode::Include,
+                output: flexaudio::OutputFormat {
+                    sample_rate: CANONICAL_STT_RATE,
+                    channels: 1,
+                },
+                ..Default::default()
+            };
+
+            let mut stream = match flexaudio::open(config) {
+                Ok(stream) => stream,
+                Err(error) => {
+                    tsfn.call(
+                        Err(napi::Error::from_reason(format!(
+                            "Windows process loopback open failed for PID {target_pid}: {error}"
+                        ))),
+                        ThreadsafeFunctionCallMode::NonBlocking,
+                    );
+                    return;
+                }
+            };
+            if let Err(error) = stream.start() {
+                tsfn.call(
+                    Err(napi::Error::from_reason(format!(
+                        "Windows process loopback start failed for PID {target_pid}: {error}"
+                    ))),
+                    ThreadsafeFunctionCallMode::NonBlocking,
+                );
+                return;
+            }
+
+            let mut emitter = BatchEmitter::new((CANONICAL_STT_RATE as usize / 50) * 2);
+            while !stop_signal.load(Ordering::Relaxed) {
+                let mut received = false;
+                while let Some(chunk) = stream.poll_chunk() {
+                    received = true;
+                    let pcm: Vec<i16> = chunk
+                        .data
+                        .into_iter()
+                        .map(|sample| {
+                            (sample.clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16
+                        })
+                        .collect();
+                    emitter.push(&i16_slice_to_le_bytes(&pcm), &tsfn);
+                }
+                while let Some(event) = stream.poll_event() {
+                    if let flexaudio::Event::Error(message) = event {
+                        tsfn.call(
+                            Err(napi::Error::from_reason(format!(
+                                "Windows process loopback error: {message}"
+                            ))),
+                            ThreadsafeFunctionCallMode::NonBlocking,
+                        );
+                    }
+                }
+                emitter.maybe_flush_timeout(&tsfn);
+                if !received {
+                    thread::sleep(Duration::from_millis(DSP_POLL_MS));
+                }
+            }
+            emitter.flush(&tsfn);
+            stream.stop();
+        }));
+        Ok(())
+    }
+
+    #[napi]
+    pub fn stop(&mut self) {
+        self.stop_signal.store(true, Ordering::SeqCst);
+        if let Some(handle) = self.capture_thread.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for WindowsProcessAudioCapture {
     fn drop(&mut self) {
         self.stop();
     }

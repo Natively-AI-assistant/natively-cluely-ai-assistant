@@ -49,6 +49,11 @@ export interface NativeModule {
     start(callback: (...args: any[]) => any, onSpeechEnded?: (...args: any[]) => any): void;
     stop(): void;
   };
+  WindowsProcessAudioCapture?: new (targetPid: number, includeChildren?: boolean | null) => {
+    getSampleRate(): number;
+    start(callback: (...args: any[]) => any): void;
+    stop(): void;
+  };
 }
 
 export interface OverlayBoundsInput {
@@ -201,11 +206,18 @@ export function loadNativeModule(): NativeModule | null {
     let verboseLogging = false;
     try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { app } = require('electron') as typeof import('electron');
-        appPath = app.getAppPath();
-        // Match the isDev predicate used in WindowHelper.ts: BOTH
-        // NODE_ENV=development AND !app.isPackaged are required.
-        isDev = process.env.NODE_ENV === 'development' && !app.isPackaged;
+        const electron = require('electron') as typeof import('electron');
+        if (!electron.app?.getAppPath) {
+            // `require('electron')` resolves to the executable path in an ordinary
+            // Node process. Native smoke tests still need the development binary.
+            appPath = process.cwd();
+            isDev = true;
+        } else {
+            appPath = electron.app.getAppPath();
+            // Match the isDev predicate used in WindowHelper.ts: BOTH
+            // NODE_ENV=development AND !app.isPackaged are required.
+            isDev = process.env.NODE_ENV === 'development' && !electron.app.isPackaged;
+        }
     } catch (e) {
         console.error('[nativeModuleLoader] app.getAppPath() not available:', e);
         cached = null;

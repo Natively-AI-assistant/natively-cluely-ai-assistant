@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>问答小助手 · 电脑端设置</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body><main class="shell">
+  <header><div class="brand">问答小助手 · 电脑端</div><div class="status"><span class="dot on"></span>本地管理</div></header>
+  <section class="card">
+    <h1>项目知识库</h1>
+    <p class="muted">路径只在电脑端处理；iPhone 不会收到项目根路径或完整文件。</p>
+    <div class="field"><label for="projectSelect">已注册项目</label><select id="projectSelect"><option value="">当前临时项目</option></select></div>
+    <div id="projectMessage" class="muted"></div>
+    <div class="field"><label for="projectPath">本地项目目录</label><input id="projectPath" placeholder="E:\code\your-project"></div>
+    <div class="actions" style="margin-top:12px"><button id="index" class="primary">增量索引</button><button id="rebuild">完全重建</button></div>
+    <pre id="indexStatus" class="muted">尚未索引</pre>
+  </section>
+  <section class="card">
+    <h1>Windows 输入源</h1>
+    <p class="muted">默认使用 WASAPI application loopback。指定进程模式不会降级为全系统录音，也不会读取 Live Captions、OCR、剪贴板或 UI Automation。</p>
+    <div class="grid">
+      <div class="field"><label for="inputSource">输入源</label><select id="inputSource"><option value="dual-process-and-microphone">指定进程 + 电脑麦克风（双路）</option><option value="specific-process-loopback">指定进程（Teams / Zoom / Chrome / Edge）</option><option value="system-loopback">系统音频 loopback</option><option value="windows-microphone">电脑麦克风</option><option value="iphone-microphone">iPhone 麦克风 fallback</option></select></div>
+      <div class="field"><label for="audioScenario">音频场景</label><select id="audioScenario"><option value="remote-interview">远程面试</option><option value="in-person-defence">现场答辩</option><option value="hybrid">混合</option></select></div>
+      <div class="field"><label for="processName">进程名或 auto</label><input id="processName" placeholder="auto / chrome.exe / teams.exe"></div>
+      <div class="field"><label for="processId">进程 PID（可选）</label><input id="processId" inputmode="numeric" placeholder="自动选择"></div>
+    </div>
+    <div class="actions" style="margin-top:12px"><button id="applyInput" class="primary">应用输入源</button></div><pre id="inputStatus" class="muted"></pre>
+  </section>
+  <section class="card">
+    <h1>连接 iPhone</h1>
+    <p>优先扫描高熵一次性二维码。六位码仅作为局域网受限备用入口。</p>
+    <div id="urls" class="path"></div><button id="pair" class="primary" style="margin-top:12px">生成一次性配对码</button>
+    <div id="pairResult" class="hidden"><img id="pairQr" alt="高熵一次性配对二维码" style="width:min(280px,100%);border-radius:12px;margin-top:12px"><p class="pair-code" id="code"></p><p class="muted">配对 ID：<span id="pairId"></span></p></div>
+  </section>
+  <section class="card banner"><b>隐私默认值</b><p>原始音频不保存；密钥仅从后端环境变量读取；管理端默认只允许本机访问。</p></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+async function loadProjects(){const response=await fetch('/api/projects'),data=await response.json();for(const project of data.projects||[]){const option=document.createElement('option');option.value=project.projectId;option.textContent=project.displayName;option.selected=project.selected;$('projectSelect').appendChild(option)}if(data.activeProjectId)$('projectMessage').textContent=`当前项目：${data.activeProjectId}`}
+async function selectProject(){if(!$('projectSelect').value)return;const response=await fetch('/api/projects/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId:$('projectSelect').value})}),data=await response.json();$('projectMessage').textContent=response.ok?`已切换：${data.displayName}${data.indexed?'（知识库可用）':'（尚未索引）'}`:`切换失败：${data.error}`;if(response.ok){$('projectPath').value=data.sourcePath;await loadStatus()}}
+async function loadStatus(){fetch('/api/project/sources').then(response=>response.json()).then(data=>{$('projectPath').value=data.projectRoot||'';$('indexStatus').textContent=JSON.stringify(data,null,2)}).catch(()=>{})}
+async function index(fullRebuild){$('indexStatus').textContent='索引中…';const response=await fetch('/api/project/index',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:$('projectPath').value||undefined,fullRebuild})});$('indexStatus').textContent=JSON.stringify(await response.json(),null,2)}
+async function loadInput(){const response=await fetch('/api/input/status'),data=await response.json();$('inputSource').value=data.source||'dual-process-and-microphone';$('audioScenario').value=data.scenario||'remote-interview';$('processName').value=data.processName||'auto';$('processId').value=data.processId||'';$('inputStatus').textContent=JSON.stringify({mode:data.mode,source:data.source,scenario:data.scenario,iphoneOutputOnly:data.iphoneOutputOnly,processName:data.processName,processId:data.processId||null},null,2)}
+async function applyInput(){const response=await fetch('/api/input/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:$('inputSource').value,scenario:$('audioScenario').value,processName:$('processName').value.trim()||'auto',processId:$('processId').value.trim()||undefined})}),data=await response.json();$('inputStatus').textContent=JSON.stringify(response.ok?{mode:data.mode,source:data.source,scenario:data.scenario,iphoneOutputOnly:data.iphoneOutputOnly,processName:data.processName,processId:data.processId||null}:{error:data.error},null,2)}
+$('projectSelect').onchange=selectProject;$('index').onclick=()=>index(false);$('rebuild').onclick=()=>index(true);
+$('applyInput').onclick=applyInput;
+$('pair').onclick=async()=>{const response=await fetch('/api/pairing/create',{method:'POST'}),data=await response.json();$('pairResult').classList.remove('hidden');$('code').textContent=data.code;$('pairId').textContent=data.id;$('pairQr').src=data.qrDataUrl||'';$('urls').innerHTML=(data.urls||[]).map(url=>`<div><a href="${url}" style="color:#7fc6ff">${url}</a></div>`).join('')};
+loadProjects().then(loadStatus);loadInput();
+</script></body></html>
