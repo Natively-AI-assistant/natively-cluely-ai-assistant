@@ -757,6 +757,15 @@ interface ElectronAPI {
     }>
   >;
   onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => () => void;
+  /**
+   * Global shortcuts the OS currently refuses to hand over. Snapshot
+   * counterpart to onKeybindRegistrationFailed — the boot-time registration
+   * pass fires before any window exists, so a renderer that only listens
+   * misses every conflict that was present at launch.
+   */
+  getKeybindRegistrationFailures: () => Promise<
+    Array<{ id: string; accelerator: string }>
+  >;
 
   // Global shortcut events (stealth: fired even when window is not focused)
   onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void;
@@ -2364,6 +2373,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setKeybind: (id: string, accelerator: string) =>
     ipcRenderer.invoke('keybinds:set', id, accelerator),
   resetKeybinds: () => ipcRenderer.invoke('keybinds:reset'),
+  getKeybindRegistrationFailures: () =>
+    ipcRenderer.invoke('keybinds:get-registration-failures'),
   onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => {
     const subscription = (_: any, keybinds: any) => callback(keybinds);
     ipcRenderer.on('keybinds:update', subscription);

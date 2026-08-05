@@ -532,6 +532,9 @@ export interface ElectronAPI {
   onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => () => void
   onKeybindRegistrationFailed: (callback: (data: { id: string; accelerator: string }) => void) => () => void
   onKeybindRegistrationSucceeded: (callback: (data: { id: string; accelerator: string }) => void) => () => void
+  /** Snapshot of currently-failing registrations, for renderers that mount after the boot-time pass. */
+  getKeybindRegistrationFailures: () => Promise<Array<{ id: string; accelerator: string }>>
+
   onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void
 
   // CGEventTap-backed stealth typing (macOS only — graceful degradation elsewhere)
