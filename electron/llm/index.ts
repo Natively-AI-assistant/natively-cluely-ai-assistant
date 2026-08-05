@@ -36,6 +36,14 @@ export type { ConversationIntent, IntentResult } from "./IntentClassifier";
 export { planNextAssistantAction } from "./PlannerDecision";
 export type { PlannerDecision, PlannerDecisionKind, PlannerInput } from "./PlannerDecision";
 export { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, shouldScaffold, isStealthEvasionQuestion, isJdFactualLookupNotNegotiationAdvice } from "./AnswerPlanner";
+export {
+  classifySdIntention,
+  SD_INTENTION_PROMOTE_THRESHOLD,
+  shouldPromoteSdIntention,
+  isSdStickyExcludedType,
+  isSdIntentionPromoteExcludedType,
+} from "./sdIntention";
+export type { SdIntentionResult } from "./sdIntention";
 export { detectAnswerStyle, styleSuppressesScaffold } from "./answerStyle";
 export type { AnswerStyle, AnswerStyleResult } from "./answerStyle";
 export { detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode } from "./codingFollowup";

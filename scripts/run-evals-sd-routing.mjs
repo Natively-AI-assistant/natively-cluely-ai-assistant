@@ -83,6 +83,7 @@ async function main() {
           source,
           speakerPerspective: source === 'what_to_answer' ? 'interviewer' : 'user',
           sdSessionOpen: c.input.sdSessionOpen === true,
+          ...(c.input.sdIntention != null ? { sdIntention: c.input.sdIntention } : {}),
         });
         ctx.answerType = plan.answerType;
       } else {

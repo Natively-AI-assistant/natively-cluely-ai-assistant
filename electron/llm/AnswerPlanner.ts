@@ -5,6 +5,13 @@ import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
 import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords } from './speakability';
 import { applyModeFallback, type ActiveModeInfo } from './modeProfiles';
 import { classifyDocumentQuestionShape } from './documentGroundedPrompt';
+import {
+  classifySdIntention,
+  isSdIntentionPromoteExcludedType,
+  isSdStickyExcludedType,
+  shouldPromoteSdIntention,
+  type SdIntentionResult,
+} from './sdIntention';
 
 export type AnswerType =
   | 'identity_answer'
@@ -194,11 +201,18 @@ export interface PlanAnswerInput {
    */
   activeMode?: ActiveModeInfo | null;
   /**
-   * SD route sticky (ADR 0004): when sticky SD session is armed (problemKey open),
-   * non-coding/non-DSA turns promote to system_design_answer so speakable DF applies
-   * mid-interview. Optional — absent keeps prior turn-by-turn classification.
+   * SD route sticky (ADR 0005): when sticky SD session is armed (problemKey open),
+   * non-coding/non-DSA clarifiers promote to system_design_answer so speakable DF
+   * applies mid-interview. Sticky exclusions skip nego/identity/meeting-admin.
+   * Optional — absent keeps prior turn-by-turn classification.
    */
   sdSessionOpen?: boolean;
+  /**
+   * SD route LLM parallel (ADR 0005): optional injected SD-intention result.
+   * When omitted, `classifySdIntention(question)` runs sync. Promote-only merge
+   * at confidence ≥ 0.75; never demotes a regex `system_design_answer` hit.
+   */
+  sdIntention?: SdIntentionResult | null;
 }
 
 // Derives from the single canonical CODING_CONTRACT (codingContract.ts) so the
@@ -2700,14 +2714,33 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     answerType = docShape === 'broad_overview' ? 'lecture_answer' : docShape;
   }
 
-  // SD route sticky (ADR 0004): armed sticky SD session promotes non-coding /
-  // non-DSA turns to system_design_answer so speakable DF + strip apply mid-interview.
+  // SD route LLM parallel (ADR 0005): promote regex misses when SD intention is
+  // high-confidence. Never demote an existing system_design_answer hit. Hard
+  // vetoes (coding/DSA/write/debug) and nego/identity exclusions win.
+  const resolvedSdIntention = input.sdIntention !== undefined && input.sdIntention !== null
+    ? input.sdIntention
+    : classifySdIntention(question);
+  if (
+    answerType !== 'system_design_answer'
+    && shouldPromoteSdIntention(resolvedSdIntention)
+    && !isCodingAnswerType(answerType)
+    && !hasWriteCodeVerb
+    && !includesAny(textNoTechStack, DSA_PATTERNS)
+    && answerType !== 'debugging_question_answer'
+    && !isSdIntentionPromoteExcludedType(answerType)
+  ) {
+    answerType = 'system_design_answer';
+  }
+
+  // SD route sticky (ADR 0005): armed sticky promotes non-coding clarifiers;
+  // sticky exclusions block nego / identity / meeting-admin.
   if (
     input.sdSessionOpen === true
     && !isCodingAnswerType(answerType)
     && !hasWriteCodeVerb
     && !includesAny(textNoTechStack, DSA_PATTERNS)
     && answerType !== 'debugging_question_answer'
+    && !isSdStickyExcludedType(answerType)
   ) {
     answerType = 'system_design_answer';
   }
