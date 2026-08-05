@@ -6,7 +6,23 @@ on:
 
 jobs:
   electron-entry-smoke:
-    runs-on: macos-latest
+    # Natively ships on macOS AND Windows, so shared build/test behavior must be
+    # proven on both. A macOS-only job cannot catch Windows-specific breakage in
+    # package scripts: npm runs them through cmd.exe there, which has no POSIX
+    # subshells, no `VAR=value cmd` prefixes, no `${VAR:-default}`, and does not
+    # strip single quotes (so single-quoted globs reach Node literally and match
+    # nothing). Every such break shipped green on the macOS-only matrix.
+    name: Electron entry smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # Keep both legs running: knowing whether a failure is shared or
+      # platform-specific is the whole point of the matrix.
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
 
     steps:
       - name: Checkout
@@ -22,10 +38,13 @@ jobs:
         run: npm ci
 
       # Belt-and-suspenders: confirm postinstall produced correct-arch
-      # binaries. CI runners are macos-latest (arm64), so x86_64 here
-      # means the install itself was poisoned. Mirrors the developer-side
-      # pre-commit + boot-time gates in main.ts.
+      # binaries. The macOS runner is arm64, so x86_64 here means the install
+      # itself was poisoned. Mirrors the developer-side pre-commit + boot-time
+      # gates in main.ts. macOS-only by design: the check guards against Rosetta
+      # arch drift, which has no Windows analogue (verify-native-arch.js already
+      # returns `skipped` off darwin, so running it there proves nothing).
       - name: Verify native module architecture
+        if: runner.os == 'macOS'
         run: node scripts/verify-native-arch.js
 
       - name: Typecheck Electron main process
@@ -37,8 +56,10 @@ jobs:
       - name: Build Electron main process
         run: npm run build:electron
 
+      # `test -f` is a POSIX builtin and does not exist in the Windows runner's
+      # default shell (PowerShell). Node is guaranteed present on both legs.
       - name: Verify packaged entrypoint exists
-        run: test -f dist-electron/electron/main.js
+        run: node -e "require('node:fs').accessSync('dist-electron/electron/main.js')"
 
       # Required packaged local-fallback assets (ONNX/Transformers deps +
       # bundled MiniLM/MobileBERT models + local ONNX worker scripts). Fail the
@@ -50,10 +71,25 @@ jobs:
       - name: Verify packaged local fallback assets (source mode)
         run: npm run verify:packaged-local-assets
 
+      # macOS-only FOR NOW — not by design. Measured on a Windows 11 host at the
+      # time this leg was added: `npm test` fails 139 of 2832, `test:intelligence`
+      # fails 3 of 957. Those are pre-existing Windows incompatibilities in the
+      # suites themselves (POSIX path assumptions, tsc-isolated-tree helpers,
+      # symlink fixtures), not regressions from the change that added this leg.
+      #
+      # They are gated rather than shipped red on purpose: a check that fails on
+      # every PR regardless of its content trains reviewers to ignore the whole
+      # workflow, which would also destroy the macOS signal that already works.
+      #
+      # TODO: fix the Windows failures in these suites and drop both `if:` gates.
+      # Track progress by running `npm test` on a Windows host — every suite that
+      # goes green shrinks the gap this comment describes.
       - name: Run Electron unit tests
+        if: runner.os == 'macOS'
         run: npm test
 
       - name: Run intelligence unit tests
+        if: runner.os == 'macOS'
         run: npm run test:intelligence
 
       # Covers src/lib/__tests__ and src/lib/onboarding/__tests__ (renderer-side
@@ -65,6 +101,15 @@ jobs:
       # hand-maintained mirror.
       - name: Run src/lib unit tests
         run: npm run test:lib
+
+      # Runs on BOTH legs by design. scripts/package-app.js and
+      # scripts/run-with-env.mjs exist solely to reconcile /bin/sh and cmd.exe
+      # behavior for `npm run dist` and `test:electron`; verifying them on one
+      # OS would defeat their purpose. The helpers are pure and take tmpdir /
+      # resolver / signal-table as parameters, so each leg exercises both
+      # platform shapes rather than only its own.
+      - name: Run build-script unit tests
+        run: npm run test:scripts
 
   api-smoke:
     # Runs weekly (Monday 09:00 UTC) and on demand via workflow_dispatch.
