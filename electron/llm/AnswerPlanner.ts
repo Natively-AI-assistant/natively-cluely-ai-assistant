@@ -402,6 +402,7 @@ Speakable SD contract (STRICT):
 - Full sentences the candidate can say aloud. Prefer "we". Hedge lightly when uncertain.
 - NEVER emit DSA scaffolds: no ## Approach, ## Code, ## Dry Run, ## Complexity, or other coding-contract ## headings.
 - NEVER emit impl-language code fences (\`\`\`python, \`\`\`javascript, \`\`\`java, \`\`\`go, \`\`\`typescript, etc.).
+- NEVER emit architecture-blog section dumps: no "### 1. Core Architecture Components", "Technology Stack Recommendation", numbered multi-section essays, or tech-stack laundry lists.
 - ASCII HLD diagrams ARE allowed as \`\`\`text or \`\`\`ascii fences only when you are on the High-Level Design slice.
 
 Slice guide (do the next unfinished one, then stop):
@@ -648,6 +649,9 @@ const SYSTEM_DESIGN_PATTERNS = [
   /\b(scalable|distributed|high[- ]?throughput)\b[^.?!]{0,40}\b(system|service|architecture|design)\b[^.?!]{0,40}\b(design|build|architect|handle|scale to|support)\b/i,
   // like-X / similar-to product clones (sd-route-positive)
   /\b(design|build)\b[^.?!]{0,60}\b(service|system|platform)\b[^.?!]{0,40}\b(like|similar to)\b/i,
+  // Bare "Design <classic product>" (dogfood: "Design Bit.ly", "Design Twitter") —
+  // case-by-case classic nouns per sd-route-positive; not open-ended Title Case.
+  /\bdesign\b\s+(?:bit\.?ly|tiny.?url|twitter|uber|instagram|whatsapp|youtube|netflix|dropbox|reddit|tiktok|pinterest|spotify|slack|discord|ticketmaster|pastebin|imgur)\b/i,
   // scale-ask (sd-route-scale-ask): how would you scale/architect a named system
   /\bhow would you\b[^.?!]{0,40}\b(scale|architect|design)\b[^.?!]{0,60}\b(system|service|platform|checkout|architecture|cache|queue|pipeline)\b/i,
   /\brate limiter\b|\burl shortener\b|\bchat system\b|\bnotification system\b/i,

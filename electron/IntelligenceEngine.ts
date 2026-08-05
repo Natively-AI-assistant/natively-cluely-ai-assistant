@@ -3180,6 +3180,11 @@ export class IntelligenceEngine extends EventEmitter {
                 });
                 answer = structureValidation.repaired;
             }
+            // Speakable SD: same post-stream polish as WTA — strip DSA bleed and
+            // architecture-blog dumps so manual "Design Bit.ly" stays read-aloud.
+            if (answer && answerPlan.answerType === 'system_design_answer') {
+                answer = applySpeakableSdIfNeeded(answerPlan.answerType, answer);
+            }
 
             if (answer) {
                 // MODE 5: Manual Answer (Fallback) — a manual-chat submission

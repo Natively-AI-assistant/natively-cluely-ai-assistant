@@ -62,6 +62,38 @@ function hasDsaHeading(answer: string): boolean {
   return DSA_HEADING_RE.test(answer);
 }
 
+/** Numbered markdown sections typical of architecture-blog dumps (not DF speech). */
+const NUMBERED_MD_SECTION_RE = /^[ \t]*#{1,3}[ \t]*\d+\.[ \t]+\S/gm;
+
+const ARCH_BLOG_MARKER_RE =
+  /\b(?:Core Architecture Components|Technology Stack Recommendation|Data Storage Strategy|High-Level Workflow|Key Challenges\s*(?:&|and)\s*Solutions|URL Generation|Handling (?:Concurrency|Analytics))\b/i;
+
+/**
+ * Multi-section architecture essays the model emits when it ignores the DF
+ * one-slice contract (dogfood: Ticketmaster / Bit.ly chat dumps).
+ */
+export function looksLikeArchitectureBlogDump(answer: string): boolean {
+  if (typeof answer !== 'string' || !answer) return false;
+  NUMBERED_MD_SECTION_RE.lastIndex = 0;
+  const sections = answer.match(NUMBERED_MD_SECTION_RE) || [];
+  if (sections.length >= 2) return true;
+  return ARCH_BLOG_MARKER_RE.test(answer) && sections.length >= 1;
+}
+
+/**
+ * Keep the lead-in prose before the first numbered ### section so a blog dump
+ * collapses to a short spoken opener instead of a 6-part essay.
+ */
+function stripArchitectureBlogDump(answer: string): string {
+  if (!looksLikeArchitectureBlogDump(answer)) return answer;
+  NUMBERED_MD_SECTION_RE.lastIndex = 0;
+  const m = NUMBERED_MD_SECTION_RE.exec(answer);
+  if (m && typeof m.index === 'number') {
+    return answer.slice(0, m.index).trim();
+  }
+  return answer;
+}
+
 function stripImplFences(answer: string): string {
   return answer.replace(/```([^\n`]*)\n([\s\S]*?)```/g, (full, info: string, body: string) =>
     shouldStripFence(info, body) ? '' : full,
@@ -80,17 +112,24 @@ function collapseBlankLines(answer: string): string {
 /**
  * Turn a system-design answer into speakable text: drop DSA scaffold headings
  * and impl-language (or code-like untagged) fences; keep ```text / ```ascii HLD.
+ * Also collapse multi-section architecture blog dumps to the lead-in prose.
  * Empty string and already-speakable prose are returned unchanged (identity).
  */
 export function toSpeakableSd(answer: string): string {
   if (typeof answer !== 'string') return '';
   if (answer === '') return answer;
 
-  if (!hasDsaHeading(answer) && !hasRemovableFence(answer)) {
+  const dirty =
+    hasDsaHeading(answer) ||
+    hasRemovableFence(answer) ||
+    looksLikeArchitectureBlogDump(answer);
+  if (!dirty) {
     return answer;
   }
 
-  const stripped = collapseBlankLines(stripDsaHeadings(stripImplFences(answer)))
+  const stripped = collapseBlankLines(
+    stripArchitectureBlogDump(stripDsaHeadings(stripImplFences(answer))),
+  )
     .replace(/^\n+/, '')
     .replace(/\n+$/, '');
   return stripped;

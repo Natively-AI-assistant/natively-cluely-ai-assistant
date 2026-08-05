@@ -52,6 +52,10 @@ test('sd-routing matrix — title-form, like-X, scale-ask, false friends', () =>
   assert.equal(planFor('Designing a Scalable Ticketing Platform').answerType, 'system_design_answer');
   assert.equal(planFor('Design a service similar to ticketmaster', 'manual').answerType, 'system_design_answer');
   assert.equal(planFor('how would you scale our checkout?').answerType, 'system_design_answer');
+  // Dogfood 2026-08-05 Distributed System Design Patterns: bare Design <product>
+  assert.equal(planFor('Design Bit.ly', 'manual').answerType, 'system_design_answer');
+  assert.equal(planFor('Design a distributed system like ticketmaster', 'manual').answerType, 'system_design_answer');
+  assert.equal(planFor('Design Twitter', 'manual').answerType, 'system_design_answer');
 
   assert.notEqual(planFor('how many years have you worked on distributed systems?').answerType, 'system_design_answer');
   assert.notEqual(planFor('implement a rate limiter in python').answerType, 'system_design_answer');
@@ -59,6 +63,8 @@ test('sd-routing matrix — title-form, like-X, scale-ask, false friends', () =>
   // Natively product-about only when the product is named — keep non-SD
   const natively = planFor('what is the architecture of Natively?');
   assert.notEqual(natively.answerType, 'system_design_answer');
+  // Lecture / non-product: do not treat "design patterns" as an SD product clone
+  assert.notEqual(planFor('explain design patterns', 'manual').answerType, 'system_design_answer');
 });
 
 test('sd-routing sticky session promotes clarifiers to system_design_answer', () => {

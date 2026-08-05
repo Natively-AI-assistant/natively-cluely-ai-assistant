@@ -108,6 +108,27 @@ describe('toSpeakableSd — identity for empty / already-speakable', () => {
     assert.equal(applySpeakableSdIfNeeded('system_design_answer', onlyScaffold), out);
   });
 
+  test('strips multi-section architecture blog dump (dogfood Bit.ly / Ticketmaster)', () => {
+    // Exact shape from meeting 4a72817e — model ignores DF one-slice and dumps HLD essay.
+    const blog = [
+      'Designing a URL shortening service like Bit.ly requires a system optimized for high-read throughput.',
+      '',
+      '### 1. Core Architecture Components',
+      '* **API Gateway:** Handles rate limiting.',
+      '',
+      '### 2. Data Storage Strategy',
+      '* **Key-Value Store:** Cassandra.',
+      '',
+      '### 6. Technology Stack Recommendation',
+      '* **Language:** Go.',
+    ].join('\n');
+    const out = toSpeakableSd(blog);
+    assert.doesNotMatch(out, /Core Architecture Components/i);
+    assert.doesNotMatch(out, /Technology Stack Recommendation/i);
+    assert.doesNotMatch(out, /###\s*2\./);
+    assert.match(out, /URL shortening service like Bit\.ly/i);
+  });
+
   test('runs without Electron runtime', () => {
     assert.equal(process.versions.electron, undefined);
   });
