@@ -91,38 +91,139 @@ async function fetchGroqModels(apiKey: string): Promise<ProviderModel[]> {
 
 // ─── Anthropic ───────────────────────────────────────────────────────────────
 
+/**
+ * A readable label for a Claude model id — "Claude Sonnet 4.6", never
+ * "claude-sonnet-4-6-20251114". Only used when /v1/models omits `display_name`;
+ * Anthropic's own label is already in this shape and is preferred.
+ *
+ * Anthropic ids come in two shapes, and BOTH are live on /v1/models:
+ *   current  claude-sonnet-4-6 / claude-opus-5 / claude-haiku-4-5-20251001
+ *            → claude-<family>-<major>[-<minor>][-<date>]
+ *   legacy   claude-3-5-sonnet-20241022
+ *            → claude-<major>-<minor>-<family>-<date>
+ *
+ * THE BUG THIS REPLACES: the old catalog filter matched /claude-(\d+)-(\d+)?/,
+ * which requires digits immediately after "claude-". That is the LEGACY shape
+ * only, so every current-generation id — including the plain, undated
+ * `claude-sonnet-4-6` — was dropped and the catalog came back empty. The
+ * caller's `models.length > 0` persist guard then skipped it, and Settings fell
+ * back to the single hardcoded STANDARD_CLOUD_MODELS preset with no error.
+ *
+ * Exported for tests.
+ */
+export function formatClaudeLabel(modelId: string): string {
+    const id = (modelId || '').toLowerCase();
+    // Drop the release-date snapshot suffix: claude-haiku-4-5-20251001 → claude-haiku-4-5
+    const base = id.replace(/-\d{8}$/, '');
+
+    const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    // Any remaining trailing segments ("-latest") become title-cased words.
+    const tag = (rest?: string) => (rest ? ' ' + rest.slice(1).split('-').map(cap).join(' ') : '');
+
+    // Current shape. The family segment is alphabetic, so this cannot match a
+    // legacy id, whose first segment is a digit.
+    let m = base.match(/^claude-([a-z]+)-(\d+)(?:-(\d+))?(-.+)?$/);
+    if (m) {
+        return `Claude ${cap(m[1])} ${m[3] ? `${m[2]}.${m[3]}` : m[2]}${tag(m[4])}`;
+    }
+
+    // Legacy shape.
+    m = base.match(/^claude-(\d+)(?:-(\d+))?-([a-z]+)(-.+)?$/);
+    if (m) {
+        return `Claude ${m[2] ? `${m[1]}.${m[2]}` : m[1]} ${cap(m[3])}${tag(m[4])}`;
+    }
+
+    return base.split('-').map(cap).join(' ');
+}
+
 async function fetchAnthropicModels(apiKey: string): Promise<ProviderModel[]> {
-    const response = await axios.get('https://api.anthropic.com/v1/models', {
-        headers: {
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-        },
-        timeout: 15000,
-    });
+    // /v1/models is newest-first and defaults to a page size of 20 — the old
+    // call passed no limit, so a key with a long model history got truncated at
+    // 20 with no indication. `limit` is documented as ranging 1..1000, so one
+    // page covers any real catalog; the loop is a formality that follows
+    // has_more/last_id if the cap ever moves.
+    const models: any[] = [];
+    let afterId: string | null = null;
 
-    const models: any[] = response.data?.data || [];
+    for (let page = 0; page < 5; page++) {
+        const url: string = afterId
+            ? `https://api.anthropic.com/v1/models?limit=1000&after_id=${encodeURIComponent(afterId)}`
+            : 'https://api.anthropic.com/v1/models?limit=1000';
 
-    // Only include Claude 3.5+ models (haiku, sonnet, opus)
-    const filtered = models.filter((m: any) => {
-        const id = (m.id || '').toLowerCase();
-        if (!id.includes('claude')) return false;
-        
-        // Match models that are version 3.5, 3.7, 4.0, etc.
-        // e.g. claude-3-5-sonnet, claude-3-7-sonnet, claude-4-opus
-        const versionMatch = id.match(/claude-(\d+)-(\d+)?/);
-        if (versionMatch) {
-            const major = parseInt(versionMatch[1], 10);
-            const minor = versionMatch[2] ? parseInt(versionMatch[2], 10) : 0;
-            if (major > 3 || (major === 3 && minor >= 5)) {
-                return true;
-            }
+        const response = await axios.get(url, {
+            headers: {
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+            },
+            timeout: 15000,
+        });
+
+        models.push(...(response.data?.data || []));
+
+        if (response.data?.has_more !== true) break;
+        afterId = response.data?.last_id || null;
+        if (!afterId) break;
+    }
+
+    // No version filter. /v1/models already returns exactly the models this key
+    // can use, and the old "Claude 3.5+" regex is what dropped the entire
+    // current generation. Everything the endpoint offers is offered here.
+    const claudeModels = models.filter((m: any) => (m.id || '').toLowerCase().includes('claude'));
+
+    return pickLatestSnapshotPerModel(claudeModels).map((m: any) => ({
+        id: m.id,
+        // display_name is Anthropic's own label and is already date-free
+        // ("Claude Sonnet 4.6"). Derive one only when the field is absent.
+        label: m.display_name || formatClaudeLabel(m.id),
+    }));
+}
+
+/**
+ * One row per model, keeping the newest release when a model ships under
+ * several dated snapshots (claude-3-5-sonnet-20240620 vs -20241022).
+ *
+ * Identity is the date-stripped id, NOT the label. An earlier version of this
+ * deduped on `display_name`, which fails the moment two snapshots of one model
+ * carry different display names — and it kept whichever came first rather than
+ * comparing the dates. `created_at` is documented as an RFC 3339 datetime, so
+ * compare that and fall back to the id's own YYYYMMDD suffix when it is absent.
+ *
+ * Note this also folds a pre-4.6 alias into its snapshot (`claude-sonnet-4-5`
+ * and `claude-sonnet-4-5-20250929` share a key) — correct, since the alias is
+ * documented as a pointer to the most recent snapshot for that version. The
+ * dateless 4.6-generation ids are NOT aliases; each is its own model and gets
+ * its own key.
+ *
+ * Input order is preserved (the API returns newest-first). Exported for tests.
+ */
+export function pickLatestSnapshotPerModel<T extends { id?: string; created_at?: string }>(
+    models: T[],
+): T[] {
+    // Sorts lexicographically in the same order it sorts chronologically, for
+    // both RFC 3339 timestamps and bare YYYYMMDD suffixes.
+    const releasedAt = (m: T): string =>
+        m?.created_at || (m?.id || '').match(/-(\d{8})$/)?.[1] || '';
+
+    const bestByModel = new Map<string, T>();
+    const order: string[] = [];
+
+    for (const m of models) {
+        const id = (m?.id || '').toLowerCase();
+        if (!id) continue;
+        const key = id.replace(/-\d{8}$/, '');
+
+        const incumbent = bestByModel.get(key);
+        if (!incumbent) {
+            bestByModel.set(key, m);
+            order.push(key);
+            continue;
         }
-        return false;
-    });
+        // Strictly-newer only: on a tie the incumbent wins, which preserves the
+        // API's newest-first ordering as the tiebreak.
+        if (releasedAt(m) > releasedAt(incumbent)) bestByModel.set(key, m);
+    }
 
-    return filtered
-        .map((m: any) => ({ id: m.id, label: m.display_name || m.id }))
-        .sort((a, b) => a.label.localeCompare(b.label));
+    return order.map(key => bestByModel.get(key) as T);
 }
 
 // ─── DeepSeek ────────────────────────────────────────────────────────────────
