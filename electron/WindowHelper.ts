@@ -731,18 +731,26 @@ export class WindowHelper {
     });
 
     this.launcherWindow.on('move', () => {
-      if (this.launcherWindow) {
-        const bounds = this.launcherWindow.getBounds();
+      const launcher = this.launcherWindow;
+      if (!launcher || launcher.isDestroyed()) return;
+      try {
+        const bounds = launcher.getBounds();
         this.launcherPosition = { x: bounds.x, y: bounds.y };
         this.appState.settingsWindowHelper.reposition(bounds);
+      } catch {
+        // Launcher destroyed mid-move (second-instance / teardown race).
       }
     });
 
     this.launcherWindow.on('resize', () => {
-      if (this.launcherWindow) {
-        const bounds = this.launcherWindow.getBounds();
+      const launcher = this.launcherWindow;
+      if (!launcher || launcher.isDestroyed()) return;
+      try {
+        const bounds = launcher.getBounds();
         this.launcherSize = { width: bounds.width, height: bounds.height };
         this.appState.settingsWindowHelper.reposition(bounds);
+      } catch {
+        // Launcher destroyed mid-resize.
       }
     });
 
