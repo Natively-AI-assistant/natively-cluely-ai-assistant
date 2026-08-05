@@ -83,9 +83,49 @@ function buildDefaultShortcuts(): ShortcutConfig {
  */
 export const DEFAULT_SHORTCUTS: ShortcutConfig = buildDefaultShortcuts();
 
+// Backend keybind id -> frontend ShortcutConfig key. Shared between the
+// backend->frontend state mapper and the registration-failure listener below
+// so both stay in sync as new keybinds are added.
+const BACKEND_ID_TO_ACTION: Partial<Record<string, keyof ShortcutConfig>> = {
+    'chat:whatToAnswer': 'whatToAnswer',
+    'chat:followUp': 'followUp',
+    'chat:followup': 'followUp', // backwards compat
+    'chat:clarify': 'clarify',
+    'chat:dynamicAction4': 'dynamicAction4',
+    'chat:answer': 'answer',
+    'chat:codeHint': 'codeHint',
+    'chat:brainstorm': 'brainstorm',
+    'chat:shorten': 'shorten',
+    'chat:recap': 'recap',
+    'chat:scrollUp': 'scrollUp',
+    'chat:scrollDown': 'scrollDown',
+    'chat:scrollLeft': 'scrollLeft',
+    'chat:scrollRight': 'scrollRight',
+    'chat:focusInput': 'focusInput',
+    'chat:auto-answer-mode': 'autoAnswerMode',
+    // Window
+    'window:move-up': 'moveWindowUp',
+    'window:move-down': 'moveWindowDown',
+    'window:move-left': 'moveWindowLeft',
+    'window:move-right': 'moveWindowRight',
+    // General
+    'general:toggle-visibility': 'toggleVisibility',
+    'general:toggle-mouse-passthrough': 'toggleMousePassthrough',
+    'general:process-screenshots': 'processScreenshots',
+    'general:capture-and-process': 'captureAndProcess',
+    'general:capture-dom': 'capturePage',
+    'general:reset-cancel': 'resetCancel',
+    'general:take-screenshot': 'takeScreenshot',
+    'general:selective-screenshot': 'selectiveScreenshot',
+};
+
 export const useShortcuts = () => {
     // Initialize state with platform-aware defaults
     const [shortcuts, setShortcuts] = useState<ShortcutConfig>(buildDefaultShortcuts);
+    // Backend ids whose globalShortcut.register() call failed (OS or another
+    // app already owns that accelerator) — surfaced in Settings so the user
+    // knows to rebind rather than assuming the feature is broken.
+    const [conflicts, setConflicts] = useState<Set<keyof ShortcutConfig>>(new Set());
 
     // Map backend keybinds (array of objects) to frontend state (ShortcutConfig)
     const mapBackendToFrontend = useCallback((backendKeybinds: any[]) => {
@@ -93,44 +133,46 @@ export const useShortcuts = () => {
             const newShortcuts: any = { ...prev };
 
             backendKeybinds.forEach(kb => {
-                const keys = acceleratorToKeys(kb.accelerator);
-
-                // Map backend IDs to frontend keys
-                if (kb.id === 'chat:whatToAnswer') newShortcuts.whatToAnswer = keys;
-                else if (kb.id === 'app:toggle-global-overlay') newShortcuts.toggleGlobalOverlay = keys;
-                else if (kb.id === 'chat:followUp') newShortcuts.followUp = keys;
-                else if (kb.id === 'chat:followup') newShortcuts.followUp = keys; // backwards compat
-                else if (kb.id === 'chat:clarify') newShortcuts.clarify = keys;
-                else if (kb.id === 'chat:dynamicAction4') newShortcuts.dynamicAction4 = keys;
-                else if (kb.id === 'chat:answer') newShortcuts.answer = keys;
-                else if (kb.id === 'chat:codeHint') newShortcuts.codeHint = keys;
-                else if (kb.id === 'chat:brainstorm') newShortcuts.brainstorm = keys;
-                else if (kb.id === 'chat:shorten') newShortcuts.shorten = keys;
-                else if (kb.id === 'chat:recap') newShortcuts.recap = keys;
-                else if (kb.id === 'chat:scrollUp') newShortcuts.scrollUp = keys;
-                else if (kb.id === 'chat:scrollDown') newShortcuts.scrollDown = keys;
-                else if (kb.id === 'chat:scrollLeft') newShortcuts.scrollLeft = keys;
-                else if (kb.id === 'chat:scrollRight') newShortcuts.scrollRight = keys;
-                else if (kb.id === 'chat:focusInput') newShortcuts.focusInput = keys;
-                else if (kb.id === 'chat:auto-answer-mode') newShortcuts.autoAnswerMode = keys;
-                // Window
-                else if (kb.id === 'window:move-up') newShortcuts.moveWindowUp = keys;
-                else if (kb.id === 'window:move-down') newShortcuts.moveWindowDown = keys;
-                else if (kb.id === 'window:move-left') newShortcuts.moveWindowLeft = keys;
-                else if (kb.id === 'window:move-right') newShortcuts.moveWindowRight = keys;
-                // General
-                else if (kb.id === 'general:toggle-visibility') newShortcuts.toggleVisibility = keys;
-                else if (kb.id === 'general:toggle-mouse-passthrough') newShortcuts.toggleMousePassthrough = keys;
-                else if (kb.id === 'general:process-screenshots') newShortcuts.processScreenshots = keys;
-                else if (kb.id === 'general:capture-and-process') newShortcuts.captureAndProcess = keys;
-                else if (kb.id === 'general:capture-dom') newShortcuts.capturePage = keys;
-                else if (kb.id === 'general:reset-cancel') newShortcuts.resetCancel = keys;
-                else if (kb.id === 'general:take-screenshot') newShortcuts.takeScreenshot = keys;
-                else if (kb.id === 'general:selective-screenshot') newShortcuts.selectiveScreenshot = keys;
+                const action = BACKEND_ID_TO_ACTION[kb.id];
+                if (action) newShortcuts[action] = acceleratorToKeys(kb.accelerator);
             });
 
             return newShortcuts;
         });
+    }, []);
+
+    // Track shortcuts the OS/another app is refusing to hand over, so
+    // Settings can flag them instead of leaving a silently dead hotkey.
+    useEffect(() => {
+        if (!window.electronAPI?.onKeybindRegistrationFailed) return;
+        const unsubscribe = window.electronAPI.onKeybindRegistrationFailed(({ id }) => {
+            const action = BACKEND_ID_TO_ACTION[id];
+            if (!action) return;
+            setConflicts(prev => {
+                if (prev.has(action)) return prev;
+                const next = new Set(prev);
+                next.add(action);
+                return next;
+            });
+        });
+        return unsubscribe;
+    }, []);
+
+    // Clear the flag once a shortcut re-registers successfully (e.g. right
+    // after the user records a new combo for it).
+    useEffect(() => {
+        if (!window.electronAPI?.onKeybindRegistrationSucceeded) return;
+        const unsubscribe = window.electronAPI.onKeybindRegistrationSucceeded(({ id }) => {
+            const action = BACKEND_ID_TO_ACTION[id];
+            if (!action) return;
+            setConflicts(prev => {
+                if (!prev.has(action)) return prev;
+                const next = new Set(prev);
+                next.delete(action);
+                return next;
+            });
+        });
+        return unsubscribe;
     }, []);
 
     // Load from Main Process on mount
@@ -158,6 +200,14 @@ export const useShortcuts = () => {
     const updateShortcut = useCallback(async (actionId: keyof ShortcutConfig, keys: string[]) => {
         // Optimistic update
         setShortcuts(prev => ({ ...prev, [actionId]: keys }));
+        // Give the conflict badge a chance to clear right away instead of
+        // waiting on the round-trip to main and back.
+        setConflicts(prev => {
+            if (!prev.has(actionId)) return prev;
+            const next = new Set(prev);
+            next.delete(actionId);
+            return next;
+        });
 
         const accelerator = keysToAccelerator(keys);
         let backendId = '';
@@ -278,6 +328,7 @@ export const useShortcuts = () => {
         shortcuts,
         updateShortcut,
         resetShortcuts,
-        isShortcutPressed
+        isShortcutPressed,
+        conflicts
     };
 };

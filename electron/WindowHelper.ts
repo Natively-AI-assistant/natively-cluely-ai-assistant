@@ -424,11 +424,18 @@ export class WindowHelper {
       ...(isMac
         ? { vibrancy: 'under-window' as const, visualEffectState: 'followWindow' as const }
         : {}),
-      transparent: isMac,
+      // `transparent` is a creation-time-only BrowserWindow option, so it must
+      // be true on every platform (not just macOS) for the Interface Opacity
+      // preview to be able to punch through the window at runtime later — see
+      // setLauncherOpacityPreview(). The window still starts fully opaque via
+      // the solid `backgroundColor` below; only the mac vibrancy path used a
+      // translucent material by default.
+      transparent: true,
       hasShadow: true,
       // The launcher starts with the black logo splash. Use a black native
-      // background too so macOS doesn't show a grey/white transparent-window
-      // flash before the renderer paints.
+      // background too so the OS doesn't show a grey/white transparent-window
+      // flash before the renderer paints (applies on macOS and Windows, both
+      // of which now create the window with `transparent: true`).
       backgroundColor: '#000000',
       focusable: true,
       resizable: true,
@@ -1860,18 +1867,15 @@ export class WindowHelper {
   // the "empty" areas behind the hidden DOM still rendered as an opaque-ish
   // dark surface instead of the real desktop, defeating the point of a live
   // preview. `transparent` itself is a creation-time-only BrowserWindow
-  // option (Electron cannot toggle it after construction), but vibrancy and
-  // backgroundColor ARE mutable at runtime, so this flips only those two for
-  // the duration of the hold.
+  // option (Electron cannot toggle it after construction) — createWindow()
+  // now always passes `transparent: true` on every platform so this handler
+  // has something to work with — but vibrancy and backgroundColor ARE
+  // mutable at runtime, so this flips those for the duration of the hold.
   //
-  // macOS-only: on Windows/Linux the launcher window is created with
-  // `transparent: false` (see createWindow()), so there is no runtime call
-  // that makes it see-through — the preview there stays boxed in the
-  // window's opaque backgroundColor. Fixing that would require creating the
-  // launcher as an always-transparent window, which the product wants only
-  // for the in-meeting overlay, not the main dashboard.
+  // Windows/Linux have no vibrancy API, so the `setVibrancy` calls are
+  // guarded to macOS only; there `setBackgroundColor('#00000000')` alone is
+  // enough to let the real desktop show through the frameless window.
   public setLauncherOpacityPreview(active: boolean): void {
-    if (process.platform !== 'darwin') return;
     if (!this.launcherWindow || this.launcherWindow.isDestroyed()) return;
     // Only short-circuit the "start previewing" case when already previewing
     // — that branch is the one worth deduping (60fps drag ticks etc. never
@@ -1884,8 +1888,10 @@ export class WindowHelper {
     // mid-drag — see that handler's comment).
     if (active && this.launcherOpacityPreviewActive) return;
 
+    const isMac = process.platform === 'darwin';
+
     if (active) {
-      this.launcherWindow.setVibrancy(null);
+      if (isMac) this.launcherWindow.setVibrancy(null);
       this.launcherWindow.setBackgroundColor('#00000000');
       // macOS renders a native drop shadow from the transparent window's own
       // painted alpha. With vibrancy off, the mockup preview's rgba surfaces
@@ -1898,7 +1904,7 @@ export class WindowHelper {
       this.launcherWindow.setHasShadow(false);
     } else {
       // Must match the values createWindow() applies at construction.
-      this.launcherWindow.setVibrancy('under-window');
+      if (isMac) this.launcherWindow.setVibrancy('under-window');
       this.launcherWindow.setBackgroundColor('#000000');
       this.launcherWindow.setHasShadow(true);
     }
