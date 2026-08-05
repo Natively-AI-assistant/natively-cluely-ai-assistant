@@ -1748,7 +1748,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 <Smartphone size={14} /> Stream Natively to Your Phone
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Phone Mirror spins up a small local web server so you can watch Natively's live transcript and AI answers from your phone or tablet — handy when your screen is being shared and you don't want the overlay visible.
+                                Phone Mirror is a local control surface on your phone: live answers, chat, quick actions, screenshot shutter, and <strong>two-device stealth</strong> (hide the desktop overlay while the phone stays primary). <strong>iPhone first:</strong> use same Wi‑Fi + Allow LAN + Safari.
                             </p>
                         </div>
 
@@ -1758,9 +1758,10 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <Wifi className="w-4 h-4 text-sky-500" /> Enable & Connect
                                 </h4>
                                 <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                    <li>Open <strong>Settings → Sync</strong></li>
-                                    <li>Toggle on, then scan the generated QR code from your phone</li>
-                                    <li>Loopback by default — flip <strong>Expose on LAN</strong> to reach it from another device on the same Wi-Fi</li>
+                                    <li>Open <strong>Settings → Sync</strong> and enable Phone Mirror</li>
+                                    <li><strong>iPhone:</strong> turn on <strong>Allow LAN</strong>, scan the QR (or paste the URL) in Safari, then tap <strong>Enter stealth</strong></li>
+                                    <li>USB tip: Internet Sharing / hotspot can share a link — still open the LAN URL, not localhost (iOS has no adb reverse)</li>
+                                    <li><strong>Android USB (later):</strong> <code className="font-mono">adb reverse</code> + loopback URL without Allow LAN</li>
                                 </ul>
                             </div>
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
