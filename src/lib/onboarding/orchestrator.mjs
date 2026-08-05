@@ -32,9 +32,9 @@ export function shouldShowToaster(config, ctx) {
   // 1. Hard skip — user-state
   if (config.skipWhen && config.skipWhen(ctx.userState)) return false;
 
-  // 2. Already done forever
+  // 2. Already done forever (onceEver OR gate-only)
   if (
-    config.onceEver &&
+    (config.onceEver || config.isGateOnly) &&
     ctx.completed[config.id] &&
     !(config.reEligibility && config.reEligibility(ctx.userState, ctx.completed))
   ) {

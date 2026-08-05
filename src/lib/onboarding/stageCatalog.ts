@@ -168,6 +168,12 @@ export const STAGES: StageConfig[] = [
 export const QUIET_WINDOW_STAGE: StageConfig = {
   id: 'quiet_window',
   order: 99, // not used in static ordering
+  // onceEver is load-bearing: without it, a persisted queue that still contains
+  // quiet_window (common after commercial-surface-strip left it in localStorage)
+  // re-completes the gate on every drain tick → completeToaster → notify →
+  // ensureDraining(delay=0) → tick forever, wedging the launcher on the splash
+  // logo (native RSS climbs to multi-GB). See scripts/diag-stuck-at-logo.mjs.
+  onceEver: true,
   isGateOnly: true, // No UI — auto-resolves once predicate is satisfied
   triggers: {},
   customPredicate: (ctx: Ctx) => {
