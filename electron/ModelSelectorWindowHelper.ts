@@ -1,5 +1,6 @@
 import { BrowserWindow, screen, app } from "electron"
 import path from "node:path"
+import { attachNoActivate } from "./utils/windowsFocusPolicy"
 
 const isDev = process.env.NODE_ENV === "development"
 
@@ -193,6 +194,12 @@ export class ModelSelectorWindowHelper {
         }
 
         this.window = new BrowserWindow(windowSettings)
+        // Windows counterpart of the NSPanel stealth attributes applied below
+        // on macOS: WS_EX_NOACTIVATE so clicking the model selector mid-meeting
+        // never steals foreground focus from the meeting app. Dismissal is the
+        // overlay popover click-catcher (blur-close is intentionally not wired
+        // here). No-op on macOS/Linux.
+        attachNoActivate(this.window)
 
         if (process.platform === "darwin") {
             // Initial defaults - will be updated in showWindow

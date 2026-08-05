@@ -46,5 +46,29 @@ core-foundation = "0.10"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 wasapi = "0.13.0"
-windows = { version = "0.52.0", features = ["Win32_Media_Audio", "Win32_System_Com", "Win32_System_Threading"] }
+# Win32 features:
+#   Win32_Media_Audio / Win32_System_Com  — WASAPI system-audio capture (existing).
+#   Win32_System_Threading                — GetCurrentThreadId (existing) + PostThreadMessageW.
+#   Win32_UI_WindowsAndMessaging          — SetWindowsHookExW / CallNextHookEx /
+#                                           UnhookWindowsHookEx / GetMessageW / the WH_*
+#                                           + WM_* constants + KBDLLHOOKSTRUCT. This is the
+#                                           Windows analogue of the macOS CGEventTap used by
+#                                           keyboard_tap.rs for stealth typing (type into the
+#                                           overlay without the window taking OS focus).
+#   Win32_UI_Input_KeyboardAndMouse       — ToUnicodeEx / GetKeyState (VK→char translation).
+#   Win32_System_LibraryLoader            — GetModuleHandleW (hmod for the LL hook).
+windows = { version = "0.52.0", features = [
+    "Win32_Media_Audio",
+    "Win32_System_Com",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_TextServices",
+    #   Win32_UI_Accessibility            — SetWinEventHook/UnhookWinEvent, used to notice
+    #                                       the foreground app changing (Alt+Tab) so stealth
+    #                                       typing stops, matching macOS panel key-resign.
+    "Win32_UI_Accessibility",
+    "Win32_System_LibraryLoader",
+    "Win32_Foundation",
+] }
 tracing = "0.1.44"

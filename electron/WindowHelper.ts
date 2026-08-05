@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
+import { attachNoActivate, isNoActivateManaged } from './utils/windowsFocusPolicy';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -238,6 +239,34 @@ export class WindowHelper {
         win.setContentProtection(enable);
       }
     });
+  }
+
+  /**
+   * Windows: keep the launcher out of the taskbar while undetectable mode is on.
+   *
+   * Every other window is created with `skipTaskbar: true` (overlay, pill,
+   * toggle, popover catcher, settings, model selector, cropper) — the launcher
+   * is the sole exception, because in NORMAL mode it is the main app window and
+   * belongs in the taskbar. That left undetectable mode only half-applied on
+   * Windows: macOS removes the app from the Dock entirely, while Windows still
+   * showed a "Natively" taskbar button whenever the launcher was up (before and
+   * after a meeting — during one the overlay is already skipTaskbar).
+   *
+   * Called at launcher creation and on every undetectable toggle. No-op off
+   * win32: macOS stealth is the Dock/activation-policy path, and forcing
+   * skipTaskbar there would be a behaviour change on a platform that does not
+   * use it.
+   */
+  public syncLauncherTaskbarForStealth(): void {
+    if (process.platform !== 'win32') return;
+    const win = this.launcherWindow;
+    if (!win || win.isDestroyed()) return;
+    try {
+      win.setSkipTaskbar(!!this.appState.getUndetectable());
+    } catch (e) {
+      // Non-fatal: worst case the taskbar button remains, exactly as before.
+      console.error('[WindowHelper] setSkipTaskbar failed:', e);
+    }
   }
 
   // Force-reapply the CURRENT content-protection state to every live window,
@@ -509,6 +538,10 @@ export class WindowHelper {
     }
 
     this.launcherWindow.setContentProtection(this.contentProtection);
+    // Apply the persisted undetectable state to the launcher's taskbar presence
+    // now, at creation — a session that STARTS undetectable would otherwise show
+    // a taskbar button until the user toggled the setting off and on again.
+    this.syncLauncherTaskbarForStealth();
 
     // A/B KILL-SWITCH (2026-07-10): NATIVELY_DISABLE_ONBOARDING_ORCH=1 appends
     // ?noorch=1, which makes App.tsx skip orch.start() entirely (no drain loop,
@@ -671,16 +704,31 @@ export class WindowHelper {
     };
 
     this.overlayWindow = new BrowserWindow(overlaySettings);
+    // Windows counterpart of the mac panel treatment above: WS_EX_NOACTIVATE
+    // (setFocusable(false)) so clicking the overlay/buttons never activates
+    // Natively — the user's meeting app keeps foreground focus, exactly like
+    // becomesKeyOnlyIfNeeded on macOS. The window is NEVER focused; typing goes
+    // through the WH_KEYBOARD_LL stealth hook (StealthKeyboardManager), same as
+    // the macOS CGEventTap. No-op on macOS/Linux.
+    if (attachNoActivate(this.overlayWindow)) {
+      // Startup breadcrumb: lets a debug log positively confirm the running
+      // process has the no-activate build (a stale process is the #1 cause of
+      // "still steals focus" reports — the bundle is only read at launch).
+      console.log('[WindowHelper] Windows no-activate policy applied to overlay');
+    }
     this.overlayWindow.setContentProtection(this.contentProtection);
     // Apply the current mouse-interaction policy to the NEW window. Without
     // this, a window (re)created while stealth passthrough is ON would start
     // fully interactive — silently breaking passthrough until the next toggle.
     this.syncOverlayInteractionPolicy();
 
-    // Register the overlay as the sole recipient of CGEventTap captured-key
+    // Register the overlay as the sole recipient of stealth captured-key
     // broadcasts. Without this, captured keystrokes fan out to ALL windows
-    // (settings, cropper, etc.) — silent privacy/security exposure.
-    if (process.platform === 'darwin') {
+    // (settings, cropper, etc.) — silent privacy/security exposure. Applies on
+    // BOTH desktop platforms now: macOS CGEventTap and the Windows
+    // WH_KEYBOARD_LL hook route keystrokes through the same manager, so the
+    // overlay must be the registered sink on Windows too.
+    if (process.platform === 'darwin' || process.platform === 'win32') {
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
@@ -1058,6 +1106,13 @@ export class WindowHelper {
   }
 
   public hideMainWindow(): void {
+    // Hiding the overlay (Cmd/Ctrl+B toggle-visibility, screenshot hide) must
+    // disengage stealth typing for the same reason as hideOverlay/switchTo-
+    // Launcher: the hook swallows keystrokes system-wide and its only "engaged"
+    // indicator is in the now-hidden overlay UI. This path hides the overlay
+    // directly (overlayWindow.hide() below) rather than via hideOverlay(), so it
+    // needs its own stop. No-op if not engaged.
+    this.stopStealthTyping();
     // Do NOT call setOpacity(0) before hide() on macOS — it causes WindowServer to
     // re-register the app as a regular window, breaking undetectable/stealth mode
     // (fixed in v2.0.8, regressed when opacity was re-added for screenshot flash).
@@ -1133,14 +1188,23 @@ export class WindowHelper {
     } else {
       this.overlayWindow.setIgnoreMouseEvents(false);
       // Restore full interactivity when capturing clicks.
-      this.overlayWindow.setFocusable(true);
+      // Windows: skip — the overlay is under the no-activate policy
+      // (attachNoActivate → WS_EX_NOACTIVATE). setFocusable(true) here would
+      // re-arm click-activation and every overlay click would steal foreground
+      // focus from the meeting app. Mouse interactivity does not need focusable
+      // on Windows; typing is captured by the WH_KEYBOARD_LL stealth hook
+      // without the window ever being focused (StealthKeyboardManager).
+      if (!isNoActivateManaged(this.overlayWindow)) {
+        this.overlayWindow.setFocusable(true);
+      }
     }
     auxWindows.forEach((w) => {
       if (passthrough) {
         w.setIgnoreMouseEvents(true, { forward: true });
       } else {
         w.setIgnoreMouseEvents(false);
-        w.setFocusable(true);
+        // Same no-activate guard as the overlay body above.
+        if (!isNoActivateManaged(w)) w.setFocusable(true);
       }
     });
     if (!quiet) {
@@ -1360,6 +1424,12 @@ export class WindowHelper {
 
     this.pillWindow = new BrowserWindow(auxSettings(true));
     this.toggleWindow = new BrowserWindow(auxSettings(false));
+    // Same Windows no-activate treatment as the overlay body: the pill's
+    // buttons (end meeting, expand, width toggle) must not steal foreground
+    // focus from the meeting app on click. Mac parity comes from
+    // type:'panel' + applyStealthToWindow below. No-op on macOS/Linux.
+    attachNoActivate(this.pillWindow);
+    attachNoActivate(this.toggleWindow);
 
     // Weld the group via real AppKit child windows (macOS only) — see the
     // overlayGroupWelded field comment for the measured semantics. Applied
@@ -1850,11 +1920,34 @@ export class WindowHelper {
   // Hide overlay directly without switching to launcher.
   // Used by IPC handlers to hide the overlay independently.
   public hideOverlay(): void {
+    // Stealth typing must never outlive a visible overlay. The keyboard hook
+    // swallows keystrokes system-wide and its only "engaged" indicator lives in
+    // the overlay UI — so if the overlay is hidden while the tap is engaged, the
+    // user has no signal that their keystrokes are still being captured (and,
+    // on Windows, cannot type into any other app). Stop it here and on every
+    // overlay→launcher switch. No-op when not engaged.
+    this.stopStealthTyping();
     // Aux chrome first, in the same block: the pill/toggle are always-on-top,
     // so a body-then-pill sequence leaves them briefly floating alone.
     this.applyOverlayAuxVisibility(false);
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
       this.overlayWindow.hide();
+    }
+  }
+
+  /**
+   * Disengage stealth typing. Called whenever the overlay stops being the
+   * visible, active surface (hide, end-meeting → launcher). Safe on every
+   * platform and when nothing is engaged: the manager no-ops if inactive, and
+   * off macOS/Windows there is no native tap at all.
+   */
+  private stopStealthTyping(): void {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+      StealthKeyboardManager.getInstance().stop();
+    } catch (e) {
+      console.error('[WindowHelper] failed to stop stealth typing:', e);
     }
   }
 
@@ -2080,6 +2173,10 @@ export class WindowHelper {
   public switchToLauncher(inactive?: boolean): void {
     const requestedInactive = !!inactive;
     console.log(`[WindowHelper] Switching to LAUNCHER (inactive: ${requestedInactive})`);
+    // Leaving the overlay (end meeting, etc.) must disengage stealth typing —
+    // otherwise the hook keeps swallowing keystrokes with the overlay hidden.
+    // No-op if not engaged, or at cold-start where this fires with no session.
+    this.stopStealthTyping();
     const wasLauncher = this.currentWindowMode === 'launcher';
     this.currentWindowMode = 'launcher';
     KeybindManager.getInstance().setMode('launcher'); // Adapted from public PR #123 — verify premium interaction
