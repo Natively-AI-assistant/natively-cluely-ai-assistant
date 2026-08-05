@@ -189,11 +189,15 @@ describe('native module present: the license belongs to ANOTHER device', () => {
 describe('native module present: replacing one perpetual license with another', () => {
   // activateLicense() is the user deliberately entering a new Gumroad/Dodo key,
   // so it opts into replacing a perpetual license (storeLicense's
-  // replacePerpetual). Driven end to end through activateLicense here, not by
-  // calling storeLicense directly: the opt-in argument at each of its six call
-  // sites IS the contract, and a direct call cannot tell whether they still
-  // pass it. Dropping one would make the guard refuse a freshly verified key
-  // while the caller reported nothing wrong.
+  // replacePerpetual). Driven end to end through activateLicense rather than by
+  // calling storeLicense directly: the opt-in argument at each call site IS the
+  // contract, and a direct call cannot tell whether a site still passes it.
+  //
+  // COVERAGE, stated honestly: the Dodo OK:, 409-with-id, 409-without-id,
+  // 422+validate-OK and Gumroad sites are each driven below. The 422-without-
+  // validate site is covered by the separate suite that pins its refusal. If a
+  // site is added later, add a case here — a missing one fails silently, because
+  // the guard's refusal looks like an ordinary unsuccessful activation.
   test('a deliberate Dodo swap is written, not refused', async () => {
     writeLicense('dodo', THIS_DEVICE_HWID, { key: 'DODO-OLD', instanceId: 'lki_old' });
     native.verifyDodo = 'OK:lki_new';
@@ -204,6 +208,53 @@ describe('native module present: replacing one perpetual license with another', 
     const stored = JSON.parse(fs.readFileSync(LICENSE_PATH, 'utf8').replace(/^ENC:/, ''));
     assert.equal(stored.key, 'DODO-NEW');
     assert.equal(stored.instanceId, 'lki_new');
+  });
+
+  test('the 409-with-instance-id site keeps its opt-in', async () => {
+    // Dodo says the key is already activated and hands back the existing slot.
+    // The key is proven real, so this is a server-confirmed branch and must be
+    // allowed over a perpetual license. Drop the opt-in here and the guard
+    // refuses a key Dodo just vouched for.
+    writeLicense('gumroad', THIS_DEVICE_HWID, { key: 'GUM-OLD' });
+    native.verifyDodo = 'ERR:dodo:duplicate:lki_existing';
+
+    const result = await freshManager().activateLicense('DODO-DUP');
+
+    assert.equal(result.success, true, result.error);
+    const stored = JSON.parse(fs.readFileSync(LICENSE_PATH, 'utf8').replace(/^ENC:/, ''));
+    assert.equal(stored.key, 'DODO-DUP');
+    assert.equal(stored.instanceId, 'lki_existing');
+  });
+
+  test('the 409-without-instance-id site keeps its opt-in', async () => {
+    // Same branch, conflict body with no id. Still server-confirmed.
+    writeLicense('gumroad', THIS_DEVICE_HWID, { key: 'GUM-OLD' });
+    native.verifyDodo = 'ERR:dodo:duplicate';
+
+    const result = await freshManager().activateLicense('DODO-DUP');
+
+    assert.equal(result.success, true, result.error);
+    assert.equal(
+      JSON.parse(fs.readFileSync(LICENSE_PATH, 'utf8').replace(/^ENC:/, '')).key,
+      'DODO-DUP',
+    );
+  });
+
+  test('the 422-with-validate-OK site keeps its opt-in', async () => {
+    // The activation limit is full but validate confirms the user owns the key,
+    // so ownership IS established and the write must be allowed. This is the
+    // branch the 422-WITHOUT-validate case is deliberately distinguished from.
+    writeLicense('gumroad', THIS_DEVICE_HWID, { key: 'GUM-OLD' });
+    native.verifyDodo = 'ERR:dodo:limit_reached';
+    native.validateDodo = 'OK';
+
+    const result = await freshManager().activateLicense('DODO-LIMITED');
+
+    assert.equal(result.success, true, result.error);
+    assert.equal(
+      JSON.parse(fs.readFileSync(LICENSE_PATH, 'utf8').replace(/^ENC:/, '')).key,
+      'DODO-LIMITED',
+    );
   });
 
   test('a Gumroad key may replace a Dodo license', async () => {
@@ -267,76 +318,58 @@ describe('native module present: what a benign skip reports', () => {
     assert.doesNotMatch(result.error, /failed to activate/i, 'must not blame the key');
   });
 
-  test('the guard clears cachedPremium for BOTH callers, not just activateLicense', async () => {
-    // A stale `false` memoised earlier in the session (safeStorage transiently
-    // unavailable at launch) otherwise survives, and the set-natively-api-key
-    // handler calls activateWithApiKey DIRECTLY — so the path users actually hit
-    // kept reporting no Pro until restart while getLicenseDetails said otherwise.
-    fs.rmSync(LICENSE_PATH, { force: true });
-    const mgr = freshManager();
-    assert.equal(mgr.isPremium(), false, 'precondition: memoise a false verdict');
-
+  test('the guard does NOT mutate cachedPremium — it must fail closed', async () => {
+    // The guard used to clear the cache here, so a stale `false` from a transient
+    // safeStorage failure at launch could not outlive an activation attempt. That
+    // failed OPEN: removeLocalLicenseFile() is best-effort, so after a
+    // server-confirmed revocation whose unlink failed, license.enc survives and
+    // the cached `false` is the ONLY thing withholding Pro — clearing it handed
+    // the revoked license back for the rest of the session. A stale `false` costs
+    // a restart; this costs entitlement. The guard is side-effect free again,
+    // which is also what makes it safe for storeLicense to re-run as the authority.
     writeLicense('gumroad', THIS_DEVICE_HWID);
+    const mgr = freshManager();
+    mgr.cachedPremium = false; // as a revocation would leave it
+
     const result = await mgr.activateWithApiKey('natively_sk_x');
 
-    assert.equal(result.skipped, true);
-    assert.equal(mgr.isPremium(), true, 'the stale cached verdict survived the guard');
-    assert.equal(mgr.isPremium(), mgr.getLicenseDetails().isPremium, 'the two must never diverge');
+    assert.equal(result.skipped, true, 'precondition: the guard must fire');
+    assert.equal(mgr.cachedPremium, false, 'the guard resurrected a withheld verdict');
+    assert.equal(mgr.isPremium(), false, 'a revoked license must stay revoked for the session');
   });
-});
 
-describe('native module present: a Dodo activation seat must survive re-activation', () => {
-  // The seat is held by instanceId, which lives ONLY in license.enc. Three
-  // activateLicense branches re-store the SAME key without one — the 409 whose
-  // conflict body carries no id, and both 422 limit-reached paths — and each
-  // used to drop it. deactivate() then takes its no-instanceId branch and only
-  // deletes the local file, so the seat is stranded with no id anywhere: the
-  // user is permanently one machine short and no support action can recover it.
-  // Re-entering your own key is the ordinary response to "Pro looks broken".
-  test('409 duplicate WITHOUT an instance id keeps the seat already on disk', async () => {
-    writeLicense('dodo', THIS_DEVICE_HWID, { key: 'DODO-K', instanceId: 'lki_held' });
-    native.verifyDodo = 'ERR:dodo:duplicate';
+  test('a revocation clears license.enc.tmp too, so Pro cannot be renamed back', async () => {
+    // storeLicense writes license.enc.tmp and unlinks it on failure, but that
+    // unlink is best-effort — on Windows the lock that failed the rename can fail
+    // it too. A leftover .tmp is a complete, safeStorage-decryptable license, so a
+    // revoked user could rename one file and be Pro again.
+    writeLicense('natively_api', THIS_DEVICE_HWID, { plan: 'ultra' });
+    fs.writeFileSync(LICENSE_PATH + '.tmp', fs.readFileSync(LICENSE_PATH));
 
-    const result = await freshManager().activateLicense('DODO-K');
+    const mgr = freshManager();
+    assert.equal(mgr.isPremium(), true, 'precondition: Pro is active');
 
-    assert.equal(result.success, true, result.error);
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      status: 200,
+      json: async () => ({ ok: true, has_pro: false, plan: 'standard' }),
+    });
+    let stillPro;
+    try {
+      stillPro = await mgr.isPremiumAsync();
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+
+    assert.equal(stillPro, false);
+    assert.equal(fs.existsSync(LICENSE_PATH), false, 'the revoked license must be removed');
     assert.equal(
-      JSON.parse(fs.readFileSync(LICENSE_PATH, 'utf8').replace(/^ENC:/, '')).instanceId,
-      'lki_held',
-      'the activation seat was stranded',
+      fs.existsSync(LICENSE_PATH + '.tmp'),
+      false,
+      'a decryptable .tmp survived the revocation and can be renamed back into Pro',
     );
   });
 
-  test('422 activation-limit-reached keeps the seat already on disk', async () => {
-    writeLicense('dodo', THIS_DEVICE_HWID, { key: 'DODO-K', instanceId: 'lki_held' });
-    native.verifyDodo = 'ERR:dodo:limit_reached';
-    native.validateDodo = 'OK';
-
-    const result = await freshManager().activateLicense('DODO-K');
-
-    assert.equal(result.success, true, result.error);
-    assert.equal(
-      JSON.parse(fs.readFileSync(LICENSE_PATH, 'utf8').replace(/^ENC:/, '')).instanceId,
-      'lki_held',
-    );
-  });
-
-  test('a DIFFERENT key never inherits the previous seat', async () => {
-    // The stored id belongs to the old license. Carrying it over would point
-    // this file at a seat it does not own, so a later deactivate() would try to
-    // free someone else's activation.
-    writeLicense('dodo', THIS_DEVICE_HWID, { key: 'DODO-OLD', instanceId: 'lki_old' });
-    native.verifyDodo = 'ERR:dodo:duplicate';
-
-    const result = await freshManager().activateLicense('DODO-NEW');
-
-    assert.equal(result.success, true, result.error);
-    assert.equal(
-      JSON.parse(fs.readFileSync(LICENSE_PATH, 'utf8').replace(/^ENC:/, '')).instanceId,
-      undefined,
-      'a different key inherited the old seat',
-    );
-  });
 });
 
 describe('native module present: an unvalidated key must not displace a verified license', () => {

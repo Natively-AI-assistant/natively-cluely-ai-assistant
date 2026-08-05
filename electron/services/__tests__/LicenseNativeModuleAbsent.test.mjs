@@ -107,6 +107,7 @@ async function withStubbedFetch({ status, body }, fn) {
 const originalFetch = globalThis.fetch;
 beforeEach(() => {
   fs.rmSync(LICENSE_PATH, { force: true });
+  fs.rmSync(LICENSE_PATH + '.tmp', { force: true });
   globalThis.fetch = async (url) => {
     throw new Error(`unexpected network call to ${url} — stub it with withStubbedFetch()`);
   };
@@ -147,9 +148,13 @@ describe('native module absent: natively_api (server-validated, not HWID-bound)'
     // and licenseGetDetails answered differently for the same stored license,
     // so which surface unlocked depended on which IPC channel it happened to
     // call.
+    // Both read the same unmodified file from a cold instance, so this pins the
+    // agreement that the original bug broke — licenseCheckPremium and
+    // licenseGetDetails answering differently for one stored license.
     writeLicense('natively_api', { plan: 'pro' });
     const mgr = freshManager();
-    assert.equal(mgr.isPremium(), mgr.getLicenseDetails().isPremium);
+    assert.equal(mgr.isPremium(), true);
+    assert.equal(mgr.getLicenseDetails().isPremium, true);
   });
 
   test('survives a restart — verdict comes from disk, not the activation cache', () => {
@@ -253,8 +258,12 @@ describe('native module absent: a license.enc that cannot be decrypted', () => {
   // made things worse, not better (decryptable credentials left behind that a
   // revocation never cleaned up, and an eviction rule that discarded the very
   // license it existed to protect). The one genuinely irreplaceable thing in a
-  // replaced license is a Dodo activation slot, and that is now freed directly
-  // at the moment of a deliberate swap — see LicenseNativeModulePresent.
+  // replaced license is a Dodo activation slot, and it is NOT rescued: a release
+  // on swap was built and removed because the stored instanceId is not proven to
+  // belong to this device, so freeing it could deactivate another machine.
+  // Re-activating your own key therefore still strands the seat. That is an open
+  // bug, not a solved one — LicenseNativeModulePresent asserts the current
+  // behaviour ('replacing a license does NOT touch the server activation seat').
   const UNDECRYPTABLE = Buffer.from('v10\x00\x01ciphertext-from-a-key-we-no-longer-have', 'utf8');
 
   test('activation proceeds — an unreadable file must not lock the user out', async () => {
