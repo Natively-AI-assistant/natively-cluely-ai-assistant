@@ -1,4 +1,4 @@
-import type { FeedItem, StreamEvent } from './types';
+import type { FeedItem, SessionStatus, StreamEvent } from './types';
 
 export interface LiveStream {
   streamId: string;
@@ -6,14 +6,24 @@ export interface LiveStream {
   createdAt: string;
 }
 
+export const initialSessionStatus: SessionStatus = {
+  sessionActive: false,
+  stealthActive: false,
+  modeId: null,
+  modes: [],
+};
+
 export interface FeedState {
   items: FeedItem[];
   live: LiveStream | null;
+  /** Connect-time / post-mutation snapshot (ticket 20). */
+  session: SessionStatus;
 }
 
 export const initialFeedState: FeedState = {
   items: [],
   live: null,
+  session: initialSessionStatus,
 };
 
 function messageItem(
@@ -32,6 +42,7 @@ export function applyStreamEvent(state: FeedState, event: StreamEvent): FeedStat
   switch (event.type) {
     case 'history': {
       return {
+        ...state,
         live: null,
         items: event.messages.map((m) =>
           messageItem(m.id, m.role, m.content, m.createdAt, m.label),
@@ -74,6 +85,7 @@ export function applyStreamEvent(state: FeedState, event: StreamEvent): FeedStat
         return { ...state, live: null };
       }
       return {
+        ...state,
         live: null,
         items: [
           ...state.items,
@@ -90,6 +102,7 @@ export function applyStreamEvent(state: FeedState, event: StreamEvent): FeedStat
         ? `${prefix}\n\n[error: ${event.message}]`
         : `[error: ${event.message}]`;
       return {
+        ...state,
         live: null,
         items: [
           ...state.items,
@@ -115,6 +128,20 @@ export function applyStreamEvent(state: FeedState, event: StreamEvent): FeedStat
     case 'ack':
       // Ticket 18: stream feed only; ack toasts deferred to later tickets.
       return state;
+    case 'status': {
+      // Reconnect / post-stealth truth comes from status — no prior stealth ack required.
+      const nextModes =
+        event.modes !== undefined ? event.modes : state.session.modes;
+      return {
+        ...state,
+        session: {
+          sessionActive: event.sessionActive,
+          stealthActive: event.stealthActive,
+          modeId: event.modeId,
+          modes: nextModes,
+        },
+      };
+    }
     default:
       return state;
   }

@@ -1,4 +1,4 @@
-import type { PersistedMessage, StreamEvent } from './types';
+import type { PersistedMessage, PhoneModeSummary, StreamEvent } from './types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -19,6 +19,17 @@ function parsePersistedMessage(raw: unknown): PersistedMessage | null {
   const msg: PersistedMessage = { id, role, content, createdAt };
   if (typeof raw.label === 'string' && raw.label) msg.label = raw.label;
   return msg;
+}
+
+function parseModeSummary(raw: unknown): PhoneModeSummary | null {
+  if (!isRecord(raw)) return null;
+  const id = asString(raw.id).trim();
+  if (!id) return null;
+  return {
+    id,
+    name: asString(raw.name, id),
+    templateType: asString(raw.templateType),
+  };
 }
 
 /**
@@ -90,6 +101,32 @@ export function parseStreamEvent(raw: unknown): StreamEvent | null {
         action: asString(raw.action),
         message: asString(raw.message),
       };
+    }
+    case 'status': {
+      if (typeof raw.sessionActive !== 'boolean' || typeof raw.stealthActive !== 'boolean') {
+        return null;
+      }
+      const modeId =
+        raw.modeId === null || raw.modeId === undefined
+          ? null
+          : typeof raw.modeId === 'string'
+            ? raw.modeId
+            : null;
+      const event: StreamEvent = {
+        type: 'status',
+        sessionActive: raw.sessionActive,
+        stealthActive: raw.stealthActive,
+        modeId,
+      };
+      if (Array.isArray(raw.modes)) {
+        const modes: PhoneModeSummary[] = [];
+        for (const item of raw.modes) {
+          const mode = parseModeSummary(item);
+          if (mode) modes.push(mode);
+        }
+        event.modes = modes;
+      }
+      return event;
     }
     default:
       return null;
