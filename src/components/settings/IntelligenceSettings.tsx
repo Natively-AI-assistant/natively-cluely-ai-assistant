@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useT } from '../../i18n';
 import { Disclosure, DisclosureChevron } from '../ui/AccordionSection';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useToggleInit } from './useToggleInit';
 
 // Label + one-line description + group + TIER for each USER-FACING Intelligence OS flag.
 // Keyed by flag key.
@@ -149,17 +150,25 @@ const formatStamp = (ms: number): string => {
   return `${m}:${String(s).padStart(2, '0')}`;
 };
 
-const Toggle: React.FC<{ on: boolean; disabled?: boolean; onClick: () => void }> = ({ on, disabled, onClick }) => (
-  <button
-    type="button"
-    disabled={disabled}
-    onClick={onClick}
-    aria-pressed={on}
-    className={`w-11 h-6 shrink-0 rounded-full p-[3px] flex items-center transition-colors ${on ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
-  >
-    <span className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-spring motion-reduce:transition-none ${on ? 'translate-x-5' : 'translate-x-0'}`} />
-  </button>
-);
+const Toggle: React.FC<{ on: boolean; disabled?: boolean; onClick: () => void }> = ({ on, disabled, onClick }) => {
+  const { isInit, onInit } = useToggleInit();
+  return (
+    <button
+      type="button"
+      role="switch"
+      data-on={String(on)}
+      aria-checked={on}
+      aria-disabled={disabled ? true : undefined}
+      disabled={disabled}
+      onPointerDown={onInit}
+      onKeyDown={onInit}
+      onClick={onClick}
+      className={`t-toggle t-toggle-lg w-11 h-6 shrink-0 rounded-full p-[3px] flex items-center ${on ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${isInit ? 'is-init' : ''}`}
+    >
+      <span className="t-toggle-thumb" aria-hidden="true" />
+    </button>
+  );
+};
 
 // Inline copyable command/snippet block — same idiom as UpdateModal's CopyBlock. Used in the
 // Hindsight setup card so a non-technical user can grab the install / launch / env-export
