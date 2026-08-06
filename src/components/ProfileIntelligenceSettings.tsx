@@ -6,6 +6,7 @@ import {
     GraduationCap, FolderKanban, Layers, Mail, MessageSquare, Target,
 } from 'lucide-react';
 import { ThinkingOrb } from 'thinking-orbs';
+import { useToggleInit } from './settings/useToggleInit';
 import { PremiumUpgradeModal, RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
@@ -358,23 +359,13 @@ const PI_CSS = `
     }
     .pi-input::placeholder { color: var(--pi-tertiary); }
 
-    /* ── Toggle track/thumb ── */
-    .pi-toggle-track {
-        width: 44px; height: 24px; border-radius: 12px; position: relative;
-        cursor: pointer; flex-shrink: 0;
-        background: rgba(255,255,255,0.12);
-        transition: background 220ms var(--pi-ease-out);
-    }
-    .pi-toggle-track[data-checked='true'] { background: var(--pi-accent); }
-    .pi-toggle-track[data-disabled='true'] { opacity: 0.4; cursor: not-allowed; }
-    .pi-root[data-theme='light'] .pi-toggle-track { background: rgba(0,0,0,0.12); }
-    .pi-toggle-thumb {
-        position: absolute; top: 3px; left: 3px;
-        width: 18px; height: 18px; border-radius: 50%;
-        background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.25);
-        transition: transform 260ms var(--pi-ease-spring);
-    }
-    .pi-toggle-track[data-checked='true'] .pi-toggle-thumb { transform: translateX(20px); }
+    /* ── Toggle (shared .t-toggle primitive, theme-tinted here) ── */
+    /* Track surface stays neutral with the card border; checked state paints
+       the accent fill. Disabled state matches the old opacity. */
+    .pi-root .t-toggle { background: rgba(255,255,255,0.12); }
+    .pi-root[data-theme='light'] .t-toggle { background: rgba(0,0,0,0.12); }
+    .pi-root .t-toggle[aria-checked='true'] { background: var(--pi-accent); }
+    .pi-root .t-toggle[aria-disabled='true'] { opacity: 0.4; cursor: not-allowed; }
 
     /* ── Toggle card (neutral — no accent tint when on; the toggle itself signals state) ── */
     .pi-toggle-card {
@@ -1208,6 +1199,7 @@ export function ProfileIntelligenceSettings({
     onOpenNativelyAPI?: () => void;
 }) {
     const cachedPremium = readPremiumCache();
+    const { isInit: piInit, onInit: piOnInit } = useToggleInit();
     const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
     const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
     const [isTrialActive] = useState(false);
@@ -1590,10 +1582,15 @@ export function ProfileIntelligenceSettings({
                             : 'Dormant. Your profile is loaded but not shaping answers yet.'}
                     </p>
                 </div>
-                <div
-                    className="pi-toggle-track"
-                    data-checked={profileStatus.profileMode && hasProfileAccess ? 'true' : 'false'}
-                    data-disabled={(!profileStatus.hasProfile || !hasProfileAccess) ? 'true' : 'false'}
+                <button
+                    type="button"
+                    role="switch"
+                    data-on={String(!!(profileStatus.profileMode && hasProfileAccess))}
+                    aria-checked={!!(profileStatus.profileMode && hasProfileAccess)}
+                    aria-disabled={(!profileStatus.hasProfile || !hasProfileAccess) ? true : undefined}
+                    aria-label="Persona Engine"
+                    onPointerDown={piOnInit}
+                    onKeyDown={piOnInit}
                     onClick={async () => {
                         if (!profileStatus.hasProfile || !hasProfileAccess) return;
                         const newState = !profileStatus.profileMode;
@@ -1602,9 +1599,10 @@ export function ProfileIntelligenceSettings({
                             setProfileStatus(prev => ({ ...prev, profileMode: newState }));
                         } catch { /**/ }
                     }}
+                    className={`t-toggle t-toggle-lg w-11 h-6 ${piInit ? 'is-init' : ''}`}
                 >
-                    <div className="pi-toggle-thumb" />
-                </div>
+                    <span className="t-toggle-thumb" aria-hidden="true" />
+                </button>
             </div>
             )}
 
