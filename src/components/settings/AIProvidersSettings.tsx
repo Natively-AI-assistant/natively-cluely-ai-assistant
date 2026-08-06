@@ -451,17 +451,9 @@ export const AIP_CSS = `
 .aip-switch[aria-checked='true'] { background: var(--aip-accent); }
 .aip-switch[aria-disabled='true'] { cursor:not-allowed; }
 .aip-switch:disabled { cursor:not-allowed; opacity:0.5; }
-.aip-switch-thumb {
-    width:14px; height:14px; border-radius:9999px; background:#fff;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.28);
-    transform: translateX(0);
-    transition: transform var(--aip-dur-travel) var(--aip-ease-spring),
-                background var(--aip-dur-state) var(--aip-ease-out);
-}
-/* --aip-on-accent, not #fff: in dark mode the accent track is periwinkle-300
-   (#B9A1F6, a LIGHT periwinkle) so a white thumb sat at ~1.5:1. --on-accent is
-   theme-split precisely for solid accent fills (#14102A dark / #fff light). */
-.aip-switch[aria-checked='true'] .aip-switch-thumb { transform: translateX(14px); background: var(--aip-on-accent); }
+/* Thumb dimensions, position, and bounce are owned by .t-toggle-thumb in
+   src/index.css. We only paint the per-theme accent fill when on. */
+.aip-switch[aria-checked='true'] .t-toggle-thumb { background: var(--aip-on-accent); }
 
 /* ── Buttons ───────────────────────────────────────────────────────────── */
 .aip-btn {
@@ -984,28 +976,38 @@ interface AipSwitchProps {
 }
 
 /**
- * One implementation replacing all seven hand-rolled `role="switch"` divs.
- * A real <button role="switch" aria-checked> gets Space/Enter activation,
- * focus and disabled semantics for free — exactly what the divs lacked, which
- * made every toggle in this panel keyboard-unreachable.
+ * The shared .t-toggle / .t-toggle-thumb classes (defined in src/index.css)
+ * own the thumb dimensions, travel, and bounce keyframe. The .aip-switch
+ * class continues to drive the per-theme track color via --aip-switch-off
+ * / --aip-accent and the accent thumb fill when on.
+ *
+ * `is-init` flips to true on the FIRST pointerdown or keydown so the off-load
+ * keyframe never plays on mount.
  */
 export const AipSwitch: React.FC<AipSwitchProps> = ({
     checked, onChange, label, title, disabled = false, hardDisabled = false, className = '',
-}) => (
-    <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-disabled={disabled || hardDisabled ? true : undefined}
-        aria-label={label}
-        title={title}
-        disabled={hardDisabled}
-        onClick={() => onChange(!checked)}
-        className={`aip-switch ${className}`}
-    >
-        <span className="aip-switch-thumb" aria-hidden="true" />
-    </button>
-);
+}) => {
+    const [isInit, setIsInit] = React.useState(false);
+    const onInit = () => { if (!isInit) setIsInit(true); };
+    return (
+        <button
+            type="button"
+            role="switch"
+            data-on={String(checked)}
+            aria-checked={checked}
+            aria-disabled={disabled || hardDisabled ? true : undefined}
+            aria-label={label}
+            title={title}
+            disabled={hardDisabled}
+            onPointerDown={onInit}
+            onKeyDown={onInit}
+            onClick={() => { if (!disabled && !hardDisabled) onChange(!checked); }}
+            className={`t-toggle aip-switch ${isInit ? 'is-init' : ''} ${className}`}
+        >
+            <span className="t-toggle-thumb aip-switch-thumb" aria-hidden="true" />
+        </button>
+    );
+};
 
 /** Per-provider brand hues for the monogram tile. */
 /**
