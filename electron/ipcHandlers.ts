@@ -11,6 +11,7 @@ import { AppState } from './main';
 import { CodexCliService, isCodexAuthError } from './services/CodexCliService';
 import { describeServiceAccountRejection } from './services/googleServiceAccount';
 import { PhoneMirrorService } from './services/PhoneMirrorService';
+import { resolveModesSetCommand } from './services/phoneMirrorCommands';
 import {
   TwoDeviceStealthSession,
   type TwoDeviceStealthHost,
@@ -10975,7 +10976,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('modes:set-active', async (_, id: string | null) => {
+  /**
+   * Shared active-mode switch for desktop IPC + Phone Mirror `modes:set`.
+   * Keeps chat-stream invalidation / session clears / broadcasts identical.
+   */
+  const applyModesSetActive = async (
+    id: string | null,
+  ): Promise<{ success: boolean; error?: string }> => {
     try {
       // Allow clearing (null) or setting general mode without pro; all other modes require pro
       if (id !== null) {
@@ -11111,6 +11118,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.error('[IPC] modes:set-active error:', e);
       return { success: false, error: e.message };
     }
+  };
+
+  safeHandle('modes:set-active', async (_, id: string | null) => {
+    return applyModesSetActive(id);
   });
 
   // PI v3 (W3): per-file index status for the Modes Manager UI badges.
@@ -11500,6 +11511,19 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // Tailscale knowledge gateway (ticket 16) — phone-token HTTP routes on the
+  // same Phone Mirror server. Retrieve-only: KnowledgeOrchestrator chunks +
+  // RAGRetriever.retrieveGlobal (never RAGManager.query streaming LLM).
+  {
+    const { createKnowledgeGatewayDeps } = require('./services/phoneMirrorKnowledgeGateway') as typeof import('./services/phoneMirrorKnowledgeGateway');
+    PhoneMirrorService.getInstance().setKnowledgeGatewayDeps(
+      createKnowledgeGatewayDeps({
+        getKnowledgeOrchestrator: () => appState.getKnowledgeOrchestrator?.() ?? null,
+        getRagManager: () => appState.getRAGManager?.() ?? null,
+      }),
+    );
+  }
+
   // Smart Browser Context v2 — inject the AI metadata classifier so the /classify
   // endpoint can route SANITIZED page metadata through the existing provider stack
   // (LLMHelper.generateContentStructured) + the hard policy engine. The classifier
@@ -11836,6 +11860,31 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Route commands sent by the phone browser back to the Electron renderer so
   // the existing action system (global-shortcut events, chat stream) handles
   // them without duplicating logic.
+  const phoneMirrorForStatus = PhoneMirrorService.getInstance();
+  phoneMirrorForStatus.setStatusProvider(() => {
+    let modeId: string | null = null;
+    let modes: Array<{ id: string; name: string; templateType: string }> = [];
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      const mm = ModesManager.getInstance();
+      const active = mm.getActiveMode();
+      modeId = active?.id ?? null;
+      modes = mm.getModes().map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        templateType: m.templateType,
+      }));
+    } catch {
+      /* modes unavailable during early boot */
+    }
+    return {
+      sessionActive: !!appState.getIsMeetingActive?.(),
+      stealthActive: TwoDeviceStealthSession.getInstance().isActive(),
+      modeId,
+      modes,
+    };
+  });
+
   PhoneMirrorService.getInstance().onPhoneCommand(async (cmd) => {
     const win = appState.getMainWindow();
 
@@ -12142,12 +12191,71 @@ export function initializeIpcHandlers(appState: AppState): void {
               ? session.exit(host)
               : await session.end(host);
         phoneMirror.publishAck(`two-device-stealth:${result.action}`, result.message);
+        // Push truthful stealth/session flags after ack (reconnect + live UI).
+        phoneMirror.publishStatus({ includeModes: false });
       } catch (e: any) {
         console.error('[PhoneMirror] two-device-stealth failed:', e);
         phoneMirror.publishAck(
           `two-device-stealth:${cmd.op}`,
           e?.message || 'Two-device stealth failed',
         );
+        phoneMirror.publishStatus({ includeModes: false });
+      }
+    } else if (cmd.type === 'start-session') {
+      // Same desktop meeting path as the launcher (`appState.startMeeting`).
+      // Device prefs live in renderer localStorage; phone uses defaults + retention.
+      const phoneMirror = PhoneMirrorService.getInstance();
+      try {
+        if (appState.getIsMeetingActive?.()) {
+          phoneMirror.publishAck('start-session', 'Session already active');
+          phoneMirror.publishStatus();
+          return;
+        }
+        const retention =
+          SettingsManager.getInstance().get('meetingRetention') ?? 'forever';
+        await appState.startMeeting({
+          doNotPersist: retention === 'never',
+          source: 'phone-mirror',
+        });
+        phoneMirror.publishAck('start-session', 'Session started');
+        phoneMirror.publishStatus();
+      } catch (e: any) {
+        console.error('[PhoneMirror] start-session failed:', e);
+        phoneMirror.publishAck(
+          'start-session',
+          e?.message || 'Failed to start session',
+        );
+        phoneMirror.publishStatus({ includeModes: false });
+      }
+    } else if (cmd.type === 'modes') {
+      const phoneMirror = PhoneMirrorService.getInstance();
+      if (cmd.op === 'list') {
+        phoneMirror.publishStatus();
+        phoneMirror.publishAck('modes:list', 'ok');
+        return;
+      }
+      // op === 'set'
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        const modes = ModesManager.getInstance().getModes();
+        const resolved = resolveModesSetCommand(cmd.modeId, modes);
+        if (!resolved.ok) {
+          phoneMirror.publishAck('modes:set', resolved.message);
+          return;
+        }
+        const result = await applyModesSetActive(resolved.modeId);
+        if (!result.success) {
+          phoneMirror.publishAck(
+            'modes:set',
+            result.error || 'Failed to set active mode',
+          );
+          return;
+        }
+        phoneMirror.publishAck('modes:set', `Active mode: ${resolved.modeId}`);
+        phoneMirror.publishStatus();
+      } catch (e: any) {
+        console.error('[PhoneMirror] modes:set failed:', e);
+        phoneMirror.publishAck('modes:set', e?.message || 'Failed to set active mode');
       }
     }
   });

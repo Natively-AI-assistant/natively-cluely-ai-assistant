@@ -871,6 +871,12 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             return;
           }
           if (ev.type === 'status') {
+            // Connect-time / post-mutation status (ticket 17). Keep stealth UI
+            // truthful after reconnect without waiting for the next stealth ack.
+            if (typeof ev.stealthActive === 'boolean') {
+              stealthActive = !!ev.stealthActive;
+            }
+            setConnected(!!(socket && socket.readyState === 1));
             return;
           }
         }
