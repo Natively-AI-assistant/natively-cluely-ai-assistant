@@ -21,3 +21,17 @@ export function safeHandlePattern(channel) {
   const escaped = channel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`safeHandle\\(\\s*['"]${escaped}['"]`, 'm');
 }
+
+/**
+ * Slice the shared `applyModesSetActive` helper (used by modes:set-active IPC
+ * and Phone Mirror `modes:set`). Falls back to the modes:set-active safeHandle
+ * block for older layouts.
+ */
+export function sliceApplyModesSetActive(source) {
+  const start = source.indexOf('const applyModesSetActive = async');
+  if (start >= 0) {
+    const end = source.indexOf("safeHandle('modes:set-active'", start);
+    if (end > start) return source.slice(start, end);
+  }
+  return sliceSafeHandleBlock(source, 'modes:set-active');
+}

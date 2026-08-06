@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
-import { findSafeHandle, sliceSafeHandleBlock } from './ipcTestUtils.mjs';
+import { findSafeHandle, sliceSafeHandleBlock, sliceApplyModesSetActive } from './ipcTestUtils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -109,11 +109,12 @@ describe('BUG-MODE-BLEEDING: Mode-context clearing on mode switch', () => {
     const sourcePath = path.resolve(__dirname, '../../ipcHandlers.ts');
     const source = fs.readFileSync(sourcePath, 'utf8');
 
-    // Find the modes:set-active handler
+    // Find the modes:set-active handler (delegates to shared applyModesSetActive)
     const handlerStart = findSafeHandle(source, 'modes:set-active');
     assert.ok(handlerStart >= 0, 'modes:set-active handler should exist');
+    assert.match(sliceSafeHandleBlock(source, 'modes:set-active'), /applyModesSetActive/);
 
-    const handlerBody = sliceSafeHandleBlock(source, 'modes:set-active');
+    const handlerBody = sliceApplyModesSetActive(source);
 
     // Must call clearSessionContext before setActiveMode
     const clearIndex = handlerBody.indexOf('clearSessionContext');
@@ -152,7 +153,7 @@ describe('BUG-MODE-BLEEDING: Mode-context clearing on mode switch', () => {
     const sourcePath = path.resolve(__dirname, '../../ipcHandlers.ts');
     const source = fs.readFileSync(sourcePath, 'utf8');
 
-    const handlerBody = sliceSafeHandleBlock(source, 'modes:set-active');
+    const handlerBody = sliceApplyModesSetActive(source);
 
     const clearConvMemIndex = handlerBody.indexOf('_manualConversationMemory.clearAllSessions()');
     const setActiveIndex = handlerBody.indexOf('ModesManager.getInstance().setActiveMode');
@@ -175,7 +176,7 @@ describe('BUG-MODE-BLEEDING: Mode-context clearing on mode switch', () => {
   test('modes:set-active also clears _manualCodingState (sibling per-session store, same defense-in-depth)', () => {
     const sourcePath = path.resolve(__dirname, '../../ipcHandlers.ts');
     const source = fs.readFileSync(sourcePath, 'utf8');
-    const handlerBody = sliceSafeHandleBlock(source, 'modes:set-active');
+    const handlerBody = sliceApplyModesSetActive(source);
 
     assert.ok(handlerBody.includes('_manualCodingState.clearAllSessions()'),
       '_manualCodingState.clearAllSessions() should be called in modes:set-active handler');

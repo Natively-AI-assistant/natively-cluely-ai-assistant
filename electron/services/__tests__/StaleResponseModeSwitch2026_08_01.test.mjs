@@ -22,7 +22,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { sliceSafeHandleBlock } from './ipcTestUtils.mjs';
+import { sliceSafeHandleBlock, sliceApplyModesSetActive } from './ipcTestUtils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const { abortAndInvalidateChatStreams } = await import(
@@ -106,8 +106,9 @@ const ipcSource = fs.readFileSync(path.resolve(__dirname, '../../ipcHandlers.ts'
 
 describe('Defect G contract: modes:set-active invalidates the chat-stream registry', () => {
   test('the handler calls abortAndInvalidateChatStreams(_chatStreamsBySender) instead of a bare abort loop', () => {
-    const handlerBody = sliceSafeHandleBlock(ipcSource, 'modes:set-active');
-    assert.ok(handlerBody.length > 0, 'modes:set-active handler must exist');
+    assert.match(sliceSafeHandleBlock(ipcSource, 'modes:set-active'), /applyModesSetActive/);
+    const handlerBody = sliceApplyModesSetActive(ipcSource);
+    assert.ok(handlerBody.length > 0, 'modes:set-active / applyModesSetActive must exist');
     assert.ok(
       handlerBody.includes('abortAndInvalidateChatStreams(_chatStreamsBySender)'),
       'modes:set-active must abort AND DELETE registry entries via abortAndInvalidateChatStreams — abort() alone is a race, not a decision',
@@ -115,7 +116,7 @@ describe('Defect G contract: modes:set-active invalidates the chat-stream regist
   });
 
   test('invalidation happens BEFORE setActiveMode flips the mode', () => {
-    const handlerBody = sliceSafeHandleBlock(ipcSource, 'modes:set-active');
+    const handlerBody = sliceApplyModesSetActive(ipcSource);
     const invalidateIdx = handlerBody.indexOf('abortAndInvalidateChatStreams(_chatStreamsBySender)');
     const setActiveIdx = handlerBody.indexOf('ModesManager.getInstance().setActiveMode');
     assert.ok(invalidateIdx >= 0, 'invalidation call must exist');

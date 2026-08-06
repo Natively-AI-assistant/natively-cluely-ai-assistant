@@ -8,12 +8,26 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { SettingsManager } from './SettingsManager';
 import { CredentialsManager } from './CredentialsManager';
 import { PHONE_MIRROR_HTML } from './phoneMirrorClient';
-import { parsePhoneCommand, type PhoneCommand } from './phoneMirrorCommands';
+import {
+  parsePhoneCommand,
+  type PhoneCommand,
+  type PhoneModeSummary,
+} from './phoneMirrorCommands';
 import { DOM_CONTEXT_MAX_CHARS } from '../config/constants';
 import { sanitizeContextEnvelope } from './browser-context/sanitize';
 
-export type { PhoneCommand } from './phoneMirrorCommands';
-export { parsePhoneCommand } from './phoneMirrorCommands';
+export type { PhoneCommand, PhoneModeSummary } from './phoneMirrorCommands';
+export { parsePhoneCommand, resolveModesSetCommand } from './phoneMirrorCommands';
+
+/** Snapshot for connect-time / post-mutation `status` StreamEvents (ticket 17). */
+export type PhoneMirrorStatusSnapshot = {
+  sessionActive: boolean;
+  stealthActive: boolean;
+  modeId: string | null;
+  modes?: PhoneModeSummary[];
+};
+
+export type PhoneMirrorStatusProvider = () => PhoneMirrorStatusSnapshot;
 
 export interface PhoneMirrorInfo {
   running: boolean;
@@ -55,7 +69,14 @@ export type StreamEvent =
   | { type: 'done'; streamId: string; content: string; createdAt: string }
   | { type: 'error'; streamId: string; message: string }
   | { type: 'assistant'; id: string; content: string; label: string; createdAt: string }
-  | { type: 'ack'; action: string; message: string };
+  | { type: 'ack'; action: string; message: string }
+  | {
+      type: 'status';
+      sessionActive: boolean;
+      stealthActive: boolean;
+      modeId: string | null;
+      modes?: PhoneModeSummary[];
+    };
 
 /**
  * Metadata the companion extension sends alongside a captured DOM (drives the
@@ -161,6 +182,8 @@ export class PhoneMirrorService {
   private rateBuckets = new Map<string, { count: number; resetAt: number }>();
   private statusListeners = new Set<StatusListener>();
   private phoneCommandListeners = new Set<(cmd: PhoneCommand) => void>();
+  /** Injected by ipcHandlers so connect-time status can read meeting/stealth/mode. */
+  private statusProvider: PhoneMirrorStatusProvider | null = null;
   private cachedInfo: PhoneMirrorInfo | null = null;
   private cachedQrUrl: string | null = null;
   private cachedQrDataUrl: string | null = null;
@@ -397,6 +420,46 @@ export class PhoneMirrorService {
   publishAck(action: string, message: string): void {
     if (!this.isRunning()) return;
     this.broadcast({ type: 'ack', action, message });
+  }
+
+  /**
+   * Register the snapshot source for `status` StreamEvents (meeting / stealth / mode).
+   * Called once from ipcHandlers when wiring phone commands.
+   */
+  setStatusProvider(provider: PhoneMirrorStatusProvider | null): void {
+    this.statusProvider = provider;
+  }
+
+  /**
+   * Build a status event from the registered provider (or safe defaults).
+   * By default includes `modes` when the provider supplies them.
+   * Pass `{ includeModes: false }` for lighter post-stealth updates.
+   */
+  buildStatusEvent(opts?: { includeModes?: boolean }): StreamEvent & { type: 'status' } {
+    const snap = this.statusProvider?.() ?? {
+      sessionActive: false,
+      stealthActive: false,
+      modeId: null,
+    };
+    const event: StreamEvent & { type: 'status' } = {
+      type: 'status',
+      sessionActive: !!snap.sessionActive,
+      stealthActive: !!snap.stealthActive,
+      modeId: snap.modeId ?? null,
+    };
+    if (opts?.includeModes !== false && Array.isArray(snap.modes)) {
+      event.modes = snap.modes;
+    }
+    return event;
+  }
+
+  /**
+   * Broadcast session/stealth/mode status to all phone clients.
+   * Sent on connect and after start-session / modes / two-device-stealth changes.
+   */
+  publishStatus(opts?: { includeModes?: boolean }): void {
+    if (!this.isRunning()) return;
+    this.broadcast(this.buildStatusEvent(opts));
   }
 
   /** Returns true when at least one phone browser is connected. */
@@ -1366,6 +1429,9 @@ export class PhoneMirrorService {
           }),
         );
       }
+      // Connect-time status so reconnecting clients learn session/stealth/mode
+      // without waiting for the next ack (ticket 17).
+      ws.send(JSON.stringify(this.buildStatusEvent()));
     } catch (_) {
       /* client may be gone already */
     }
@@ -1420,10 +1486,15 @@ export class PhoneMirrorService {
         const validated = parsePhoneCommand(c);
 
         if (validated) {
-          const label =
-            validated.type === 'two-device-stealth'
-              ? `${validated.type}:${validated.op}`
-              : validated.type;
+          let label: string = validated.type;
+          if (validated.type === 'two-device-stealth') {
+            label = `${validated.type}:${validated.op}`;
+          } else if (validated.type === 'modes') {
+            label =
+              validated.op === 'set'
+                ? `modes:set:${validated.modeId}`
+                : 'modes:list';
+          }
           console.log(`[PhoneMirror] phone command: ${label}`);
           this.emitPhoneCommand(validated);
         }
