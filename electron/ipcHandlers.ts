@@ -11500,6 +11500,19 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // Tailscale knowledge gateway (ticket 16) — phone-token HTTP routes on the
+  // same Phone Mirror server. Retrieve-only: KnowledgeOrchestrator chunks +
+  // RAGRetriever.retrieveGlobal (never RAGManager.query streaming LLM).
+  {
+    const { createKnowledgeGatewayDeps } = require('./services/phoneMirrorKnowledgeGateway') as typeof import('./services/phoneMirrorKnowledgeGateway');
+    PhoneMirrorService.getInstance().setKnowledgeGatewayDeps(
+      createKnowledgeGatewayDeps({
+        getKnowledgeOrchestrator: () => appState.getKnowledgeOrchestrator?.() ?? null,
+        getRagManager: () => appState.getRAGManager?.() ?? null,
+      }),
+    );
+  }
+
   // Smart Browser Context v2 — inject the AI metadata classifier so the /classify
   // endpoint can route SANITIZED page metadata through the existing provider stack
   // (LLMHelper.generateContentStructured) + the hard policy engine. The classifier

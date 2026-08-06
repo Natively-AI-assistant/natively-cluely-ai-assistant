@@ -11,9 +11,16 @@ import { PHONE_MIRROR_HTML } from './phoneMirrorClient';
 import { parsePhoneCommand, type PhoneCommand } from './phoneMirrorCommands';
 import { DOM_CONTEXT_MAX_CHARS } from '../config/constants';
 import { sanitizeContextEnvelope } from './browser-context/sanitize';
+import {
+  handleKnowledgeGatewayRequest,
+  isKnowledgeGatewayPath,
+  type KnowledgeGatewayDeps,
+} from './phoneMirrorKnowledgeGateway';
 
 export type { PhoneCommand } from './phoneMirrorCommands';
 export { parsePhoneCommand } from './phoneMirrorCommands';
+export type { KnowledgeGatewayDeps } from './phoneMirrorKnowledgeGateway';
+export { createKnowledgeGatewayDeps } from './phoneMirrorKnowledgeGateway';
 
 export interface PhoneMirrorInfo {
   running: boolean;
@@ -213,6 +220,10 @@ export class PhoneMirrorService {
   private metadataClassifier:
     | ((meta: unknown) => Promise<{ autoPolicy: string; category?: string }>)
     | null = null;
+  // Tailscale knowledge gateway (ticket 16) — injectable KnowledgeOrchestrator /
+  // RAG retrieve seam. Null → authenticated routes still answer (ready:false /
+  // chunks:[]) so phone clients get a stable contract without SQLite exposure.
+  private knowledgeGatewayDeps: KnowledgeGatewayDeps | null = null;
   /**
    * Per-session sentinel: once the IPC layer has shown the "Allow LAN access?"
    * dialog and the user picked "Allow", subsequent calls to setExposeOnLan(true)
@@ -499,6 +510,15 @@ export class PhoneMirrorService {
     fn: ((meta: unknown) => Promise<{ autoPolicy: string; category?: string }>) | null,
   ): void {
     this.metadataClassifier = fn;
+  }
+
+  /**
+   * Inject knowledge/RAG deps for the phone-token gateway routes
+   * (`/knowledge/*`, `/rag/query`). Pass null to clear (routes still auth +
+   * return empty/not-ready). Prefer `createKnowledgeGatewayDeps` from main.
+   */
+  setKnowledgeGatewayDeps(deps: KnowledgeGatewayDeps | null): void {
+    this.knowledgeGatewayDeps = deps;
   }
 
   /**
@@ -1033,6 +1053,20 @@ export class PhoneMirrorService {
     if (fullUrl.pathname === '/healthz') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify({ ok: true, clients: this.phoneClientCount() }));
+      return;
+    }
+
+    // Tailscale knowledge gateway — phone-token auth (Bearer and/or ?t=).
+    // Handlers live in phoneMirrorKnowledgeGateway.ts to keep this method thin
+    // (ticket 17 owns WS protocol changes in the same file).
+    if (isKnowledgeGatewayPath(fullUrl.pathname)) {
+      void handleKnowledgeGatewayRequest(
+        req,
+        res,
+        fullUrl,
+        { phoneToken: this.token, equal: timingSafeEqualStr },
+        this.knowledgeGatewayDeps,
+      );
       return;
     }
 

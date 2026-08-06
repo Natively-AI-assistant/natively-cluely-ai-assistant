@@ -211,6 +211,14 @@ export class KnowledgeOrchestrator {
     }
 
     /**
+     * Ingested doc-type inventory for the phone knowledge gateway. Cheap
+     * document-row counts only — no embedding work.
+     */
+    listDocTypeCounts(): Array<{ docType: DocType; count: number }> {
+        return this.db.countDocumentsByType();
+    }
+
+    /**
      * Re-embed any chunk stranded in an OLD embedding space (e.g. after a
      * gemini-embedding-001 → -2 upgrade — same 768 dims, incompatible space) or
      * left NULL-space with an embedding. Mirrors the meeting-RAG auto-reindex

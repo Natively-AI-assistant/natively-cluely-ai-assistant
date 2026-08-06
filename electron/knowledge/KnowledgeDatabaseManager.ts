@@ -361,6 +361,23 @@ export class KnowledgeDatabaseManager {
         return row ? this.rowToDocument(row) : null;
     }
 
+    /**
+     * Cheap GROUP BY for the phone knowledge gateway `/knowledge/docs` list —
+     * document counts only (no chunk/embedding scan).
+     */
+    countDocumentsByType(): Array<{ docType: DocType; count: number }> {
+        const rows = this.db.prepare(`
+            SELECT doc_type AS docType, COUNT(*) AS count
+            FROM knowledge_documents
+            GROUP BY doc_type
+            ORDER BY doc_type
+        `).all() as Array<{ docType: string; count: number }>;
+        return rows.map((r) => ({
+            docType: r.docType as DocType,
+            count: Number(r.count) || 0,
+        }));
+    }
+
     // ============================================
     // Private Helpers
     // ============================================
