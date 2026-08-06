@@ -8090,13 +8090,17 @@ html[data-platform="linux"] body {
 .t-toggle.t-toggle-lg { --toggle-travel: 20px; }
 .t-toggle-thumb {
     translate: 0 0;
-    will-change: translate;
+    will-change: translate, background-color;
     display: block;
     width: 14px;
     height: 14px;
     border-radius: 9999px;
     background: #fff;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+    /* Cross-fade the dark-on-accent thumb fill (.aip-on-accent, etc.) on the
+       same easing the track uses, so the white->dark swap rides the bounce
+       keyframe instead of snapping when aria-checked flips. */
+    transition: background-color var(--toggle-dur) var(--toggle-ease);
 }
 .t-toggle-lg .t-toggle-thumb { width: 18px; height: 18px; }
 .t-toggle[data-on="true"] .t-toggle-thumb { translate: var(--toggle-travel) 0; }
