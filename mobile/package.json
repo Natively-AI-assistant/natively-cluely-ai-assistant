@@ -1,0 +1,29 @@
+{
+  "name": "natively-phone-mirror",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "private": true,
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo start --ios",
+    "android": "expo start --android",
+    "test": "jest",
+    "typecheck": "tsc --noEmit",
+    "prebuild:ios": "expo prebuild --platform ios",
+    "run:ios": "expo run:ios"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "~57.0.10",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.2"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/react": "~19.2.2",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.12",
+    "typescript": "~5.9.3"
+  }
+}

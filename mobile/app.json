@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Natively Mirror",
+    "slug": "natively-phone-mirror",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "natively-mirror",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.natively.phonemirror",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#05070a",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.natively.phonemirror"
+    },
+    "plugins": [],
+    "extra": {
+      "platformFocus": "ios-first",
+      "distribution": "personal-sideload-only"
+    }
+  }
+}
