@@ -1809,7 +1809,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             </p>
                                                         </div>
                                                     </div>
-                                                    <div
+                                                    <button
+                                                        type="button"
+                                                        role="switch"
+                                                        data-on={String(isUndetectable)}
+                                                        aria-checked={isUndetectable}
+                                                        aria-label={t('Undetectable mode')}
+                                                        onPointerDown={settingsOnInit}
+                                                        onKeyDown={settingsOnInit}
                                                         onClick={() => {
                                                             const newState = !isUndetectable;
                                                             setIsUndetectable(newState);
@@ -1817,10 +1824,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             // Analytics: Undetectable Mode Toggle
                                                             analytics.trackModeSelected(newState ? 'undetectable' : 'overlay');
                                                         }}
-                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${isUndetectable ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={`t-toggle t-toggle-lg w-11 h-6 rounded-full p-[3px] flex items-center cursor-pointer shrink-0 ${isUndetectable ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${settingsInit ? 'is-init' : ''}`}
                                                     >
-                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isUndetectable ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
+                                                        <span className="t-toggle-thumb" aria-hidden="true" />
+                                                    </button>
                                                 </div>
 
                                                 {/* Open at Login */}
@@ -1834,16 +1841,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Natively will open automatically when you log in to your computer')}</p>
                                                         </div>
                                                     </div>
-                                                    <div
+                                                    <button
+                                                        type="button"
+                                                        role="switch"
+                                                        data-on={String(openOnLogin)}
+                                                        aria-checked={openOnLogin}
+                                                        aria-label={t('Open Natively when you log in')}
+                                                        onPointerDown={settingsOnInit}
+                                                        onKeyDown={settingsOnInit}
                                                         onClick={() => {
                                                             const newState = !openOnLogin;
                                                             setOpenOnLogin(newState);
                                                             window.electronAPI?.setOpenAtLogin(newState);
                                                         }}
-                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${openOnLogin ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={`t-toggle t-toggle-lg w-11 h-6 rounded-full p-[3px] flex items-center cursor-pointer shrink-0 ${openOnLogin ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${settingsInit ? 'is-init' : ''}`}
                                                     >
-                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${openOnLogin ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
+                                                        <span className="t-toggle-thumb" aria-hidden="true" />
+                                                    </button>
                                                 </div>
 
                                                 {/* Ambient AI Chat */}
@@ -2163,16 +2177,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 </p>
                                                             </div>
                                                         </div>
-                                                        <div
+                                                        <button
+                                                            type="button"
+                                                            role="switch"
+                                                            data-on={String(isMousePassthrough)}
+                                                            aria-checked={isMousePassthrough}
+                                                            aria-label={t('Mouse Passthrough')}
+                                                            onPointerDown={settingsOnInit}
+                                                            onKeyDown={settingsOnInit}
                                                             onClick={() => {
                                                                 const newState = !isMousePassthrough;
                                                                 setIsMousePassthrough(newState);
                                                                 window.electronAPI?.setOverlayMousePassthrough(newState);
                                                             }}
-                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${isMousePassthrough ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                            className={`t-toggle t-toggle-lg w-11 h-6 rounded-full p-[3px] flex items-center cursor-pointer shrink-0 ${isMousePassthrough ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${settingsInit ? 'is-init' : ''}`}
                                                         >
-                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isMousePassthrough ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                        </div>
+                                                            <span className="t-toggle-thumb" aria-hidden="true" />
+                                                        </button>
                                                     </div>
 
                                                     {/* Debug Logging */}
@@ -2186,16 +2207,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <p className="text-xs text-text-secondary mt-0.5">{t('Print detailed audio, STT, and pipeline diagnostics')}</p>
                                                             </div>
                                                         </div>
-                                                        <div
+                                                        <button
+                                                            type="button"
+                                                            role="switch"
+                                                            data-on={String(verboseLogging)}
+                                                            aria-checked={verboseLogging}
+                                                            aria-label={t('Verbose debug logging')}
+                                                            onPointerDown={settingsOnInit}
+                                                            onKeyDown={settingsOnInit}
                                                             onClick={() => {
                                                                 const newState = !verboseLogging;
                                                                 setVerboseLogging(newState);
                                                                 window.electronAPI?.setVerboseLogging?.(newState);
                                                             }}
-                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${verboseLogging ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                            className={`t-toggle t-toggle-lg w-11 h-6 rounded-full p-[3px] flex items-center cursor-pointer shrink-0 ${verboseLogging ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${settingsInit ? 'is-init' : ''}`}
                                                         >
-                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${verboseLogging ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                        </div>
+                                                            <span className="t-toggle-thumb" aria-hidden="true" />
+                                                        </button>
                                                     </div>
 
                                                     {/* Verbose logging toast */}
@@ -2278,17 +2306,24 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <p className="text-xs text-text-secondary mt-0.5">{t('Show real-time transcription of the interviewer')}</p>
                                                             </div>
                                                         </div>
-                                                        <div
+                                                        <button
+                                                            type="button"
+                                                            role="switch"
+                                                            data-on={String(showTranscript)}
+                                                            aria-checked={showTranscript}
+                                                            aria-label={t('Interviewer Transcript')}
+                                                            onPointerDown={settingsOnInit}
+                                                            onKeyDown={settingsOnInit}
                                                             onClick={() => {
                                                                 const newState = !showTranscript;
                                                                 setShowTranscript(newState);
                                                                 localStorage.setItem('natively_interviewer_transcript', String(newState));
                                                                 window.dispatchEvent(new Event('storage'));
                                                             }}
-                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${showTranscript ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                            className={`t-toggle t-toggle-lg w-11 h-6 rounded-full p-[3px] flex items-center cursor-pointer shrink-0 ${showTranscript ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${settingsInit ? 'is-init' : ''}`}
                                                         >
-                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${showTranscript ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                        </div>
+                                                            <span className="t-toggle-thumb" aria-hidden="true" />
+                                                        </button>
                                                     </div>
                                                 </div>
                                                 </Disclosure>
@@ -3167,16 +3202,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 </p>
                                                             </div>
                                                         </div>
-                                                        <div
+                                                        <button
+                                                            type="button"
+                                                            role="switch"
+                                                            data-on={String(useExperimentalSck)}
+                                                            aria-checked={useExperimentalSck}
+                                                            aria-label={t('Use ScreenCaptureKit backend')}
+                                                            onPointerDown={settingsOnInit}
+                                                            onKeyDown={settingsOnInit}
                                                             onClick={() => {
                                                                 const newState = !useExperimentalSck;
                                                                 setUseExperimentalSck(newState);
                                                                 window.localStorage.setItem('useExperimentalSckBackend', newState ? 'true' : 'false');
                                                             }}
-                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors shrink-0 cursor-pointer ${useExperimentalSck ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                            className={`t-toggle t-toggle-lg w-11 h-6 rounded-full p-[3px] flex items-center shrink-0 cursor-pointer ${useExperimentalSck ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${settingsInit ? 'is-init' : ''}`}
                                                         >
-                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${useExperimentalSck ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                        </div>
+                                                            <span className="t-toggle-thumb" aria-hidden="true" />
+                                                        </button>
                                                     </div>
                                                 </div>
                                             )}
