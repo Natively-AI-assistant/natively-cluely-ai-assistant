@@ -12,6 +12,7 @@ Connects with the existing phone-token WebSocket (`ws://host:port/ws?t=<token>`)
 - Node 20+ (repo uses Node 24 locally)
 - Xcode + iOS Simulator (or a physical iPhone with a development team)
 - Desktop Natively with Phone Mirror enabled and **Allow LAN** (or Tailscale IP)
+- **Interview day (USB):** see **[docs/USB-INTERVIEW.md](./docs/USB-INTERVIEW.md)** — iPhone Personal Hotspot over USB (not `localhost`; iOS has no `adb reverse`)
 
 ## Install
 
@@ -33,7 +34,17 @@ Or:
 npx expo start --ios
 ```
 
-Enter the desktop LAN/Tailscale host, port (default `4123`), and phone token from Settings → Sync (or paste the pairing URL).
+Enter the desktop host, port (default `4123`), and phone token from Settings → Sync (or paste the pairing URL).
+
+On the pairing screen pick a transport tip:
+
+| Tip | When |
+| --- | --- |
+| **USB** | Interview day — Mac tether IP (often `172.20.10.2`); run `node scripts/ios-usb-interview-host.mjs` on the Mac |
+| **LAN** | Same Wi‑Fi desk test |
+| **Tailscale** | On-the-go test (`100.x` / MagicDNS) |
+
+Full USB checklist: [docs/USB-INTERVIEW.md](./docs/USB-INTERVIEW.md).
 
 ## Sideload / open in Xcode
 
@@ -52,9 +63,11 @@ npx expo run:ios
 
 | Field | Source |
 | --- | --- |
-| Host | LAN IP or Tailscale IP of the desktop |
+| Host | USB tether Mac IP (interview), LAN IP, or Tailscale IP |
 | Port | Phone Mirror port (usually `4123`) |
 | Phone token | `t=` from the QR / `primaryUrl` / `lanUrls` |
+
+Do **not** use `127.0.0.1` on a physical iPhone — that is not the Mac (unlike Android `adb reverse`).
 
 Host, port, and token persist via AsyncStorage.
 
@@ -74,9 +87,13 @@ npm test
 ```text
 mobile/
   App.tsx                 # Pairing ↔ stream screens
+  docs/USB-INTERVIEW.md   # Interview-day USB path + AC checklist
   src/
+    pairing/              # USB / LAN / Tailscale transport tips
     protocol/             # StreamEvent types, parse, feed, reconnect policy
     storage/              # AsyncStorage pairing persistence
     ws/                   # PhoneMirrorConnection
     components/           # PairingScreen, StreamFeed
 ```
+
+Desktop helper (repo root): `node scripts/ios-usb-interview-host.mjs`

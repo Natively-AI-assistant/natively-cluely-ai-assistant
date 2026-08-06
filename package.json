@@ -9,6 +9,8 @@
     "workspace:prune:dry": "node scripts/workspace-prune.js --dry-run",
     "workspace:prune:features": "node scripts/workspace-prune.js --features",
     "test:workspace-prune": "node --test scripts/__tests__/workspace-prune.test.mjs",
+    "ios:usb-interview-host": "node scripts/ios-usb-interview-host.mjs",
+    "test:ios-usb-interview-host": "node --test scripts/__tests__/ios-usb-interview-host.test.mjs",
     "dev": "vite",
     "build": "npm run clean && tsc && vite build",
     "build:electron": "node scripts/build-electron.js",
