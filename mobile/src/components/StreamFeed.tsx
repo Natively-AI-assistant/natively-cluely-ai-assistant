@@ -1,14 +1,23 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import {
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
   type ListRenderItem,
 } from 'react-native';
+import type { PhoneCommand } from '../protocol/phoneCommands';
 import type { FeedItem } from '../protocol/types';
 import type { ConnectionStatus } from '../ws/PhoneMirrorConnection';
+import { SessionControls } from './SessionControls';
+
+export interface AckToast {
+  message: string;
+  ok: boolean;
+}
 
 interface Props {
   items: FeedItem[];
@@ -16,8 +25,16 @@ interface Props {
   hostLabel: string;
   fatalError?: string | null;
   notice?: string | null;
+  ackToast?: AckToast | null;
+  stealthActive?: boolean;
+  /** Ticket 20: status / start / mode chrome above the feed. */
+  headerSlot?: ReactNode;
+  /** Optional override for ticket 19 controls (defaults to SessionControls). */
+  footerSlot?: ReactNode;
   onDisconnect: () => void;
   onEditPairing: () => void;
+  onSendCommand: (cmd: PhoneCommand) => boolean;
+  onLocalNotice?: (message: string) => void;
 }
 
 function formatTime(value: string): string {
@@ -47,8 +64,14 @@ export function StreamFeed({
   hostLabel,
   fatalError,
   notice,
+  ackToast,
+  stealthActive = false,
+  headerSlot,
+  footerSlot,
   onDisconnect,
   onEditPairing,
+  onSendCommand,
+  onLocalNotice,
 }: Props) {
   const listRef = useRef<FlatList<FeedItem>>(null);
   const connected = status === 'connected';
@@ -98,7 +121,11 @@ export function StreamFeed({
   };
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+    >
       <View style={styles.topbar}>
         <View style={styles.topLeft}>
           <Text style={styles.title}>Live stream</Text>
@@ -125,6 +152,20 @@ export function StreamFeed({
           <Text style={styles.bannerNoticeText}>{notice}</Text>
         </View>
       ) : null}
+      {ackToast ? (
+        <View style={[styles.bannerAck, ackToast.ok ? styles.bannerAckOk : styles.bannerAckFail]}>
+          <Text
+            style={[
+              styles.bannerAckText,
+              ackToast.ok ? styles.bannerAckTextOk : styles.bannerAckTextFail,
+            ]}
+          >
+            {ackToast.message}
+          </Text>
+        </View>
+      ) : null}
+
+      {headerSlot}
 
       <FlatList
         ref={listRef}
@@ -132,6 +173,7 @@ export function StreamFeed({
         data={items}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={
           items.length === 0 ? styles.emptyContainer : styles.listContent
         }
@@ -144,6 +186,15 @@ export function StreamFeed({
         }
       />
 
+      {footerSlot ?? (
+        <SessionControls
+          enabled={connected}
+          stealthActive={stealthActive}
+          onSendCommand={onSendCommand}
+          onLocalNotice={onLocalNotice}
+        />
+      )}
+
       <View style={styles.actions}>
         <Pressable style={styles.secondaryBtn} onPress={onEditPairing}>
           <Text style={styles.secondaryBtnText}>Pairing</Text>
@@ -152,7 +203,7 @@ export function StreamFeed({
           <Text style={styles.dangerBtnText}>Disconnect</Text>
         </Pressable>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -239,6 +290,27 @@ const styles = StyleSheet.create({
     color: '#9ec4ef',
     fontSize: 12,
   },
+  bannerAck: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  bannerAckOk: {
+    backgroundColor: 'rgba(108,240,214,0.1)',
+    borderColor: 'rgba(108,240,214,0.28)',
+  },
+  bannerAckFail: {
+    backgroundColor: 'rgba(255,93,108,0.12)',
+    borderColor: 'rgba(255,93,108,0.35)',
+  },
+  bannerAckText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  bannerAckTextOk: { color: '#6cf0d6' },
+  bannerAckTextFail: { color: '#ff8a96' },
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: 16,
@@ -348,12 +420,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 16,
+    paddingTop: 4,
+    paddingBottom: 12,
   },
   secondaryBtn: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 40,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
@@ -366,7 +438,7 @@ const styles = StyleSheet.create({
   },
   dangerBtn: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 40,
     borderRadius: 10,
     backgroundColor: 'rgba(255,93,108,0.16)',
     borderWidth: 1,

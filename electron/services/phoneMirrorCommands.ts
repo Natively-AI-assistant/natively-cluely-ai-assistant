@@ -53,7 +53,8 @@ export function parsePhoneCommand(cmd: unknown): PhoneCommand | null {
   if (
     c.type === 'action' &&
     typeof c.action === 'string' &&
-    /^[a-zA-Z:_-]{1,64}$/.test(c.action)
+    // Digits required for shortcut ids like dynamicAction4 (Recap / Brainstorm).
+    /^[a-zA-Z0-9:_-]{1,64}$/.test(c.action)
   ) {
     return { type: 'action', action: c.action };
   }

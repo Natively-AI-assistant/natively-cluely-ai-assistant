@@ -9,6 +9,11 @@ import {
 } from 'react-native';
 import type { PairingConfig } from '../protocol/types';
 import { parsePairingUrl } from '../protocol/wsUrl';
+import {
+  getTransportPreset,
+  TRANSPORT_PRESETS,
+  type TransportPresetId,
+} from '../pairing/transportPresets';
 
 interface Props {
   initial: PairingConfig;
@@ -23,6 +28,19 @@ export function PairingScreen({ initial, busy, error, onConnect }: Props) {
   const [phoneToken, setPhoneToken] = useState(initial.phoneToken);
   const [pasteUrl, setPasteUrl] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
+  const [transport, setTransport] = useState<TransportPresetId>('usb');
+
+  const preset = getTransportPreset(transport);
+
+  const applyTransport = (id: TransportPresetId) => {
+    setTransport(id);
+    const next = getTransportPreset(id);
+    if (next.hostHint) {
+      setHost(next.hostHint);
+    }
+    if (!port.trim()) setPort('4123');
+    setLocalError(null);
+  };
 
   const applyPaste = () => {
     const parsed = parsePairingUrl(pasteUrl);
@@ -56,8 +74,26 @@ export function PairingScreen({ initial, busy, error, onConnect }: Props) {
     <View style={styles.screen}>
       <Text style={styles.title}>Natively Mirror</Text>
       <Text style={styles.subtitle}>
-        Personal React Native client — pair with desktop Phone Mirror (LAN / Tailscale).
+        Personal React Native client — pair with desktop Phone Mirror. Interview day: USB;
+        on-the-go: Tailscale.
       </Text>
+
+      <Text style={styles.label}>Transport</Text>
+      <View style={styles.chipRow}>
+        {TRANSPORT_PRESETS.map((p) => {
+          const active = p.id === transport;
+          return (
+            <Pressable
+              key={p.id}
+              style={[styles.chip, active && styles.chipActive]}
+              onPress={() => applyTransport(p.id)}
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{p.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Text style={styles.transportHelp}>{preset.help}</Text>
 
       <Text style={styles.label}>Paste pairing URL (optional)</Text>
       <TextInput
@@ -66,12 +102,17 @@ export function PairingScreen({ initial, busy, error, onConnect }: Props) {
         onChangeText={setPasteUrl}
         autoCapitalize="none"
         autoCorrect={false}
-        placeholder="http://100.x.x.x:4123/?t=…"
+        placeholder="http://172.20.10.2:4123/?t=… or Tailscale URL"
         placeholderTextColor="#6b7785"
       />
       <Pressable style={styles.secondaryBtn} onPress={applyPaste}>
         <Text style={styles.secondaryBtnText}>Apply URL</Text>
       </Pressable>
+      {transport === 'usb' ? (
+        <Text style={styles.usbNote}>
+          After paste, set Host to the Mac USB/tether IP if the URL still has Wi‑Fi or Tailscale.
+        </Text>
+      ) : null}
 
       <Text style={styles.label}>Host</Text>
       <TextInput
@@ -80,7 +121,7 @@ export function PairingScreen({ initial, busy, error, onConnect }: Props) {
         onChangeText={setHost}
         autoCapitalize="none"
         autoCorrect={false}
-        placeholder="192.168.1.10 or Tailscale IP"
+        placeholder={preset.placeholder}
         placeholderTextColor="#6b7785"
       />
 
@@ -122,7 +163,7 @@ export function PairingScreen({ initial, busy, error, onConnect }: Props) {
 
       <Text style={styles.hint}>
         Settings are saved on this device. Token rotate on desktop closes with code 4401 — reconnect
-        only after updating the token.
+        only after updating the token. USB steps: mobile/docs/USB-INTERVIEW.md
       </Text>
     </View>
   );
@@ -144,10 +185,47 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     marginTop: 8,
-    marginBottom: 22,
+    marginBottom: 18,
     color: '#7b8896',
     fontSize: 14,
     lineHeight: 20,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  chip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: '#111821',
+  },
+  chipActive: {
+    borderColor: 'rgba(108,240,214,0.55)',
+    backgroundColor: 'rgba(108,240,214,0.12)',
+  },
+  chipText: {
+    color: '#9aa8b6',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  chipTextActive: {
+    color: '#6cf0d6',
+  },
+  transportHelp: {
+    color: '#6b7785',
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  usbNote: {
+    marginTop: 8,
+    color: '#8a9aab',
+    fontSize: 12,
+    lineHeight: 17,
   },
   label: {
     color: '#9aa8b6',
