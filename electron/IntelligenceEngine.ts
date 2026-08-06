@@ -45,7 +45,7 @@ import { ScreenContext } from './services/screen/ScreenContextService';
 import { buildPreparedTranscriptContext as assemblePreparedTranscriptContext } from './utils/preparedTranscriptContext';
 import { PiLatencyTrace } from './services/telemetry/PiLatencyTracer';
 import { beginTrace, commitTrace } from './intelligence/IntelligenceTrace';
-import { isDurableMemoryWindowEnabled, isIntelligenceFlagEnabled } from './intelligence/intelligenceFlags';
+import { isIntelligenceFlagEnabled } from './intelligence/intelligenceFlags';
 import { applyAnswerContract } from './intelligence/OutputShapeNormalizer';
 import { LiveTranscriptBrain } from './intelligence/LiveTranscriptBrain';
 import { recordAttribution } from './intelligence/IntelligenceAttribution';
@@ -3992,7 +3992,15 @@ export class IntelligenceEngine extends EventEmitter {
                     surface: 'what_to_answer',
                     live_transcript_brain_used: isIntelligenceFlagEnabled('liveTranscriptBrain'),
                     live_transcript_brain_mode: isIntelligenceFlagEnabled('liveTranscriptBrain') ? 'shadow' : 'off',
-                    durable_context_used: isDurableMemoryWindowEnabled(),
+                    // ALWAYS true: the long-range memory window reads
+                    // SessionTracker.getDurableContext() unconditionally (see the
+                    // "correctness always uses the durable source for long windows"
+                    // comment at the memWindowSource call site above). This used to
+                    // report `isDurableMemoryWindowEnabled()`, which made every trace
+                    // claim durable context was OFF while the engine was in fact using
+                    // it — the flag stopped gating this path and the telemetry was never
+                    // updated (settings-surface audit, 2026-08-05).
+                    durable_context_used: true,
                     session_tracker_used: true,
                     output_normalizer_used: finalWtaAnswer !== fullAnswer,
                     prompt_assembler_v2_mode: isIntelligenceFlagEnabled('promptAssemblerV2') ? 'shadow' : 'off',

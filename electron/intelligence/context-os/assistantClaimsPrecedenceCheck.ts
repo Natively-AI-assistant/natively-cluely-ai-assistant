@@ -24,10 +24,14 @@
 // promotion bar (see contextOsEnabled's 2026-07-18 precedent, and Slices
 // 2/3/4's identical deferral reasoning for consequential live-path
 // changes) — would be exactly the kind of unverified, hard-to-reverse risk
-// an autonomous unsupervised pass should not take. The
-// assistantClaimsEnforcement flag (dev/test-only default) exists so a
-// future pass can wire this in shadow-only (observe/log) before ever
-// blocking a real answer.
+// an autonomous unsupervised pass should not take. A future pass should
+// wire this in shadow-only (observe/log) before ever blocking a real answer.
+//
+// NOTE (2026-08-05, settings-surface audit): the `assistantClaimsEnforcement`
+// flag that used to be referenced here has been REMOVED. It gated nothing —
+// this module has no production call site — so it only existed as an
+// unexplained switch in the Settings UI. Add the flag back together with the
+// call site it gates, not before.
 
 export interface ContradictedClaimRow {
   claim_id: string;

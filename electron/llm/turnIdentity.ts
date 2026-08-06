@@ -6,9 +6,15 @@
 // (`ipcHandlers.ts`'s `_chatStreamsBySender` map) with a shared, testable
 // predicate and a SessionTracker-level write guard.
 //
-// Gated by the `turnIdentityV2` flag (dev/test-only until a documented
-// promotion decision, mirroring `ragConfidenceGate`/`okfHybridRetrieval`'s
-// rollout precedent) — both identity schemes run in PARALLEL until then.
+// STATUS (corrected 2026-08-05, settings-surface audit): this module is NOT
+// currently wired into the supersession path. It used to say it was "gated by
+// the `turnIdentityV2` flag… both identity schemes run in PARALLEL", but that
+// wiring never landed in ipcHandlers.ts — `_isCurrentStream` does not exist and
+// the raw `_chatStreamsBySender.get(senderId)?.streamId` comparisons are still
+// the live mechanism. The flag has been removed rather than left as a
+// user-visible switch over nothing. `mintTurnId` IS used (ipcHandlers.ts,
+// IntelligenceEngine.ts); the attemptId half is still only exercised by tests.
+// Re-introduce a flag alongside the call site when the guard sites are migrated.
 // This module defines only the identity types and the one shared predicate;
 // it does not decide when a new attempt is minted or how the old `streamId`
 // counter is retired — those remain call-site concerns.
