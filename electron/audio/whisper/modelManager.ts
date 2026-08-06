@@ -323,3 +323,54 @@ export function deleteModel(modelId: WhisperModelId): void {
     console.log(`[modelManager] Deleted model: ${modelId}`);
   }
 }
+
+/**
+ * Errors that mean "the bytes on disk are not a usable model", as opposed to
+ * "this machine cannot run models at all".
+ *
+ * ORT reports a truncated .onnx as a protobuf failure, because it walks the
+ * file and hits EOF mid-message. That is indistinguishable at the API level
+ * from any other malformed file, and the distinction does not matter here —
+ * every case is fixed by fetching the file again.
+ *
+ * Deliberately does NOT match the macOS 12 / libonnxruntime symbol errors:
+ * those are environment failures, and wiping a perfectly good download because
+ * the host cannot load ANY model would turn one bad message into a bad message
+ * plus a lost 350 MB.
+ */
+export function isCorruptModelError(message: string): boolean {
+  const m = (message || '').toLowerCase();
+  if (m.includes('symbol not found') || m.includes('libonnxruntime') || m.includes('to_chars')) return false;
+  return m.includes('protobuf parsing failed')
+    || m.includes('failed to load model')  // ORT's generic load-time wrapper
+    || m.includes('invalid model')
+    || m.includes('no such file or directory');
+}
+
+/**
+ * Purge a model whose files failed to load, so the next install re-downloads
+ * instead of re-reading the same bad bytes.
+ *
+ * THE BUG THIS EXISTS FOR: isModelCached only asserts `size > 0` per file. That
+ * catches the 0-byte stub it was written for, but a TRUNCATED download — e.g.
+ * 121 MB of a 353 MB encoder — passes every check. LocalModelDownloadService
+ * then verifies via isModelCached, sees "cached", and marks the install
+ * complete. The UI reports the model installed, every load fails with a
+ * protobuf error, and because the cache check still returns true nothing ever
+ * re-fetches it. The corrupt state is self-perpetuating and survives restarts,
+ * which is why it presents as "every model fails to download".
+ *
+ * Returns true when something was actually removed.
+ */
+export function purgeCorruptModel(modelId: WhisperModelId, reason: string): boolean {
+  try {
+    const modelDir = path.join(getModelsDir(), modelIdToCacheDir(modelId));
+    if (!fs.existsSync(modelDir)) return false;
+    fs.rmSync(modelDir, { recursive: true, force: true });
+    console.warn(`[modelManager] Purged corrupt model ${modelId} — ${reason}`);
+    return true;
+  } catch (e) {
+    console.error(`[modelManager] Failed to purge corrupt model ${modelId}:`, e);
+    return false;
+  }
+}

@@ -79,7 +79,12 @@ import { useResolvedTheme } from '../../hooks/useResolvedTheme';
    stay off the main thread, which matters because this renderer also hosts the
    always-on-top overlay and a 3s Ollama poll.
    ═══════════════════════════════════════════════════════════════════════════ */
-const AIP_CSS = `
+/* Exported so other panels can adopt this design language. Every token below is
+   scoped to `.aip-root`, and this sheet is mounted by whichever panel renders it
+   — Settings mounts one panel at a time, so a consumer on another tab has to
+   bring the sheet with it or every .aip-* class silently resolves to nothing.
+   Duplicate <style> elements are harmless: identical rules, same cascade. */
+export const AIP_CSS = `
 .aip-root {
     --aip-accent:            var(--accent-primary);
     --aip-on-accent:         var(--on-accent);
