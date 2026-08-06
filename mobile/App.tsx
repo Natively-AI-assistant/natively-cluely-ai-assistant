@@ -2,10 +2,13 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Pressable,
   SafeAreaView,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
+import { BrowseScreen } from './src/components/BrowseScreen';
 import { PairingScreen } from './src/components/PairingScreen';
 import { StreamFeed } from './src/components/StreamFeed';
 import {
@@ -21,10 +24,12 @@ import {
   type ConnectionStatus,
 } from './src/ws/PhoneMirrorConnection';
 
-type Screen = 'loading' | 'pairing' | 'stream';
+type Screen = 'loading' | 'pairing' | 'main';
+type MainTab = 'session' | 'browse';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('loading');
+  const [tab, setTab] = useState<MainTab>('session');
   const [pairing, setPairing] = useState<PairingConfig>({
     host: '',
     port: '4123',
@@ -76,7 +81,8 @@ export default function App() {
     setFeed(initialFeedState);
     await savePairingConfig(config);
     setPairing(config);
-    setScreen('stream');
+    setTab('session');
+    setScreen('main');
     connectionRef.current?.disconnect();
     connectionRef.current = null;
     ensureConnection().connect(config);
@@ -117,15 +123,54 @@ export default function App() {
           onConnect={handleConnect}
         />
       ) : (
-        <StreamFeed
-          items={feedItemsForDisplay(feed)}
-          status={status}
-          hostLabel={`${pairing.host}:${pairing.port}`}
-          fatalError={fatalError}
-          notice={notice}
-          onDisconnect={handleDisconnect}
-          onEditPairing={handleEditPairing}
-        />
+        <View style={styles.main}>
+          <View style={styles.tabBar}>
+            <Pressable
+              style={[styles.tab, tab === 'session' && styles.tabActive]}
+              onPress={() => setTab('session')}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  tab === 'session' && styles.tabTextActive,
+                ]}
+              >
+                Session
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.tab, tab === 'browse' && styles.tabActive]}
+              onPress={() => setTab('browse')}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  tab === 'browse' && styles.tabTextActive,
+                ]}
+              >
+                Browse
+              </Text>
+            </Pressable>
+          </View>
+          <View style={styles.tabBody}>
+            {tab === 'session' ? (
+              <StreamFeed
+                items={feedItemsForDisplay(feed)}
+                status={status}
+                hostLabel={`${pairing.host}:${pairing.port}`}
+                fatalError={fatalError}
+                notice={notice}
+                onDisconnect={handleDisconnect}
+                onEditPairing={handleEditPairing}
+              />
+            ) : (
+              <BrowseScreen
+                pairing={pairing}
+                hostLabel={`${pairing.host}:${pairing.port}`}
+              />
+            )}
+          </View>
+        </View>
       )}
       <StatusBar style="light" />
     </SafeAreaView>
@@ -141,5 +186,39 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  main: {
+    flex: 1,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    padding: 4,
+    borderRadius: 12,
+    backgroundColor: '#111821',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 9,
+    alignItems: 'center',
+  },
+  tabActive: {
+    backgroundColor: 'rgba(108,240,214,0.14)',
+  },
+  tabText: {
+    color: '#8a97a6',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    color: '#6cf0d6',
+  },
+  tabBody: {
+    flex: 1,
   },
 });
