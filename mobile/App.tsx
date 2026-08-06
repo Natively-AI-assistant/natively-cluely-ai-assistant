@@ -7,13 +7,14 @@ import {
   View,
 } from 'react-native';
 import { PairingScreen } from './src/components/PairingScreen';
-import { StreamFeed } from './src/components/StreamFeed';
+import { StreamFeed, type AckToast } from './src/components/StreamFeed';
 import {
   applyStreamEvent,
   feedItemsForDisplay,
   initialFeedState,
   type FeedState,
 } from './src/protocol/feedReducer';
+import { interpretAck, type PhoneCommand } from './src/protocol/phoneCommands';
 import type { PairingConfig } from './src/protocol/types';
 import { loadPairingConfig, savePairingConfig } from './src/storage/pairingStorage';
 import {
@@ -34,7 +35,10 @@ export default function App() {
   const [feed, setFeed] = useState<FeedState>(initialFeedState);
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [ackToast, setAckToast] = useState<AckToast | null>(null);
+  const [stealthActive, setStealthActive] = useState(false);
   const connectionRef = useRef<PhoneMirrorConnection | null>(null);
+  const ackClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,8 +52,18 @@ export default function App() {
       cancelled = true;
       connectionRef.current?.disconnect();
       connectionRef.current = null;
+      if (ackClearTimer.current) clearTimeout(ackClearTimer.current);
     };
   }, []);
+
+  const showAckToast = (toast: AckToast) => {
+    setAckToast(toast);
+    if (ackClearTimer.current) clearTimeout(ackClearTimer.current);
+    ackClearTimer.current = setTimeout(() => {
+      ackClearTimer.current = null;
+      setAckToast(null);
+    }, 3200);
+  };
 
   const ensureConnection = (): PhoneMirrorConnection => {
     if (connectionRef.current) return connectionRef.current;
@@ -58,6 +72,16 @@ export default function App() {
       onEvent: (event) => {
         setFeed((prev) => applyStreamEvent(prev, event));
         if (event.type === 'history') setNotice(null);
+        if (event.type === 'ack') {
+          const interpreted = interpretAck(event);
+          showAckToast({ message: interpreted.toast, ok: interpreted.ok });
+          if (
+            interpreted.kind === 'stealth' &&
+            typeof interpreted.stealthActive === 'boolean'
+          ) {
+            setStealthActive(interpreted.stealthActive);
+          }
+        }
       },
       onFatalError: (reason) => {
         setFatalError(reason.message);
@@ -73,6 +97,8 @@ export default function App() {
   const handleConnect = async (config: PairingConfig) => {
     setFatalError(null);
     setNotice(null);
+    setAckToast(null);
+    setStealthActive(false);
     setFeed(initialFeedState);
     await savePairingConfig(config);
     setPairing(config);
@@ -93,7 +119,12 @@ export default function App() {
     connectionRef.current = null;
     setStatus('idle');
     setNotice(null);
+    setAckToast(null);
     setScreen('pairing');
+  };
+
+  const handleSendCommand = (cmd: PhoneCommand): boolean => {
+    return connectionRef.current?.sendCommand(cmd) ?? false;
   };
 
   if (screen === 'loading') {
@@ -123,8 +154,12 @@ export default function App() {
           hostLabel={`${pairing.host}:${pairing.port}`}
           fatalError={fatalError}
           notice={notice}
+          ackToast={ackToast}
+          stealthActive={stealthActive}
           onDisconnect={handleDisconnect}
           onEditPairing={handleEditPairing}
+          onSendCommand={handleSendCommand}
+          onLocalNotice={(message) => setNotice(message)}
         />
       )}
       <StatusBar style="light" />

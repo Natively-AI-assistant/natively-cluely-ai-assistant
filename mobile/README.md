@@ -62,7 +62,7 @@ On token rotate the server closes with code **4401**. This client **stops auto-r
 
 ## Unit tests
 
-Protocol parse + reconnect policy (no device required):
+Protocol parse, command builders, reconnect policy (no device required):
 
 ```bash
 cd mobile
@@ -75,8 +75,12 @@ npm test
 mobile/
   App.tsx                 # Pairing ↔ stream screens
   src/
-    protocol/             # StreamEvent types, parse, feed, reconnect policy
+    protocol/             # StreamEvent types, parse, feed, phoneCommands, reconnect
     storage/              # AsyncStorage pairing persistence
-    ws/                   # PhoneMirrorConnection
-    components/           # PairingScreen, StreamFeed
+    ws/                   # PhoneMirrorConnection (+ sendCommand)
+    components/           # PairingScreen, StreamFeed, SessionControls
 ```
+
+After connect, `SessionControls` (bottom, one-handed) sends chat / quick actions /
+screenshot / two-device stealth over the same WS. `StreamFeed` exposes `topSlot`
+for ticket 20 (start-session / modes / status).

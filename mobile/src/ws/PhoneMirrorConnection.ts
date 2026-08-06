@@ -7,6 +7,7 @@ import {
   shouldAutoReconnect,
   type CloseReason,
 } from '../protocol/reconnectPolicy';
+import type { PhoneCommand } from '../protocol/phoneCommands';
 import type { PairingConfig, StreamEvent } from '../protocol/types';
 import { buildPhoneMirrorWsUrl } from '../protocol/wsUrl';
 
@@ -35,6 +36,21 @@ export class PhoneMirrorConnection {
 
   getStatus(): ConnectionStatus {
     return this.status;
+  }
+
+  /**
+   * Send a validated phone command when the socket is open.
+   * Returns false if disconnected / send throws (caller may toast).
+   */
+  sendCommand(cmd: PhoneCommand): boolean {
+    const socket = this.socket;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    try {
+      socket.send(JSON.stringify(cmd));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   connect(config: PairingConfig): void {

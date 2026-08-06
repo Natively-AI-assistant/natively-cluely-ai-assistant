@@ -111,6 +111,11 @@ describe('parsePhoneCommand — ticket 17 shapes', () => {
   test('existing commands still parse', () => {
     assert.equal(parsePhoneCommand({ type: 'chat', message: 'hi' }).type, 'chat');
     assert.equal(parsePhoneCommand({ type: 'action', action: 'whatToAnswer' }).type, 'action');
+    // Digits in action ids (Recap / Brainstorm shortcut).
+    assert.deepEqual(parsePhoneCommand({ type: 'action', action: 'dynamicAction4' }), {
+      type: 'action',
+      action: 'dynamicAction4',
+    });
     assert.equal(parsePhoneCommand({ type: 'screenshot' }).type, 'screenshot');
     assert.deepEqual(parsePhoneCommand({ type: 'two-device-stealth', op: 'enter' }), {
       type: 'two-device-stealth',
