@@ -5,6 +5,18 @@ import type { BrowserContextSettings, PhoneMirrorInfo } from '../../types/electr
 import { isMac } from '../../utils/platformUtils';
 import { BrowserExtensionIcon } from '../onboarding/BrowserExtensionIcon';
 
+/**
+ * Adds the `.is-init` class on the FIRST user interaction (pointerdown or
+ * keydown) so the shared .t-toggle off-load keyframe never plays on mount.
+ * Returns `{ isInit, onInit }` for the consumer to wire into className and
+ * the two event handlers.
+ */
+function useToggleInit(): { isInit: boolean; onInit: () => void } {
+    const [isInit, setIsInit] = useState(false);
+    const onInit = useCallback(() => { setIsInit(true); }, []);
+    return { isInit, onInit };
+}
+
 const MiniPairingCountdownRing: React.FC<{ seconds: number; total: number }> = ({
   seconds,
   total,
@@ -77,6 +89,7 @@ const EMPTY_INFO: PhoneMirrorInfo = {
 
 export const PhoneMirrorSettings: React.FC = () => {
   const t = useT();
+  const { isInit: pmInit, onInit: pmOnInit } = useToggleInit();
   const [info, setInfo] = useState<PhoneMirrorInfo>(EMPTY_INFO);
   const [busy, setBusy] = useState<null | 'enable' | 'disable' | 'lan' | 'rotate'>(null);
   const [error, setError] = useState<string | null>(null);
@@ -314,14 +327,15 @@ export const PhoneMirrorSettings: React.FC = () => {
           <button
             type="button"
             role="switch"
+            data-on={String(info.running)}
             aria-checked={info.running}
             disabled={busy !== null}
+            onPointerDown={pmOnInit}
+            onKeyDown={pmOnInit}
             onClick={onToggleEnable}
-            className={`inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-accent-focus ${info.running ? 'bg-accent-primary' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''}`}
+            className={`t-toggle t-toggle-lg inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${info.running ? 'bg-accent-primary' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''} ${pmInit ? 'is-init' : ''}`}
           >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${info.running ? 'translate-x-5' : 'translate-x-0'}`}
-            />
+            <span className="t-toggle-thumb" aria-hidden="true" />
           </button>
         </div>
 
@@ -446,14 +460,15 @@ export const PhoneMirrorSettings: React.FC = () => {
             <button
               type="button"
               role="switch"
+              data-on={String(info.exposeOnLan)}
               aria-checked={info.exposeOnLan}
               disabled={busy !== null}
+              onPointerDown={pmOnInit}
+              onKeyDown={pmOnInit}
               onClick={onToggleLan}
-              className={`inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-accent-focus ${info.exposeOnLan ? 'bg-amber-500' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''}`}
+              className={`t-toggle t-toggle-lg inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${info.exposeOnLan ? 'bg-amber-500' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''} ${pmInit ? 'is-init' : ''}`}
             >
-              <span
-                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${info.exposeOnLan ? 'translate-x-5' : 'translate-x-0'}`}
-              />
+              <span className="t-toggle-thumb" aria-hidden="true" />
             </button>
           </div>
           {lanWarning && (
@@ -748,7 +763,9 @@ const CtxToggle: React.FC<{
    * path — tracked as a follow-up.)
    */
   comingSoon?: boolean;
-}> = ({ label, desc, checked, onChange, icon, experimental, comingSoon }) => (
+}> = ({ label, desc, checked, onChange, icon, experimental, comingSoon }) => {
+  const { isInit: ctxInit, onInit: ctxOnInit } = useToggleInit();
+  return (
   <div className={`flex items-start justify-between gap-3 ${comingSoon ? 'opacity-55' : ''}`}>
     <div className="flex items-start gap-2.5 min-w-0">
       {icon && (
@@ -779,19 +796,19 @@ const CtxToggle: React.FC<{
     <button
       type="button"
       role="switch"
+      data-on={String(comingSoon ? false : checked)}
       aria-checked={comingSoon ? false : checked}
       aria-label={label}
       disabled={comingSoon}
+      onPointerDown={ctxOnInit}
+      onKeyDown={ctxOnInit}
       onClick={comingSoon ? undefined : onChange}
-      className={`flex-shrink-0 mt-0.5 inline-flex h-6 w-11 items-center rounded-full p-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-accent-focus ${
+      className={`t-toggle t-toggle-lg flex-shrink-0 mt-0.5 inline-flex h-6 w-11 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${
         comingSoon ? 'cursor-not-allowed bg-bg-item-active' : checked ? 'bg-accent-primary' : 'bg-bg-item-active'
-      }`}
+      } ${ctxInit ? 'is-init' : ''}`}
     >
-      <span
-        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
-          !comingSoon && checked ? 'translate-x-5' : 'translate-x-0'
-        }`}
-      />
+      <span className="t-toggle-thumb" aria-hidden="true" />
     </button>
   </div>
-);
+  );
+};
