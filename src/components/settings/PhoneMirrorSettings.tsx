@@ -4,18 +4,7 @@ import { useT } from '../../i18n';
 import type { BrowserContextSettings, PhoneMirrorInfo } from '../../types/electron';
 import { isMac } from '../../utils/platformUtils';
 import { BrowserExtensionIcon } from '../onboarding/BrowserExtensionIcon';
-
-/**
- * Adds the `.is-init` class on the FIRST user interaction (pointerdown or
- * keydown) so the shared .t-toggle off-load keyframe never plays on mount.
- * Returns `{ isInit, onInit }` for the consumer to wire into className and
- * the two event handlers.
- */
-function useToggleInit(): { isInit: boolean; onInit: () => void } {
-    const [isInit, setIsInit] = useState(false);
-    const onInit = useCallback(() => { setIsInit(true); }, []);
-    return { isInit, onInit };
-}
+import { useToggleInit } from './useToggleInit';
 
 const MiniPairingCountdownRing: React.FC<{ seconds: number; total: number }> = ({
   seconds,

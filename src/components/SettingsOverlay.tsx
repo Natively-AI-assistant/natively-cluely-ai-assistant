@@ -22,6 +22,7 @@ import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { isMac } from '../utils/platformUtils';
+import { useToggleInit } from './settings/useToggleInit';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import {
     clampOverlayOpacity,
@@ -426,6 +427,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 }) => {
     const isLight = useResolvedTheme() === 'light';
     const { t, lang, setLang } = useLanguage();
+    // Shared .t-toggle off-load keyframe gate: flips on first pointerdown/keydown
+    // so the bounce never plays on mount. One hook instance per switch is fine
+    // because the off-load animation is identical for all settings toggles.
+    const { isInit: settingsInit, onInit: settingsOnInit } = useToggleInit();
     const [activeTab, setActiveTab] = useState(initialTab);
 
     /* ---------------------------------------------------------------- */
@@ -1852,19 +1857,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Meetings start without capturing mic or system audio')}</p>
                                                         </div>
                                                     </div>
-                                                    <div
+                                                    <button
+                                                        type="button"
+                                                        role="switch"
+                                                        data-on={String(ambientChatEnabled)}
+                                                        aria-checked={ambientChatEnabled}
+                                                        aria-label={t('Ambient AI Chat')}
+                                                        onPointerDown={settingsOnInit}
+                                                        onKeyDown={settingsOnInit}
                                                         onClick={() => {
                                                             const newState = !ambientChatEnabled;
                                                             setAmbientChatEnabled(newState);
                                                             window.electronAPI?.setAmbientChatEnabled?.(newState);
                                                         }}
-                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${ambientChatEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                        role="switch"
-                                                        aria-checked={ambientChatEnabled}
-                                                        aria-label={t('Ambient AI Chat')}
+                                                        className={`t-toggle t-toggle-lg w-11 h-6 rounded-full p-[3px] flex items-center cursor-pointer shrink-0 ${ambientChatEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${settingsInit ? 'is-init' : ''}`}
                                                     >
-                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${ambientChatEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
+                                                        <span className="t-toggle-thumb" aria-hidden="true" />
+                                                    </button>
                                                 </div>
 
                                                 {/* Meeting Retention */}
@@ -1878,19 +1887,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <p className="text-xs text-text-secondary mt-0.5 leading-normal">{t('Nothing is saved after the meeting ends')}</p>
                                                         </div>
                                                     </div>
-                                                    <div
+                                                    <button
+                                                        type="button"
+                                                        role="switch"
+                                                        data-on={String(meetingRetention === 'never')}
+                                                        aria-checked={meetingRetention === 'never'}
+                                                        aria-label={t('Do not save meetings')}
+                                                        onPointerDown={settingsOnInit}
+                                                        onKeyDown={settingsOnInit}
                                                         onClick={() => {
                                                             const nextRetention = meetingRetention === 'never' ? 'forever' : 'never';
                                                             setMeetingRetention(nextRetention);
                                                             window.electronAPI?.setMeetingRetention?.(nextRetention);
                                                         }}
-                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 mt-2 ${meetingRetention === 'never' ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                        role="switch"
-                                                        aria-checked={meetingRetention === 'never'}
-                                                        aria-label={t("Do not save meetings")}
+                                                        className={`t-toggle t-toggle-lg w-11 h-6 rounded-full p-[3px] flex items-center cursor-pointer shrink-0 mt-2 ${meetingRetention === 'never' ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${settingsInit ? 'is-init' : ''}`}
                                                     >
-                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${meetingRetention === 'never' ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
+                                                        <span className="t-toggle-thumb" aria-hidden="true" />
+                                                    </button>
                                                 </div>
 
                                                 {/* Theme */}
@@ -2232,7 +2245,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <p className="text-xs text-text-secondary mt-0.5">{t('Run generated code against test cases and self-correct')}</p>
                                                             </div>
                                                         </div>
-                                                        <div
+                                                        <button
+                                                            type="button"
+                                                            role="switch"
+                                                            data-on={String(codeVerification)}
+                                                            aria-checked={codeVerification}
+                                                            aria-label={t('Verify coding answers')}
+                                                            onPointerDown={settingsOnInit}
+                                                            onKeyDown={settingsOnInit}
                                                             onClick={() => {
                                                                 const newState = !codeVerification;
                                                                 setCodeVerification(newState);
@@ -2241,13 +2261,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 // other toggle-style settings also use optional chaining.
                                                                 window.electronAPI?.setCodeVerification?.(newState)?.catch?.(() => { });
                                                             }}
-                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${codeVerification ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                            role="switch"
-                                                            aria-checked={codeVerification}
-                                                            aria-label={t('Verify coding answers')}
+                                                            className={`t-toggle t-toggle-lg w-11 h-6 rounded-full p-[3px] flex items-center cursor-pointer shrink-0 ${codeVerification ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${settingsInit ? 'is-init' : ''}`}
                                                         >
-                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${codeVerification ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                        </div>
+                                                            <span className="t-toggle-thumb" aria-hidden="true" />
+                                                        </button>
                                                     </div>
 
                                                     {/* Interviewer Transcript */}
