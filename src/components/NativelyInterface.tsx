@@ -252,8 +252,10 @@ import {
   shouldDedupeOverlayAction,
 } from '../lib/overlayActionDedup.mjs';
 import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
+import { planAskSubmitAction, askSubmitTouchesListenTransport } from '../lib/askSubmit.mjs';
 import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
+import { projectLiveTranscriptChunk } from '../lib/liveTranscriptProjection.mjs';
 import {
   applyWhatToAnswerNullFeedbackMessages,
   finalizeStreamingByIntentMessages,
@@ -1014,6 +1016,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [conversationContext, setConversationContext] = useState<string>('');
   const [isManualRecording, setIsManualRecording] = useState(false);
   const isRecordingRef = useRef(false); // Ref to track recording state (avoids stale closure)
+  const [listenTransport, setListenTransport] = useState<{
+    state: string;
+    captureShouldRun: boolean;
+    reason: string;
+  }>({ state: 'idle', captureShouldRun: false, reason: 'idle' });
+  // phone-stt-source: which device owns user-speech STT (last-armed wins).
+  const [userSttSource, setUserSttSource] = useState<{
+    source: string;
+    label: string;
+  }>({ source: 'none', label: 'None' });
+  // always-on-live-transcript: ref so transcript IPC handler sees armed state
+  // without re-subscribing (same stale-closure pattern as isRecordingRef).
+  const listenArmedRef = useRef(false);
   const [manualTranscript, setManualTranscript] = useState('');
   const manualTranscriptRef = useRef<string>('');
   const [showTranscript, setShowTranscript] = useState(() => {
@@ -2674,6 +2689,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         overlayOpacity,
         themeMode: isLightTheme ? 'light' : 'dark',
         interfaceTheme: isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default',
+        listenArmed: listenTransport.state === 'armed',
       })
       .catch(() => {});
   }, [
@@ -2684,7 +2700,40 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     isLightTheme,
     isGlassTheme,
     isModernTheme,
+    listenTransport.state,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.electronAPI?.getListenTransport?.().then((snap) => {
+      if (!cancelled && snap) setListenTransport(snap);
+    }).catch(() => {});
+    const unsub = window.electronAPI?.onListenTransportChanged?.((snap) => {
+      setListenTransport(snap);
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.electronAPI?.getUserSttSource?.().then((snap) => {
+      if (!cancelled && snap) setUserSttSource(snap);
+    }).catch(() => {});
+    const unsub = window.electronAPI?.onUserSttSourceChanged?.((snap) => {
+      setUserSttSource(snap);
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    listenArmedRef.current = listenTransport.state === 'armed';
+  }, [listenTransport.state]);
 
   useEffect(() => {
     const unsubscribe = window.electronAPI?.onOverlayUiAction?.((action) => {
@@ -2698,6 +2747,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         case 'end-meeting':
           if (onEndMeeting) onEndMeeting();
           else window.electronAPI.quitApp();
+          break;
+        case 'toggle-listen-transport':
+          window.electronAPI?.toggleListenTransport?.().catch(() => {});
           break;
       }
     });
@@ -4448,12 +4500,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }),
     );
 
-    // Real-time Transcripts
+    // Real-time Transcripts — always-on-live-transcript while listenArmed;
+    // Ask/submit still owns voice-input capture via isManualRecording.
     cleanups.push(
       window.electronAPI.onNativeAudioTranscript((transcript) => {
-        // When Answer button is active, capture USER transcripts for voice input
-        // Use ref to avoid stale closure issue
-        if (isRecordingRef.current && transcript.speaker === 'user') {
+        const route = projectLiveTranscriptChunk({
+          speaker: transcript.speaker,
+          listenArmed: listenArmedRef.current,
+          isManualRecording: isRecordingRef.current,
+        });
+
+        // Ask/submit voice buffer — independent of rolling projection (ticket 04).
+        if (route.captureForAsk && transcript.speaker === 'user') {
           if (transcript.final) {
             // Accumulate final transcripts, collapsing STT overlap/re-transcription
             // races (RC5, docs/context-rebuild/03_LIVE_REPRO_FINDINGS.md item 4)
@@ -4470,21 +4528,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             setManualTranscript(transcript.text);
             manualTranscriptRef.current = transcript.text;
           }
-          return; // Don't add to messages while recording
         }
 
-        // Ignore user mic transcripts when not recording
-        // Only interviewer (system audio) transcripts should appear in chat
-        if (transcript.speaker === 'user') {
-          return; // Skip user mic input - only relevant when Answer button is active
+        // Always-on live transcript while armed (ticket 02); interviewer always.
+        if (!route.projectToRolling) {
+          return;
         }
 
-        // Only show interviewer (system audio) transcripts in rolling bar
-        if (transcript.speaker !== 'interviewer') {
-          return; // Safety check for any other speaker types
-        }
-
-        // Route to rolling transcript bar — partials debounced; finals commit immediately.
+        // Rolling bar: interviewer always; user-mic when transport is armed.
         if (!transcript.final) {
           if (!interviewerSpeakingRef.current) {
             interviewerSpeakingRef.current = true;
@@ -5682,11 +5733,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => cleanups.forEach((fn) => fn());
   }, [currentModel, queueToken, flushToken]); // Ensure tracking captures correct model
 
+  // Ask/submit (chat:answer / Answer chip): spoken or typed → AI turn.
+  // Must NEVER call toggleListenTransport — listen arming is red-square only
+  // (interviewman-control-map / ticket 04).
   const handleAnswerNow = async () => {
     if (isManualRecording) {
       if (!tryBeginOverlayAction('answer_now')) return;
       try {
-        // Stop recording - send accumulated voice input to Gemini
+        // End Ask voice-capture arming and send accumulated input to the AI path.
+        // Does not pause/resume listen transport.
         isRecordingRef.current = false;
         setIsManualRecording(false);
         setManualTranscript('');
@@ -5707,7 +5762,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         setManualTranscript('');
         manualTranscriptRef.current = '';
 
-        if (!question && currentAttachments.length === 0) {
+        const askPlan = planAskSubmitAction({
+          isVoiceCaptureArmed: true,
+          hasQuestionOrAttachments: Boolean(question) || currentAttachments.length > 0,
+        });
+        if (askSubmitTouchesListenTransport(askPlan.effects)) {
+          console.error('[NativelyInterface] Ask/submit must not touch listen transport', askPlan);
+          return;
+        }
+
+        if (askPlan.action === 'empty_speech_error') {
           if (sttUserStatus === 'failed' && sttUserError) {
             const errCat = categorizeSttError(sttUserError);
             setMessages((prev) => [
@@ -5842,7 +5906,17 @@ Provide only the answer, nothing else.`;
         endOverlayAction('answer_now');
       }
     } else {
-      // Start recording - reset voice input state
+      // Arm Ask voice-capture only (user-mic → submit). Listen transport is
+      // independent — do not call toggleListenTransport here.
+      const askPlan = planAskSubmitAction({
+        isVoiceCaptureArmed: false,
+        hasQuestionOrAttachments: false,
+      });
+      if (askSubmitTouchesListenTransport(askPlan.effects)) {
+        console.error('[NativelyInterface] Ask/submit must not touch listen transport', askPlan);
+        return;
+      }
+
       setVoiceInput('');
       voiceInputRef.current = '';
       setManualTranscript('');
@@ -7425,7 +7499,10 @@ Provide only the answer, nothing else.`;
   // Suppressed: mode label pill is not required in the UI.
   // Suppressed: LLM privacy label pill is not required in the UI.
   // Suppressed: vision pill ("Vision: provider") is not required in the UI.
-  const hasStatusPill = shouldShowSttSummaryPill || !!pageContext || sdGateStripVisible;
+  const showUserSttSourcePill =
+    userSttSource.source === 'desktop' || userSttSource.source === 'phone';
+  const hasStatusPill =
+    shouldShowSttSummaryPill || !!pageContext || sdGateStripVisible || showUserSttSourcePill;
   const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-black/20 border-white/10'}`;
 
   // Suppress the shell's scale/translate entry animation until it has rendered
@@ -7597,6 +7674,20 @@ Provide only the answer, nothing else.`;
                   >
                     <Mic className="h-3 w-3 opacity-70" />
                     <span>{sttSummary.label}</span>
+                  </div>
+                )}
+                {showUserSttSourcePill && (
+                  <div
+                    className={`${statusPillBaseClass} ${
+                      userSttSource.source === 'phone'
+                        ? getStatusToneClass('ok')
+                        : ''
+                    }`}
+                    data-testid="user-stt-source-pill"
+                    title="Active user-speech STT source (last-armed wins)"
+                  >
+                    <Mic className="h-3 w-3 opacity-70" />
+                    <span>{userSttSource.label}</span>
                   </div>
                 )}
                 <SdRequirementsGateStrip
@@ -7945,6 +8036,25 @@ Provide only the answer, nothing else.`;
                   void handleWhatToSay(action.promptInstruction);
                 }}
               />
+
+              {/* Listen transport unready — STT not configured; do not fake listening. */}
+              {listenTransport.state === 'unready' ? (
+                <div
+                  className="mx-3 mb-2 px-3 py-2 rounded-xl border border-amber-400/40 bg-amber-500/10 text-[11px] overlay-text-primary flex items-center gap-2"
+                  data-testid="listen-transport-unready"
+                >
+                  <span className="flex-1">
+                    Listening is not ready — configure speech-to-text in Settings, then resume with the red square.
+                  </span>
+                  <button
+                    type="button"
+                    className="shrink-0 underline opacity-90 hover:opacity-100"
+                    onClick={() => window.electronAPI?.openSettingsTab?.('audio')}
+                  >
+                    Open Settings
+                  </button>
+                </div>
+              ) : null}
 
               {/* Rolling Transcript Bar — live transcript + on-demand diagnostics
                   for hard failures. Reconnecting/awaiting-audio status is owned by
@@ -8328,6 +8438,8 @@ Provide only the answer, nothing else.`;
                 </button>
                 <button
                   onClick={handleAnswerNow}
+                  data-testid="ask-submit-chip"
+                  title={t('Ask / Submit')}
                   className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${
                     isManualRecording
                       ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20'
@@ -8338,11 +8450,11 @@ Provide only the answer, nothing else.`;
                   {isManualRecording ? (
                     <>
                       <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                      {t('Stop')}
+                      {t('Submit')}
                     </>
                   ) : (
                     <>
-                      <Zap className="w-3 h-3 opacity-70" /> {t('Answer')}
+                      <Zap className="w-3 h-3 opacity-70" /> {t('Ask')}
                     </>
                   )}
                 </button>
@@ -8392,7 +8504,7 @@ Provide only the answer, nothing else.`;
                       ))}
                     </div>
                     <span className="text-[10px] overlay-text-muted">
-                      {t('Ask a question or click Answer')}
+                      {t('Ask a question or click Ask')}
                     </span>
                   </div>
                 )}

@@ -246,6 +246,24 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       .stealth-btn.exit { color: var(--accent-2); border-color: rgba(85,166,255,0.3); }
       .stealth-btn.end { color: #ff8f8f; border-color: rgba(255,120,120,0.35); }
       .stealth-btn:disabled { opacity: 0.45; }
+      .listen-row {
+        display: flex; gap: 6px;
+      }
+      .listen-btn {
+        flex: 1; height: 34px; padding: 0 8px;
+        border-radius: 8px; border: 1px solid var(--line-soft);
+        background: rgba(255,255,255,0.04); color: var(--muted);
+        font-size: 11.5px; font-weight: 700; letter-spacing: 0.2px;
+      }
+      .listen-btn.pause { color: #ffc46c; border-color: rgba(255,180,80,0.35); }
+      .listen-btn.resume { color: var(--accent); border-color: rgba(108,240,214,0.35); }
+      .listen-btn.end { color: #ff8f8f; border-color: rgba(255,120,120,0.35); }
+      .listen-btn.phone-stt { color: var(--accent-2); border-color: rgba(85,166,255,0.35); }
+      .listen-btn.phone-stt.active {
+        color: var(--accent); border-color: rgba(108,240,214,0.45);
+        background: rgba(108,240,214,0.08);
+      }
+      .listen-btn:disabled { opacity: 0.45; }
       /* Chat input row */
       .input-row {
         display: flex; gap: 8px; align-items: center;
@@ -326,10 +344,16 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           <button class="qa-btn" data-action="codeHint" type="button">Code Hint</button>
           <button class="qa-btn" data-action="clarify" type="button">Clarify</button>
           <button class="qa-btn" data-action="brainstorm" type="button">Brainstorm</button>
-          <button class="qa-btn" data-action="answer" type="button">Answer</button>
+          <button class="qa-btn" id="askSubmitBtn" type="button" title="Ask/submit — typed message or Answer chip on desktop">Ask/Submit</button>
           <button class="qa-btn" data-action="followUp" type="button">Follow Up</button>
           <button class="qa-btn" data-action="dynamicAction4" type="button">Recap</button>
           <button class="qa-btn screenshot-btn" id="screenshotBtn" type="button" title="Capture desktop screenshot for AI prompt">📷 Capture</button>
+        </div>
+        <div class="listen-row" id="listenRow">
+          <button class="listen-btn pause" id="listenPauseBtn" type="button" title="Pause listen transport (red-square)">Pause listen</button>
+          <button class="listen-btn resume" id="listenResumeBtn" type="button" title="Resume listen transport">Resume listen</button>
+          <button class="listen-btn end" id="endMeetingBtn" type="button" title="End meeting (triangle)">End meeting</button>
+          <button class="listen-btn phone-stt" id="phoneSttBtn" type="button" title="Arm phone mic STT (Web Speech) — merges into desktop session">Phone mic</button>
         </div>
         <div class="stealth-row" id="stealthRow">
           <button class="stealth-btn enter" id="stealthEnterBtn" type="button" title="Hide desktop overlay; keep answers on this phone">Enter stealth</button>
@@ -656,6 +680,8 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         let reconnectDelay = 800;
         let wakeLock = null;
         let stealthActive = false;
+        let phoneSttArmed = false;
+        let phoneRecognition = null;
 
         function showToast(text) {
           toast.textContent = text;
@@ -672,6 +698,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           sendBtn.disabled = !isConnected;
           document.querySelectorAll('.qa-btn').forEach(function (b) { b.disabled = !isConnected; });
           document.querySelectorAll('.stealth-btn').forEach(function (b) { b.disabled = !isConnected; });
+          document.querySelectorAll('.listen-btn').forEach(function (b) { b.disabled = !isConnected; });
         }
 
         function fmtTime(value) {
@@ -867,6 +894,15 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
                 if (op === 'exit' || op === 'end') stealthActive = false;
               }
               setConnected(!!(socket && socket.readyState === 1));
+            } else if (action.indexOf('listen-transport:') === 0 || action === 'end-meeting') {
+              // Toast already shown above; keep connection chrome in sync.
+              setConnected(!!(socket && socket.readyState === 1));
+            } else if (action.indexOf('phone-stt:') === 0) {
+              const op = action.slice('phone-stt:'.length);
+              if (op === 'arm') phoneSttArmed = true;
+              else if (op === 'disarm') phoneSttArmed = false;
+              updatePhoneSttButton();
+              setConnected(!!(socket && socket.readyState === 1));
             }
             return;
           }
@@ -894,6 +930,11 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           });
           socket.addEventListener('close', (ev) => {
             setConnected(false);
+            if (phoneSttArmed) {
+              phoneSttArmed = false;
+              stopPhoneRecognition();
+              updatePhoneSttButton();
+            }
             if (ev.code === 4401) { subtitle.textContent = 'Pairing token rejected'; return; }
             scheduleReconnect();
           });
@@ -964,6 +1005,102 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         document.getElementById('stealthEndBtn').addEventListener('click', function () {
           sendTwoDeviceStealth('end');
         });
+
+        // Listen transport + end meeting + Ask/Submit (ticket 06 — desktop remains LLM host)
+        function sendListenTransport(op) {
+          sendCommand({ type: 'listen-transport', op: op });
+        }
+        document.getElementById('listenPauseBtn').addEventListener('click', function () {
+          sendListenTransport('pause');
+        });
+        document.getElementById('listenResumeBtn').addEventListener('click', function () {
+          sendListenTransport('resume');
+        });
+        document.getElementById('endMeetingBtn').addEventListener('click', function () {
+          sendCommand({ type: 'end-meeting' });
+        });
+        document.getElementById('askSubmitBtn').addEventListener('click', function () {
+          const msg = chatInput.value.trim();
+          if (msg) {
+            sendCommand({ type: 'ask-submit', message: msg });
+            chatInput.value = '';
+          } else {
+            sendCommand({ type: 'ask-submit' });
+          }
+          const btn = document.getElementById('askSubmitBtn');
+          if (btn) {
+            btn.classList.add('working');
+            setTimeout(function () { btn.classList.remove('working'); }, 1200);
+          }
+        });
+
+        // Phone mic STT (ticket 07) — Web Speech API when available; desktop remains LLM host.
+        function updatePhoneSttButton() {
+          const btn = document.getElementById('phoneSttBtn');
+          if (!btn) return;
+          btn.classList.toggle('active', phoneSttArmed);
+          btn.textContent = phoneSttArmed ? 'Phone mic ON' : 'Phone mic';
+        }
+        function stopPhoneRecognition() {
+          if (!phoneRecognition) return;
+          try { phoneRecognition.onresult = null; } catch (e) {}
+          try { phoneRecognition.onerror = null; } catch (e) {}
+          try { phoneRecognition.onend = null; } catch (e) {}
+          try { phoneRecognition.stop(); } catch (e) {}
+          phoneRecognition = null;
+        }
+        function startPhoneRecognition() {
+          const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (!SR) {
+            showToast('Web Speech API unavailable — arm still sent');
+            return;
+          }
+          stopPhoneRecognition();
+          const rec = new SR();
+          phoneRecognition = rec;
+          rec.continuous = true;
+          rec.interimResults = true;
+          rec.maxAlternatives = 1;
+          rec.onresult = function (event) {
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const result = event.results[i];
+              const text = (result[0] && result[0].transcript) ? String(result[0].transcript).trim() : '';
+              if (!text || text.length > 2000) continue;
+              sendCommand({
+                type: 'phone-stt-transcript',
+                text: text,
+                final: !!result.isFinal,
+              });
+            }
+          };
+          rec.onerror = function (ev) {
+            if (ev && (ev.error === 'aborted' || ev.error === 'no-speech')) return;
+            showToast('Phone STT: ' + ((ev && ev.error) || 'error'));
+          };
+          rec.onend = function () {
+            // Chrome stops continuous recognition periodically — restart while armed.
+            if (phoneSttArmed && phoneRecognition === rec) {
+              try { rec.start(); } catch (e) {}
+            }
+          };
+          try { rec.start(); } catch (e) {
+            showToast('Could not start phone mic');
+          }
+        }
+        document.getElementById('phoneSttBtn').addEventListener('click', function () {
+          if (!phoneSttArmed) {
+            sendCommand({ type: 'phone-stt', op: 'arm' });
+            phoneSttArmed = true;
+            updatePhoneSttButton();
+            startPhoneRecognition();
+          } else {
+            sendCommand({ type: 'phone-stt', op: 'disarm' });
+            phoneSttArmed = false;
+            updatePhoneSttButton();
+            stopPhoneRecognition();
+          }
+        });
+
         // Utility buttons
         document.getElementById('clearButton').addEventListener('click', () => {
           messages.length = 0; live = null; render();
@@ -1002,6 +1139,8 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         // Start disconnected — buttons disabled until connected
         sendBtn.disabled = true;
         document.querySelectorAll('.qa-btn').forEach(function (b) { b.disabled = true; });
+        document.querySelectorAll('.stealth-btn').forEach(function (b) { b.disabled = true; });
+        document.querySelectorAll('.listen-btn').forEach(function (b) { b.disabled = true; });
 
         requestWakeLock();
         connect();

@@ -1,0 +1,3 @@
+# Red square is listen transport; triangle ends the meeting
+
+Today’s TopPill red square ends the meeting (`endMeeting`), and the Answer chip both gates user-mic transcript UI and submits voice as a chat turn. For InterviewMan listen parity we remap: **red square** = start/stop listening + voice dictation only; **Ask/submit** = spoken/typed → AI turn; **triangle** = end meeting. We rejected keeping red-square-as-quit while also calling it listen-stop — that collision is what made “click Answers for STT” feel necessary. Retention timers and whole-app visual clones stay out of this decision (see `docs/interviewman-listen/CONTEXT.md`).

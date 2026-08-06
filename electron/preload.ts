@@ -460,7 +460,15 @@ interface ElectronAPI {
   // Intelligence Mode Events
   onIntelligenceAssistUpdate: (callback: (data: { insight: string }) => void) => () => void;
   onIntelligenceSuggestedAnswer: (
-    callback: (data: { answer: string; question: string; confidence: number; sourceLabel?: string; generationId?: number }) => void,
+    callback: (data: {
+      answer: string;
+      question: string;
+      confidence: number;
+      sourceLabel?: string;
+      generationId?: number;
+      emittedAt?: number;
+      triggerSource?: 'human-observer-suggestion';
+    }) => void,
   ) => () => void;
   onIntelligenceSuggestedAnswerDiscard: (
     callback: (data: { reason: string }) => void,
@@ -607,6 +615,21 @@ interface ElectronAPI {
   // emitted during the same startAudioTest lifecycle.
   onAudioTestSystemLevel: (callback: (level: number) => void) => () => void;
   onAudioTestSystemError: (callback: (errorMessage: string) => void) => () => void;
+  // Settings Audio live-STT sandbox (real transcript stream).
+  startLiveSttSandbox: (deviceId?: string) => Promise<{
+    success: boolean;
+    reason?: 'stt_unready' | string;
+    error?: string;
+  }>;
+  stopLiveSttSandbox: () => Promise<{ success: boolean }>;
+  onAudioTestTranscript: (callback: (payload: {
+    text: string;
+    final: boolean;
+    confidence?: number;
+    speaker: 'user';
+    timestamp: number;
+  }) => void) => () => void;
+  onAudioTestTranscriptError: (callback: (errorMessage: string) => void) => () => void;
 
   // Database
   flushDatabase: () => Promise<{ success: boolean }>;
@@ -615,7 +638,23 @@ interface ElectronAPI {
   showOverlay: () => Promise<void>;
   hideOverlay: () => Promise<void>;
   getMeetingActive: () => Promise<boolean>;
-  onMeetingStateChanged: (callback: (data: { isActive: boolean }) => void) => () => void;
+  onMeetingStateChanged: (callback: (data: {
+    isActive: boolean;
+    listenTransport?: { state: string; captureShouldRun: boolean; reason: string };
+  }) => void) => () => void;
+  getListenTransport: () => Promise<{ state: string; captureShouldRun: boolean; reason: string }>;
+  toggleListenTransport: () => Promise<{
+    success: boolean;
+    listenTransport?: { state: string; captureShouldRun: boolean; reason: string };
+    error?: string;
+  }>;
+  onListenTransportChanged: (
+    callback: (data: { state: string; captureShouldRun: boolean; reason: string }) => void,
+  ) => () => void;
+  getUserSttSource: () => Promise<{ source: string; label: string }>;
+  onUserSttSourceChanged: (
+    callback: (data: { source: string; label: string }) => void,
+  ) => () => void;
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void;
   onEnsureExpanded: (callback: () => void) => () => void;
   onToggleExpand: (callback: () => void) => () => void;
@@ -1291,8 +1330,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showOverlay: () => ipcRenderer.invoke('show-overlay'),
   hideOverlay: () => ipcRenderer.invoke('hide-overlay'),
   getMeetingActive: () => ipcRenderer.invoke('get-meeting-active'),
-  onMeetingStateChanged: (callback: (data: { isActive: boolean }) => void) => {
-    const subscription = (_: any, data: { isActive: boolean }) => callback(data);
+  onMeetingStateChanged: (callback: (data: {
+    isActive: boolean;
+    listenTransport?: { state: string; captureShouldRun: boolean; reason: string };
+  }) => void) => {
+    const subscription = (_: any, data: {
+      isActive: boolean;
+      listenTransport?: { state: string; captureShouldRun: boolean; reason: string };
+    }) => callback(data);
     ipcRenderer.on('meeting-state-changed', subscription);
     return () => {
       ipcRenderer.removeListener('meeting-state-changed', subscription);
@@ -1744,6 +1789,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       domContext?: string;
       domContextEnvelope?: unknown;
       sdRequirementsUiAdvance?: boolean;
+      triggerSource?: 'human-observer-suggestion';
     },
   ) => ipcRenderer.invoke('generate-what-to-say', question, imagePaths, options),
   getSdRequirementsGateStatus: () => ipcRenderer.invoke('get-sd-requirements-gate-status'),
@@ -1799,6 +1845,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => ipcRenderer.invoke('start-meeting', metadata),
   endMeeting: () => ipcRenderer.invoke('end-meeting'),
+  getListenTransport: () => ipcRenderer.invoke('listen-transport:get'),
+  toggleListenTransport: () => ipcRenderer.invoke('listen-transport:toggle'),
+  onListenTransportChanged: (
+    callback: (data: { state: string; captureShouldRun: boolean; reason: string }) => void,
+  ) => {
+    const subscription = (_: any, data: { state: string; captureShouldRun: boolean; reason: string }) =>
+      callback(data);
+    ipcRenderer.on('listen-transport-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('listen-transport-changed', subscription);
+    };
+  },
+  getUserSttSource: () => ipcRenderer.invoke('user-stt-source:get'),
+  onUserSttSourceChanged: (
+    callback: (data: { source: string; label: string }) => void,
+  ) => {
+    const subscription = (_: any, data: { source: string; label: string }) => callback(data);
+    ipcRenderer.on('user-stt-source-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('user-stt-source-changed', subscription);
+    };
+  },
   debugInjectTranscript: (segments: Array<{ speaker?: string; text: string; timestamp?: number; confidence?: number }>) =>
     ipcRenderer.invoke('debug-inject-transcript', segments),
   finalizeMicSTT: () => ipcRenderer.invoke('finalize-mic-stt'),
@@ -1872,7 +1940,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   onIntelligenceSuggestedAnswer: (
-    callback: (data: { answer: string; question: string; confidence: number; sourceLabel?: string; generationId?: number }) => void,
+    callback: (data: {
+      answer: string;
+      question: string;
+      confidence: number;
+      sourceLabel?: string;
+      generationId?: number;
+      emittedAt?: number;
+      triggerSource?: 'human-observer-suggestion';
+    }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('intelligence-suggested-answer', subscription);
@@ -2169,6 +2245,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('audio-test-system-error', subscription);
     return () => {
       ipcRenderer.removeListener('audio-test-system-error', subscription);
+    };
+  },
+  // Settings Audio live-STT sandbox — real partial/final transcript text.
+  startLiveSttSandbox: (deviceId?: string) =>
+    ipcRenderer.invoke('start-live-stt-sandbox', deviceId),
+  stopLiveSttSandbox: () => ipcRenderer.invoke('stop-live-stt-sandbox'),
+  onAudioTestTranscript: (callback: (payload: {
+    text: string;
+    final: boolean;
+    confidence?: number;
+    speaker: 'user';
+    timestamp: number;
+  }) => void) => {
+    const subscription = (_: any, payload: {
+      text: string;
+      final: boolean;
+      confidence?: number;
+      speaker: 'user';
+      timestamp: number;
+    }) => callback(payload);
+    ipcRenderer.on('audio-test-transcript', subscription);
+    return () => {
+      ipcRenderer.removeListener('audio-test-transcript', subscription);
+    };
+  },
+  onAudioTestTranscriptError: (callback: (errorMessage: string) => void) => {
+    const subscription = (_: any, errorMessage: string) => callback(errorMessage);
+    ipcRenderer.on('audio-test-transcript-error', subscription);
+    return () => {
+      ipcRenderer.removeListener('audio-test-transcript-error', subscription);
     };
   },
 

@@ -473,6 +473,12 @@ tools/
 !docs/
 docs/*
 !docs/VISION_MODEL_BENCHMARK.md
+!docs/adr/
+!docs/adr/**
+!docs/interviewman-listen/
+!docs/interviewman-listen/**
+!docs/speakable-sd/
+!docs/speakable-sd/**
 benchmark-results/
 
 

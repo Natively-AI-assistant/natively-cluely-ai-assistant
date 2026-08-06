@@ -119,7 +119,10 @@ export interface ElectronAPI {
   showOverlay: () => Promise<void>
   hideOverlay: () => Promise<void>
   getMeetingActive: () => Promise<boolean>
-  onMeetingStateChanged: (callback: (data: { isActive: boolean }) => void) => () => void
+  onMeetingStateChanged: (callback: (data: {
+    isActive: boolean
+    listenTransport?: { state: string; captureShouldRun: boolean; reason: string }
+  }) => void) => () => void
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void
   onEnsureExpanded: (callback: () => void) => () => void
   openExternal: (url: string) => Promise<void>
@@ -216,7 +219,7 @@ export interface ElectronAPI {
     display_name_publicly: boolean;
   }) => Promise<{ ok: boolean; error?: string; status?: number }>
   getNativelyUsage: (force?: boolean) => Promise<{ ok: boolean; error?: string; plan?: string; quota?: { transcription: { used: number; limit: number; remaining: number }; ai: { used: number; limit: number; remaining: number }; search: { used: number; limit: number; remaining: number }; resets_at: string }; member_since?: string }>
-  getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; disabledProviders?: string[]; cloudEnabledModels?: Record<string, string[]>; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
+  getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; disabledProviders?: string[]; cloudEnabledModels?: Record<string, string[]>; cloudFetchedModels?: Record<string, { id: string; label: string }[]>; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
   // Permissions
   checkPermissions:     () => Promise<{ microphone: 'granted'|'denied'|'not-determined'|'restricted'; screen: 'granted'|'denied'|'not-determined'|'restricted'; platform: string }>
   requestMicPermission: () => Promise<boolean>
@@ -297,6 +300,7 @@ export interface ElectronAPI {
     domContext?: string;
     domContextEnvelope?: ContextEnvelope;
     sdRequirementsUiAdvance?: boolean;
+    triggerSource?: 'human-observer-suggestion';
   }) => Promise<{
     answer: string | null;
     question?: string;
@@ -309,6 +313,7 @@ export interface ElectronAPI {
     visionFailureReason?: 'no_vision_provider' | 'all_vision_failed' | 'privacy_blocked' | 'scope_blocked' | 'provider_timeout';
     imageCount?: number;
     usedImageInput?: boolean;
+    triggerSource?: 'human-observer-suggestion';
   }>
   getSdRequirementsGateStatus: () => Promise<{
     success: boolean;
@@ -366,6 +371,19 @@ export interface ElectronAPI {
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string; code?: string }>
   endMeeting: () => Promise<{ success: boolean; error?: string }>
+  getListenTransport: () => Promise<{ state: string; captureShouldRun: boolean; reason: string }>
+  toggleListenTransport: () => Promise<{
+    success: boolean
+    listenTransport?: { state: string; captureShouldRun: boolean; reason: string }
+    error?: string
+  }>
+  onListenTransportChanged: (
+    callback: (data: { state: string; captureShouldRun: boolean; reason: string }) => void,
+  ) => () => void
+  getUserSttSource: () => Promise<{ source: string; label: string }>
+  onUserSttSourceChanged: (
+    callback: (data: { source: string; label: string }) => void,
+  ) => () => void
   debugInjectTranscript: (segments: Array<{ speaker?: string; text: string; timestamp?: number; confidence?: number }>)
     => Promise<{ success: boolean; injected?: number; error?: string }>
   finalizeMicSTT: () => Promise<void>
@@ -404,7 +422,7 @@ export interface ElectronAPI {
   // Intelligence Mode Events
   onIntelligenceAssistUpdate: (callback: (data: { insight: string }) => void) => () => void
   onIntelligenceSuggestedAnswerToken: (callback: (data: { token: string; question: string; confidence: number }) => void) => () => void
-  onIntelligenceSuggestedAnswer: (callback: (data: { answer: string; question: string; confidence: number; generationId?: number; sourceLabel?: string; emittedAt?: number }) => void) => () => void
+  onIntelligenceSuggestedAnswer: (callback: (data: { answer: string; question: string; confidence: number; generationId?: number; sourceLabel?: string; emittedAt?: number; triggerSource?: 'human-observer-suggestion' }) => void) => () => void
   onIntelligenceSuggestedAnswerDiscard: (callback: (data: { reason: string }) => void) => () => void
   // Verified code execution (background): ✓ badge + corrected message.
   onIntelligenceCodeVerified: (callback: (data: { question: string; passed: number; total: number; language: string }) => void) => () => void
@@ -494,6 +512,22 @@ export interface ElectronAPI {
   // the same startAudioTest lifecycle.
   onAudioTestSystemLevel: (callback: (level: number) => void) => () => void;
   onAudioTestSystemError: (callback: (errorMessage: string) => void) => () => void;
+  // Settings Audio live-STT sandbox — real partial/final transcript text
+  // (not levels / credential ping). reason=stt_unready when provider is none.
+  startLiveSttSandbox: (deviceId?: string) => Promise<{
+    success: boolean;
+    reason?: 'stt_unready' | string;
+    error?: string;
+  }>;
+  stopLiveSttSandbox: () => Promise<{ success: boolean }>;
+  onAudioTestTranscript: (callback: (payload: {
+    text: string;
+    final: boolean;
+    confidence?: number;
+    speaker: 'user';
+    timestamp: number;
+  }) => void) => () => void;
+  onAudioTestTranscriptError: (callback: (errorMessage: string) => void) => () => void;
 
   // Database
   flushDatabase: () => Promise<{ success: boolean }>;

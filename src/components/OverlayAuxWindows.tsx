@@ -26,6 +26,8 @@ export interface OverlayUiState {
   overlayOpacity?: number;
   themeMode?: 'light' | 'dark';
   interfaceTheme?: 'default' | 'liquid-glass' | 'modern';
+  /** Listen transport armed (red-square active). */
+  listenArmed?: boolean;
 }
 
 const DEFAULT_STATE: Required<Omit<OverlayUiState, 'hasContent'>> & OverlayUiState = {
@@ -240,7 +242,11 @@ export function OverlayPillWindow() {
         <TopPill
           expanded={state.expanded !== false}
           onToggle={() => sendAction('toggle-expand')}
-          onQuit={() => sendAction('end-meeting')}
+          onToggleListen={() => {
+            window.electronAPI?.toggleListenTransport?.().catch(() => {});
+          }}
+          onEndMeeting={() => sendAction('end-meeting')}
+          listenArmed={state.listenArmed === true}
           appearance={appearance}
           onLogoClick={() => window.electronAPI?.setWindowMode?.('launcher')}
         />

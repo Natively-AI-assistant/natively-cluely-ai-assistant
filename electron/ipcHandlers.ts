@@ -13,6 +13,12 @@ import { describeServiceAccountRejection } from './services/googleServiceAccount
 import { PhoneMirrorService } from './services/PhoneMirrorService';
 import { resolveModesSetCommand } from './services/phoneMirrorCommands';
 import {
+  formatListenTransportAck,
+  formatPhoneSttAck,
+} from './services/phoneMirrorCommands';
+import type { PhoneCommand } from './services/phoneMirrorCommands';
+import { labelUserSttSource } from './audio/userSttSource';
+import {
   TwoDeviceStealthSession,
   type TwoDeviceStealthHost,
 } from './services/TwoDeviceStealthSession';
@@ -30,6 +36,7 @@ import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, resolveStructureValidationType, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, applySpeakableSdIfNeeded, mayCompressToSpeakable, type ExplicitCodingContract, type AnswerType } from './llm';
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
+import { mintTurnId } from './llm/turnIdentity';
 import { buildProfileJitPrompt } from './llm/ProfileJitPromptBuilder';
 import { decideSessionWritePolicy, type FinalGenerationMode, type SessionWriteDecision } from './llm/FinalAnswerGenerationPolicy';
 import { stripEmbeddedAnswerContract } from './llm/stripEmbeddedAnswerContract';
@@ -6699,7 +6706,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('get-stored-credentials', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      const creds = CredentialsManager.getInstance().getAllCredentials();
+      const cm = CredentialsManager.getInstance();
+      const creds = cm.getAllCredentials();
 
       // Return masked versions for security (just indicate if set)
       const hasKey = (key?: string) => !!(key && key.trim().length > 0);
@@ -6748,6 +6756,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         deepseekPreferredModel: creds.deepseekPreferredModel || undefined,
         disabledProviders: creds.disabledProviders || [],
         cloudEnabledModels: creds.cloudEnabledModels || {},
+        cloudFetchedModels: cm.getAllCloudFetchedModels?.() || creds.cloudFetchedModels || {},
       };
     } catch (error: any) {
       // SECURITY FIX (P0): Error fallback returns masked keys, not raw strings
@@ -7970,6 +7979,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
 
+      // gemini-selection-sticky: overlay picks must survive restart (same persistence
+      // as Settings set-default-model).
+      cm.setDefaultModel(modelId);
+
       // Get all providers (Curl + Custom)
       const curlProviders = cm.getCurlProviders();
       const legacyProviders = cm.getCustomProviders() || [];
@@ -8092,6 +8105,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  // Settings Audio live-STT sandbox (ticket 05) — real partial/final transcript
+  // stream on the audio-test mic path. Distinct from level meter + credential ping.
+  safeHandle('start-live-stt-sandbox', async (_event, deviceId?: string) => {
+    return appState.startLiveSttSandbox(deviceId);
+  });
+
+  safeHandle('stop-live-stt-sandbox', async () => {
+    appState.stopLiveSttSandbox();
+    return { success: true };
+  });
+
   safeHandle('set-recognition-language', async (_, key: string) => {
     appState.setRecognitionLanguage(key);
     return { success: true };
@@ -8122,6 +8146,27 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.error('Error ending meeting:', error);
       return { success: false, error: error.message };
     }
+  });
+
+  // InterviewMan listen transport — red-square pause/resume (does not end meeting).
+  safeHandle('listen-transport:get', async () => {
+    return appState.getListenTransport();
+  });
+
+  safeHandle('listen-transport:toggle', async () => {
+    try {
+      const snap = await appState.toggleListenTransport();
+      return { success: true, listenTransport: snap };
+    } catch (error: any) {
+      console.error('Error toggling listen transport:', error);
+      return { success: false, error: error?.message };
+    }
+  });
+
+  // phone-stt-source — active user-speech STT device (desktop | phone | none).
+  safeHandle('user-stt-source:get', async () => {
+    const source = appState.getUserSttSource();
+    return { source, label: labelUserSttSource(source) };
   });
 
   // TEST-TRANSCRIPT INJECTION (deep-run 2 issue 10, 2026-08-01). The all-files
@@ -8584,8 +8629,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         domContext?: string;
         domContextEnvelope?: unknown;
         sdRequirementsUiAdvance?: boolean;
+        triggerSource?: 'human-observer-suggestion';
       },
     ) => {
+      const triggerSource =
+        options?.triggerSource === 'human-observer-suggestion'
+          ? ('human-observer-suggestion' as const)
+          : undefined;
       try {
         let screenContext: any;
         let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
@@ -8611,6 +8661,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               question: question || 'unknown',
               screenContextStatus,
               error: 'Invalid image path payload',
+              triggerSource,
             };
           }
 
@@ -8755,6 +8806,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 : undefined,
             domContext: effectiveDomContext,
             sdRequirementsUiAdvance: options?.sdRequirementsUiAdvance === true,
+            ...(triggerSource ? { triggerSource } : {}),
           },
         );
         if (answer) {
@@ -8776,6 +8828,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           visionFailureReason,
           imageCount: validatedImagePaths?.length || 0,
           usedImageInput: Boolean(validatedImagePaths?.length),
+          triggerSource:
+            triggerSource ||
+            intelligenceManager.getLastWtaTriggerSource?.() ||
+            undefined,
         };
       } catch (error: any) {
         console.error('[IPC] generate-what-to-say error:', error);
@@ -8783,6 +8839,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           answer: null,
           question: question || 'unknown',
           error: error?.message || 'unknown_error',
+          triggerSource,
         };
       }
     },
@@ -11885,8 +11942,38 @@ export function initializeIpcHandlers(appState: AppState): void {
     };
   });
 
-  PhoneMirrorService.getInstance().onPhoneCommand(async (cmd) => {
+  PhoneMirrorService.getInstance().onPhoneCommand(async (rawCmd) => {
     const win = appState.getMainWindow();
+
+    // Ask/submit (ticket 06): optional message → same desktop LLM chat host path;
+    // no message → Answer chip via global-shortcut. Desktop remains LLM host (ADR 0015).
+    let cmd: PhoneCommand = rawCmd;
+    if (rawCmd.type === 'ask-submit') {
+      const phoneMirror = PhoneMirrorService.getInstance();
+      if (rawCmd.message) {
+        phoneMirror.publishAck('ask-submit', 'Ask submitted');
+        cmd = { type: 'chat', message: rawCmd.message };
+      } else {
+        try {
+          const helper = appState.getWindowHelper();
+          const sent = new Set<number>();
+          for (const w of [helper.getLauncherWindow(), helper.getOverlayWindow()]) {
+            if (!w || w.isDestroyed() || sent.has(w.id)) continue;
+            sent.add(w.id);
+            try {
+              w.webContents.send('global-shortcut', { action: 'answer' });
+            } catch {
+              // Window is tearing down; keep delivering to any other valid surface.
+            }
+          }
+          phoneMirror.publishAck('ask-submit', 'Ask/submit');
+        } catch (e: any) {
+          console.error('[PhoneMirror] ask-submit failed:', e);
+          phoneMirror.publishAck('ask-submit', e?.message || 'Ask/submit failed');
+        }
+        return;
+      }
+    }
 
     if (cmd.type === 'action') {
       // Re-use the same global-shortcut dispatch path the keyboard uses.
@@ -12256,6 +12343,64 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch (e: any) {
         console.error('[PhoneMirror] modes:set failed:', e);
         phoneMirror.publishAck('modes:set', e?.message || 'Failed to set active mode');
+      }
+    } else if (cmd.type === 'listen-transport') {
+      // Red-square pause/resume via getListenTransport + toggle (ticket 06).
+      const phoneMirror = PhoneMirrorService.getInstance();
+      try {
+        const current = appState.getListenTransport();
+        let shouldToggle = false;
+        if (cmd.op === 'toggle') {
+          shouldToggle = true;
+        } else if (cmd.op === 'pause') {
+          shouldToggle = current.state === 'armed';
+        } else if (cmd.op === 'resume') {
+          shouldToggle = current.state === 'paused' || current.state === 'unready';
+        }
+        const snap = shouldToggle
+          ? await appState.toggleListenTransport()
+          : current;
+        const ack = formatListenTransportAck(cmd.op, snap.state);
+        phoneMirror.publishAck(ack.action, ack.message);
+      } catch (e: any) {
+        console.error('[PhoneMirror] listen-transport failed:', e);
+        phoneMirror.publishAck(
+          `listen-transport:${cmd.op}`,
+          e?.message || 'Listen transport failed',
+        );
+      }
+    } else if (cmd.type === 'end-meeting') {
+      // Triangle equivalent — end meeting without two-device stealth session dance.
+      const phoneMirror = PhoneMirrorService.getInstance();
+      try {
+        await appState.endMeeting();
+        phoneMirror.publishAck('end-meeting', 'Meeting ended');
+      } catch (e: any) {
+        console.error('[PhoneMirror] end-meeting failed:', e);
+        phoneMirror.publishAck('end-meeting', e?.message || 'End meeting failed');
+      }
+    } else if (cmd.type === 'phone-stt') {
+      // Arm/disarm phone as user-speech STT source (last-armed wins; ADR 0015).
+      const phoneMirror = PhoneMirrorService.getInstance();
+      try {
+        const source =
+          cmd.op === 'arm' ? appState.armPhoneUserStt() : appState.disarmPhoneUserStt();
+        const ack = formatPhoneSttAck(cmd.op, source);
+        phoneMirror.publishAck(ack.action, ack.message);
+      } catch (e: any) {
+        console.error('[PhoneMirror] phone-stt failed:', e);
+        phoneMirror.publishAck(
+          `phone-stt:${cmd.op}`,
+          e?.message || 'Phone STT failed',
+        );
+      }
+    } else if (cmd.type === 'phone-stt-transcript') {
+      // Merge phone finals/partials into desktop session when phone is active
+      // source. No toast ack — continuous recognition would spam the phone UI.
+      try {
+        appState.ingestPhoneSttTranscript(cmd.text, cmd.final);
+      } catch (e: any) {
+        console.error('[PhoneMirror] phone-stt-transcript failed:', e);
       }
     }
   });

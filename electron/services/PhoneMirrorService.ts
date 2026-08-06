@@ -1521,13 +1521,21 @@ export class PhoneMirrorService {
 
         if (validated) {
           let label: string = validated.type;
-          if (validated.type === 'two-device-stealth') {
+          if (
+            validated.type === 'two-device-stealth' ||
+            validated.type === 'listen-transport' ||
+            validated.type === 'phone-stt'
+          ) {
             label = `${validated.type}:${validated.op}`;
           } else if (validated.type === 'modes') {
             label =
               validated.op === 'set'
                 ? `modes:set:${validated.modeId}`
                 : 'modes:list';
+          } else if (validated.type === 'ask-submit') {
+            label = validated.message ? 'ask-submit:message' : 'ask-submit';
+          } else if (validated.type === 'phone-stt-transcript') {
+            label = 'phone-stt-transcript';
           }
           console.log(`[PhoneMirror] phone command: ${label}`);
           this.emitPhoneCommand(validated);

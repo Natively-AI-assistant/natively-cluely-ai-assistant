@@ -96,8 +96,15 @@ const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: M
                                 <ChevronUp className="w-3.5 h-3.5 opacity-70" />
                                 <span className="opacity-80 tracking-wide">{t('Hide')}</span>
                             </div>
-                            <div className="w-8 h-8 rounded-full flex items-center justify-center overlay-icon-surface overlay-text-primary" style={appearance.iconStyle}>
-                                <div className="w-3.5 h-3.5 rounded-[3px] bg-red-400 opacity-80" />
+                            <div className="flex items-center gap-0.5 pl-1.5 ml-0.5 border-l border-white/12">
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center overlay-icon-surface text-red-400 bg-red-500/10" style={appearance.iconStyle} title={t('Pause listening')}>
+                                    <div className="w-3 h-3 rounded-[2.5px] bg-red-400 opacity-90" />
+                                </div>
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center overlay-icon-surface overlay-text-primary" style={appearance.iconStyle} title={t('End meeting')}>
+                                    <svg width="12" height="10" viewBox="0 0 12 10" className="opacity-85" aria-hidden>
+                                        <path d="M6 9.25 0.75 1.1h10.5L6 9.25Z" fill="currentColor" />
+                                    </svg>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -139,7 +146,7 @@ const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: M
                                 <HelpCircle className="w-3 h-3 opacity-70" /> {t('Follow Up Question')}
                             </div>
                             <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium min-w-[74px] shrink-0 border overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <Zap className="w-3 h-3 opacity-70" /> {t('Answer')}
+                                <Zap className="w-3 h-3 opacity-70" /> {t('Ask')}
                             </div>
                         </div>
 
@@ -993,6 +1000,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [selectedInput, setSelectedInput] = useState('');
     const [selectedOutput, setSelectedOutput] = useState('');
     const [micLevel, setMicLevel] = useState(0);
+    // Settings Audio live-STT sandbox (ticket 05) — real transcript text, not levels.
+    const [liveSttSandboxListening, setLiveSttSandboxListening] = useState(false);
+    const [liveSttSandboxTranscript, setLiveSttSandboxTranscript] = useState('');
+    const [liveSttSandboxPartial, setLiveSttSandboxPartial] = useState('');
+    const [liveSttSandboxUnready, setLiveSttSandboxUnready] = useState(false);
+    const [liveSttSandboxError, setLiveSttSandboxError] = useState('');
+    const [liveSttSandboxStarting, setLiveSttSandboxStarting] = useState(false);
     const [useExperimentalSck, setUseExperimentalSck] = useState(false);
     // Most-recent device fallback notice. Populated by main process via
     // 'device-selection-applied' IPC when the saved device couldn't be opened
@@ -1531,10 +1545,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
             return () => {
                 unsubscribe?.();
+                // stopAudioTest also tears down the live-STT sandbox.
                 window.electronAPI?.stopAudioTest?.().catch((error) => {
                     console.error("Error stopping native microphone test:", error);
                 });
                 setMicLevel(0);
+                setLiveSttSandboxListening(false);
+                setLiveSttSandboxPartial('');
             };
         }
 
@@ -1549,7 +1566,78 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             console.error("Error stopping native microphone test (guard=false):", error);
         });
         setMicLevel(0);
+        setLiveSttSandboxListening(false);
+        setLiveSttSandboxPartial('');
     }, [isOpen, activeTab, selectedInput]);
+
+    // Live-STT sandbox transcript IPC — only while Listen is armed.
+    useEffect(() => {
+        if (!liveSttSandboxListening) return;
+        const unsubTranscript = window.electronAPI?.onAudioTestTranscript?.((payload) => {
+            if (!payload?.text) return;
+            if (payload.final) {
+                setLiveSttSandboxTranscript((prev) => {
+                    const next = prev ? `${prev} ${payload.text}`.trim() : payload.text.trim();
+                    return next;
+                });
+                setLiveSttSandboxPartial('');
+            } else {
+                setLiveSttSandboxPartial(payload.text);
+            }
+        });
+        const unsubError = window.electronAPI?.onAudioTestTranscriptError?.((message) => {
+            setLiveSttSandboxError(message || t('Transcription error'));
+        });
+        return () => {
+            unsubTranscript?.();
+            unsubError?.();
+        };
+    }, [liveSttSandboxListening, t]);
+
+    const handleLiveSttSandboxToggle = async () => {
+        if (liveSttSandboxListening) {
+            try {
+                await window.electronAPI?.stopLiveSttSandbox?.();
+            } catch (e) {
+                console.error('Error stopping live STT sandbox:', e);
+            }
+            setLiveSttSandboxListening(false);
+            setLiveSttSandboxPartial('');
+            setLiveSttSandboxStarting(false);
+            return;
+        }
+
+        // Unready STT (provider none) — same class of setup guidance as meeting unready.
+        if (sttProvider === 'none') {
+            setLiveSttSandboxUnready(true);
+            setLiveSttSandboxError('');
+            setLiveSttSandboxListening(false);
+            return;
+        }
+
+        setLiveSttSandboxUnready(false);
+        setLiveSttSandboxError('');
+        setLiveSttSandboxStarting(true);
+        try {
+            const result = await window.electronAPI?.startLiveSttSandbox?.(selectedInput || undefined);
+            if (!result?.success) {
+                if (result?.reason === 'stt_unready') {
+                    setLiveSttSandboxUnready(true);
+                } else {
+                    setLiveSttSandboxError(result?.error || t('Failed to start live transcript test.'));
+                }
+                setLiveSttSandboxListening(false);
+                return;
+            }
+            setLiveSttSandboxListening(true);
+        } catch (e: any) {
+            console.error('Error starting live STT sandbox:', e);
+            setLiveSttSandboxError(e?.message || t('Failed to start live transcript test.'));
+            setLiveSttSandboxListening(false);
+        } finally {
+            setLiveSttSandboxStarting(false);
+        }
+    };
 
     return (
         <AnimatePresence>
@@ -2540,6 +2628,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <div>
                                             <div className="mb-3">
                                                 <h4 className="text-sm font-bold text-text-primary">{t('Chat')}</h4>
+                                                <p className="text-[11px] text-text-tertiary mt-1 leading-relaxed">
+                                                    {t('Ask / Submit sends a question to the AI. It does not start listening — use the red square on the overlay to pause or resume STT. The triangle ends the meeting.')}
+                                                </p>
                                             </div>
                                             <div className="space-y-1">
                                                 {[
@@ -2547,7 +2638,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     { id: 'clarify', label: 'Clarify', icon: <MessageSquare size={14} /> },
                                                     { id: 'followUp', label: 'Follow Up', icon: <MessageSquare size={14} /> },
                                                     { id: 'dynamicAction4', label: 'Recap / Brainstorm', icon: <RefreshCw size={14} /> },
-                                                    { id: 'answer', label: 'Answer / Record', icon: <Mic size={14} /> },
+                                                    { id: 'answer', label: 'Ask / Submit', icon: <Mic size={14} /> },
                                                     { id: 'codeHint', label: 'Get Code Hint', icon: <Zap size={14} /> },
                                                     { id: 'brainstorm', label: 'Brainstorm Approaches', icon: <Zap size={14} /> },
                                                     { id: 'scrollUp', label: 'Scroll Up', icon: <ArrowUp size={14} /> },
@@ -2859,11 +2950,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         </div>
                                                     )}
 
+                                                    <div className="flex flex-col gap-1.5">
                                                     <div className="flex items-center gap-3">
                                                         <button
                                                             onClick={handleTestSttConnection}
                                                             disabled={sttTestStatus === 'testing'}
                                                             className="text-xs bg-bg-input hover:bg-bg-elevated text-text-primary px-3 py-1.5 rounded-md transition-colors flex items-center gap-2 disabled:opacity-50"
+                                                            title={t('Verifies API credentials only — not a live transcript test.')}
                                                         >
                                                             {sttTestStatus === 'testing' ? (
                                                                 <><RefreshCw size={12} className="animate-spin" /> {t('Testing...')}</>
@@ -2896,6 +2989,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         {sttTestStatus === 'error' && (
                                                             <span className="text-xs text-red-400">{sttTestError}</span>
                                                         )}
+                                                    </div>
+                                                    <p className="text-[10px] text-text-tertiary px-0.5">
+                                                        {t('Credential check only. Use Listen below to stream a live transcript.')}
+                                                    </p>
                                                     </div>
                                                 </div>
                                             )}
@@ -3021,6 +3118,77 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         style={{ width: `${micLevel}%` }}
                                                     />
                                                 </div>
+                                            </div>
+
+                                            {/* Live-STT sandbox — real partial/final transcript (not the level meter). */}
+                                            <div
+                                                className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3"
+                                                data-testid="live-stt-sandbox"
+                                            >
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <h4 className="text-sm font-medium text-text-primary">{t('Live transcript test')}</h4>
+                                                        <p className="text-[11px] text-text-secondary mt-0.5 leading-snug">
+                                                            {t('Listen streams real speech-to-text from your microphone using your selected provider.')}
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        data-testid="live-stt-sandbox-listen"
+                                                        onClick={() => { void handleLiveSttSandboxToggle(); }}
+                                                        disabled={liveSttSandboxStarting}
+                                                        className={`shrink-0 text-xs px-3 py-1.5 rounded-md transition-colors flex items-center gap-2 disabled:opacity-50 ${
+                                                            liveSttSandboxListening
+                                                                ? 'bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/30'
+                                                                : 'bg-bg-input hover:bg-bg-elevated text-text-primary border border-border-subtle'
+                                                        }`}
+                                                    >
+                                                        {liveSttSandboxStarting ? (
+                                                            <><RefreshCw size={12} className="animate-spin" /> {t('Starting...')}</>
+                                                        ) : liveSttSandboxListening ? (
+                                                            <><Mic size={12} /> {t('Stop')}</>
+                                                        ) : (
+                                                            <><Headphones size={12} /> {t('Listen')}</>
+                                                        )}
+                                                    </button>
+                                                </div>
+
+                                                {liveSttSandboxUnready && (
+                                                    <div
+                                                        className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20"
+                                                        data-testid="live-stt-sandbox-unready"
+                                                    >
+                                                        <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                                                        <p className="text-xs text-amber-200/90 leading-snug">
+                                                            {t('Listening is not ready — configure speech-to-text above, then try Listen again.')}
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                {liveSttSandboxError && !liveSttSandboxUnready && (
+                                                    <p className="text-xs text-red-400" data-testid="live-stt-sandbox-error">
+                                                        {liveSttSandboxError}
+                                                    </p>
+                                                )}
+
+                                                {(liveSttSandboxListening || liveSttSandboxTranscript || liveSttSandboxPartial) && (
+                                                    <div
+                                                        className="min-h-[4.5rem] max-h-36 overflow-y-auto rounded-lg bg-bg-input border border-border-subtle px-3 py-2 text-xs text-text-primary leading-relaxed whitespace-pre-wrap"
+                                                        data-testid="live-stt-sandbox-transcript"
+                                                        aria-live="polite"
+                                                    >
+                                                        {liveSttSandboxTranscript}
+                                                        {liveSttSandboxPartial ? (
+                                                            <span className="text-text-tertiary">
+                                                                {liveSttSandboxTranscript ? ' ' : ''}
+                                                                {liveSttSandboxPartial}
+                                                            </span>
+                                                        ) : null}
+                                                        {!liveSttSandboxTranscript && !liveSttSandboxPartial && liveSttSandboxListening ? (
+                                                            <span className="text-text-tertiary italic">{t('Listening… speak to see live transcript text.')}</span>
+                                                        ) : null}
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div className="h-px bg-border-subtle my-2" />

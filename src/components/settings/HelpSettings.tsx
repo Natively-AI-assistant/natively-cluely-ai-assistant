@@ -24,7 +24,7 @@ const MOCK_BUTTONS = [
     { icon: MessageSquare, label: 'Clarify', kbd: `${CMD_SYMBOL}2`, color: 'indigo' },
     { icon: RefreshCw, label: 'Recap', kbd: `${CMD_SYMBOL}7`, color: 'amber' },
     { icon: HelpCircle, label: 'Follow Up Question', kbd: `${CMD_SYMBOL}4`, color: 'teal' },
-    { icon: Zap, label: 'Answer', kbd: `${CMD_SYMBOL}5`, color: 'emerald' },
+    { icon: Zap, label: 'Ask', kbd: `${CMD_SYMBOL}5`, color: 'emerald' },
 ] as const;
 
 const colorMap: Record<string, string> = {
@@ -64,9 +64,16 @@ const MockAppInterface = () => {
                             <ChevronUp className="w-3.5 h-3.5 opacity-70" />
                             <span className="tracking-wide opacity-80">Hide</span>
                         </div>
-                        {/* Stop Button */}
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center bg-bg-item-active text-text-primary border border-border-muted">
-                            <div className="w-3.5 h-3.5 rounded-[3px] bg-current opacity-80" />
+                        {/* Red square = listen transport; triangle = end meeting */}
+                        <div className="flex items-center gap-0.5 pl-1.5 ml-0.5 border-l border-border-muted">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-red-500/10 text-red-400 border border-red-500/25">
+                                <div className="w-3 h-3 rounded-[2.5px] bg-red-400" />
+                            </div>
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-bg-item-active text-text-primary border border-border-muted">
+                                <svg width="12" height="10" viewBox="0 0 12 10" className="opacity-85" aria-hidden>
+                                    <path d="M6 9.25 0.75 1.1h10.5L6 9.25Z" fill="currentColor" />
+                                </svg>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -515,7 +522,7 @@ const MockPillControlsAnim = () => {
                 </div>
             </div>
 
-            {/* Stop → end session */}
+            {/* Red square → pause / resume listen (does not end the meeting) */}
             <div className="flex items-center gap-3 p-3 bg-bg-elevated border border-border-subtle rounded-xl">
                 <div className="w-8 h-8 rounded-full bg-red-500/10 border border-red-500/25 flex items-center justify-center shrink-0">
                     <div className="w-3 h-3 rounded-[2.5px] bg-red-400" />
@@ -527,9 +534,23 @@ const MockPillControlsAnim = () => {
                         transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
                         className="text-[11px] text-red-400 font-medium shrink-0"
                     >
-                        Session ends instantly
+                        Pause / resume listening
                     </motion.span>
-                    <span className="text-[11px] text-text-tertiary">— returns to launcher</span>
+                    <span className="text-[11px] text-text-tertiary">— STT stays in the meeting</span>
+                </div>
+            </div>
+
+            {/* Triangle → end meeting */}
+            <div className="flex items-center gap-3 p-3 bg-bg-elevated border border-border-subtle rounded-xl">
+                <div className="w-8 h-8 rounded-full bg-bg-item-active border border-border-muted flex items-center justify-center shrink-0 text-text-primary">
+                    <svg width="12" height="10" viewBox="0 0 12 10" className="opacity-85" aria-hidden>
+                        <path d="M6 9.25 0.75 1.1h10.5L6 9.25Z" fill="currentColor" />
+                    </svg>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-[11px] text-text-primary font-medium shrink-0">End meeting</span>
+                    <span className="text-[11px] text-text-tertiary">— triangle tears down the session</span>
                 </div>
             </div>
 
@@ -983,6 +1004,12 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                 <AccordionSection title="2. Audio STT Providers Setup (Microphone)" icon={<Mic className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p>Natively supports over 8 different Audio engines to transcribe what you hear and say. From the Audio tab in settings, use the overarching dropdown to switch the active engine.</p>
+                        <div className="p-3 rounded-xl border border-border-subtle bg-bg-item-surface space-y-1.5">
+                            <div className="text-[12px] font-semibold text-text-primary">Live STT sandbox</div>
+                            <p className="text-[11px] text-text-secondary leading-relaxed">
+                                Settings → Audio → <strong className="text-text-primary">Listen</strong> streams real speech-to-text from your mic (partial and final text). Level meters and credential checks alone do not prove STT works. Use this before a meeting if listening shows an unready / setup state.
+                            </p>
+                        </div>
 
                         <MockProviderSelectionAnim />
 
@@ -1213,6 +1240,18 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     <div className="space-y-6">
                         <p className="text-[13px]">When initialized, Natively hides itself visually while remaining active as a persistent translucent overlay. This is your command center.</p>
 
+                        <div className="p-3 rounded-xl border border-border-subtle bg-bg-item-surface space-y-2">
+                            <div className="text-[11px] font-semibold text-text-primary uppercase tracking-wider">Listen controls (InterviewMan map)</div>
+                            <ul className="text-[12px] text-text-secondary leading-relaxed space-y-1.5 list-disc pl-4">
+                                <li><strong className="text-text-primary">Red square</strong> — pause or resume listening (STT capture). Does not end the meeting.</li>
+                                <li><strong className="text-text-primary">Triangle</strong> — end the meeting and return to the launcher.</li>
+                                <li><strong className="text-text-primary">Ask / Submit</strong> ({CMD_SYMBOL}5) — send a spoken or typed question to the AI. Does not start or stop listening.</li>
+                            </ul>
+                            <p className="text-[11px] text-text-tertiary leading-relaxed">
+                                Listening arms when a meeting starts (unless Ambient AI Chat is on, or speech-to-text is not ready). Live transcript text appears without clicking Ask first. Use Settings → Audio → Listen to verify live STT before a meeting.
+                            </p>
+                        </div>
+
                         <div className="relative w-full flex flex-col p-2 sm:p-5 bg-bg-main rounded-[26px] border border-border-subtle shadow-inner">
                             <MockAppInterface />
                             <MockPillControlsAnim />
@@ -1230,7 +1269,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 { Icon: Pencil, color: 'blue', title: 'What to Answer?', badge: null, bc: '', kbd: ['⌘', '1'], desc: 'Reads the active transcript and screen, then streams a precise response to read aloud.' },
                                 { Icon: Lightbulb, color: 'violet', title: 'Brainstorm', badge: 'Interview ON', bc: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', kbd: ['⌘', '3'], desc: 'Recap becomes Brainstorm when Interview Mode is ON — deep multi-step strategies.' },
                                 { Icon: HelpCircle, color: 'teal', title: 'Follow Up', badge: null, bc: '', kbd: ['⌘', '4'], desc: 'Suggests the next logical question to keep conversation flowing gracefully.' },
-                                { Icon: Zap, color: 'emerald', title: 'Answer Now', badge: null, bc: '', kbd: ['⌘', '5'], desc: 'Records your mic + screen context and fires an immediate AI query.' },
+                                { Icon: Zap, color: 'emerald', title: 'Ask / Submit', badge: null, bc: '', kbd: ['⌘', '5'], desc: 'Sends spoken or typed words as an AI question. Does not arm or pause listening — use the red square for that.' },
                                 { Icon: MessageSquare, color: 'indigo', title: 'Clarify', badge: null, bc: '', kbd: ['⌘', '2'], desc: 'Generates sharp probing questions from latent audio when a topic is unclear.' },
                                 { Icon: RefreshCw, color: 'amber', title: 'Recap', badge: 'Interview OFF', bc: 'bg-red-500/10 text-red-400 border-red-500/30', kbd: ['⌘', '3'], desc: 'Condenses the last 5 minutes into bullet points when you lose the thread.' },
                                 { Icon: Sparkles, color: 'sky', title: 'Code Hint', badge: null, bc: '', kbd: ['⌘', '6'], desc: 'Reads your screen and nudges you toward the correct code implementation.' },
