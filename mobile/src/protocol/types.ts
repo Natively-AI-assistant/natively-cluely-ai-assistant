@@ -13,6 +13,27 @@ export interface PersistedMessage {
   label?: string;
 }
 
+/** Mode row from desktop `status` / modes:list (ticket 17). */
+export interface PhoneModeSummary {
+  id: string;
+  name: string;
+  templateType: string;
+}
+
+/** Phone → desktop commands owned by ticket 20 (start / modes). */
+export type SessionControlCommand =
+  | { type: 'start-session' }
+  | { type: 'modes'; op: 'list' }
+  | { type: 'modes'; op: 'set'; modeId: string };
+
+/** Session/stealth/mode snapshot from desktop `status` StreamEvent. */
+export interface SessionStatus {
+  sessionActive: boolean;
+  stealthActive: boolean;
+  modeId: string | null;
+  modes: PhoneModeSummary[];
+}
+
 export type StreamEvent =
   | { type: 'history'; messages: PersistedMessage[] }
   | { type: 'user'; id: string; content: string; createdAt: string }
@@ -20,7 +41,14 @@ export type StreamEvent =
   | { type: 'done'; streamId: string; content: string; createdAt: string }
   | { type: 'error'; streamId: string; message: string }
   | { type: 'assistant'; id: string; content: string; label: string; createdAt: string }
-  | { type: 'ack'; action: string; message: string };
+  | { type: 'ack'; action: string; message: string }
+  | {
+      type: 'status';
+      sessionActive: boolean;
+      stealthActive: boolean;
+      modeId: string | null;
+      modes?: PhoneModeSummary[];
+    };
 
 /** Feed item shown in the UI (history + live stream). */
 export type FeedItem =

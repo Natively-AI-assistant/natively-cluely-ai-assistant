@@ -87,8 +87,42 @@ describe('parseStreamEvent', () => {
     ).toEqual({ type: 'user', id: 'u2', content: 'q', createdAt: 't3' });
   });
 
+  it('parses status with session / stealth / modes', () => {
+    expect(
+      parseStreamEvent({
+        type: 'status',
+        sessionActive: true,
+        stealthActive: false,
+        modeId: 'm1',
+        modes: [{ id: 'm1', name: 'Behavioral', templateType: 'interview' }],
+      }),
+    ).toEqual({
+      type: 'status',
+      sessionActive: true,
+      stealthActive: false,
+      modeId: 'm1',
+      modes: [{ id: 'm1', name: 'Behavioral', templateType: 'interview' }],
+    });
+    expect(
+      parseStreamEvent({
+        type: 'status',
+        sessionActive: false,
+        stealthActive: true,
+        modeId: null,
+      }),
+    ).toEqual({
+      type: 'status',
+      sessionActive: false,
+      stealthActive: true,
+      modeId: null,
+    });
+  });
+
   it('ignores unknown and malformed frames', () => {
     expect(parseStreamEvent({ type: 'status' })).toBeNull();
+    expect(
+      parseStreamEvent({ type: 'status', sessionActive: true }),
+    ).toBeNull();
     expect(parseStreamEvent({ type: 'token' })).toBeNull();
     expect(parseStreamEvent(null)).toBeNull();
     expect(parseStreamEventFromData('not-json')).toBeNull();

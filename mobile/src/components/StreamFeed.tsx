@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import {
   FlatList,
   Pressable,
@@ -16,6 +16,10 @@ interface Props {
   hostLabel: string;
   fatalError?: string | null;
   notice?: string | null;
+  /** Ticket 20 status / mode strip (and future session chrome). */
+  headerSlot?: ReactNode;
+  /** Ticket 19 chat/actions/stealth — compose without rewriting the feed. */
+  footerSlot?: ReactNode;
   onDisconnect: () => void;
   onEditPairing: () => void;
 }
@@ -47,6 +51,8 @@ export function StreamFeed({
   hostLabel,
   fatalError,
   notice,
+  headerSlot,
+  footerSlot,
   onDisconnect,
   onEditPairing,
 }: Props) {
@@ -126,6 +132,8 @@ export function StreamFeed({
         </View>
       ) : null}
 
+      {headerSlot}
+
       <FlatList
         ref={listRef}
         style={styles.list}
@@ -143,6 +151,8 @@ export function StreamFeed({
           </Text>
         }
       />
+
+      {footerSlot}
 
       <View style={styles.actions}>
         <Pressable style={styles.secondaryBtn} onPress={onEditPairing}>

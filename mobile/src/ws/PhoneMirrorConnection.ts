@@ -59,6 +59,22 @@ export class PhoneMirrorConnection {
     this.setStatus('stopped');
   }
 
+  /**
+   * Send a JSON command to desktop when the socket is open.
+   * Returns false if not connected (caller may show a notice).
+   */
+  sendCommand(command: object): boolean {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    try {
+      this.socket.send(JSON.stringify(command));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private setStatus(status: ConnectionStatus): void {
     this.status = status;
     this.handlers.onStatus(status);

@@ -6,8 +6,16 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { ModePicker } from './src/components/ModePicker';
 import { PairingScreen } from './src/components/PairingScreen';
+import { SessionStatusBar } from './src/components/SessionStatusBar';
+import { StartSessionButton } from './src/components/StartSessionButton';
 import { StreamFeed } from './src/components/StreamFeed';
+import {
+  buildModesListCommand,
+  buildModesSetCommand,
+  buildStartSessionCommand,
+} from './src/protocol/commands';
 import {
   applyStreamEvent,
   feedItemsForDisplay,
@@ -70,6 +78,11 @@ export default function App() {
     return conn;
   };
 
+  const sendOrNotice = (command: object, failMessage: string) => {
+    const ok = connectionRef.current?.sendCommand(command);
+    if (!ok) setNotice(failMessage);
+  };
+
   const handleConnect = async (config: PairingConfig) => {
     setFatalError(null);
     setNotice(null);
@@ -96,6 +109,26 @@ export default function App() {
     setScreen('pairing');
   };
 
+  const handleStartSession = () => {
+    sendOrNotice(buildStartSessionCommand(), 'Not connected — cannot start session');
+  };
+
+  const handleSelectMode = (modeId: string) => {
+    const command = buildModesSetCommand(modeId);
+    if (!command) {
+      setNotice('Invalid mode id');
+      return;
+    }
+    sendOrNotice(command, 'Not connected — cannot set mode');
+  };
+
+  // If connect-time status omitted modes, ask once when connected + empty.
+  useEffect(() => {
+    if (status !== 'connected') return;
+    if (feed.session.modes.length > 0) return;
+    connectionRef.current?.sendCommand(buildModesListCommand());
+  }, [status, feed.session.modes.length]);
+
   if (screen === 'loading') {
     return (
       <SafeAreaView style={styles.root}>
@@ -106,6 +139,8 @@ export default function App() {
       </SafeAreaView>
     );
   }
+
+  const connected = status === 'connected';
 
   return (
     <SafeAreaView style={styles.root}>
@@ -123,6 +158,29 @@ export default function App() {
           hostLabel={`${pairing.host}:${pairing.port}`}
           fatalError={fatalError}
           notice={notice}
+          headerSlot={
+            <View>
+              <SessionStatusBar
+                connectionStatus={status}
+                session={feed.session}
+              />
+              <View style={styles.sessionRow}>
+                <View style={styles.startWrap}>
+                  <StartSessionButton
+                    sessionActive={feed.session.sessionActive}
+                    disabled={!connected}
+                    onPress={handleStartSession}
+                  />
+                </View>
+              </View>
+              <ModePicker
+                modes={feed.session.modes}
+                modeId={feed.session.modeId}
+                disabled={!connected}
+                onSelect={handleSelectMode}
+              />
+            </View>
+          }
           onDisconnect={handleDisconnect}
           onEditPairing={handleEditPairing}
         />
@@ -141,5 +199,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  sessionRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  startWrap: {
+    alignSelf: 'stretch',
   },
 });
