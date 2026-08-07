@@ -18,7 +18,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -27,6 +27,7 @@ const read = (p) => readFileSync(join(HERE, p), 'utf8');
 
 const SETTINGS_OVERLAY = read('../../SettingsOverlay.tsx');
 const PHONE_MIRROR = read('../PhoneMirrorSettings.tsx');
+const SETTINGS_POPUP = read('../../SettingsPopup.tsx');
 const SETTINGS_TOGGLE = read('../SettingsToggle.tsx');
 const HOOK = read('../useToggleInit.ts');
 
@@ -70,6 +71,7 @@ describe('useToggleInit is scoped per switch', () => {
         for (const [name, src] of [
             ['SettingsOverlay.tsx', SETTINGS_OVERLAY],
             ['PhoneMirrorSettings.tsx', PHONE_MIRROR],
+            ['SettingsPopup.tsx', SETTINGS_POPUP],
         ]) {
             const switches = countSwitches(src);
             const calls = countHookCalls(src);
@@ -85,6 +87,27 @@ describe('useToggleInit is scoped per switch', () => {
     test('SettingsToggle owns exactly one hook call for its single switch', () => {
         assert.equal(countHookCalls(SETTINGS_TOGGLE), 1);
         assert.equal(countSwitches(SETTINGS_TOGGLE), 1);
+    });
+
+    test('no hand-rolled toggle survives anywhere in src/', () => {
+        // The pre-migration idiom was a translate-x knob with its own
+        // transition, which slides linearly with no double bounce. Five of
+        // these sat unmigrated in SettingsPopup for a while precisely because
+        // nothing failed when they were missed.
+        const files = readdirSync(join(HERE, '../../..'), { recursive: true })
+            .filter((f) => typeof f === 'string' && f.endsWith('.tsx') && !f.includes('__tests__'));
+        const offenders = [];
+        for (const rel of files) {
+            const src = stripComments(readFileSync(join(HERE, '../../..', rel), 'utf8'));
+            // A knob that moves via translate-x AND sits in a rounded track.
+            if (/translate-x-\[?1[02]px\]?|translate-x-5/.test(src) && /rounded-full/.test(src)) {
+                offenders.push(rel);
+            }
+        }
+        assert.deepEqual(
+            offenders, [],
+            'these files still hand-roll a toggle instead of using .t-toggle / .t-toggle-thumb',
+        );
     });
 
     test('hook exposes a class fragment, not a bare boolean', () => {

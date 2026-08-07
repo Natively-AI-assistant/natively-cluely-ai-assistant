@@ -11,6 +11,51 @@ import {
     getOverlayAppearance,
     OVERLAY_OPACITY_DEFAULT,
 } from '../lib/overlayAppearance';
+import { useToggleInit } from './settings/useToggleInit';
+
+/**
+ * The quick-settings popup's compact 30x18 switch.
+ *
+ * Same `.t-toggle` contract as the main settings panels, on the `sm` size
+ * variant (12px travel, 15px knob). Two things are deliberately local:
+ *
+ *  - The knob is theme-INVERTED here (black on dark, white on light), which is
+ *    the opposite of the shared `.t-toggle-thumb` white default. `knobClassName`
+ *    carries that, and the Tailwind background wins over the shared rule.
+ *  - `active:scale-[0.92]` press feedback, which the larger switches don't have.
+ *
+ * One `useToggleInit()` per instance — a flag shared across switches makes every
+ * OFF switch in the panel play the off-bounce the moment any one is touched.
+ */
+const PopupToggle: React.FC<{
+    checked: boolean;
+    onChange: () => void;
+    label: string;
+    disabled?: boolean;
+    /** Track classes when on — accent for most, inverted for Undetectable. */
+    onClassName: string;
+    /** Track classes when off. */
+    offClassName: string;
+    /** Theme-inverted knob fill. */
+    knobClassName: string;
+}> = ({ checked, onChange, label, disabled = false, onClassName, offClassName, knobClassName }) => {
+    const toggleInit = useToggleInit();
+    return (
+        <button
+            type="button"
+            role="switch"
+            data-on={String(checked)}
+            aria-checked={checked}
+            aria-label={label}
+            disabled={disabled}
+            {...toggleInit.handlers}
+            onClick={onChange}
+            className={`t-toggle t-toggle-sm w-[30px] h-[18px] rounded-full p-[1.5px] flex items-center active:scale-[0.92] ${checked ? onClassName : offClassName} ${toggleInit.className}`}
+        >
+            <span className={`t-toggle-thumb ${knobClassName}`} aria-hidden="true" />
+        </button>
+    );
+};
 
 const SettingsPopup = () => {
     const { shortcuts } = useShortcuts();
@@ -325,19 +370,21 @@ const SettingsPopup = () => {
                         />
                         <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>{isUndetectable ? 'Undetectable' : 'Detectable'}</span>
                     </div>
-                    <button
-                        onClick={() => {
+                    <PopupToggle
+                        checked={isUndetectable}
+                        label={isUndetectable ? 'Undetectable' : 'Detectable'}
+                        onChange={() => {
                             const newState = !isUndetectable;
                             setIsUndetectable(newState);
                             localStorage.setItem('natively_undetectable', String(newState));
                             window.electronAPI?.setUndetectable(newState);
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] flex items-center transition-all duration-300 ease-spring active:scale-[0.92] ${isUndetectable
-                            ? (isDarkBg ? 'bg-white shadow-[0_2px_8px_rgba(255,255,255,0.2)]' : 'bg-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.18)]')
-                            : defaultToggleTrackClass}`}
-                    >
-                        <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${isUndetectable ? 'translate-x-[12px]' : 'translate-x-0'}`} />
-                    </button>
+                        onClassName={isDarkBg
+                            ? 'bg-white shadow-[0_2px_8px_rgba(255,255,255,0.2)]'
+                            : 'bg-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.18)]'}
+                        offClassName={defaultToggleTrackClass}
+                        knobClassName={toggleKnobClass}
+                    />
                 </div>
 
 
@@ -350,16 +397,18 @@ const SettingsPopup = () => {
                         />
                         <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Fast Response</span>
                     </div>
-                    <button
-                        onClick={() => {
+                    <PopupToggle
+                        checked={useGroqFastText}
+                        label="Fast Response"
+                        disabled={!(hasStoredKey.groq || hasStoredKey.natively)}
+                        onChange={() => {
                             if (!(hasStoredKey.groq || hasStoredKey.natively)) return;
                             setUseGroqFastText(!useGroqFastText);
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] flex items-center transition-all duration-300 ease-spring active:scale-[0.92] ${useGroqFastText ? 'bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]' : defaultToggleTrackClass}`}
-                        disabled={!(hasStoredKey.groq || hasStoredKey.natively)}
-                    >
-                        <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${useGroqFastText ? 'translate-x-[12px]' : 'translate-x-0'}`} />
-                    </button>
+                        onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
+                        offClassName={defaultToggleTrackClass}
+                        knobClassName={toggleKnobClass}
+                    />
                 </div>
 
                 {/* Interviewer Transcript Toggle */}
@@ -371,18 +420,20 @@ const SettingsPopup = () => {
                         />
                         <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Transcript</span>
                     </div>
-                    <button
-                        onClick={() => {
+                    <PopupToggle
+                        checked={showTranscript}
+                        label="Transcript"
+                        onChange={() => {
                             const newState = !showTranscript;
                             setShowTranscript(newState);
                             localStorage.setItem('natively_interviewer_transcript', String(newState));
                             // Dispatch event for same-window listeners
                             window.dispatchEvent(new Event('storage'));
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] flex items-center transition-all duration-300 ease-spring active:scale-[0.92] ${showTranscript ? 'bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]' : defaultToggleTrackClass}`}
-                    >
-                        <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${showTranscript ? 'translate-x-[12px]' : 'translate-x-0'}`} />
-                    </button>
+                        onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
+                        offClassName={defaultToggleTrackClass}
+                        knobClassName={toggleKnobClass}
+                    />
                 </div>
 
                 {/* Interview Mode (Brainstorm) Toggle */}
@@ -405,8 +456,10 @@ const SettingsPopup = () => {
                         </svg>
                         <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Interview Mode</span>
                     </div>
-                    <button
-                        onClick={async () => {
+                    <PopupToggle
+                        checked={actionButtonMode === 'brainstorm'}
+                        label="Interview Mode"
+                        onChange={async () => {
                             const newMode: 'recap' | 'brainstorm' = actionButtonMode === 'brainstorm' ? 'recap' : 'brainstorm';
                             setActionButtonModeState(newMode);
                             try {
@@ -414,10 +467,10 @@ const SettingsPopup = () => {
                                 await window.electronAPI?.setActionButtonMode?.(newMode);
                             } catch (e) { console.error(e); }
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] flex items-center transition-all duration-300 ease-spring active:scale-[0.92] ${actionButtonMode === 'brainstorm' ? 'bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]' : defaultToggleTrackClass}`}
-                    >
-                        <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${actionButtonMode === 'brainstorm' ? 'translate-x-[12px]' : 'translate-x-0'}`} />
-                    </button>
+                        onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
+                        offClassName={defaultToggleTrackClass}
+                        knobClassName={toggleKnobClass}
+                    />
                 </div>
 
                 {/* Profile Mode Toggle — hidden under Context Intelligence V3,
@@ -431,8 +484,11 @@ const SettingsPopup = () => {
                             />
                             <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Profile Mode</span>
                         </div>
-                        <button
-                            onClick={async () => {
+                        <PopupToggle
+                            checked={profileMode && isPremium}
+                            label="Profile Mode"
+                            disabled={!isPremium}
+                            onChange={async () => {
                                 if (!isPremium) return;
                                 const newState = !profileMode;
                                 setProfileMode(newState);
@@ -441,11 +497,10 @@ const SettingsPopup = () => {
                                     await window.electronAPI?.profileSetMode?.(newState);
                                 } catch (e) { console.error(e); }
                             }}
-                            className={`w-[30px] h-[18px] rounded-full p-[1.5px] flex items-center transition-all duration-300 ease-spring active:scale-[0.92] ${profileMode && isPremium ? 'bg-accent-primary shadow-[0_2px_10px_rgba(var(--color-accent-primary),0.3)]' : defaultToggleTrackClass}`}
-                            disabled={!isPremium}
-                        >
-                            <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${profileMode && isPremium ? 'translate-x-[12px]' : 'translate-x-0'}`} />
-                        </button>
+                            onClassName="bg-accent-primary shadow-[0_2px_10px_rgba(var(--color-accent-primary),0.3)]"
+                            offClassName={defaultToggleTrackClass}
+                            knobClassName={toggleKnobClass}
+                        />
                     </div>
                 )}
 

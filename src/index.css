@@ -8088,6 +8088,8 @@ html[data-platform="linux"] body {
 
 .t-toggle { transition: background var(--toggle-track) var(--toggle-ease); }
 .t-toggle.t-toggle-lg { --toggle-travel: 20px; }
+/* The compact 30x18 switch in the quick-settings popup. */
+.t-toggle.t-toggle-sm { --toggle-travel: 12px; }
 /* The thumb is white in both states — it never recolours, so there is no
    background transition here and nothing colour-related to hint to
    will-change. Only the travel is animated. */
@@ -8102,6 +8104,7 @@ html[data-platform="linux"] body {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
 }
 .t-toggle-lg .t-toggle-thumb { width: 18px; height: 18px; }
+.t-toggle-sm .t-toggle-thumb { width: 15px; height: 15px; }
 .t-toggle[data-on="true"] .t-toggle-thumb { translate: var(--toggle-travel) 0; }
 .t-toggle.is-init[data-on="true"] .t-toggle-thumb { animation: t-toggle-on var(--toggle-dur) var(--toggle-ease) both; }
 .t-toggle.is-init[data-on="false"] .t-toggle-thumb { animation: t-toggle-off var(--toggle-dur) var(--toggle-ease) both; }
