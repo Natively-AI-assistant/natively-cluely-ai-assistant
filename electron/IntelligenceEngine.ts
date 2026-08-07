@@ -46,6 +46,12 @@ import { ScreenContext } from './services/screen/ScreenContextService';
 import { buildPreparedTranscriptContext as assemblePreparedTranscriptContext } from './utils/preparedTranscriptContext';
 import { PiLatencyTrace } from './services/telemetry/PiLatencyTracer';
 import { beginTrace, commitTrace } from './intelligence/IntelligenceTrace';
+// Context OS — statically imported (PR #427 §3.3). Previously pulled in via
+// 10 synchronous require() calls on the hot answer path, which bypassed the
+// module graph and defeated tree-shaking. No dependency cycle exists
+// (context-os does not import IntelligenceEngine), so the dynamic form was
+// never load-bearing.
+import * as contextOsStatic from './intelligence/context-os';
 import { isIntelligenceFlagEnabled } from './intelligence/intelligenceFlags';
 import { applyAnswerContract } from './intelligence/OutputShapeNormalizer';
 import { LiveTranscriptBrain } from './intelligence/LiveTranscriptBrain';
@@ -1677,7 +1683,7 @@ export class IntelligenceEngine extends EventEmitter {
                 const { buildCustomModeExecutionContract } = require('./llm/customModeExecutionContract');
                 const { resolveSourceOwnership } = require('./llm/sourceOwnership');
                 const { getSourceOwnerEnforcementStage } = require('./intelligence/intelligenceFlags');
-                const { buildTurnContractIfEnabled, allowsEvidence: coAllowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                const { buildTurnContractIfEnabled, allowsEvidence: coAllowsEvidence } = contextOsStatic;
                 // MUST match wtaTurnQuestion / canonicalTurn's expression below
                 // (see the _wtaQHoist comment above): _wtaQ drives planAnswer →
                 // _wtaContract, resolveSourceOwnership and
@@ -2072,7 +2078,7 @@ export class IntelligenceEngine extends EventEmitter {
             const wtaTurnQuestion = question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
             try {
                 const { buildCustomModeExecutionContract: _bldC } = require('./llm/customModeExecutionContract');
-                const { buildTurnContractIfEnabled } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                const { buildTurnContractIfEnabled } = contextOsStatic;
                 const _wtaQ2 = wtaTurnQuestion;
                 const _hasProfile2 = Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data);
                 const { resolveExplicitSourceRequest: _wtaResolveSwitch2, toLegacyUserExplicitSource: _wtaToLegacySwitch2 } = require('./intelligence/context-os/explicitSourceSwitch');
@@ -2122,7 +2128,7 @@ export class IntelligenceEngine extends EventEmitter {
                     turnId: _wtaTurnId,
                 });
                 if (wtaTurnContract) {
-                    const { allowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                    const { allowsEvidence } = contextOsStatic;
                     // Evidence-execution-repair (2026-07-11): third occurrence of
                     // the same profile_jd gap fixed above — see
                     // docs/context-os/evidence-execution-repair/07_SOURCE_SWITCH_RESULTS.md.
@@ -2136,7 +2142,7 @@ export class IntelligenceEngine extends EventEmitter {
                         trace.mark('context_selected', { via: 'context_os_profile_suppressed', sourceOwner: wtaTurnContract.sourceOwner } as any);
                     }
                     if (isIntelligenceFlagEnabled('trace')) {
-                        const { buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                        const { buildContextOsTrace, logContextOsTrace } = contextOsStatic;
                         logContextOsTrace(buildContextOsTrace({
                             contract: wtaTurnContract,
                             sourceAuthority: _legacyContract2.sourceAuthority,
@@ -2175,7 +2181,7 @@ export class IntelligenceEngine extends EventEmitter {
                 && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
                 && isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled')) {
                 try {
-                    const { TurnEvidenceCoordinator, ProfileEvidenceService } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                    const { TurnEvidenceCoordinator, ProfileEvidenceService } = contextOsStatic;
                     const { EvidenceResolver } = require('./intelligence/context-os/EvidenceResolver') as typeof import('./intelligence/context-os/EvidenceResolver');
                     const { classifyQuestion } = require('./services/knowledge/QuestionClassifier') as typeof import('./services/knowledge/QuestionClassifier');
                     const { queryOkfCards } = require('./services/knowledge/OkfRetriever') as typeof import('./services/knowledge/OkfRetriever');
@@ -2314,7 +2320,7 @@ export class IntelligenceEngine extends EventEmitter {
                 && isIntelligenceFlagEnabled('contextOsPropertyValidation')
                 && !isSpeculative) {
                 try {
-                    const { buildSourceClarification, buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                    const { buildSourceClarification, buildContextOsTrace, logContextOsTrace } = contextOsStatic;
                     // Evidence-execution-repair (2026-07-12): prefer the legacy,
                     // mode-aware sourceOwnership.resolveSourceOwnership() decision
                     // (computed above as wtaOwnershipDecision) when it has a
@@ -3283,7 +3289,7 @@ export class IntelligenceEngine extends EventEmitter {
                 const contractPermitsProfileRepair = (() => {
                     if (!wtaTurnContract) return true;
                     try {
-                        const { allowsEvidence } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                        const { allowsEvidence } = contextOsStatic;
                         // Grounding-campaign fix (2026-07-16): same missing-profile_jd
                         // gap as wtaDecisionAllowsCandidateProfile above — kept in sync
                         // so a JD-only-granted turn isn't treated inconsistently by the
@@ -4416,7 +4422,7 @@ export class IntelligenceEngine extends EventEmitter {
             // gated + best-effort: null contract → legacy byte-for-byte.
             let followUpContractRule: string | undefined;
             try {
-                const contextOs = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                const contextOs = contextOsStatic;
                 const fuContract = this.buildRecapFollowUpContract('follow_up', String(refinementRequest || ''));
                 if (fuContract) {
                     const switchTo = contextOs.detectFollowUpSourceSwitch(String(refinementRequest || ''));
@@ -4499,7 +4505,7 @@ export class IntelligenceEngine extends EventEmitter {
     ): import('./intelligence/context-os').TurnContextContract | null {
         try {
             const { buildCustomModeExecutionContract } = require('./llm/customModeExecutionContract');
-            const { buildTurnContractIfEnabled } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            const { buildTurnContractIfEnabled } = contextOsStatic;
             const { ModesManager } = require('./services/ModesManager');
             const modeInfo = ModesManager.getInstance().getActiveModeInfo?.() ?? null;
             const docInfo = ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.() ?? null;
@@ -4571,7 +4577,7 @@ export class IntelligenceEngine extends EventEmitter {
             // transcript summary. Flag-gated; null → legacy byte-for-byte.
             let recapContractRule: string | undefined;
             try {
-                const contextOs = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                const contextOs = contextOsStatic;
                 const recapContract = this.buildRecapFollowUpContract('recap', 'Recap the conversation so far');
                 if (recapContract) recapContractRule = contextOs.buildRecapContractRule(recapContract);
             } catch { /* Context OS is additive — never break recap */ }
