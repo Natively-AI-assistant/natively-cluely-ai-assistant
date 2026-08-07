@@ -45,7 +45,10 @@ export const SettingsToggle: React.FC<SettingsToggleProps> = ({
                 toggleInit.arm();
                 onChange();
             }}
-            className={`t-toggle t-toggle-lg w-11 h-6 rounded-full p-[3px] flex items-center shrink-0 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'} ${className} ${toggleInit.className}`}
+            /* Every caller paints a 1px border via `className`, which eats 2px
+               of content box: 44 − 2*1 − 2*3 − 18 = 18px, not the 20px
+               t-toggle-lg assumes for a borderless track. */
+            className={`t-toggle t-toggle-lg t-toggle-bordered w-11 h-6 rounded-full p-[3px] flex items-center shrink-0 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'} ${className} ${toggleInit.className}`}
         >
             <span className="t-toggle-thumb" aria-hidden="true" />
         </button>

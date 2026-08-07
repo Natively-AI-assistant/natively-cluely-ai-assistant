@@ -20,8 +20,11 @@ import { useToggleInit } from './settings/useToggleInit';
  * variant (12px travel, 15px knob). Two things are deliberately local:
  *
  *  - The knob is theme-INVERTED here (black on dark, white on light), which is
- *    the opposite of the shared `.t-toggle-thumb` white default. `knobClassName`
- *    carries that, and the Tailwind background wins over the shared rule.
+ *    the opposite of the shared `.t-toggle-thumb` white default. A Tailwind
+ *    class alone CANNOT do this: the shared rule sits after `@tailwind
+ *    utilities` in index.css, so at equal specificity it beats `bg-black`.
+ *    Hence `t-toggle-thumb-custom`, which clears the shared fill so
+ *    `knobClassName` takes effect.
  *  - `active:scale-[0.92]` press feedback, which the larger switches don't have.
  *
  * One `useToggleInit()` per instance — a flag shared across switches makes every
@@ -51,7 +54,7 @@ const PopupToggle: React.FC<{
             onClick={() => { toggleInit.arm(); onChange(); }}
             className={`t-toggle t-toggle-sm w-[30px] h-[18px] rounded-full p-[1.5px] flex items-center active:scale-[0.92] ${checked ? onClassName : offClassName} ${toggleInit.className}`}
         >
-            <span className={`t-toggle-thumb ${knobClassName}`} aria-hidden="true" />
+            <span className={`t-toggle-thumb t-toggle-thumb-custom ${knobClassName}`} aria-hidden="true" />
         </button>
     );
 };

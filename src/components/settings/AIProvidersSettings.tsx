@@ -442,6 +442,10 @@ export const AIP_CSS = `
    without changing layout or the visual size. */
 .aip-switch::after { content:''; position:absolute; inset:-3px -2px; }
 .aip-switch {
+    /* 34px track − 2*1px border − 2*2px padding − 14px thumb = 14px travel.
+       The shared 14.66px default assumes no border, and left the thumb 0.66px
+       short of the right edge here. */
+    --toggle-travel: 14px;
     position:relative; box-sizing:border-box; width:34px; height:20px; flex-shrink:0;
     padding:2px; border-radius:9999px; border:1px solid transparent;
     background: var(--aip-switch-off);
@@ -980,10 +984,11 @@ interface AipSwitchProps {
  * The shared .t-toggle / .t-toggle-thumb classes (defined in src/index.css)
  * own the thumb dimensions, travel, and bounce keyframe. The .aip-switch
  * class continues to drive the per-theme track color via --aip-switch-off
- * / --aip-accent and the accent thumb fill when on.
+ * / --aip-accent.
  *
- * `is-init` flips to true on the FIRST pointerdown or keydown so the off-load
- * keyframe never plays on mount.
+ * `is-init` is added by arm(), called from the click handler, so it lands in
+ * the same render as the new data-on — see useToggleInit for why arming a
+ * render earlier makes the thumb kick backwards.
  */
 export const AipSwitch: React.FC<AipSwitchProps> = ({
     checked, onChange, label, title, disabled = false, hardDisabled = false, className = '',
@@ -1000,8 +1005,12 @@ export const AipSwitch: React.FC<AipSwitchProps> = ({
             title={title}
             disabled={hardDisabled}
             onClick={() => {
-                if (disabled || hardDisabled) return;
-                toggleInit.arm();
+                // Soft `disabled` deliberately still fires onChange — call sites
+                // rely on it to explain WHY the control is unavailable (see the
+                // prop doc above, and Fast Response Mode's alert()). Only arm
+                // the bounce, which needs a real state change to animate.
+                if (hardDisabled) return;
+                if (!disabled) toggleInit.arm();
                 onChange(!checked);
             }}
             className={`t-toggle aip-switch ${toggleInit.className} ${className}`}

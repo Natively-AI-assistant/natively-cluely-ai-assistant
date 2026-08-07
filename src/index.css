@@ -8082,14 +8082,32 @@ html[data-platform="linux"] body {
     --toggle-travel: 14.66px;
     --toggle-ov1: 1px;
     --toggle-ov2: 0px;
+    /* Verbatim from the spec. Note this means the TRACK colour snaps while the
+       thumb springs over 350ms — the migration also removed the per-panel
+       `transition-colors` that used to fade it. Raise to e.g. 200ms if the
+       track should cross-fade with the travel. */
     --toggle-track: 0ms;
     --toggle-ease: cubic-bezier(0.34, 1.35, 0.64, 1);
 }
 
+/* Travel must equal (track − 2*border − 2*padding − thumb), or the thumb rests
+   off-centre in one of the two states. Each variant below is paired with the
+   exact geometry it assumes; a call site with different padding must override
+   `--toggle-travel` itself (see .aip-switch, which has a 1px border). */
 .t-toggle { transition: background var(--toggle-track) var(--toggle-ease); }
+/* 44px track, no border, 3px padding, 18px thumb. */
 .t-toggle.t-toggle-lg { --toggle-travel: 20px; }
+/* Same 44px track but with a 1px border (2px less content box) or 2px padding.
+   These are plain classes, NOT Tailwind `[--toggle-travel:18px]` utilities:
+   utilities are emitted where `@tailwind utilities` sits near the top of this
+   file, so `.t-toggle.t-toggle-lg` below would both out-specify (0,2,0 vs
+   0,1,0) and out-order them, and the override would silently do nothing. */
+.t-toggle.t-toggle-lg.t-toggle-bordered { --toggle-travel: 18px; }
+.t-toggle.t-toggle-lg.t-toggle-tight { --toggle-travel: 22px; }
 /* The compact 30x18 switch in the quick-settings popup. */
 .t-toggle.t-toggle-sm { --toggle-travel: 12px; }
+/* The 32x16 switch in the Launcher's detectability row. */
+.t-toggle.t-toggle-xs { --toggle-travel: 16px; }
 /* The thumb is white in both states — it never recolours, so there is no
    background transition here and nothing colour-related to hint to
    will-change. Only the travel is animated. */
@@ -8103,8 +8121,19 @@ html[data-platform="linux"] body {
     background: #fff;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
 }
+/* Opt out of the shared fill when a panel paints its own knob. This rule
+   exists because `background`/`box-shadow` above sit AFTER `@tailwind
+   utilities` in this file, so at equal specificity they beat a `bg-black` /
+   `shadow-sm` utility on the element — a Tailwind class alone cannot recolour
+   the thumb. The quick-settings popup needs a theme-INVERTED knob (black on
+   dark), so it adds this class and supplies both properties itself. */
+.t-toggle-thumb.t-toggle-thumb-custom {
+    background: none;
+    box-shadow: none;
+}
 .t-toggle-lg .t-toggle-thumb { width: 18px; height: 18px; }
 .t-toggle-sm .t-toggle-thumb { width: 15px; height: 15px; }
+.t-toggle-xs .t-toggle-thumb { width: 12px; height: 12px; }
 .t-toggle[data-on="true"] .t-toggle-thumb { translate: var(--toggle-travel) 0; }
 .t-toggle.is-init[data-on="true"] .t-toggle-thumb { animation: t-toggle-on var(--toggle-dur) var(--toggle-ease) both; }
 .t-toggle.is-init[data-on="false"] .t-toggle-thumb { animation: t-toggle-off var(--toggle-dur) var(--toggle-ease) both; }

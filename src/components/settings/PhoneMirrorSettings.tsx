@@ -82,6 +82,19 @@ const EMPTY_INFO: PhoneMirrorInfo = {
  * SettingsToggle does not model. One `useToggleInit()` per instance — a flag
  * shared across switches makes every OFF switch in the panel play the
  * off-bounce the moment any one of them is touched.
+ *
+ * THESE TWO SWITCHES ARE ASYNC, which the plain arm()-on-click pattern does not
+ * cover. `onToggleEnable`/`onToggleLan` go through `apply()`, which sets `busy`
+ * synchronously but only updates `info` after the IPC round-trip — so `checked`
+ * (and therefore `data-on`) flips one or more renders later. Arming on click
+ * would put `is-init` on the element while `data-on` is still stale, matching
+ * `.t-toggle.is-init[data-on="false"]` and playing `t-toggle-off` against a
+ * thumb already at rest — the backwards nudge.
+ *
+ * So `is-init` is withheld while `busy`. It reappears in the same commit that
+ * carries the new `info` (React batches the `setInfo` + `setBusy(null)` pair),
+ * so the class and the new `data-on` land together and the correct keyframe
+ * plays from the correct resting position.
  */
 const PhoneMirrorSwitch: React.FC<{
   checked: boolean;
@@ -101,7 +114,8 @@ const PhoneMirrorSwitch: React.FC<{
       aria-label={label}
       disabled={busy}
       onClick={() => { toggleInit.arm(); onChange(); }}
-      className={`t-toggle t-toggle-lg inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${checked ? onClassName : 'bg-bg-item-active'} ${busy ? 'opacity-60 cursor-wait' : ''} ${toggleInit.className}`}
+      /* p-0.5 (2px), not the 3px t-toggle-lg assumes, so travel is 22px here. */
+      className={`t-toggle t-toggle-lg t-toggle-tight inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${checked ? onClassName : 'bg-bg-item-active'} ${busy ? 'opacity-60 cursor-wait' : ''} ${busy ? '' : toggleInit.className}`}
     >
       <span className="t-toggle-thumb" aria-hidden="true" />
     </button>
@@ -809,7 +823,8 @@ const CtxToggle: React.FC<{
       aria-label={label}
       disabled={comingSoon}
       onClick={comingSoon ? undefined : () => { toggleInit.arm(); onChange(); }}
-      className={`t-toggle t-toggle-lg flex-shrink-0 mt-0.5 inline-flex h-6 w-11 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${
+      /* p-0.5 (2px), not the 3px t-toggle-lg assumes, so travel is 22px here. */
+      className={`t-toggle t-toggle-lg t-toggle-tight flex-shrink-0 mt-0.5 inline-flex h-6 w-11 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${
         comingSoon ? 'cursor-not-allowed bg-bg-item-active' : checked ? 'bg-accent-primary' : 'bg-bg-item-active'
       } ${toggleInit.className}`}
     >

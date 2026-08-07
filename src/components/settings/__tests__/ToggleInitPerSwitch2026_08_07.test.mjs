@@ -28,6 +28,8 @@ const read = (p) => readFileSync(join(HERE, p), 'utf8');
 const SETTINGS_OVERLAY = read('../../SettingsOverlay.tsx');
 const PHONE_MIRROR = read('../PhoneMirrorSettings.tsx');
 const SETTINGS_POPUP = read('../../SettingsPopup.tsx');
+const PROFILE_INTELLIGENCE = read('../../ProfileIntelligenceSettings.tsx');
+const LAUNCHER = read('../../Launcher.tsx');
 const SETTINGS_TOGGLE = read('../SettingsToggle.tsx');
 const HOOK = read('../useToggleInit.ts');
 
@@ -72,6 +74,11 @@ describe('useToggleInit is scoped per switch', () => {
             ['SettingsOverlay.tsx', SETTINGS_OVERLAY],
             ['PhoneMirrorSettings.tsx', PHONE_MIRROR],
             ['SettingsPopup.tsx', SETTINGS_POPUP],
+            // PI holds a top-level hook because it renders exactly ONE switch.
+            // Listed so that adding a second switch there trips this check
+            // rather than silently reintroducing the panel-wide flicker.
+            ['ProfileIntelligenceSettings.tsx', PROFILE_INTELLIGENCE],
+            ['Launcher.tsx', LAUNCHER],
         ]) {
             const switches = countSwitches(src);
             const calls = countHookCalls(src);
@@ -99,8 +106,29 @@ describe('useToggleInit is scoped per switch', () => {
         const offenders = [];
         for (const rel of files) {
             const src = stripComments(readFileSync(join(HERE, '../../..', rel), 'utf8'));
-            // A knob that moves via translate-x AND sits in a rounded track.
-            if (/translate-x-\[?1[02]px\]?|translate-x-5/.test(src) && /rounded-full/.test(src)) {
+            // Match the KNOB itself: one element that is round, filled, and
+            // moved by translate-x. Matching translate-x anywhere in the file
+            // is too blunt — hover nudges like `group-hover:translate-x-0.5` on
+            // a chevron are not toggles.
+            //
+            // Deliberately not an enumerated list of offsets: an earlier
+            // version matched only 10px/12px/`-5`, so Launcher.tsx's
+            // `translate-x-4` sailed through and stayed unmigrated after the
+            // rollout was declared complete.
+            // Scan each className="..." / className={...} region as a whole and
+            // ask whether the SAME element is both round and translate-x-moved.
+            //
+            // Not a `[^`'"]*` run between the two: a template literal's
+            // `${cond ? 'translate-x-4' : ...}` contains nested quotes, so such
+            // a run stops dead at the first one and the knob escapes. That is
+            // exactly how Launcher.tsx stayed unmigrated.
+            //
+            // `(?<![:\w-])` rejects variant-prefixed utilities like
+            // `group-hover/btn:translate-x-[1px]` — hover nudges on icons, not
+            // a knob's resting position.
+            const TX = /(?<![:\w-])translate-x-(?:\[[^\]]+\]|\d)/;
+            const regions = src.match(/className=(?:"[^"]*"|'[^']*'|\{(?:[^{}]|\{[^{}]*\})*\})/g) || [];
+            if (regions.some((r) => /\brounded-full\b/.test(r) && TX.test(r))) {
                 offenders.push(rel);
             }
         }

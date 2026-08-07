@@ -161,7 +161,9 @@ const Toggle: React.FC<{ on: boolean; disabled?: boolean; onClick: () => void }>
       aria-disabled={disabled ? true : undefined}
       disabled={disabled}
       onClick={() => { toggleInit.arm(); onClick(); }}
-      className={`t-toggle t-toggle-lg w-11 h-6 shrink-0 rounded-full p-[3px] flex items-center ${on ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${toggleInit.className}`}
+      /* 1px border here, which t-toggle-lg's 20px does not account for:
+         44 − 2*1 − 2*3 − 18 = 18px. */
+      className={`t-toggle t-toggle-lg t-toggle-bordered w-11 h-6 shrink-0 rounded-full p-[3px] flex items-center ${on ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${toggleInit.className}`}
     >
       <span className="t-toggle-thumb" aria-hidden="true" />
     </button>

@@ -1603,7 +1603,7 @@ export function ProfileIntelligenceSettings({
                             setProfileStatus(prev => ({ ...prev, profileMode: newState }));
                         } catch { /**/ }
                     }}
-                    className={`t-toggle t-toggle-lg w-11 h-6 ${piToggleInit.className}`}
+                    className={`t-toggle t-toggle-lg w-11 h-6 shrink-0 rounded-full p-[3px] flex items-center ${piToggleInit.className}`}
                 >
                     <span className="t-toggle-thumb" aria-hidden="true" />
                 </button>
