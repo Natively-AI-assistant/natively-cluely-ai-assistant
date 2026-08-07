@@ -82,10 +82,10 @@ export function reduceDashes(text: string): string {
 
     // Restore code
     inlineCodes.forEach((c, i) => {
-        result = result.replace(`INL${i}`, c);
+        result = result.replace(`INL${i}`, () => c);
     });
     codeBlocks.forEach((c, i) => {
-        result = result.replace(`CODE${i}`, c);
+        result = result.replace(`CODE${i}`, () => c);
     });
 
     return result;
@@ -130,8 +130,8 @@ function reduceProseDashes(segment: string): string {
     s = s
         .replace(/\s*[—–]\s*/g, ", ")
         .replace(/(?<=[A-Za-z]) - (?=[A-Za-z])/g, ", ");
-    math.forEach((m, i) => { s = s.replace(` MATH${i} `, m); });
-    inline.forEach((c, i) => { s = s.replace(` INL${i} `, c); });
+    math.forEach((m, i) => { s = s.replace(` MATH${i} `, () => m); });
+    inline.forEach((c, i) => { s = s.replace(` INL${i} `, () => c); });
     return s;
 }
 
@@ -210,7 +210,7 @@ function stripMarkdown(text: string): string {
     // Extract code blocks to protect them
     result = result.replace(/```[\s\S]*?```/g, (match) => {
         codeBlocks.push(match);
-        return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+        return `CODEBLOCK${codeBlocks.length - 1}`;
     });
 
     // Remove headers (# ## ### etc.)
@@ -256,7 +256,7 @@ function stripMarkdown(text: string): string {
     // Restore code blocks
     // Add newlines around them for better formatting
     codeBlocks.forEach((block, index) => {
-        result = result.replace(`__CODE_BLOCK_${index}__`, `\n${block}\n`);
+        result = result.replace(`CODEBLOCK${index}`, () => `\n${block}\n`);
     });
 
     return result.trim();

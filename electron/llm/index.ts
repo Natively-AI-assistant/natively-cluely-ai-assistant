@@ -13,6 +13,9 @@ export { WhatToAnswerLLM } from "./WhatToAnswerLLM";
 export { shouldThrottleTrigger } from "./triggerGate";
 export type { TriggerGateInput } from "./triggerGate";
 export { clampResponse, validateResponse, reduceDashes, reduceDashesInChunk, StreamingDashReducer } from "./postProcessor";
+export { speculativeQuestionSimilarity } from "./speculativeSimilarity";
+export { acceptRepairedAnswer } from "./repairAcceptance";
+export type { RepairAcceptanceInput, RepairAcceptanceVerdict, RepairRejectionReason } from "./repairAcceptance";
 export {
     cleanTranscript,
     sparsifyTranscript,

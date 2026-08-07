@@ -23,7 +23,7 @@ import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/s
 
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
-import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
+import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
 import { mintTurnId } from './llm/turnIdentity';
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
 import { buildProfileJitPrompt } from './llm/ProfileJitPromptBuilder';
@@ -3669,10 +3669,25 @@ export function initializeIpcHandlers(appState: AppState): void {
                   if (repairedTrim.length >= 5) {
                     const reCheck = validateProfileEvidence({ answer: repairedTrim, plan: answerPlan, evidence, profileAvailable, candidateDirected: true });
                     const stillCritical = reCheck.violations.some(v => v.severity === 'error' && CRITICAL_CODES.has(v.code));
-                    if (!stillCritical) {
-                      fullResponse = repairedTrim;
-                      finalText = repairedTrim;
+                    // Shared acceptance policy (PR #427 §1.4, 2026-08-07). This path
+                    // previously accepted on `!stillCritical` ALONE — it had neither
+                    // the leaked-artifact re-check nor the non-regression length floor
+                    // the WTA path has had since 2026-07-19/23, even though the WTA
+                    // comment claimed the length floor mirrored a guard here. It never
+                    // existed here, so a manual repair that came back as a leaked
+                    // <rewrite_instructions> block was shipped verbatim. Both paths now
+                    // call one policy so the guards cannot drift apart again.
+                    const verdict = acceptRepairedAnswer({
+                      original: fullResponse,
+                      repaired: repairedTrim,
+                      stillInvalid: stillCritical,
+                    });
+                    if (verdict.accepted) {
+                      fullResponse = verdict.text;
+                      finalText = verdict.text;
                       console.warn('[ProfileIntelligence] manual profile repair applied', { code: critical.code });
+                    } else {
+                      console.warn('[ProfileIntelligence] manual profile repair REJECTED', { code: critical.code, reason: verdict.reason });
                     }
                   }
                 } catch (repairErr: any) {
