@@ -151,7 +151,7 @@ const formatStamp = (ms: number): string => {
 };
 
 const Toggle: React.FC<{ on: boolean; disabled?: boolean; onClick: () => void }> = ({ on, disabled, onClick }) => {
-  const { isInit, onInit } = useToggleInit();
+  const toggleInit = useToggleInit();
   return (
     <button
       type="button"
@@ -160,10 +160,9 @@ const Toggle: React.FC<{ on: boolean; disabled?: boolean; onClick: () => void }>
       aria-checked={on}
       aria-disabled={disabled ? true : undefined}
       disabled={disabled}
-      onPointerDown={onInit}
-      onKeyDown={onInit}
+      {...toggleInit.handlers}
       onClick={onClick}
-      className={`t-toggle t-toggle-lg w-11 h-6 shrink-0 rounded-full p-[3px] flex items-center ${on ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${isInit ? 'is-init' : ''}`}
+      className={`t-toggle t-toggle-lg w-11 h-6 shrink-0 rounded-full p-[3px] flex items-center ${on ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${toggleInit.className}`}
     >
       <span className="t-toggle-thumb" aria-hidden="true" />
     </button>

@@ -1199,7 +1199,9 @@ export function ProfileIntelligenceSettings({
     onOpenNativelyAPI?: () => void;
 }) {
     const cachedPremium = readPremiumCache();
-    const { isInit: piInit, onInit: piOnInit } = useToggleInit();
+    // Safe as a panel-level call ONLY because this panel renders exactly one
+    // switch. Add a second and it must move into a per-switch component.
+    const piToggleInit = useToggleInit();
     const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
     const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
     const [isTrialActive] = useState(false);
@@ -1589,8 +1591,7 @@ export function ProfileIntelligenceSettings({
                     aria-checked={!!(profileStatus.profileMode && hasProfileAccess)}
                     aria-disabled={(!profileStatus.hasProfile || !hasProfileAccess) ? true : undefined}
                     aria-label="Persona Engine"
-                    onPointerDown={piOnInit}
-                    onKeyDown={piOnInit}
+                    {...piToggleInit.handlers}
                     onClick={async () => {
                         if (!profileStatus.hasProfile || !hasProfileAccess) return;
                         const newState = !profileStatus.profileMode;
@@ -1599,7 +1600,7 @@ export function ProfileIntelligenceSettings({
                             setProfileStatus(prev => ({ ...prev, profileMode: newState }));
                         } catch { /**/ }
                     }}
-                    className={`t-toggle t-toggle-lg w-11 h-6 ${piInit ? 'is-init' : ''}`}
+                    className={`t-toggle t-toggle-lg w-11 h-6 ${piToggleInit.className}`}
                 >
                     <span className="t-toggle-thumb" aria-hidden="true" />
                 </button>

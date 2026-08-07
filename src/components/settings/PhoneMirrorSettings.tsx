@@ -76,9 +76,41 @@ const EMPTY_INFO: PhoneMirrorInfo = {
   bindAddress: '127.0.0.1',
 };
 
+/**
+ * Phone Mirror's own switch: same `.t-toggle` contract as the rest of settings,
+ * but it carries a focus ring and a busy/cursor-wait state the shared
+ * SettingsToggle does not model. One `useToggleInit()` per instance — a flag
+ * shared across switches makes every OFF switch in the panel play the
+ * off-bounce the moment any one of them is touched.
+ */
+const PhoneMirrorSwitch: React.FC<{
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  busy: boolean;
+  /** Track color when on — accent for the server, amber for LAN exposure. */
+  onClassName: string;
+}> = ({ checked, onChange, label, busy, onClassName }) => {
+  const toggleInit = useToggleInit();
+  return (
+    <button
+      type="button"
+      role="switch"
+      data-on={String(checked)}
+      aria-checked={checked}
+      aria-label={label}
+      disabled={busy}
+      {...toggleInit.handlers}
+      onClick={onChange}
+      className={`t-toggle t-toggle-lg inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${checked ? onClassName : 'bg-bg-item-active'} ${busy ? 'opacity-60 cursor-wait' : ''} ${toggleInit.className}`}
+    >
+      <span className="t-toggle-thumb" aria-hidden="true" />
+    </button>
+  );
+};
+
 export const PhoneMirrorSettings: React.FC = () => {
   const t = useT();
-  const { isInit: pmInit, onInit: pmOnInit } = useToggleInit();
   const [info, setInfo] = useState<PhoneMirrorInfo>(EMPTY_INFO);
   const [busy, setBusy] = useState<null | 'enable' | 'disable' | 'lan' | 'rotate'>(null);
   const [error, setError] = useState<string | null>(null);
@@ -313,19 +345,13 @@ export const PhoneMirrorSettings: React.FC = () => {
                 : 'Off'}
             </div>
           </div>
-          <button
-            type="button"
-            role="switch"
-            data-on={String(info.running)}
-            aria-checked={info.running}
-            disabled={busy !== null}
-            onPointerDown={pmOnInit}
-            onKeyDown={pmOnInit}
-            onClick={onToggleEnable}
-            className={`t-toggle t-toggle-lg inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${info.running ? 'bg-accent-primary' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''} ${pmInit ? 'is-init' : ''}`}
-          >
-            <span className="t-toggle-thumb" aria-hidden="true" />
-          </button>
+          <PhoneMirrorSwitch
+            checked={info.running}
+            onChange={onToggleEnable}
+            label={t('Enable Phone Mirror')}
+            busy={busy !== null}
+            onClassName="bg-accent-primary"
+          />
         </div>
 
         {/* Pairing disclosure — nested under Enable Phone Mirror */}
@@ -446,19 +472,13 @@ export const PhoneMirrorSettings: React.FC = () => {
                   : 'Keep the mirror on this computer only.'}
               </div>
             </div>
-            <button
-              type="button"
-              role="switch"
-              data-on={String(info.exposeOnLan)}
-              aria-checked={info.exposeOnLan}
-              disabled={busy !== null}
-              onPointerDown={pmOnInit}
-              onKeyDown={pmOnInit}
-              onClick={onToggleLan}
-              className={`t-toggle t-toggle-lg inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${info.exposeOnLan ? 'bg-amber-500' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''} ${pmInit ? 'is-init' : ''}`}
-            >
-              <span className="t-toggle-thumb" aria-hidden="true" />
-            </button>
+            <PhoneMirrorSwitch
+              checked={info.exposeOnLan}
+              onChange={onToggleLan}
+              label={t('Allow LAN access')}
+              busy={busy !== null}
+              onClassName="bg-amber-500"
+            />
           </div>
           {lanWarning && (
             <div className="mt-2.5 flex items-start gap-2 text-amber-400/90 text-xs leading-relaxed">
@@ -753,7 +773,7 @@ const CtxToggle: React.FC<{
    */
   comingSoon?: boolean;
 }> = ({ label, desc, checked, onChange, icon, experimental, comingSoon }) => {
-  const { isInit: ctxInit, onInit: ctxOnInit } = useToggleInit();
+  const toggleInit = useToggleInit();
   return (
   <div className={`flex items-start justify-between gap-3 ${comingSoon ? 'opacity-55' : ''}`}>
     <div className="flex items-start gap-2.5 min-w-0">
@@ -789,12 +809,11 @@ const CtxToggle: React.FC<{
       aria-checked={comingSoon ? false : checked}
       aria-label={label}
       disabled={comingSoon}
-      onPointerDown={ctxOnInit}
-      onKeyDown={ctxOnInit}
+      {...toggleInit.handlers}
       onClick={comingSoon ? undefined : onChange}
       className={`t-toggle t-toggle-lg flex-shrink-0 mt-0.5 inline-flex h-6 w-11 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${
         comingSoon ? 'cursor-not-allowed bg-bg-item-active' : checked ? 'bg-accent-primary' : 'bg-bg-item-active'
-      } ${ctxInit ? 'is-init' : ''}`}
+      } ${toggleInit.className}`}
     >
       <span className="t-toggle-thumb" aria-hidden="true" />
     </button>

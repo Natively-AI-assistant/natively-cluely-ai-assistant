@@ -5,6 +5,7 @@ import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, STANDARD_
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useToggleInit } from './useToggleInit';
 
 // Official provider marks, vendored from @lobehub/icons-static-svg v1.94.0 (MIT).
 // See src/assets/provider-logos/README.md for provenance and why these are local
@@ -987,8 +988,7 @@ interface AipSwitchProps {
 export const AipSwitch: React.FC<AipSwitchProps> = ({
     checked, onChange, label, title, disabled = false, hardDisabled = false, className = '',
 }) => {
-    const [isInit, setIsInit] = React.useState(false);
-    const onInit = () => { if (!isInit) setIsInit(true); };
+    const toggleInit = useToggleInit();
     return (
         <button
             type="button"
@@ -999,10 +999,9 @@ export const AipSwitch: React.FC<AipSwitchProps> = ({
             aria-label={label}
             title={title}
             disabled={hardDisabled}
-            onPointerDown={onInit}
-            onKeyDown={onInit}
+            {...toggleInit.handlers}
             onClick={() => { if (!disabled && !hardDisabled) onChange(!checked); }}
-            className={`t-toggle aip-switch ${isInit ? 'is-init' : ''} ${className}`}
+            className={`t-toggle aip-switch ${toggleInit.className} ${className}`}
         >
             <span className="t-toggle-thumb aip-switch-thumb" aria-hidden="true" />
         </button>
