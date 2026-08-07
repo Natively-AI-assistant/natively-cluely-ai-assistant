@@ -451,9 +451,9 @@ export const AIP_CSS = `
 .aip-switch[aria-checked='true'] { background: var(--aip-accent); }
 .aip-switch[aria-disabled='true'] { cursor:not-allowed; }
 .aip-switch:disabled { cursor:not-allowed; opacity:0.5; }
-/* Thumb dimensions, position, and bounce are owned by .t-toggle-thumb in
-   src/index.css. We only paint the per-theme accent fill when on. */
-.aip-switch[aria-checked='true'] .t-toggle-thumb { background: var(--aip-on-accent); }
+/* Thumb dimensions, position, bounce, AND the on-state --on-accent fill are all
+   owned by .t-toggle-thumb in src/index.css now — this panel's local rule said
+   the same thing (--aip-on-accent resolves to --on-accent) for one panel only. */
 
 /* ── Buttons ───────────────────────────────────────────────────────────── */
 .aip-btn {
