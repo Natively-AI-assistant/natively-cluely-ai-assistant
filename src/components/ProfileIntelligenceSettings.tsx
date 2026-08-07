@@ -1591,12 +1591,15 @@ export function ProfileIntelligenceSettings({
                     aria-checked={!!(profileStatus.profileMode && hasProfileAccess)}
                     aria-disabled={(!profileStatus.hasProfile || !hasProfileAccess) ? true : undefined}
                     aria-label="Persona Engine"
-                    {...piToggleInit.handlers}
                     onClick={async () => {
                         if (!profileStatus.hasProfile || !hasProfileAccess) return;
                         const newState = !profileStatus.profileMode;
                         try {
                             await window.electronAPI?.profileSetMode?.(newState);
+                            // Armed next to the state change, not before the
+                            // await: data-on only flips when this resolves, and
+                            // is-init must not land in an earlier render.
+                            piToggleInit.arm();
                             setProfileStatus(prev => ({ ...prev, profileMode: newState }));
                         } catch { /**/ }
                     }}

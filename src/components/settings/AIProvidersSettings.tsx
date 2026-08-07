@@ -999,8 +999,11 @@ export const AipSwitch: React.FC<AipSwitchProps> = ({
             aria-label={label}
             title={title}
             disabled={hardDisabled}
-            {...toggleInit.handlers}
-            onClick={() => { if (!disabled && !hardDisabled) onChange(!checked); }}
+            onClick={() => {
+                if (disabled || hardDisabled) return;
+                toggleInit.arm();
+                onChange(!checked);
+            }}
             className={`t-toggle aip-switch ${toggleInit.className} ${className}`}
         >
             <span className="t-toggle-thumb aip-switch-thumb" aria-hidden="true" />

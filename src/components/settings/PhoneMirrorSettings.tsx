@@ -100,8 +100,7 @@ const PhoneMirrorSwitch: React.FC<{
       aria-checked={checked}
       aria-label={label}
       disabled={busy}
-      {...toggleInit.handlers}
-      onClick={onChange}
+      onClick={() => { toggleInit.arm(); onChange(); }}
       className={`t-toggle t-toggle-lg inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${checked ? onClassName : 'bg-bg-item-active'} ${busy ? 'opacity-60 cursor-wait' : ''} ${toggleInit.className}`}
     >
       <span className="t-toggle-thumb" aria-hidden="true" />
@@ -809,8 +808,7 @@ const CtxToggle: React.FC<{
       aria-checked={comingSoon ? false : checked}
       aria-label={label}
       disabled={comingSoon}
-      {...toggleInit.handlers}
-      onClick={comingSoon ? undefined : onChange}
+      onClick={comingSoon ? undefined : () => { toggleInit.arm(); onChange(); }}
       className={`t-toggle t-toggle-lg flex-shrink-0 mt-0.5 inline-flex h-6 w-11 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${
         comingSoon ? 'cursor-not-allowed bg-bg-item-active' : checked ? 'bg-accent-primary' : 'bg-bg-item-active'
       } ${toggleInit.className}`}

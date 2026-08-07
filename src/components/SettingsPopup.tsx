@@ -48,8 +48,7 @@ const PopupToggle: React.FC<{
             aria-checked={checked}
             aria-label={label}
             disabled={disabled}
-            {...toggleInit.handlers}
-            onClick={onChange}
+            onClick={() => { toggleInit.arm(); onChange(); }}
             className={`t-toggle t-toggle-sm w-[30px] h-[18px] rounded-full p-[1.5px] flex items-center active:scale-[0.92] ${checked ? onClassName : offClassName} ${toggleInit.className}`}
         >
             <span className={`t-toggle-thumb ${knobClassName}`} aria-hidden="true" />

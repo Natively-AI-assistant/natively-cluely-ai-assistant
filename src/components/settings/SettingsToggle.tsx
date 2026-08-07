@@ -40,8 +40,11 @@ export const SettingsToggle: React.FC<SettingsToggleProps> = ({
             aria-label={label}
             title={title}
             disabled={disabled}
-            {...toggleInit.handlers}
-            onClick={() => { if (!disabled) onChange(); }}
+            onClick={() => {
+                if (disabled) return;
+                toggleInit.arm();
+                onChange();
+            }}
             className={`t-toggle t-toggle-lg w-11 h-6 rounded-full p-[3px] flex items-center shrink-0 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'} ${className} ${toggleInit.className}`}
         >
             <span className="t-toggle-thumb" aria-hidden="true" />

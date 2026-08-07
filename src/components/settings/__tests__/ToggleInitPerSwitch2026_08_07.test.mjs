@@ -115,18 +115,48 @@ describe('useToggleInit is scoped per switch', () => {
         // string is awkward to spread across several buttons, so the wrong shape
         // is harder to write by accident.
         assert.match(HOOK, /className:\s*isInit \? 'is-init' : ''/);
-        assert.match(HOOK, /handlers:\s*\{/);
     });
 
-    test('arming ignores navigation keys so tabbing through cannot arm a switch', () => {
-        // A bare onKeyDown={arm} fires for Tab too. The keydown for Tab lands on
-        // the switch focus MOVES TO, arming a control the user never operated —
-        // a later unrelated re-render would then bounce it.
-        assert.match(HOOK, /e\?\.key === ' '/);
-        assert.match(HOOK, /e\?\.key === 'Enter'/);
+    test('the hook does not arm from a pointer/key handler of its own', () => {
+        // THE GLITCH THIS PREVENTS. `is-init` and the new `data-on` must land in
+        // the SAME render. Arming on pointerdown is a render EARLIER than the
+        // click that flips data-on, so the intermediate render matches
+        // `.t-toggle.is-init[data-on="false"]` and plays `t-toggle-off` while
+        // the thumb is already at rest — its 55% keyframe kicks the thumb to
+        // -1px. On the first click of an OFF switch the thumb appeared to go
+        // on, snap back off, then travel on again.
+        //
+        // So the hook must expose only `arm()`, called from the same handler
+        // that changes state. It must not ship its own onPointerDown/onKeyDown.
         assert.doesNotMatch(
-            HOOK, /onKeyDown:\s*arm\b/,
-            'onKeyDown must filter to activation keys, not arm on every keydown',
+            HOOK, /onPointerDown/,
+            'the hook must not arm on pointerdown — that is a render before data-on flips',
         );
+        assert.doesNotMatch(
+            HOOK, /handlers:\s*\{/,
+            'the hook must not expose a handlers bundle; callers call arm() from their own onClick',
+        );
+        assert.match(HOOK, /arm:\s*\(\)\s*=>\s*void|arm\b/);
+    });
+
+    test('every switch arms from the handler that changes its state', () => {
+        // If a call site renders a switch but never calls arm(), that switch
+        // silently never animates.
+        for (const [name, src] of [
+            ['SettingsToggle.tsx', SETTINGS_TOGGLE],
+            ['PhoneMirrorSettings.tsx', PHONE_MIRROR],
+            ['SettingsPopup.tsx', SETTINGS_POPUP],
+        ]) {
+            const clean = stripComments(src);
+            if (countSwitches(clean) === 0) continue;
+            assert.match(
+                clean, /\.arm\(\)/,
+                `${name} renders a switch but never calls arm() — that switch will never animate`,
+            );
+            assert.doesNotMatch(
+                clean, /\.\.\.\w*[Tt]oggleInit\.handlers/,
+                `${name} still spreads a handlers bundle, which arms a render too early`,
+            );
+        }
     });
 });
