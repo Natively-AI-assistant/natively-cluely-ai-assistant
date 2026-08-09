@@ -73,8 +73,8 @@ function assertMicStartsBeforeSystem(body, label) {
   );
 }
 
-test('startMeeting starts microphone before system audio', () => {
-  assertMicStartsBeforeSystem(extractMethodBody('startMeeting'), 'startMeeting');
+test('startMeetingTransition starts microphone before system audio', () => {
+  assertMicStartsBeforeSystem(extractMethodBody('startMeetingTransition'), 'startMeetingTransition');
 });
 
 test('reconfigureAudio restarts microphone before system audio during active meetings', () => {
