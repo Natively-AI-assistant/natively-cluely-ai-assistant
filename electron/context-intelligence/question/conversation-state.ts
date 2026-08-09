@@ -112,6 +112,11 @@ export function extractTopicPhrase(text: string): string | undefined {
     /\babout ((?:[\w-]+ ){0,4}[\w-]+)$/i,                       // "…about quantum computing"
     /\bwhat (?:is|are) (?:a |an |the )?((?:[\w-]+ ){0,3}[\w-]+)$/i, // "what is a mutex"
     /\b(?:explain|define|describe) (?:a |an |the )?((?:[\w-]+ ){0,3}[\w-]+)$/i,
+    // "how do database indexes work" (2026-08-09). This shape is a COMPLETE
+    // question whose subject is lowercase, so capitalisation-gated entity
+    // extraction saw nothing and the self-contained guard let it inherit a
+    // stale topic. The subject sits between the auxiliary and the verb.
+    /\bhow (?:do|does|did) (?:a |an |the )?((?:[\w-]+ ){0,3}[\w-]+) (?:work|works|worked|behave|behaves|differ|differs|compare|compares)\b/i,
   ];
   for (const p of pats) {
     const m = q.match(p);
@@ -135,18 +140,59 @@ export function extractTopicPhrase(text: string): string | undefined {
  * or a who-question subject ("Who is Leena?"). A bare capitalised token is NOT
  * enough — that is exactly how Kubernetes became "she".
  */
+// One shared NAME shape: an optional two-token capitalised name. Kept as a
+// source string so the three cue patterns cannot drift apart, and — critically
+// — so no cue can apply a case-insensitive flag to it. The title pattern used
+// to be built with `/gi`, which made `[A-Z][a-z]{2,}` match ANY letters, and
+// the optional second token then swallowed the following lowercase verb:
+// "candidate Leena say" yielded the person "Leena say" (2026-08-09).
+const PERSON_NAME_SRC = String.raw`[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?`;
+
+// Titles are matched case-insensitively by EXPLICIT alternation rather than the
+// `i` flag, so case-insensitivity never leaks into the name group. Longest
+// alternatives first so "Mrs" is not consumed as "Mr".
+const POSSESSIVE_PERSON_RE = new RegExp(String.raw`\b(${PERSON_NAME_SRC})['’]s\b`, 'g');
+const TITLE_PERSON_RE = new RegExp(
+  String.raw`\b(?:[Cc]andidate|[Pp]rof(?:essor)?|[Mm]rs|[Mm]s|[Mm]r|[Dd]r)\.?\s+(${PERSON_NAME_SRC})`, 'g');
+// `[Ww]ho` rather than a bare `who`: with no `i` flag this pattern could never
+// match a sentence-initial "Who", so the who-question cue — one of the three
+// documented cues — had never fired for a single real question (2026-08-09).
+const WHO_PERSON_RE = new RegExp(String.raw`\b[Ww]ho\s+is\s+(${PERSON_NAME_SRC})\b`, 'g');
+
+/**
+ * Drop leading filler from a captured name.
+ *
+ * The two-token name shape lets a sentence-initial capital be absorbed as the
+ * FIRST token — "Does Priya's profile…" captured "Does Priya", which then
+ * reached the prompt verbatim as "(referring to: Does Priya)". add()'s own
+ * guard could not catch it: it tests the whole captured string against
+ * SENTENCE_STARTERS/STOP, and those sets hold single words.
+ *
+ * Never strips the last remaining token — a single filler word is add()'s job
+ * to reject, and stripping to empty here would hide it.
+ */
+function trimLeadingFiller(name: string): string {
+  const parts = name.split(/\s+/).filter(Boolean);
+  while (parts.length > 1) {
+    const head = parts[0].toLowerCase();
+    if (!SENTENCE_STARTERS.has(head) && !STOP.has(head)) break;
+    parts.shift();
+  }
+  return parts.join(' ');
+}
+
 export function extractPersonEntities(text: string): string[] {
   const s = String(text);
   const out: string[] = [];
   const seen = new Set<string>();
   const add = (v: string | undefined) => {
-    const t = (v ?? '').trim();
+    const t = trimLeadingFiller((v ?? '').trim());
     if (!t || seen.has(t) || STOP.has(t.toLowerCase()) || SENTENCE_STARTERS.has(t.toLowerCase())) return;
     seen.add(t); out.push(t);
   };
-  for (const m of s.matchAll(/\b([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)['’]s\b/g)) add(m[1]);
-  for (const m of s.matchAll(/\b(?:candidate|mr|mrs|ms|dr|prof(?:essor)?)\.?\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)/gi)) add(m[1]);
-  for (const m of s.matchAll(/\bwho\s+is\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)\b/g)) add(m[1]);
+  for (const m of s.matchAll(POSSESSIVE_PERSON_RE)) add(m[1]);
+  for (const m of s.matchAll(TITLE_PERSON_RE)) add(m[1]);
+  for (const m of s.matchAll(WHO_PERSON_RE)) add(m[1]);
   return out;
 }
 
@@ -244,6 +290,58 @@ const NONPERSON_PRONOUN_RE = /\b(it|its|that|this|those|these|they|them|the (?:s
  */
 const PRONOUN_RESOLUTION_MAX_WORDS = 12;
 
+/**
+ * A QUOTED span is the strongest statement of subject a user can make.
+ *
+ * Live repro 2026-08-09: after "What do you think about remote work?", the turn
+ * 'Give me an example answer for "Why do you want this role?"' was rewritten to
+ * '… (referring to: remote work)' and the model produced an example answer
+ * about remote work. The next turn inherited it too — two wrong answers in a
+ * six-question manual run, with nothing in the output to reveal why.
+ *
+ * The self-contained guard below could not catch it: that guard is skipped
+ * whenever the turn has a pronoun or is a response request, and this turn was
+ * both ("you", in a short turn, phrased as "give me an example answer for X").
+ * A quoted subject has to win regardless of those flags, so it is checked
+ * FIRST and independently.
+ *
+ * Matching is deliberately conservative — a false positive silently disables
+ * resolution for an ordinary follow-up:
+ *   - double quotes (straight or curly) need 2+ characters between them;
+ *   - single quotes additionally need BOUNDARIES on both sides, so the
+ *     apostrophes in "doesn't that work?" or "the role's scope" cannot pair up
+ *     into a phantom quotation.
+ */
+const QUOTED_SUBJECT_RES: readonly RegExp[] = [
+  /"[^"]{2,}"/,
+  /“[^”]{2,}”/,
+  /(?:^|[\s(\[:;,—–-])['‘]([^'’]{2,})['’](?=$|[\s).,?!\]:;—–-])/,
+];
+function hasQuotedSubject(q: string): boolean {
+  return QUOTED_SUBJECT_RES.some((re) => re.test(q));
+}
+
+/**
+ * The question's OWN subject, when it states one in lowercase (2026-08-09).
+ *
+ * `extractEntities` is capitalisation-gated, so the self-contained guard was
+ * blind to "How do database indexes work?" and "…a question about salary
+ * expectations" — both complete questions that then inherited a stale topic.
+ *
+ * The pronoun filter is load-bearing, not defensive. extractTopicPhrase returns
+ * "it simply" for "Can you explain it more simply?" — a phrase assembled out of
+ * pronouns is retrieval residue, not a subject, and accepting it would classify
+ * a genuine follow-up as self-contained and stop it resolving. That is the trap
+ * this filter exists to avoid; it was measured before the fix, not guessed.
+ */
+const PRONOUN_TOKEN_RE =
+  /\b(?:i|me|my|mine|we|us|our|ours|you|your|yours|he|him|his|she|her|hers|it|its|they|them|their|theirs|this|that|these|those)\b/i;
+function ownSubjectPhrase(q: string): string | undefined {
+  const phrase = extractTopicPhrase(q);
+  if (!phrase || PRONOUN_TOKEN_RE.test(phrase)) return undefined;
+  return phrase;
+}
+
 export interface ResolvedReference {
   resolved: string;
   usedState: boolean;
@@ -292,6 +390,24 @@ export function resolveReference(question: string, state: ConversationState | nu
   const bare = isBareFollowUp(q);
   const rephrase = isResponseRequest(q);
   const fragment = isContinuationFragment(q);
+
+  // A QUOTED subject beats inherited state UNCONDITIONALLY (2026-08-09), so it
+  // is resolved FIRST — ahead of every trigger gate below.
+  //
+  // Hoisted above the trigger check deliberately. Both of these carry their own
+  // quoted subject and must behave identically:
+  //
+  //   'Give me an example answer for "Why do you want this role?"'          (9 words)
+  //   'Give me an example answer for "Tell me about a conflict you resolved"' (11 words)
+  //
+  // Before this, the first was corrupted with the stale topic and the second
+  // escaped only because it exceeded PRONOUN_RESOLUTION_MAX_WORDS — same shape,
+  // opposite outcome, decided by word count. Now both return here, with a
+  // reason that says why rather than "no trigger".
+  if (hasQuotedSubject(q)) {
+    return { resolved: q, usedState: false, reason: 'CURRENT_QUESTION_CONTAINS_EXPLICIT_ENTITY' };
+  }
+
   if (!pronoun && !bare && !rephrase) {
     return {
       resolved: q, usedState: false,
@@ -300,6 +416,16 @@ export function resolveReference(question: string, state: ConversationState | nu
       // class this gate closes, and telemetry needs to see it as a decision.
       reason: pronounAnywhere ? 'CURRENT_TURN_SELF_CONTAINED' : 'NO_REFERENT_TRIGGER',
     };
+  }
+
+  // A LOWERCASE subject counts too (2026-08-09). Checked ahead of the entity
+  // guard and — unlike it — also on REPHRASE turns, because "How should I
+  // answer a question about salary expectations?" is a response request that
+  // nonetheless names exactly what it is about. `!pronoun` is still required:
+  // "Has she used GCP?" carries the entity GCP but genuinely needs the person
+  // slot, so an entity/topic must never override a live pronoun.
+  if (!pronoun && ownSubjectPhrase(q)) {
+    return { resolved: q, usedState: false, reason: 'CURRENT_QUESTION_CONTAINS_EXPLICIT_ENTITY' };
   }
 
   // SELF-CONTAINED questions get no referent (deep-test D9): "How many
