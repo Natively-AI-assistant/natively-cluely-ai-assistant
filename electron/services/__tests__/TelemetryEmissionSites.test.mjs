@@ -35,7 +35,7 @@ describe('Phase 6 — TelemetryService production emission sites', () => {
 
   test('main.ts emits meeting_stop at end-meeting site (before teardown)', () => {
     const src = read('electron/main.ts');
-    const idx = src.search(/public async endMeeting/);
+    const idx = src.search(/private async endMeetingTransition/);
     assert.ok(idx > 0);
     // Widened from 1200 → 2000 chars to accommodate the idempotency-guard
     // comment block (added with the per-meeting-teardown promise) that now

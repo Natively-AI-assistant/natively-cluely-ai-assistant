@@ -1035,16 +1035,74 @@ export class NativelyProSTT extends EventEmitter {
 
         if (this.ws) {
             const dying = this.ws;
+            const readyState = dying.readyState;
             this.ws = null;
-            // Strip every JS-side listener BEFORE close(). The libuv socket can
-            // still deliver 'message'/'close' events that were already in
-            // flight from the kernel — without removeAllListeners() they would
-            // bubble up to handlers that mutate state on `this` and corrupt
-            // the new connection. The handler-side `guard(ws === this.ws)`
-            // makes this safe even if removeAllListeners() somehow misses
-            // anything, but doing both is the production-grade pattern.
-            try { dying.removeAllListeners(); } catch {}
-            try { dying.close(); } catch {}
+
+            // Strip the state-mutating listeners BEFORE close(). The libuv
+            // socket can still deliver 'open'/'message' events that were
+            // already in flight from the kernel — without removing them they
+            // would bubble up to handlers that mutate state on `this` and
+            // corrupt the new connection. The handler-side
+            // `guard(ws === this.ws)` makes this safe even if the removal
+            // somehow misses anything, but doing both is the production-grade
+            // pattern.
+            //
+            // CRITICAL (2026-08-07): this used to be a blanket
+            // removeAllListeners(), which ALSO stripped 'error'. That is the
+            // one listener we must keep. ws@8's close() on a CONNECTING socket
+            // routes through abortHandshake(), which ends in:
+            //
+            //     process.nextTick(emitErrorAndClose, websocket, err)
+            //
+            // so 'error' is emitted unconditionally ONE TICK LATER with the
+            // message "WebSocket was closed before the connection was
+            // established". With no listener attached, Node's EventEmitter
+            // promotes it to a process-level uncaughtException — and main.ts's
+            // handler responds by closing the SQLite singleton irreversibly,
+            // silently killing meeting persistence for the rest of the session.
+            //
+            // There is no way to suppress that emit: terminate() takes the same
+            // abortHandshake path, and deferring the close() to a later tick
+            // does not help either (both measured against ws@8.21.0). See
+            // websockets/ws#1835 — abortHandshake is deliberately private and
+            // the library's contract is that the caller keeps an 'error'
+            // listener attached across the cancellation.
+            for (const event of ['open', 'message', 'ping', 'pong', 'upgrade', 'unexpected-response']) {
+                try { dying.removeAllListeners(event); } catch {}
+            }
+            try { dying.removeAllListeners('error'); } catch {}
+            try { dying.removeAllListeners('close'); } catch {}
+
+            // Narrow cancellation listeners for the DETACHED socket only. They
+            // are permitted precisely because `dying` is no longer `this.ws`:
+            // an error on the still-owned active socket keeps the normal
+            // provider error path installed by connect(). They release each
+            // other on 'close' so a discarded socket does not retain listeners
+            // — these sockets are cycled on every meeting.
+            const consumeDetachedError = (error: Error): void => {
+                if (process.env.NATIVELY_STT_LIFECYCLE_DEBUG === '1') {
+                    console.log(
+                        `[NativelyProSTT:${this.channel}] detached socket error ` +
+                        `state=${readyState} message=${error?.message}`,
+                    );
+                }
+            };
+            const releaseDetachedListeners = (): void => {
+                try { dying.removeListener('error', consumeDetachedError); } catch {}
+                try { dying.removeListener('close', releaseDetachedListeners); } catch {}
+            };
+            try { dying.on('error', consumeDetachedError); } catch {}
+            try { dying.on('close', releaseDetachedListeners); } catch {}
+
+            // Only CONNECTING/OPEN sockets need a close. A CLOSING socket is
+            // already tearing down (its 'close' will fire and release the
+            // listeners); a CLOSED one will never emit again, so release now
+            // rather than leaving the pair attached forever.
+            if (readyState === WebSocket.CONNECTING || readyState === WebSocket.OPEN) {
+                try { dying.close(); } catch { releaseDetachedListeners(); }
+            } else if (readyState === WebSocket.CLOSED) {
+                releaseDetachedListeners();
+            }
         }
     }
 }
