@@ -52,6 +52,25 @@ export interface AdoptionPlan {
   adopt: string[];
   /** Templates with no existing row to adopt — seed a fresh one. */
   seed: BuiltinModeTemplate[];
+  /**
+   * Templates where MORE THAN ONE row qualified and the oldest was taken.
+   *
+   * Reported because it is the one case adoption can get wrong: if the older
+   * qualifier is a CUSTOM mode the user renamed to exactly the canonical label,
+   * that row gets its template locked instead of the intended one.
+   *
+   * There is no provenance column to break the tie properly, and the obvious
+   * heuristic does not work — on real data every row carries an empty
+   * custom_context, so "prefer the pristine one" discriminates nothing. Rather
+   * than invent a signal, the ambiguity is surfaced so a wrong pick is
+   * diagnosable from the logs instead of silent.
+   *
+   * The blast radius is small by construction: an adopted row always has a
+   * correct name↔template pairing, so the only loss is that that row can no
+   * longer be re-templated — and updateMode's rejection message already points
+   * at the remedy (duplicate it as a custom mode).
+   */
+  ambiguous: Array<{ templateType: BuiltinModeTemplate; chosen: string; skipped: string[] }>;
 }
 
 /**
@@ -76,6 +95,7 @@ export interface AdoptionPlan {
 export function planBuiltinAdoption(rows: readonly AdoptionCandidate[]): AdoptionPlan {
   const adopt: string[] = [];
   const covered = new Set<string>();
+  const ambiguous: AdoptionPlan['ambiguous'] = [];
 
   const ordered = [...rows].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
 
@@ -84,19 +104,30 @@ export function planBuiltinAdoption(rows: readonly AdoptionCandidate[]): Adoptio
     if (r.isBuiltin && isBuiltinTemplate(r.templateType)) covered.add(r.templateType);
   }
 
+  // Group the QUALIFIERS per template first, so a tie is visible rather than
+  // being consumed silently by first-wins iteration.
+  const qualifiers = new Map<BuiltinModeTemplate, string[]>();
   for (const r of ordered) {
     if (r.isBuiltin) continue;
     const t = r.templateType;
     if (!isBuiltinTemplate(t) || covered.has(t)) continue;
     if (String(r.name).trim() !== BUILTIN_MODE_LABELS[t]) continue;
-    adopt.push(r.id);
+    const list = qualifiers.get(t) ?? [];
+    list.push(r.id);
+    qualifiers.set(t, list);
+  }
+
+  for (const [t, ids] of qualifiers) {
+    const [chosen, ...skipped] = ids;   // `ordered` is oldest-first
+    adopt.push(chosen);
     covered.add(t);
+    if (skipped.length) ambiguous.push({ templateType: t, chosen, skipped });
   }
 
   const seed = (Object.keys(BUILTIN_MODE_LABELS) as BuiltinModeTemplate[])
     .filter((t) => !covered.has(t));
 
-  return { adopt, seed };
+  return { adopt, seed, ambiguous };
 }
 
 function isBuiltinTemplate(v: string): v is BuiltinModeTemplate {

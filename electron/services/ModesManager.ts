@@ -387,14 +387,23 @@ export class ModesManager {
             // read a mode goes through this accessor. Doing it anywhere else
             // risks a caller observing modes before they exist. Guarded so a
             // re-entrant getInstance() during seeding cannot recurse.
-            if (!ModesManager.builtinsEnsured) {
-                ModesManager.builtinsEnsured = true;
-                ModesManager.instance.ensureBuiltinModes();
-            }
+        }
+        // Retried on a LATER getInstance() when a previous run was incomplete —
+        // a partial seed used to persist for the whole session because the latch
+        // was set before the work. Bounded so a permanently broken database
+        // cannot spin on every accessor call.
+        if (!ModesManager.builtinsEnsured && ModesManager.builtinAttempts < ModesManager.MAX_BUILTIN_ATTEMPTS) {
+            ModesManager.builtinAttempts += 1;
+            // Latch BEFORE the call so a re-entrant getInstance() cannot recurse;
+            // unlatch only if the run reported itself incomplete.
+            ModesManager.builtinsEnsured = true;
+            if (!ModesManager.instance.ensureBuiltinModes()) ModesManager.builtinsEnsured = false;
         }
         return ModesManager.instance;
     }
     private static builtinsEnsured = false;
+    private static builtinAttempts = 0;
+    private static readonly MAX_BUILTIN_ATTEMPTS = 3;
 
     // ── Modes ─────────────────────────────────────────────────────
 
@@ -586,7 +595,8 @@ export class ModesManager {
      * A row is only ever marked, and only when its name is already exactly the
      * canonical label for its own template.
      */
-    public ensureBuiltinModes(): void {
+    public ensureBuiltinModes(): boolean {
+        let complete = true;
         try {
             const db = DatabaseManager.getInstance();
             const rows = db.getModes().map((r: any) => ({
@@ -598,24 +608,58 @@ export class ModesManager {
             }));
             const plan = planBuiltinAdoption(rows);
 
-            for (const id of plan.adopt) db.setModeBuiltin(id, true);
+            // Ambiguity is the one thing adoption can get wrong (see AdoptionPlan
+            // .ambiguous). No provenance column exists to break the tie, so it is
+            // LOGGED rather than guessed at — a wrong pick stays diagnosable.
+            for (const a of plan.ambiguous) {
+                console.warn(`[ModesManager] ${a.templateType}: ${a.skipped.length + 1} rows qualified as the `
+                    + `built-in; adopted the oldest (${a.chosen}), left custom: ${a.skipped.join(', ')}. `
+                    + `If the wrong one was adopted, duplicate it as a custom mode to change its template.`);
+            }
+
+            for (const id of plan.adopt) {
+                // Per-row, so one bad write cannot cost the rest of the adoption.
+                try { db.setModeBuiltin(id, true); } catch (e) {
+                    complete = false;
+                    console.error(`[ModesManager] adopt ${id} failed:`, e);
+                }
+            }
 
             for (const t of plan.seed) {
-                const created = this.createMode({ name: BUILTIN_MODE_LABELS[t], templateType: t });
-                db.setModeBuiltin(created.id, true);
+                // Per-seed for the same reason. A disk error on one template used
+                // to abort every remaining one and leave the session with a
+                // partial set until the next launch.
+                try {
+                    const created = this.createMode({ name: BUILTIN_MODE_LABELS[t], templateType: t });
+                    db.setModeBuiltin(created.id, true);
+                } catch (e) {
+                    complete = false;
+                    console.error(`[ModesManager] seed ${t} failed:`, e);
+                }
             }
 
             if (plan.adopt.length || plan.seed.length) {
                 console.log(`[ModesManager] built-ins established: adopted ${plan.adopt.length}, `
-                    + `seeded ${plan.seed.length}${plan.seed.length ? ` (${plan.seed.join(', ')})` : ''}`);
+                    + `seeded ${plan.seed.length}${plan.seed.length ? ` (${plan.seed.join(', ')})` : ''}`
+                    + `${complete ? '' : ' — INCOMPLETE, will retry'}`);
                 this.invalidateActiveModeCache();
             }
         } catch (e) {
             // Never fatal: a failure here leaves every mode custom, which is the
             // pre-v26 behaviour, not a broken app.
+            complete = false;
             console.error('[ModesManager] ensureBuiltinModes failed:', e);
         }
+        return complete;
     }
+
+    /** Test seam: clear the once-per-process latch so a run can be repeated. */
+    public static _resetBuiltinLatchForTest(): void {
+        ModesManager.builtinsEnsured = false;
+        ModesManager.builtinAttempts = 0;
+    }
+
+
 
     public createMode(params: { name: string; templateType: ModeTemplateType }): Mode {
         if (!ModesManager.isKnownTemplateType(params.templateType)) {
