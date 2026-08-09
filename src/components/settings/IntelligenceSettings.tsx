@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useT } from '../../i18n';
 import { Disclosure, DisclosureChevron } from '../ui/AccordionSection';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { useToggleInit } from './useToggleInit';
+import { SettingsToggle } from './SettingsToggle';
 
 // Label + one-line description + group + TIER for each USER-FACING Intelligence OS flag.
 // Keyed by flag key.
@@ -112,7 +112,12 @@ const FlagRowView: React.FC<{ row: FlagRow; onToggle: (row: FlagRow) => void }> 
         <div className="text-xs font-medium text-text-primary">{meta?.label || row.key}</div>
         {meta?.desc ? <div className="mt-0.5 text-[11px] leading-relaxed text-text-secondary">{meta.desc}</div> : null}
       </div>
-      <Toggle on={row.enabled} onClick={() => onToggle(row)} />
+      <SettingsToggle
+        checked={row.enabled}
+        onChange={() => onToggle(row)}
+        label={meta?.label || row.key}
+        className={row.enabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+      />
     </div>
   );
 };
@@ -148,26 +153,6 @@ const formatStamp = (ms: number): string => {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
-};
-
-const Toggle: React.FC<{ on: boolean; disabled?: boolean; onClick: () => void }> = ({ on, disabled, onClick }) => {
-  const toggleInit = useToggleInit();
-  return (
-    <button
-      type="button"
-      role="switch"
-      data-on={String(on)}
-      aria-checked={on}
-      aria-disabled={disabled ? true : undefined}
-      disabled={disabled}
-      onClick={() => { toggleInit.arm(); onClick(); }}
-      /* 1px border here, which t-toggle-lg's 20px does not account for:
-         44 − 2*1 − 2*3 − 18 = 18px. */
-      className={`t-toggle t-toggle-lg t-toggle-bordered w-11 h-6 shrink-0 rounded-full p-[3px] flex items-center ${on ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'} ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${toggleInit.className}`}
-    >
-      <span className="t-toggle-thumb" aria-hidden="true" />
-    </button>
-  );
 };
 
 // Inline copyable command/snippet block — same idiom as UpdateModal's CopyBlock. Used in the
@@ -913,7 +898,12 @@ export const IntelligenceSettings: React.FC = () => {
                   {t('When ON and the companion is installed, Natively starts it for you at launch and forwards your AI provider key automatically. Turn OFF to manage the server yourself.')}
                 </span>
               </span>
-              <Toggle on={autoStart} onClick={() => { setAutoStart((v) => !v); scheduleAutoSave(); }} />
+              <SettingsToggle
+                checked={autoStart}
+                onChange={() => { setAutoStart((v) => !v); scheduleAutoSave(); }}
+                label={t('Start memory server automatically at launch')}
+                className={autoStart ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+              />
             </label>
 
             {/* "Don't use Hindsight" opt-out — sets the explicit-disable sentinel so the
@@ -1023,7 +1013,16 @@ export const IntelligenceSettings: React.FC = () => {
                   </motion.span>
                 ) : null}
               </AnimatePresence>
-              <Toggle on={masterState !== 'off'} disabled={masterBusy} onClick={onToggleMaster} />
+              <SettingsToggle
+                checked={masterState !== 'off'}
+                disabled={masterBusy}
+                onChange={onToggleMaster}
+                label={t('Smart features')}
+                className={
+                  (masterState !== 'off' ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted')
+                  + (masterBusy ? ' opacity-40' : '')
+                }
+              />
             </div>
           </div>
 

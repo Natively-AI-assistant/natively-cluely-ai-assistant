@@ -85,4 +85,32 @@ describe('acceptRepairedAnswer — shared WTA/manual repair acceptance policy', 
     assert.doesNotThrow(() => acceptRepairedAnswer({ original: undefined, repaired: undefined }));
     assert.equal(acceptRepairedAnswer({ original: undefined, repaired: undefined }).accepted, false);
   });
+
+  // Code review 2026-08-07: acceptRepairedAnswer checked length_downgrade BEFORE
+  // stillInvalid, so a repair that a caller's domain re-check confirmed FIXED the
+  // critical violation was rejected purely for being shorter than the flagged-bad
+  // original — and the confirmed-invalid original shipped instead. Live-reproduced
+  // against real DeepSeek v4-flash: a false "I don't have access to your name"
+  // refusal (200 chars) correctly repaired to "My name is Priya Nair." (22 chars,
+  // ratio 0.11) was rejected as length_downgrade even though stillInvalid was false.
+  test('a repair the caller confirmed FIXED the violation is accepted even when drastically shorter', () => {
+    const original = 'I don\'t have access to your specific resume details or personal information loaded ' +
+      'right now, so I can\'t share your name or speak to any particulars about who you are.';
+    const verdict = acceptRepairedAnswer({ original, repaired: 'My name is Priya Nair.', stillInvalid: false });
+    assert.equal(verdict.accepted, true, JSON.stringify(verdict));
+  });
+
+  test('without a caller domain check (stillInvalid omitted), the length floor still protects against a lazy repair', () => {
+    const original = 'a'.repeat(200);
+    const verdict = acceptRepairedAnswer({ original, repaired: 'Not sure, honestly.' });
+    assert.equal(verdict.accepted, false, JSON.stringify(verdict));
+    assert.equal(verdict.reason, 'length_downgrade');
+  });
+
+  test('stillInvalid:true still rejects regardless of length (domain check outranks the length floor either way)', () => {
+    const original = 'a'.repeat(200);
+    const verdict = acceptRepairedAnswer({ original, repaired: 'Still wrong, but concise.', stillInvalid: true });
+    assert.equal(verdict.accepted, false, JSON.stringify(verdict));
+    assert.equal(verdict.reason, 'still_invalid');
+  });
 });

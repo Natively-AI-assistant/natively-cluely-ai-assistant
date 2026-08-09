@@ -18,6 +18,16 @@
 // still own their own DOMAIN validity re-check (profile evidence, doc-grounded
 // validation) and pass the verdict in via `stillInvalid` — this module owns only
 // the checks that are identical on both paths.
+//
+// Fix 2026-08-07: the length floor used to reject a repair BEFORE `stillInvalid`
+// was checked, so a repair that a caller's domain re-check confirmed FIXED the
+// original violation could still be discarded for being shorter — re-shipping
+// the confirmed-bad original. The length floor now only fires when the caller
+// did NOT pass `stillInvalid` (left it `undefined`) — i.e. it is a fallback net
+// for a caller with no domain check of its own, not a second opinion that can
+// overrule one. All three current call sites always pass an explicit boolean,
+// so today this makes the length floor effectively dead for them; it stays as
+// the fallback for any future caller that skips its own domain re-check.
 
 import { isLeakedAnswerArtifact } from './answerPolish';
 
@@ -81,15 +91,30 @@ export function acceptRepairedAnswer(input: RepairAcceptanceInput): RepairAccept
       return { accepted: false, text: repairedTrim, reason: 'leaked_artifact' };
     }
 
+    // Domain validity comes first: at every call site `original` is already the
+    // confirmed-INVALID pre-repair answer (that's why a repair was attempted at
+    // all), so a repair that resolves the caller's domain check (stillInvalid
+    // === false) must never lose to the length floor below — falling back to
+    // "original" would silently re-ship the very fabrication/leak/refusal the
+    // repair was triggered to fix, just because the correct fix happens to be
+    // short (e.g. a one-line factual answer replacing a padded false refusal).
+    if (input?.stillInvalid) {
+      return { accepted: false, text: repairedTrim, reason: 'still_invalid' };
+    }
+
+    // Length floor is a fallback safety net for a caller that did NOT run its
+    // own domain re-check (stillInvalid left undefined) — it protects against a
+    // repair that might be suspiciously thin/lazy relative to a SUBSTANTIVE
+    // original when nothing else has verified the repair's content. Once a
+    // caller has explicitly confirmed the repair is domain-valid
+    // (stillInvalid === false), the length floor must not override that: the
+    // "original" it would fall back to is confirmed-worse, not merely unproven.
     if (
-      originalTrim.length >= SUBSTANTIVE_ORIGINAL_CHARS
+      input?.stillInvalid === undefined
+      && originalTrim.length >= SUBSTANTIVE_ORIGINAL_CHARS
       && repairedTrim.length < originalTrim.length * MIN_REPAIR_LENGTH_RATIO
     ) {
       return { accepted: false, text: repairedTrim, reason: 'length_downgrade' };
-    }
-
-    if (input?.stillInvalid) {
-      return { accepted: false, text: repairedTrim, reason: 'still_invalid' };
     }
 
     return { accepted: true, text: repairedTrim };
