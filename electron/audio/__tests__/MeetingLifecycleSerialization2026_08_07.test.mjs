@@ -56,6 +56,60 @@ test('duplicate start requests coalesce into one transition', async () => {
     assert.equal(runs, 1, 'no extra transition ran after settling');
 });
 
+test('a queued start adopts the NEWEST intent instead of discarding it', async () => {
+    // Greptile PR #439: coalescing returned the first request's promise and
+    // threw away the second closure. startMeeting() closes over `metadata`,
+    // which carries the calendar title/eventId AND the user's chosen audio
+    // devices (metadata.audio.inputDeviceId drives reconfigureAudio). A manual
+    // Start racing a calendar auto-start therefore silently ignored the user's
+    // selected microphone while still reporting success.
+    //
+    // Contract: while the transition is still QUEUED, the latest runner wins.
+    const q = new MeetingLifecycleQueue();
+    const ran = [];
+    const gate = deferred();
+
+    // Occupy the chain so the next start is QUEUED rather than run immediately.
+    // (Do not await these — they are deliberately blocked on `gate`.)
+    const blocker = q.start(async () => { ran.push('blocker'); await gate.promise; });
+    await tick();
+    const stopped = q.stop(async () => { ran.push('stop'); });
+    await tick();
+
+    // Two starts land while the chain is still busy. The SECOND carries the
+    // metadata that must survive.
+    const first = q.start(async () => { ran.push('calendar-metadata'); });
+    const second = q.start(async () => { ran.push('user-selected-mic'); });
+    assert.equal(first, second, 'both callers share one transition — still exactly one meeting');
+
+    gate.resolve();
+    await Promise.allSettled([blocker, stopped, first, second]);
+
+    assert.ok(ran.includes('user-selected-mic'),
+        `the newest start intent must execute, got ${JSON.stringify(ran)}`);
+    assert.ok(!ran.includes('calendar-metadata'),
+        'the superseded runner must NOT also run — that would start twice');
+    assert.equal(q.getState(), 'active');
+});
+
+test('once a start is executing, later starts coalesce and do not swap the runner', async () => {
+    // The mirror of the above: mid-flight the meeting is already starting, so
+    // there is nothing to re-apply and swapping the runner underneath a running
+    // transition would be far worse than coalescing.
+    const q = new MeetingLifecycleQueue();
+    const ran = [];
+    const gate = deferred();
+
+    const first = q.start(async () => { ran.push('executing'); await gate.promise; });
+    await tick();   // let the body begin
+    const second = q.start(async () => { ran.push('too-late'); });
+
+    gate.resolve();
+    await Promise.all([first, second]);
+
+    assert.deepEqual(ran, ['executing'], 'the in-flight runner must not be replaced mid-execution');
+});
+
 test('starting while already active is a no-op', async () => {
     const q = new MeetingLifecycleQueue();
     let runs = 0;
