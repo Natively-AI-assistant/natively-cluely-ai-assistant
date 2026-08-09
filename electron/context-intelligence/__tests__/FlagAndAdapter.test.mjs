@@ -9,8 +9,22 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+// The persisted-opt-in block below writes through flag.js's settingsPath(),
+// which resolves NATIVELY_TEST_USERDATA → electron app.getPath('userData') →
+// null. Under `node --test` there is no Electron, and under
+// `ELECTRON_RUN_AS_NODE=1 electron --test` the `app` object is absent too
+// (that mode is Node, not an Electron main process) — so writePersistedSetting
+// threw "no userData path available for the V3 opt-in" under BOTH runners.
+//
+// flag.js's own header names NATIVELY_TEST_USERDATA as the isolation variable
+// "every harness here already sets"; this one did not. Set before the module is
+// imported so the very first settingsPath() call resolves. (2026-08-07)
+process.env.NATIVELY_TEST_USERDATA ??= fs.mkdtempSync(path.join(os.tmpdir(), 'v3-flag-'));
 
 const base = path.resolve(process.cwd(), 'dist-electron/electron/context-intelligence');
 const flagMod = await import(pathToFileURL(path.join(base, 'contracts/flag.js')).href);
