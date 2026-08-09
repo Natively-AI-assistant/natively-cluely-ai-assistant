@@ -169,10 +169,14 @@ describe('composition wording', () => {
   });
 
   test('zero attachments + NO profile: the notice offers Profile Intelligence as the fix', async () => {
+    // Policy-scoped on 2026-08-07 — see the companion test below. The "nothing
+    // was searched, do not answer from general knowledge" wording is the
+    // STRICT-mode contract; it is no longer what a non-strict turn receives.
     const d = decide({
       requestId: 'rn', requestSequence: 1, surface: 'manual-chat',
       modeId: 'looking-for-work', scope: { userId: 'local' }, sessionId: 'e2e-none',
       manualQuestion: 'What is my CGPA?',
+      userAnswerPolicy: 'only_answer_from_references',
     });
     const composed = composePrompt({
       decision: d, policy: POLICY, evidence: [],
@@ -181,6 +185,28 @@ describe('composition wording', () => {
     assert.ok(composed.user.includes('NO reference material attached'));
     assert.ok(composed.user.includes('Profile Intelligence'),
       'the honest fix is named: upload once under Profile Intelligence');
+  });
+
+  test('zero attachments + NO profile under "Use references when relevant" still names the gap, but answers', async () => {
+    const d = decide({
+      requestId: 'rn2', requestSequence: 1, surface: 'manual-chat',
+      modeId: 'looking-for-work', scope: { userId: 'local' }, sessionId: 'e2e-none-2',
+      manualQuestion: 'What is my CGPA?',
+      userAnswerPolicy: 'use_references_when_relevant',
+    });
+    const composed = composePrompt({
+      decision: d, policy: POLICY, evidence: [],
+      attachedSourceCount: 0, profileSourceCount: 0,
+    });
+    // Still source-honest: a CGPA is a fact ABOUT the user and must never be
+    // produced from general knowledge. The user signed this refusal off as
+    // correct — only the blanket prohibition on answering at all is lifted.
+    assert.ok(!composed.user.includes('do not answer from general knowledge as though it were sourced'),
+      composed.user);
+    assert.match(composed.user, /not established by any available source/);
+    assert.match(composed.user, /state nothing as a fact about the user/);
+    assert.ok(composed.user.includes('Profile Intelligence'),
+      'the remedy is still named, as a hint rather than as a refusal');
   });
 
   test('complete-inventory evidence renders the checked-absence contract and the attribute', async () => {

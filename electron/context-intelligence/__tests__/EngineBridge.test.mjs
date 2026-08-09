@@ -6,12 +6,21 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+// The Answer policy is read from the store per turn, so any test that pins a
+// policy needs an isolated userData dir. NATIVELY_TEST_USERDATA is the variable
+// the store itself checks first, ahead of Electron's app.getPath.
+const USERDATA = fs.mkdtempSync(path.join(os.tmpdir(), 'v3-bridge-'));
+process.env.NATIVELY_TEST_USERDATA = USERDATA;
 
 const base = path.resolve(process.cwd(), 'dist-electron/electron/context-intelligence');
 const { buildV3Prompt } = await import(pathToFileURL(path.join(base, 'orchestration/engine-bridge.js')).href);
 const { CONTEXT_INTELLIGENCE_V3_ENV_KEY } = await import(pathToFileURL(path.join(base, 'contracts/flag.js')).href);
+const { setStoredAnswerPolicy } = await import(pathToFileURL(path.join(base, 'policies/answer-policy-store.js')).href);
 
 const ENV = CONTEXT_INTELLIGENCE_V3_ENV_KEY;
 const enable = () => { process.env[ENV] = '1'; };
@@ -76,15 +85,25 @@ describe('the prompt reflects the decision', () => {
       'a question that never needed evidence must not be told retrieval failed');
   });
 
-  test('an unsupported-in-mode question is flagged and told not to answer generally', async () => {
+  test('an unsupported-in-mode question is flagged, and answered without source-specific claims', async () => {
+    // Until 2026-08-07 this asserted "told not to answer generally". The flag
+    // and the label are unchanged — the mode genuinely cannot evidence this —
+    // but the INSTRUCTION derived from them is now policy-scoped: refusing the
+    // whole turn is the contract of "Only answer from references", not of the
+    // default. See AnswerPolicyLiveDenials2026_08_07 for the strict half and
+    // for the live denials this scoping fixes.
+    setStoredAnswerPolicy('technical-interview', null, USERDATA);
     const r = await buildV3Prompt({
       surface: 'assist', question: 'How many backend roles are we opening this quarter?',
-      modeTemplateType: 'technical-interview',
+      modeTemplateType: 'technical-interview', modeUniqueId: 'technical-interview',
     });
     assert.equal(r.unsupportedInMode, true);
     assert.equal(r.fallbackUsed, 'STRICT_NOT_FOUND');
-    assert.match(r.user, /does not authorize/);
-    assert.match(r.user, /do not answer it from general knowledge/i);
+    assert.match(r.user, /No source available in the active mode can establish facts specific to this question/);
+    assert.match(r.user, /Answer the question itself helpfully from general knowledge/);
+    // The headcount itself may still never be produced.
+    assert.match(r.user, /Do not invent source-specific facts/);
+    assert.doesNotMatch(r.user, /do not answer it from general knowledge/i);
   });
 
   test('grounded evidence reaches the prompt with provenance', async () => {

@@ -225,6 +225,13 @@ function noEvidenceNotice(d: Readonly<TurnDecision>, attachedSourceCount?: numbe
   // governs the turn and no evidence narrative belongs in it.
   if (!d.claimRequirements.some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED')) return '';
 
+  // The ONE discriminator for every absence branch below. It is false exactly
+  // when the effective policy is STRICT_SOURCE_ONLY — which is what "Only
+  // answer from references" resolves to — or when the mode itself forbids
+  // general technical knowledge. decide() computes it AFTER the user's Answer
+  // policy choice is applied, so reading it here honours that choice per turn.
+  const generalKnowledgeAllowed = d.generalKnowledgeAllowed;
+
   const types = d.retrievalPlan.sourceTypes;
   const has = (t: string) => (types as readonly string[]).includes(t);
 
@@ -243,6 +250,33 @@ function noEvidenceNotice(d: Readonly<TurnDecision>, attachedSourceCount?: numbe
   if (attachedSourceCount === 0 && (profileSourceCount ?? 0) === 0
       && needsAFile && d.retrievalPlan.shouldRetrieve) {
     const profileCouldServe = has('RESUME') || has('PROFILE_FACT') || has('JOB_DESCRIPTION');
+    // ANSWER POLICY (§6), 2026-08-07. "No material attached" describes the
+    // SOURCE state; it is not a licence to refuse. Under "Only answer from
+    // references" (STRICT_SOURCE_ONLY ⇒ generalKnowledgeAllowed false) refusing
+    // is the whole point of the setting. Under "Use references when relevant" —
+    // and under every OPEN_KNOWLEDGE mode default — prohibiting general
+    // knowledge here directly contradicted the grounding line this same prompt
+    // carries ("For parts it does not cover, answer from general knowledge"),
+    // and the model obeyed the louder, more specific prohibition. Measured on
+    // the live path: 72 of 80 fresh-user turns across all 8 modes were denied,
+    // including plain advice questions with no private fact in them.
+    //
+    // The relaxation is one-directional and cannot fabricate: the answer must
+    // still never be attributed to the user, the job, the meeting or a
+    // document, and a question that TURNS ON such a fact still has to say the
+    // fact is unavailable. Only the blanket prohibition goes.
+    if (generalKnowledgeAllowed) {
+      return '# Evidence\nNo reference material is attached to the active mode, so nothing was searched. '
+        + 'Answer the question itself helpfully from general knowledge.'
+        + (profileCouldServe
+          ? ' You may note in one short sentence that adding a résumé and target job description under Profile '
+            + 'Intelligence in Settings would let this be tailored to them.'
+          : ' You may note in one short sentence that attaching the relevant document would let this be tailored.')
+        + ' Do not invent source-specific facts: state nothing as a fact about the user, the job, the meeting or a '
+        + 'document, and do NOT say a résumé, job description or document "does not mention" this, because no such '
+        + 'file exists here. If the question turns on a specific fact about them, say plainly that it is not '
+        + 'established by any available source before answering the general part.';
+    }
     return '# Evidence\nThe active mode has NO reference material attached, so there was nothing to search. '
       + 'Say plainly that no document has been added to this mode yet and that the user can upload one'
       + (profileCouldServe
@@ -264,6 +298,29 @@ function noEvidenceNotice(d: Readonly<TurnDecision>, attachedSourceCount?: numbe
     // The private-claim gate for this branch (2026-08-02, claim-less AMBIGUOUS
     // turns were refused over a source problem that does not exist) now lives
     // at the top of the function, covering every branch.
+    //
+    // ANSWER POLICY (§6), 2026-08-07 — the branch behind the live denials the
+    // user reported verbatim ("switch to a profile-enabled mode, like Looking
+    // for work"). `unsupportedInMode` is a SOURCE-authority fact: the mode does
+    // not authorize the source that could evidence a private claim. That is a
+    // correct reason to withhold source-specific ASSERTIONS. It was being used
+    // as a reason to withhold the whole answer, so "What do you think about
+    // remote work?" — an opinion ask that merely contains "I"/"my" — came back
+    // as a refusal plus a mode-switch instruction.
+    //
+    // Under general knowledge (option 1, and every OPEN_KNOWLEDGE default) the
+    // ordering inverts: answer first, disclose the source gap second. The
+    // mode-switch remedy is suppressed here because it is bad advice once the
+    // question can be answered — it tells the user to go elsewhere for an
+    // answer they are about to receive. It stays byte-identical under "Only
+    // answer from references", where declining IS the selected behavior.
+    if (generalKnowledgeAllowed) {
+      return '# Evidence\nNo source available in the active mode can establish facts specific to this question. '
+        + 'Answer the question itself helpfully from general knowledge. Do not invent source-specific facts: '
+        + 'anything about the user\'s actual background, the job, the meeting or a document is not established by any '
+        + 'available source here. If the question turns on such a fact, say plainly that it is not available before '
+        + 'answering the general part, and never present general knowledge as a fact about them or about a document.';
+    }
     //
     // NAME THE REMEDY (2026-08-02): "cannot be answered from the available
     // material" alone left the model improvising — asked "tell me about
@@ -291,6 +348,27 @@ function noEvidenceNotice(d: Readonly<TurnDecision>, attachedSourceCount?: numbe
       + 'knowledge, do not invent a template or example answer in its place, and do not describe it as missing from a '
       + 'document when no document was consulted.'
       + remedy;
+  }
+  // ANSWER POLICY (§6), 2026-08-07 — the third and least obvious branch, and
+  // the one that matters MOST for this setting: it is unreachable while nothing
+  // is attached (the zero-attachment branch swallows that case), so it governs
+  // exactly the scenario the control is named after — material IS attached, the
+  // question simply is not covered by it. Measured with one attached file and
+  // an empty sweep: 27 of 48 turns across all 8 modes received a report-the-gap
+  // instruction and no licence to answer, identically under option 1, option 2
+  // and the mode default.
+  //
+  // Deep-test D5's anti-substitution rule is preserved verbatim in spirit on
+  // both paths — it is conditional on the question asking for a VALUE from the
+  // material, and it protects against masked retrieval failure, which has
+  // nothing to do with the grounding policy.
+  if (generalKnowledgeAllowed) {
+    return `# Evidence\nNo supporting evidence was retrieved for this question — ${subject}. Say plainly what the `
+      + `material does not cover, naming the ACTUAL source consulted, and then answer the question itself helpfully `
+      + `from general knowledge. Do not say "the document" or "the retrieved sections" unless a document was `
+      + `genuinely the source for this turn. Do not invent source-specific facts: if the question asks for a `
+      + `specific value FROM the material, say the exact value could not be retrieved — never present a general `
+      + `figure, definition or typical value as though it came from the material.`;
   }
   return `# Evidence\nNo supporting evidence was retrieved for this question — ${subject}. Do not invent `
     + `source-specific facts; say plainly what is not covered, naming the ACTUAL source consulted. Do not say `
