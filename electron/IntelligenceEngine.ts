@@ -4226,13 +4226,14 @@ export class IntelligenceEngine extends EventEmitter {
     } | null {
         try {
             const { createModeRetrievalPort, attachmentSourceTypeExtensions } = require('./context-intelligence/retrieval/mode-retrieval-port');
-            const { resolveModePolicy, isModeId } = require('./context-intelligence/policies/mode-policy-registry');
+            const { resolveModePolicy, isModeId, resolveModeIdOrWarn } = require('./context-intelligence/policies/mode-policy-registry');
             const { ModesManager } = require('./services/ModesManager');
             const _mm = ModesManager.getInstance();
             const _mi = _mm.getActiveModeInfo?.() ?? null;
             const _files = _mi?.id ? (_mm.getReferenceFiles?.(_mi.id) ?? []) : [];
             const raw = (_mi as any)?.templateType ?? 'general';
-            const _modeId = isModeId(raw) ? raw : 'general';
+            // Announced, not silent — see resolveModeIdOrWarn (2026-08-09).
+            const _modeId = resolveModeIdOrWarn(_mi ? raw : null, 'engine/transcript-surface', { quietWhenAbsent: true });
             const policy = resolveModePolicy(_modeId);
             // Deep-test D10: custom/general modes gain the source types their own
             // attachments evidence (candidate résumé → CANDIDATE_FILE, JD →

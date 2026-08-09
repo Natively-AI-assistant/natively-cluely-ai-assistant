@@ -273,6 +273,42 @@ export function isModeId(v: unknown): v is ModeId {
 }
 
 /**
+ * Resolve a mode id for a LIVE ANSWER PATH, announcing an unusable value.
+ *
+ * The answer surfaces cannot throw — `resolveModePolicy` fails closed by
+ * design, which is right for the registry and wrong inside a turn the user is
+ * waiting on. So they all carried `isModeId(raw) ? raw : 'general'`.
+ *
+ * That fallback is silent AND points at the most permissive mode. `general` is
+ * the only built-in with `profileSources: []`, so "we do not recognise this
+ * mode" degrades precisely into "no Profile Intelligence, widest general
+ * knowledge" — with nothing logged. Reported 2026-08-09: a mode named
+ * "Technical Interview" ran as `general`, the user's résumé was never in
+ * scope, and the only visible trace was `profile=0` in the [V3] line.
+ *
+ * The fallback target is deliberately unchanged — flipping it to a stricter
+ * mode would turn a data problem into a refusal, which is worse for the user.
+ * What changes is that it is no longer quiet.
+ *
+ * `quietWhenAbsent` distinguishes "no mode selected", an ordinary state on a
+ * fresh app, from "a mode was set and its template is unusable", which is a
+ * defect. Only the second is worth a warning.
+ */
+export function resolveModeIdOrWarn(
+  raw: unknown,
+  surface: string,
+  opts?: { quietWhenAbsent?: boolean },
+): ModeId {
+  if (isModeId(raw)) return raw;
+  const absent = raw === null || raw === undefined || raw === '';
+  if (!(absent && opts?.quietWhenAbsent)) {
+    console.warn(`[mode] unusable templateType ${JSON.stringify(raw)} on surface "${surface}" — `
+      + `falling back to "general", which has NO profile sources. The mode's row needs repair.`);
+  }
+  return 'general';
+}
+
+/**
  * Resolve a mode policy. THROWS on an unknown id.
  *
  * The legacy path fails OPEN: an unvalidated templateType yields empty note

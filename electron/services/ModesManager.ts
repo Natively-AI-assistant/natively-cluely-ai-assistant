@@ -541,7 +541,23 @@ export class ModesManager {
         return !ModesManager.PREMIUM_INTERCEPT_INCOMPATIBLE_TEMPLATES.has(mode.templateType);
     }
 
+    /**
+     * Is this a template the app actually ships?
+     *
+     * Derived from MODE_TEMPLATES so the list cannot drift from the one the UI
+     * offers. Added 2026-08-09: `template_type` was persisted unvalidated, so an
+     * unrecognised value only surfaced at READ time as a silent fallback to
+     * `general` — the one mode with no profile sources. Rejecting on WRITE keeps
+     * the bad value out of the row in the first place.
+     */
+    public static isKnownTemplateType(v: unknown): v is ModeTemplateType {
+        return typeof v === 'string' && MODE_TEMPLATES.some((t) => t.type === v);
+    }
+
     public createMode(params: { name: string; templateType: ModeTemplateType }): Mode {
+        if (!ModesManager.isKnownTemplateType(params.templateType)) {
+            throw new Error(`createMode: unknown templateType ${JSON.stringify(params.templateType)}`);
+        }
         const id = `mode_${crypto.randomUUID()}`;
         const initialContract = defaultSourceContractForNewMode(params.templateType);
         DatabaseManager.getInstance().createMode({
@@ -578,6 +594,13 @@ export class ModesManager {
     }
 
     public updateMode(id: string, updates: { name?: string; templateType?: ModeTemplateType; customContext?: string; sourceContract?: ModeSourceContract }): void {
+        // Reject an unusable template BEFORE it reaches the row (2026-08-09).
+        // Persisting one is not a harmless typo: read-time resolution silently
+        // degrades it to `general`, which has NO profile sources, so the mode
+        // quietly loses résumé access with nothing logged at write time.
+        if (updates.templateType !== undefined && !ModesManager.isKnownTemplateType(updates.templateType)) {
+            throw new Error(`updateMode: unknown templateType ${JSON.stringify(updates.templateType)}`);
+        }
         const { sourceContract, ...rest } = updates;
         // Knowledge Source canonical-gate repair (2026-07-16): the renderer can
         // change a mode's templateType AFTER creation (PI v3 W7). The mode's

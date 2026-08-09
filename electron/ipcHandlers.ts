@@ -1030,7 +1030,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           const callerOwnsPrompt = options?.skipSystemPrompt === true && Boolean(context);
           if (!callerOwnsPrompt && isContextIntelligenceV3Enabled()) {
             const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
-            const { resolveModePolicy, isModeId } = require('./context-intelligence/policies/mode-policy-registry');
+            const { resolveModePolicy, isModeId, resolveModeIdOrWarn } = require('./context-intelligence/policies/mode-policy-registry');
             const { ModesManager } = require('./services/ModesManager');
 
             // The registry and the turn MUST agree on this, or scope containment
@@ -1041,8 +1041,12 @@ export function initializeIpcHandlers(appState: AppState): void {
             const modeInfo = mm.getActiveModeInfo?.() ?? null;
             const rawMode = (modeInfo as any)?.templateType ?? 'general';
             // Unknown ids fail closed in the registry; fall back to the seeded
-            // mode rather than throwing inside a live answer path.
-            const modeId = isModeId(rawMode) ? rawMode : 'general';
+            // mode rather than throwing inside a live answer path — but SAY SO.
+            // A silent fallback lands on `general`, the one mode with no profile
+            // sources, so an unrepaired mode row silently costs the user their
+            // résumé (reported 2026-08-09).
+            const modeId = resolveModeIdOrWarn(
+              modeInfo ? rawMode : null, 'ipc/manual-chat', { quietWhenAbsent: true });
             const policy = resolveModePolicy(modeId);
 
             const files = modeInfo?.id ? (mm.getReferenceFiles?.(modeInfo.id) ?? []) : [];
