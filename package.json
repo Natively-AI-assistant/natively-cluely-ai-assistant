@@ -172,7 +172,7 @@
       ],
       "icon": "assets/natively.icns",
       "identity": null,
-      "hardenedRuntime": false,
+      "hardenedRuntime": true,
       "extendInfo": {
         "NSScreenCaptureUsageDescription": "Natively needs Screen Recording permission to capture system audio for meeting transcription.",
         "NSMicrophoneUsageDescription": "Natively needs microphone access to transcribe your voice during meetings.",
