@@ -7,6 +7,7 @@ import type { AnswerType } from '../llm/AnswerPlanner';
 import type { ActiveModeInfo } from '../llm/modeProfiles';
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
 import { diagLog } from '../llm/documentGroundedPrompt';
+import { planBuiltinAdoption, BUILTIN_MODE_LABELS } from './builtinModes';
 import {
     type ModeSourceContract,
     type ModeSourceOwner,
@@ -82,6 +83,14 @@ export interface Mode {
     customContext: string;
     isActive: boolean;
     createdAt: string;
+    /**
+     * An app DEFAULT (migration v26, 2026-08-09). Its `templateType` is FIXED —
+     * everything else (name, custom context, reference files, Answer policy)
+     * stays editable. Locking the template is what stops a mode being named one
+     * thing and behaving as another; locking more would remove choices users
+     * have already made.
+     */
+    isBuiltin: boolean;
     /**
      * Persisted, explicit, typed source policy (real-custom-mode-repair,
      * 2026-07-11). `null` for a mode that has never been migrated/set — callers
@@ -328,6 +337,7 @@ function rowToMode(row: any): Mode {
         customContext: row.custom_context ?? '',
         isActive: row.is_active === 1,
         createdAt: row.created_at,
+        isBuiltin: row.is_builtin === 1,
         sourceContract: parseModeSourceContract(row.source_contract_json),
     };
 }
@@ -372,9 +382,19 @@ export class ModesManager {
     public static getInstance(): ModesManager {
         if (!ModesManager.instance) {
             ModesManager.instance = new ModesManager();
+            // Establish the app defaults ONCE, here rather than at a startup
+            // hook: the database opens lazily, and every entry point that can
+            // read a mode goes through this accessor. Doing it anywhere else
+            // risks a caller observing modes before they exist. Guarded so a
+            // re-entrant getInstance() during seeding cannot recurse.
+            if (!ModesManager.builtinsEnsured) {
+                ModesManager.builtinsEnsured = true;
+                ModesManager.instance.ensureBuiltinModes();
+            }
         }
         return ModesManager.instance;
     }
+    private static builtinsEnsured = false;
 
     // ── Modes ─────────────────────────────────────────────────────
 
@@ -554,6 +574,49 @@ export class ModesManager {
         return typeof v === 'string' && MODE_TEMPLATES.some((t) => t.type === v);
     }
 
+    /**
+     * Establish the app's DEFAULT modes, once (migration v26, 2026-08-09).
+     *
+     * Adoption reclassifies user data, so the decision lives in
+     * services/builtinModes.ts as a pure, tested function and this method only
+     * APPLIES it. Seeding goes through createMode so a seeded default gets the
+     * same note sections and source contract any mode would.
+     *
+     * Idempotent and non-destructive: nothing is renamed, retyped or deleted.
+     * A row is only ever marked, and only when its name is already exactly the
+     * canonical label for its own template.
+     */
+    public ensureBuiltinModes(): void {
+        try {
+            const db = DatabaseManager.getInstance();
+            const rows = db.getModes().map((r: any) => ({
+                id: r.id,
+                name: r.name,
+                templateType: r.template_type,
+                createdAt: r.created_at,
+                isBuiltin: r.is_builtin === 1,
+            }));
+            const plan = planBuiltinAdoption(rows);
+
+            for (const id of plan.adopt) db.setModeBuiltin(id, true);
+
+            for (const t of plan.seed) {
+                const created = this.createMode({ name: BUILTIN_MODE_LABELS[t], templateType: t });
+                db.setModeBuiltin(created.id, true);
+            }
+
+            if (plan.adopt.length || plan.seed.length) {
+                console.log(`[ModesManager] built-ins established: adopted ${plan.adopt.length}, `
+                    + `seeded ${plan.seed.length}${plan.seed.length ? ` (${plan.seed.join(', ')})` : ''}`);
+                this.invalidateActiveModeCache();
+            }
+        } catch (e) {
+            // Never fatal: a failure here leaves every mode custom, which is the
+            // pre-v26 behaviour, not a broken app.
+            console.error('[ModesManager] ensureBuiltinModes failed:', e);
+        }
+    }
+
     public createMode(params: { name: string; templateType: ModeTemplateType }): Mode {
         if (!ModesManager.isKnownTemplateType(params.templateType)) {
             throw new Error(`createMode: unknown templateType ${JSON.stringify(params.templateType)}`);
@@ -589,6 +652,10 @@ export class ModesManager {
             customContext: '',
             isActive: false,
             createdAt: new Date().toISOString(),
+            // createMode always produces a CUSTOM mode. ensureBuiltinModes marks
+            // a seeded default afterwards via setModeBuiltin, so the built-in
+            // flag has exactly one writer.
+            isBuiltin: false,
             sourceContract: initialContract,
         };
     }
@@ -600,6 +667,19 @@ export class ModesManager {
         // quietly loses résumé access with nothing logged at write time.
         if (updates.templateType !== undefined && !ModesManager.isKnownTemplateType(updates.templateType)) {
             throw new Error(`updateMode: unknown templateType ${JSON.stringify(updates.templateType)}`);
+        }
+        // A built-in's template is FIXED (v26). This is the guard that makes
+        // "Technical Interview" unable to become `general`. A no-op assignment
+        // of the SAME template is allowed so ordinary saves from the editor do
+        // not have to special-case built-ins.
+        if (updates.templateType !== undefined) {
+            const current = this.resolveMode(id);
+            if (current?.isBuiltin && current.templateType !== updates.templateType) {
+                throw new Error(
+                    `updateMode: "${current.name}" is a built-in mode — its template is fixed at `
+                    + `"${current.templateType}" and cannot be changed to "${updates.templateType}". `
+                    + `Duplicate it as a custom mode to change the template.`);
+            }
         }
         const { sourceContract, ...rest } = updates;
         // Knowledge Source canonical-gate repair (2026-07-16): the renderer can

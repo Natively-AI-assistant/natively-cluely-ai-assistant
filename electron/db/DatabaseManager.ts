@@ -1330,6 +1330,31 @@ export class DatabaseManager {
             this.db.pragma('user_version = 25');
         }
 
+        // Version 25 → 26: modes.is_builtin (2026-08-09).
+        //
+        // Until now there were no default modes. Every row was a user-created
+        // `mode_<uuid>` with a freely editable template, including the ones
+        // NAMED "General" / "Team Meet" / "Technical Interview", and updateMode
+        // would persist any template onto any row. A mode named "Technical
+        // Interview" therefore ran as `general` — the one built-in with
+        // `profileSources: []` — and the user's résumé was silently out of
+        // scope.
+        //
+        // This migration only ADDS the column. Deciding which existing rows
+        // become built-ins reclassifies user data, so that rule lives in
+        // services/builtinModes.ts (pure, tested) and is applied once at
+        // startup by ModesManager.ensureBuiltinModes() — where seeding can reuse
+        // createMode and get note sections and a source contract for free.
+        if (version < 26) {
+            console.log('[DatabaseManager] Applying migration v25 → v26: Add modes.is_builtin');
+            const hasColumn = this.db.prepare(`PRAGMA table_info(modes)`).all()
+                .some((col: any) => col.name === 'is_builtin');
+            if (!hasColumn) {
+                this.db.exec(`ALTER TABLE modes ADD COLUMN is_builtin INTEGER NOT NULL DEFAULT 0`);
+            }
+            this.db.pragma('user_version = 26');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -1495,6 +1520,16 @@ export class DatabaseManager {
             `).run(mode.id, mode.name, mode.templateType, mode.customContext, mode.sourceContractJson ?? null);
         } catch (e) {
             console.error('[DatabaseManager] createMode failed:', e);
+        }
+    }
+
+    /** Mark/unmark a mode as an app default (migration v26). */
+    public setModeBuiltin(id: string, isBuiltin: boolean): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare('UPDATE modes SET is_builtin = ? WHERE id = ?').run(isBuiltin ? 1 : 0, id);
+        } catch (e) {
+            console.error('[DatabaseManager] setModeBuiltin failed:', e);
         }
     }
 
