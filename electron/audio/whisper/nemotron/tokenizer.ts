@@ -31,21 +31,20 @@ export interface NemotronTokenizer {
 }
 
 // Fallback decoder: vocab.txt is a flat, newline-delimited id -> piece
-// lookup (line N is the piece for token id N). This is a crude, non-BPE-aware
-// fallback (unlike the real SentencePiece decoder, it doesn't distinguish
-// "continuation of the previous word" from "new word" for pieces missing the
-// `▁` marker) — it space-joins every piece and then strips any `▁` markers,
-// so each vocab entry decodes to its own space-separated token. That's the
-// deliberate, verified behavior here (see tokenizer.test.mjs): this path only
-// ever runs if AutoTokenizer.from_pretrained fails, so it trades subword
-// fidelity for a simple, dependency-free safety net. Unknown ids (outside the
-// vocab range) are skipped rather than throwing, since a slightly malformed
-// decode is more useful than a crashed pipeline.
+// lookup (line N is the piece for token id N). This follows standard
+// SentencePiece detokenization: pieces are joined with NO separator (a piece
+// with no leading `▁` is a glued continuation of the previous piece, e.g.
+// ['▁un', 'happy'] -> "unhappy"), and the `▁` marker itself is converted to a
+// literal space to mark word boundaries. This path only ever runs if
+// AutoTokenizer.from_pretrained fails, serving as a dependency-free safety
+// net. Unknown ids (outside the vocab range) are skipped rather than
+// throwing, since a slightly malformed decode is more useful than a crashed
+// pipeline.
 export function decodeWithVocab(vocabPath: string): (ids: number[]) => string {
   const lines = fs.readFileSync(vocabPath, 'utf8').split('\n').filter(l => l.length > 0);
   return (ids: number[]): string => {
     const pieces = ids.map(id => lines[id]).filter((p): p is string => p !== undefined);
-    return pieces.join(' ').replace(/▁/g, '').replace(/\s+/g, ' ').trim();
+    return pieces.join('').replace(/▁/g, ' ').trim();
   };
 }
 

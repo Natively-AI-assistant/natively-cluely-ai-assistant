@@ -18,9 +18,16 @@ import { decodeWithVocab } from '../tokenizer.ts';
 
 test('decodeWithVocab joins pieces and turns the ▁ marker into a space', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nemotron-vocab-'));
-  fs.writeFileSync(path.join(tmp, 'vocab.txt'), ['▁hello', 'world', '▁there'].join('\n'));
+  fs.writeFileSync(path.join(tmp, 'vocab.txt'), ['▁hello', '▁world', '▁there'].join('\n'));
   const decode = decodeWithVocab(path.join(tmp, 'vocab.txt'));
   assert.equal(decode([0, 1, 2]), 'hello world there');
+});
+
+test('decodeWithVocab glues a continuation piece (no leading ▁) onto the previous word', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nemotron-vocab-'));
+  fs.writeFileSync(path.join(tmp, 'vocab.txt'), ['▁un', 'happy'].join('\n'));
+  const decode = decodeWithVocab(path.join(tmp, 'vocab.txt'));
+  assert.equal(decode([0, 1]), 'unhappy');
 });
 
 test('decodeWithVocab skips unknown ids rather than throwing', () => {
