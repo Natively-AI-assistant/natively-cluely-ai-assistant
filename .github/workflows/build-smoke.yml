@@ -155,25 +155,35 @@ jobs:
       - name: Verify packaged local fallback assets (source mode)
         run: npm run verify:packaged-local-assets
 
-      # macOS-only FOR NOW — not by design. Measured on a Windows 11 host at the
-      # time this leg was added: `npm test` fails 139 of 2832, `test:intelligence`
-      # fails 3 of 957. Those are pre-existing Windows incompatibilities in the
-      # suites themselves (POSIX path assumptions, tsc-isolated-tree helpers,
-      # symlink fixtures), not regressions from the change that added this leg.
+      # Windows runs these ADVISORY (2026-08-10). Previously both steps were
+      # skipped outright on Windows, which meant the windows-latest leg reported
+      # green while running ZERO tests — its signal covered install and build
+      # only, and the matrix looked stronger than it was.
       #
-      # They are gated rather than shipped red on purpose: a check that fails on
-      # every PR regardless of its content trains reviewers to ignore the whole
-      # workflow, which would also destroy the macOS signal that already works.
+      # The original gate was deliberate, and its reasoning stands: measured on a
+      # Windows 11 host, `npm test` failed 139 of 2832 and `test:intelligence` 3
+      # of 957, all pre-existing Windows incompatibilities in the suites (POSIX
+      # path assumptions, tsc-isolated-tree helpers, symlink fixtures). Shipping
+      # that red on every PR trains reviewers to ignore the workflow and would
+      # destroy the macOS signal that already works.
       #
-      # TODO: fix the Windows failures in these suites and drop both `if:` gates.
-      # Track progress by running `npm test` on a Windows host — every suite that
-      # goes green shrinks the gap this comment describes.
+      # `continue-on-error` keeps both properties: the suites actually RUN on
+      # Windows so the gap is visible and measurable per-PR, while only macOS can
+      # fail the check. A Windows regression now shows up as a warning instead of
+      # being invisible.
+      #
+      # NOTE: the 139/2832 figure predates the runner fix (Electron ABI instead
+      # of plain node, #442) and is therefore stale — the first advisory run
+      # re-measures it.
+      #
+      # TODO: fix the Windows failures, then drop `continue-on-error` so the leg
+      # is enforcing on both platforms.
       - name: Run Electron unit tests
-        if: runner.os == 'macOS'
+        continue-on-error: ${{ runner.os == 'Windows' }}
         run: npm test
 
       - name: Run intelligence unit tests
-        if: runner.os == 'macOS'
+        continue-on-error: ${{ runner.os == 'Windows' }}
         run: npm run test:intelligence
 
       # Covers src/lib/__tests__ and src/lib/onboarding/__tests__ (renderer-side
