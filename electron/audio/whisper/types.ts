@@ -94,6 +94,10 @@ export interface WorkerInitMessage {
   // sibling `*.onnx_data` weight files of external-data checkpoints get fetched.
   // See WhisperModelInfo.externalDataFormat for the full rationale.
   useExternalDataFormat?: boolean | Record<string, boolean>;
+  // Routes the worker between the transformers.js pipeline() path (undefined /
+  // 'encoder-decoder' / 'single') and the raw-ONNX Nemotron engine
+  // ('nemotron-rnnt'). See WhisperModelInfo.sessionLayout for the source of truth.
+  sessionLayout?: 'encoder-decoder' | 'single' | 'nemotron-rnnt';
 }
 export interface WorkerTranscribeMessage {
   type: 'transcribe';

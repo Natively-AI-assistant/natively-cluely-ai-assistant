@@ -38,6 +38,10 @@ const LANG_MAP: Record<string, string | null> = {
 
 let pipe: any = null;
 let loadedModelId = '';
+// Set only when sessionLayout === 'nemotron-rnnt' — routes transcribe messages
+// to the raw-ONNX engine instead of the transformers.js pipe() above. The two
+// are mutually exclusive per worker instance (one model loaded at a time).
+let nemotronEngine: import('./nemotron/nemotronEngine').NemotronEngine | null = null;
 
 // Tokenized prompt cache — populated by `setPrompt` messages, reused by
 // every subsequent transcribe. Cleared on model swap.
@@ -132,6 +136,18 @@ async function loadTransformers(): Promise<{ pipeline: any; env: any }> {
 
 parentPort.on('message', async (msg: any) => {
   if (msg.type === 'init') {
+    if (msg.sessionLayout === 'nemotron-rnnt') {
+      try {
+        const { NemotronEngine } = require('./nemotron/nemotronEngine');
+        const path = require('path');
+        const modelDir = path.join(msg.cacheDir, ...String(msg.modelId).split('/'));
+        nemotronEngine = await NemotronEngine.create(modelDir, msg.executionProviders ?? ['cpu']);
+        parentPort!.postMessage({ type: 'ready' });
+      } catch (e: any) {
+        parentPort!.postMessage({ type: 'error', message: e?.message ?? String(e) });
+      }
+      return; // do not fall through to the transformers.js pipeline() path below
+    }
     // Validate required fields BEFORE entering the try/catch so the error
     // surfaces as a structured `error` postMessage rather than an unhandled
     // worker throw (which would leave the host's workerReady stuck false).
@@ -260,6 +276,20 @@ parentPort.on('message', async (msg: any) => {
   } else if (msg.type === 'setPrompt') {
     await updatePromptCache(msg.prompt);
   } else if (msg.type === 'transcribe') {
+    if (nemotronEngine) {
+      try {
+        const results = await nemotronEngine.pushAudio(msg.audio);
+        const text = results.map(r => r.text).join(' ').trim();
+        parentPort!.postMessage(
+          msg.streaming
+            ? { type: 'partial', taskId: msg.taskId, text }
+            : { type: 'result', taskId: msg.taskId, text },
+        );
+      } catch (e: any) {
+        parentPort!.postMessage({ type: 'error', taskId: msg.taskId, message: e?.message ?? String(e) });
+      }
+      return;
+    }
     if (!pipe) {
       parentPort!.postMessage({ type: 'error', message: 'Model not loaded' });
       return;

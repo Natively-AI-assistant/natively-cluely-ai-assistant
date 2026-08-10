@@ -5,7 +5,7 @@ import type { WhisperModelId, WhisperModelInfo } from './types';
 // env is configured lazily via configureTransformersCache()
 // We import the type only here; the actual require() happens at runtime.
 
-const MODEL_CATALOG: WhisperModelInfo[] = [
+export const MODEL_CATALOG: WhisperModelInfo[] = [
   // ── Moonshine — streaming-native ASR. ~100× lower latency than Whisper Large v3.
   //     Encoder caching + decoder state reuse. English-only. Best choice for live use.
   { id: 'onnx-community/moonshine-tiny-ONNX', name: 'Moonshine Tiny',  sizeMb: 26,   speed: 'very-fast', accuracy: 'good',      multilingual: false, status: 'missing', streaming: true },
