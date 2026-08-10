@@ -78,7 +78,12 @@ describe('Fix #1: reconfigureSttProvider is serialized (source contract)', () =>
   it('the real teardown/rebuild lives in _doReconfigureSttProvider', () => {
     const doStart = mainSrc.indexOf('private async _doReconfigureSttProvider(');
     assert.ok(doStart >= 0, 'BUG: _doReconfigureSttProvider (the serialized worker) is missing.');
-    const doBody = mainSrc.slice(doStart, doStart + 2000);
+    // Bounded by the next section's marker, not a fixed char count — a fixed
+    // +2000 previously clipped the function body before reaching the actual
+    // call once the RC-01 fix comment (audio-capture drain ordering) made the
+    // function longer, producing a false positive on an intact rebuild.
+    const doEnd = mainSrc.indexOf('PR #173: Audio Recovery Handler', doStart);
+    const doBody = mainSrc.slice(doStart, doEnd > doStart ? doEnd : doStart + 3000);
     assert.match(
       doBody,
       /setupSystemAudioPipeline/,
@@ -180,12 +185,28 @@ describe('Fix #2: renderer no longer double-fires; server compensates the UI ref
     assert.ok(start >= 0, 'set-natively-api-key handler must exist');
     const end = ipcSrc.indexOf("safeHandle('get-natively-pricing'", start);
     const handlerBody = ipcSrc.slice(start, end > start ? end : start + 4000);
-    assert.match(
-      handlerBody,
-      /send\(\s*['"]credentials-changed['"]\s*\)/,
-      "BUG: set-natively-api-key no longer broadcasts 'credentials-changed'. The Settings STT " +
-        'dropdown will show a stale provider after the Natively key is saved or cleared.',
-    );
+    // Accept either the direct call or the shared broadcastCredentialsChanged()
+    // helper it was later refactored into — assert the helper itself really
+    // sends the event, so this test still catches the helper being hollowed out.
+    const usesHelper = /broadcastCredentialsChanged\s*\(\s*\)/.test(handlerBody);
+    if (usesHelper) {
+      const helperStart = ipcSrc.indexOf('const broadcastCredentialsChanged');
+      assert.ok(helperStart >= 0, 'BUG: broadcastCredentialsChanged helper is called but no longer defined.');
+      const helperBody = ipcSrc.slice(helperStart, helperStart + 400);
+      assert.match(
+        helperBody,
+        /send\(\s*['"]credentials-changed['"]\s*\)/,
+        "BUG: broadcastCredentialsChanged no longer sends 'credentials-changed'. The Settings STT " +
+          'dropdown will show a stale provider after the Natively key is saved or cleared.',
+      );
+    } else {
+      assert.match(
+        handlerBody,
+        /send\(\s*['"]credentials-changed['"]\s*\)/,
+        "BUG: set-natively-api-key no longer broadcasts 'credentials-changed'. The Settings STT " +
+          'dropdown will show a stale provider after the Natively key is saved or cleared.',
+      );
+    }
   });
 });
 
