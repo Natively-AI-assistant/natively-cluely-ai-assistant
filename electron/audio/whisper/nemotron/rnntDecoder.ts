@@ -17,6 +17,12 @@ export const MAX_SYMBOLS_PER_STEP = 10;
 export interface DecoderState {
   h: number[] | Float32Array;
   c: number[] | Float32Array;
+  // The RNNT predictor's last emitted non-blank token, carried across the
+  // WHOLE utterance — across both the inner (per-frame symbol) loop and the
+  // outer (per-encoder-frame, per-chunk) loop Task 7's engine adds. This is
+  // NOT reset per frame; it only resets to `blankId` at utterance/segment
+  // boundaries (blank is RNNT's implicit start-of-sequence token).
+  lastTokenId: number;
 }
 
 export type EncoderFrame = unknown; // one time-step slice of the encoder's `outputs` tensor
@@ -36,7 +42,7 @@ export async function greedyDecodeFrame(
 ): Promise<{ tokenIds: number[]; nextState: DecoderState }> {
   const tokenIds: number[] = [];
   let state = prevState;
-  let lastToken = blankId; // RNNT predictor's initial "previous token" is blank
+  let lastToken = prevState.lastTokenId; // carried across frame/chunk boundaries
   for (let i = 0; i < maxSymbolsPerStep; i++) {
     const { tokenId, nextState } = await runDecoderJoint(encoderFrame, lastToken, state);
     if (tokenId === blankId) break;
@@ -44,5 +50,5 @@ export async function greedyDecodeFrame(
     lastToken = tokenId;
     state = nextState;
   }
-  return { tokenIds, nextState: state };
+  return { tokenIds, nextState: { ...state, lastTokenId: lastToken } };
 }
