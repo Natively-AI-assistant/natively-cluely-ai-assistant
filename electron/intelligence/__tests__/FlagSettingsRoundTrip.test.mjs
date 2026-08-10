@@ -51,7 +51,6 @@ import {
 const EXPECTED_KEYS = [
   'trace',
   'durableMemoryWindow',
-  'intelligenceOsEnabled',
   'profileTreeV2',
   'contextRouterV2',
   'liveTranscriptBrain',
@@ -62,7 +61,6 @@ const EXPECTED_KEYS = [
   'meetingModeAutoDetect',
   'followUpDraftV2',
   'speakerLabelsV1',
-  'meetingNotesStructuredOutput',
   'meetingSummaryLlmPolish',
   'speakerDiarizationV1',
   'globalSearchV2',
@@ -109,22 +107,14 @@ const EXPECTED_KEYS = [
   'contextOsMultiFamilyEvidenceEnabled',
   // Answer-relevance semantic guard (campaign2 longsession, 2026-07-19). Was
   // already missing from this list before Slice 1/2 of the context-rebuild
-  // (found 2026-07-25 while adding turnIdentityV2 below — this file has its
+  // (found 2026-07-25 — this file has its
   // own independent hardcoded key list from IntelligenceFlags.test.mjs's,
   // so the earlier fix there did not cover this one).
   'answerRelevanceGuardLive',
-  // TurnIdentity (Phase 6 Slice 1, context-rebuild, 2026-07-25) — dev/test-only.
-  'turnIdentityV2',
-  // Phase 6 Slice 3 (context-rebuild, 2026-07-25) — dev/test-only.
-  'canonicalTurnManualChat',
   // Phase 6 Slice 5 (context-rebuild, 2026-07-25) — dev/test-only.
   'atomicJdProfilePackGeneration',
-  // Phase 6 Slice 7 (context-rebuild, 2026-07-25) — dev/test-only.
-  'assistantClaimsEnforcement',
   // Phase 6 Slice 4 item 2 follow-up (context-rebuild, 2026-07-26) — dev/test-only.
   'pronounRegexShadowObservation',
-  // Phase 6 Slice 7 follow-up (context-rebuild, 2026-07-26) — dev/test-only.
-  'modePolicyShadowObservation',
   // EvidencePack impossible-evidence-state gate, Stage 0/1 (answer-pipeline-rebuild,
   // 2026-07-28) — dev/test-only.
   'contextOsImpossibleStateGateShadow',
@@ -171,7 +161,6 @@ const DEFAULT_ON_KEYS = new Set([
 const ALL_ENV_VARS = [
   'NATIVELY_INTELLIGENCE_TRACE',
   'NATIVELY_DURABLE_MEMORY_WINDOW',
-  'NATIVELY_INTELLIGENCE_OS',
   'NATIVELY_PROFILE_TREE_V2',
   'NATIVELY_CONTEXT_ROUTER_V2',
   'NATIVELY_LIVE_TRANSCRIPT_BRAIN',
@@ -182,7 +171,6 @@ const ALL_ENV_VARS = [
   'NATIVELY_MEETING_MODE_AUTODETECT',
   'NATIVELY_FOLLOWUP_DRAFT_V2',
   'NATIVELY_SPEAKER_LABELS_V1',
-  'NATIVELY_MEETING_NOTES_STRUCTURED_OUTPUT',
   'NATIVELY_MEETING_SUMMARY_LLM_POLISH',
   'NATIVELY_SPEAKER_DIARIZATION_V1',
   'NATIVELY_GLOBAL_SEARCH_V2',
@@ -222,13 +210,9 @@ const ALL_ENV_VARS = [
   'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION',
   'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE',
   'NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE',
-  'NATIVELY_TURN_IDENTITY_V2',
   'NATIVELY_PROMPT_COMPOSER_V2',
-  'NATIVELY_CANONICAL_TURN_MANUAL_CHAT',
   'NATIVELY_ATOMIC_JD_PROFILE_PACK',
-  'NATIVELY_ASSISTANT_CLAIMS_ENFORCEMENT',
   'NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION',
-  'NATIVELY_MODE_POLICY_SHADOW_OBSERVATION',
 ];
 
 function clearAllEnv() {

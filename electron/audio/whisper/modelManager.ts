@@ -11,6 +11,25 @@ const MODEL_CATALOG: WhisperModelInfo[] = [
   { id: 'onnx-community/moonshine-tiny-ONNX', name: 'Moonshine Tiny',  sizeMb: 26,   speed: 'very-fast', accuracy: 'good',      multilingual: false, status: 'missing', streaming: true },
   { id: 'onnx-community/moonshine-base-ONNX', name: 'Moonshine Base',  sizeMb: 60,   speed: 'very-fast', accuracy: 'very-high', multilingual: false, status: 'missing', streaming: true },
 
+  // ── Parakeet — NVIDIA's Conformer CTC encoder, English-only. Top of the Open
+  //     ASR leaderboard for its size; CC-BY-4.0, so redistribution is fine.
+  //
+  //     The ONLY single-session model in this catalog. CTC collapses frame-level
+  //     logits and has no autoregressive decoder, so the repo ships one
+  //     `onnx/model.onnx` rather than the encoder + decoder pair every other
+  //     entry here uses — hence sessionLayout: 'single'. Without that the cache
+  //     check hunts for `encoder_model.onnx`, never finds it, and the model
+  //     re-downloads on every launch while reporting itself missing.
+  //
+  //     externalDataFormat is a bare `true`, not a per-file map: EVERY dtype
+  //     variant in this repo (fp32/fp16/q8/int8/q4/uint8/bnb4) carries a
+  //     `*.onnx_data` companion, so keying it per-filename would silently miss
+  //     the companion the moment the active dtype changed.
+  //
+  //     sizeMb is the q8 download (1.3MB graph + 611MB weights). fp32 is 2.4GB;
+  //     `model: 'q8'` in WHISPER_SAFE_DTYPE is what keeps us off that path.
+  { id: 'onnx-community/parakeet-ctc-0.6b-ONNX', name: 'Parakeet CTC 0.6B', sizeMb: 583, speed: 'fast', accuracy: 'very-high', multilingual: false, status: 'missing', sessionLayout: 'single', externalDataFormat: true },
+
   // ── Distil-Whisper — same architecture as Whisper, distilled to 1/2 layers,
   //     ~6× faster CPU/GPU at near-equivalent WER. English-only.
   { id: 'distil-whisper/distil-small.en',    name: 'Distil Small EN',  sizeMb: 164,  speed: 'very-fast', accuracy: 'high',      multilingual: false, status: 'missing', distilled: true },
@@ -173,7 +192,23 @@ function externalDataFilesFor(
 function expectedOnnxFiles(
   dtype: string | Record<string, string>,
   externalDataFormat?: boolean | Record<string, boolean>,
+  sessionLayout?: 'encoder-decoder' | 'single',
 ) {
+  // A one-session CTC model (Parakeet): a single `model.onnx`, no decoder at
+  // all. Returned through the same shape as the encoder-decoder case so the
+  // caller stays layout-agnostic — `decoderOptions: [[]]` reads as "one valid
+  // decoder layout, requiring no files", which `.some(opt => opt.every(...))`
+  // satisfies vacuously. Encoding it as [] instead would mean "NO valid layout"
+  // and the model could never be cached.
+  if (sessionLayout === 'single') {
+    const dt = dtypeForFile('model', dtype);
+    return {
+      encoder: onnxFilename('model', dt),
+      encoderData: externalDataFilesFor('model', dt, externalDataFormat),
+      decoderOptions: [[]] as string[][],
+    };
+  }
+
   const encDt = dtypeForFile('encoder_model', dtype);
   const mergedDt = dtypeForFile('decoder_model_merged', dtype);
   const decDt = dtypeForFile('decoder_model', dtype);
@@ -240,7 +275,8 @@ export function isModelCached(modelId: WhisperModelId, dtype?: string | Record<s
   };
 
   const externalDataFormat = getModelExternalDataFormat(modelId);
-  const { encoder, encoderData, decoderOptions } = expectedOnnxFiles(dtype, externalDataFormat);
+  const sessionLayout = MODEL_CATALOG.find(m => m.id === modelId)?.sessionLayout;
+  const { encoder, encoderData, decoderOptions } = expectedOnnxFiles(dtype, externalDataFormat, sessionLayout);
   if (!present(encoder)) return false;
   // External-weight companion(s) of the encoder must exist too, else ORT aborts.
   if (!encoderData.every(present)) return false;
@@ -321,5 +357,56 @@ export function deleteModel(modelId: WhisperModelId): void {
   if (fs.existsSync(modelDir)) {
     fs.rmSync(modelDir, { recursive: true, force: true });
     console.log(`[modelManager] Deleted model: ${modelId}`);
+  }
+}
+
+/**
+ * Errors that mean "the bytes on disk are not a usable model", as opposed to
+ * "this machine cannot run models at all".
+ *
+ * ORT reports a truncated .onnx as a protobuf failure, because it walks the
+ * file and hits EOF mid-message. That is indistinguishable at the API level
+ * from any other malformed file, and the distinction does not matter here —
+ * every case is fixed by fetching the file again.
+ *
+ * Deliberately does NOT match the macOS 12 / libonnxruntime symbol errors:
+ * those are environment failures, and wiping a perfectly good download because
+ * the host cannot load ANY model would turn one bad message into a bad message
+ * plus a lost 350 MB.
+ */
+export function isCorruptModelError(message: string): boolean {
+  const m = (message || '').toLowerCase();
+  if (m.includes('symbol not found') || m.includes('libonnxruntime') || m.includes('to_chars')) return false;
+  return m.includes('protobuf parsing failed')
+    || m.includes('failed to load model')  // ORT's generic load-time wrapper
+    || m.includes('invalid model')
+    || m.includes('no such file or directory');
+}
+
+/**
+ * Purge a model whose files failed to load, so the next install re-downloads
+ * instead of re-reading the same bad bytes.
+ *
+ * THE BUG THIS EXISTS FOR: isModelCached only asserts `size > 0` per file. That
+ * catches the 0-byte stub it was written for, but a TRUNCATED download — e.g.
+ * 121 MB of a 353 MB encoder — passes every check. LocalModelDownloadService
+ * then verifies via isModelCached, sees "cached", and marks the install
+ * complete. The UI reports the model installed, every load fails with a
+ * protobuf error, and because the cache check still returns true nothing ever
+ * re-fetches it. The corrupt state is self-perpetuating and survives restarts,
+ * which is why it presents as "every model fails to download".
+ *
+ * Returns true when something was actually removed.
+ */
+export function purgeCorruptModel(modelId: WhisperModelId, reason: string): boolean {
+  try {
+    const modelDir = path.join(getModelsDir(), modelIdToCacheDir(modelId));
+    if (!fs.existsSync(modelDir)) return false;
+    fs.rmSync(modelDir, { recursive: true, force: true });
+    console.warn(`[modelManager] Purged corrupt model ${modelId} — ${reason}`);
+    return true;
+  } catch (e) {
+    console.error(`[modelManager] Failed to purge corrupt model ${modelId}:`, e);
+    return false;
   }
 }

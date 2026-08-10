@@ -251,9 +251,16 @@ describe('personaBase composition', () => {
 });
 
 describe('unsupported-in-mode notice names the remedy (2026-08-02)', () => {
-  test('a personal question in a profile-less mode points at profile-enabled modes', () => {
+  test('a personal question in a profile-less mode answers generally, without a coaching template', () => {
     // general does not authorize RESUME/PROFILE_FACT — the mode-less chat case
     // that produced a coaching template with bracket placeholders.
+    //
+    // 2026-08-07: the remedy ("switch to a profile-enabled mode") and the
+    // blanket "do not answer from general knowledge" became STRICT-only. They
+    // were the text EVERY non-strict turn received, which is what denied fresh
+    // users an answer to plain advice questions. What survives at the default
+    // is the part that was actually load-bearing: no invented facts about the
+    // user, and no template in place of an answer.
     const d = decide({
       requestId: 'r-intro', requestSequence: 1, surface: 'manual-chat', modeId: 'general',
       scope: { userId: 'u1' }, sessionId: 's-intro',
@@ -264,8 +271,32 @@ describe('unsupported-in-mode notice names the remedy (2026-08-02)', () => {
       decision: d, policy: MODE_POLICIES.general, evidence: [],
       attachedSourceCount: 0, profileSourceCount: 0,
     });
-    assert.ok(p.user.includes('Profile Intelligence'), p.user);
-    assert.ok(p.user.includes('do not invent a template or example answer'), p.user);
+    assert.ok(!p.user.includes('cannot be answered from the available material'), p.user);
+    assert.ok(!p.user.includes('do not answer it from general knowledge'), p.user);
+    assert.ok(!p.user.includes('switching to a profile-enabled mode'),
+      'a mode-switch remedy is bad advice for a turn that is about to be answered');
+    assert.match(p.user, /Answer the question itself helpfully from general knowledge/);
+    assert.match(p.user, /Do not invent source-specific facts/);
+    assert.match(p.user, /never present general knowledge as a fact about them/);
+  });
+
+  test('the same turn under "Only answer from references" keeps the remedy and the refusal', () => {
+    // The strict half, pinned so the branch cannot be deleted by a later sweep.
+    // Choosing option 2 makes the mode document-centric, so this turn plans
+    // retrieval and lands on the zero-attachment branch rather than the
+    // unsupported-in-mode one — both refuse, which is the point of the setting.
+    const d = decide({
+      requestId: 'r-intro-2', requestSequence: 1, surface: 'manual-chat', modeId: 'general',
+      scope: { userId: 'u1' }, sessionId: 's-intro-2',
+      manualQuestion: 'Can you tell me about yourself?',
+      userAnswerPolicy: 'only_answer_from_references',
+    });
+    const p = composePrompt({
+      decision: d, policy: MODE_POLICIES.general, evidence: [],
+      attachedSourceCount: 0, profileSourceCount: 0,
+    });
+    assert.ok(p.user.includes('do not answer from general knowledge as though it were sourced'), p.user);
+    assert.ok(p.user.includes('no document has been added to this mode yet'), p.user);
   });
 
   test('remedy derives from claim sources, never question wording — meeting claims name the transcript', () => {

@@ -20,7 +20,12 @@ export type WhisperModelId =
   // reuse → ~100× lower latency than Whisper Large v3 at comparable WER.
   // English-only. MIT licensed.
   | 'onnx-community/moonshine-tiny-ONNX'
-  | 'onnx-community/moonshine-base-ONNX';
+  | 'onnx-community/moonshine-base-ONNX'
+  // Parakeet — NVIDIA Conformer CTC, English-only, CC-BY-4.0. Single-session:
+  // CTC has no autoregressive decoder, so the repo ships one `onnx/model.onnx`
+  // instead of the encoder/decoder pair every other id here uses. See
+  // `sessionLayout` on WhisperModelInfo.
+  | 'onnx-community/parakeet-ctc-0.6b-ONNX';
 
 export type WhisperModelStatus = 'available' | 'missing' | 'downloading' | 'error';
 
@@ -50,6 +55,20 @@ export interface WhisperModelInfo {
   // upstream `transformers.js_config` convention: `true` for all chunked files,
   // or a map keyed by ONNX basename (e.g. `{ 'encoder_model.onnx': true }`).
   externalDataFormat?: boolean | Record<string, boolean>;
+  /**
+   * ONNX session layout.
+   *
+   * Whisper, Distil-Whisper and Moonshine are all encoder-decoder: an
+   * `encoder_model.onnx` plus either a merged decoder or a
+   * (decoder + decoder_with_past) pair. That is the default and stays implicit.
+   *
+   * `'single'` is a one-session CTC model — Parakeet ships a single
+   * `onnx/model.onnx`, because CTC decodes by collapsing frame-level logits and
+   * has no autoregressive decoder to load. Without this the cache check looks
+   * for an encoder/decoder pair that will never exist and reports the model
+   * missing forever, so it re-downloads on every launch and never runs.
+   */
+  sessionLayout?: 'encoder-decoder' | 'single';
 }
 
 export interface WorkerInitMessage {

@@ -5,6 +5,7 @@ import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
 import mainui from "../UI_comp/mainui.png";
 import UpcomingCalendarCard from './ui/UpcomingCalendarCard';
+import { useToggleInit } from './settings/useToggleInit';
 import MeetingDetails from './MeetingDetails';
 import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
@@ -271,6 +272,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             window.removeEventListener('keydown', handleKeyDown);
         };
     }, [isShortcutPressed]);
+
+    // Declared above the `!window.electronAPI` early return below — a hook after
+    // that guard would break the rules of hooks on the error path.
+    const detectableToggleInit = useToggleInit();
 
     // Upcoming meetings (in-progress up to 5 min ago, or any future event in the API's 7-day
     // window), sorted soonest-first. Cap at 3 for the right-side calendar card peek stack.
@@ -791,12 +796,17 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                 <span className="text-xs font-medium flex-1 transition-colors text-text-secondary">
                                                     {isDetectable ? t("Detectable") : t("Undetectable")}
                                                 </span>
-                                                <div
-                                                    className={`w-8 h-4 rounded-full p-0.5 flex items-center shrink-0 transition-colors cursor-pointer ${!isDetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch'}`}
-                                                    onClick={toggleDetectable}
+                                                <button
+                                                    type="button"
+                                                    role="switch"
+                                                    data-on={String(!isDetectable)}
+                                                    aria-checked={!isDetectable}
+                                                    aria-label={t("Undetectable")}
+                                                    onClick={() => { detectableToggleInit.arm(); toggleDetectable(); }}
+                                                    className={`t-toggle t-toggle-xs w-8 h-4 rounded-full p-0.5 flex items-center shrink-0 cursor-pointer ${!isDetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch'} ${detectableToggleInit.className}`}
                                                 >
-                                                    <div className={`w-3 h-3 rounded-full bg-white shadow-sm transition-transform ${!isDetectable ? 'translate-x-4' : 'translate-x-0'}`} />
-                                                </div>
+                                                    <span className="t-toggle-thumb" aria-hidden="true" />
+                                                </button>
                                              </div>
 
                                              {/* What's New Pill */}

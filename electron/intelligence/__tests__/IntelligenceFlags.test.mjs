@@ -6,7 +6,6 @@ import {
   isIntelligenceFlagEnabled,
   isIntelligenceTraceEnabled,
   isDurableMemoryWindowEnabled,
-  isIntelligenceOsEnabled,
   intelligenceFlagSnapshot,
   __resetIntelligenceFlagsCache,
 } from '../../../dist-electron/electron/intelligence/intelligenceFlags.js';
@@ -37,13 +36,9 @@ const ENV_KEYS = [
   // FLAGS registry but never added here, so this test's own length-parity assertion
   // was already red at HEAD (53 !== 52, confirmed via git stash) before this change.
   'NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE',
-  'NATIVELY_TURN_IDENTITY_V2',
   'NATIVELY_PROMPT_COMPOSER_V2',
-  'NATIVELY_CANONICAL_TURN_MANUAL_CHAT',
   'NATIVELY_ATOMIC_JD_PROFILE_PACK',
-  'NATIVELY_ASSISTANT_CLAIMS_ENFORCEMENT',
   'NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION',
-  'NATIVELY_MODE_POLICY_SHADOW_OBSERVATION',
   // EvidencePack impossible-evidence-state gate, Stage 0/1 (answer-pipeline-rebuild,
   // 2026-07-28) — dev/test-only, same pattern.
   'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_SHADOW',
@@ -55,10 +50,10 @@ const ENV_KEYS = [
 // The full flag set — Meeting Notes V3 product flags intentionally ship default ON;
 // the rest remain additive/opt-in default OFF.
 const ALL_FLAG_KEYS = [
-  'trace', 'durableMemoryWindow', 'intelligenceOsEnabled', 'profileTreeV2', 'contextRouterV2',
+  'trace', 'durableMemoryWindow', 'profileTreeV2', 'contextRouterV2',
   'liveTranscriptBrain', 'promptAssemblerV2', 'answerDiversityGuard', 'meetingMemoryV2',
   'meetingSummaryV3', 'meetingModeAutoDetect', 'followUpDraftV2', 'speakerLabelsV1',
-  'meetingNotesStructuredOutput', 'meetingSummaryLlmPolish', 'speakerDiarizationV1',
+  'meetingSummaryLlmPolish', 'speakerDiarizationV1',
   'globalSearchV2', 'inMeetingSearchV2', 'conversationMemoryV2', 'lectureIntelligenceV2', 'diagramIntelligence',
   'hindsightMemory', 'hindsightLiveRecall', 'hindsightPostMeetingRetain',
   'ragConfidenceGate', 'ragLocalRerank', 'ragRrfFusion', 'ragSpeculativeRerank',
@@ -79,20 +74,11 @@ const ALL_FLAG_KEYS = [
   'contextOsMultiFamilyEvidenceEnabled',
   // Pre-existing gap closed 2026-07-25 (see the matching ENV_KEYS comment above).
   'answerRelevanceGuardLive',
-  // Phase 6 Slice 1 (context-rebuild, 2026-07-25) — dev/test-only like the
-  // ragConfidenceGate/okfKnowledgePacks precedent above; resolves to
+  // Phase 6 Slice 5 (context-rebuild, 2026-07-25) — dev/test-only; resolves to
   // isInternalDevTestContext() = FALSE under this bare node harness.
-  'turnIdentityV2',
-  // Phase 6 Slice 3 (context-rebuild, 2026-07-25) — dev/test-only, same pattern.
-  'canonicalTurnManualChat',
-  // Phase 6 Slice 5 (context-rebuild, 2026-07-25) — dev/test-only, same pattern.
   'atomicJdProfilePackGeneration',
-  // Phase 6 Slice 7 (context-rebuild, 2026-07-25) — dev/test-only, same pattern.
-  'assistantClaimsEnforcement',
   // Phase 6 Slice 4 item 2 follow-up (context-rebuild, 2026-07-26) — dev/test-only, same pattern.
   'pronounRegexShadowObservation',
-  // Phase 6 Slice 7 follow-up (context-rebuild, 2026-07-26) — dev/test-only, same pattern.
-  'modePolicyShadowObservation',
   // EvidencePack impossible-evidence-state gate, Stage 0/1 (answer-pipeline-rebuild,
   // 2026-07-28) — dev/test-only, same pattern.
   'contextOsImpossibleStateGateShadow',
@@ -147,7 +133,6 @@ describe('intelligenceFlags', () => {
   test('every flag resolves to its documented default', () => {
     assert.equal(isIntelligenceTraceEnabled(), false);
     assert.equal(isDurableMemoryWindowEnabled(), false);
-    assert.equal(isIntelligenceOsEnabled(), false);
     for (const key of ALL_FLAG_KEYS) {
       assert.equal(isIntelligenceFlagEnabled(key), expectedDefault(key), `flag ${key} default mismatch`);
     }

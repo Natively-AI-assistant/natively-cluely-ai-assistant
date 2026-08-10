@@ -5,6 +5,8 @@ import {
     User, CheckCircle, ArrowUpRight, ChevronRight, Paperclip, FileText,
     GraduationCap, FolderKanban, Layers, Mail, MessageSquare, Target,
 } from 'lucide-react';
+import { ThinkingOrb } from 'thinking-orbs';
+import { useToggleInit } from './settings/useToggleInit';
 import { PremiumUpgradeModal, RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
@@ -55,6 +57,11 @@ const PI_CSS = `
         --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-300) 30%, transparent);
         --pi-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
         --pi-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+        /* Expo-out. Almost all of the distance is covered in the first third,
+           then it glides for a long time — which is what buys a slow animation
+           the right to be slow: it reads as settling, not as waiting. This is
+           the curve for anything that travels far or lands late. */
+        --pi-ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
         --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-300) 40%, transparent);
         --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-300) 4%, transparent);
         --pi-cta-bg: #ffffff;
@@ -111,12 +118,38 @@ const PI_CSS = `
 
     /* ── Keyframes ── */
     @keyframes pi-list-in {
-        from { opacity: 0; transform: translateY(4px); }
+        from { opacity: 0; transform: translateY(8px); }
         to   { opacity: 1; transform: translateY(0); }
     }
-    @keyframes pi-panel-fade {
-        from { opacity: 0; transform: translateY(4px); }
-        to   { opacity: 1; transform: translateY(0); }
+    /* Section swap. The panel enters from the direction the user travelled in
+       the nav — pick something lower down and the new panel rises from below —
+       so the sidebar keeps reading as a place rather than a set of buttons.
+       The blur is doing the same job it does in any crossfade: without it you
+       see two distinct slabs overlapping, with it the eye reads one shape
+       resolving into focus. 4px is enough; blur gets expensive fast. */
+    @keyframes pi-panel-in-down {
+        from { opacity: 0; transform: translateY(16px); filter: blur(6px); }
+        45%  { opacity: 1; }
+        to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+    }
+    @keyframes pi-panel-in-up {
+        from { opacity: 0; transform: translateY(-16px); filter: blur(6px); }
+        45%  { opacity: 1; }
+        to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+    }
+    /* The section's own blocks then arrive one at a time. Each one rises and
+       comes forward at once — the scale is what turns "it faded in" into "it
+       arrived", and it is the reason the cascade can run this long without
+       reading as lag: at any moment something is still landing. Opacity
+       finishes at 60% so a block is legible well before it stops moving. */
+    @keyframes pi-section-in {
+        from { opacity: 0; transform: translateY(16px) scale(0.985); }
+        60%  { opacity: 1; }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes pi-fade-only {
+        from { opacity: 0; }
+        to   { opacity: 1; }
     }
     @keyframes pi-check-in {
         from { opacity: 0; transform: scale(0.5); }
@@ -136,8 +169,82 @@ const PI_CSS = `
         0%, 100% { opacity: 0.55; }
         50%       { opacity: 1; }
     }
-    .pi-panel-fade { animation: pi-panel-fade 180ms var(--pi-ease-out) both; }
-    .pi-list-item  { animation: pi-list-in 280ms var(--pi-ease-out) both; }
+    /* Indexing → indexed handoff. The orb settles rather than vanishing (it
+       shrinks INTO the result instead of being cut), then the extracted card
+       rises the same way every other section in this panel arrives, so the
+       finish reads as one motion instead of two unrelated ones. */
+    @keyframes pi-handoff-out {
+        from { opacity: 1; transform: scale(1);    filter: blur(0px); }
+        to   { opacity: 0; transform: scale(0.94); filter: blur(2px); }
+    }
+    @keyframes pi-handoff-in {
+        from { opacity: 0; transform: translateY(10px) scale(0.985); }
+        60%  { opacity: 1; }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    /* fill-mode backwards, never both. A finished "both" animation keeps its
+       transform applied forever, which leaves every animated block a permanent
+       stacking context — that is exactly how the Settings cards ended up
+       burying their own dropdowns. "backwards" holds the from-state only
+       during the delay and hands the element back to its own (identical)
+       style the moment it finishes. */
+    .pi-panel-fade { animation: pi-panel-in-down 420ms var(--pi-ease-expo) backwards; }
+    .pi-panel-fade[data-dir='up'] { animation-name: pi-panel-in-up; }
+
+    /* Blocks arrive one by one. 55ms apart is the sweet spot: wide enough to
+       read as a sequence rather than a wave, tight enough that the whole
+       column is in motion at once instead of queueing. The steps shrink as
+       they go — a constant delay makes the tail feel like it stalled, while a
+       decelerating one lets the section close itself out. Nothing here blocks
+       input: the panel is clickable from the first frame. */
+    .pi-panel-fade > * { animation: pi-section-in 520ms var(--pi-ease-expo) backwards; }
+    .pi-panel-fade > *:nth-child(1)     { animation-delay: 40ms; }
+    .pi-panel-fade > *:nth-child(2)     { animation-delay: 95ms; }
+    .pi-panel-fade > *:nth-child(3)     { animation-delay: 150ms; }
+    .pi-panel-fade > *:nth-child(4)     { animation-delay: 205ms; }
+    .pi-panel-fade > *:nth-child(5)     { animation-delay: 255ms; }
+    .pi-panel-fade > *:nth-child(6)     { animation-delay: 300ms; }
+    .pi-panel-fade > *:nth-child(7)     { animation-delay: 340ms; }
+    .pi-panel-fade > *:nth-child(8)     { animation-delay: 375ms; }
+    .pi-panel-fade > *:nth-child(9)     { animation-delay: 405ms; }
+    .pi-panel-fade > *:nth-child(n+10)  { animation-delay: 430ms; }
+
+    /* Some sections (Company Intel) render their blocks inside one flex column
+       instead of returning them flat. The cascade only reaches direct children,
+       so that whole column used to arrive as a single slab while Identity and
+       Profile came in one card at a time. Marking the column pi-cascade hands
+       the beat down to its children and takes the wrapper itself out of the
+       sequence — without that the two transforms would compound and the lower
+       cards would travel twice as far as they should.
+       The ramp picks up one step in, since the section header above it has
+       already taken the first beat. */
+    .pi-panel-fade > .pi-cascade { animation: none; }
+    .pi-panel-fade > .pi-cascade > * { animation: pi-section-in 520ms var(--pi-ease-expo) backwards; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(1)     { animation-delay: 95ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(2)     { animation-delay: 150ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(3)     { animation-delay: 205ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(4)     { animation-delay: 255ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(5)     { animation-delay: 300ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(6)     { animation-delay: 340ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(7)     { animation-delay: 375ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(8)     { animation-delay: 405ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(9)     { animation-delay: 430ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(10)    { animation-delay: 450ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(n+11)  { animation-delay: 465ms; }
+
+    .pi-list-item  { animation: pi-list-in 420ms var(--pi-ease-expo) backwards; }
+    /* fill-mode "forwards" is the deliberate exception to the backwards-only
+       rule above: this element is unmounted the instant the animation ends, so
+       it can never persist a transform (and therefore never becomes a lingering
+       stacking context). Holding the end state stops it flashing back to full
+       opacity if React's unmount lands a frame late. */
+    .pi-handoff-out { animation: pi-handoff-out 240ms var(--pi-ease-out) forwards; }
+    /* -self animates the block itself (the empty slot, which owns its own
+       border and background); the child form staggers the file row and the
+       snapshot card, matching .pi-cascade's beat. */
+    .pi-handoff-in-self,
+    .pi-handoff-in > * { animation: pi-handoff-in 560ms var(--pi-ease-expo) backwards; }
+    .pi-handoff-in > *:nth-child(2) { animation-delay: 110ms; }
     .pi-spinner    { animation: pi-spin 0.8s linear infinite; }
     .pi-save-pulse { animation: pi-save-pulse 360ms var(--pi-ease-spring); }
     .pi-skeleton   {
@@ -158,18 +265,25 @@ const PI_CSS = `
     .pi-press-soft:active { transform: scale(0.92); }
 
     /* ── Sliding selection indicator ── */
+    /* Travels on transform, not top. Animating "top" relayouts the nav on
+       every frame; translateY runs on the compositor and the pill is the one
+       thing on this screen the eye actually follows. */
     .pi-sel-indicator {
         position: absolute;
-        left: 8px; right: 8px;
+        top: 0; left: 8px; right: 8px;
         background: var(--pi-item-active);
         border-radius: 6px;
         pointer-events: none;
         z-index: 0;
+        will-change: transform;
+        /* Expo covers most of the gap in the first ~120ms, so the pill still
+           answers the click instantly and then takes its time arriving. That
+           is what lets it run at 380ms without feeling laggy. */
         transition:
-            top 280ms cubic-bezier(0.23, 1, 0.32, 1),
-            height 280ms cubic-bezier(0.23, 1, 0.32, 1),
-            opacity 200ms ease;
+            transform 380ms var(--pi-ease-expo),
+            opacity 240ms ease;
     }
+    /* First paint: land on the active item, don't slide down from the top. */
     .pi-sel-indicator[data-instant='true'] { transition: opacity 160ms ease; }
 
     /* ── Nav items ── */
@@ -181,23 +295,37 @@ const PI_CSS = `
         user-select: none; margin-bottom: 2px;
         position: relative; z-index: 1;
         transition: background 180ms cubic-bezier(0.23, 1, 0.32, 1), color 180ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
-        animation: pi-list-in 280ms var(--pi-ease-out) both;
+        /* backwards, not both. A finished "both" animation keeps applying its
+           to-state transform from the animation origin, which sits above
+           declared styles in the cascade — so :active below could never take
+           effect and the rows had no press feedback at all once they had
+           settled. */
+        animation: pi-list-in 420ms var(--pi-ease-expo) backwards;
     }
     .pi-nav-item:hover { background: var(--pi-item-hover); }
     .pi-nav-item.active { color: var(--pi-primary); }
     .pi-nav-item:active { transform: scale(0.97); }
 
-    /* Staggered nav entry */
-    .pi-nav-item:nth-child(2) { animation-delay: 0ms; }
-    .pi-nav-item:nth-child(3) { animation-delay: 30ms; }
-    .pi-nav-item:nth-child(4) { animation-delay: 60ms; }
-    .pi-nav-item:nth-child(5) { animation-delay: 90ms; }
-    .pi-nav-item:nth-child(6) { animation-delay: 120ms; }
-    .pi-nav-item:nth-child(n+7) { animation-delay: 150ms; }
+    /* Staggered nav entry, on the same 55ms beat as the panel's blocks so the
+       two columns read as one entrance rather than two animations that
+       happened to fire together. nth-child starts at 2 — child 1 is the
+       selection indicator. */
+    .pi-nav-item:nth-child(2)   { animation-delay: 0ms; }
+    .pi-nav-item:nth-child(3)   { animation-delay: 55ms; }
+    .pi-nav-item:nth-child(4)   { animation-delay: 110ms; }
+    .pi-nav-item:nth-child(5)   { animation-delay: 160ms; }
+    .pi-nav-item:nth-child(6)   { animation-delay: 205ms; }
+    .pi-nav-item:nth-child(7)   { animation-delay: 245ms; }
+    .pi-nav-item:nth-child(n+8) { animation-delay: 280ms; }
 
     /* Nav icon */
-    .pi-nav-item svg { color: var(--pi-tertiary); flex-shrink: 0; }
-    .pi-nav-item.active svg { color: var(--pi-secondary); }
+    .pi-nav-item svg {
+        color: var(--pi-tertiary); flex-shrink: 0;
+        transition: color 180ms ease, transform 260ms var(--pi-ease-spring);
+    }
+    /* A hair of scale on the active icon. Nobody will name it; it is the
+       difference between the row looking selected and looking alive. */
+    .pi-nav-item.active svg { color: var(--pi-secondary); transform: scale(1.08); }
 
     /* ── Content boxes ── */
     .pi-content-box {
@@ -231,23 +359,13 @@ const PI_CSS = `
     }
     .pi-input::placeholder { color: var(--pi-tertiary); }
 
-    /* ── Toggle track/thumb ── */
-    .pi-toggle-track {
-        width: 44px; height: 24px; border-radius: 12px; position: relative;
-        cursor: pointer; flex-shrink: 0;
-        background: rgba(255,255,255,0.12);
-        transition: background 220ms var(--pi-ease-out);
-    }
-    .pi-toggle-track[data-checked='true'] { background: var(--pi-accent); }
-    .pi-toggle-track[data-disabled='true'] { opacity: 0.4; cursor: not-allowed; }
-    .pi-root[data-theme='light'] .pi-toggle-track { background: rgba(0,0,0,0.12); }
-    .pi-toggle-thumb {
-        position: absolute; top: 3px; left: 3px;
-        width: 18px; height: 18px; border-radius: 50%;
-        background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.25);
-        transition: transform 260ms var(--pi-ease-spring);
-    }
-    .pi-toggle-track[data-checked='true'] .pi-toggle-thumb { transform: translateX(20px); }
+    /* ── Toggle (shared .t-toggle primitive, theme-tinted here) ── */
+    /* Track surface stays neutral with the card border; checked state paints
+       the accent fill. Disabled state matches the old opacity. */
+    .pi-root .t-toggle { background: rgba(255,255,255,0.12); }
+    .pi-root[data-theme='light'] .t-toggle { background: rgba(0,0,0,0.12); }
+    .pi-root .t-toggle[aria-checked='true'] { background: var(--pi-accent); }
+    .pi-root .t-toggle[aria-disabled='true'] { opacity: 0.4; cursor: not-allowed; }
 
     /* ── Toggle card (neutral — no accent tint when on; the toggle itself signals state) ── */
     .pi-toggle-card {
@@ -425,12 +543,27 @@ const PI_CSS = `
     .pi-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 
     /* ── Reduced motion ── */
+    /* Reduced motion means less movement, not no feedback: the opacity change
+       is what tells you the panel actually swapped, so it stays. */
     @media (prefers-reduced-motion: reduce) {
-        .pi-panel-fade { animation: none; }
-        .pi-list-item  { animation-duration: 100ms; animation-delay: 0ms !important; }
+        .pi-panel-fade,
+        .pi-panel-fade[data-dir='up'] { animation: pi-fade-only 200ms ease backwards; }
+        .pi-panel-fade > *,
+        .pi-panel-fade > .pi-cascade > * { animation: none; }
+        .pi-sel-indicator { transition: opacity 160ms ease; }
+        .pi-nav-item svg, .pi-nav-item.active svg { transition: color 180ms ease; transform: none; }
+        .pi-nav-item { animation: pi-fade-only 160ms ease backwards; animation-delay: 0ms !important; }
+        .pi-list-item  { animation: pi-fade-only 160ms ease backwards; animation-delay: 0ms !important; }
         .pi-press:active, .pi-press-soft:active { transform: none; }
         .pi-cta--shimmer::after { animation: none; }
         .pi-skeleton { animation: none; opacity: 0.5; }
+        /* The handoff keeps its crossfade — that opacity change is the only
+           signal that indexing finished — but loses the travel, the scale and
+           the blur, and the stagger collapses to a single beat. */
+        .pi-handoff-out { animation: pi-fade-only 160ms ease reverse forwards; }
+        .pi-handoff-in-self,
+        .pi-handoff-in > * { animation: pi-fade-only 200ms ease backwards; }
+        .pi-handoff-in > *:nth-child(2) { animation-delay: 0ms; }
     }
 `;
 
@@ -524,6 +657,55 @@ function useDisplayedStatus(rawStatus: string | undefined): string | undefined {
     return displayed;
 }
 
+// ─── Indexing → indexed handoff ───────────────────────────────────────────────
+// React swaps the orb for the extracted card in a single frame, which reads as a
+// glitch rather than a finish. This sequences it: the orb holds one extra beat
+// to play its exit, then the result arrives.
+//
+// Both phases come out of ONE state deliberately. With two independent flags the
+// frame that drops the orb and the frame that adds the result's entrance class
+// are different frames, so the result paints once at full opacity before
+// snapping back to the animation's 0% — a visible flicker at exactly the moment
+// this is supposed to smooth over.
+const HANDOFF_OUT_MS = 240;
+// 560ms entrance + the 110ms stagger on the second child. Keep in sync with
+// .pi-handoff-in and its nth-child(2) delay above — retuning either there
+// without updating this leaves the block stranded on 'arriving' early or late.
+const HANDOFF_IN_MS = 670;
+function useIndexHandoff(indexing: boolean): { settling: boolean; arriving: boolean } {
+    const [phase, setPhase] = useState<'idle' | 'settling' | 'arriving'>('idle');
+    const prevIndexingRef = useRef(indexing);
+
+    // The falling edge is handled DURING render, not in an effect. Effects run
+    // after paint, so reacting there lets the browser paint one frame of the
+    // finished result at full opacity before the orb has even begun its exit —
+    // measured, not theorised: a reduced-motion frame sampler caught the result
+    // at opacity 1 two milliseconds in. Setting state during render re-renders
+    // before paint, so that frame never reaches the screen. A fresh upload
+    // landing mid-handoff resets to idle: the orb is coming back, and finishing
+    // the previous exit would fight the new entrance.
+    if (prevIndexingRef.current !== indexing) {
+        prevIndexingRef.current = indexing;
+        setPhase(indexing ? 'idle' : 'settling');
+    }
+
+    // One timer per phase, each cancelled by its own cleanup. Scheduling both
+    // hops up front instead would mean the settling → arriving re-render tore
+    // down the timer that ends the handoff, stranding it on 'arriving'.
+    useEffect(() => {
+        if (phase === 'settling') {
+            const t = setTimeout(() => setPhase('arriving'), HANDOFF_OUT_MS);
+            return () => clearTimeout(t);
+        }
+        if (phase === 'arriving') {
+            const t = setTimeout(() => setPhase('idle'), HANDOFF_IN_MS);
+            return () => clearTimeout(t);
+        }
+    }, [phase]);
+
+    return { settling: phase === 'settling', arriving: phase === 'arriving' };
+}
+
 const PIIndexBadge: React.FC<{ status?: string }> = ({ status }) => {
     const displayedStatus = useDisplayedStatus(status);
     const badge = displayedStatus ? PI_INDEX_BADGES[displayedStatus] : undefined;
@@ -540,17 +722,10 @@ const PIIndexBadge: React.FC<{ status?: string }> = ({ status }) => {
         return () => { if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current); };
     }, [badge?.label]);
     if (!badge) return <span style={{ width: 100, flexShrink: 0 }} />;
-    const isInProgress = displayedStatus === 'uploading' || displayedStatus === 'processing';
     return (
-        <span style={{ display: 'grid', gridTemplateColumns: '14px 6px 80px', alignItems: 'center', width: 100, flexShrink: 0 }}>
-            <span aria-hidden="true" style={{ gridColumn: 1, display: 'flex', alignItems: 'center', opacity: isInProgress ? 1 : 0, transition: 'opacity 180ms ease-out', flexShrink: 0 }}>
-                <svg className="pi-spinner" width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <circle cx="7" cy="7" r="5.5" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" />
-                    <path d="M7 1.5 A5.5 5.5 0 0 1 12.5 7" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-            </span>
+        <span style={{ display: 'grid', gridTemplateColumns: '20px 80px', alignItems: 'center', width: 100, flexShrink: 0 }}>
             <span title={badge.title} style={{
-                gridColumn: 3, justifySelf: 'start' as const,
+                gridColumn: 2, justifySelf: 'start' as const,
                 fontSize: 9.5, fontWeight: 600, letterSpacing: 0.2, padding: '2px 6px',
                 borderRadius: 999, color: badge.color, background: badge.bg, flexShrink: 0,
                 textTransform: 'uppercase' as const,
@@ -565,25 +740,45 @@ const PIIndexBadge: React.FC<{ status?: string }> = ({ status }) => {
 };
 
 // ─── FileUploadEmpty — Modes-style empty state ────────────────────────────────
+// No `uploading` state: the caller swaps this whole block for FileUploadIndexing
+// while an ingest is in flight, so a "Processing…" button here would be dead.
 interface FileUploadEmptyProps {
     hint: string;
-    uploading: boolean;
     hasAccess: boolean;
     onBrowse: () => void;
     onNeedUpgrade: () => void;
+    /** Entrance class when this slot is what a finished indexing run landed on
+        (i.e. the ingest failed and dropped the user back to the upload CTA). */
+    enterClass?: string;
 }
-const FileUploadEmpty = ({ hint, uploading, hasAccess, onBrowse, onNeedUpgrade }: FileUploadEmptyProps) => (
-    <div className="pi-file-empty" style={{ gap: 12 }}>
+const FileUploadEmpty = ({ hint, hasAccess, onBrowse, onNeedUpgrade, enterClass }: FileUploadEmptyProps) => (
+    <div className={`pi-file-empty${enterClass ? ` ${enterClass}` : ''}`} style={{ gap: 12 }}>
         <p style={{ fontSize: 12, color: 'var(--pi-tertiary)', margin: 0 }}>{hint}{!hasAccess ? ' Requires Pro.' : ''}</p>
         <button
             className="pi-upload-btn"
-            disabled={uploading}
             onClick={() => { if (!hasAccess) { onNeedUpgrade(); return; } onBrowse(); }}
         >
-            {uploading
-                ? <><RefreshCw size={13} className="pi-spinner" /> Processing…</>
-                : <><Paperclip size={13} /> Upload file</>}
+            <Paperclip size={13} /> Upload file
         </button>
+    </div>
+);
+
+// ─── FileUploadIndexing — in-flight ingest ────────────────────────────────────
+// Reuses the empty slot's container so the empty → indexing → filled sequence
+// keeps one silhouette and the panel doesn't jump as the state advances.
+// The orb ships two tuned size presets (64 / 20); 64 is the one that reads as a
+// deliberate "working" surface rather than a button spinner, so it gets the
+// block the empty slot was already occupying. `theme` stays on its default
+// `auto` — it walks up to .pi-root's data-theme, which is the same signal the
+// panel's own light/dark tokens key off.
+// The orb is aria-hidden and the <p> carries the announcement: labelling both
+// makes a screen reader read the state twice. role="status" (implicitly polite)
+// is the whole announcement contract here — the badge no longer has an
+// in-progress branch to carry it.
+const FileUploadIndexing = ({ label, settling }: { label: string; settling?: boolean }) => (
+    <div className={`pi-file-empty${settling ? ' pi-handoff-out' : ''}`} style={{ gap: 14 }} role="status">
+        <ThinkingOrb state="composing" size={64} speed={1.10} aria-hidden="true" />
+        <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: 0 }}>{label}</p>
     </div>
 );
 
@@ -1004,6 +1199,9 @@ export function ProfileIntelligenceSettings({
     onOpenNativelyAPI?: () => void;
 }) {
     const cachedPremium = readPremiumCache();
+    // Safe as a panel-level call ONLY because this panel renders exactly one
+    // switch. Add a second and it must move into a per-switch component.
+    const piToggleInit = useToggleInit();
     const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
     const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
     const [isTrialActive] = useState(false);
@@ -1013,6 +1211,22 @@ export function ProfileIntelligenceSettings({
     const theme = useResolvedTheme();
 
     const [activeSection, setActiveSection] = useState('identity');
+    // Which way the user just travelled through the nav. The incoming panel
+    // enters from that side, so moving down the list pulls content up from
+    // below and moving back up drops it in from above — the sidebar stays a
+    // place you move through rather than a row of buttons that swap a screen.
+    const [navDir, setNavDir] = useState<'down' | 'up'>('down');
+    const panelScrollRef = useRef<HTMLDivElement | null>(null);
+
+    // Single entry point for section changes so direction is never computed in
+    // one call site and forgotten in the next (Role Insight jumps here too).
+    const goToSection = (id: string) => {
+        if (id === activeSection) return;
+        const from = NAV_ITEMS.findIndex(n => n.id === activeSection);
+        const to = NAV_ITEMS.findIndex(n => n.id === id);
+        setNavDir(from >= 0 && to >= 0 && to < from ? 'up' : 'down');
+        setActiveSection(id);
+    };
 
     // ── Sliding indicator refs ─────────────────────────────────────────────────
     const navItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -1058,6 +1272,22 @@ export function ProfileIntelligenceSettings({
     const jdAbortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
     const jdDetachedRef = useRef(false);
 
+    // Which slot shows the orb. Gated on the DISPLAYED status, not `uploading`:
+    // useDisplayedStatus holds an in-progress state for MIN_INDEXING_MS so a
+    // sub-second ingest still reads as work rather than a flicker, and the floor
+    // outlives `uploading` by up to that long. Gating on `uploading` would drop
+    // the orb early and hand the tail back to the badge. Both flags move
+    // together on every path (local upload, adopted ingest, failure), so this is
+    // a strict superset of `uploading` — including the window the adopt-poll
+    // comment below guards, where clearing `uploading` first would flash the
+    // empty upload slot.
+    const displayedProfileStatus = useDisplayedStatus(profileUploadStatus);
+    const displayedJdStatus = useDisplayedStatus(jdUploadStatus);
+    const profileIndexing = displayedProfileStatus === 'uploading' || displayedProfileStatus === 'processing';
+    const jdIndexing = displayedJdStatus === 'uploading' || displayedJdStatus === 'processing';
+    const profileHandoff = useIndexHandoff(profileIndexing);
+    const jdHandoff = useIndexHandoff(jdIndexing);
+
     // Tavily
     const [tavilyApiKey, setTavilyApiKey] = useState('');
     const [hasStoredTavilyKey, setHasStoredTavilyKey] = useState(false);
@@ -1076,6 +1306,10 @@ export function ProfileIntelligenceSettings({
 
     // ── Measure & update indicator on section change ───────────────────────────
     useLayoutEffect(() => {
+        // Land every section at its own top. Inheriting the previous section's
+        // scroll offset makes the entrance animation start mid-content, which
+        // reads as a glitch rather than a transition.
+        if (panelScrollRef.current) panelScrollRef.current.scrollTop = 0;
         const el = navItemRefs.current.get(activeSection);
         if (!el) { setIndicatorState(prev => ({ ...prev, visible: false })); return; }
         setIndicatorState(prev => ({
@@ -1350,21 +1584,29 @@ export function ProfileIntelligenceSettings({
                             : 'Dormant. Your profile is loaded but not shaping answers yet.'}
                     </p>
                 </div>
-                <div
-                    className="pi-toggle-track"
-                    data-checked={profileStatus.profileMode && hasProfileAccess ? 'true' : 'false'}
-                    data-disabled={(!profileStatus.hasProfile || !hasProfileAccess) ? 'true' : 'false'}
+                <button
+                    type="button"
+                    role="switch"
+                    data-on={String(!!(profileStatus.profileMode && hasProfileAccess))}
+                    aria-checked={!!(profileStatus.profileMode && hasProfileAccess)}
+                    aria-disabled={(!profileStatus.hasProfile || !hasProfileAccess) ? true : undefined}
+                    aria-label="Persona Engine"
                     onClick={async () => {
                         if (!profileStatus.hasProfile || !hasProfileAccess) return;
                         const newState = !profileStatus.profileMode;
                         try {
                             await window.electronAPI?.profileSetMode?.(newState);
+                            // Armed next to the state change, not before the
+                            // await: data-on only flips when this resolves, and
+                            // is-init must not land in an earlier render.
+                            piToggleInit.arm();
                             setProfileStatus(prev => ({ ...prev, profileMode: newState }));
                         } catch { /**/ }
                     }}
+                    className={`t-toggle t-toggle-lg w-11 h-6 shrink-0 rounded-full p-[3px] flex items-center ${piToggleInit.className}`}
                 >
-                    <div className="pi-toggle-thumb" />
-                </div>
+                    <span className="t-toggle-thumb" aria-hidden="true" />
+                </button>
             </div>
             )}
 
@@ -1384,16 +1626,18 @@ export function ProfileIntelligenceSettings({
                     Grounds every answer in what you've actually done, instead of generic advice.
                 </p>
             </div>
-            {!profileStatus.hasProfile && !profileUploading ? (
+            {profileIndexing || profileHandoff.settling ? (
+                <FileUploadIndexing label="Reading your resume…" settling={profileHandoff.settling} />
+            ) : !profileStatus.hasProfile ? (
                 <FileUploadEmpty
                     hint="Add your resume as real-time context."
-                    uploading={profileUploading}
                     hasAccess={hasProfileAccess}
                     onBrowse={browseResume}
                     onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+                    enterClass={profileHandoff.arriving ? 'pi-handoff-in-self' : undefined}
                 />
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                <div className={profileHandoff.arriving ? 'pi-handoff-in' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '13px 1fr 100px 20px', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--pi-btn-bg)', border: '1px solid var(--pi-btn-border)', borderRadius: 'var(--pi-r-md)' }}>
                         <FileText size={13} style={{ color: 'var(--pi-secondary)', flexShrink: 0 }} />
                         <span style={{ fontSize: 12, color: 'var(--pi-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1494,16 +1738,18 @@ export function ProfileIntelligenceSettings({
                     Frames answers around what this specific role asks for, and powers Company Intel.
                 </p>
             </div>
-            {!profileData?.hasActiveJD && !jdUploading ? (
+            {jdIndexing || jdHandoff.settling ? (
+                <FileUploadIndexing label="Reading the job description…" settling={jdHandoff.settling} />
+            ) : !profileData?.hasActiveJD ? (
                 <FileUploadEmpty
                     hint="Add a job description as real-time context."
-                    uploading={jdUploading}
                     hasAccess={hasProfileAccess}
                     onBrowse={browseJD}
                     onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+                    enterClass={jdHandoff.arriving ? 'pi-handoff-in-self' : undefined}
                 />
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                <div className={jdHandoff.arriving ? 'pi-handoff-in' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '13px 1fr 100px 20px', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--pi-btn-bg)', border: '1px solid var(--pi-btn-border)', borderRadius: 'var(--pi-r-md)' }}>
                         <FileText size={13} style={{ color: 'var(--pi-secondary)', flexShrink: 0 }} />
                         <span style={{ fontSize: 12, color: 'var(--pi-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -2049,7 +2295,7 @@ export function ProfileIntelligenceSettings({
                     </div>
                 )}
                 {companyResearching && companyName && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div className="pi-cascade" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         {/* Work Culture skeleton — overall rating + 4 sub-ratings grid.
                             Card shell is solid (no pulse); only the inner text placeholders breathe. */}
                         <div>
@@ -2178,7 +2424,7 @@ export function ProfileIntelligenceSettings({
                     </div>
                 )}
                 {companyDossier && !companyResearching && companyName && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div className="pi-cascade" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         {companyDossier.culture_ratings && (
                             <div>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Work Culture</div>
@@ -2604,7 +2850,7 @@ export function ProfileIntelligenceSettings({
         <RoleInsightPanel
             hasAccess={hasProfileAccess}
             onNeedUpgrade={() => setIsPremiumModalOpen(true)}
-            onGoToProfile={() => setActiveSection('identity')}
+            onGoToProfile={() => goToSection('identity')}
         />
     );
 
@@ -2692,7 +2938,7 @@ export function ProfileIntelligenceSettings({
                         className="pi-sel-indicator"
                         data-instant={!indicatorState.ready}
                         style={{
-                            top: indicatorState.top,
+                            transform: `translateY(${indicatorState.top}px)`,
                             height: indicatorState.height,
                             opacity: indicatorState.visible ? 1 : 0,
                         }}
@@ -2706,7 +2952,7 @@ export function ProfileIntelligenceSettings({
                                 else navItemRefs.current.delete(id);
                             }}
                             className={`pi-nav-item${activeSection === id ? ' active' : ''}`}
-                            onClick={() => setActiveSection(id)}
+                            onClick={() => goToSection(id)}
                         >
                             <Icon size={15} />
                             <span>{label}</span>
@@ -2738,9 +2984,10 @@ export function ProfileIntelligenceSettings({
 
             {/* ── Right panel ── */}
             <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                {/* Scrollable content — key triggers blur-fade animation on each switch */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', boxSizing: 'border-box' }}>
-                    <div key={activeSection} className="pi-panel-fade">
+                {/* Scrollable content — key remounts the block on each switch, which
+                    is what re-fires the directional blur-in below it. */}
+                <div ref={panelScrollRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '24px 32px', boxSizing: 'border-box' }}>
+                    <div key={activeSection} className="pi-panel-fade" data-dir={navDir}>
                         {(SECTION_RENDERERS[activeSection] ?? renderIdentity)()}
                     </div>
                 </div>

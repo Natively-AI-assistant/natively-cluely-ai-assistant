@@ -5,6 +5,7 @@ import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, isModelAl
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useToggleInit } from './useToggleInit';
 
 // Official provider marks, vendored from @lobehub/icons-static-svg v1.94.0 (MIT).
 // See src/assets/provider-logos/README.md for provenance and why these are local
@@ -79,7 +80,12 @@ import { useResolvedTheme } from '../../hooks/useResolvedTheme';
    stay off the main thread, which matters because this renderer also hosts the
    always-on-top overlay and a 3s Ollama poll.
    ═══════════════════════════════════════════════════════════════════════════ */
-const AIP_CSS = `
+/* Exported so other panels can adopt this design language. Every token below is
+   scoped to `.aip-root`, and this sheet is mounted by whichever panel renders it
+   — Settings mounts one panel at a time, so a consumer on another tab has to
+   bring the sheet with it or every .aip-* class silently resolves to nothing.
+   Duplicate <style> elements are harmless: identical rules, same cascade. */
+export const AIP_CSS = `
 .aip-root {
     --aip-accent:            var(--accent-primary);
     --aip-on-accent:         var(--on-accent);
@@ -436,6 +442,10 @@ const AIP_CSS = `
    without changing layout or the visual size. */
 .aip-switch::after { content:''; position:absolute; inset:-3px -2px; }
 .aip-switch {
+    /* 34px track − 2*1px border − 2*2px padding − 14px thumb = 14px travel.
+       The shared 14.66px default assumes no border, and left the thumb 0.66px
+       short of the right edge here. */
+    --toggle-travel: 14px;
     position:relative; box-sizing:border-box; width:34px; height:20px; flex-shrink:0;
     padding:2px; border-radius:9999px; border:1px solid transparent;
     background: var(--aip-switch-off);
@@ -446,17 +456,9 @@ const AIP_CSS = `
 .aip-switch[aria-checked='true'] { background: var(--aip-accent); }
 .aip-switch[aria-disabled='true'] { cursor:not-allowed; }
 .aip-switch:disabled { cursor:not-allowed; opacity:0.5; }
-.aip-switch-thumb {
-    width:14px; height:14px; border-radius:9999px; background:#fff;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.28);
-    transform: translateX(0);
-    transition: transform var(--aip-dur-travel) var(--aip-ease-spring),
-                background var(--aip-dur-state) var(--aip-ease-out);
-}
-/* --aip-on-accent, not #fff: in dark mode the accent track is periwinkle-300
-   (#B9A1F6, a LIGHT periwinkle) so a white thumb sat at ~1.5:1. --on-accent is
-   theme-split precisely for solid accent fills (#14102A dark / #fff light). */
-.aip-switch[aria-checked='true'] .aip-switch-thumb { transform: translateX(14px); background: var(--aip-on-accent); }
+/* Thumb dimensions, position, and bounce are owned by .t-toggle-thumb in
+   src/index.css. The thumb stays white in both states — this panel used to
+   darken it to --aip-on-accent when on; that is deliberately gone. */
 
 /* ── Buttons ───────────────────────────────────────────────────────────── */
 .aip-btn {
@@ -979,28 +981,44 @@ interface AipSwitchProps {
 }
 
 /**
- * One implementation replacing all seven hand-rolled `role="switch"` divs.
- * A real <button role="switch" aria-checked> gets Space/Enter activation,
- * focus and disabled semantics for free — exactly what the divs lacked, which
- * made every toggle in this panel keyboard-unreachable.
+ * The shared .t-toggle / .t-toggle-thumb classes (defined in src/index.css)
+ * own the thumb dimensions, travel, and bounce keyframe. The .aip-switch
+ * class continues to drive the per-theme track color via --aip-switch-off
+ * / --aip-accent.
+ *
+ * `is-init` is added by arm(), called from the click handler, so it lands in
+ * the same render as the new data-on — see useToggleInit for why arming a
+ * render earlier makes the thumb kick backwards.
  */
 export const AipSwitch: React.FC<AipSwitchProps> = ({
     checked, onChange, label, title, disabled = false, hardDisabled = false, className = '',
-}) => (
-    <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-disabled={disabled || hardDisabled ? true : undefined}
-        aria-label={label}
-        title={title}
-        disabled={hardDisabled}
-        onClick={() => onChange(!checked)}
-        className={`aip-switch ${className}`}
-    >
-        <span className="aip-switch-thumb" aria-hidden="true" />
-    </button>
-);
+}) => {
+    const toggleInit = useToggleInit();
+    return (
+        <button
+            type="button"
+            role="switch"
+            data-on={String(checked)}
+            aria-checked={checked}
+            aria-disabled={disabled || hardDisabled ? true : undefined}
+            aria-label={label}
+            title={title}
+            disabled={hardDisabled}
+            onClick={() => {
+                // Soft `disabled` deliberately still fires onChange — call sites
+                // rely on it to explain WHY the control is unavailable (see the
+                // prop doc above, and Fast Response Mode's alert()). Only arm
+                // the bounce, which needs a real state change to animate.
+                if (hardDisabled) return;
+                if (!disabled) toggleInit.arm();
+                onChange(!checked);
+            }}
+            className={`t-toggle aip-switch ${toggleInit.className} ${className}`}
+        >
+            <span className="t-toggle-thumb aip-switch-thumb" aria-hidden="true" />
+        </button>
+    );
+};
 
 /** Per-provider brand hues for the monogram tile. */
 /**

@@ -295,7 +295,7 @@ registerPrismLanguages();
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
 import 'katex/dist/katex.min.css';
 import DOMPurify from 'dompurify';
-import { marked } from 'marked';
+import { normalizeFinalizedMarkdownMath, renderStreamingMarkdown } from '../lib/streamingMarkdown';
 import ReactMarkdown from 'react-markdown';
 import { useT } from '../i18n';
 import rehypeKatex from 'rehype-katex';
@@ -3408,7 +3408,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // later); and brief holds land after sentence/clause punctuation for a
   // natural reading rhythm. Every one of these behaviors is provider-
   // independent by construction — the user cannot infer which LLM answered
-  // from the streaming cadence. marked.parse runs on the REVEALED slice, not
+  // from the streaming cadence. renderStreamingMarkdown runs on the REVEALED slice, not
   // the arrived text.
   //
   // `prefers-reduced-motion` bypasses pacing entirely (tickPacer's
@@ -3641,13 +3641,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // finalizes), so leaving existing children alone is always correct.
       return;
     }
-    // marked.parse is sync and fast (<1ms for typical LLM chunks).
+    // renderStreamingMarkdown is sync and fast (<1ms for typical LLM chunks).
     // DOMPurify strips any script/event-handler injection.
     // Teleprompter gist: a trailing [[GIST]] line (or a partial marker still
     // streaming in) is split off the spoken body and painted as a bottom
     // summary chip instead of literal text.
     const { body: revealedBody, gist: revealedGist } = splitGistLineStreaming(revealed);
-    const rawHtml = collapseBlockGaps(marked.parse(revealedBody, { async: false }) as string);
+    const rawHtml = collapseBlockGaps(renderStreamingMarkdown(revealedBody));
     const gistHtml = revealedGist
       ? `<div class="overlay-gist-chip">${revealedGist
           .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`
@@ -3925,7 +3925,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       const prevText = streamingTextRef.current;
       const prevId   = streamingMsgIdRef.current;
       // Wipe imperative innerHTML before nulling the node ref so the previous
-      // stream's marked.parse output doesn't stack under the new intent's
+      // stream's rendered Markdown output doesn't stack under the new intent's
       // finalized React render (same root cause as the flushToken cleanup).
       if (streamingNodeRef.current) streamingNodeRef.current.innerHTML = '';
       streamingNodeRef.current  = null;
@@ -6088,7 +6088,7 @@ Provide only the answer, nothing else.`;
         // children (typically the dots, since msg.text/React state never
         // changes during imperative-mode streaming). But the imperative
         // div's ACTUAL dom contents were long since overwritten out-of-band
-        // by paintRevealedNow's `node.innerHTML = ...` (marked.parse output)
+        // by paintRevealedNow's `node.innerHTML = ...` (math-aware rendered output)
         // — React's fiber has no idea. If React then tried to reconcile
         // (not unmount) that div's children against ITS stale record, it
         // would attempt to remove a child DOM node that innerHTML already
@@ -6144,7 +6144,7 @@ Provide only the answer, nothing else.`;
                * token lands, queueToken's mid-stream path does
                *   streamingNodeRef.current.textContent = streamingTextRef.current
                * which REPLACES these React-rendered children with a text node,
-               * and the subsequent RAF replaces that with marked.parse HTML.
+               * and the subsequent RAF replaces that with math-aware rendered HTML.
                *
                * React's fiber still thinks the children are these dots — but
                * because we never re-trigger the streaming branch with
@@ -6317,7 +6317,7 @@ Provide only the answer, nothing else.`;
                       rehypePlugins={REHYPE_PLUGINS}
                       components={mdComponents.codeText}
                     >
-                      {part}
+                      {normalizeFinalizedMarkdownMath(part)}
                     </ReactMarkdown>
                   </div>
                 );
@@ -6353,7 +6353,7 @@ Provide only the answer, nothing else.`;
                 rehypePlugins={REHYPE_PLUGINS}
                 components={mdComponents.shortenText}
               >
-                {gistBody}
+                {normalizeFinalizedMarkdownMath(gistBody)}
               </ReactMarkdown>
               {gistChip}
             </div>
@@ -6379,7 +6379,7 @@ Provide only the answer, nothing else.`;
                 rehypePlugins={REHYPE_PLUGINS}
                 components={mdComponents.recapText}
               >
-                {gistBody}
+                {normalizeFinalizedMarkdownMath(gistBody)}
               </ReactMarkdown>
               {gistChip}
             </div>
@@ -6405,7 +6405,7 @@ Provide only the answer, nothing else.`;
                 rehypePlugins={REHYPE_PLUGINS}
                 components={mdComponents.followUpQuestionsText}
               >
-                {msg.text}
+                {normalizeFinalizedMarkdownMath(msg.text)}
               </ReactMarkdown>
             </div>
           </div>
@@ -6476,7 +6476,7 @@ Provide only the answer, nothing else.`;
                       rehypePlugins={REHYPE_PLUGINS}
                       components={mdComponents.whatToAnswerText}
                     >
-                      {part}
+                      {normalizeFinalizedMarkdownMath(part)}
                     </ReactMarkdown>
                   </div>
                 );
@@ -6506,7 +6506,7 @@ Provide only the answer, nothing else.`;
                 rehypePlugins={REHYPE_PLUGINS}
                 components={mdComponents.standard}
               >
-                {gistBody}
+                {normalizeFinalizedMarkdownMath(gistBody)}
               </ReactMarkdown>
               {gistChip}
             </div>
@@ -6523,7 +6523,7 @@ Provide only the answer, nothing else.`;
             rehypePlugins={REHYPE_PLUGINS}
             components={mdComponents.standard}
           >
-            {msg.text}
+            {normalizeFinalizedMarkdownMath(msg.text)}
           </ReactMarkdown>
         </div>
       );

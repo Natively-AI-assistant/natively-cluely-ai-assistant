@@ -22,6 +22,7 @@ import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { isMac } from '../utils/platformUtils';
+import { SettingsToggle } from './settings/SettingsToggle';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import {
     clampOverlayOpacity,
@@ -36,6 +37,7 @@ import { KeyRecorder } from './ui/KeyRecorder';
 import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
 import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
 import GlassEffectLayer from './ui/GlassEffectLayer';
+import { BrandMark, BrandMonogram } from './ui/BrandMark';
 import icon from './icon.png';
 
 // ---------------------------------------------------------------------------
@@ -246,10 +248,18 @@ interface ProviderOption {
     id: string;
     label: string;
     badge?: string | null;
-    recommended?: boolean;
     desc: string;
     color: string;
     icon: React.ReactNode;
+    /** Row carries an official brand mark, so its tile drops the per-provider
+     *  tint and goes neutral — a mark in its own brand colours cannot sit on a
+     *  coloured wash without reading as an accident. Monogram rows keep the
+     *  tint, which is the only colour they have. */
+    neutralTile?: boolean;
+    /** Explicit tile classes, overriding both the tint and `neutralTile`. For a
+     *  monogram that has to reproduce a specific brand treatment rather than a
+     *  generic tint. */
+    tileClassName?: string;
 }
 
 interface ProviderSelectProps {
@@ -289,8 +299,14 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
         }
     };
 
-    const getIconStyle = (color?: string, isSelectedItem: boolean = false) => {
+    const getIconStyle = (color?: string, isSelectedItem: boolean = false, neutralTile: boolean = false, tileClassName?: string) => {
         if (isSelectedItem) return 'bg-accent-primary text-on-accent shadow-sm';
+        // An explicit brand treatment wins over both the tint and the neutral tile.
+        if (tileClassName) return tileClassName;
+        // A row showing an official brand mark gets a neutral surface so the mark
+        // renders in its own colours. Mirrors `.aip-tile--mark` in the AI Providers
+        // panel, which likewise reserves the brand tint for monogram tiles.
+        if (neutralTile) return 'bg-bg-input border border-border-subtle text-text-primary';
         // For unselected items in list or trigger
         switch (color) {
             case 'blue': return 'bg-blue-500/10 text-blue-600';
@@ -312,14 +328,13 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
             >
                 {selected ? (
                     <div className="flex items-center gap-3 overflow-hidden">
-                        <div className={`w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-all duration-300 ${getIconStyle(selected.color)}`}>
+                        <div className={`w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-all duration-300 ${getIconStyle(selected.color, false, selected.neutralTile, selected.tileClassName)}`}>
                             {selected.icon}
                         </div>
                         <div className="min-w-0 flex-1 text-left">
                             <div className="flex items-center gap-2">
                                 <span className="text-[13px] font-semibold text-text-primary truncate leading-tight">{selected.label}</span>
                                 {selected.badge && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ml-2 ${getBadgeStyle(selected.badge === 'Saved' ? 'green' : selected.color)}`}>{t(selected.badge)}</span>}
-                                {selected.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ml-2 ${getBadgeStyle(selected.color)}`}>{t('Recommended')}</span>}
                             </div>
                             {/* Short description for trigger */}
                             <span className="text-[11px] text-text-tertiary truncate block leading-tight mt-0.5">{selected.desc}</span>
@@ -350,7 +365,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
                                         onClick={() => { onChange(option.id); setIsOpen(false); }}
                                         className={`w-full rounded-[10px] p-2 flex items-center gap-3 transition-all duration-200 group relative ${isSelected ? (isLight ? 'bg-bg-item-active shadow-inner' : 'bg-white/10 shadow-inner') : (isLight ? 'hover:bg-bg-item-surface' : 'hover:bg-white/5')}`}
                                     >
-                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 ${isSelected ? 'scale-100' : 'scale-95 group-hover:scale-100'} ${getIconStyle(option.color, false)}`}>
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 ${isSelected ? 'scale-100' : 'scale-95 group-hover:scale-100'} ${getIconStyle(option.color, false, option.neutralTile, option.tileClassName)}`}>
                                             {option.icon}
                                         </div>
                                         <div className="flex-1 min-w-0 text-left">
@@ -358,7 +373,6 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
                                                 <div className="flex items-center gap-2">
                                                     <span className={`text-[13px] font-medium transition-colors ${isSelected && !isLight ? 'text-white' : 'text-text-primary'}`}>{option.label}</span>
                                                     {option.badge && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.badge === 'Saved' ? 'green' : option.color)}`}>{t(option.badge)}</span>}
-                                                    {option.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.color)}`}>{t('Recommended')}</span>}
                                                 </div>
                                                 {isSelected && <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}><Check size={14} className="text-accent-primary" strokeWidth={3} /></motion.div>}
                                             </div>
@@ -1791,18 +1805,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             </p>
                                                         </div>
                                                     </div>
-                                                    <div
-                                                        onClick={() => {
+                                                    <SettingsToggle
+                                                        checked={isUndetectable}
+                                                        label={t('Undetectable mode')}
+                                                        onChange={() => {
                                                             const newState = !isUndetectable;
                                                             setIsUndetectable(newState);
                                                             window.electronAPI?.setUndetectable(newState);
                                                             // Analytics: Undetectable Mode Toggle
                                                             analytics.trackModeSelected(newState ? 'undetectable' : 'overlay');
                                                         }}
-                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${isUndetectable ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                    >
-                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isUndetectable ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
+                                                        className={isUndetectable ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                    />
                                                 </div>
 
                                                 {/* Open at Login */}
@@ -1816,16 +1830,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Natively will open automatically when you log in to your computer')}</p>
                                                         </div>
                                                     </div>
-                                                    <div
-                                                        onClick={() => {
+                                                    <SettingsToggle
+                                                        checked={openOnLogin}
+                                                        label={t('Open Natively when you log in')}
+                                                        onChange={() => {
                                                             const newState = !openOnLogin;
                                                             setOpenOnLogin(newState);
                                                             window.electronAPI?.setOpenAtLogin(newState);
                                                         }}
-                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${openOnLogin ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                    >
-                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${openOnLogin ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
+                                                        className={openOnLogin ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                    />
                                                 </div>
 
                                                 {/* Ambient AI Chat */}
@@ -1839,19 +1853,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Meetings start without capturing mic or system audio')}</p>
                                                         </div>
                                                     </div>
-                                                    <div
-                                                        onClick={() => {
+                                                    <SettingsToggle
+                                                        checked={ambientChatEnabled}
+                                                        label={t('Ambient AI Chat')}
+                                                        onChange={() => {
                                                             const newState = !ambientChatEnabled;
                                                             setAmbientChatEnabled(newState);
                                                             window.electronAPI?.setAmbientChatEnabled?.(newState);
                                                         }}
-                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${ambientChatEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                        role="switch"
-                                                        aria-checked={ambientChatEnabled}
-                                                        aria-label={t('Ambient AI Chat')}
-                                                    >
-                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${ambientChatEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
+                                                        className={ambientChatEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                    />
                                                 </div>
 
                                                 {/* Meeting Retention */}
@@ -1865,19 +1876,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <p className="text-xs text-text-secondary mt-0.5 leading-normal">{t('Nothing is saved after the meeting ends')}</p>
                                                         </div>
                                                     </div>
-                                                    <div
-                                                        onClick={() => {
+                                                    <SettingsToggle
+                                                        checked={meetingRetention === 'never'}
+                                                        label={t('Do not save meetings')}
+                                                        onChange={() => {
                                                             const nextRetention = meetingRetention === 'never' ? 'forever' : 'never';
                                                             setMeetingRetention(nextRetention);
                                                             window.electronAPI?.setMeetingRetention?.(nextRetention);
                                                         }}
-                                                        className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 mt-2 ${meetingRetention === 'never' ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                        role="switch"
-                                                        aria-checked={meetingRetention === 'never'}
-                                                        aria-label={t("Do not save meetings")}
-                                                    >
-                                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${meetingRetention === 'never' ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                    </div>
+                                                        className={`mt-2 ${meetingRetention === 'never' ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                    />
                                                 </div>
 
                                                 {/* Theme */}
@@ -2137,16 +2145,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 </p>
                                                             </div>
                                                         </div>
-                                                        <div
-                                                            onClick={() => {
+                                                        <SettingsToggle
+                                                            checked={isMousePassthrough}
+                                                            label={t('Mouse Passthrough')}
+                                                            onChange={() => {
                                                                 const newState = !isMousePassthrough;
                                                                 setIsMousePassthrough(newState);
                                                                 window.electronAPI?.setOverlayMousePassthrough(newState);
                                                             }}
-                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${isMousePassthrough ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                        >
-                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isMousePassthrough ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                        </div>
+                                                            className={isMousePassthrough ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
                                                     </div>
 
                                                     {/* Debug Logging */}
@@ -2160,19 +2168,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <p className="text-xs text-text-secondary mt-0.5">{t('Print detailed audio, STT, and pipeline diagnostics')}</p>
                                                             </div>
                                                         </div>
-                                                        <div
-                                                            onClick={() => {
+                                                        <SettingsToggle
+                                                            checked={verboseLogging}
+                                                            label={t('Verbose debug logging')}
+                                                            onChange={() => {
                                                                 const newState = !verboseLogging;
                                                                 setVerboseLogging(newState);
                                                                 window.electronAPI?.setVerboseLogging?.(newState);
-                                                                if (newState) {
-                                                                    setShowVerboseToast(true);
-                                                                }
                                                             }}
-                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${verboseLogging ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                        >
-                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${verboseLogging ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                        </div>
+                                                            className={verboseLogging ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
                                                     </div>
 
                                                     {/* Verbose logging toast */}
@@ -2222,8 +2227,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <p className="text-xs text-text-secondary mt-0.5">{t('Run generated code against test cases and self-correct')}</p>
                                                             </div>
                                                         </div>
-                                                        <div
-                                                            onClick={() => {
+                                                        <SettingsToggle
+                                                            checked={codeVerification}
+                                                            label={t('Verify coding answers')}
+                                                            onChange={() => {
                                                                 const newState = !codeVerification;
                                                                 setCodeVerification(newState);
                                                                 // Swallow rejection: a missing handler (pre-rebuild) must not
@@ -2231,13 +2238,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 // other toggle-style settings also use optional chaining.
                                                                 window.electronAPI?.setCodeVerification?.(newState)?.catch?.(() => { });
                                                             }}
-                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${codeVerification ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                            role="switch"
-                                                            aria-checked={codeVerification}
-                                                            aria-label={t('Verify coding answers')}
-                                                        >
-                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${codeVerification ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                        </div>
+                                                            className={codeVerification ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
                                                     </div>
 
                                                     {/* Interviewer Transcript */}
@@ -2251,17 +2253,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <p className="text-xs text-text-secondary mt-0.5">{t('Show real-time transcription of the interviewer')}</p>
                                                             </div>
                                                         </div>
-                                                        <div
-                                                            onClick={() => {
+                                                        <SettingsToggle
+                                                            checked={showTranscript}
+                                                            label={t('Interviewer Transcript')}
+                                                            onChange={() => {
                                                                 const newState = !showTranscript;
                                                                 setShowTranscript(newState);
                                                                 localStorage.setItem('natively_interviewer_transcript', String(newState));
                                                                 window.dispatchEvent(new Event('storage'));
                                                             }}
-                                                            className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors cursor-pointer shrink-0 ${showTranscript ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                        >
-                                                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${showTranscript ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                        </div>
+                                                            className={showTranscript ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
                                                     </div>
                                                 </div>
                                                 </Disclosure>
@@ -2630,16 +2632,33 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         value={sttProvider}
                                                         onChange={(val) => handleSttProviderChange(val as any)}
                                                         options={[
-                                                            ...(hasNativelyKey ? [{ id: 'natively', label: 'Natively API', badge: 'Saved' as const, recommended: true, desc: t('Managed transcription via Natively backend'), color: 'blue', icon: <Mic size={14} /> }] : []),
-                                                            { id: 'google', label: 'Google Cloud', badge: googleServiceAccountPath ? 'Saved' : null, recommended: true, desc: t('gRPC streaming via Service Account'), color: 'blue', icon: <Mic size={14} /> },
-                                                            { id: 'groq', label: 'Groq Whisper', badge: hasStoredSttGroqKey ? 'Saved' : null, recommended: true, desc: t('Ultra-fast REST transcription'), color: 'orange', icon: <Mic size={14} /> },
-                                                            { id: 'openai', label: 'OpenAI Whisper', badge: hasStoredSttOpenaiKey ? 'Saved' : null, desc: t('OpenAI-compatible Whisper API'), color: 'green', icon: <Mic size={14} /> },
-                                                            { id: 'deepgram', label: 'Deepgram Nova-3', badge: hasStoredDeepgramKey ? 'Saved' : null, recommended: true, desc: t('High-accuracy REST transcription'), color: 'purple', icon: <Mic size={14} /> },
-                                                            { id: 'elevenlabs', label: 'ElevenLabs Scribe', badge: hasStoredElevenLabsKey ? 'Saved' : null, desc: t('Scribe v2 Realtime API'), color: 'teal', icon: <Mic size={14} /> },
-                                                            { id: 'azure', label: 'Azure Speech', badge: hasStoredAzureKey ? 'Saved' : null, desc: t('Microsoft Cognitive Services STT'), color: 'cyan', icon: <Mic size={14} /> },
-                                                            { id: 'ibmwatson', label: 'IBM Watson', badge: hasStoredIbmWatsonKey ? 'Saved' : null, desc: t('IBM Watson cloud STT service'), color: 'indigo', icon: <Mic size={14} /> },
-                                                            { id: 'soniox', label: 'Soniox', badge: hasStoredSonioxKey ? 'Saved' : null, recommended: true, desc: t('60+ languages, multilingual, domain context'), color: 'cyan', icon: <Mic size={14} /> },
-                                                            { id: 'local-whisper', label: 'Local Whisper', badge: null, desc: t('Privacy-first: runs 100% on your device'), color: 'green', icon: <Cpu size={14} /> },
+                                                            /* Icons are each provider's official monochrome brand mark, inlined so it
+                                                               inherits the tile's per-provider tint (see src/components/ui/BrandMark.tsx).
+                                                               Soniox is a monogram because it publishes no licence-compatible mark;
+                                                               Natively is our own logo component. Every option used to share one
+                                                               generic <Mic>, which made the list unreadable at a glance. */
+                                                            ...(hasNativelyKey ? [{ id: 'natively', label: 'Natively API', badge: 'Saved' as const, desc: t('Managed transcription via Natively backend'), color: 'blue', icon: <BrandMark provider="natively" />, neutralTile: true }] : []),
+                                                            { id: 'google', label: 'Google Cloud', badge: googleServiceAccountPath ? 'Saved' : null, desc: t('gRPC streaming via Service Account'), color: 'blue', icon: <BrandMark provider="google" />, neutralTile: true },
+                                                            { id: 'groq', label: 'Groq Whisper', badge: hasStoredSttGroqKey ? 'Saved' : null, desc: t('Ultra-fast REST transcription'), color: 'orange', icon: <BrandMark provider="groq" />, neutralTile: true },
+                                                            { id: 'openai', label: 'OpenAI Whisper', badge: hasStoredSttOpenaiKey ? 'Saved' : null, desc: t('OpenAI-compatible Whisper API'), color: 'green', icon: <BrandMark provider="openai" />, neutralTile: true },
+                                                            { id: 'deepgram', label: 'Deepgram Nova-3', badge: hasStoredDeepgramKey ? 'Saved' : null, desc: t('High-accuracy REST transcription'), color: 'purple', icon: <BrandMark provider="deepgram" />, neutralTile: true },
+                                                            { id: 'elevenlabs', label: 'ElevenLabs Scribe', badge: hasStoredElevenLabsKey ? 'Saved' : null, desc: t('Scribe v2 Realtime API'), color: 'teal', icon: <BrandMark provider="elevenlabs" />, neutralTile: true },
+                                                            { id: 'azure', label: 'Azure Speech', badge: hasStoredAzureKey ? 'Saved' : null, desc: t('Microsoft Cognitive Services STT'), color: 'cyan', icon: <BrandMark provider="azure" />, neutralTile: true },
+                                                            { id: 'ibmwatson', label: 'IBM Watson', badge: hasStoredIbmWatsonKey ? 'Saved' : null, desc: t('IBM Watson cloud STT service'), color: 'indigo', icon: <BrandMark provider="ibmwatson" />, neutralTile: true },
+                                                            /* Soniox has no licence-compatible mark, so its monogram reproduces the brand's
+                                                               own treatment instead of a generic tint: white letterform on black. Fixed in
+                                                               both themes — it is a brand colour pair, not a themed surface. */
+                                                            { id: 'soniox', label: 'Soniox', badge: hasStoredSonioxKey ? 'Saved' : null, desc: t('60+ languages, multilingual, domain context'), color: 'cyan', icon: <BrandMonogram name="Soniox" />, tileClassName: 'bg-black text-white' },
+                                                            /* Label only — the `local-whisper` id stays as-is. It is the persisted
+                                                               sttProvider value and is matched across the main process, IPC and
+                                                               CredentialsManager, so renaming it would strand every existing user
+                                                               on a provider the app no longer recognises. */
+                                                            /* The host OS mark: these models run on THIS machine, so the platform is
+                                                               the identity. Apple on macOS; on Windows the Microsoft mark, because no
+                                                               Windows logo exists under a licence compatible with AGPL-3.0 (it is in
+                                                               neither lobehub nor simple-icons — see the README). `isMac` is the same
+                                                               platform source the rest of this panel uses. */
+                                                            { id: 'local-whisper', label: 'Local Models', badge: null, desc: t('Privacy-first: runs 100% on your device'), color: 'green', icon: <BrandMark provider={isMac ? 'apple' : 'microsoft'} />, neutralTile: true },
                                                         ]}
                                                     />
                                                 </div>
@@ -3103,37 +3122,38 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 has no meaning there and routing "sck" as a device id
                                                 silently breaks system audio (issue #252 audit / F-003). */}
                                             {isMac && (
-                                                <>
-                                                    <div className="h-px bg-border-subtle my-2" />
-                                                    <div className="bg-amber-500/5 rounded-xl border border-amber-500/20 p-4">
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex items-start gap-3">
-                                                                <div className="mt-0.5 p-1.5 rounded-lg bg-amber-500/10 text-amber-500">
-                                                                    <FlaskConical size={18} />
-                                                                </div>
-                                                                <div>
-                                                                    <div className="flex items-center gap-2 mb-0.5">
-                                                                        <h3 className="text-sm font-bold text-text-primary">SCK Backend</h3>
-                                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent-muted text-accent-primary uppercase tracking-wide">{t('Alternative')}</span>
-                                                                    </div>
-                                                                    <p className="text-xs text-text-secondary leading-relaxed max-w-[300px]">
-                                                                        {t('Use the ScreenCaptureKit backend. An optimized alternative to CoreAudio if you experience any capture issues.')}
-                                                                    </p>
-                                                                </div>
+                                                /* Standard panel card, matching the Speech Provider cards above. This
+                                                   was an amber wash with a FlaskConical icon — the visual grammar this
+                                                   panel uses for warnings — which oversold a supported alternative
+                                                   backend as something risky, and matched nothing else in Settings.
+                                                   The "Alternative" badge went with it: the description's own first
+                                                   clause already says it, and a badge that only echoes adjacent copy
+                                                   is noise (same rule as the status badge in ProviderCard). */
+                                                <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
+                                                    <div className="flex items-center justify-between gap-4">
+                                                        <div className="flex items-center gap-4 min-w-0">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Headphones size={20} />
                                                             </div>
-                                                            <div
-                                                                onClick={() => {
-                                                                    const newState = !useExperimentalSck;
-                                                                    setUseExperimentalSck(newState);
-                                                                    window.localStorage.setItem('useExperimentalSckBackend', newState ? 'true' : 'false');
-                                                                }}
-                                                                className={`w-11 h-6 rounded-full p-[3px] flex items-center transition-colors shrink-0 cursor-pointer ${useExperimentalSck ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                                            >
-                                                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${useExperimentalSck ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                            <div className="min-w-0">
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('SCK Backend')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {t('Use the ScreenCaptureKit backend. An optimized alternative to CoreAudio if you experience any capture issues.')}
+                                                                </p>
                                                             </div>
                                                         </div>
+                                                        <SettingsToggle
+                                                            checked={useExperimentalSck}
+                                                            label={t('Use ScreenCaptureKit backend')}
+                                                            onChange={() => {
+                                                                const newState = !useExperimentalSck;
+                                                                setUseExperimentalSck(newState);
+                                                                window.localStorage.setItem('useExperimentalSckBackend', newState ? 'true' : 'false');
+                                                            }}
+                                                            className={useExperimentalSck ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
                                                     </div>
-                                                </>
+                                                </div>
                                             )}
                                         </div>
                                     </div>

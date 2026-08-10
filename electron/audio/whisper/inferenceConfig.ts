@@ -46,6 +46,12 @@ const WHISPER_SAFE_DTYPE: Record<string, string> = {
     decoder_model: 'q8',
     decoder_model_merged: 'q8',
     decoder_with_past_model: 'q8',
+    // Single-session CTC models (Parakeet) load one module named `model`. The
+    // lookup falls back to fp32 for any key it does not find, and for Parakeet
+    // that means the 2.4 GB fp32 weights instead of the 583 MB q8 — a 4x
+    // download for a model whose q8 WER is within noise. Whisper-family models
+    // have no `model` session, so this key is inert for them.
+    model: 'q8',
 };
 
 /**
