@@ -313,13 +313,56 @@ const PRONOUN_RESOLUTION_MAX_WORDS = 12;
  *     into a phantom quotation.
  */
 const QUOTED_SUBJECT_RES: readonly RegExp[] = [
-  /"[^"]{2,}"/,
-  /“[^”]{2,}”/,
+  /"([^"]{2,})"/,
+  /“([^”]{2,})”/,
   /(?:^|[\s(\[:;,—–-])['‘]([^'’]{2,})['’](?=$|[\s).,?!\]:;—–-])/,
 ];
+
+/**
+ * A quoted SUBJECT is a clause; a quoted TERM is a word (2026-08-10).
+ *
+ * The double-quote branch originally had no discrimination at all — 2+ chars,
+ * no boundary rule — and returned ahead of every other gate. So
+ * `Did she say "no"?` and `Why did she call it "flaky"?` lost their
+ * activePerson binding to a scare-quoted word, and any pasted error string or
+ * code snippet did the same.
+ *
+ * Requiring 2+ WORDS is the discriminator. Every real case this gate exists for
+ * quotes a whole question — "Why do you want this role?", "What is your
+ * greatest weakness?" — while scare quotes, quoted identifiers and quoted error
+ * tokens are single words. Applied to all three branches so the quote style a
+ * user happens to type cannot change the outcome.
+ */
 function hasQuotedSubject(q: string): boolean {
-  return QUOTED_SUBJECT_RES.some((re) => re.test(q));
+  for (const re of QUOTED_SUBJECT_RES) {
+    const m = q.match(re);
+    if (m && (m[1] ?? '').trim().split(/\s+/).filter(Boolean).length >= 2) return true;
+  }
+  return false;
 }
+
+/**
+ * Nouns that cannot denote on their own — the classifier's own relational set.
+ *
+ * `extractTopicPhrase` happily returns "difference", "steps", "tradeoffs" as a
+ * topic, because for the STATE-ADVANCE path that is fine: it is a reasonable
+ * thing to store as `activeTopic`. It is NOT evidence the current question
+ * states its own subject, and treating it as such made
+ * "Can you explain the difference?" self-contained — pre-empting the
+ * continuation-fragment branch that exists precisely for that shape
+ * (regression found in review, 2026-08-10).
+ *
+ * Kept as a literal mirror of turn-classifier's CONTINUATION_NOUN_RE rather
+ * than an import, because that regex is unanchored and used for a different
+ * question ("does this turn contain a relational noun"); here the test is
+ * "is the extracted phrase HEADED by one".
+ */
+const RELATIONAL_HEAD_RE =
+  /^(?:the\s+|a\s+|an\s+)?(?:examples?|details?|alternatives?|options?|differences?|difference|trade-?offs?|pros|cons|benefits?|drawbacks?|advantages?|disadvantages?|use ?cases?|steps?|reasons?|comparisons?|comparison|syntax|summary|explanation|definitions?|definition|specifics?|clarification|more|thoughts?|opinions?|feedback|suggestions?|recommendations?|takeaways?|ideas?)\b/i;
+
+/** Openers that are anaphoric by construction: "what about X" always means
+ *  "X, in relation to what we were just discussing". */
+const ANAPHORIC_OPENER_RE = /^(?:so\s+|and\s+|but\s+)?(?:what|how)\s+about\b/i;
 
 /**
  * The question's OWN subject, when it states one in lowercase (2026-08-09).
@@ -337,8 +380,13 @@ function hasQuotedSubject(q: string): boolean {
 const PRONOUN_TOKEN_RE =
   /\b(?:i|me|my|mine|we|us|our|ours|you|your|yours|he|him|his|she|her|hers|it|its|they|them|their|theirs|this|that|these|those)\b/i;
 function ownSubjectPhrase(q: string): string | undefined {
+  // "What about X?" is anaphoric however concrete X is.
+  if (ANAPHORIC_OPENER_RE.test(q.trim())) return undefined;
+  // A relational noun is not a subject — see RELATIONAL_HEAD_RE.
+  if (isContinuationFragment(q)) return undefined;
   const phrase = extractTopicPhrase(q);
   if (!phrase || PRONOUN_TOKEN_RE.test(phrase)) return undefined;
+  if (RELATIONAL_HEAD_RE.test(phrase.trim())) return undefined;
   return phrase;
 }
 
