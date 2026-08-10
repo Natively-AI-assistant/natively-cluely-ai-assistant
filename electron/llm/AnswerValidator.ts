@@ -373,8 +373,16 @@ export const repairCodingMarkdown = (rawResponse: string, question?: string, lan
   // if there's no complexity section AND no extractable bound do we use the
   // honest O(?) placeholder.
   const complexitySection = (parsed.sections.complexity || '').trim();
+  // Live regression (2026-08-10, real natively-api answer): the model stated
+  // "runs in O(n) time and O(1) space" in prose that sat AFTER its own bold
+  // heading, so it landed in a parsed section rather than the preamble — and
+  // scanning only the preamble missed it, overwriting a correct bound with the
+  // O(?) placeholder. Search the preamble first (most common position), then
+  // the rest of the model's own text, before ever falling back to the marker.
+  // Never fabricate a bound; only lift one the model actually wrote.
   const complexity = complexitySection
     || extractComplexityText(parsed.preamble) // bound stated inline in prose
+    || extractComplexityText(trimmed)         // bound stated anywhere else
     || MISSING_COMPLEXITY_MARKER;
 
   // Follow-ups: parsed section (as lines) or the standard two prompts.
@@ -415,12 +423,48 @@ export const validateCodingMarkdown = (response: string): AnswerValidationResult
     && !startsWithCode
     && !leaksContext;
 
+  // SUBSTANTIVELY COMPLETE ANSWERS ARE NOT REWRITTEN (live regression,
+  // 2026-08-10). Reproduced against the real natively-api backend on a healthy
+  // ~1.7s answer — no deadline, nothing malformed: the model simply wrote a
+  // correct, complete solution in its OWN format (bold pseudo-headings) instead
+  // of the six `##` headings. The reformat then LOST content — it dropped the
+  // second fenced block and replaced the model's own "O(n) time and O(1) space"
+  // with the O(?) placeholder. 2 of 3 live coding answers hit this.
+  //
+  // An answer that carries working code AND a stated complexity has everything
+  // the contract exists to guarantee; only its heading style differs. Rewriting
+  // it can lose real content and can only ever gain cosmetics, so the trade is
+  // strictly negative. The repair still runs where it genuinely helps — a
+  // missing code block, a missing bound, or leaked context — which is the case
+  // it was built for.
+  // `hasComplexity` requires the LABELLED form ("Time Complexity: O(n)"). The
+  // live answer stated its bound as natural prose — "runs in O(n) time and O(1)
+  // space" — which is a real, user-visible complexity statement that the label
+  // check rejects. `extractComplexityText` is the existing parser for exactly
+  // that phrasing, so completeness is judged on "did the model state a bound in
+  // any form", not "did it use our heading style".
+  const statesComplexity = complexity || Boolean(extractComplexityText(answer));
+  // Narrow exemption: it applies only when the model used its OWN format and
+  // wrote everything. An answer that already uses the canonical `##` headings
+  // but puts them in the WRONG ORDER is a different case — re-ordering known
+  // sections is lossless (every section is parsed and re-emitted verbatim), and
+  // leading with a bare code block is a real presentation problem worth fixing.
+  // So an answer that has recognized canonical sections still gets repaired;
+  // only a model-formatted, complete answer is left alone.
+  const usesCanonicalHeadings = missingSections.length === 0;
+  const substantivelyComplete = codeBlock
+    && hasTaggedBlock
+    && statesComplexity
+    && !startsWithCode
+    && !leaksContext
+    && !usesCanonicalHeadings;
+
   return {
     ok,
     missingSections,
     hasCodeBlock: codeBlock,
     hasComplexity: complexity,
-    repaired: ok ? undefined : repairCodingMarkdown(answer),
+    repaired: (ok || substantivelyComplete) ? undefined : repairCodingMarkdown(answer),
   };
 };
 
