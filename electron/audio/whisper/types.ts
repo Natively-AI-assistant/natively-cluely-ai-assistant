@@ -25,7 +25,14 @@ export type WhisperModelId =
   // CTC has no autoregressive decoder, so the repo ships one `onnx/model.onnx`
   // instead of the encoder/decoder pair every other id here uses. See
   // `sessionLayout` on WhisperModelInfo.
-  | 'onnx-community/parakeet-ctc-0.6b-ONNX';
+  | 'onnx-community/parakeet-ctc-0.6b-ONNX'
+  // Nemotron 3.5 ASR Streaming — NVIDIA's cache-aware FastConformer-RNNT,
+  // multilingual, genuinely chunked/streaming (not simulated like every other
+  // entry above). Int4 ONNX export via onnx-community. Bypasses
+  // @huggingface/transformers' pipeline() entirely — see
+  // electron/audio/whisper/nemotron/ for the raw onnxruntime-node engine that
+  // drives its three graphs (encoder/decoder/joint) directly.
+  | 'onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4';
 
 export type WhisperModelStatus = 'available' | 'missing' | 'downloading' | 'error';
 
@@ -68,7 +75,7 @@ export interface WhisperModelInfo {
    * for an encoder/decoder pair that will never exist and reports the model
    * missing forever, so it re-downloads on every launch and never runs.
    */
-  sessionLayout?: 'encoder-decoder' | 'single';
+  sessionLayout?: 'encoder-decoder' | 'single' | 'nemotron-rnnt';
 }
 
 export interface WorkerInitMessage {

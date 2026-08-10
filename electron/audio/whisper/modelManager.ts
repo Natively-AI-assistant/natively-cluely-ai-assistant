@@ -30,6 +30,25 @@ const MODEL_CATALOG: WhisperModelInfo[] = [
   //     `model: 'q8'` in WHISPER_SAFE_DTYPE is what keeps us off that path.
   { id: 'onnx-community/parakeet-ctc-0.6b-ONNX', name: 'Parakeet CTC 0.6B', sizeMb: 583, speed: 'fast', accuracy: 'very-high', multilingual: false, status: 'missing', sessionLayout: 'single', externalDataFormat: true },
 
+  // ── Nemotron 3.5 ASR Streaming — NVIDIA cache-aware FastConformer-RNNT.
+  //     The ONLY model in this catalog with real streaming (chunked ONNX
+  //     inference with cross-call cache state), not the simulated polling
+  //     used for Whisper/Distil-Whisper/Moonshine/Parakeet. Multilingual
+  //     (40 locales, tiered — see nemotron/languageTable.ts for which are
+  //     exposed). Flat repo layout (no onnx/ subdir, no dtype suffix) — its
+  //     cache check is a dedicated branch below, not expectedOnnxFiles().
+  {
+    id: 'onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4',
+    name: 'Nemotron 3.5 ASR Streaming',
+    sizeMb: 793,
+    speed: 'fast',
+    accuracy: 'high',
+    multilingual: true,
+    status: 'missing',
+    streaming: true,
+    sessionLayout: 'nemotron-rnnt',
+  },
+
   // ── Distil-Whisper — same architecture as Whisper, distilled to 1/2 layers,
   //     ~6× faster CPU/GPU at near-equivalent WER. English-only.
   { id: 'distil-whisper/distil-small.en',    name: 'Distil Small EN',  sizeMb: 164,  speed: 'very-fast', accuracy: 'high',      multilingual: false, status: 'missing', distilled: true },
@@ -244,6 +263,21 @@ function expectedOnnxFiles(
   };
 }
 
+// Exported (not module-private) so downloadFiles.ts (Task 9) imports this same
+// list rather than maintaining a second copy that could drift out of sync.
+export const NEMOTRON_REQUIRED_FILES = [
+  'encoder.onnx', 'encoder.onnx.data',
+  'decoder.onnx', 'decoder.onnx.data',
+  'joint.onnx', 'joint.onnx.data',
+  'tokenizer.json', 'vocab.txt', 'tokenizer_config.json',
+] as const;
+
+function isNemotronModelCached(modelDir: string): boolean {
+  return NEMOTRON_REQUIRED_FILES.every(f => {
+    try { return fs.statSync(path.join(modelDir, f)).size > 0; } catch { return false; }
+  });
+}
+
 /**
  * Returns true when the cache contains the ONNX files the active dtype will
  * actually load. When `dtype` is omitted (legacy callers), falls back to a
@@ -260,6 +294,9 @@ export function isModelCached(modelId: WhisperModelId, dtype?: string | Record<s
   const modelDir = path.join(cacheDir, modelIdToCacheDir(modelId));
   if (!fs.existsSync(modelDir)) return false;
 
+  const sessionLayout = MODEL_CATALOG.find(m => m.id === modelId)?.sessionLayout;
+  if (sessionLayout === 'nemotron-rnnt') return isNemotronModelCached(modelDir);
+
   if (!dtype) {
     try { return fs.readdirSync(modelDir).length > 0; } catch { return false; }
   }
@@ -275,7 +312,6 @@ export function isModelCached(modelId: WhisperModelId, dtype?: string | Record<s
   };
 
   const externalDataFormat = getModelExternalDataFormat(modelId);
-  const sessionLayout = MODEL_CATALOG.find(m => m.id === modelId)?.sessionLayout;
   const { encoder, encoderData, decoderOptions } = expectedOnnxFiles(dtype, externalDataFormat, sessionLayout);
   if (!present(encoder)) return false;
   // External-weight companion(s) of the encoder must exist too, else ORT aborts.
