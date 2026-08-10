@@ -56,10 +56,30 @@ export const LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS = 7000;
 export const LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS = 30000;
 /**
  * Absolute ceiling on a live answer's first-useful token (the no-fallback budget).
- * Sits just above the 7s first-useful cap so a MiniMax stream about to deliver at
+ * Sits above the 7s first-useful cap so a MiniMax stream about to deliver at
  * ~6.5s isn't guillotined by this ceiling.
+ *
+ * MUST ALSO STAY ABOVE natively-api's AI_TTFT_BUDGET_MS (10s), and this is the
+ * binding constraint. A Natively-key user's chat goes to
+ * `${NATIVELY_API_URL}/v1/chat` (LLMHelper.ts), where the server runs a
+ * SEQUENTIAL provider cascade (Gemini Flash -> MiniMax-M3 -> Gemini Pro) and
+ * cuts over to the next provider when one is slow to first token. That cutover
+ * is the thing that actually RESCUES a slow turn — the client, by contrast, can
+ * only give up.
+ *
+ * At the previous 8000 the ordering was inverted: the client abandoned the turn
+ * 2s BEFORE the server would have rotated, so the user got the local fallback
+ * (or, for coding, a fabricated scaffold) instead of the answer the server was
+ * about to deliver. 13000 = the server's 10s cutover + 3s for the next leg to
+ * produce a first token. DeadlineBudgetOrdering2026_08_10.test.mjs reads
+ * AI_TTFT_BUDGET_MS out of server.js and fails if these drift back out of order.
+ *
+ * Cost of the raise is near-zero: this ceiling only fires when a provider is
+ * genuinely slow to first token — a healthy stream delivers in <1s and never
+ * approaches it. The inter-token stall guard (unchanged, 8s) still bounds a
+ * mid-stream hang, which is a different failure mode.
  */
-export const LIVE_TOTAL_HARD_TIMEOUT_MS = 8000;
+export const LIVE_TOTAL_HARD_TIMEOUT_MS = 13000;
 /**
  * Local-provider counterpart to LIVE_TOTAL_HARD_TIMEOUT_MS: the no-fallback ceiling
  * when there is no deterministic fallback to swap in. Matches the local first-useful
