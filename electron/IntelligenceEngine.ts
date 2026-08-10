@@ -2850,7 +2850,26 @@ export class IntelligenceEngine extends EventEmitter {
             trace.mark('validation_started', { answerType: answerPlan.answerType });
             wtaTrace.lifecycle('validating', { answerType: answerPlan.answerType });
             const structureValidation = validateAnswerStructure(answerPlan.answerType, fullAnswer);
-            if (!structureValidation.ok && structureValidation.repaired) {
+            // DEADLINE-TRUNCATED ANSWERS ARE NOT MALFORMED (user-reported
+            // 2026-08-09, reproduced): the coding scaffold repair below fabricates
+            // any section the model didn't write — a code block holding
+            // MISSING_CODE_MARKER, "O(?)" complexity, a generic dry-run. That is
+            // the right call for a model that ignored the contract, and the WRONG
+            // call for a stream the first-useful/stall deadline cut short: the
+            // model was still writing.
+            //
+            // It is user-visible because CodingStreamGate opens at 48 chars (or on
+            // the first heading), well below STREAMING_SAFE_PREFIX_CHARS (160), so
+            // a coding answer is ALREADY ON SCREEN while fullAnswer is short.
+            // Measured pre-fix: 68 visible chars of correct approach text replaced
+            // by 676 chars of mostly-fabricated scaffold. Keeping the honest
+            // partial is strictly better — the user keeps what they were reading,
+            // and nothing is invented on their behalf.
+            const structureRepairSuppressedByDeadline = liveDeadlineFired && emittedStreamingToken;
+            if (structureRepairSuppressedByDeadline && !structureValidation.ok) {
+                trace.mark('validation_completed', { reason: 'structure_repair_skipped_deadline_truncated' });
+            }
+            if (!structureRepairSuppressedByDeadline && !structureValidation.ok && structureValidation.repaired) {
                 console.warn('[IntelligenceEngine] Repaired answer structure', {
                     answerType: answerPlan.answerType,
                     missingSections: structureValidation.missingSections,

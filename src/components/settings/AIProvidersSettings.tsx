@@ -151,7 +151,10 @@ export const AIP_CSS = `
        Progression it has to stay legible against: rest 0.10 -> hover 0.12
        (--aip-border-strong) -> focus 0.36. */
     --aip-input-border-focus: rgba(255,255,255,0.36);
-    --aip-switch-off:         rgba(255,255,255,0.14);
+    /* Repointed to the shared Apple-style toggle palette (index.css) so this
+       switch matches every other one in the app instead of the panel's own
+       neutral-grey range. */
+    --aip-switch-off:         var(--toggle-off);
     --aip-pill-bg:            var(--aip-item-active);
     --aip-pill-border:        var(--aip-border-strong);
     --aip-pill-lift:          inset 0 1px 0 rgba(255,255,255,0.06);
@@ -246,7 +249,7 @@ export const AIP_CSS = `
        #27272A. 0.44 composites to #838486 = 3.16:1. (Was #374151 at 8.7:1.)
        Rest 0.11 -> hover 0.13 -> focus 0.44. */
     --aip-input-border-focus: rgba(0,0,0,0.44);
-    --aip-switch-off:   rgba(0,0,0,0.16);
+    --aip-switch-off:   var(--toggle-off);
     --aip-pill-bg:      #ffffff;
     --aip-pill-border:  rgba(0,0,0,0.06);
     --aip-pill-lift:    none;
@@ -434,26 +437,28 @@ export const AIP_CSS = `
     word-break: break-word;
 }
 
-/* ── Switch. 34x20 track / 14px thumb / 14px travel (border-box: 34 - 2px
-      border - 4px padding - 14px thumb = 14). The thumb is the ONE control
-      with a physical metaphor, so it gets travel + spring. ─────────────── */
-/* Hit target: the visible track is 34x20, under the 24px WCAG 2.5.8 minimum on the
-   vertical axis. A transparent ::after grows the target into the surrounding padding
-   without changing layout or the visual size. */
-.aip-switch::after { content:''; position:absolute; inset:-3px -2px; }
-.aip-switch {
-    /* 34px track − 2*1px border − 2*2px padding − 14px thumb = 14px travel.
-       The shared 14.66px default assumes no border, and left the thumb 0.66px
-       short of the right edge here. */
-    --toggle-travel: 14px;
-    position:relative; box-sizing:border-box; width:34px; height:20px; flex-shrink:0;
-    padding:2px; border-radius:9999px; border:1px solid transparent;
-    background: var(--aip-switch-off);
-    display:inline-flex; align-items:center; cursor:pointer;
-    transition: background var(--aip-dur-state) var(--aip-ease-out),
-                border-color var(--aip-dur-state) var(--aip-ease-out);
+/* ── Switch. Track/thumb geometry, travel, and press are the shared
+      .t-toggle / .t-toggle-thumb rule's literal 88x40/52x32 reference
+      shape (index.css) at zoom:0.5 -> a 44x20 track (matches the original
+      20px row height exactly; width grows from 34px to 44px — same
+      trade-off as every other size variant, see index.css). Only the
+      background color and hit-target stay local here. */
+.aip-switch::after {
+    content:'';
+    position:absolute;
+    /* -3px/-2px at the element's actual (post-zoom) scale; doubled here
+       because this pseudo-element inherits the parent's zoom:0.5 too. */
+    inset:-6px -4px;
 }
-.aip-switch[aria-checked='true'] { background: var(--aip-accent); }
+.aip-switch {
+    zoom: 0.5;
+    flex-shrink:0;
+    background: var(--aip-switch-off);
+    cursor:pointer;
+}
+/* Repointed to --toggle-on (not --aip-accent) so only the switch changes —
+   --aip-accent still drives buttons, links, and chips elsewhere in this panel. */
+.aip-switch[aria-checked='true'] { background: var(--toggle-on); }
 .aip-switch[aria-disabled='true'] { cursor:not-allowed; }
 .aip-switch:disabled { cursor:not-allowed; opacity:0.5; }
 /* Thumb dimensions, position, and bounce are owned by .t-toggle-thumb in
@@ -982,13 +987,15 @@ interface AipSwitchProps {
 
 /**
  * The shared .t-toggle / .t-toggle-thumb classes (defined in src/index.css)
- * own the thumb dimensions, travel, and bounce keyframe. The .aip-switch
- * class continues to drive the per-theme track color via --aip-switch-off
- * / --aip-accent.
+ * own the literal reference geometry (88x40/52x32) AND colors/transitions
+ * now. .aip-switch only supplies `zoom: 0.5` (-> a 44x20 track) and the
+ * hit-target ::after — --aip-switch-off is repointed to the same shared
+ * --toggle-off token, so it no longer diverges from the rest of the app's
+ * switches.
  *
- * `is-init` is added by arm(), called from the click handler, so it lands in
- * the same render as the new data-on — see useToggleInit for why arming a
- * render earlier makes the thumb kick backwards.
+ * `is-init`/`arm()` (via useToggleInit) is now inert: the CSS bounce
+ * keyframe it used to gate was replaced by a plain transition, which
+ * doesn't need arming. Left wired for now rather than ripped out here.
  */
 export const AipSwitch: React.FC<AipSwitchProps> = ({
     checked, onChange, label, title, disabled = false, hardDisabled = false, className = '',
