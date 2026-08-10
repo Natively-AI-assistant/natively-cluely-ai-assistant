@@ -79,22 +79,17 @@ const EMPTY_INFO: PhoneMirrorInfo = {
 /**
  * Phone Mirror's own switch: same `.t-toggle` contract as the rest of settings,
  * but it carries a focus ring and a busy/cursor-wait state the shared
- * SettingsToggle does not model. One `useToggleInit()` per instance — a flag
- * shared across switches makes every OFF switch in the panel play the
- * off-bounce the moment any one of them is touched.
+ * SettingsToggle does not model.
  *
- * THESE TWO SWITCHES ARE ASYNC, which the plain arm()-on-click pattern does not
- * cover. `onToggleEnable`/`onToggleLan` go through `apply()`, which sets `busy`
- * synchronously but only updates `info` after the IPC round-trip — so `checked`
- * (and therefore `data-on`) flips one or more renders later. Arming on click
- * would put `is-init` on the element while `data-on` is still stale, matching
- * `.t-toggle.is-init[data-on="false"]` and playing `t-toggle-off` against a
- * thumb already at rest — the backwards nudge.
- *
- * So `is-init` is withheld while `busy`. It reappears in the same commit that
- * carries the new `info` (React batches the `setInfo` + `setBusy(null)` pair),
- * so the class and the new `data-on` land together and the correct keyframe
- * plays from the correct resting position.
+ * `useToggleInit()`/`is-init` below is now inert — the shared CSS moved from a
+ * keyframe bounce (which needed `is-init` to avoid replaying on stale renders)
+ * to a plain `transition`, which doesn't need arming. Left wired rather than
+ * ripped out here; the `busy`-gating logic it's paired with is otherwise
+ * unaffected. THESE TWO SWITCHES ARE ASYNC: `onToggleEnable`/`onToggleLan` go
+ * through `apply()`, which sets `busy` synchronously but only updates `info`
+ * after the IPC round-trip, so `checked` (and therefore `data-on`) flips one
+ * or more renders later — that's still true regardless of what the CSS does
+ * with `is-init`.
  */
 const PhoneMirrorSwitch: React.FC<{
   checked: boolean;
@@ -114,7 +109,9 @@ const PhoneMirrorSwitch: React.FC<{
       aria-label={label}
       disabled={busy}
       onClick={() => { toggleInit.arm(); onChange(); }}
-      /* p-0.5 (2px), not the 3px t-toggle-lg assumes, so travel is 22px here. */
+      /* p-0.5/`t-toggle-tight` are vestigial — geometry is the shared
+         .t-toggle rule's literal 88x40 shape at zoom:0.6 (t-toggle-lg,
+         index.css), not padding-derived. */
       className={`t-toggle t-toggle-lg t-toggle-tight inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${checked ? onClassName : 'bg-bg-item-active'} ${busy ? 'opacity-60 cursor-wait' : ''} ${busy ? '' : toggleInit.className}`}
     >
       <span className="t-toggle-thumb" aria-hidden="true" />
@@ -823,7 +820,9 @@ const CtxToggle: React.FC<{
       aria-label={label}
       disabled={comingSoon}
       onClick={comingSoon ? undefined : () => { toggleInit.arm(); onChange(); }}
-      /* p-0.5 (2px), not the 3px t-toggle-lg assumes, so travel is 22px here. */
+      /* p-0.5/`t-toggle-tight` are vestigial — geometry is the shared
+         .t-toggle rule's literal 88x40 shape at zoom:0.6 (t-toggle-lg,
+         index.css), not padding-derived. */
       className={`t-toggle t-toggle-lg t-toggle-tight flex-shrink-0 mt-0.5 inline-flex h-6 w-11 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${
         comingSoon ? 'cursor-not-allowed bg-bg-item-active' : checked ? 'bg-accent-primary' : 'bg-bg-item-active'
       } ${toggleInit.className}`}

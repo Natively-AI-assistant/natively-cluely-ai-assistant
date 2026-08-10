@@ -3,6 +3,14 @@ import { useCallback, useState } from 'react';
 /**
  * Arms the shared `.t-toggle` bounce for ONE switch.
  *
+ * CURRENTLY INERT: index.css's `.t-toggle` moved from a keyframe bounce
+ * (gated on `is-init`, exactly as described below) to a plain CSS
+ * `transition`, which fires correctly on every state change with no arming
+ * needed. Every call site still applies `is-init` via `arm()`, but it no
+ * longer matches any selector. Left wired rather than pulled out of every
+ * caller here; harmless to keep, safe to delete if this hook's only purpose
+ * (below) doesn't come back.
+ *
  * WHY ARMING HAPPENS ON ACTIVATION, NOT ON POINTERDOWN. `is-init` and the new
  * `data-on` must land in the SAME render. An earlier version armed on
  * `pointerdown`, which is a separate render from the `click` that flips

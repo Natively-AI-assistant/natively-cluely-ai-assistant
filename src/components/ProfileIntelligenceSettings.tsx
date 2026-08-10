@@ -359,12 +359,12 @@ const PI_CSS = `
     }
     .pi-input::placeholder { color: var(--pi-tertiary); }
 
-    /* ── Toggle (shared .t-toggle primitive, theme-tinted here) ── */
-    /* Track surface stays neutral with the card border; checked state paints
-       the accent fill. Disabled state matches the old opacity. */
-    .pi-root .t-toggle { background: rgba(255,255,255,0.12); }
-    .pi-root[data-theme='light'] .t-toggle { background: rgba(0,0,0,0.12); }
-    .pi-root .t-toggle[aria-checked='true'] { background: var(--pi-accent); }
+    /* ── Toggle (shared .t-toggle primitive) ── */
+    /* Colors now come from the shared Apple-style palette in index.css
+       (--toggle-off/--toggle-on) rather than the panel's own accent, so this
+       block only needs to beat the shared rule's specificity, not repaint it. */
+    .pi-root .t-toggle { background: var(--toggle-off); }
+    .pi-root .t-toggle[aria-checked='true'] { background: var(--toggle-on); }
     .pi-root .t-toggle[aria-disabled='true'] { opacity: 0.4; cursor: not-allowed; }
 
     /* ── Toggle card (neutral — no accent tint when on; the toggle itself signals state) ── */

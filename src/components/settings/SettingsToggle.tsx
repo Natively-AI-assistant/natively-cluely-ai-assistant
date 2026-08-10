@@ -2,12 +2,16 @@ import React from 'react';
 import { useToggleInit } from './useToggleInit';
 
 /**
- * The 44x24 settings switch. Wraps the shared `.t-toggle` markup so every
- * instance owns its own `useToggleInit()` — see that hook for why a per-panel
- * flag makes the whole panel flicker on a single click.
+ * The settings switch. Wraps the shared `.t-toggle` markup, which is a
+ * literal copy of the reference 88x40/52x32 toggle shape at `zoom: 0.6`
+ * (`.t-toggle-lg`) — a 52.8x24 track. `w-11 h-6 p-[3px]` below no longer do
+ * anything (kept for layout compatibility rather than stripped from every
+ * caller); the Apple-style palette and press/hover/focus behavior win
+ * unconditionally over whatever track color a caller passes via `className`.
  *
- * Callers keep supplying their own track colors via `className`, since the ON
- * fill is not uniform (accent for most, amber for Phone Mirror's LAN switch).
+ * `useToggleInit()` is currently inert (the CSS bounce it used to arm was
+ * replaced by a plain transition, which needs no arming) but still wired per
+ * instance; see that hook's docstring for the render-ordering bug it guarded.
  */
 export interface SettingsToggleProps {
     checked: boolean;
@@ -45,9 +49,10 @@ export const SettingsToggle: React.FC<SettingsToggleProps> = ({
                 toggleInit.arm();
                 onChange();
             }}
-            /* Every caller paints a 1px border via `className`, which eats 2px
-               of content box: 44 − 2*1 − 2*3 − 18 = 18px, not the 20px
-               t-toggle-lg assumes for a borderless track. */
+            /* `t-toggle-bordered` no longer changes the geometry (it used to
+               subtract a border from --toggle-travel); the shared .t-toggle
+               rule forces border:none, so this class is now just a label —
+               kept on the element rather than stripped from every caller. */
             className={`t-toggle t-toggle-lg t-toggle-bordered w-11 h-6 rounded-full p-[3px] flex items-center shrink-0 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'} ${className} ${toggleInit.className}`}
         >
             <span className="t-toggle-thumb" aria-hidden="true" />
