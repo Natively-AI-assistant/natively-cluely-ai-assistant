@@ -141,6 +141,23 @@ function readMinFreeGB(): number {
     return Number.isFinite(n) && n >= 0 ? n : 2.0;
 }
 
+// A weight-exceeds-cap acquisition (see canAcquireNow's exclusive-mode
+// branch) is admitted only when the gate is completely free, and the
+// holder that eventually wins keeps it for its ENTIRE session lifetime
+// (e.g. a whole meeting for LocalWhisperSTT) — not a brief critical
+// section. So a wait past cold-start-plus-margin here isn't "queued a bit
+// longer", it's permanent: the current holder will not release until ITS
+// session ends, which for a live recording could be hours away. Reject
+// after this bound so the caller's existing error path can engage instead
+// of hanging forever. Deliberately NOT applied to weight <= cap
+// acquisitions (normal-priority queuing under ordinary contention is
+// expected to legitimately wait longer than this). Overridable via env var
+// (matching readMaxConcurrent/readMinFreeGB's own pattern) so tests don't
+// need to hand-wait the real default.
+function readExclusiveTimeoutMs(): number {
+    return readIntEnv('NATIVELY_ONNX_EXCLUSIVE_TIMEOUT_MS', 15000);
+}
+
 function canAcquireNow(priority: OnnxSlotPriority, weight: number): boolean {
     const cap = readMaxConcurrent();
     const current = _sem.inFlightNormal + _sem.inFlightHigh;
@@ -160,10 +177,15 @@ function canAcquireNow(priority: OnnxSlotPriority, weight: number): boolean {
     return _sem.waitersHigh.length === 0;
 }
 
+function removeFromQueue(queue: Array<() => void>, resolver: () => void): void {
+    const idx = queue.indexOf(resolver);
+    if (idx !== -1) queue.splice(idx, 1);
+}
+
 /**
  * Acquire a shared ONNX session slot. Returns a release function the caller
  * MUST call when the session is torn down (typically in worker `error`/`exit`
- * handlers). Blocks until a slot is available; NEVER rejects.
+ * handlers).
  *
  * Priority 'high' is for latency-critical consumers (Whisper) — it acquires
  * ahead of queued normal-priority waiters but does NOT preempt a running
@@ -172,17 +194,62 @@ function canAcquireNow(priority: OnnxSlotPriority, weight: number): boolean {
  *
  * `weight` (default 1) is how many concurrent native ONNX sessions this one
  * acquisition represents — NemotronEngine opens 3 (encoder/decoder/joint)
- * per worker, so its caller passes `weight: 3`. See canAcquireNow's
- * exclusive-mode branch for what happens when weight exceeds the cap.
+ * per worker, so its caller passes `weight: 3`. A `weight` that exceeds the
+ * cap runs in exclusive mode (see canAcquireNow) and is subject to
+ * readExclusiveTimeoutMs(): since an exclusive holder keeps the gate for
+ * its entire session lifetime, a wait past that bound means the request
+ * cannot be satisfied while the current holder is alive, not that it needs
+ * a bit more patience — the promise REJECTS in that case instead of hanging
+ * forever. A `weight <= cap` acquisition still never rejects and blocks
+ * however long ordinary contention requires, exactly as before.
  */
 export async function acquireOnnxSlot(priority: OnnxSlotPriority = 'normal', weight: number = 1): Promise<() => void> {
+    const cap = readMaxConcurrent();
+    const exclusive = weight > cap;
     const queue = priority === 'high' ? _sem.waitersHigh : _sem.waitersNormal;
-    // Only enqueue when we're actually going to wait — otherwise stale
-    // resolvers accumulate in the queue and confuse the FIFO order.
+    const timeoutMs = readExclusiveTimeoutMs();
+    const deadline = exclusive ? Date.now() + timeoutMs : null;
+
     while (!canAcquireNow(priority, weight)) {
-        const waiterP = new Promise<void>(resolve => queue.push(resolve));
-        await waiterP;
+        let resolveWaiter!: () => void;
+        const waiterP = new Promise<void>((resolve) => {
+            resolveWaiter = resolve;
+            queue.push(resolve);
+        });
+
+        if (deadline === null) {
+            await waiterP;
+            continue;
+        }
+
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) {
+            removeFromQueue(queue, resolveWaiter);
+            throw new Error(
+                `ONNX slot acquisition timed out after ${timeoutMs}ms — ` +
+                `weight ${weight} exceeds the concurrency cap (${cap}), and another exclusive-mode ` +
+                `session is already holding the gate for its full lifetime. This model cannot run ` +
+                `concurrently with the session currently holding the ONNX gate.`
+            );
+        }
+
+        const TIMEOUT = Symbol('onnx-slot-acquire-timeout');
+        const outcome = await Promise.race([
+            waiterP.then(() => 'resolved' as const),
+            new Promise<typeof TIMEOUT>((resolve) => setTimeout(() => resolve(TIMEOUT), remaining)),
+        ]);
+        if (outcome === TIMEOUT) {
+            removeFromQueue(queue, resolveWaiter);
+            throw new Error(
+                `ONNX slot acquisition timed out after ${timeoutMs}ms — ` +
+                `weight ${weight} exceeds the concurrency cap (${cap}), and another exclusive-mode ` +
+                `session is already holding the gate for its full lifetime. This model cannot run ` +
+                `concurrently with the session currently holding the ONNX gate.`
+            );
+        }
+        // Resolved normally within the deadline — loop re-checks canAcquireNow.
     }
+
     if (priority === 'high') _sem.inFlightHigh += weight;
     else _sem.inFlightNormal += weight;
 

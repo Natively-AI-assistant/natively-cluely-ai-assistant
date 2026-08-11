@@ -666,7 +666,14 @@ export class LocalWhisperSTT extends EventEmitter {
                 this.pendingAudio.push(item);
             } else {
                 console.warn('[LocalWhisperSTT] Pending queue full — dropping oldest segment');
-                this.pendingAudio.shift();
+                const dropped = this.pendingAudio.shift();
+                if (dropped?.nemotronReset && this.pendingAudio.length > 0) {
+                    // Don't lose the segment-boundary reset signal just because
+                    // its original item got dropped for capacity — carry it
+                    // forward onto the new head so the engine still resets
+                    // before replaying the backlog.
+                    this.pendingAudio[0].nemotronReset = true;
+                }
                 this.pendingAudio.push(item);
             }
             return;
