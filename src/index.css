@@ -8075,17 +8075,19 @@ html[data-platform="linux"] body {
   }
 }
 
-/* Apple-style toggle — a LITERAL, pixel-exact copy of the reference
-   component (88x40 track, 4px inset, 52x32 thumb, 28px travel, 56px
-   press-width, 24px press-on travel — every number below matches the
-   reference verbatim, not a re-derived approximation). Per-size variants
-   below apply CSS `zoom` — a uniform scalar, not separate width/height
-   math — so every toggle in the app is the exact same shape at a smaller
-   size: identical aspect ratio, identical relative thumb-to-track
-   proportions, identical relative motion, by construction (it's the same
-   design rendered smaller, not independently recomputed geometry). `zoom`
-   (not `transform: scale`) because it actually shrinks the element's layout
-   box, so surrounding rows reflow around the smaller footprint. */
+/* Apple-style toggle — the reference component's exact 88x40/4px-inset/
+   52x32-thumb/28px-travel/56px-press-width/24px-press-on-travel proportions,
+   reproduced at each size variant via literal px values (below) computed
+   from the SAME ratios (thumb 59% of track width, inset 10% of track
+   height, etc — see the per-variant comments), not CSS `zoom`. An earlier
+   version used `zoom: <factor>` to scale the canonical shape down in one
+   step; `zoom` is a legacy, non-standard property that has known bad
+   interactions with `backdrop-filter`/compositing, which both the meeting
+   and settings overlay windows use (unlike the plain panel this was
+   originally tested in) — it visually dropped the thumb there. These
+   literal values are mathematically identical to what the old `zoom`
+   factors produced, so the shape/ratio guarantee is unchanged; only the
+   mechanism is safer. */
 :root {
     /* Hardcoded on purpose: every caller's own track token (bg-accent-primary,
        --pi-accent, --aip-accent, Phone Mirror's amber LAN switch, …) is
@@ -8103,8 +8105,6 @@ html[data-platform="linux"] body {
     --toggle-focus-ring: var(--accent-focus);
 }
 .t-toggle {
-    width: 88px;
-    height: 40px;
     position: relative;
     display: inline-block;
     padding: 0;
@@ -8129,19 +8129,31 @@ html[data-platform="linux"] body {
 @media (hover: hover) {
     .t-toggle:not(:disabled):hover { filter: brightness(1.03); }
 }
-/* Width grows beyond each variant's old fixed-width footprint (track is
-   88×zoom wide, not whatever w-11/w-[30px]/w-8 used to say) — 88×0.6=52.8px,
-   88×0.45=39.6px, 88×0.4=35.2px. Height matches the original row height
-   exactly, since that's what each row was actually built around. */
-.t-toggle.t-toggle-lg { zoom: 0.6; }   /* 24px row height -> 52.8x24 track */
-.t-toggle.t-toggle-sm { zoom: 0.45; }  /* 18px row height -> 39.6x18 track */
-.t-toggle.t-toggle-xs { zoom: 0.4; }   /* 16px row height -> 35.2x16 track */
+/* Each variant's own box size + geometry (previously `zoom: <factor>` on the
+   canonical 88x40/52x32 shape — see the file-level comment above). Height
+   matches each row's original height exactly; width grows to preserve the
+   reference's 2.2:1 track aspect ratio, same trade-off as before. */
+.t-toggle.t-toggle-lg {
+    width: 52.8px; height: 24px;
+    --toggle-inset: 2.4px; --toggle-thumb-w: 31.2px; --toggle-thumb-h: 19.2px;
+    --toggle-travel: 16.8px; --toggle-grow: 2.4px;
+}
+.t-toggle.t-toggle-sm {
+    width: 39.6px; height: 18px;
+    --toggle-inset: 1.8px; --toggle-thumb-w: 23.4px; --toggle-thumb-h: 14.4px;
+    --toggle-travel: 12.6px; --toggle-grow: 1.8px;
+}
+.t-toggle.t-toggle-xs {
+    width: 35.2px; height: 16px;
+    --toggle-inset: 1.6px; --toggle-thumb-w: 20.8px; --toggle-thumb-h: 12.8px;
+    --toggle-travel: 11.2px; --toggle-grow: 1.6px;
+}
 .t-toggle-thumb {
     position: absolute;
-    top: 4px;
-    left: 4px;
-    width: 52px;
-    height: 32px;
+    top: var(--toggle-inset);
+    left: var(--toggle-inset);
+    width: var(--toggle-thumb-w);
+    height: var(--toggle-thumb-h);
     border-radius: 999px;
     background: var(--toggle-thumb);
     transform: translateX(0);
@@ -8154,17 +8166,17 @@ html[data-platform="linux"] body {
         background 180ms ease;
 }
 .t-toggle[data-on="true"] .t-toggle-thumb {
-    transform: translateX(28px);
+    transform: translateX(var(--toggle-travel));
 }
 /* Elastic press, matching the reference exactly: literal width growth (not a
    scale trick), anchored against whichever wall the thumb is resting on —
-   left edge fixed when OFF; when ON, translateX shrinks by the same 4px so
+   left edge fixed when OFF; when ON, translateX shrinks by --toggle-grow so
    the RIGHT edge stays flush instead of the thumb overshooting the track. */
 .t-toggle:not(:disabled):active .t-toggle-thumb {
-    width: 56px;
+    width: calc(var(--toggle-thumb-w) + var(--toggle-grow));
 }
 .t-toggle[data-on="true"]:not(:disabled):active .t-toggle-thumb {
-    transform: translateX(24px);
+    transform: translateX(calc(var(--toggle-travel) - var(--toggle-grow)));
 }
 /* Opt out of the shared fill when a panel paints its own knob. This rule
    exists because `background`/`box-shadow` above sit AFTER `@tailwind

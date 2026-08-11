@@ -437,21 +437,22 @@ export const AIP_CSS = `
     word-break: break-word;
 }
 
-/* ── Switch. Track/thumb geometry, travel, and press are the shared
-      .t-toggle / .t-toggle-thumb rule's literal 88x40/52x32 reference
-      shape (index.css) at zoom:0.5 -> a 44x20 track (matches the original
-      20px row height exactly; width grows from 34px to 44px — same
-      trade-off as every other size variant, see index.css). Only the
-      background color and hit-target stay local here. */
+/* ── Switch. 44x20 track (matches the original 20px row height; width grows
+      from 34px to 44px — same trade-off as every other size variant, see
+      index.css). Geometry values are the reference shape's ratios applied
+      to a 20px height, not CSS zoom — zoom doesn't compose reliably with
+      backdrop-filter/glass compositing (see index.css's file-level comment
+      on the shared .t-toggle rule). Only the background color and
+      hit-target stay local here; travel/press/curves are shared. */
 .aip-switch::after {
     content:'';
     position:absolute;
-    /* -3px/-2px at the element's actual (post-zoom) scale; doubled here
-       because this pseudo-element inherits the parent's zoom:0.5 too. */
-    inset:-6px -4px;
+    inset:-3px -2px;
 }
 .aip-switch {
-    zoom: 0.5;
+    width: 44px; height: 20px;
+    --toggle-inset: 2px; --toggle-thumb-w: 26px; --toggle-thumb-h: 16px;
+    --toggle-travel: 14px; --toggle-grow: 2px;
     flex-shrink:0;
     background: var(--aip-switch-off);
     cursor:pointer;
