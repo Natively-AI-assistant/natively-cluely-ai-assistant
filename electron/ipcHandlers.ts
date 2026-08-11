@@ -24,6 +24,7 @@ import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/s
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
+import { stripPriorAssistantTurns } from './llm/conversationHistoryPolicy';
 import { mintTurnId } from './llm/turnIdentity';
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
 import { buildProfileJitPrompt } from './llm/ProfileJitPromptBuilder';
@@ -102,37 +103,6 @@ const GATE_GENERIC_TOKENS = new Set<string>([
   'implementation', 'component', 'components', 'structure', 'technique', 'techniques',
 ]);
 
-/**
- * Strip prior ASSISTANT turns from a SessionTracker formatted-context snapshot
- * (audit 2026-06-27, document-grounded real-path fix). The snapshot format is
- * line-prefixed blocks: `[ME]: ...`, `[INTERVIEWER]: ...`,
- * `[ASSISTANT (PREVIOUS SUGGESTION)]: ...` joined by '\n' (see
- * SessionTracker.formatContextItems). An assistant block's text may itself span
- * multiple lines, so once we see the ASSISTANT label we drop every following
- * line until the next `[ME]:` / `[INTERVIEWER]:` label (or end of input).
- *
- * Keeping `[ME]:` / `[INTERVIEWER]:` turns preserves follow-up pronoun
- * resolution; dropping the assistant turns prevents a previously-emitted answer
- * from anchoring the next document-grounded answer (the observed topic collapse).
- */
-function stripPriorAssistantTurns(snapshot: string): string {
-  const lines = snapshot.split('\n');
-  const kept: string[] = [];
-  let skipping = false;
-  for (const line of lines) {
-    if (/^\[ASSISTANT \(PREVIOUS SUGGESTION\)\]:/.test(line)) {
-      skipping = true;
-      continue;
-    }
-    if (/^\[(ME|INTERVIEWER)\]:/.test(line)) {
-      skipping = false;
-      kept.push(line);
-      continue;
-    }
-    if (!skipping) kept.push(line);
-  }
-  return kept.join('\n').trim();
-}
 
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (
@@ -2911,7 +2881,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
             && isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled')) {
           try {
-            const { TurnEvidenceCoordinator, ProfileEvidenceService } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            const { TurnEvidenceCoordinator, ProfileEvidenceService, packGovernsGeneration } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
             const { ModesManager } = require('./services/ModesManager');
             const modesMgr = ModesManager.getInstance();
             const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
@@ -3015,9 +2985,17 @@ export function initializeIpcHandlers(appState: AppState): void {
                 sourceAuthority: manualSourceContract?.sourceAuthority ?? 'ask_if_ambiguous',
               },
               turnSourceDecision: manualTurnSourceDecision,
-              govern: true,
+              // Same line as the WTA site (2026-08-11): a refusal pack governs
+              // only when the mode's authority promises a bounded universe.
+              // Elsewhere an empty pack means "the evidence system has nothing
+              // to add" and the legacy path answers. See
+              // context-os/refusalPolicy.ts.
+              govern: packGovernsGeneration({
+                answerPolicy: coordinatorResult.pack.answerPolicy,
+                sourceAuthority: manualSourceContract?.sourceAuthority ?? null,
+              }),
             };
-            coordinatorGovernedProfileEvidence = true;
+            coordinatorGovernedProfileEvidence = manualContextOsGeneration.govern;
             iTrace.noteContext({
               source: 'context_os_turn_evidence_coordinator',
               trustLevel: 'high',
