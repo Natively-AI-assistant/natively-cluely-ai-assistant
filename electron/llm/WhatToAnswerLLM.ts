@@ -583,7 +583,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         return;
                     }
                     if (pack.answerPolicy === 'refuse_insufficient_evidence') {
-                        yield buildInsufficientPropertyAnswer({ property: pack.requestedProperty });
+                        yield buildInsufficientPropertyAnswer({ property: pack.requestedProperty, sourceOwner: pack.sourceOwner });
                         return;
                     }
                     const rendered = renderGoverningFactualBlock({ ..._cog, evidencePack: pack });

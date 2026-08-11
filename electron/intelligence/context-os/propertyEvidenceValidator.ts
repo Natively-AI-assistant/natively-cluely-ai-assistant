@@ -117,8 +117,20 @@ export function itemSupportsProperty(item: EvidenceItem, property: RequestedProp
 export function buildInsufficientPropertyAnswer(input: {
   property: RequestedProperty;
   nearMissNote?: string | null;
+  /**
+   * The pack's source owner, so the wording names the universe that was
+   * actually searched. Before 2026-08-11 this line always said "the uploaded
+   * material" — a PROFILE-owned refusal in a mode with zero uploaded files
+   * told the user something flatly false about where the answer was looked
+   * for. Optional so every existing caller keeps the historical wording; the
+   * "not directly mentioned" stem is preserved on every branch because the
+   * doc-grounded repair sniffer (ipcHandlers REFUSAL_SNIFF_RE) keys on it.
+   */
+  sourceOwner?: string;
 }): string {
-  const base = 'This is not directly mentioned in the uploaded material.';
+  const base = input.sourceOwner === 'profile'
+    ? 'This is not directly mentioned in your profile material.'
+    : 'This is not directly mentioned in the uploaded material.';
   if (input.nearMissNote && input.nearMissNote.trim()) {
     return `${base} ${input.nearMissNote.trim()}`;
   }

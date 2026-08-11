@@ -2930,7 +2930,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
             && isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled')) {
           try {
-            const { TurnEvidenceCoordinator, ProfileEvidenceService } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            const { TurnEvidenceCoordinator, ProfileEvidenceService, packGovernsGeneration } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
             const { ModesManager } = require('./services/ModesManager');
             const modesMgr = ModesManager.getInstance();
             const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
@@ -3034,9 +3034,17 @@ export function initializeIpcHandlers(appState: AppState): void {
                 sourceAuthority: manualSourceContract?.sourceAuthority ?? 'ask_if_ambiguous',
               },
               turnSourceDecision: manualTurnSourceDecision,
-              govern: true,
+              // Same line as the WTA site (2026-08-11): a refusal pack governs
+              // only when the mode's authority promises a bounded universe.
+              // Elsewhere an empty pack means "the evidence system has nothing
+              // to add" and the legacy path answers. See
+              // context-os/refusalPolicy.ts.
+              govern: packGovernsGeneration({
+                answerPolicy: coordinatorResult.pack.answerPolicy,
+                sourceAuthority: manualSourceContract?.sourceAuthority ?? null,
+              }),
             };
-            coordinatorGovernedProfileEvidence = true;
+            coordinatorGovernedProfileEvidence = manualContextOsGeneration.govern;
             iTrace.noteContext({
               source: 'context_os_turn_evidence_coordinator',
               trustLevel: 'high',

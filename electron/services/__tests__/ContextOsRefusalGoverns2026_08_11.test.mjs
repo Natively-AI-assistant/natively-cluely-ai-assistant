@@ -1,0 +1,145 @@
+// Live report 2026-08-11: WTA (Cmd+1 / Cmd+Enter) with a screenshot in a
+// looking-for-work mode answered, three times:
+//
+//     "This is not directly mentioned in the uploaded material."
+//
+// The user's own [CONTEXT-OS] trace showed the whole chain:
+//   sourceAuthority=profile_only, sourceOwner=profile, questionPreview="",
+//   forbiddenSources includes screen_context, selectedEvidenceCount=0,
+//   finalAction="answer"  ← the KERNEL wanted to answer
+//
+// The evidence layer then overrode that into a refusal: with zero candidates,
+// the coordinator/profile-service pack comes back
+// `refuse_insufficient_evidence`, the govern sites set `govern: true`
+// UNCONDITIONALLY, and WhatToAnswerLLM yields the canned string without ever
+// calling the model. Meanwhile the identical screenshot pasted into
+// manual-chat answered fine (868 chars, Gemini vision) — that path's V3
+// fallback was GENERAL_KNOWLEDGE.
+//
+// The honest line (independent review, 2026-08-11): a refusal is only truthful
+// when the mode's authority promises a BOUNDED UNIVERSE — the four strict
+// authorities where "answer only from X" is the product contract. Those are
+// exactly the ones modeSourceContract marks `evidenceRequired: true`. For
+// profile_only / general_mixed / ask_if_ambiguous / profile_plus_transcript,
+// failing to find evidence means FALL BACK TO THE MODEL, not refuse: the mode
+// never promised source-exclusivity, so "not in the uploaded material" is a
+// false statement about a universe that was never bounded (and in the
+// reported case, never even populated — zero files).
+//
+// packGovernsGeneration is that line as a predicate. It gates `govern:` at the
+// two coordinator sites; govern:false reverts the turn to the legacy path,
+// which every consumer already respects (`_cog?.govern` guards in
+// WhatToAnswerLLM/LLMHelper).
+
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const base = path.resolve(process.cwd(), 'dist-electron/electron');
+const { packGovernsGeneration, sourceAuthorityPermitsRefusal, buildInsufficientPropertyAnswer } =
+  await import(pathToFileURL(path.join(base, 'intelligence/context-os/index.js')).href);
+
+const STRICT = ['reference_files_only', 'reference_files_primary', 'reference_files_plus_transcript', 'transcript_only'];
+const OPEN = ['profile_only', 'profile_plus_transcript', 'general_mixed', 'ask_if_ambiguous'];
+
+describe('the reported turn — profile_only + empty evidence must NOT govern into a refusal', () => {
+  test('the exact live case: profile_only + refuse_insufficient_evidence → legacy path', () => {
+    assert.equal(packGovernsGeneration({
+      answerPolicy: 'refuse_insufficient_evidence',
+      sourceAuthority: 'profile_only',
+    }), false, 'the model must get the turn (screenshot and all), not the canned string');
+  });
+
+  for (const sourceAuthority of OPEN) {
+    test(`${sourceAuthority}: refusal does not govern`, () => {
+      assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority }), false);
+    });
+  }
+});
+
+describe('honest refusals are preserved — the fabrication boundary must not move', () => {
+  // A funding_source question against a real uploaded paper that only mentions
+  // collaborations SHOULD refuse. Killing that reintroduces the fabrication
+  // class this subsystem exists to prevent.
+  for (const sourceAuthority of STRICT) {
+    test(`${sourceAuthority}: refusal still governs`, () => {
+      assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority }), true);
+    });
+  }
+
+  test('an answering pack always governs, any authority', () => {
+    for (const sourceAuthority of [...STRICT, ...OPEN]) {
+      assert.equal(packGovernsGeneration({ answerPolicy: 'answer', sourceAuthority }), true, sourceAuthority);
+      assert.equal(packGovernsGeneration({ answerPolicy: 'answer_with_uncertainty', sourceAuthority }), true, sourceAuthority);
+    }
+  });
+
+  test('ask_clarification is untouched by this change', () => {
+    for (const sourceAuthority of [...STRICT, ...OPEN]) {
+      assert.equal(packGovernsGeneration({ answerPolicy: 'ask_clarification', sourceAuthority }), true, sourceAuthority);
+    }
+  });
+
+  test('an unknown/legacy authority fails toward answering, not refusing', () => {
+    // 'legacy' and undefined reach the govern sites via `?? 'ask_if_ambiguous'`
+    // fallbacks, but the predicate itself must also fail open: refusing on an
+    // authority we cannot classify would recreate the reported bug for any
+    // future authority value.
+    assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority: 'legacy' }), false);
+    assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority: undefined }), false);
+  });
+});
+
+describe('DRIFT GUARD: the strict set IS modeSourceContract.evidenceRequired', () => {
+  // The predicate hand-mirrors EVIDENCE_REQUIRED_FOR_AUTHORITY rather than
+  // importing it (services → context-os would be a layering inversion). This
+  // test is the enforcement that the mirror cannot drift: it asserts the
+  // predicate agrees with the real mapping for every authority the contract
+  // module defines.
+  test('predicate agrees with evidenceRequired for every authority', async () => {
+    const { defaultSourceContractForNewMode } =
+      await import(pathToFileURL(path.join(base, 'services/modeSourceContract.js')).href);
+    // Derive the mapping from the public surface: every template's default
+    // contract carries both fields.
+    const seen = new Map();
+    for (const t of ['general', 'sales', 'recruiting', 'team-meet', 'looking-for-work', 'technical-interview', 'lecture', 'seminar']) {
+      const c = defaultSourceContractForNewMode(t);
+      seen.set(c.sourceAuthority, c.evidenceRequired);
+    }
+    assert.ok(seen.size >= 2, 'expected multiple distinct authorities across the templates');
+    for (const [authority, evidenceRequired] of seen) {
+      assert.equal(sourceAuthorityPermitsRefusal(authority), evidenceRequired,
+        `${authority}: predicate says ${sourceAuthorityPermitsRefusal(authority)}, contract says evidenceRequired=${evidenceRequired}`);
+    }
+  });
+});
+
+describe('the refusal string no longer lies about its source', () => {
+  test('reference_files wording is byte-identical to before', () => {
+    assert.equal(
+      buildInsufficientPropertyAnswer({ property: 'unknown', sourceOwner: 'reference_files' }),
+      'This is not directly mentioned in the uploaded material.');
+    // and the legacy no-owner call keeps the old string, so existing callers
+    // and the REFUSAL_SNIFF_RE repair path are unaffected
+    assert.equal(
+      buildInsufficientPropertyAnswer({ property: 'unknown' }),
+      'This is not directly mentioned in the uploaded material.');
+  });
+
+  test('a profile-owned refusal names the profile, not phantom uploads', () => {
+    const s = buildInsufficientPropertyAnswer({ property: 'unknown', sourceOwner: 'profile' });
+    assert.ok(!/uploaded material/i.test(s), `must not claim uploaded material: ${s}`);
+    assert.match(s, /profile/i);
+    // keep the "not directly mentioned" stem — downstream refusal sniffers
+    // (ipcHandlers REFUSAL_SNIFF_RE) key on it
+    assert.match(s, /not directly mentioned/i);
+  });
+
+  test('the funding_source near-miss note survives on both owners', () => {
+    for (const sourceOwner of ['reference_files', 'profile']) {
+      const s = buildInsufficientPropertyAnswer({ property: 'funding_source', sourceOwner });
+      assert.match(s, /collaboration is not the same as funding/);
+    }
+  });
+});

@@ -2286,11 +2286,29 @@ export class IntelligenceEngine extends EventEmitter {
                         // (`forbiddenFamilies=[]`) and a JD-only decision can
                         // leak résumé content through the rendered pack.
                         turnSourceDecision: canonicalTurn.turnSourceDecision,
-                        govern: true,
+                        // A refusal pack only GOVERNS when the mode's authority
+                        // promises a bounded universe (evidenceRequired
+                        // authorities). profile_only/general_mixed turns whose
+                        // retrieval came back empty fall through to the legacy
+                        // path so the model answers — live report 2026-08-11:
+                        // a WTA screenshot turn in a looking-for-work mode was
+                        // governed into "not directly mentioned in the
+                        // uploaded material" with zero files and an empty
+                        // question, while the same screenshot answered fine on
+                        // manual-chat. packGovernsGeneration is the tested
+                        // predicate for that line.
+                        govern: contextOsStatic.packGovernsGeneration({
+                            answerPolicy: coordinatorResult.pack.answerPolicy,
+                            sourceAuthority: canonicalTurn.sourceAuthority ?? null,
+                        }),
                     };
                     // The typed pack is now the sole factual injection. Do not also
                     // pass the JIT's raw profile XML into WhatToAnswerLLM.
-                    candidateProfile = '';
+                    // ONLY when the pack actually governs: an ungoverned turn
+                    // (refusal pack in a non-bounded mode, 2026-08-11) runs the
+                    // legacy path, and stripping its profile XML here would
+                    // change legacy behaviour as a side effect of the fix.
+                    if (wtaContextOsGeneration.govern) candidateProfile = '';
                     wtaTrace.noteContext({
                         source: 'context_os_turn_evidence_coordinator',
                         trustLevel: 'high',

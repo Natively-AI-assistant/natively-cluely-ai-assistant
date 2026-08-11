@@ -6046,7 +6046,7 @@ let isMultimodal = !!(imagePaths?.length);
             providerDispatch: false,
             terminal: 'refuse',
           });
-          yield buildInsufficientPropertyAnswer({ property: pack.requestedProperty });
+          yield buildInsufficientPropertyAnswer({ property: pack.requestedProperty, sourceOwner: pack.sourceOwner });
           return;
         }
         const rendered = renderGoverningFactualBlock({ ..._cog, evidencePack: pack });
@@ -6200,7 +6200,7 @@ let isMultimodal = !!(imagePaths?.length);
             providerDispatch: false,
             terminal: 'refuse',
           });
-          yield buildInsufficientPropertyAnswer({ property: contextOsGovernedPack.requestedProperty });
+          yield buildInsufficientPropertyAnswer({ property: contextOsGovernedPack.requestedProperty, sourceOwner: contextOsGovernedPack.sourceOwner });
           return;
         }
       }
