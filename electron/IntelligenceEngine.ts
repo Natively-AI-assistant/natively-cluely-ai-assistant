@@ -2492,6 +2492,34 @@ export class IntelligenceEngine extends EventEmitter {
                         // though the answer was said out loud a minute ago.
                         conversationSummary: _ctx.conversationWindow(90),
                         retrieval: _ctx.port as any,
+                        // CODING CONTRACT ON THE V3 PATH (live regression, 2026-08-11).
+                        // `_v3.system` REPLACES the v2 base prompt below
+                        // (WhatToAnswerLLM.ts:813), and the V3 composer has no coding
+                        // contract of its own — so a V3-owned coding turn lost the six
+                        // mandatory headings entirely. Measured live: the model emitted
+                        // ZERO `##` headings and opened with a raw ```python fence, so
+                        // it wrote no Complexity and no Dry Run, and the downstream
+                        // repair painted "O(?) — state the actual time bound" into the
+                        // sections the model was never asked for. The model never
+                        // disobeyed the contract; it never received it.
+                        //
+                        // This is the hook the bridge already exposes for exactly this
+                        // (BridgeInput.personaBase), and it mirrors the manual-chat call
+                        // site in ipcHandlers. Resolved through resolveV2SystemPrompt so
+                        // the contract text has ONE source and cannot drift. Param
+                        // annotated inline because buildV3Prompt arrives via a lazy
+                        // require (any), so the literal gets no contextual type.
+                        personaBase: ({ codingTask }: { codingTask: boolean }) => {
+                            try {
+                                const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+                                return resolveV2SystemPrompt({
+                                    action: 'answer',
+                                    tier: v2TierForPromptTier(this.llmHelper.getPromptTier?.()),
+                                    activeMode: snapshotModeInfo ?? undefined,
+                                    codingTask,
+                                });
+                            } catch { return null; } // no persona ⇒ composition unchanged
+                        },
                     });
                     if (_v3) {
                         wtaTrace.lifecycle('planned', {
