@@ -24,6 +24,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import Module from 'module';
+import { EventEmitter } from 'events';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -70,6 +71,21 @@ function makeFakeWorker() {
     postMessage: (msg) => posted.push(msg),
   };
 }
+
+/**
+ * Real EventEmitter-backed fake worker for tests that need
+ * attachWorkerListeners()'s actual 'message'/'error'/'exit' handlers wired
+ * up (e.g. to trigger the error-branch cursor rewind below).
+ */
+function makeEmitterFakeWorker() {
+  const w = new EventEmitter();
+  w.posted = [];
+  w.postMessage = (msg) => w.posted.push(msg);
+  w.removeAllListeners = EventEmitter.prototype.removeAllListeners.bind(w);
+  return w;
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function wireActive(lws, worker, vad) {
   lws['isActive'] = true;
@@ -203,5 +219,83 @@ describe('Nemotron delta-dispatch (Task 10 fix round 1)', () => {
     assert.ok(!secondMsg.nemotronReset);
     assert.equal(firstMsg.audio.length, tick1Samples.length);
     assert.equal(secondMsg.audio.length, tick2Samples.length, 'non-Nemotron ticks must still send the full cumulative buffer');
+  });
+
+  // ── Self-healing cursor rewind (fix round 1, advisor-flagged gap) ──────
+  //
+  // The delta scheme is NOT self-healing like the old cumulative one: if a
+  // dispatched delta never reaches (or never returns from) the engine — a
+  // wedged worker (this repo has a whole test file about that failure mode:
+  // LocalWhisperStuckWorker.test.mjs) or a worker-side 'error' on the
+  // in-flight streaming task — nemotronSentSamples has already been
+  // optimistically advanced past audio the engine never actually decoded.
+  // Without a rewind, every subsequent tick's delta silently starts past a
+  // gap of lost audio. Both recovery paths (watchdog force-clear, matching-
+  // taskId error) must reset the cursor to 0 so the next tick resends the
+  // full open segment with nemotronReset:true.
+
+  test('watchdog force-clear rewinds nemotronSentSamples to 0', async () => {
+    lws = new LocalWhisperSTT(NEMOTRON_MODEL_ID);
+    lws['nemotronSentSamples'] = 5000;
+    lws['streamingTaskInFlight'] = true;
+    lws['streamingTaskId'] = 's1';
+    // The watchdog-fire path emits('error', ...) on this EventEmitter
+    // subclass — Node throws synchronously on an 'error' emit with zero
+    // listeners, so a real consumer's listener must be present (matches
+    // production: LocalWhisperSTT.start()'s caller always listens).
+    lws.on('error', () => {});
+    // Speed the real 30s watchdog up for the test — it's a plain mutable
+    // static field on the compiled class (TS `readonly`/`private` are
+    // erased at runtime).
+    const ctor = lws.constructor;
+    const original = ctor.STREAMING_WATCHDOG_MS;
+    ctor.STREAMING_WATCHDOG_MS = 10;
+    try {
+      lws['armStreamingWatchdog']();
+      await sleep(60);
+      assert.equal(lws['nemotronSentSamples'], 0, 'watchdog fire must rewind the cursor');
+      assert.equal(lws['streamingTaskInFlight'], false);
+    } finally {
+      ctor.STREAMING_WATCHDOG_MS = original;
+    }
+  });
+
+  test('a worker error on the in-flight streaming task rewinds nemotronSentSamples to 0', () => {
+    lws = new LocalWhisperSTT(NEMOTRON_MODEL_ID);
+    const worker = makeEmitterFakeWorker();
+    lws['isActive'] = true;
+    lws['workerReady'] = true;
+    lws['worker'] = worker;
+    lws['attachWorkerListeners']();
+
+    lws['nemotronSentSamples'] = 7000;
+    lws['streamingTaskInFlight'] = true;
+    lws['streamingTaskId'] = 's7';
+
+    worker.emit('message', { type: 'error', taskId: 's7', message: 'simulated worker fault' });
+
+    assert.equal(lws['nemotronSentSamples'], 0, 'a streaming-task error must rewind the cursor');
+    assert.equal(lws['streamingTaskInFlight'], false);
+    assert.equal(lws['streamingTaskId'], null);
+  });
+
+  test('regression: non-Nemotron models are unaffected by the rewind paths (no such field to reset)', async () => {
+    lws = new LocalWhisperSTT('Xenova/whisper-tiny.en');
+    lws['streamingTaskInFlight'] = true;
+    lws['streamingTaskId'] = 's1';
+    lws.on('error', () => {}); // see the previous test's comment
+    const ctor = lws.constructor;
+    const original = ctor.STREAMING_WATCHDOG_MS;
+    ctor.STREAMING_WATCHDOG_MS = 10;
+    try {
+      lws['armStreamingWatchdog']();
+      await sleep(60);
+      // Non-Nemotron: nemotronSentSamples stays at its default 0 the whole
+      // time (never advanced in the first place) — nothing to regress.
+      assert.equal(lws['nemotronSentSamples'], 0);
+      assert.equal(lws['streamingTaskInFlight'], false);
+    } finally {
+      ctor.STREAMING_WATCHDOG_MS = original;
+    }
   });
 });

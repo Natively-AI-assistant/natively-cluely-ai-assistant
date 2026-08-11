@@ -416,6 +416,15 @@ export class LocalWhisperSTT extends EventEmitter {
             this.streamingTaskId = null;
             this.streamingStallCount = 0;
             this.streamingNextDelayMs = this.streamingIntervalBaseMs;
+            // nemotron-rnnt only: the wedged dispatch's samples never reached
+            // (or never returned from) the engine, so nemotronSentSamples now
+            // overcounts what the engine actually has. Unlike the cumulative
+            // path (self-healing by construction — it always resends
+            // everything), the delta path needs an explicit rewind: reset the
+            // cursor so the NEXT tick resends the full open segment with
+            // nemotronReset:true, forcing a clean NemotronEngine.reset() +
+            // full re-decode instead of silently gapping the lost audio.
+            if (this.isNemotronModel) this.nemotronSentSamples = 0;
             this.emit('error', new Error(
                 `Local Whisper streaming task ${stuckTaskId ?? '?'} did not return within ${LocalWhisperSTT.STREAMING_WATCHDOG_MS}ms — worker likely stuck, unblocking next tick.`
             ));
@@ -779,6 +788,10 @@ export class LocalWhisperSTT extends EventEmitter {
                     // Worker is free again; reset backoff so next tick is prompt.
                     this.streamingStallCount = 0;
                     this.streamingNextDelayMs = this.streamingIntervalBaseMs;
+                    // nemotron-rnnt only: same rewind as the watchdog path
+                    // above — this dispatch's samples never landed, so the
+                    // cursor would otherwise overcount what the engine has.
+                    if (this.isNemotronModel) this.nemotronSentSamples = 0;
                 }
                 if (msg.message.includes('Failed to load model')) {
                     const isOnnxSymbolError = msg.message.includes('Symbol not found')
