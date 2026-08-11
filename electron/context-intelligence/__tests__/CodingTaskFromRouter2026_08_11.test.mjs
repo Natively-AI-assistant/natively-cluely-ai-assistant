@@ -96,3 +96,36 @@ describe('the router, not a keyword list, decides codingTask', () => {
     );
   });
 });
+
+describe('manual chat gets the same routed verdict as the live path', () => {
+  // Code review 2026-08-12: 06d88fba threaded the router's verdict into the WTA
+  // (live) buildV3Prompt call but not the manual-chat one in ipcHandlers, so
+  // typing the SAME question into chat still fell through to the keyword regex
+  // and silently lost the six-section coding contract. Both surfaces call the
+  // same bridge; a fix on one and not the other is exactly the drift the
+  // shared-policy work in this session was undoing elsewhere.
+  test('the manual-chat buildV3Prompt call passes a routed codingTask', () => {
+    const IPC = path.resolve(__dirname, '../../ipcHandlers.ts');
+    const ipcSrc = fs.readFileSync(IPC, 'utf8');
+    // Bound the slice by the call's own start and the next statement rather
+    // than a window centred on the marker — the field sits after `surface:`,
+    // and a backwards-only window silently missed it.
+    const start = ipcSrc.indexOf('const composed = await buildV3Prompt({');
+    assert.ok(start > 0, 'could not locate the manual-chat buildV3Prompt call');
+    const end = ipcSrc.indexOf('\n            });', start);
+    assert.ok(end > start, 'could not find the end of the manual-chat buildV3Prompt call');
+    const call = ipcSrc.slice(start, end);
+    assert.match(call, /surface:\s*'manual-chat'/, 'located the wrong buildV3Prompt call');
+    // The WTA site can pass `codingTask: isCodingAnswerType(answerPlan...)`
+    // directly because its plan already exists; manual chat computes the
+    // verdict inline (its real plan is built much later in the handler), so
+    // assert the two things that actually matter: the field is supplied, and
+    // its value comes from the router rather than any local heuristic.
+    assert.match(call, /codingTask:/, 'manual chat must supply codingTask to the bridge');
+    assert.match(
+      call,
+      /isCodingAnswerType\([\s\S]*?planAnswer\(/,
+      'manual chat\'s codingTask must come from AnswerPlanner, not a keyword guess',
+    );
+  });
+});

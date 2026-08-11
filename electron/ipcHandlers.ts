@@ -1140,6 +1140,24 @@ export function initializeIpcHandlers(appState: AppState): void {
               surface: 'manual-chat',
               pathTag: 'ipc',
               question: String(message || ''),
+              // Routed coding verdict, same as the WTA path (see
+              // BridgeInput.codingTask). Without it the bridge falls back to its
+              // keyword regex, which misses ordinary phrasings like "Write a BFS
+              // shortest-path function" and silently drops the six-section
+              // coding contract — the same defect fixed for the live path in
+              // 06d88fba, left open here. planAnswer is pure and the real plan
+              // is not built until much later in this handler, so this computes
+              // the verdict directly from the message + active mode.
+              codingTask: (() => {
+                try {
+                  return isCodingAnswerType(planAnswer({
+                    question: String(message || ''),
+                    source: 'manual_input',
+                    speakerPerspective: 'user',
+                    activeMode: modeInfo ?? undefined,
+                  }).answerType);
+                } catch { return undefined; } // fall back to the bridge's own check
+              })(),
               modeTemplateType: rawMode,
               modeUniqueId: modeInfo?.id ?? null,
               modeName: (modeInfo as any)?.name ?? null,
@@ -2121,7 +2139,14 @@ export function initializeIpcHandlers(appState: AppState): void {
             && isIntelligenceFlagEnabled('contextOsPropertyValidation')
             && !isCodingChat
             && !imagePaths?.length
-            && !isStealthChat) {
+            && !isStealthChat
+            // A clarify born of a reference-bound mode with ZERO files is not
+            // actionable — nothing to disambiguate into (2026-08-11). Same
+            // predicate as the WTA twin; see refusalPolicy.ts.
+            && require('./intelligence/context-os').clarificationIsActionable({
+                sourceAuthority: manualSourceContract?.sourceAuthority ?? null,
+                hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
+            })) {
           try {
             const { buildSourceClarification } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
             // Evidence-execution-repair (2026-07-12): two independent source-
@@ -3172,6 +3197,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                 ? { contextOsGeneration: manualContextOsGeneration }
                 : turnContract
                   && manualActiveMode?.documentGroundedCustomModeActive === true
+                  // Same rule as the WTA twin (2026-08-11): no files -> no doc-grounded govern.
+                  && Boolean((manualActiveMode as any)?.hasReferenceFiles)
                   && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
                 ? {
                     contextOsGeneration: (manualContextOsGeneration = {
