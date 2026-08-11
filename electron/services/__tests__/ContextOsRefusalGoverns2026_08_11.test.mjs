@@ -37,7 +37,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const base = path.resolve(process.cwd(), 'dist-electron/electron');
-const { packGovernsGeneration, sourceAuthorityPermitsRefusal, buildInsufficientPropertyAnswer } =
+const { packGovernsGeneration, sourceAuthorityPermitsRefusal, clarificationIsActionable, buildInsufficientPropertyAnswer } =
   await import(pathToFileURL(path.join(base, 'intelligence/context-os/index.js')).href);
 
 const STRICT = ['reference_files_only', 'reference_files_primary', 'reference_files_plus_transcript', 'transcript_only'];
@@ -112,6 +112,47 @@ describe('DRIFT GUARD: the strict set IS modeSourceContract.evidenceRequired', (
       assert.equal(sourceAuthorityPermitsRefusal(authority), evidenceRequired,
         `${authority}: predicate says ${sourceAuthorityPermitsRefusal(authority)}, contract says evidenceRequired=${evidenceRequired}`);
     }
+  });
+});
+
+describe('a clarify short-circuit must be ACTIONABLE (live report #2, 2026-08-11)', () => {
+  // Second live report, same day, after the refuse-path fix: WTA screenshot in
+  // a blank GENERAL-template mode answered
+  //
+  //   "This mode only answers from your uploaded material, so I'm not pulling
+  //    from your résumé here. Switch to a mode that enables that source..."
+  //
+  // The general template's SEEDED contract claims reference_files_primary; the
+  // mode had ZERO files; the kernel demoted sourceOwner to 'clarify'; and the
+  // clarification short-circuit fired before the provider call. The contract
+  // simultaneously FORBADE every profile source — so the message told the user
+  // to switch modes to reach a resume it would not have used, about material
+  // that was never uploaded, for a question that was never typed.
+  //
+  // The same honest line applies: a clarification between source universes is
+  // only actionable when the mode's own bounded universe actually EXISTS. A
+  // reference-bound authority with no files has nothing to disambiguate into —
+  // the honest move is answering.
+  for (const sourceAuthority of ['reference_files_only', 'reference_files_primary', 'reference_files_plus_transcript']) {
+    test(`${sourceAuthority} + NO files: clarify is not actionable`, () => {
+      assert.equal(clarificationIsActionable({ sourceAuthority, hasReferenceFiles: false }), false);
+    });
+    test(`${sourceAuthority} + files present: clarify stays actionable`, () => {
+      assert.equal(clarificationIsActionable({ sourceAuthority, hasReferenceFiles: true }), true);
+    });
+  }
+
+  test('non-reference authorities keep their clarifications regardless of files', () => {
+    // ask_if_ambiguous / general_mixed clarifications disambiguate between
+    // REAL universes (profile vs transcript vs docs) and must survive;
+    // transcript_only never has files, so a files check must not gag it.
+    for (const sourceAuthority of ['ask_if_ambiguous', 'general_mixed', 'profile_only', 'transcript_only']) {
+      assert.equal(clarificationIsActionable({ sourceAuthority, hasReferenceFiles: false }), true, sourceAuthority);
+    }
+  });
+
+  test('unknown authority fails toward answering the user, not gagging them', () => {
+    assert.equal(clarificationIsActionable({ sourceAuthority: 'legacy', hasReferenceFiles: false }), true);
   });
 });
 

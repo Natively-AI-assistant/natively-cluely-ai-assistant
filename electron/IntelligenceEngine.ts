@@ -2336,7 +2336,19 @@ export class IntelligenceEngine extends EventEmitter {
             if (wtaTurnContract
                 && wtaTurnContract.sourceOwner === 'clarify'
                 && isIntelligenceFlagEnabled('contextOsPropertyValidation')
-                && !isSpeculative) {
+                && !isSpeculative
+                // Image turns bypass clarification — the manual-chat twin has
+                // had this since its escape hatches; WTA never did (2026-08-11:
+                // a screenshot turn with an EMPTY question was asked "which
+                // source do you mean").
+                && !imagePaths?.length
+                // And a clarify born of a reference-bound mode with ZERO files
+                // is not actionable — there is no universe to disambiguate
+                // into. See clarificationIsActionable (refusalPolicy.ts).
+                && contextOsStatic.clarificationIsActionable({
+                    sourceAuthority: canonicalTurn.sourceAuthority ?? null,
+                    hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                })) {
                 try {
                     const { buildSourceClarification, buildContextOsTrace, logContextOsTrace } = contextOsStatic;
                     // Evidence-execution-repair (2026-07-12): prefer the legacy,

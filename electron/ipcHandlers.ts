@@ -2170,7 +2170,14 @@ export function initializeIpcHandlers(appState: AppState): void {
             && isIntelligenceFlagEnabled('contextOsPropertyValidation')
             && !isCodingChat
             && !imagePaths?.length
-            && !isStealthChat) {
+            && !isStealthChat
+            // A clarify born of a reference-bound mode with ZERO files is not
+            // actionable — nothing to disambiguate into (2026-08-11). Same
+            // predicate as the WTA twin; see refusalPolicy.ts.
+            && require('./intelligence/context-os').clarificationIsActionable({
+                sourceAuthority: manualSourceContract?.sourceAuthority ?? null,
+                hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
+            })) {
           try {
             const { buildSourceClarification } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
             // Evidence-execution-repair (2026-07-12): two independent source-

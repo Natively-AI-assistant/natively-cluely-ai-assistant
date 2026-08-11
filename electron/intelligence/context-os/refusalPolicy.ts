@@ -65,3 +65,42 @@ export function packGovernsGeneration(input: {
   if (input.answerPolicy !== 'refuse_insufficient_evidence') return true;
   return sourceAuthorityPermitsRefusal(input.sourceAuthority);
 }
+
+/** The authorities whose universe is the mode's uploaded reference files. */
+const REFERENCE_BOUND_AUTHORITIES: ReadonlySet<string> = new Set([
+  'reference_files_only',
+  'reference_files_primary',
+  'reference_files_plus_transcript',
+]);
+
+/**
+ * Is a sourceOwner='clarify' short-circuit ACTIONABLE for this turn?
+ *
+ * Second live report, 2026-08-11 (same day as the refuse-path fix): a WTA
+ * screenshot turn in a blank GENERAL-template mode was short-circuited into
+ * "This mode only answers from your uploaded material… switch to a mode that
+ * enables that source". The general template's SEEDED contract claims
+ * reference_files_primary; the mode had ZERO files; the kernel demoted the
+ * owner to 'clarify'; and the short-circuit ran before the provider call. The
+ * same contract FORBADE every profile source — so the message pointed at a
+ * résumé it would not have used, about material never uploaded, for a question
+ * never typed.
+ *
+ * The same honest line as packGovernsGeneration: a clarification between
+ * source universes is only worth interrupting the user for when the mode's own
+ * bounded universe actually EXISTS. A reference-bound authority with no files
+ * has nothing to disambiguate into — the honest move is answering.
+ *
+ * Deliberately scoped to the reference-bound trio: ask_if_ambiguous /
+ * general_mixed clarifications disambiguate between REAL universes and must
+ * survive, and transcript_only never has files, so a bare files check would
+ * gag it. Unknown authorities fail toward answering the user.
+ */
+export function clarificationIsActionable(input: {
+  sourceAuthority: string | null | undefined;
+  hasReferenceFiles: boolean;
+}): boolean {
+  if (typeof input.sourceAuthority !== 'string') return true;
+  if (!REFERENCE_BOUND_AUTHORITIES.has(input.sourceAuthority)) return true;
+  return input.hasReferenceFiles;
+}
