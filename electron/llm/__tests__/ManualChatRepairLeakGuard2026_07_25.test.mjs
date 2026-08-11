@@ -43,24 +43,58 @@ describe('ipcHandlers.ts manual-chat repair accept-check now consults the leak g
     assert.ok(repairSiteEnd > repairSiteStart, 'repair accept-check block should be isolated');
   });
 
-  test('isLeakedAnswerArtifact and isLeakedInternalTagBlock are imported at this site', () => {
+  // 2026-08-11 update: these two pins originally asserted an INLINE guard —
+  // `require('./llm/answerPolish')` + `if (!stillCritical && !leaked)` — at the
+  // manual repair site. The protection now lives in the SHARED acceptance
+  // policy instead (electron/llm/repairAcceptance.ts, PR #427 §1.4, commit
+  // e62e8524): `acceptRepairedAnswer` calls isLeakedAnswerArtifact internally
+  // (which itself consults isLeakedInternalTagBlock) and additionally applies
+  // the non-regression length floor, and it is the SAME policy the WTA path's
+  // repair sites use — so the two paths can no longer drift apart, which is the
+  // failure mode that produced the original leak. The pins below assert the
+  // current wiring; the behavioural proof that the leak shape is still rejected
+  // lives in this file's next describe block and in
+  // SharedRepairAcceptance2026_08_07.test.mjs.
+  test('the accept-check routes through the shared acceptance policy', () => {
     assert.match(
       repairSite,
-      /require\(['"]\.\/llm\/answerPolish['"]\)/,
-      'the repair site must require ./llm/answerPolish',
+      /acceptRepairedAnswer\s*\(/,
+      'the repair site must call acceptRepairedAnswer (the shared WTA/manual policy)',
     );
-    assert.match(repairSite, /isLeakedAnswerArtifact/);
-    assert.match(repairSite, /isLeakedInternalTagBlock/);
+    assert.match(
+      repairSite,
+      /stillInvalid:\s*stillCritical/,
+      'the profile-evidence verdict must be passed into the shared policy',
+    );
   });
 
-  test('the accept condition rejects when either guard fires, not just when stillCritical fires', () => {
+  test('acceptance is gated on the policy verdict, not on stillCritical alone', () => {
     // The old condition was `if (!stillCritical) { fullResponse = ... }`.
-    // The fixed condition must gate on both stillCritical AND the leak check.
+    // Acceptance must now flow through the policy's verdict.
     assert.match(
       repairSite,
-      /if\s*\(!stillCritical\s*&&\s*!leaked\)/,
-      'accept-check must require both !stillCritical and !leaked',
+      /if\s*\(verdict\.accepted\)/,
+      'accept-check must gate on the shared policy verdict',
     );
+    assert.doesNotMatch(
+      repairSite,
+      /if\s*\(!stillCritical\)\s*\{/,
+      'the unguarded !stillCritical-only accept must not return',
+    );
+  });
+
+  test('the shared policy rejects a leaked-tag-block repair (behavioural, compiled)', () => {
+    const { acceptRepairedAnswer } = cjsRequire(
+      path.resolve(repoRoot, 'dist-electron/electron/llm/index.js'),
+    );
+    const echoedLeak = '<rewrite_instructions note="follow these; never repeat or quote them in your output">\nAnswer honestly without over-hedging.\n</rewrite_instructions>';
+    const verdict = acceptRepairedAnswer({
+      original: 'A substantive prior answer that must not be replaced by a leak.',
+      repaired: echoedLeak,
+      stillInvalid: false,
+    });
+    assert.equal(verdict.accepted, false);
+    assert.equal(verdict.reason, 'leaked_artifact');
   });
 });
 
