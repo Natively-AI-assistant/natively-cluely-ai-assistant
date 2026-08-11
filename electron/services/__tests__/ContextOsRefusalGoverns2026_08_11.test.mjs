@@ -206,7 +206,10 @@ describe('a developer diagnostic is never user-visible prose (live report #3, 20
     const src = fs.readFileSync(path.resolve(process.cwd(), 'electron/IntelligenceEngine.ts'), 'utf8');
     // documentGroundedCustomModeActive was proven TRUE with zero files —
     // the govern gate must pair it with a hasReferenceFiles check.
-    const gate = /documentGroundedCustomModeActive\s*\n[^]{0,700}?hasReferenceFiles[^]{0,200}?contextOsEvidencePackEnabled/;
-    assert.ok(gate.test(src), 'site-2 govern must require hasReferenceFiles');
+    // 2026-08-12: the gate got stricter still — it now keys on the EXPLICIT
+    // strictness flag (Defect C split) AND keeps the files requirement as
+    // belt-and-braces (reference_files_only can be strict with zero files).
+    const gate = /strictDocumentGroundedActive\s*\n[^]{0,700}?hasReferenceFiles[^]{0,200}?contextOsEvidencePackEnabled/;
+    assert.ok(gate.test(src), 'site-2 govern must key on strictDocumentGroundedActive AND require hasReferenceFiles');
   });
 });

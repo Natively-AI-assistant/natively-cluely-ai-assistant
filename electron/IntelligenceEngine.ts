@@ -905,6 +905,13 @@ export class IntelligenceEngine extends EventEmitter {
         // every live token (#3) so the renderer can drop stale-generation batches.
         const snapshotModeInfo = this.getActiveModeInfo();
         const documentGroundedCustomModeActive = snapshotModeInfo?.documentGroundedCustomModeActive === true;
+        // Defect C split (2026-08-01): STRICT knowledge suppression vs broad
+        // source isolation. Strictness consumers below (skip-legacy-retrieval,
+        // forceDocumentGrounding, the generic-knowledge bypass gate, and the
+        // doc-grounded govern site) read THIS; isolation consumers keep the
+        // broad flag. WTA was never migrated when manual chat was
+        // (LLMHelper:5448) — the root asymmetry behind the 2026-08-11 reports.
+        const strictDocumentGroundedActive = (snapshotModeInfo as any)?.strictDocumentGroundedActive === true;
         const snapshotModeId = this.getActiveModeId();
         // The narrow ActiveModeInfo snapshot is enough for planning, but a
         // multi-family typed reference pack also needs the full mode row and its
@@ -1123,7 +1130,7 @@ export class IntelligenceEngine extends EventEmitter {
             // Governed document turns resolve through EvidenceResolver inside
             // WhatToAnswerLLM. Do not start the legacy prefetch in parallel: even
             // an ignored retrieval is an unauthorized competing evidence path.
-            const modeContextPromise: Promise<string> = options?.activeSkill || documentGroundedCustomModeActive
+            const modeContextPromise: Promise<string> = options?.activeSkill || strictDocumentGroundedActive
                 ? Promise.resolve('') // skill/governed-document mode skips legacy retrieval
                 : (async () => {
                     try {
@@ -1145,7 +1152,7 @@ export class IntelligenceEngine extends EventEmitter {
                             } catch { /* flag module unavailable → no rerank */ }
                             return await mm.buildRetrievedActiveModeContextBlockHybrid(
                                 preparedTranscript, preparedTranscript, 1800, undefined, true, snapshotModeInfo?.id, allowRerank,
-                                documentGroundedCustomModeActive ? { forceDocumentGrounding: true } : undefined,
+                                strictDocumentGroundedActive ? { forceDocumentGrounding: true } : undefined,
                             );
                         }
                         return '';
@@ -1498,7 +1505,7 @@ export class IntelligenceEngine extends EventEmitter {
             let candidateProfile = '';
             try {
                 const orchestrator = this.llmHelper.getKnowledgeOrchestrator?.();
-                if (orchestrator?.isKnowledgeMode?.() && !documentGroundedCustomModeActive
+                if (orchestrator?.isKnowledgeMode?.() && !strictDocumentGroundedActive
                     && wtaDecisionAllowsCandidateProfile) {
                     const extracted = extractedQuestion;
                     // Only ground question types that resolve to the candidate's
@@ -2451,7 +2458,7 @@ export class IntelligenceEngine extends EventEmitter {
             // block (no double retrieval) and governs the factual prompt.
             if (!wtaContextOsGeneration
                 && wtaTurnContract
-                && documentGroundedCustomModeActive
+                && strictDocumentGroundedActive
                 // Live proof 2026-08-11: documentGroundedCustomModeActive can be
                 // TRUE with hasReferenceFiles FALSE (custom mode, contract seeded
                 // reference_files_primary, zero files). Governing that turn

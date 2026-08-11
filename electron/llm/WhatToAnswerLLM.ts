@@ -259,7 +259,13 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     // a second line of defence for other call paths.)
                     const activeModeGroundingInfo = modesManager.getActiveModeDocumentGroundingInfo?.(requestSnapshot?.modeUniqueId);
                     const documentGroundedCustomModeActive = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
-                    const forceDocumentGrounding = documentGroundedCustomModeActive;
+                    // Defect C (2026-08-01) prescribed the split: knowledge
+                    // suppression reads strictDocumentGroundedActive; isolation
+                    // keeps the broad flag. Manual chat was migrated
+                    // (LLMHelper:5448); this surface was not, so WTA ran the
+                    // strict doc pipeline for every template-seeded mode with
+                    // zero files — the root of the 2026-08-11 denial reports.
+                    const forceDocumentGrounding = activeModeGroundingInfo?.strictDocumentGroundedActive === true;
                     const retrievalOptions = forceDocumentGrounding
                         ? { forceDocumentGrounding: true, followUpReferentHint: temporalContext?.previousResponses?.slice(-1)?.[0] }
                         : undefined;

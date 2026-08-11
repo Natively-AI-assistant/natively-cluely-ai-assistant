@@ -1463,7 +1463,13 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     .replace(/\bfull[- ]?stack\b/g, 'fullstack')
     .replace(/\bstack(s|ed)?\s+up\b/g, 'measure$1 up');
   const extractedType = input.extractedQuestion?.questionType;
-  const documentGroundedCustomModeActive = input.activeMode?.documentGroundedCustomModeActive === true;
+  // Defect C split: prefer the EXPLICIT strictness flag when the snapshot
+  // carries it (live snapshots always do since 2026-08-12); fall back to the
+  // broad flag only for older callers/tests that never pass strict. Keying
+  // doc-shape routing and layer suppression on the broad flag ran the strict
+  // pipeline for stock template-seeded modes with zero files.
+  const documentGroundedCustomModeActive =
+    (input.activeMode?.strictDocumentGroundedActive ?? input.activeMode?.documentGroundedCustomModeActive) === true;
   const explicitDocumentModeCodingAsk = /\b(write|implement|code|coding interview|dsa|dry run|time complexity|space complexity|big[-\s]?o|algorithm(?:ic)?|solution code|source code)\b/i.test(text);
   const explicitDocumentModeProfileAsk = /\b(resume|cv|profile|job description|\bjd\b|career|work experience|candidate profile|my background|your background|my projects?|your projects?|my skills?|your skills?)\b/i.test(text);
 

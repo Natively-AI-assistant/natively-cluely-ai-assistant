@@ -99,7 +99,12 @@ describe('#6 — runWhatShouldISay captures ONE mode snapshot at t0 and threads 
   // duplicate-authority cleanup can't silently re-open profile evidence on a
   // JD-only / reference-files-only / transcript-only turn.
   test('the candidate-profile orchestrator fetch is gated on the canonical never-retrieve decision', () => {
-    assert.match(body, /isKnowledgeMode\?\.\(\) && !documentGroundedCustomModeActive\s*\n?\s*&& wtaDecisionAllowsCandidateProfile/s,
+    // 2026-08-12: the suppression side of this gate reads the EXPLICIT
+    // strictness flag (Defect C split) — the broad isolation flag classified
+    // every template-seeded mode as strict and ran the doc-refusal pipeline on
+    // fileless stock modes. The invariant this pin protects is unchanged: the
+    // résumé orchestrator fetch must AND the canonical candidate-profile gate.
+    assert.match(body, /isKnowledgeMode\?\.\(\) && !strictDocumentGroundedActive\s*\n?\s*&& wtaDecisionAllowsCandidateProfile/s,
       'the résumé orchestrator fetch must AND the canonical candidate-profile gate');
   });
 

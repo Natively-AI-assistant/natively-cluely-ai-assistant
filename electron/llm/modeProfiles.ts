@@ -62,6 +62,17 @@ export interface ActiveModeInfo {
      * files authoritative and at least one reference file is available.
      */
     documentGroundedCustomModeActive?: boolean;
+  /**
+   * EXPLICIT strictness only (Defect C, 2026-08-01) — knowledge-suppression
+   * consumers read THIS, never the broad isolation flag above. The broad flag
+   * is TRUE for every template-seeded mode (the seed stamps
+   * reference_files_primary on all non-interview templates), so keying strict
+   * behaviour on it ran the doc-grounded refusal pipeline for stock modes with
+   * zero files. Manual chat was migrated to strict at LLMHelper:5448; the WTA
+   * surface never was — that asymmetry is the root of the 2026-08-11 WTA
+   * denial reports (four layers of them).
+   */
+  strictDocumentGroundedActive?: boolean;
     /** The mode's persisted, explicit source policy (real-custom-mode-repair). */
     sourceContract?: ModeSourceContract;
 }

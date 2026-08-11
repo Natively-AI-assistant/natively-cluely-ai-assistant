@@ -531,6 +531,7 @@ export class ModesManager {
                 hasCustomPrompt: grounding.hasCustomPrompt,
                 documentGrounded: grounding.documentGrounded,
                 documentGroundedCustomModeActive: grounding.documentGroundedCustomModeActive,
+                strictDocumentGroundedActive: grounding.strictDocumentGroundedActive,
                 sourceContract: grounding.sourceContract,
             };
         } else {
