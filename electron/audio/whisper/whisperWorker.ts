@@ -138,9 +138,13 @@ parentPort.on('message', async (msg: any) => {
   if (msg.type === 'init') {
     if (msg.sessionLayout === 'nemotron-rnnt') {
       try {
+        const { downloadNemotronFiles } = require('./nemotron/downloadFiles');
         const { NemotronEngine } = require('./nemotron/nemotronEngine');
         const path = require('path');
         const modelDir = path.join(msg.cacheDir, ...String(msg.modelId).split('/'));
+        await downloadNemotronFiles(modelDir, (pct: number) => {
+          parentPort!.postMessage({ type: 'progress', modelId: msg.modelId, progress: pct });
+        });
         nemotronEngine = await NemotronEngine.create(modelDir, msg.executionProviders ?? ['cpu']);
         parentPort!.postMessage({ type: 'ready' });
       } catch (e: any) {

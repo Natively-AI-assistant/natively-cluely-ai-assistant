@@ -7558,9 +7558,10 @@ async function initializeApp() {
   // waiting for IPC registration. The service rehydrates from disk
   // synchronously in its constructor.
   try {
-    const { LocalModelDownloadService, createWhisperDownloadProvider } = require('./services/LocalModelDownloadService');
+    const { LocalModelDownloadService, createWhisperDownloadProvider, createNemotronDownloadProvider } = require('./services/LocalModelDownloadService');
     const downloadService = LocalModelDownloadService.getInstance();
     downloadService.registerProvider(createWhisperDownloadProvider());
+    downloadService.registerProvider(createNemotronDownloadProvider());
     // 2026-07-06: lazy download for the reranker (smart-retrieval Phase 1).
     // The 283 MB bge-reranker-base model is no longer bundled — it is fetched
     // on first document-grounded mode activation via ModesManager.

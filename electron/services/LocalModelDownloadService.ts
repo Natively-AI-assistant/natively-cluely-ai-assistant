@@ -653,3 +653,44 @@ export function createWhisperDownloadProvider(): LocalModelDownloadProvider {
     },
   };
 }
+
+/**
+ * Nemotron 3.5 ASR Streaming provider — reuses whisperWorker.ts as the
+ * download-and-load worker (its `nemotron-rnnt` init branch fetches the
+ * required files via downloadFiles.ts before constructing ONNX sessions),
+ * so "download" and "load" stay a single worker lifecycle exactly like
+ * every other model family.
+ */
+export function createNemotronDownloadProvider(): LocalModelDownloadProvider {
+  return {
+    name: 'nemotron',
+    isModelCached(modelId: string): boolean {
+      const { isModelCached } = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
+      return isModelCached(modelId as any);
+    },
+    deletePartial(modelId: string): void {
+      const { getModelsDir } = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
+      const { deletePartialNemotronFiles } = require('../audio/whisper/nemotron/downloadFiles') as typeof import('../audio/whisper/nemotron/downloadFiles');
+      const path = require('path') as typeof import('path');
+      deletePartialNemotronFiles(path.join(getModelsDir(), ...modelId.split('/')));
+    },
+    preflightCheck(): string | null {
+      // Same macOS-13-floor gate every other local model uses. Interface takes
+      // no modelId — getAvailableModels() applies the gate uniformly across
+      // the whole catalog (see modelManager.ts:297-308 / getAvailableModels),
+      // so any entry's errorMessage reflects the same platform-level check.
+      const { getAvailableModels } = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
+      const models = getAvailableModels();
+      return models.find((m) => m.errorMessage)?.errorMessage ?? null;
+    },
+    spawnWorker(): Worker {
+      const { Worker } = require('worker_threads');
+      const { resolveWhisperWorkerPath } = require('../audio/whisper/workerPathResolver') as typeof import('../audio/whisper/workerPathResolver');
+      return new Worker(resolveWhisperWorkerPath());
+    },
+    buildInitMessage(modelId: string): unknown {
+      const { buildWorkerInitMessage } = require('../audio/whisper/inferenceConfig') as typeof import('../audio/whisper/inferenceConfig');
+      return buildWorkerInitMessage(modelId);
+    },
+  };
+}
