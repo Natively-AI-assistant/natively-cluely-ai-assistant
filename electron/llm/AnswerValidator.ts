@@ -471,7 +471,12 @@ export const validateCodingMarkdown = (response: string): AnswerValidationResult
   // check rejects. `extractComplexityText` is the existing parser for exactly
   // that phrasing, so completeness is judged on "did the model state a bound in
   // any form", not "did it use our heading style".
-  const statesComplexity = complexity || Boolean(extractComplexityText(answer));
+  // Code-review 2026-08-12: extractComplexityText is fence-blind, so a code
+  // COMMENT ("# brute force is O(n^2), too slow") satisfied this check and
+  // suppressed the repair for an answer that never stated a bound TO THE USER.
+  // Strip fenced blocks before asking whether the model stated its complexity.
+  const proseOnly = answer.replace(/```[\s\S]*?```/g, ' ');
+  const statesComplexity = complexity || Boolean(extractComplexityText(proseOnly));
   // Narrow exemption: it applies only when the model used its OWN format and
   // wrote everything. An answer that already uses the canonical `##` headings
   // but puts them in the WRONG ORDER is a different case — re-ordering known
@@ -479,7 +484,15 @@ export const validateCodingMarkdown = (response: string): AnswerValidationResult
   // leading with a bare code block is a real presentation problem worth fixing.
   // So an answer that has recognized canonical sections still gets repaired;
   // only a model-formatted, complete answer is left alone.
-  const usesCanonicalHeadings = missingSections.length === 0;
+  // Code-review 2026-08-12: this was `missingSections.length === 0`, i.e. true
+  // only when ALL SIX canonical sections exist. An answer that started the
+  // canonical scaffold and dropped out partway (say Approach + Code +
+  // Complexity, no Dry Run / Technique / Follow-ups) therefore counted as
+  // "not canonical" and was wrongly treated as model-formatted-and-complete —
+  // exempting exactly the half-finished answers the contract exists to repair.
+  // ANY canonical heading means the model was using our format, so the
+  // exemption (which is only for a model using its OWN format) must not apply.
+  const usesCanonicalHeadings = missingSections.length < CODING_SECTIONS.length;
   const substantivelyComplete = codeBlock
     && hasTaggedBlock
     && statesComplexity

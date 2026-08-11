@@ -143,3 +143,42 @@ describe('a complete answer is not "repaired" at all', () => {
     );
   });
 });
+
+describe('the completeness exemption is narrow (code-review 2026-08-12)', () => {
+  // Two ways the exemption added on 2026-08-10 was too permissive. Both were
+  // found by reviewing the change against its own comment, which promised the
+  // exemption "applies only when the model used its OWN format and wrote
+  // everything".
+
+  test('a PARTIALLY canonical answer is still repaired, not exempted', () => {
+    // Uses `##` headings but drops Dry Run / Technique / Follow-ups. The
+    // exemption keyed on `missingSections.length === 0`, which is only true
+    // when ALL six exist — so an answer missing three sections fell through
+    // to "not canonical" and was wrongly treated as model-formatted.
+    const partial = [
+      '## Approach', '', 'Use a hash map.', '',
+      '## Code', '', '```python', 'def f(x):', '    return x', '```', '',
+      '## Complexity', '', 'Time Complexity: O(n). Space Complexity: O(1).',
+    ].join('\n');
+    const result = validateAnswerStructure('dsa_question_answer', partial);
+    assert.ok(result.repaired, 'an answer that started the canonical scaffold and dropped out must still be repaired');
+  });
+
+  test('a complexity bound that exists ONLY inside a code fence does not count', () => {
+    // extractComplexityText is fence-blind, so a code comment like
+    // "# brute force is O(n^2), too slow" satisfied `statesComplexity` and
+    // suppressed the repair for an answer that never stated a bound to the user.
+    const codeCommentOnly = [
+      '## Approach', '', 'Sort then scan.', '',
+      '## Code', '', '```python', '# brute force is O(n^2), too slow', 'def f(x):', '    return sorted(x)', '```',
+    ].join('\n');
+    const result = validateAnswerStructure('dsa_question_answer', codeCommentOnly);
+    assert.ok(result.repaired, 'a bound mentioned only in a code comment must not count as the answer stating complexity');
+  });
+
+  test('the live-regression answer is STILL exempt (no over-correction)', () => {
+    // The fix must not re-break what 2026-08-10 fixed: model-formatted, complete.
+    const result = validateAnswerStructure('dsa_question_answer', LIVE_ANSWER);
+    assert.ok(!result.repaired, 'a complete, model-formatted answer must still be left alone');
+  });
+});
