@@ -22,7 +22,15 @@ export const NEMOTRON_FILES = NEMOTRON_REQUIRED_FILES;
 
 // Approximate byte sizes per file, for progress-bar weighting. Exact totals
 // aren't required — this only affects how smoothly the bar advances.
-const APPROX_BYTES: Record<string, number> = {
+// Keyed off `typeof NEMOTRON_REQUIRED_FILES[number]` (not a bare `Record<string, number>`)
+// so this object and NEMOTRON_REQUIRED_FILES are compiler-enforced to stay in
+// sync: a future add/rename/remove in the required-files list makes this
+// object fail to typecheck (missing OR excess key — verified both directions)
+// instead of silently producing `APPROX_BYTES[file] === undefined` → `NaN`
+// propagating through `downloadedSoFar`, which would defeat the
+// `pct === lastReportedPct` dedup guard below (NaN !== NaN never matches)
+// and reflood IPC on every chunk.
+const APPROX_BYTES: Record<(typeof NEMOTRON_REQUIRED_FILES)[number], number> = {
   'encoder.onnx': 2_800_000, 'encoder.onnx.data': 693_000_000,
   'decoder.onnx': 4_800, 'decoder.onnx.data': 60_000_000,
   'joint.onnx': 2_200, 'joint.onnx.data': 38_000_000,

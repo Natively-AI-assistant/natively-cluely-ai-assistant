@@ -58,14 +58,18 @@ build({
     // onnxruntime-node ships a compiled `.node` binary. Every other ONNX
     // consumer in this codebase (Whisper, LocalReranker, LocalEmbeddingProvider,
     // IntentClassifier) only reaches it indirectly through @huggingface/transformers'
-    // own dynamic loading, which doesn't trip esbuild's bundler. nemotronEngine.ts
-    // is the first place with a direct static `import ... from 'onnxruntime-node'`,
-    // and esbuild can't bundle a native binary — it throws "No loader configured
-    // for .node files". Externalizing keeps it loadable from node_modules at
-    // runtime instead. onnxruntime-common is a transitive dep pulled in the same
-    // way, so it needs the same treatment.
+    // own dynamic loading, which doesn't trip esbuild's bundler. The Nemotron
+    // ONNX modules (electron/audio/whisper/nemotron/) are the first place
+    // with a direct static `import ... from 'onnxruntime-node'`, and esbuild
+    // can't bundle a native binary — it throws "No loader configured for
+    // .node files". Externalizing keeps it loadable from node_modules at
+    // runtime instead. (onnxruntime-common is a transitive dep of
+    // onnxruntime-node but does NOT need to be listed here: once
+    // onnxruntime-node itself is external, esbuild never traverses into its
+    // internals to see the nested `require('onnxruntime-common')` call —
+    // verified empirically by removing it and rebuilding clean, and by
+    // confirming no first-party file imports onnxruntime-common directly.)
     'onnxruntime-node',
-    'onnxruntime-common',
     // Heavy native ESM modules with `import.meta.url`-dependent init. Keeping
     // them external lets Node's loader give them a real `import.meta.url`,
     // which the bundled version can't (esbuild's CJS target sets
