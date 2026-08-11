@@ -38,17 +38,39 @@ const FIXTURE_WAV = path.join(__dirname, 'fixtures', 'known-phrase-16k-mono.wav'
 const KNOWN_PHRASE = 'the quick brown fox jumps over the lazy dog';
 
 /**
- * Minimal WAV (PCM16 mono) -> Float32 reader. Skips the standard 44-byte
- * header (RIFF/WAVE/fmt /data chunk layout as produced by ffmpeg's default
- * `-c:a pcm_s16le` output) and normalizes int16 samples to [-1, 1] by
- * dividing by 32768. No general RIFF chunk-walking — this is deliberately
- * narrow, matching the brief's guidance not to pull in a WAV-parsing
- * dependency for a fixed, self-produced fixture.
+ * Minimal WAV (PCM16 mono) -> Float32 reader. Walks RIFF chunks to find the
+ * real `data` chunk rather than assuming a fixed 44-byte header — this
+ * fixture's own ffmpeg-produced file has a `LIST`/INFO metadata chunk
+ * between `fmt ` and `data` (an `ISFT` encoder tag), so `data` actually
+ * starts at byte 78, not 44 (confirmed by walking this exact file: `fmt `
+ * chunk at 12, `LIST` chunk of size 26 at 36, `data` chunk at 70 with its
+ * payload starting at 78). A fixed 44-byte assumption silently read 17
+ * samples (34 bytes) of ASCII metadata as bogus leading audio. No WAV
+ * parsing dependency — this is a small, self-contained chunk walk, still
+ * matching the brief's guidance not to pull in a library for a
+ * fixed, self-produced fixture.
  */
 function readPcm16Mono(wavPath) {
   const buf = fs.readFileSync(wavPath);
-  const dataStart = 44;
-  const sampleCount = (buf.length - dataStart) / 2;
+  if (buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WAVE') {
+    throw new Error(`${wavPath} is not a RIFF/WAVE file`);
+  }
+  let offset = 12;
+  let dataStart = -1;
+  let dataSize = 0;
+  while (offset + 8 <= buf.length) {
+    const chunkId = buf.toString('ascii', offset, offset + 4);
+    const chunkSize = buf.readUInt32LE(offset + 4);
+    if (chunkId === 'data') {
+      dataStart = offset + 8;
+      dataSize = chunkSize;
+      break;
+    }
+    // Chunks are word-aligned: a chunk with an odd size has one pad byte.
+    offset += 8 + chunkSize + (chunkSize % 2);
+  }
+  if (dataStart < 0) throw new Error(`${wavPath}: no 'data' chunk found`);
+  const sampleCount = Math.floor(Math.min(dataSize, buf.length - dataStart) / 2);
   const out = new Float32Array(sampleCount);
   for (let i = 0; i < sampleCount; i++) {
     out[i] = buf.readInt16LE(dataStart + i * 2) / 32768;
