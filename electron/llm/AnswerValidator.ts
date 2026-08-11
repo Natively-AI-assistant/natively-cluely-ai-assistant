@@ -178,7 +178,35 @@ const extractFirstCodeBlock = (answer: string): { language: string; code: string
   };
 };
 
-const stripCodeBlock = (answer: string, block?: string): string => block ? answer.replace(block, '').trim() : answer.trim();
+/**
+ * Remove the extracted code block from prose that will be re-emitted as the
+ * Approach section (the code lives in its own `## Code` section).
+ *
+ * Also drops the model's own lead-in heading when the block was its ONLY
+ * content. Live regression (2026-08-11): the model wrote
+ *
+ *     **Python implementation:**
+ *
+ *     ```python … ```
+ *
+ * and removing just the fence left "**Python implementation:**" followed by
+ * nothing — the user watched code appear under that heading and then vanish
+ * from it. A label whose entire body was lifted out belongs with the code, not
+ * stranded above an empty gap. Only a short bold/heading line immediately above
+ * the block is taken, and only when nothing else separates it from the fence,
+ * so ordinary prose is never removed.
+ */
+const CODE_LEAD_IN_RE = /(?:^|\n)[ \t]*(?:\*\*[^\n*]{0,60}?:?\*\*|#{1,6}[ \t][^\n]{0,60}?)[ \t]*:?[ \t]*\n(?:[ \t]*\n)*$/;
+
+const stripCodeBlock = (answer: string, block?: string): string => {
+  if (!block) return answer.trim();
+  const at = answer.indexOf(block);
+  if (at < 0) return answer.replace(block, '').trim();
+  const before = answer.slice(0, at);
+  const after = answer.slice(at + block.length);
+  const trimmedBefore = CODE_LEAD_IN_RE.test(before) ? before.replace(CODE_LEAD_IN_RE, '\n') : before;
+  return `${trimmedBefore}${after}`.replace(/\n{3,}/g, '\n\n').trim();
+};
 
 const inferLanguage = (answer: string, explicit?: string): string => {
   if (explicit && explicit.trim()) return explicit.trim();
