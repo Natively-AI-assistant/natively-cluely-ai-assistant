@@ -88,6 +88,7 @@ describe('catalog invariants', () => {
     const expectedIds = [
       'onnx-community/moonshine-tiny-ONNX',
       'onnx-community/moonshine-base-ONNX',
+      'onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4',
       'distil-whisper/distil-small.en',
       'distil-whisper/distil-medium.en',
       'distil-whisper/distil-large-v3',
