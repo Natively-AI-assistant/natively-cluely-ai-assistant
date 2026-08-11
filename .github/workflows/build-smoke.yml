@@ -289,8 +289,14 @@ jobs:
       - name: Build Electron (test prerequisite)
         run: npm run build:electron
 
+      # Dedicated script rather than `npm test -- --test-name-pattern`: the test
+      # runner now launches under Electron (so native modules built for
+      # Electron's ABI load), and the extra argv layer does not forward node's
+      # --test-name-pattern through to the runner — the flag was silently
+      # ignored and the FULL suite ran. Targeting the one file is also cheaper
+      # than filtering the whole glob set.
       - name: Run API smoke tests
-        run: npm test -- --test-name-pattern 'Natively API'
+        run: npm run test:api-smoke
         env:
           RUN_NATIVELY_API_E2E: ${{ secrets.RUN_NATIVELY_API_E2E }}
           NATIVELY_API_KEY: ${{ secrets.NATIVELY_API_KEY }}
