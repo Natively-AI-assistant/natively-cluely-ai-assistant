@@ -1,0 +1,11 @@
+{
+  "list_price_usd_per_seat_month": 49,
+  "annual_discount_pct": 12,
+  "enterprise_floor": {
+    "account": "Acme",
+    "discount_floor_pct": 17,
+    "note": "Acme enterprise discount floor is 17 percent — do not go below this without VP sign-off."
+  },
+  "approval_required_below_pct": 12,
+  "multi_year_uplift_pct": 4
+}

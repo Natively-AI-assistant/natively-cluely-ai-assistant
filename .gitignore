@@ -459,6 +459,15 @@ fixtures/
 # before its contents can be.
 !electron/**/__tests__/fixtures/
 !electron/**/__tests__/fixtures/**
+# Same sweep deleted tests/fixtures/modes/* (73 files) in 6f8e3329 — the mode
+# reference-file corpus that CustomModes / ModePersonaScenarios / Seminar /
+# ModeFixtureIntegrity / ModeBleedingMatrix import. That turned ~120 suite
+# cases into unconditional ENOENT failures on every fresh checkout. Restored
+# from 6f8e3329~1 (2026-08-11) and re-included here so the cleanup cannot
+# recur. Same two-line pattern as above: re-include the directory first, then
+# its contents.
+!tests/fixtures/
+!tests/fixtures/**
 tools/
 
 # Vision benchmark source documentation + generated reports

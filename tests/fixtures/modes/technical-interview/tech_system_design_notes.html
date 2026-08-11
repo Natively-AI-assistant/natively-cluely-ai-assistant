@@ -1,0 +1,10 @@
+<!doctype html>
+<html><body>
+<h1>System design notes — sharded write path</h1>
+<p>Cap throughput at 10k qps per shard; use read replicas.</p>
+<ul>
+  <li>Partition key: tenant_id.</li>
+  <li>Replication: synchronous to one replica, asynchronous to two.</li>
+  <li>Failover: leader election via etcd in &lt;5s.</li>
+</ul>
+</body></html>

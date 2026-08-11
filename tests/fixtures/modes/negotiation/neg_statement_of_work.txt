@@ -1,0 +1,11 @@
+Statement of Work — Halcyon integration
+
+SOW scope: 4 milestones; rate $140/hr; cap 200 hours.
+
+Milestones:
+1. Discovery and architecture (40 hr).
+2. Backend integration (80 hr).
+3. UI integration (60 hr).
+4. Handoff and documentation (20 hr).
+
+Change requests outside this scope require a written addendum.

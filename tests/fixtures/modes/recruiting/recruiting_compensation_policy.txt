@@ -1,0 +1,7 @@
+Backend compensation bands
+
+L3: base 135-155k USD, equity 0.05-0.10%.
+L4: Backend L4 base 165-185k USD, equity 0.10-0.20%.
+L5: base 195-225k USD, equity 0.20-0.40%.
+
+Geographic adjustments: -10% for non-US/EU offices. No sponsored relocation budget; one-time stipend $5k.

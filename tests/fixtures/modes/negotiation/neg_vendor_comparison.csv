@@ -1,0 +1,4 @@
+vendor,annual_price_usd,soc2,note
+VendorA,84000,yes,Reference customer in our industry
+VendorB,68880,no,Vendor B price 18% lower but no SOC2
+VendorC,92400,yes,Higher price but bundle includes premium support
