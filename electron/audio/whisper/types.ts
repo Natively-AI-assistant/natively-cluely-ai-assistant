@@ -108,6 +108,14 @@ export interface WorkerTranscribeMessage {
   //                  with deterministic params (no condition_on_previous_text).
   // streaming=false (default) → final pass, emits 'result'.
   streaming?: boolean;
+  // nemotron-rnnt session layout only (silently ignored by every other
+  // model): true on the FIRST chunk dispatched for a segment. Tells the
+  // worker to call NemotronEngine.reset() before pushAudio() so encoder/
+  // decoder cache state never leaks across a VAD segment boundary — or
+  // across a warm-preloaded worker's PREVIOUS recording session, since a
+  // fresh LocalWhisperSTT instance's sent-sample cursor always starts at 0,
+  // so its first chunk always sets this true.
+  nemotronReset?: boolean;
 }
 /**
  * Out-of-band prompt update. Sent only when the host's context string

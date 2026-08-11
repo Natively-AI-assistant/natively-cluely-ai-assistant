@@ -172,9 +172,14 @@ class ModelPreloader {
         }
         // Acquire the shared ONNX slot BEFORE spawning the worker. The release
         // function is wired into the worker's error/exit handlers below — the
-        // slot stays held for the lifetime of the worker's session.
+        // slot stays held for the lifetime of the worker's session. Nemotron
+        // opens 3 concurrent ONNX sessions per worker (encoder/decoder/joint)
+        // vs. every other model's 1 — weight the acquisition accordingly so
+        // the gate's crash-avoidance guarantee holds for a preloaded worker
+        // too, not just a cold-started one (see onnxThreadConfig.ts).
         let slotRelease: (() => void) | null = null;
-        acquireOnnxSlot('high').then((release) => {
+        const onnxWeight = modelId.toLowerCase().includes('nemotron') ? 3 : 1;
+        acquireOnnxSlot('high', onnxWeight).then((release) => {
             slotRelease = release;
         }).catch(() => { /* should never reject */ });
 

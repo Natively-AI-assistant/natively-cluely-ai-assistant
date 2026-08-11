@@ -141,15 +141,23 @@ function readMinFreeGB(): number {
     return Number.isFinite(n) && n >= 0 ? n : 2.0;
 }
 
-function canAcquireNow(priority: OnnxSlotPriority): boolean {
+function canAcquireNow(priority: OnnxSlotPriority, weight: number): boolean {
     const cap = readMaxConcurrent();
-    if (priority === 'high') {
-        return _sem.inFlightNormal + _sem.inFlightHigh < cap;
+    const current = _sem.inFlightNormal + _sem.inFlightHigh;
+    // A request whose own weight exceeds the cap (Nemotron's 3 sessions
+    // against the default cap of 2) can never satisfy "current + weight <=
+    // cap" — that would deadlock forever. Treat it as exclusive: admit only
+    // when nothing else is in flight, then let it run alone even though it
+    // temporarily exceeds the nominal cap.
+    if (weight > cap) {
+        if (current > 0) return false;
+    } else if (current + weight > cap) {
+        return false;
     }
+    if (priority === 'high') return true;
     // Normal priority: only acquire when there are no high-priority waiters
     // queued (so Whisper can grab the next slot promptly).
-    if (_sem.waitersHigh.length > 0) return false;
-    return _sem.inFlightNormal + _sem.inFlightHigh < cap;
+    return _sem.waitersHigh.length === 0;
 }
 
 /**
@@ -161,32 +169,41 @@ function canAcquireNow(priority: OnnxSlotPriority): boolean {
  * ahead of queued normal-priority waiters but does NOT preempt a running
  * session. If the cap is exhausted, high-priority waiters block normal-priority
  * acquisitions so Whisper can take the next free slot promptly.
+ *
+ * `weight` (default 1) is how many concurrent native ONNX sessions this one
+ * acquisition represents — NemotronEngine opens 3 (encoder/decoder/joint)
+ * per worker, so its caller passes `weight: 3`. See canAcquireNow's
+ * exclusive-mode branch for what happens when weight exceeds the cap.
  */
-export async function acquireOnnxSlot(priority: OnnxSlotPriority = 'normal'): Promise<() => void> {
+export async function acquireOnnxSlot(priority: OnnxSlotPriority = 'normal', weight: number = 1): Promise<() => void> {
     const queue = priority === 'high' ? _sem.waitersHigh : _sem.waitersNormal;
     // Only enqueue when we're actually going to wait — otherwise stale
     // resolvers accumulate in the queue and confuse the FIFO order.
-    while (!canAcquireNow(priority)) {
+    while (!canAcquireNow(priority, weight)) {
         const waiterP = new Promise<void>(resolve => queue.push(resolve));
         await waiterP;
     }
-    if (priority === 'high') _sem.inFlightHigh++;
-    else _sem.inFlightNormal++;
+    if (priority === 'high') _sem.inFlightHigh += weight;
+    else _sem.inFlightNormal += weight;
 
     let released = false;
     return () => {
         if (released) return;
         released = true;
-        if (priority === 'high') _sem.inFlightHigh--;
-        else _sem.inFlightNormal--;
-        // Wake the next eligible waiter. Try high first, then normal — keeps
-        // Whisper latency-critical even when embeddings are queued.
-        const nextHigh = _sem.waitersHigh.shift();
-        if (nextHigh) nextHigh();
-        else {
-            const nextNormal = _sem.waitersNormal.shift();
-            if (nextNormal) nextNormal();
-        }
+        if (priority === 'high') _sem.inFlightHigh -= weight;
+        else _sem.inFlightNormal -= weight;
+        // Wake EVERY waiter, not just one: a multi-unit release (weight > 1)
+        // can free capacity for more than one queued weight-1 waiter, and a
+        // single-wake design (correct when every release always freed
+        // exactly what one waiter needed) would leave the extra capacity
+        // idle with nobody polling for it. Each woken waiter re-checks
+        // canAcquireNow itself (the `while` loop above) and re-enqueues if
+        // it still doesn't fit — waking more than necessary is safe, just
+        // slightly less efficient than a targeted wake.
+        const highWaiters = _sem.waitersHigh.splice(0);
+        const normalWaiters = _sem.waitersNormal.splice(0);
+        highWaiters.forEach(resolve => resolve());
+        normalWaiters.forEach(resolve => resolve());
     };
 }
 

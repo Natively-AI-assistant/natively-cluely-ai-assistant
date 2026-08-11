@@ -282,7 +282,16 @@ parentPort.on('message', async (msg: any) => {
   } else if (msg.type === 'transcribe') {
     if (nemotronEngine) {
       try {
+        if (msg.nemotronReset) nemotronEngine.reset();
         const results = await nemotronEngine.pushAudio(msg.audio);
+        if (!msg.streaming) {
+          // Final pass: decode whatever's left in the < CHUNK_SAMPLES tail
+          // buffer (zero-padded) instead of silently dropping the last partial
+          // chunk of the segment. Streaming (partial) passes intentionally
+          // leave it buffered for the next pushAudio() call to complete.
+          const tail = await nemotronEngine.flush();
+          if (tail) results.push(tail);
+        }
         const text = results.map(r => r.text).join(' ').trim();
         parentPort!.postMessage(
           msg.streaming

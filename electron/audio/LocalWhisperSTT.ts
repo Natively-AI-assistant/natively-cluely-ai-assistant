@@ -105,7 +105,15 @@ export class LocalWhisperSTT extends EventEmitter {
     // Pending audio waiting for the worker to become ready. Always finals —
     // streaming partials are never queued (they're best-effort and only fire
     // while a segment is open AND the worker is ready).
-    private pendingAudio: Float32Array[] = [];
+    private pendingAudio: Array<{ audio: Float32Array; nemotronReset: boolean }> = [];
+
+    // nemotron-rnnt only: how many samples of the CURRENT open VAD segment have
+    // already been sent to the (stateful) worker engine. Reset to 0 at every
+    // segment boundary (see dispatchFinal). Always 0 for every other model,
+    // which ignores this field entirely and keeps sending the full cumulative
+    // buffer every tick, as before.
+    private nemotronSentSamples = 0;
+    private readonly isNemotronModel: boolean;
 
     // Gap-flush: ensures a segment closes even if Rust SilenceSuppressor
     // stops sending audio before VAD's hangover completes.
@@ -153,6 +161,7 @@ export class LocalWhisperSTT extends EventEmitter {
     constructor(modelId: string) {
         super();
         this.modelId = modelId;
+        this.isNemotronModel = LocalWhisperSTT.isNemotronModelId(modelId);
         configureTransformersCache();
 
         // Tune the streaming loop for this specific model's characteristics.
@@ -168,6 +177,10 @@ export class LocalWhisperSTT extends EventEmitter {
         this.skipAgreement = profile.skipAgreement;
         this.streamingNextDelayMs = this.streamingIntervalBaseMs;
         console.log(`[LocalWhisperSTT] streaming profile for ${modelId}: interval=${profile.intervalMs}ms minAudio=${profile.minAudioMs}ms skipAgreement=${profile.skipAgreement}`);
+    }
+
+    private static isNemotronModelId(modelId: string): boolean {
+        return modelId.toLowerCase().includes('nemotron');
     }
 
     /**
@@ -197,7 +210,7 @@ export class LocalWhisperSTT extends EventEmitter {
         // LocalAgreement-2 for the same reason as Moonshine: the worker's
         // per-chunk greedy RNNT decode is already stable, so there's no
         // ambiguous partial to stabilize across two passes.
-        if (modelId.toLowerCase().includes('nemotron')) {
+        if (LocalWhisperSTT.isNemotronModelId(modelId)) {
             return { intervalMs: 560, minAudioMs: 560, skipAgreement: true };
         }
         return { intervalMs: 1500, minAudioMs: 800, skipAgreement: false };
@@ -440,10 +453,24 @@ export class LocalWhisperSTT extends EventEmitter {
         this.streamingTaskInFlight = true;
         const taskId = `s${++this.taskCounter}`;
         this.streamingTaskId = taskId;
-        const copy = open.samples.slice();
+        // Pinned to the ArrayBuffer-backed generic (not the wider default
+        // Float32Array<ArrayBufferLike>) so `.buffer` stays assignable to
+        // Worker.postMessage's `Transferable` transfer-list type — `.slice()`
+        // always creates a fresh ArrayBuffer, never a SharedArrayBuffer.
+        let copy: Float32Array<ArrayBuffer>;
+        let nemotronReset = false;
+        if (this.isNemotronModel) {
+            // Send only what's new since the last tick. `open.samples` keeps
+            // growing (VAD hasn't closed this segment); slice(cursor) is the delta.
+            nemotronReset = this.nemotronSentSamples === 0;
+            copy = open.samples.slice(this.nemotronSentSamples);
+            this.nemotronSentSamples = open.samples.length;
+        } else {
+            copy = open.samples.slice();
+        }
         this.armStreamingWatchdog();
         this.worker.postMessage(
-            { type: 'transcribe', taskId, audio: copy, language: this.language, streaming: true },
+            { type: 'transcribe', taskId, audio: copy, language: this.language, streaming: true, nemotronReset },
             [copy.buffer]
         );
     }
@@ -604,14 +631,34 @@ export class LocalWhisperSTT extends EventEmitter {
         this.clearStreamingWatchdog();
         this.streamingTaskInFlight = false;
 
+        let outgoing = audio;
+        let nemotronReset = false;
+        if (this.isNemotronModel) {
+            // `audio` is the segment's FULL samples (VAD hands over the whole
+            // closed segment here, not just the tail). Only the part beyond
+            // what streaming ticks already sent is new. This also covers a
+            // segment that closed before any streaming tick fired (short
+            // utterance): nemotronSentSamples is still 0, so the whole segment
+            // goes out as the delta, exactly as if it were one big chunk.
+            nemotronReset = this.nemotronSentSamples === 0;
+            outgoing = audio.length > this.nemotronSentSamples
+                ? audio.slice(this.nemotronSentSamples)
+                : new Float32Array(0);
+            // Segment boundary — the NEXT segment (or a soft-committed
+            // continuation of this one) starts from a clean cursor regardless
+            // of how much of THIS segment was streamed.
+            this.nemotronSentSamples = 0;
+        }
+
         if (!this.workerReady) {
             const MAX_PENDING = 500;
+            const item = { audio: outgoing.slice(), nemotronReset };
             if (this.pendingAudio.length < MAX_PENDING) {
-                this.pendingAudio.push(audio.slice());
+                this.pendingAudio.push(item);
             } else {
                 console.warn('[LocalWhisperSTT] Pending queue full — dropping oldest segment');
                 this.pendingAudio.shift();
-                this.pendingAudio.push(audio.slice());
+                this.pendingAudio.push(item);
             }
             return;
         }
@@ -619,15 +666,15 @@ export class LocalWhisperSTT extends EventEmitter {
         if (this.isDrainingFinals) {
             this.drainingFinalsInFlight++;
         }
-        this.sendTranscribe(audio, false);
+        this.sendTranscribe(outgoing, false, nemotronReset);
     }
 
-    private sendTranscribe(audio: Float32Array, streaming: boolean): void {
+    private sendTranscribe(audio: Float32Array, streaming: boolean, nemotronReset: boolean = false): void {
         if (!this.worker) return;
         const taskId = `${streaming ? 's' : 't'}${++this.taskCounter}`;
         const copy = audio.slice();
         this.worker.postMessage(
-            { type: 'transcribe', taskId, audio: copy, language: this.language, streaming },
+            { type: 'transcribe', taskId, audio: copy, language: this.language, streaming, nemotronReset },
             [copy.buffer]
         );
     }
@@ -659,7 +706,7 @@ export class LocalWhisperSTT extends EventEmitter {
             );
         }
 
-        this.slotRelease = await acquireOnnxSlot('high');
+        this.slotRelease = await acquireOnnxSlot('high', this.isNemotronModel ? 3 : 1);
 
         console.log(`[LocalWhisperSTT] Cold-starting worker for ${this.modelId}`);
         const workerPath = resolveWhisperWorkerPath();
@@ -830,7 +877,7 @@ export class LocalWhisperSTT extends EventEmitter {
         // prompt for whichever transcribe arrives next).
         this.maybePushPromptToWorker();
         const queued = this.pendingAudio.splice(0);
-        queued.forEach(audio => this.sendTranscribe(audio, false));
+        queued.forEach(({ audio, nemotronReset }) => this.sendTranscribe(audio, false, nemotronReset));
         if (this.isDrainingFinals && queued.length === 0 && this.drainingFinalsInFlight === 0 && this.worker) {
             this.beginWorkerTermination(this.worker);
         }
