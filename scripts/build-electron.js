@@ -55,6 +55,17 @@ build({
     'keytar',
     'sqlite-vec',
     '@vectorize-io/hindsight-client',
+    // onnxruntime-node ships a compiled `.node` binary. Every other ONNX
+    // consumer in this codebase (Whisper, LocalReranker, LocalEmbeddingProvider,
+    // IntentClassifier) only reaches it indirectly through @huggingface/transformers'
+    // own dynamic loading, which doesn't trip esbuild's bundler. nemotronEngine.ts
+    // is the first place with a direct static `import ... from 'onnxruntime-node'`,
+    // and esbuild can't bundle a native binary — it throws "No loader configured
+    // for .node files". Externalizing keeps it loadable from node_modules at
+    // runtime instead. onnxruntime-common is a transitive dep pulled in the same
+    // way, so it needs the same treatment.
+    'onnxruntime-node',
+    'onnxruntime-common',
     // Heavy native ESM modules with `import.meta.url`-dependent init. Keeping
     // them external lets Node's loader give them a real `import.meta.url`,
     // which the bundled version can't (esbuild's CJS target sets
