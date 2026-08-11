@@ -37,6 +37,17 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '../../../natively-api/server.js');
 
+// `natively-api` is a gitlink with NO .gitmodules entry, so CI never checks it
+// out and this file is absent there (code review 2026-08-12 — previously this
+// suite would have ENOENT'd on every CI run). The cross-repo assertions are
+// skipped when it is missing rather than failing: they are a local/dev guard
+// against the two budgets drifting, and a skip states that honestly instead of
+// turning an un-checkable invariant into a red build.
+const SERVER_AVAILABLE = fs.existsSync(SERVER);
+const SKIP_NO_SERVER = SERVER_AVAILABLE
+  ? false
+  : 'skip: natively-api/server.js not checked out (gitlink absent — expected in CI)';
+
 /** Read the server's default TTFT budget straight from its source. */
 function serverTtftBudgetMs() {
   const src = fs.readFileSync(SERVER, 'utf8');
@@ -46,7 +57,7 @@ function serverTtftBudgetMs() {
 }
 
 describe('client and server first-token deadlines are correctly ordered', () => {
-  test('the client ceiling sits ABOVE the server TTFT cutover', () => {
+  test('the client ceiling sits ABOVE the server TTFT cutover', { skip: SKIP_NO_SERVER }, () => {
     const server = serverTtftBudgetMs();
     assert.ok(
       LIVE_TOTAL_HARD_TIMEOUT_MS > server,
@@ -55,7 +66,7 @@ describe('client and server first-token deadlines are correctly ordered', () => 
     );
   });
 
-  test('the margin is large enough to cover the cutover plus a rotation', () => {
+  test('the margin is large enough to cover the cutover plus a rotation', { skip: SKIP_NO_SERVER }, () => {
     // The server needs headroom AFTER the cutover to actually start the next
     // provider and get a first token out. A margin under ~2s means the client
     // still wins the race in practice even though the ordering looks right.
