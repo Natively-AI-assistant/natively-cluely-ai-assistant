@@ -25,6 +25,14 @@
  *       cleaned partial directly.
  *     - First interim emit ~400–600ms after speech starts.
  *
+ *   Nemotron 3.5 ASR Streaming path (genuinely chunked, cache-aware RNNT):
+ *     - Tick every 560ms after 560ms of audio — NOT a tunable polling rate
+ *       like the profiles above; 560ms (8960 samples @ 16kHz) is the fixed
+ *       chunk size the ONNX export itself was built around.
+ *     - Skip LA-2 — same rationale as Moonshine: the worker's per-chunk
+ *       greedy RNNT decode is already stable.
+ *     - First interim emit ~560ms after speech starts.
+ *
  *   When VAD closes the segment (or hits MAX_SEGMENT_MS for a soft commit):
  *     - Run a final pass on the full segment
  *     - Emit { isFinal: true, confidence: 0.9 }
@@ -176,6 +184,21 @@ export class LocalWhisperSTT extends EventEmitter {
         // p50 once a Moonshine model is downloaded; expect <600ms.
         if (modelId.toLowerCase().includes('moonshine')) {
             return { intervalMs: 750, minAudioMs: 400, skipAgreement: true };
+        }
+        // Nemotron 3.5 ASR Streaming (sessionLayout: 'nemotron-rnnt' in
+        // MODEL_CATALOG) — the ONLY model in this catalog with genuinely
+        // chunked streaming inference: the ONNX export itself processes
+        // audio in fixed 8960-sample (560ms @ 16kHz) chunks with cross-call
+        // cache state (NemotronEngine.pushAudio, worker-side). Unlike
+        // Moonshine's 750ms figure (a tunable polling rate chosen for
+        // measured first-partial latency), 560ms here is NOT tunable — it's
+        // dictated by the export's chunk size, so intervalMs/minAudioMs are
+        // both pinned to it rather than picked independently. Skips
+        // LocalAgreement-2 for the same reason as Moonshine: the worker's
+        // per-chunk greedy RNNT decode is already stable, so there's no
+        // ambiguous partial to stabilize across two passes.
+        if (modelId.toLowerCase().includes('nemotron')) {
+            return { intervalMs: 560, minAudioMs: 560, skipAgreement: true };
         }
         return { intervalMs: 1500, minAudioMs: 800, skipAgreement: false };
     }
