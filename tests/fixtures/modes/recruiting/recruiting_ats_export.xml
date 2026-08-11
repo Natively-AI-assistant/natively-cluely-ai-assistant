@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<ats>
+  <candidate id="ATS-7321" channel="referral">
+    <note>Candidate id ATS-7321 came via referral from current engineer.</note>
+    <stage>onsite</stage>
+  </candidate>
+  <candidate id="ATS-7402" channel="job-board">
+    <stage>phone-screen</stage>
+  </candidate>
+</ats>

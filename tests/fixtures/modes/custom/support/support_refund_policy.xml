@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<refund_policy>
+  <section number="3.2" title="Annual subscription refunds">
+    Annual subscriptions are eligible for a prorated refund within 30 days of renewal if no support escalation has been resolved. Outside the 30 day window only credit toward future months is offered.
+  </section>
+  <section number="3.3" title="Monthly subscriptions">
+    Monthly subscriptions are non refundable after the billing date. Cancellation stops the next charge but does not refund the current month.
+  </section>
+  <section number="4.0" title="No refund cases">
+    Trial conversions older than 14 days, chargeback disputes already filed with the payment processor, accounts in violation of acceptable use policy.
+  </section>
+</refund_policy>

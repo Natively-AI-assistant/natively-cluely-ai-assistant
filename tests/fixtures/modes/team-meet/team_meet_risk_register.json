@@ -1,0 +1,7 @@
+{
+  "risks": [
+    {"id": "R-3", "title": "Gemini quota exhaustion during demo", "owner": "platform", "mitigation": "Pre-warm credits; Groq fallback"},
+    {"id": "R-7", "title": "Third-party STT outage", "owner": "platform", "mitigation": "Risk R-7: third-party STT outage, mitigation: local Whisper fallback"},
+    {"id": "R-9", "title": "App-store review delay", "owner": "growth", "mitigation": "Submit 14 days before launch"}
+  ]
+}

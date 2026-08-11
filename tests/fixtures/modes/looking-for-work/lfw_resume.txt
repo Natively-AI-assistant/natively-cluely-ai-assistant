@@ -1,0 +1,15 @@
+Evin J — Resume
+
+Summary
+Senior product engineer with 8 years experience across consumer and developer tooling. Built PriceX, a price-comparison website; scaled Natively to 10k users in the first 90 days.
+
+Experience
+- Founder, Natively (2025–present). Live-meeting copilot. Scaled to 10k users.
+- Founder, PriceX (2022–2024). Price-comparison website covering 14 retailers; sold to a strategic acquirer.
+- Senior engineer, Wilson & Kinsman (2018–2022). Owned the order-management subsystem.
+
+Education
+- B.Tech, Computer Science (2014–2018).
+
+Notable projects
+- Open-source CLI for streaming STT benchmarks.

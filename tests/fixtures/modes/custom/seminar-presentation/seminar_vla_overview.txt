@@ -1,0 +1,11 @@
+Title: Towards Connected Intelligence: Empowering Robotic Applications with Agentic AI Frameworks
+Abstract: The thesis studies Agentic AI frameworks integrated with Vision-Language-Action models for embodied robotic systems.
+AgenticVLA end-to-end robot manipulation pipeline is the proposed system for the Mercury X1 humanoid robot.
+OpenVLA foundational vision language action model is used as the baseline VLA.
+OpenVLA is a 7B-parameter open-source Vision-Language-Action model.
+OpenVLA-OFT fine-tuned with on-robot data using LoRA adapters is described as the optimized model.
+OpenVLA-OFT uses parallel decoding and action chunking and achieves 43x faster throughput than base OpenVLA.
+AutoGen multi-agent framework orchestrates AgenticVLA skills for planning, task reasoning, and tool coordination.
+Research questions ask how agentic frameworks improve VLA robotic performance and how embodied cognition supports connected intelligence.
+Main objectives include teleoperation, data collection, training the VLA, and Agentic AI integration.
+Agentic AI components in the thesis include perception, planning, and action execution.
