@@ -55,6 +55,11 @@ function contentWordsOf(text: string): Set<string> {
 // strengths/weaknesses) land at 0.45; true prefix completions land at 0.9.
 const CONTENT_AGREEMENT_MIN = 0.6;
 
+// Hard cap applied when a content word was SUBSTITUTED between the partial and
+// the final (best→worst, succeeded→failed, Java→JavaScript). Safely below the
+// 0.75 reuse threshold so a substitution can never reuse a prepared answer.
+const CONTENT_SUBSTITUTION_CAP = 0.6;
+
 export function speculativeQuestionSimilarity(speculative: string, final: string): number {
     const raw = blendedTokenSimilarity(wordsOf(speculative), wordsOf(final));
     const contentA = contentWordsOf(speculative);
@@ -63,6 +68,32 @@ export function speculativeQuestionSimilarity(speculative: string, final: string
     // me about") carries no meaning signal — keep the pre-guard behavior.
     if (contentA.size === 0 || contentB.size === 0) return raw;
     const content = blendedTokenSimilarity(contentA, contentB);
+
+    // SUBSTITUTION, NOT COMPLETION (100-pair sweep, 2026-08-11): the set-
+    // similarity guard below dilutes in longer questions — "made your best
+    // decision" vs "made your worst decision" shares 4 of 5 content words, so
+    // content agreement clears the floor and the raw blend (0.800) false-
+    // accepts, even though the single flipped word flips the entire answer.
+    //
+    // A prefix COMPLETION never has this shape: the partial's content words are
+    // a subset of the final's (words are only APPENDED). When BOTH sides hold a
+    // meaningful word the other lacks, a word was REPLACED — the final asks
+    // about something the speculation never contained. Cost asymmetry decides
+    // the response: a false reject re-generates (latency), a false accept
+    // speaks the wrong answer aloud. Cap below the threshold, always.
+    //
+    // Tokens under 3 chars are ignored here: contractions tokenize into
+    // fragments ("what's" → "what","s"; "can't" → "can","t") that would
+    // otherwise register as phantom substitutions on ordinary rephrasing.
+    const meaningful = (w: string) => w.length >= 3;
+    let partialHasExclusive = false;
+    contentA.forEach(w => { if (meaningful(w) && !contentB.has(w)) partialHasExclusive = true; });
+    let finalHasExclusive = false;
+    contentB.forEach(w => { if (meaningful(w) && !contentA.has(w)) finalHasExclusive = true; });
+    if (partialHasExclusive && finalHasExclusive) {
+        return Math.min(raw, content, CONTENT_SUBSTITUTION_CAP);
+    }
+
     // Content disagreement caps the score below the reuse threshold: stop-word
     // overlap alone must never serve a prepared answer to a different question.
     return content < CONTENT_AGREEMENT_MIN ? Math.min(raw, content) : raw;
