@@ -184,3 +184,29 @@ describe('the refusal string no longer lies about its source', () => {
     }
   });
 });
+
+describe('a developer diagnostic is never user-visible prose (live report #3, 2026-08-11)', () => {
+  // The user was shown, verbatim:
+  //     "sourceAuthority=reference_files_primary; requestedProperty=unknown"
+  // — contract.reason, yielded as the ask_clarification answer. Reasons are
+  // telemetry; users get the human question. Source-level tripwire, same style
+  // as ContextOsStaticImport: if anyone reintroduces a reason yield, this
+  // fails with the incident attached.
+  test('no surface yields contract.reason', async () => {
+    const fs = await import('node:fs');
+    for (const f of ['electron/llm/WhatToAnswerLLM.ts', 'electron/LLMHelper.ts']) {
+      const src = fs.readFileSync(path.resolve(process.cwd(), f), 'utf8');
+      assert.ok(!/yield\s+_?cog\??\.?contract\.reason|yield\s+contract\.reason/.test(src),
+        `${f}: contract.reason must never be yielded to the user`);
+    }
+  });
+
+  test('the WTA doc-grounded govern site requires actual files', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync(path.resolve(process.cwd(), 'electron/IntelligenceEngine.ts'), 'utf8');
+    // documentGroundedCustomModeActive was proven TRUE with zero files —
+    // the govern gate must pair it with a hasReferenceFiles check.
+    const gate = /documentGroundedCustomModeActive\s*\n[^]{0,700}?hasReferenceFiles[^]{0,200}?contextOsEvidencePackEnabled/;
+    assert.ok(gate.test(src), 'site-2 govern must require hasReferenceFiles');
+  });
+});

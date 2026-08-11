@@ -2452,6 +2452,14 @@ export class IntelligenceEngine extends EventEmitter {
             if (!wtaContextOsGeneration
                 && wtaTurnContract
                 && documentGroundedCustomModeActive
+                // Live proof 2026-08-11: documentGroundedCustomModeActive can be
+                // TRUE with hasReferenceFiles FALSE (custom mode, contract seeded
+                // reference_files_primary, zero files). Governing that turn
+                // builds an empty pack whose answerPolicy is ask_clarification,
+                // and the surface then yielded contract.reason — the raw
+                // developer diagnostic — to the user. A doc-grounded govern
+                // with no documents governs nothing: require the files.
+                && Boolean((snapshotModeInfo as any)?.hasReferenceFiles)
                 && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
                 wtaContextOsGeneration = {
                     contract: wtaTurnContract,

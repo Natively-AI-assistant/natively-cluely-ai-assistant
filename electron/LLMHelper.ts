@@ -6034,7 +6034,11 @@ let isMultimodal = !!(imagePaths?.length);
             providerDispatch: false,
             terminal: 'clarify',
           });
-          yield _cog.contract.reason || 'Which source should I use for that answer?';
+          // contract.reason is a developer diagnostic (e.g. "sourceAuthority=
+                        // reference_files_primary; requestedProperty=unknown") and was
+                        // yielded VERBATIM to a live user (2026-08-11). Reasons are for
+                        // logs; users get the human question.
+                        yield 'Which source should I use for that answer?';
           return;
         }
         if (pack.answerPolicy === 'refuse_insufficient_evidence') {

@@ -579,7 +579,11 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     const pack = governedEvidencePack ?? _cog.evidencePack;
                     if (!pack) throw new Error('governed WTA turn missing canonical EvidencePack');
                     if (pack.answerPolicy === 'ask_clarification') {
-                        yield _cog.contract.reason || 'Which source should I use for that answer?';
+                        // contract.reason is a developer diagnostic (e.g. "sourceAuthority=
+                        // reference_files_primary; requestedProperty=unknown") and was
+                        // yielded VERBATIM to a live user (2026-08-11). Reasons are for
+                        // logs; users get the human question.
+                        yield 'Which source should I use for that answer?';
                         return;
                     }
                     if (pack.answerPolicy === 'refuse_insufficient_evidence') {

@@ -3228,6 +3228,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                 ? { contextOsGeneration: manualContextOsGeneration }
                 : turnContract
                   && manualActiveMode?.documentGroundedCustomModeActive === true
+                  // Same rule as the WTA twin (2026-08-11): no files -> no doc-grounded govern.
+                  && Boolean((manualActiveMode as any)?.hasReferenceFiles)
                   && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
                 ? {
                     contextOsGeneration: (manualContextOsGeneration = {
