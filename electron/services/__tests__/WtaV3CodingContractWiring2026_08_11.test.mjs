@@ -55,11 +55,16 @@ describe('the V3 bridge still offers the coding-contract hook', () => {
     );
   });
 
-  test('the bridge derives codingTask from the routed decision', () => {
+  test('the bridge prefers the caller\'s routed codingTask over its keyword check', () => {
+    // Superseded by CodingTaskFromRouter2026_08_11: this originally asserted the
+    // questionTypes/CODING_TASK derivation. Dumping the composed prompt proved
+    // that keyword list misses ordinary questions ("Write a BFS shortest-path
+    // function…"), silently dropping the coding contract. The routed verdict now
+    // wins, with the regex kept only as the fallback for callers that pass none.
     assert.match(
       bridgeSrc,
-      /codingTask:\s*\(result\.decision\.questionTypes[\s\S]{0,120}?CODING_TASK/,
-      'codingTask must come from the router, never be re-derived from text',
+      /codingTask:\s*input\.codingTask\s*\?\?[\s\S]{0,160}?CODING_TASK/,
+      'the bridge must prefer input.codingTask, falling back to the keyword check',
     );
   });
 

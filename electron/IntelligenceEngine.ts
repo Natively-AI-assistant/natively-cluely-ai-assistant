@@ -2492,6 +2492,12 @@ export class IntelligenceEngine extends EventEmitter {
                         // though the answer was said out loud a minute ago.
                         conversationSummary: _ctx.conversationWindow(90),
                         retrieval: _ctx.port as any,
+                        // Hand the bridge THIS turn's routed verdict rather than
+                        // letting it re-derive one from keywords — see
+                        // BridgeInput.codingTask. AnswerPlanner already
+                        // classified the turn; a keyword list disagreeing with it
+                        // silently drops the coding contract.
+                        codingTask: isCodingAnswerType(answerPlan.answerType),
                         // CODING CONTRACT ON THE V3 PATH (live regression, 2026-08-11).
                         // `_v3.system` REPLACES the v2 base prompt below
                         // (WhatToAnswerLLM.ts:813), and the V3 composer has no coding
