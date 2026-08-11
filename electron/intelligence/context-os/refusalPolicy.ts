@@ -61,9 +61,21 @@ export function sourceAuthorityPermitsRefusal(sourceAuthority: string | null | u
 export function packGovernsGeneration(input: {
   answerPolicy: EvidencePack['answerPolicy'] | string;
   sourceAuthority: string | null | undefined;
+  /**
+   * Review finding F2 (2026-08-12): the docblock above says "the bounded
+   * universe actually EXISTS", and clarificationIsActionable already takes
+   * this — but this function did not, so a reference_files_primary mode with
+   * ZERO files was still classed as bounded. For the reference-bound trio the
+   * universe exists only when files do; omitted/false fails toward answering,
+   * because refusing on an unverified universe is the whole bug class.
+   * transcript_only never has files and stays authority-only.
+   */
+  hasReferenceFiles?: boolean;
 }): boolean {
   if (input.answerPolicy !== 'refuse_insufficient_evidence') return true;
-  return sourceAuthorityPermitsRefusal(input.sourceAuthority);
+  if (!sourceAuthorityPermitsRefusal(input.sourceAuthority)) return false;
+  if (input.sourceAuthority === 'transcript_only') return true;
+  return input.hasReferenceFiles === true;
 }
 
 /** The authorities whose universe is the mode's uploaded reference files. */

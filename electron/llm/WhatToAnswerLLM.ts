@@ -228,8 +228,13 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // items, create a second factual authority, and race the active mode.
             // Legacy document-only WTA contexts arrive without a pack and retain
             // the existing resolver path below.
+            // Review finding F3 (2026-08-12): keying on pack PRESENCE meant an
+            // UNGOVERNED refuse pack (govern:false — the layer-1 fall-through)
+            // still suppressed legacy mode-context retrieval below. govern:false
+            // must actually mean the legacy path, as layer 1's contract claims.
             let governedEvidencePack: import('../intelligence/context-os').EvidencePack | null =
-                initialContextOsGeneration?.evidencePack ?? null;
+                initialContextOsGeneration?.govern
+                    ? (initialContextOsGeneration?.evidencePack ?? null) : null;
             // Skill mode owns the system prompt — skip the (potentially expensive
             // hybrid retrieval) mode-context block fetch entirely. A pre-resolved
             // governed packet likewise skips legacy/raw retrieval.

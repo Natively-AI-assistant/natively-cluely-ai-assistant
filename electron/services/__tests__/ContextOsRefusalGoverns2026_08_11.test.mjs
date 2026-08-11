@@ -63,10 +63,34 @@ describe('honest refusals are preserved — the fabrication boundary must not mo
   // collaborations SHOULD refuse. Killing that reintroduces the fabrication
   // class this subsystem exists to prevent.
   for (const sourceAuthority of STRICT) {
-    test(`${sourceAuthority}: refusal still governs`, () => {
-      assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority }), true);
+    test(`${sourceAuthority}: refusal still governs (universe populated)`, () => {
+      assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority, hasReferenceFiles: true }), true);
     });
   }
+
+  // Review finding F2 (2026-08-12): the module's own docblock states the line
+  // as "the bounded universe actually EXISTS", and clarificationIsActionable
+  // already takes hasReferenceFiles — but packGovernsGeneration did not. The
+  // reporting user's mode IS reference_files_primary with ZERO files; it was
+  // saved only by a coordinator scope rule unrelated to this fix. The two
+  // halves of one principle must be implemented symmetrically.
+  for (const sourceAuthority of ['reference_files_only', 'reference_files_primary', 'reference_files_plus_transcript']) {
+    test(`${sourceAuthority} + ZERO files: refusal does NOT govern`, () => {
+      assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority, hasReferenceFiles: false }), false);
+    });
+  }
+
+  test('transcript_only never has files — authority alone still governs', () => {
+    assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority: 'transcript_only', hasReferenceFiles: false }), true);
+  });
+
+  test('omitting hasReferenceFiles keeps the old behaviour for non-file authorities only', () => {
+    // Legacy callers that never pass files: transcript_only unaffected;
+    // the reference trio FAILS TOWARD ANSWERING when files are unknown,
+    // because refusing on an unverified universe is the whole bug class.
+    assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority: 'transcript_only' }), true);
+    assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority: 'reference_files_primary' }), false);
+  });
 
   test('an answering pack always governs, any authority', () => {
     for (const sourceAuthority of [...STRICT, ...OPEN]) {

@@ -2307,6 +2307,7 @@ export class IntelligenceEngine extends EventEmitter {
                         govern: contextOsStatic.packGovernsGeneration({
                             answerPolicy: coordinatorResult.pack.answerPolicy,
                             sourceAuthority: canonicalTurn.sourceAuthority ?? null,
+                            hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
                         }),
                     };
                     // The typed pack is now the sole factual injection. Do not also
@@ -3159,7 +3160,18 @@ export class IntelligenceEngine extends EventEmitter {
             // retrieval window. Zero-fabrication remains sacred: repairs that add a
             // number+unit not present in the evidence are rejected.
             try {
-                if (!isCoding && documentGroundedCustomModeActive && this.currentGenerationId === generationId) {
+                // Review finding F1 (2026-08-12): the SEVENTH strictness
+                // consumer, missed by the layer-5 migration. On the broad flag
+                // this validator ran for template-seeded fileless modes, built
+                // an empty retrievedBlock, and OVERWROTE a correct streamed
+                // answer with "I could not find that in the retrieved sections
+                // of the document." — one typed question away from the fixed
+                // turn. Strict + files + doc-shaped answer (the manual twin's
+                // parity term, ipcHandlers ~4086) are all required now.
+                if (!isCoding && strictDocumentGroundedActive
+                    && Boolean((snapshotModeInfo as any)?.hasReferenceFiles)
+                    && isDocGroundedAnswerType(answerPlan.answerType)
+                    && this.currentGenerationId === generationId) {
                     const docQuestion = (answerPlan.question || question || extractedQuestion.latestQuestion || lastInterviewerTurn || '').trim();
                     if (docQuestion) {
                         const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');

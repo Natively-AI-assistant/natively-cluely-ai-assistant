@@ -154,8 +154,12 @@ describe('#6 — runWhatShouldISay captures ONE mode snapshot at t0 and threads 
 
   test('a pre-resolved multi-family packet is reused by WhatToAnswerLLM without re-retrieval', () => {
     const llmSrc = read('../../llm/WhatToAnswerLLM.ts');
-    assert.match(llmSrc, /let governedEvidencePack: import\('\.\.\/intelligence\/context-os'\)\.EvidencePack \| null =\s*initialContextOsGeneration\?\.evidencePack \?\? null/s,
-      'WTA generation must begin with the coordinator-owned EvidencePack');
+    // Pin updated 2026-08-12 (review F3): the packet seed is now gated on
+    // .govern — an ungoverned refuse pack must NOT suppress legacy retrieval.
+    // The protected invariant is unchanged: a GOVERNED coordinator pack is
+    // reused as-is, with no re-retrieval.
+    assert.match(llmSrc, /let governedEvidencePack: import\('\.\.\/intelligence\/context-os'\)\.EvidencePack \| null =\s*initialContextOsGeneration\?\.govern\s*\?\s*\(initialContextOsGeneration\?\.evidencePack \?\? null\) : null/s,
+      'WTA generation must begin with the coordinator-owned EvidencePack, gated on .govern');
     assert.match(llmSrc, /if \(!activeSkill && !governedEvidencePack\) \{/,
       'a resolved packet must skip the legacy document retrieval branch');
     assert.match(llmSrc, /const pack = governedEvidencePack \?\? _cog\.evidencePack/,

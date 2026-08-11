@@ -3049,6 +3049,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               govern: packGovernsGeneration({
                 answerPolicy: coordinatorResult.pack.answerPolicy,
                 sourceAuthority: manualSourceContract?.sourceAuthority ?? null,
+                hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
               }),
             };
             coordinatorGovernedProfileEvidence = manualContextOsGeneration.govern;
