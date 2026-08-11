@@ -297,8 +297,21 @@ export function normalizeFinalizedMarkdownMath(markdown: string): string {
     }
 
     if (/^\s*\\\[\s*(?:\n)?$/.test(line)) {
+      // Stop the search at the first code fence. Code review 2026-08-12: this
+      // scan ran outside the fence state machine above, so a lone `\]` line
+      // INSIDE a fenced block could close a display-math opener that started
+      // before it — splicing the fence delimiters and the code between them
+      // into a `$$…$$` block. Reproduced: a `\[` opener followed by a python
+      // fence containing a `\]` line emitted "$$\n```python\nx = 1\n$$\n```",
+      // corrupting the code and breaking this module's stated guarantee that
+      // fenced content is preserved byte-for-byte. Display math never spans a
+      // code fence, so refusing to look past one loses nothing.
+      const fenceAhead = lines.findIndex((candidate, candidateIndex) =>
+        candidateIndex > index && /^( {0,3})(`{3,}|~{3,})/.test(candidate),
+      );
+      const searchLimit = fenceAhead >= 0 ? fenceAhead : lines.length;
       const closingIndex = lines.findIndex((candidate, candidateIndex) =>
-        candidateIndex > index && /^\s*\\\]\s*(?:\n)?$/.test(candidate),
+        candidateIndex > index && candidateIndex < searchLimit && /^\s*\\\]\s*(?:\n)?$/.test(candidate),
       );
       if (closingIndex >= 0) {
         const body = lines.slice(index + 1, closingIndex).join('').trim();

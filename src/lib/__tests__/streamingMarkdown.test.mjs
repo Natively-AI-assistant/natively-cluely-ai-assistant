@@ -348,3 +348,22 @@ describe('normalizeFinalizedMarkdownMath — remarkMath semantics', () => {
     assert.ok(out.includes('$$\nE=mc^2\n$$'), out);
   });
 });
+
+describe('normalizeFinalizedMarkdownMath — fenced code is never spliced into math', () => {
+  // Code review 2026-08-12: the standalone `\[…\]` block scan ran outside the
+  // fence state machine, so a lone `\]` line inside a fenced code block could
+  // close a display-math opener that started before it — wrapping the fence
+  // delimiters and the code between them into `$$…$$`.
+  test('a lone \\] inside a code fence does not close an earlier \\[', () => {
+    const src = 'Formula:\n\n\\[\n\n```python\nx = 1\n\\]\n```\n\nAfter.';
+    const out = normalizeFinalizedMarkdownMath(src);
+    assert.ok(out.includes('```python\nx = 1'), `the code fence was corrupted:\n${out}`);
+    assert.ok(!/\$\$\n```/.test(out), `math delimiters were spliced into the fence:\n${out}`);
+  });
+
+  test('a genuine multiline \\[…\\] before any fence still normalizes', () => {
+    const src = 'Formula:\n\n\\[\nE=mc^2\n\\]\n\nAfter.';
+    const out = normalizeFinalizedMarkdownMath(src);
+    assert.ok(/\$\$\nE=mc\^2\n\$\$/.test(out), `expected block math, got:\n${out}`);
+  });
+});
