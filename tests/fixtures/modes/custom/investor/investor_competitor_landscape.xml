@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<competitor_landscape>
+  <competitor name="Cluely">
+    <strengths>Strong brand, viral marketing, screen-aware interview answers.</strengths>
+    <weaknesses>Cluely lacks per-mode reference files and does not offer a local-only operation mode. Pricing is per-seat only with no annual discount surfacing.</weaknesses>
+  </competitor>
+  <competitor name="Final Round AI">
+    <strengths>Dedicated interview prep flow, large question bank, mock interview UX.</strengths>
+    <weaknesses>Final Round AI is single-purpose, no sales or team meeting modes, no reference file system, no post-call action item extraction.</weaknesses>
+  </competitor>
+  <competitor name="Otter">
+    <strengths>Mature transcription, calendar integration, team collaboration features.</strengths>
+    <weaknesses>Otter has no live answer generation, no mode system, no objection handling for sales calls.</weaknesses>
+  </competitor>
+  <competitor name="Granola">
+    <strengths>Clean post-call notes, well-loved by founders, integrations with task managers.</strengths>
+    <weaknesses>Granola has no live answer generation and no in-call copilot.</weaknesses>
+  </competitor>
+</competitor_landscape>

@@ -1,0 +1,10 @@
+{
+  "quarter": "2026-Q2",
+  "priority": "Q2 priority: multi-modal copilot beta",
+  "themes": ["multi-modal copilot beta", "profile intelligence GA", "team workspaces"],
+  "milestones": [
+    {"id": "M-21", "title": "Multi-modal copilot closed beta", "owner": "founder", "due": "2026-05-22"},
+    {"id": "M-22", "title": "Profile intelligence GA", "owner": "platform", "due": "2026-06-15"},
+    {"id": "M-23", "title": "Team workspaces v1", "owner": "growth", "due": "2026-06-30"}
+  ]
+}

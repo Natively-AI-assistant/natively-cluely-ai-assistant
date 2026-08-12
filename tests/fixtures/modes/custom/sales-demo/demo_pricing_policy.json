@@ -1,0 +1,30 @@
+{
+  "tiers": [
+    {
+      "name": "Free",
+      "price_usd_monthly": 0,
+      "limits": "10 sessions per month, 1 mode, no reference files",
+      "notes": "Trial product surface; no commercial use rights"
+    },
+    {
+      "name": "Pro",
+      "price_usd_monthly": 24,
+      "price_usd_annual": 240,
+      "annual_discount_pct": 16.7,
+      "limits": "Unlimited sessions, all 7 modes, up to 50 reference files per mode, custom modes",
+      "notes": "Pro tier is $24/user/mo annual; default upsell target for individual operators"
+    },
+    {
+      "name": "Enterprise",
+      "price_usd_annual_minimum": 20000,
+      "limits": "Team admin, shared knowledge base, SSO, dedicated support",
+      "notes": "Enterprise gated at $20k per year minimum; not part of current Natively individual SKU"
+    }
+  ],
+  "discount_policy": {
+    "annual_upgrade_floor_pct": 16.7,
+    "multi_year_floor_pct": 25,
+    "founder_referral_pct": 30,
+    "policy_owner": "Only the founder can authorise a discount below the multi-year floor"
+  }
+}

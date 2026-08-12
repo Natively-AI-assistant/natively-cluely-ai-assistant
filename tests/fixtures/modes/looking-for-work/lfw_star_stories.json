@@ -1,0 +1,16 @@
+{
+  "stories": [
+    {
+      "tag": "conflict",
+      "title": "Chargeback escalation with payments vendor",
+      "summary": "Conflict story: chargeback escalation with payments vendor. Vendor refused to refund 1.4% of disputed charges; I led a tripartite call with finance and the vendor's risk team and recovered 91% of the disputed amount.",
+      "outcome": "Recovered 91% of $48k disputed; renegotiated contract clause."
+    },
+    {
+      "tag": "scale",
+      "title": "Scaled Natively to 10k users",
+      "summary": "Led infra rework when the live transcript pipeline started dropping audio at >3 concurrent meetings per host.",
+      "outcome": "Sustained 10k DAU with p95 transcript-to-answer < 1.4s."
+    }
+  ]
+}

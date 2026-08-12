@@ -1,0 +1,8 @@
+Mercury X1 humanoid robot 19 degrees of freedom is the primary hardware platform in the thesis.
+Mercury X1 was selected because it provides an embodied robotic system for manipulation experiments.
+LiDAR sensor provides 3D point cloud for obstacle detection.
+ultrasonic sensors detect proximity at short range.
+2D vision camera RGB stream for object recognition.
+The sensors include LiDAR, ultrasonic sensors, and 2D vision for environment perception.
+Technical specifications table lists the Mercury X1 mobility, manipulation hardware, and sensor suite.
+ROS# middleware bridges ROS topics to Unity simulation and allows Unity/.NET applications to communicate with ROS nodes, topics, services, and messages.

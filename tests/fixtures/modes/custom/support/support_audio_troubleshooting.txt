@@ -1,0 +1,18 @@
+Audio capture troubleshooting
+============================
+
+macOS microphone permission missing
+- Reset the TCC entry using: tccutil reset Microphone com.electron.natively
+- Restart the app and approve the prompt
+- If approval prompt is missing, open System Settings Privacy Microphone and toggle Natively off then on
+
+macOS system audio permission missing
+- Reset the screen recording TCC entry: tccutil reset ScreenCapture com.electron.natively
+- System audio uses the aggregate device created at first launch; do not edit the aggregate descriptor manually
+
+Windows microphone silent capture
+- Check Windows Settings Privacy Microphone Allow apps to access your microphone
+- If the device list is empty, the audio service may be stopped; restart Windows Audio service
+
+STT reconnect loop on VPN
+- See known issues entry NAT 218 for the workaround
