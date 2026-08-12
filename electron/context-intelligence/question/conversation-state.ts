@@ -275,6 +275,41 @@ const PERSONAL_PRONOUN_RE = /\b(she|he|her|him|his|hers)\b/i;
 const NONPERSON_PRONOUN_RE = /\b(it|its|that|this|those|these|they|them|the (?:same|latter|former)|there)\b/i;
 
 /**
+ * `its own` / `their own` is a fixed idiom meaning "separate / dedicated", and
+ * it NEVER points outside the current sentence — its antecedent is always the
+ * noun it modifies, which is present locally by construction.
+ *
+ * Live report 2026-08-12. "Explain mass-energy equivalence. Put the formula on
+ * its own line as $$E=mc^2$$." (exactly 12 words, so `shortTurn` held) matched
+ * NONPERSON_PRONOUN_RE on the `its` of "its own line" and was rewritten to
+ * "... (referring to: Makefile)" — the previous, unrelated turn. That referent
+ * then drove retrieval, and the turn came back DOCUMENT_FACT with
+ * answerability NONE for a physics question.
+ *
+ * Stripping ONLY this idiom before pronoun detection is deliberately narrow:
+ *
+ *   - "What is its time complexity?"  `its` is not followed by `own`, so it is
+ *     still a live referential pronoun (the 2026-08-02 canonical case).
+ *   - "Put it on its own line."       the separate `it` still matches, so a
+ *     genuinely bare follow-up still resolves.
+ *
+ * Two broader fixes were measured and rejected. Relaxing the explicit-entity
+ * guards from `!pronoun` to `!personal` (which is all their own comment's
+ * rationale actually supports) fixes this case but breaks "Put it on its own
+ * line." and "Can you explain that in the context of Kubernetes?", because
+ * extractEntities reports sentence-initial capitals as entities ("Put") and
+ * cannot tell an entity BEFORE the pronoun from one after it. Raising or
+ * lowering PRONOUN_RESOLUTION_MAX_WORDS just moves the boundary — this question
+ * sat exactly on it, which is the fragility the 12-word comment already warns
+ * about.
+ *
+ * The general problem (deciding whether a non-personal pronoun binds locally)
+ * is NOT solved here. This closes one idiom that provably cannot bind
+ * externally.
+ */
+const NONREFERENTIAL_POSSESSIVE_RE = /\b(?:its|their)\s+own\b/gi;
+
+/**
  * A pronoun licenses state resolution only in a SHORT turn (2026-08-02).
  *
  * A genuine follow-up is short because its subject lives elsewhere — the same
@@ -383,9 +418,15 @@ export function resolveReference(question: string, state: ConversationState | nu
   const q = question.trim();
   if (!state) return { resolved: q, usedState: false, reason: 'NO_CONVERSATION_STATE' };
 
-  const pronounAnywhere = PERSONAL_PRONOUN_RE.test(q) || NONPERSON_PRONOUN_RE.test(q);
+  // Pronoun DETECTION only: drop the `its own` / `their own` idiom, which can
+  // never refer outside the sentence (see NONREFERENTIAL_POSSESSIVE_RE). `q`
+  // itself is untouched — this must not alter the question that gets resolved,
+  // word-counted, or handed to retrieval.
+  const qForPronouns = q.replace(NONREFERENTIAL_POSSESSIVE_RE, ' ');
+
+  const pronounAnywhere = PERSONAL_PRONOUN_RE.test(qForPronouns) || NONPERSON_PRONOUN_RE.test(qForPronouns);
   const shortTurn = q.split(/\s+/).filter(Boolean).length <= PRONOUN_RESOLUTION_MAX_WORDS;
-  const personal = PERSONAL_PRONOUN_RE.test(q) && shortTurn;
+  const personal = PERSONAL_PRONOUN_RE.test(qForPronouns) && shortTurn;
   const pronoun = pronounAnywhere && shortTurn;
   const bare = isBareFollowUp(q);
   const rephrase = isResponseRequest(q);
