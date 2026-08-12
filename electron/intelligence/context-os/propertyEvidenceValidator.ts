@@ -109,6 +109,19 @@ export function itemSupportsProperty(item: EvidenceItem, property: RequestedProp
 }
 
 /**
+ * One stem per source owner the kernel can issue (SourceAuthorityKernel.ts
+ * resolves 'profile' | 'transcript' | 'mixed' | 'reference_files'). Every stem
+ * keeps the "not directly mentioned" opening the doc-grounded repair sniffer
+ * (ipcHandlers REFUSAL_SNIFF_RE) matches on. Unknown/absent owners fall back to
+ * the historical uploaded-material wording.
+ */
+const SOURCE_OWNER_REFUSAL_STEMS: Record<string, string> = {
+  profile: 'This is not directly mentioned in your profile material.',
+  transcript: 'This is not directly mentioned in the conversation so far.',
+  mixed: 'This is not directly mentioned in the material available for this mode.',
+};
+
+/**
  * The honest refusal line for a doc-grounded turn whose evidence has topic
  * overlap but not the requested property (Scenario D). Includes what the
  * material DOES mention when a near-miss category is identifiable — general
@@ -125,12 +138,17 @@ export function buildInsufficientPropertyAnswer(input: {
    * for. Optional so every existing caller keeps the historical wording; the
    * "not directly mentioned" stem is preserved on every branch because the
    * doc-grounded repair sniffer (ipcHandlers REFUSAL_SNIFF_RE) keys on it.
+   *
+   * Code-review 2026-08-12: only 'profile' was special-cased, but
+   * SourceAuthorityKernel also issues 'transcript' and 'mixed' owners — a
+   * transcript_only or profile_plus_transcript refusal still claimed to have
+   * searched uploaded files the user never provided, which is the same
+   * falsehood this parameter was added to remove.
    */
   sourceOwner?: string;
 }): string {
-  const base = input.sourceOwner === 'profile'
-    ? 'This is not directly mentioned in your profile material.'
-    : 'This is not directly mentioned in the uploaded material.';
+  const base = SOURCE_OWNER_REFUSAL_STEMS[input.sourceOwner ?? '']
+    ?? 'This is not directly mentioned in the uploaded material.';
   if (input.nearMissNote && input.nearMissNote.trim()) {
     return `${base} ${input.nearMissNote.trim()}`;
   }
