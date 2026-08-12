@@ -5,6 +5,20 @@
  * cleanly in .mjs for `node --test`.
  */
 
+/**
+ * Review-prompt engagement policy — mirrors stageCatalog.ts, which in turn
+ * mirrors the review ledger (electron/services/ReviewPromptLogic.ts). The rule
+ * is "sessions OR usage", which cannot be expressed via `triggers` because the
+ * orchestrator ANDs those — hence the predicate.
+ */
+export const REVIEW_PROMPT_MIN_SESSIONS = 3;
+export const REVIEW_PROMPT_MIN_USAGE_MS = 30 * 60 * 1000;
+
+export function reviewEngagementMet(ctx) {
+  return ctx.startupCount >= REVIEW_PROMPT_MIN_SESSIONS
+    || ctx.totalUsageMs >= REVIEW_PROMPT_MIN_USAGE_MS;
+}
+
 export const STAGE_ORDER = [
   'permissions',
   'browser_extension',
@@ -121,9 +135,9 @@ export const STAGES = [
       requiresHomepageDuration: 10_000,
       requiresForeground: true,
       requiresMeetingInactive: true,
-      requiresStartupCount: 6,
-      requiresTotalUsageMs: 45 * 60 * 1000,
+      // Engagement lives in customPredicate — `triggers` are ANDed.
     },
+    customPredicate: reviewEngagementMet,
     requiresStages: ['ads'],
     cooldownMs: () => 90 * 24 * 60 * 60 * 1000,
   },
