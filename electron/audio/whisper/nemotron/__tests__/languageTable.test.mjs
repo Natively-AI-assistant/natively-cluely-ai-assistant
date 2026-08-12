@@ -59,3 +59,29 @@ test('all 19 transcription-ready table entries match the verified reference valu
     assert.equal(resolveNemotronLangId(locale), langId, `mismatch for ${locale}`);
   }
 });
+
+// final-review-fix1 round, I4: narrow, well-evidenced alias/inference layer
+// on top of the 19-entry verified table — see languageTable.ts's own
+// comments for why these are NOT added as new table entries.
+test('resolveNemotronLangId("ar-SA") aliases to "ar-AR" (id 7) — same language, different picker bcp47 tag', () => {
+  // electron/config/languages.ts's real `arabic` entry uses bcp47 'ar-SA';
+  // the verified reference table keys the same language 'ar-AR'.
+  assert.equal(resolveNemotronLangId('ar-SA'), 7);
+  assert.equal(resolveNemotronLangId('ar-SA'), resolveNemotronLangId('ar-AR'));
+});
+
+test('resolveNemotronLangId maps en-IN/en-AU/en-CA to lang_id 0 (inferred, same as en-US)', () => {
+  assert.equal(resolveNemotronLangId('en-IN'), 0);
+  assert.equal(resolveNemotronLangId('en-AU'), 0);
+  assert.equal(resolveNemotronLangId('en-CA'), 0);
+});
+
+test('the alias/inference layer does not add new keys to the verified 19-entry table', () => {
+  // Guards against a future edit "simplifying" this by folding the aliases
+  // directly into NEMOTRON_TRANSCRIPTION_READY_LOCALES, which would silently
+  // blur the line between independently-verified reference values and this
+  // round's aliases/inferences.
+  assert.equal(Object.keys(NEMOTRON_TRANSCRIPTION_READY_LOCALES).length, 19);
+  assert.equal(NEMOTRON_TRANSCRIPTION_READY_LOCALES['ar-SA'], undefined);
+  assert.equal(NEMOTRON_TRANSCRIPTION_READY_LOCALES['en-IN'], undefined);
+});

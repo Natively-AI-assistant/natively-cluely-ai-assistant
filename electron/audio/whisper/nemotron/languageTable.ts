@@ -62,6 +62,36 @@ export const NEMOTRON_TRANSCRIPTION_READY_LOCALES: Record<string, number> = {
   'uk-UA': 19,
 };
 
+// Alias/inference layer (final-review-fix1 round, I4) — kept OUT of
+// NEMOTRON_TRANSCRIPTION_READY_LOCALES itself so that table stays exactly
+// the 19 ground-truth-verified reference entries (languageTable.test.mjs
+// asserts its exact shape/length); these are resolved one layer up, in
+// resolveNemotronLangId() below, instead.
+//
+// Arabic: electron/config/languages.ts's real `arabic` entry has
+// `bcp47: 'ar-SA'`, but the reference PROMPT_DICTIONARY (and this table) key
+// the SAME language as 'ar-AR' (both id 7) — a codeset-variant naming
+// mismatch between this app's picker and Nemotron's own preferred tag, not a
+// different language. Independently verified, not an inference.
+const NEMOTRON_LOCALE_ALIASES: Record<string, string> = {
+  'ar-SA': 'ar-AR',
+};
+
+// English regional variants (electron/config/languages.ts's `english-in` /
+// `english-au` / `english-ca` entries, bcp47 'en-IN'/'en-AU'/'en-CA') have NO
+// dedicated slot in the reference PROMPT_DICTIONARY at all. Unlike the
+// Arabic alias above, mapping them to 'en-US's lang_id (0) is a genuine
+// INFERENCE, not an independently-verified correction: regional English
+// accents are far closer to US/GB English than to any other supported
+// language, but this has NOT been verified against real Indian/Australian/
+// Canadian-accented audio in this investigation — unlike 'en-US' itself,
+// which HAS real-audio verification (task-11-fix1-report.md).
+const NEMOTRON_ENGLISH_VARIANT_LOCALES = new Set(['en-IN', 'en-AU', 'en-CA']);
+
 export function resolveNemotronLangId(locale: string): number | null {
-  return NEMOTRON_TRANSCRIPTION_READY_LOCALES[locale] ?? null;
+  if (NEMOTRON_ENGLISH_VARIANT_LOCALES.has(locale)) {
+    return NEMOTRON_TRANSCRIPTION_READY_LOCALES['en-US'];
+  }
+  const canonical = NEMOTRON_LOCALE_ALIASES[locale] ?? locale;
+  return NEMOTRON_TRANSCRIPTION_READY_LOCALES[canonical] ?? null;
 }

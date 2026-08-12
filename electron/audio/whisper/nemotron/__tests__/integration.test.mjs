@@ -1,10 +1,7 @@
 // Real-model integration test for NemotronEngine (Task 11 go/no-go gate).
 //
-// Gated: skipped when the real Nemotron model isn't present (see
-// NEMOTRON_TEST_MODEL_DIR below) or the fixture WAV is missing. In this
-// environment (Task 11) the real model was downloaded by Task 1's
-// inspection spike and is still present at /tmp/nemotron-inspect — this
-// test runs for real here, it does not skip.
+// Gated: skipped when the real Nemotron model isn't present (see MODEL_DIR
+// below) or the fixture WAV is missing.
 //
 // Import strategy: unlike this directory's other __tests__/*.test.mjs files
 // (rnntDecoder.test.mjs / melFrontend.test.mjs / cacheState.test.mjs / etc.,
@@ -22,6 +19,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 
@@ -33,7 +31,67 @@ const nemotronEnginePath = path.resolve(
 const { NemotronEngine } = fs.existsSync(nemotronEnginePath)
   ? await import(pathToFileURL(nemotronEnginePath).href)
   : { NemotronEngine: null };
-const MODEL_DIR = process.env.NEMOTRON_TEST_MODEL_DIR || '/tmp/nemotron-inspect';
+
+// final-review-fix1 round, I3: MODEL_DIR used to default to
+// '/tmp/nemotron-inspect', a one-off directory from Task 1's inspection
+// spike. On any other machine (CI, a fresh clone, this same machine after
+// /tmp is cleared) that directory doesn't exist, `{ skip: !modelPresent }`
+// below registers as a PASSING skip, and this branch's headline go/no-go
+// evidence silently stops being checked anywhere, with no signal that it
+// stopped. Fixed to default to wherever the app actually stores a
+// downloaded model — the same `getModelsDir()`-joined-with-model-id path
+// modelManager.ts's isModelCached()/isNemotronModelCached() use — so the
+// test runs for real (not skipped) for any developer who has downloaded the
+// model through the app's normal flow.
+//
+// modelManager.ts's real getModelsDir() calls `require('electron').app.getPath(
+// 'userData')`, which is unusable here: this test runs under `electron --test`
+// with ELECTRON_RUN_AS_NODE=1 (this repo's own `npm test`), where
+// `require('electron').app` is undefined (confirmed empirically against
+// this exact invocation — same reason LocalReranker.ts's resolveModelPath()
+// already documents a HOME-based ELECTRON_RUN_AS_NODE fallback for the
+// identical problem). So the OS default userData root is recomputed
+// directly here, matching Electron's own per-platform default
+// (`path.join(appDataRoot, app.name)`, with app.name defaulting to
+// package.json's `name` field, "natively", before any app.setName()
+// override runs — verified against this machine's real, dev-mode (`npm
+// start`) `~/Library/Application Support/natively/whisper-models/...`
+// directory). A packaged (electron-builder) build may instead resolve the
+// capitalized `productName` ("Natively") — not re-verified against a
+// packaged install here — but macOS and Windows filesystems are both
+// case-insensitive by default, so 'natively' still resolves to the same
+// directory either way; only case-sensitive Linux filesystems could diverge,
+// and Linux packaging isn't in this project's scope (see CLAUDE.md).
+function defaultAppUserDataDir() {
+  const appName = 'natively';
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', appName);
+  }
+  if (process.platform === 'win32') {
+    return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), appName);
+  }
+  return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), appName);
+}
+
+// Reuse the real catalog id (not a duplicated string literal) when the
+// build is present, so this test's default path can never drift out of
+// sync with modelManager.ts's own MODEL_CATALOG entry.
+const modelManagerPath = path.resolve(
+  __dirname,
+  '../../../../../dist-electron/electron/audio/whisper/modelManager.js',
+);
+const NEMOTRON_MODEL_ID_FALLBACK = 'onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4';
+let nemotronModelId = NEMOTRON_MODEL_ID_FALLBACK;
+if (fs.existsSync(modelManagerPath)) {
+  const { MODEL_CATALOG } = await import(pathToFileURL(modelManagerPath).href);
+  const entry = MODEL_CATALOG.find((m) => m.sessionLayout === 'nemotron-rnnt');
+  if (entry) nemotronModelId = entry.id;
+}
+
+// NEMOTRON_TEST_MODEL_DIR remains available as an explicit override for
+// local development (e.g. pointing at a one-off inspection directory).
+const MODEL_DIR = process.env.NEMOTRON_TEST_MODEL_DIR
+  || path.join(defaultAppUserDataDir(), 'whisper-models', nemotronModelId);
 const FIXTURE_WAV = path.join(__dirname, 'fixtures', 'known-phrase-16k-mono.wav');
 const KNOWN_PHRASE = 'the quick brown fox jumps over the lazy dog';
 
