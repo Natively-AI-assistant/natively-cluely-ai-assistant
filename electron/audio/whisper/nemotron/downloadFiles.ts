@@ -68,6 +68,15 @@ export async function downloadNemotronFiles(
     if (!response.ok || !response.body) {
       throw new Error(`Failed to download ${file}: HTTP ${response.status}`);
     }
+    // Content-Length, when the server sends one, is the ground truth for how
+    // many bytes this file SHOULD be. Compared against actual written bytes
+    // below so a connection that terminates cleanly but early (no HTTP
+    // error, no thrown read error — just fewer bytes than promised) is
+    // still caught, instead of silently producing a truncated-but-nonzero
+    // file that isModelCached()/isNemotronModelCached() (size > 0 only)
+    // would treat as a valid, complete download forever.
+    const expectedBytesHeader = response.headers.get('content-length');
+    const expectedBytes = expectedBytesHeader !== null ? Number(expectedBytesHeader) : null;
     const fileStream = fs.createWriteStream(`${destPath}.partial`);
     let fileBytes = 0;
     const reader = response.body.getReader();
@@ -82,6 +91,17 @@ export async function downloadNemotronFiles(
     }
     fileStream.end();
     await finished(fileStream);
+    if (expectedBytes !== null && Number.isFinite(expectedBytes) && fileBytes !== expectedBytes) {
+      // Clean up the partial file before throwing — an init failure surfaces
+      // this as an 'error' worker message (see whisperWorker.ts), which
+      // LocalWhisperSTT then classifies via isCorruptModelError and purges
+      // the whole model directory on retry; there is no reason to leave a
+      // known-truncated `.partial` sitting alongside it in the meantime.
+      fs.rmSync(`${destPath}.partial`, { force: true });
+      throw new Error(
+        `Truncated download for ${file}: expected ${expectedBytes} bytes, received ${fileBytes}`,
+      );
+    }
     fs.renameSync(`${destPath}.partial`, destPath);
     downloadedSoFar += fileBytes;
   }
