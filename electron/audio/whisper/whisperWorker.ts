@@ -279,6 +279,13 @@ parentPort.on('message', async (msg: any) => {
     }
   } else if (msg.type === 'setPrompt') {
     await updatePromptCache(msg.prompt);
+  } else if (msg.type === 'setLanguage') {
+    // nemotron-rnnt only — silently ignored (no-op) for the transformers.js
+    // pipeline() path, same convention as `nemotronReset` on 'transcribe'.
+    // langId is already resolved + fail-closed-checked host-side (see
+    // LocalWhisperSTT.resolveAndApplyNemotronLanguage / languageTable.ts) —
+    // the worker just forwards it.
+    if (nemotronEngine) nemotronEngine.setLanguage(msg.langId);
   } else if (msg.type === 'transcribe') {
     if (nemotronEngine) {
       try {

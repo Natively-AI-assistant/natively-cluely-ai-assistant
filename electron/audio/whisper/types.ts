@@ -144,7 +144,26 @@ export interface WorkerSetPromptMessage {
   type: 'setPrompt';
   prompt: string;
 }
-export type WorkerInMessage = WorkerInitMessage | WorkerTranscribeMessage | WorkerSetPromptMessage;
+/**
+ * Out-of-band language update — nemotron-rnnt session layout only (silently
+ * ignored by every other model, same convention as `nemotronReset` on
+ * WorkerTranscribeMessage). Sent only when the host's resolved `lang_id`
+ * actually changes (see LocalWhisperSTT's `maybePushNemotronLangToWorker`),
+ * mirroring WorkerSetPromptMessage's "only on change" convention. `langId`
+ * is a small (0-127) NVIDIA PROMPT_DICTIONARY index — see
+ * ./nemotron/languageTable.ts — already resolved and fail-closed-checked by
+ * the host; the worker trusts it as-is and forwards it straight to
+ * NemotronEngine.setLanguage().
+ */
+export interface WorkerSetLanguageMessage {
+  type: 'setLanguage';
+  langId: number;
+}
+export type WorkerInMessage =
+  | WorkerInitMessage
+  | WorkerTranscribeMessage
+  | WorkerSetPromptMessage
+  | WorkerSetLanguageMessage;
 
 export interface WorkerReadyResponse { type: 'ready'; }
 export interface WorkerResultResponse { type: 'result'; taskId: string; text: string; }

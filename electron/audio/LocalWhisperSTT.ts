@@ -50,6 +50,8 @@ import { buildWorkerInitMessage } from './whisper/inferenceConfig';
 import { resolveWhisperWorkerPath } from './whisper/workerPathResolver';
 import type { WorkerOutMessage } from './whisper/types';
 import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../utils/onnxThreadConfig';
+import { resolveNemotronLangId } from './whisper/nemotron/languageTable';
+import { RECOGNITION_LANGUAGES } from '../config/languages';
 
 export class LocalWhisperSTT extends EventEmitter {
     private readonly modelId: string;
@@ -114,6 +116,21 @@ export class LocalWhisperSTT extends EventEmitter {
     // buffer every tick, as before.
     private nemotronSentSamples = 0;
     private readonly isNemotronModel: boolean;
+
+    // nemotron-rnnt only: resolved NVIDIA PROMPT_DICTIONARY lang_id (see
+    // ./whisper/nemotron/languageTable.ts), derived from `this.language` via
+    // resolveAndApplyNemotronLanguage(). Defaults to 0 — the same value
+    // NemotronEngine's own DEFAULT_LANG_ID falls back to (English,
+    // task-11-fix1-report.md) — so an instance that's never had its language
+    // explicitly (re)resolved still matches the engine's built-in default,
+    // not an arbitrary sentinel. Ignored entirely by every other model.
+    private nemotronLangId = 0;
+    // Last langId actually pushed to the CURRENT worker, so
+    // maybePushNemotronLangToWorker only posts on real change (same
+    // "only on change" convention as contextPromptSentToWorker /
+    // maybePushPromptToWorker). Reset to null in beginWorkerTermination —
+    // a future worker starts without this state applied and must be re-sent.
+    private nemotronLangIdSentToWorker: number | null = null;
 
     // Gap-flush: ensures a segment closes even if Rust SilenceSuppressor
     // stops sending audio before VAD's hangover completes.
@@ -218,7 +235,10 @@ export class LocalWhisperSTT extends EventEmitter {
 
     setSampleRate(rate: number): void { this.inputSampleRate = rate; }
     setAudioChannelCount(_count: number): void {}
-    setRecognitionLanguage(key: string): void { this.language = key || 'auto'; }
+    setRecognitionLanguage(key: string): void {
+        this.language = key || 'auto';
+        if (this.isNemotronModel) this.resolveAndApplyNemotronLanguage();
+    }
     setCredentials(_credPath: string): void {}
 
     /**
@@ -249,6 +269,87 @@ export class LocalWhisperSTT extends EventEmitter {
         if (this.contextPrompt === this.contextPromptSentToWorker) return;
         this.worker.postMessage({ type: 'setPrompt', prompt: this.contextPrompt });
         this.contextPromptSentToWorker = this.contextPrompt;
+    }
+
+    /**
+     * nemotron-rnnt only: resolves `this.language` (the app's internal
+     * settings key, e.g. 'english-us' / 'french' / 'auto' — see
+     * electron/config/languages.ts's RECOGNITION_LANGUAGES, keyed by that
+     * same `code` field, not raw BCP-47) to its BCP-47 locale, then to a
+     * NVIDIA PROMPT_DICTIONARY lang_id via resolveNemotronLangId(). Called
+     * from setRecognitionLanguage() whenever the language changes (including
+     * at construction time — createSTTProvider() in main.ts calls
+     * setRecognitionLanguage() immediately after `new LocalWhisperSTT(...)`,
+     * before start() or any listener is attached).
+     *
+     * 'auto' → English, not fail-closed: 'auto' IS a real, user-selectable
+     * RECOGNITION_LANGUAGES entry ("Auto Detect") — the language table's own
+     * doc comment claiming this app "never sends Nemotron literal auto" was
+     * wrong, corrected here. Nemotron has no real auto-detect mode (its
+     * lang_id conditioning requires one explicit locale per session), so
+     * this follows the SAME precedent AppState.setRecognitionLanguage
+     * already applies for every other non-NativelyProSTT provider (main.ts:
+     * "'auto' is only meaningful for NativelyProSTT — other providers fall
+     * back to en-US"). This normalization must also live HERE, not only at
+     * that call site, because createSTTProvider() (main.ts) calls
+     * setRecognitionLanguage() with the RAW persisted value at construction
+     * time — that particular call site does NOT go through
+     * AppState.setRecognitionLanguage's own 'auto' normalization. Without
+     * this, any user who previously picked "Auto Detect" would hit the
+     * fail-closed path below on every app launch while on the Nemotron
+     * model — surfacing as a disruptive "reconnecting"/eventually "failed"
+     * STT status (main.ts's stt.on('error', ...) treats any non-auth/quota
+     * error as retryable-then-fatal after 5 occurrences), not a one-time
+     * settings notice.
+     *
+     * Fail-closed (per the design doc's error-handling section) for
+     * everything else unmapped: any of the 21 non-"transcription-ready"
+     * locales, or a RECOGNITION_LANGUAGES key with no BCP-47 mapping at all
+     * — does NOT silently fall back to English. `nemotronLangId` is left at
+     * whatever it last successfully resolved to (defaulting to 0/English,
+     * matching NemotronEngine's own DEFAULT_LANG_ID, until the first
+     * successful resolution), and an 'error' is surfaced via the same event
+     * this class already uses for other unrecoverable-config problems (e.g.
+     * spawnWorker's ONNX-slot failure path, the streaming-watchdog path
+     * above).
+     */
+    private resolveAndApplyNemotronLanguage(): void {
+        const attemptedKey = this.language;
+        const effectiveKey = attemptedKey === 'auto' ? 'english-us' : attemptedKey;
+        const bcp47 = RECOGNITION_LANGUAGES[effectiveKey]?.bcp47;
+        const langId = bcp47 ? resolveNemotronLangId(bcp47) : null;
+        if (langId === null) {
+            // Deferred via setImmediate, not emitted synchronously: this
+            // method can run during construction, synchronously inside
+            // setRecognitionLanguage(), BEFORE createSTTProvider() (main.ts)
+            // has wired an 'error' listener on the returned instance — a
+            // synchronous emit here with no listener yet attached would
+            // throw per Node's EventEmitter contract (unhandled 'error'
+            // event) and crash STT provider creation outright. Deferring one
+            // tick lets the caller's synchronous listener-wiring finish
+            // first, matching how every other 'error' emit in this class is
+            // already reached only via an async callback (worker message,
+            // timer, promise rejection) scheduled well after construction.
+            const keptLangId = this.nemotronLangId;
+            setImmediate(() => {
+                this.emit('error', new Error(
+                    `Nemotron STT: recognition language "${attemptedKey}"` +
+                    (bcp47 ? ` (resolved locale "${bcp47}")` : ' (no BCP-47 mapping found)') +
+                    ' is not in the transcription-ready set — keeping the previous Nemotron ' +
+                    `language (lang_id=${keptLangId}) rather than silently falling back to English.`,
+                ));
+            });
+            return;
+        }
+        this.nemotronLangId = langId;
+        this.maybePushNemotronLangToWorker();
+    }
+
+    private maybePushNemotronLangToWorker(): void {
+        if (!this.worker || !this.workerReady) return; // pushed in flushPending after ready
+        if (this.nemotronLangId === this.nemotronLangIdSentToWorker) return;
+        this.worker.postMessage({ type: 'setLanguage', langId: this.nemotronLangId });
+        this.nemotronLangIdSentToWorker = this.nemotronLangId;
     }
 
     start(): void {
@@ -892,10 +993,12 @@ export class LocalWhisperSTT extends EventEmitter {
     }
 
     private flushPending(): void {
-        // Push the cached prompt to the worker FIRST so the queued transcribes
-        // see the bias on their initial run (worker honors the latest cached
-        // prompt for whichever transcribe arrives next).
+        // Push the cached prompt AND (nemotron-rnnt only) the resolved
+        // lang_id to the worker FIRST so the queued transcribes see both on
+        // their initial run (worker honors the latest cached prompt / lang_id
+        // for whichever transcribe/pushAudio arrives next).
         this.maybePushPromptToWorker();
+        this.maybePushNemotronLangToWorker();
         const queued = this.pendingAudio.splice(0);
         queued.forEach(({ audio, nemotronReset }) => this.sendTranscribe(audio, false, nemotronReset));
         if (this.isDrainingFinals && queued.length === 0 && this.drainingFinalsInFlight === 0 && this.worker) {
@@ -914,6 +1017,10 @@ export class LocalWhisperSTT extends EventEmitter {
         // Reset the sent-prompt tracker: a future spawnWorker call will get a
         // fresh worker with empty cache, so we must re-push on next ready.
         this.contextPromptSentToWorker = '';
+        // Same reasoning for nemotron-rnnt's lang_id: a fresh worker's
+        // NemotronEngine starts at its own DEFAULT_LANG_ID (0/English), not
+        // whatever this instance last resolved — must re-push on next ready.
+        this.nemotronLangIdSentToWorker = null;
         w.removeAllListeners('message');
         w.removeAllListeners('error');
         if (this.workerTerminateTimer) clearTimeout(this.workerTerminateTimer);
