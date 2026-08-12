@@ -5090,9 +5090,26 @@ let isMultimodal = !!(imagePaths?.length);
     // Find the AbortSignal anywhere in args (position-independent) so adding a
     // trailing `thinkingBudget` arg below doesn't hide it from the abort check.
     const abortSignal = args.find((a): a is AbortSignal => a instanceof AbortSignal);
+    // Runaway bound. Applied HERE, at the single public entry point, so it
+    // covers every provider — the wrapped fall-through sites and the ones that
+    // return unconditionally (Ollama, OpenAI, Claude, DeepSeek, LiteLLM) alike.
+    // See MAX_STREAM_OUTPUT_CHARS for why this is a character cap and not a
+    // wall-clock one, and why it is defence in depth rather than the real fix.
+    const { MAX_STREAM_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
+    let emittedChars = 0;
     for await (const chunk of this._streamChatInner(...args)) {
       if (abortSignal?.aborted) return;
       yield dashReducer.reduce(chunk);
+      emittedChars += typeof chunk === 'string' ? chunk.length : 0;
+      if (emittedChars > MAX_STREAM_OUTPUT_CHARS) {
+        // End the stream the same way a post-commit provider failure now does —
+        // return, never throw — so the consumer sees one consistent shape for
+        // "this stream stopped early".
+        console.warn(
+          `[LLMHelper] Stream exceeded MAX_STREAM_OUTPUT_CHARS (${emittedChars} > ${MAX_STREAM_OUTPUT_CHARS}) — ending the turn. The model is not converging.`,
+        );
+        return;
+      }
     }
   }
 

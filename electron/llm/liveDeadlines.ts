@@ -96,6 +96,35 @@ export const LIVE_INTER_TOKEN_STALL_MS = 8000;
 /** Benchmark per-question hard timeout — the outer wrapper that must never be exceeded. */
 export const BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS = 30000;
 
+/**
+ * Absolute ceiling on the TOTAL characters one answer may stream.
+ *
+ * This is deliberately NOT a wall-clock cap, and does not contradict
+ * LIVE_INTER_TOKEN_STALL_MS's rule that a healthy long answer is never
+ * truncated mid-sentence: a stream that keeps producing tokens quickly is
+ * healthy by the time-based tests, and that is exactly the runaway this bounds.
+ *
+ * Live capture 2026-08-12 (what_to_answer): the model produced 8047 tokens /
+ * 22871 chars over 61s before the SERVER aborted it. tfft was 2084ms and tokens
+ * flowed continuously, so no client guard applied — not the first-token ceiling
+ * (LIVE_TOTAL_HARD_TIMEOUT_MS), not the inter-token stall guard. Nothing on the
+ * client bounded total output at all.
+ *
+ * Sized off measured data, not intuition. Across 19 real answers captured in
+ * that same session the largest was 2530 chars (median 639). 16000 is ~6x that
+ * p100, and ~2x a generous estimate for the longest legitimate answer this
+ * pipeline can produce (a six-section coding answer with multiple code blocks,
+ * ~8000). An answer that reaches this has stopped being an answer.
+ *
+ * DEFENCE IN DEPTH, NOT THE FIX. The real fix is an output bound on the
+ * request: streamWithNatively's body sends { messages, stream, fast_mode,
+ * system, language, images } and no max_tokens — it is the ONLY provider in
+ * LLMHelper that does not bound output (DeepSeek, LiteLLM, Claude, Gemini and
+ * Groq all do). Adding it needs a natively-api change too, because /v1/chat
+ * destructures a fixed field list and would silently ignore the field today.
+ */
+export const MAX_STREAM_OUTPUT_CHARS = 16000;
+
 const COMPLEX_TYPES = new Set<AnswerType>([
   'coding_question_answer', 'dsa_question_answer', 'system_design_answer', 'debugging_question_answer',
 ]);
