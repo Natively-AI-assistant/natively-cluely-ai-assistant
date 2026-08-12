@@ -40,8 +40,13 @@ describe('splitGistLine', () => {
     assert.deepEqual(splitGistLine('[[GIST]] only line'), { body: '', gist: 'only line' });
   });
 
-  test('empty gist text after the marker → gist null', () => {
-    assert.equal(splitGistLine('Body.\n[[GIST]]   ').gist, null);
+  // The body assertion is the load-bearing half: a marker that starts its line
+  // is chrome even with no essence, so it must never survive into the body —
+  // stripDisplayMarkup feeds TTS, which would otherwise SAY "[[GIST]]".
+  test('empty gist text after the marker → gist null, marker still stripped', () => {
+    assert.deepEqual(splitGistLine('Body.\n[[GIST]]   '), { body: 'Body.', gist: null });
+    assert.deepEqual(splitGistLine('Body.\n[[GIST]]'), { body: 'Body.', gist: null });
+    assert.equal(stripDisplayMarkup('Body.\n[[GIST]]'), 'Body.');
   });
 
   test('trailing whitespace after the gist line is tolerated', () => {
@@ -49,6 +54,74 @@ describe('splitGistLine', () => {
       body: 'Body.',
       gist: 'short essence',
     });
+  });
+});
+
+// 2026-08-12: the model sometimes breaks the line after the marker, and the
+// old split rejected the whole shape — so a literal "[[GIST]]" painted on
+// screen above the essence. Recovered for display; still lint-visible.
+describe('splitGistLine — newline between the marker and its essence', () => {
+  test('marker alone on its line, essence underneath → recovered', () => {
+    assert.deepEqual(
+      splitGistLine('You sort them first, then subtract.\n[[GIST]]\nSort the numbers and calculate c minus a'),
+      {
+        body: 'You sort them first, then subtract.',
+        gist: 'Sort the numbers and calculate c minus a',
+        recovered: true,
+      },
+    );
+  });
+
+  test('no body at all → recovered with an empty body', () => {
+    assert.deepEqual(splitGistLine('[[GIST]]\nSort the numbers and calculate c minus a'), {
+      body: '',
+      gist: 'Sort the numbers and calculate c minus a',
+      recovered: true,
+    });
+  });
+
+  test('blank lines between the marker and the essence are tolerated', () => {
+    assert.deepEqual(splitGistLine('Body.\n[[GIST]]\n\n  five word essence here  \n'), {
+      body: 'Body.',
+      gist: 'five word essence here',
+      recovered: true,
+    });
+  });
+
+  test('TWO lines after the marker stay malformed — recovery must not eat body text', () => {
+    assert.deepEqual(splitGistLine('Body.\n[[GIST]]\nline one\nline two'), {
+      body: 'Body.\n[[GIST]]\nline one\nline two',
+      gist: null,
+    });
+  });
+
+  // A misplaced marker with a real closing SENTENCE under it looks identical
+  // to a line-broken gist. Length breaks the tie: a gist is five to eight
+  // words by contract, so a longer line stays in the spoken body rather than
+  // being silently demoted to a chip nobody hears.
+  test('a following line too long to be a gist stays malformed', () => {
+    const text = 'Sort the array first, then walk it once.\n[[GIST]]\nThe answer is the difference between the last and the first elements.';
+    assert.deepEqual(splitGistLine(text), { body: text, gist: null });
+  });
+
+  test('a contract-length essence is still recovered at the boundary', () => {
+    assert.deepEqual(splitGistLine('Body.\n[[GIST]]\none two three four five six seven eight nine ten'), {
+      body: 'Body.',
+      gist: 'one two three four five six seven eight nine ten',
+      recovered: true,
+    });
+    assert.equal(
+      splitGistLine('Body.\n[[GIST]]\none two three four five six seven eight nine ten eleven').gist,
+      null,
+    );
+  });
+
+  test('a clean split carries no recovered flag', () => {
+    assert.equal(splitGistLine('Body.\n[[GIST]] essence').recovered, undefined);
+  });
+
+  test('the recovered gist is not spoken', () => {
+    assert.equal(stripDisplayMarkup('The **key term** here.\n[[GIST]]\nessence'), 'The key term here.');
   });
 });
 
@@ -70,6 +143,23 @@ describe('splitGistLineStreaming', () => {
   test('finished text behaves exactly like splitGistLine', () => {
     const text = 'Body one.\n[[GIST]] essence';
     assert.deepEqual(splitGistLineStreaming(text), splitGistLine(text));
+  });
+
+  // The frame between a COMPLETE marker and its first essence token: the raw
+  // last line is EMPTY, so the old prefix test missed it and the marker
+  // flashed as literal text before the chip mounted.
+  test('a completed marker awaiting its essence on the next line is hidden', () => {
+    for (const partial of ['Body.\n[[GIST]]\n', 'Body.\n[[GIST]]\n  ']) {
+      assert.deepEqual(splitGistLineStreaming(partial), { body: 'Body.', gist: null }, partial);
+    }
+  });
+
+  test('the essence then streams into the chip from the next line', () => {
+    assert.deepEqual(splitGistLineStreaming('Body.\n[[GIST]]\nSort the'), {
+      body: 'Body.',
+      gist: 'Sort the',
+      recovered: true,
+    });
   });
 });
 

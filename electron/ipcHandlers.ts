@@ -4111,7 +4111,17 @@ export function initializeIpcHandlers(appState: AppState): void {
               // resolver failure), the legacy re-retrieval below remains the only
               // source, unchanged.
               let docContextBlock = '';
-              const _governedPack = manualContextOsGeneration?.evidencePack;
+              // Code-review 2026-08-12: keyed on pack PRESENCE, but a pack is
+              // now attached even when it does NOT govern (packGovernsGeneration
+              // false — the layer-1 fall-through for unbounded authorities). An
+              // ungoverned refusal pack has zero items, so `_governedPack` was
+              // truthy, the `!_governedPack` branches below were skipped, and
+              // the validator ran against an empty block for a turn the legacy
+              // path actually answered. `govern` is what the comment above
+              // means by "governed this turn".
+              const _governedPack = manualContextOsGeneration?.govern
+                ? manualContextOsGeneration.evidencePack
+                : undefined;
               // Root-cause fix (2026-07-23): prefer the RAW block the actual
               // generation call retrieved (surfaced via
               // ContextOsGenerationContext.retrievedBlockRaw, written
