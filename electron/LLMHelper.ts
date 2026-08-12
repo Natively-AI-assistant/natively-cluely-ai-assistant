@@ -4844,6 +4844,12 @@ let isMultimodal = !!(imagePaths?.length);
       abortSignal?.addEventListener('abort', onAbort, { once: true });
     });
 
+    // Commit tracking: identical rule to _streamChatInner and the vision path.
+    // The rotation loop below retries the WHOLE provider list up to 3 times, so
+    // without this an error after the first token could append as many as
+    // 3 x providers.length complete answers to the partial the user already saw.
+    const commit = { emitted: false };
+
     for (let rotation = 0; rotation < MAX_FULL_ROTATIONS; rotation++) {
       if (abortSignal?.aborted) return;
       if (rotation > 0) {
@@ -4858,10 +4864,14 @@ let isMultimodal = !!(imagePaths?.length);
         const provider = providers[i];
         try {
           console.log(`[LLMHelper] ${rotation === 0 ? '🚀' : '🔁'} Attempting ${provider.name}...`);
-          yield* (provider.execute() as any);
+          yield* this.trackCommit(provider.execute() as any, commit);
           console.log(`[LLMHelper] ✅ ${provider.name} stream completed successfully`);
           return; // SUCCESS — exit immediately
         } catch (err: any) {
+          if (commit.emitted) {
+            console.warn(`[LLMHelper] ⚠️ ${provider.name} failed AFTER first token — ending stream rather than appending a second answer: ${err.message}`);
+            return;
+          }
           console.warn(`[LLMHelper] ⚠️ ${provider.name} failed: ${err.message}`);
           // Continue to next provider
         }
@@ -5083,6 +5093,42 @@ let isMultimodal = !!(imagePaths?.length);
     for await (const chunk of this._streamChatInner(...args)) {
       if (abortSignal?.aborted) return;
       yield dashReducer.reduce(chunk);
+    }
+  }
+
+  /**
+   * Commit-point tracking for provider fall-through.
+   *
+   * `yield*` cannot be undone. Once a delegated provider stream has yielded a
+   * non-empty chunk, the consumer has already painted it, so a LATER failure in
+   * that same provider must NOT fall through to another provider — the next one
+   * starts from scratch and its answer is appended to the partial, producing one
+   * truncated answer immediately followed by a second, different, complete one.
+   *
+   * Live capture 2026-08-12 (what_to_answer, Natively fast-mode):
+   *   stream 1  tokens 8047  chars 22871  -> ai_unavailable during_stream
+   *   stream 2                chars  2342  (fell through, fresh answer)
+   *   stored assistant message           25210  ≈ 22871 + 2342 − trim
+   *
+   * The vision path already documents and implements this rule (see the
+   * "commit point" note above streamVisionWithFallback and `committedProvider`):
+   * a failure after commit ends the stream gracefully rather than switching.
+   * The text path had the rule written down but never applied at its
+   * catch-and-continue sites. This helper is how those sites observe it.
+   *
+   * The emptiness predicate is deliberately identical to the vision path's
+   * (`typeof tok === 'string' && tok.trim().length > 0`) so the two cannot drift:
+   * whitespace-only preamble does not commit, real text does.
+   */
+  private async * trackCommit(
+    inner: AsyncGenerator<string, void, unknown>,
+    state: { emitted: boolean },
+  ): AsyncGenerator<string, void, unknown> {
+    for await (const tok of inner) {
+      if (!state.emitted && typeof tok === 'string' && tok.trim().length > 0) {
+        state.emitted = true;
+      }
+      yield tok;
     }
   }
 
@@ -6310,6 +6356,11 @@ let isMultimodal = !!(imagePaths?.length);
     // Gate: only short-circuit to fast paths when the user's picked model is one of
     // the providers fast-mode actually routes to. Otherwise picking Gemini/Claude/OpenAI
     // in the UI is silently ignored because fast-mode returns before model routing runs.
+    // Tracks whether ANY provider below has already yielded real text to the
+    // consumer. Every catch-and-continue site in this generator must consult it
+    // before falling through — see trackCommit.
+    const commit = { emitted: false };
+
     const fastModeApplies = this.groqFastTextMode && !isMultimodal && (
       this.isCodexAvailable() ||
       this.isGroqModel(this.currentModelId) ||
@@ -6319,9 +6370,13 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isCodexAvailable()) {
         console.log(`[LLMHelper] ⚡️ Fast Text Mode Active (Streaming). Routing to Codex CLI...`);
         try {
-          yield* this.streamWithCodexCli(userContent, finalSystemPrompt, true, undefined, abortSignal);
+          yield* this.trackCommit(this.streamWithCodexCli(userContent, finalSystemPrompt, true, undefined, abortSignal), commit);
           return;
         } catch (e: any) {
+          if (commit.emitted) {
+            console.warn("[LLMHelper] Codex CLI Fast Text failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            return;
+          }
           console.warn("[LLMHelper] Codex CLI Fast Text streaming failed, falling back:", e.message);
         }
       }
@@ -6334,14 +6389,21 @@ let isMultimodal = !!(imagePaths?.length);
           // we'd send 'natively' or a Gemini ID as the Groq model name → 400.
           const groqModelId = this.isGroqModel(this.currentModelId) ? this.currentModelId : GROQ_MODEL;
           // CACHE: pass system separately so Groq prefix-cache hits across turns.
-          yield* this.streamWithGroq(userContent, groqModelId, finalGroqSystem, abortSignal);
+          yield* this.trackCommit(this.streamWithGroq(userContent, groqModelId, finalGroqSystem, abortSignal), commit);
           return;
         } catch (e: any) {
-          console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
+          // A 401 still disables local Groq for the session even post-commit —
+          // that is provider bookkeeping, not output, so it runs before the
+          // commit guard returns.
           if (typeof e?.message === 'string' && /401|invalid[_\s-]api[_\s-]key/i.test(e.message)) {
             this._groqLocalDisabled = true;
             console.warn("[LLMHelper] Local Groq key rejected (401) — disabling local Groq for the rest of this session. Re-enable by saving a new key in Settings.");
           }
+          if (commit.emitted) {
+            console.warn("[LLMHelper] Groq Fast Text failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            return;
+          }
+          console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
         }
         // Local Groq failed — fall through to Natively if available
       }
@@ -6349,9 +6411,17 @@ let isMultimodal = !!(imagePaths?.length);
         // streamWithNatively → generateWithNatively → sends fast_mode:true → server Groq pool
         console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active (Streaming). Routing to Natively server Groq pool...`);
         try {
-          yield* this.streamWithNatively(userContent, finalSystemPrompt, undefined, abortSignal);
+          yield* this.trackCommit(this.streamWithNatively(userContent, finalSystemPrompt, undefined, abortSignal), commit);
           return;
         } catch (e: any) {
+          // This is the site the 2026-08-12 live capture hit: the server aborted
+          // at 61s AFTER streaming 8047 tokens, and the old unconditional
+          // fall-through appended a whole second answer to what the user had
+          // already read.
+          if (commit.emitted) {
+            console.warn("[LLMHelper] Natively fast-mode failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            return;
+          }
           console.warn("[LLMHelper] Natively fast-mode failed, falling back:", e.message);
         }
       }
@@ -6440,14 +6510,14 @@ let isMultimodal = !!(imagePaths?.length);
           // Route multimodal to Groq Llama 4 Scout (vision-capable)
           const groqSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
           const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
-          yield* this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem, abortSignal);
+          yield* this.trackCommit(this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem, abortSignal), commit);
           return;
         }
         // Text-only Groq
         const groqSystem = systemPromptOverride ? baseSystemPrompt : GROQ_SYSTEM_PROMPT;
         const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
         // CACHE: pass system separately so Groq prefix-cache hits across turns.
-        yield* this.streamWithGroq(userContent, this.currentModelId, finalGroqSystem, abortSignal);
+        yield* this.trackCommit(this.streamWithGroq(userContent, this.currentModelId, finalGroqSystem, abortSignal), commit);
         return;
       } catch (e: any) {
         // 413 / 429 / 5xx on Groq → fall through to Natively / Gemini cascade
@@ -6467,6 +6537,14 @@ let isMultimodal = !!(imagePaths?.length);
         } else {
           // Unknown error — log and fall through anyway so the user still gets an answer
           console.warn('[LLMHelper] Groq streaming failed, falling through:', msg.slice(0, 120));
+        }
+        // A post-commit failure must NOT fall through: the providers below
+        // would append a second, complete answer to the partial the user has
+        // already read. Provider bookkeeping (the 401 disable above) still
+        // applies; only the fall-through is suppressed.
+        if (commit.emitted) {
+          console.warn('[LLMHelper] Groq failed AFTER first token — ending stream rather than appending a second answer:', msg.slice(0, 120));
+          return;
         }
         // Fall through to Natively at line ~5435
       }
