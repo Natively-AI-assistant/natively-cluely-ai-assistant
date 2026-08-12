@@ -43,7 +43,11 @@ describe('W5: pipeline shape (source pins)', () => {
         assert.match(engineSrc, /const modeContextPromise: Promise<string>/);
         // The prefetch promise, request snapshot, and request-owned cancellation
         // signal are all threaded to WTA generation.
-        assert.match(engineSrc, /generateStream\([^)]*modeContextPromise, requestSnapshot, whatToAnswerCancellationToken\.signal\)/s);
+        // Anchored on the ORDER of the threaded values rather than on the call
+        // ending there — a truncation sink was appended after the signal
+        // (2026-08-12) and an end-anchored match would fail for a reason
+        // unrelated to the prestream invariant this pins.
+        assert.match(engineSrc, /generateStream\([^)]*modeContextPromise, requestSnapshot, whatToAnswerCancellationToken\.signal[,)]/s);
     });
 
     test('the floating intent promise carries an inline rejection handler', () => {

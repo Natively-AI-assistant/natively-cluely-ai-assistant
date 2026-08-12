@@ -190,7 +190,9 @@ describe('every text-path fall-through site consults the commit flag', () => {
       `expected exactly one STREAMING rotation loop, found ${streamingLoops.length}`,
     );
     const loop = streamingLoops[0];
-    assert.match(loop, /yield\* this\.trackCommit\(provider\.execute\(\)/);
+    // trackCommit may now be WRAPPED by capOutput (the total-output bound added
+    // 2026-08-12), so match the delegation without assuming it is outermost.
+    assert.match(loop, /this\.trackCommit\(provider\.execute\(\)/);
     assert.match(loop, /if \(commit\.emitted\)[\s\S]{0,900}?return;/);
   });
 });

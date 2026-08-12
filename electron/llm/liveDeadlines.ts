@@ -99,10 +99,19 @@ export const BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS = 30000;
 /**
  * Absolute ceiling on the TOTAL characters one answer may stream.
  *
- * This is deliberately NOT a wall-clock cap, and does not contradict
- * LIVE_INTER_TOKEN_STALL_MS's rule that a healthy long answer is never
- * truncated mid-sentence: a stream that keeps producing tokens quickly is
- * healthy by the time-based tests, and that is exactly the runaway this bounds.
+ * This is a CHARACTER bound, not a wall-clock one — a different instrument from
+ * LIVE_INTER_TOKEN_STALL_MS, which bounds a mid-stream hang.
+ *
+ * Be honest about the tension (code review 2026-08-12). LIVE_INTER_TOKEN_STALL_MS
+ * promises unconditionally that "healthy long answers are never truncated
+ * mid-sentence". This cap DOES truncate mid-sentence, at whatever chunk boundary
+ * crosses the limit, and it cannot tell a looping model from a genuinely long
+ * answer — only their size. The earlier wording here reconciled the two by
+ * redefining "healthy" as "passes the time-based checks", which is not what that
+ * promise said. The real position: above this size an answer is treated as a
+ * runaway, accepting that a legitimate answer that large is cut off. It is set
+ * high enough (below) that no measured answer comes close, and it is
+ * env-overridable for anyone who hits it.
  *
  * Live capture 2026-08-12 (what_to_answer): the model produced 8047 tokens /
  * 22871 chars over 61s before the SERVER aborted it. tfft was 2084ms and tokens

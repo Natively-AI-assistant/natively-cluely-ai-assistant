@@ -92,18 +92,43 @@ describe('the cap is a character bound, not a wall-clock one', () => {
   });
 });
 
-describe('the cap is applied where it covers every provider', () => {
-  test('it sits in the public streamChat wrapper, not one provider branch', () => {
-    // _streamChatInner has ~20 delegation sites; only 8 are wrapped for commit
-    // tracking. A cap installed at any of those would miss Ollama, OpenAI,
-    // Claude, DeepSeek and LiteLLM. streamChat is the single point every chunk
-    // passes through.
-    const start = src.indexOf('public async * streamChat(');
-    assert.ok(start > 0, 'could not locate streamChat');
-    const end = src.indexOf('private async * trackCommit(', start);
-    const body = src.slice(start, end);
-    assert.match(body, /MAX_STREAM_OUTPUT_CHARS/, 'the cap must be applied in streamChat');
-    assert.match(body, /emittedChars/, 'streamChat must accumulate emitted characters');
+describe('the cap covers EVERY public streaming entry point', () => {
+  // Code review 2026-08-12 caught this test asserting the wrong invariant. It
+  // pinned "the cap is in streamChat" and called streamChat "the single point
+  // every chunk passes through" — which was FALSE. streamChatWithGemini is a
+  // second public generator that never touches streamChat, and RAGManager
+  // consumes it directly, so the doc-grounded/RAG path was unbounded. The test
+  // passed the whole time because it only ever looked at streamChat.
+  //
+  // Enumerate the public streaming generators and require each to be bounded,
+  // so adding a third one fails here rather than shipping unbounded.
+  const PUBLIC_STREAM_ENTRY_POINTS = ['streamChat', 'streamChatWithGemini', 'streamWithGroqOrGemini'];
+
+  test('every public streaming generator is enumerated', () => {
+    const declared = [...src.matchAll(/public async \* (\w+)\(/g)].map(m => m[1]);
+    const streaming = declared.filter(n => /^stream/.test(n));
+    assert.deepEqual(
+      streaming.sort(),
+      [...PUBLIC_STREAM_ENTRY_POINTS].sort(),
+      'a public streaming generator was added or renamed — bound it with capOutput and list it here',
+    );
+  });
+
+  test('each public streaming generator applies the output cap', () => {
+    for (const name of PUBLIC_STREAM_ENTRY_POINTS) {
+      const start = src.indexOf(`public async * ${name}(`);
+      assert.ok(start > 0, `could not locate ${name}`);
+      // Bound the slice at the next method declaration.
+      const nextDecl = src.slice(start + 10).search(/\n  (?:public|private) async \*/);
+      const body = src.slice(start, nextDecl > 0 ? start + 10 + nextDecl : start + 4000);
+      // Accept either an inline cap or delegation to a bounded private impl —
+      // `streamChat` is a thin wrapper over `_streamChatTracked`, which holds
+      // the counter. What must never happen is a public streaming generator
+      // that neither caps nor delegates to something that does.
+      const bounded = /capOutput\(|MAX_STREAM_OUTPUT_CHARS/.test(body)
+        || /yield\* this\._streamChatTracked\(/.test(body);
+      assert.ok(bounded, `${name} streams to consumers without a total-output bound`);
+    }
   });
 
   test('reaching the cap ends the stream by returning, never throwing', () => {

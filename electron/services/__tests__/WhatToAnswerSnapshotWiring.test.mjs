@@ -56,7 +56,11 @@ describe('#6 — runWhatShouldISay captures ONE mode snapshot at t0 and threads 
   test('an immutable request snapshot is built and passed into generateStream', () => {
     assert.match(body, /const requestSnapshot: WhatToAnswerRequestSnapshot = Object\.freeze\(/,
       'a frozen request snapshot must be assembled');
-    assert.match(body, /generateStream\([^;]*,\s*modeContextPromise,\s*requestSnapshot,\s*whatToAnswerCancellationToken\.signal\)/,
+    // Anchored on the ORDER of the three threaded values, not on the call
+    // ending there — a later parameter was appended (the truncation sink,
+    // 2026-08-12) and an end-anchored match would fail for a reason unrelated
+    // to the invariant this test guards.
+    assert.match(body, /generateStream\([^;]*,\s*modeContextPromise,\s*requestSnapshot,\s*whatToAnswerCancellationToken\.signal[,)]/,
       'the snapshot and request cancellation signal must be threaded into WhatToAnswerLLM.generateStream');
   });
 

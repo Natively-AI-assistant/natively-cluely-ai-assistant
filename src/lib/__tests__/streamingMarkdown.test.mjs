@@ -441,6 +441,12 @@ describe('the FINALIZED path must survive remark-math, not just this module', ()
     ['other sigils', 'The variables $! and $* are special.'],
     ['awk fields', 'Use $1 and $2 to select fields.'],
     ['currency', 'It costs $100 for $200 total.'],
+    // Odd/multiple dollar counts. Only the OPENING dollar of a rejected pair is
+    // escaped, which leaves a lone `$` behind — these prove that leftover can
+    // never pair with a later dollar and resurrect the math.
+    ['three sigils on one line', 'Use $@ and $< and $# in one line.'],
+    ['sigils far apart', 'Rule uses $@ then prose then $? at the end.'],
+    ['sigils mixed with ANSI-C quoting', "Mix: $@ and $< plus IFS=$'\\n' and $# too."],
   ];
   for (const [name, input] of PROSE) {
     test(`${name} does not reach KaTeX`, async () => {
@@ -454,6 +460,9 @@ describe('the FINALIZED path must survive remark-math, not just this module', ()
     ['spaces inside the expression', 'We know $a + b = c$ holds.'],
     ['single digit', 'Given $5$ apples.'],
     ['display math', 'Put the formula on its own line as $$E=mc^2$$.'],
+    // Both kinds in one line: the sigil must be neutralised without taking the
+    // real expression with it.
+    ['real math alongside a shell sigil', 'Vars $@ are prose but $x$ is math.'],
   ];
   for (const [name, input] of MATH) {
     test(`${name} still reaches KaTeX`, async () => {

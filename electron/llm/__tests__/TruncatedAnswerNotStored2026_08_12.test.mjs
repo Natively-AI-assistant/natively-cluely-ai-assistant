@@ -150,3 +150,68 @@ describe('manual chat refuses to store a truncated answer', () => {
     );
   });
 });
+
+describe('the WTA path is protected too, not just manual chat', () => {
+  // Code review 2026-08-12. The original fix wired manual chat only — while the
+  // live capture that motivated it was a `what_to_answer` turn
+  // (`addAssistantMessage length=25210, surface: what_to_answer`). WTA called
+  // plain `streamChat`, so it could not observe truncation, and
+  // IntelligenceEngine stored the answer unconditionally. A truncated WTA
+  // answer went into the session transcript, usage, and — via
+  // `temporalContext.previousResponses` — the NEXT turn's evidence.
+  //
+  // Third occurrence this session of "fixed one surface, missed the sibling"
+  // (see also 0f4fc959 and the streamChatWithGemini cap gap), which is why
+  // these assertions name both surfaces rather than one.
+  const wtaSrc = fs.readFileSync(path.resolve(__dirname, '../WhatToAnswerLLM.ts'), 'utf8');
+  const engineSrc = fs.readFileSync(path.resolve(__dirname, '../../IntelligenceEngine.ts'), 'utf8');
+
+  test('WhatToAnswerLLM consumes the outcome-bearing API', () => {
+    assert.match(
+      wtaSrc,
+      /streamChatWithOutcome === 'function'/,
+      'WTA must prefer streamChatWithOutcome or it cannot detect a truncated answer',
+    );
+    assert.doesNotMatch(
+      wtaSrc,
+      /for await \(const token of \(?this\.llmHelper[^\n]*\.streamChat\(/,
+      'WTA still consumes plain streamChat directly — that path cannot see truncation',
+    );
+  });
+
+  test('the plain-streamChat fallback is for test doubles only, never production', () => {
+    // WTA falls back to `streamChat` when the injected helper lacks
+    // streamChatWithOutcome, so the 14 suites that stub only `streamChat` keep
+    // working. That fallback loses truncation detection, so it must never be
+    // the live path: assert the REAL LLMHelper exposes the richer method.
+    assert.equal(
+      typeof LLMHelper.prototype.streamChatWithOutcome,
+      'function',
+      'the real LLMHelper lost streamChatWithOutcome — WTA would silently degrade to the pre-fix behaviour',
+    );
+  });
+
+  test('the truncation sink is caller-owned, not instance state', () => {
+    // WhatToAnswerLLM is a long-lived singleton and turns can overlap, so a
+    // `this.lastOutcome` field would race between concurrent answers.
+    assert.match(wtaSrc, /truncationSink\?:\s*\{\s*truncated:\s*boolean\s*\}/);
+    assert.doesNotMatch(wtaSrc, /this\.(lastOutcome|lastTruncated)\b/);
+  });
+
+  test('the engine passes a sink and gates the session write on it', () => {
+    assert.match(engineSrc, /const wtaTruncation = \{ truncated: false \}/);
+    assert.match(engineSrc, /generateStream\([\s\S]{0,600}?wtaTruncation\)/);
+    const guard = engineSrc.indexOf('if (wtaTruncation.truncated) {');
+    assert.ok(guard > 0, 'the engine must gate its write policy on truncation');
+    const block = engineSrc.slice(guard, guard + 500);
+    assert.match(block, /decideSessionWritePolicy/, 'must go through the existing write-policy decision');
+    assert.match(block, /validationOk: false/, 'a truncated answer is not a valid one');
+  });
+
+  test('the gate precedes the addAssistantMessage call it governs', () => {
+    const guard = engineSrc.indexOf('if (wtaTruncation.truncated) {');
+    const write = engineSrc.indexOf("addAssistantMessage(finalWtaAnswer, wtaWriteDecision, 'what_to_answer')");
+    assert.ok(guard > 0 && write > 0);
+    assert.ok(guard < write, 'the write policy must be decided BEFORE the session write');
+  });
+});

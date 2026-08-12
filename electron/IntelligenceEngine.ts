@@ -905,6 +905,13 @@ export class IntelligenceEngine extends EventEmitter {
         // every live token (#3) so the renderer can drop stale-generation batches.
         const snapshotModeInfo = this.getActiveModeInfo();
         const documentGroundedCustomModeActive = snapshotModeInfo?.documentGroundedCustomModeActive === true;
+        // Defect C split (2026-08-01): STRICT knowledge suppression vs broad
+        // source isolation. Strictness consumers below (skip-legacy-retrieval,
+        // forceDocumentGrounding, the generic-knowledge bypass gate, and the
+        // doc-grounded govern site) read THIS; isolation consumers keep the
+        // broad flag. WTA was never migrated when manual chat was
+        // (LLMHelper:5448) — the root asymmetry behind the 2026-08-11 reports.
+        const strictDocumentGroundedActive = (snapshotModeInfo as any)?.strictDocumentGroundedActive === true;
         const snapshotModeId = this.getActiveModeId();
         // The narrow ActiveModeInfo snapshot is enough for planning, but a
         // multi-family typed reference pack also needs the full mode row and its
@@ -1123,7 +1130,7 @@ export class IntelligenceEngine extends EventEmitter {
             // Governed document turns resolve through EvidenceResolver inside
             // WhatToAnswerLLM. Do not start the legacy prefetch in parallel: even
             // an ignored retrieval is an unauthorized competing evidence path.
-            const modeContextPromise: Promise<string> = options?.activeSkill || documentGroundedCustomModeActive
+            const modeContextPromise: Promise<string> = options?.activeSkill || strictDocumentGroundedActive
                 ? Promise.resolve('') // skill/governed-document mode skips legacy retrieval
                 : (async () => {
                     try {
@@ -1145,7 +1152,7 @@ export class IntelligenceEngine extends EventEmitter {
                             } catch { /* flag module unavailable → no rerank */ }
                             return await mm.buildRetrievedActiveModeContextBlockHybrid(
                                 preparedTranscript, preparedTranscript, 1800, undefined, true, snapshotModeInfo?.id, allowRerank,
-                                documentGroundedCustomModeActive ? { forceDocumentGrounding: true } : undefined,
+                                strictDocumentGroundedActive ? { forceDocumentGrounding: true } : undefined,
                             );
                         }
                         return '';
@@ -1498,7 +1505,7 @@ export class IntelligenceEngine extends EventEmitter {
             let candidateProfile = '';
             try {
                 const orchestrator = this.llmHelper.getKnowledgeOrchestrator?.();
-                if (orchestrator?.isKnowledgeMode?.() && !documentGroundedCustomModeActive
+                if (orchestrator?.isKnowledgeMode?.() && !strictDocumentGroundedActive
                     && wtaDecisionAllowsCandidateProfile) {
                     const extracted = extractedQuestion;
                     // Only ground question types that resolve to the candidate's
@@ -2286,11 +2293,30 @@ export class IntelligenceEngine extends EventEmitter {
                         // (`forbiddenFamilies=[]`) and a JD-only decision can
                         // leak résumé content through the rendered pack.
                         turnSourceDecision: canonicalTurn.turnSourceDecision,
-                        govern: true,
+                        // A refusal pack only GOVERNS when the mode's authority
+                        // promises a bounded universe (evidenceRequired
+                        // authorities). profile_only/general_mixed turns whose
+                        // retrieval came back empty fall through to the legacy
+                        // path so the model answers — live report 2026-08-11:
+                        // a WTA screenshot turn in a looking-for-work mode was
+                        // governed into "not directly mentioned in the
+                        // uploaded material" with zero files and an empty
+                        // question, while the same screenshot answered fine on
+                        // manual-chat. packGovernsGeneration is the tested
+                        // predicate for that line.
+                        govern: contextOsStatic.packGovernsGeneration({
+                            answerPolicy: coordinatorResult.pack.answerPolicy,
+                            sourceAuthority: canonicalTurn.sourceAuthority ?? null,
+                            hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                        }),
                     };
                     // The typed pack is now the sole factual injection. Do not also
                     // pass the JIT's raw profile XML into WhatToAnswerLLM.
-                    candidateProfile = '';
+                    // ONLY when the pack actually governs: an ungoverned turn
+                    // (refusal pack in a non-bounded mode, 2026-08-11) runs the
+                    // legacy path, and stripping its profile XML here would
+                    // change legacy behaviour as a side effect of the fix.
+                    if (wtaContextOsGeneration.govern) candidateProfile = '';
                     wtaTrace.noteContext({
                         source: 'context_os_turn_evidence_coordinator',
                         trustLevel: 'high',
@@ -2318,7 +2344,19 @@ export class IntelligenceEngine extends EventEmitter {
             if (wtaTurnContract
                 && wtaTurnContract.sourceOwner === 'clarify'
                 && isIntelligenceFlagEnabled('contextOsPropertyValidation')
-                && !isSpeculative) {
+                && !isSpeculative
+                // Image turns bypass clarification — the manual-chat twin has
+                // had this since its escape hatches; WTA never did (2026-08-11:
+                // a screenshot turn with an EMPTY question was asked "which
+                // source do you mean").
+                && !imagePaths?.length
+                // And a clarify born of a reference-bound mode with ZERO files
+                // is not actionable — there is no universe to disambiguate
+                // into. See clarificationIsActionable (refusalPolicy.ts).
+                && contextOsStatic.clarificationIsActionable({
+                    sourceAuthority: canonicalTurn.sourceAuthority ?? null,
+                    hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                })) {
                 try {
                     const { buildSourceClarification, buildContextOsTrace, logContextOsTrace } = contextOsStatic;
                     // Evidence-execution-repair (2026-07-12): prefer the legacy,
@@ -2421,7 +2459,15 @@ export class IntelligenceEngine extends EventEmitter {
             // block (no double retrieval) and governs the factual prompt.
             if (!wtaContextOsGeneration
                 && wtaTurnContract
-                && documentGroundedCustomModeActive
+                && strictDocumentGroundedActive
+                // Live proof 2026-08-11: documentGroundedCustomModeActive can be
+                // TRUE with hasReferenceFiles FALSE (custom mode, contract seeded
+                // reference_files_primary, zero files). Governing that turn
+                // builds an empty pack whose answerPolicy is ask_clarification,
+                // and the surface then yielded contract.reason — the raw
+                // developer diagnostic — to the user. A doc-grounded govern
+                // with no documents governs nothing: require the files.
+                && Boolean((snapshotModeInfo as any)?.hasReferenceFiles)
                 && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
                 wtaContextOsGeneration = {
                     contract: wtaTurnContract,
@@ -2577,7 +2623,14 @@ export class IntelligenceEngine extends EventEmitter {
             }).lifecycle('provider_dispatched', {
                 providerAttempts: 1,
             });
-            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined, answerPlan, modeContextPromise, requestSnapshot, whatToAnswerCancellationToken.signal);
+            // Code review 2026-08-12: the truncation fix (9b78621b) wired manual
+            // chat only — while the live capture that motivated it was a
+            // what_to_answer turn. A WTA answer cut short by a post-commit
+            // provider failure or the runaway cap was still written to the
+            // session transcript and usage, and fed to the NEXT turn as
+            // prior_assistant_responses evidence.
+            const wtaTruncation = { truncated: false };
+            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined, answerPlan, modeContextPromise, requestSnapshot, whatToAnswerCancellationToken.signal, wtaTruncation);
             let streamAborted = false;
             let emittedStreamingToken = false;
             let streamingTokenBuffer = '';
@@ -2682,6 +2735,17 @@ export class IntelligenceEngine extends EventEmitter {
             // Full-JIT policy forbids deterministic profile fallback here; ship a
             // transparent non-authoritative line instead of guessing from cached/AOT prose.
             let wtaWriteDecision = decideSessionWritePolicy({ finalGenerationMode: 'jit_llm', validationOk: true, sourceContractHonored: true });
+            // An INCOMPLETE answer must not become session history. It would be
+            // replayed to the next turn as prior_assistant_responses evidence
+            // and stand in for a complete answer that was never produced. The
+            // user still SEES the partial text; it just is not stored.
+            if (wtaTruncation.truncated) {
+                wtaWriteDecision = decideSessionWritePolicy({
+                    finalGenerationMode: 'provider_error_no_answer',
+                    validationOk: false,
+                    criticalViolations: ['stream_truncated'],
+                });
+            }
             if (liveDeadlineFired && !emittedStreamingToken && !isSpeculative
                 && this.currentGenerationId === generationId) {
                 streamingTokenBuffer = '';
@@ -3148,7 +3212,18 @@ export class IntelligenceEngine extends EventEmitter {
             // retrieval window. Zero-fabrication remains sacred: repairs that add a
             // number+unit not present in the evidence are rejected.
             try {
-                if (!isCoding && documentGroundedCustomModeActive && this.currentGenerationId === generationId) {
+                // Review finding F1 (2026-08-12): the SEVENTH strictness
+                // consumer, missed by the layer-5 migration. On the broad flag
+                // this validator ran for template-seeded fileless modes, built
+                // an empty retrievedBlock, and OVERWROTE a correct streamed
+                // answer with "I could not find that in the retrieved sections
+                // of the document." — one typed question away from the fixed
+                // turn. Strict + files + doc-shaped answer (the manual twin's
+                // parity term, ipcHandlers ~4086) are all required now.
+                if (!isCoding && strictDocumentGroundedActive
+                    && Boolean((snapshotModeInfo as any)?.hasReferenceFiles)
+                    && isDocGroundedAnswerType(answerPlan.answerType)
+                    && this.currentGenerationId === generationId) {
                     const docQuestion = (answerPlan.question || question || extractedQuestion.latestQuestion || lastInterviewerTurn || '').trim();
                     if (docQuestion) {
                         const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');

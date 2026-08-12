@@ -160,6 +160,14 @@ export class WhatToAnswerLLM {
         // The request-owned WTA controller. A newer WTA trigger aborts it so the
         // provider request ends rather than continuing as a hidden stale stream.
         abortSignal?: AbortSignal,
+        // Caller-owned truncation sink (code review 2026-08-12). A stream that
+        // stops early — a provider failing after its first token, or the runaway
+        // output cap — ends by RETURNING, so this generator cannot tell a
+        // truncated answer from a complete one and neither can the engine. The
+        // engine gates its session write on this; see decideSessionWritePolicy.
+        // Owned by the caller rather than stored on the instance because
+        // WhatToAnswerLLM is a long-lived singleton and turns can overlap.
+        truncationSink?: { truncated: boolean },
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
         let tStart = 0, tIntent = 0, tTemporal = 0, tMode = 0, tTrunc = 0, tPrompt = 0, tStreamStart = 0;
@@ -833,7 +841,18 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // turn (V3's system prompt + Context OS's user pack, V3's user
             // prompt discarded). Only set when _v3p actually rides this stream.
             const _wtaRoute = _v3p ? { ...wtaRouteOptions, v3Owned: true } : wtaRouteOptions;
-            for await (const token of this.llmHelper.streamChat(_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, _wtaRoute)) {
+            // Prefer the outcome-bearing API so a truncated answer can be kept
+            // out of session history. Fourteen existing suites inject a test
+            // double that implements only `streamChat`; those double s degrade
+            // to the pre-fix behaviour (no truncation detection) rather than
+            // throwing. Production always takes the first branch — pinned by a
+            // test asserting the real LLMHelper exposes the method, so this
+            // fallback can never quietly become the live path.
+            const _wtaArgs = [_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, _wtaRoute] as const;
+            const _wtaStream = typeof (this.llmHelper as any).streamChatWithOutcome === 'function'
+                ? (this.llmHelper as any).streamChatWithOutcome(..._wtaArgs)
+                : { stream: (this.llmHelper as any).streamChat(..._wtaArgs), outcome: { truncated: false } };
+            for await (const token of _wtaStream.stream) {
                 if (MEASURE) {
                     const now = performance.now();
                     if (!tFirstToken) tFirstToken = now;
@@ -843,6 +862,13 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 tokenCount++;
                 streamedBuffer.push(token);
                 yield token;
+            }
+            // Publish the outcome the moment the stream drains. `outcome` is
+            // only populated once the generator completes, so this must sit
+            // AFTER the loop and BEFORE any early return below.
+            if (truncationSink && _wtaStream.outcome.truncated) {
+                truncationSink.truncated = true;
+                console.warn(`[WhatToAnswerLLM] answer is INCOMPLETE (${_wtaStream.outcome.reason}) — the engine will not store it as session history`);
             }
 
             // Post-stream code sanity check. Fire-and-forget log + telemetry on

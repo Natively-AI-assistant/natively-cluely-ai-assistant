@@ -4857,6 +4857,9 @@ let isMultimodal = !!(imagePaths?.length);
     // without this an error after the first token could append as many as
     // 3 x providers.length complete answers to the partial the user already saw.
     const commit = { emitted: false };
+    // Total-output budget, shared across every rotation so a looping provider
+    // cannot get a fresh 16k on each retry. See capOutput.
+    const outputBudget = { chars: 0 };
 
     for (let rotation = 0; rotation < MAX_FULL_ROTATIONS; rotation++) {
       if (abortSignal?.aborted) return;
@@ -4872,7 +4875,7 @@ let isMultimodal = !!(imagePaths?.length);
         const provider = providers[i];
         try {
           console.log(`[LLMHelper] ${rotation === 0 ? '🚀' : '🔁'} Attempting ${provider.name}...`);
-          yield* this.trackCommit(provider.execute() as any, commit);
+          yield* this.capOutput(this.trackCommit(provider.execute() as any, commit), outputBudget, provider.name);
           console.log(`[LLMHelper] ✅ ${provider.name} stream completed successfully`);
           return; // SUCCESS — exit immediately
         } catch (err: any) {
@@ -5215,6 +5218,39 @@ let isMultimodal = !!(imagePaths?.length);
    * (`typeof tok === 'string' && tok.trim().length > 0`) so the two cannot drift:
    * whitespace-only preamble does not commit, real text does.
    */
+  /**
+   * Total-output bound, shared by every public streaming entry point.
+   *
+   * Code review 2026-08-12: the original cap lived inline in `streamChat` and
+   * its comment claimed "streamChat is the single point every chunk passes
+   * through". That was FALSE — `streamChatWithGemini` is a second public
+   * generator that never touches `streamChat`, and RAGManager consumes it
+   * directly (RAGManager.ts:281,312) guarded only by RAG_STREAM_STALL_MS. Like
+   * every other time-based guard, a stall deadline cannot catch a runaway,
+   * which is fast by definition — so the doc-grounded/RAG generation path was
+   * completely unbounded by the very fix meant to bound it.
+   *
+   * `state` is caller-owned so a retry loop accumulates across attempts rather
+   * than resetting the budget on every rung.
+   */
+  private async * capOutput(
+    inner: AsyncGenerator<string, void, unknown>,
+    state: { chars: number },
+    label: string,
+  ): AsyncGenerator<string, void, unknown> {
+    const { MAX_STREAM_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
+    for await (const chunk of inner) {
+      yield chunk;
+      state.chars += typeof chunk === 'string' ? chunk.length : 0;
+      if (state.chars > MAX_STREAM_OUTPUT_CHARS) {
+        console.warn(
+          `[LLMHelper] ${label} exceeded MAX_STREAM_OUTPUT_CHARS (${state.chars} > ${MAX_STREAM_OUTPUT_CHARS}) — ending the turn. The model is not converging.`,
+        );
+        return;
+      }
+    }
+  }
+
   private async * trackCommit(
     inner: AsyncGenerator<string, void, unknown>,
     state: { emitted: boolean },
@@ -8578,6 +8614,24 @@ let isMultimodal = !!(imagePaths?.length);
    * @param config - Optional temperature and max tokens
    */
   public async * streamWithGroqOrGemini(
+    groqMessage: string,
+    geminiMessage: string,
+    config?: { temperature?: number; maxTokens?: number }
+  ): AsyncGenerator<string, void, unknown> {
+    // Bounded like every other PUBLIC streaming entry point (code review
+    // 2026-08-12). The Groq branch already sets max_tokens, but the Gemini
+    // fallback delegates to streamWithGeminiModel with no output bound at all.
+    // This method currently has no callers — the doc comment above claiming
+    // RecapLLM/FollowUpLLM/WhatToAnswerLLM use it is stale — but it is public,
+    // so it is bounded rather than left as a trap for the next caller.
+    yield* this.capOutput(
+      this._streamWithGroqOrGeminiInner(groqMessage, geminiMessage, config),
+      { chars: 0 },
+      'streamWithGroqOrGemini',
+    );
+  }
+
+  private async * _streamWithGroqOrGeminiInner(
     groqMessage: string,
     geminiMessage: string,
     config?: { temperature?: number; maxTokens?: number }
