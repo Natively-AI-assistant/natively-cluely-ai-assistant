@@ -30,9 +30,14 @@ const modelMgrPath = path.join(distRoot, 'modelManager.js');
 // pathToFileURL, not a bare path: dynamic import() requires a valid URL, and
 // a raw Windows path (C:\...) is not one — StartupModelValidation.test.mjs
 // establishes this exact pattern for the same reason.
-const { isModelCached, NEMOTRON_REQUIRED_FILES, MODEL_CATALOG_IDS, getModelSizeBytes } = await import(
-  pathToFileURL(modelMgrPath).href
-);
+const {
+  isModelCached,
+  NEMOTRON_REQUIRED_FILES,
+  MODEL_CATALOG_IDS,
+  getModelSizeBytes,
+  getModelExternalDataFormat,
+  getAvailableModels,
+} = await import(pathToFileURL(modelMgrPath).href);
 
 const MODEL_ID = 'onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4';
 const REQUIRED_FILES = [
@@ -77,4 +82,37 @@ test('nemotron-rnnt sessionLayout: isModelCached is false when a required file i
   assert.equal(isModelCached(MODEL_ID), false);
   fs.writeFileSync(path.join(modelDir, 'joint.onnx.data'), 'x'); // restore
   assert.equal(isModelCached(MODEL_ID), true);
+});
+
+// ── hidden: true gating (ship-gated: Nemotron transcribes real speech as an
+// empty string — see task-11-report.md / task-11-debug1-report.md). The
+// catalog entry, download plumbing, and worker routing all stay intact;
+// only getAvailableModels() (the single function every user-facing picker
+// consumes) must stop surfacing it.
+
+test('getAvailableModels() does NOT include the hidden nemotron entry', () => {
+  const models = getAvailableModels();
+  assert.ok(Array.isArray(models) && models.length > 0, 'sanity: catalog is non-empty');
+  assert.equal(
+    models.some((m) => m.id === MODEL_ID),
+    false,
+    'nemotron entry must not appear in the user-facing picker list',
+  );
+});
+
+test('MODEL_CATALOG_IDS (unfiltered) still includes the nemotron id despite it being picker-hidden', () => {
+  // Regression guard: proves the hidden filter was applied only inside
+  // getAvailableModels(), not to the underlying catalog/id set used by
+  // startup validation of a previously-persisted setting.
+  assert.ok(MODEL_CATALOG_IDS.has(MODEL_ID));
+});
+
+test('getModelSizeBytes / getModelExternalDataFormat still resolve for the hidden nemotron id', () => {
+  // These back the download/worker-init flow, not the picker — must keep
+  // working exactly as before regardless of picker visibility.
+  assert.equal(getModelSizeBytes(MODEL_ID), Math.round(793 * 1024 * 1024));
+  // Nemotron's catalog entry does not declare externalDataFormat (flat
+  // repo layout, no external-data split) — undefined is the correct,
+  // unchanged resolution, not a thrown error or a missing-id fallback.
+  assert.equal(getModelExternalDataFormat(MODEL_ID), undefined);
 });

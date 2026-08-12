@@ -76,6 +76,21 @@ export interface WhisperModelInfo {
    * missing forever, so it re-downloads on every launch and never runs.
    */
   sessionLayout?: 'encoder-decoder' | 'single' | 'nemotron-rnnt';
+  /**
+   * Set when this catalog entry is not yet functional and must not be
+   * surfaced in any user-facing model picker. Everything else about the
+   * entry (download provider, worker routing, streaming plumbing) stays
+   * intact — this only controls visibility in getAvailableModels()'s
+   * output. Set for Nemotron 3.5 ASR Streaming pending a real-model go/no-go
+   * fix: it currently transcribes real speech as an empty string (see
+   * .superpowers/sdd/2026-08-10-nemotron-local-stt/task-11-report.md
+   * and task-11-debug1-report.md for the full diagnostic). Remove this flag
+   * only once that same integration test
+   * (electron/audio/whisper/nemotron/__tests__/integration.test.mjs)
+   * produces a real, materially correct, non-empty transcription against a
+   * real downloaded model.
+   */
+  hidden?: boolean;
 }
 
 export interface WorkerInitMessage {

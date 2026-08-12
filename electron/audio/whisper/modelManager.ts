@@ -37,6 +37,12 @@ export const MODEL_CATALOG: WhisperModelInfo[] = [
   //     (40 locales, tiered — see nemotron/languageTable.ts for which are
   //     exposed). Flat repo layout (no onnx/ subdir, no dtype suffix) — its
   //     cache check is a dedicated branch below, not expectedOnnxFiles().
+  //
+  //     hidden: true — real-model testing found it transcribes speech as an
+  //     empty string (complete functional failure, root cause unresolved).
+  //     See .superpowers/sdd/2026-08-10-nemotron-local-stt/task-11-report.md
+  //     and task-11-debug1-report.md. All engineering below stays intact;
+  //     only user-facing picker visibility is gated.
   {
     id: 'onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4',
     name: 'Nemotron 3.5 ASR Streaming',
@@ -47,6 +53,7 @@ export const MODEL_CATALOG: WhisperModelInfo[] = [
     status: 'missing',
     streaming: true,
     sessionLayout: 'nemotron-rnnt',
+    hidden: true,
   },
 
   // ── Distil-Whisper — same architecture as Whisper, distilled to 1/2 layers,
@@ -335,7 +342,7 @@ export function getAvailableModels(): WhisperModelInfo[] {
     const darwinMajor = parseInt(release.split('.')[0], 10);
     // Darwin 22 = macOS 13 Ventura. Darwin 21 = macOS 12 Monterey.
     if (Number.isNaN(darwinMajor) || darwinMajor < 22) {
-      return MODEL_CATALOG.map(m => ({
+      return MODEL_CATALOG.filter(m => !m.hidden).map(m => ({
         ...m,
         status: 'error' as const,
         errorMessage: 'Requires macOS 13 Ventura or later. Local models are not supported on macOS 12 (Monterey) or earlier.',
@@ -353,7 +360,7 @@ export function getAvailableModels(): WhisperModelInfo[] {
   } catch {
     dtype = undefined; // fall back to legacy directory-non-empty check
   }
-  return MODEL_CATALOG.map(m => ({
+  return MODEL_CATALOG.filter(m => !m.hidden).map(m => ({
     ...m,
     status: isModelCached(m.id, dtype) ? 'available' : 'missing',
   }));
