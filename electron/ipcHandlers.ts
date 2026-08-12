@@ -2170,7 +2170,14 @@ export function initializeIpcHandlers(appState: AppState): void {
             && isIntelligenceFlagEnabled('contextOsPropertyValidation')
             && !isCodingChat
             && !imagePaths?.length
-            && !isStealthChat) {
+            && !isStealthChat
+            // A clarify born of a reference-bound mode with ZERO files is not
+            // actionable — nothing to disambiguate into (2026-08-11). Same
+            // predicate as the WTA twin; see refusalPolicy.ts.
+            && require('./intelligence/context-os').clarificationIsActionable({
+                sourceAuthority: manualSourceContract?.sourceAuthority ?? null,
+                hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
+            })) {
           try {
             const { buildSourceClarification } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
             // Evidence-execution-repair (2026-07-12): two independent source-
@@ -2930,7 +2937,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
             && isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled')) {
           try {
-            const { TurnEvidenceCoordinator, ProfileEvidenceService } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            const { TurnEvidenceCoordinator, ProfileEvidenceService, packGovernsGeneration } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
             const { ModesManager } = require('./services/ModesManager');
             const modesMgr = ModesManager.getInstance();
             const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
@@ -3034,9 +3041,18 @@ export function initializeIpcHandlers(appState: AppState): void {
                 sourceAuthority: manualSourceContract?.sourceAuthority ?? 'ask_if_ambiguous',
               },
               turnSourceDecision: manualTurnSourceDecision,
-              govern: true,
+              // Same line as the WTA site (2026-08-11): a refusal pack governs
+              // only when the mode's authority promises a bounded universe.
+              // Elsewhere an empty pack means "the evidence system has nothing
+              // to add" and the legacy path answers. See
+              // context-os/refusalPolicy.ts.
+              govern: packGovernsGeneration({
+                answerPolicy: coordinatorResult.pack.answerPolicy,
+                sourceAuthority: manualSourceContract?.sourceAuthority ?? null,
+                hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
+              }),
             };
-            coordinatorGovernedProfileEvidence = true;
+            coordinatorGovernedProfileEvidence = manualContextOsGeneration.govern;
             iTrace.noteContext({
               source: 'context_os_turn_evidence_coordinator',
               trustLevel: 'high',
@@ -3213,6 +3229,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                 ? { contextOsGeneration: manualContextOsGeneration }
                 : turnContract
                   && manualActiveMode?.documentGroundedCustomModeActive === true
+                  // Same rule as the WTA twin (2026-08-11): no files -> no doc-grounded govern.
+                  && Boolean((manualActiveMode as any)?.hasReferenceFiles)
                   && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
                 ? {
                     contextOsGeneration: (manualContextOsGeneration = {

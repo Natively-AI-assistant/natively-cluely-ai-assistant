@@ -228,8 +228,13 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // items, create a second factual authority, and race the active mode.
             // Legacy document-only WTA contexts arrive without a pack and retain
             // the existing resolver path below.
+            // Review finding F3 (2026-08-12): keying on pack PRESENCE meant an
+            // UNGOVERNED refuse pack (govern:false — the layer-1 fall-through)
+            // still suppressed legacy mode-context retrieval below. govern:false
+            // must actually mean the legacy path, as layer 1's contract claims.
             let governedEvidencePack: import('../intelligence/context-os').EvidencePack | null =
-                initialContextOsGeneration?.evidencePack ?? null;
+                initialContextOsGeneration?.govern
+                    ? (initialContextOsGeneration?.evidencePack ?? null) : null;
             // Skill mode owns the system prompt — skip the (potentially expensive
             // hybrid retrieval) mode-context block fetch entirely. A pre-resolved
             // governed packet likewise skips legacy/raw retrieval.
@@ -259,7 +264,13 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     // a second line of defence for other call paths.)
                     const activeModeGroundingInfo = modesManager.getActiveModeDocumentGroundingInfo?.(requestSnapshot?.modeUniqueId);
                     const documentGroundedCustomModeActive = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
-                    const forceDocumentGrounding = documentGroundedCustomModeActive;
+                    // Defect C (2026-08-01) prescribed the split: knowledge
+                    // suppression reads strictDocumentGroundedActive; isolation
+                    // keeps the broad flag. Manual chat was migrated
+                    // (LLMHelper:5448); this surface was not, so WTA ran the
+                    // strict doc pipeline for every template-seeded mode with
+                    // zero files — the root of the 2026-08-11 denial reports.
+                    const forceDocumentGrounding = activeModeGroundingInfo?.strictDocumentGroundedActive === true;
                     const retrievalOptions = forceDocumentGrounding
                         ? { forceDocumentGrounding: true, followUpReferentHint: temporalContext?.previousResponses?.slice(-1)?.[0] }
                         : undefined;
@@ -579,11 +590,15 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     const pack = governedEvidencePack ?? _cog.evidencePack;
                     if (!pack) throw new Error('governed WTA turn missing canonical EvidencePack');
                     if (pack.answerPolicy === 'ask_clarification') {
-                        yield _cog.contract.reason || 'Which source should I use for that answer?';
+                        // contract.reason is a developer diagnostic (e.g. "sourceAuthority=
+                        // reference_files_primary; requestedProperty=unknown") and was
+                        // yielded VERBATIM to a live user (2026-08-11). Reasons are for
+                        // logs; users get the human question.
+                        yield 'Which source should I use for that answer?';
                         return;
                     }
                     if (pack.answerPolicy === 'refuse_insufficient_evidence') {
-                        yield buildInsufficientPropertyAnswer({ property: pack.requestedProperty });
+                        yield buildInsufficientPropertyAnswer({ property: pack.requestedProperty, sourceOwner: pack.sourceOwner });
                         return;
                     }
                     const rendered = renderGoverningFactualBlock({ ..._cog, evidencePack: pack });
