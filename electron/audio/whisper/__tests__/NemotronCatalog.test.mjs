@@ -84,30 +84,32 @@ test('nemotron-rnnt sessionLayout: isModelCached is false when a required file i
   assert.equal(isModelCached(MODEL_ID), true);
 });
 
-// ── hidden: true gating (ship-gated: Nemotron transcribes real speech as an
-// empty string — see task-11-report.md / task-11-debug1-report.md). The
-// catalog entry, download plumbing, and worker routing all stay intact;
-// only getAvailableModels() (the single function every user-facing picker
-// consumes) must stop surfacing it.
+// ── picker visibility (Task 11 fix1 round: UNHIDDEN — the real go/no-go
+// integration test now passes, 77.8% word overlap vs. the required 50%, see
+// task-11-fix1-report.md. Previously ship-gated behind `hidden: true`
+// because Nemotron transcribed real speech as an empty string — see
+// task-11-report.md / task-11-debug1-report.md / task-11-debug2-report.md /
+// task-11-debug3-report.md for the full root-cause history. The catalog
+// entry, download plumbing, and worker routing were never touched by the
+// gating; only getAvailableModels() (the single function every user-facing
+// picker consumes) was filtering it out — that filter is now moot for this
+// id since `hidden` is no longer set on its catalog entry.
 
-test('getAvailableModels() does NOT include the hidden nemotron entry', () => {
+test('getAvailableModels() now includes the previously-hidden nemotron entry', () => {
   const models = getAvailableModels();
   assert.ok(Array.isArray(models) && models.length > 0, 'sanity: catalog is non-empty');
   assert.equal(
     models.some((m) => m.id === MODEL_ID),
-    false,
-    'nemotron entry must not appear in the user-facing picker list',
+    true,
+    'nemotron entry must appear in the user-facing picker list now that the go/no-go gate passes',
   );
 });
 
-test('MODEL_CATALOG_IDS (unfiltered) still includes the nemotron id despite it being picker-hidden', () => {
-  // Regression guard: proves the hidden filter was applied only inside
-  // getAvailableModels(), not to the underlying catalog/id set used by
-  // startup validation of a previously-persisted setting.
+test('MODEL_CATALOG_IDS (unfiltered) still includes the nemotron id', () => {
   assert.ok(MODEL_CATALOG_IDS.has(MODEL_ID));
 });
 
-test('getModelSizeBytes / getModelExternalDataFormat still resolve for the hidden nemotron id', () => {
+test('getModelSizeBytes / getModelExternalDataFormat resolve for the nemotron id', () => {
   // These back the download/worker-init flow, not the picker — must keep
   // working exactly as before regardless of picker visibility.
   assert.equal(getModelSizeBytes(MODEL_ID), Math.round(793 * 1024 * 1024));

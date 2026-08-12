@@ -2,15 +2,35 @@
 import { InferenceSession, Tensor } from 'onnxruntime-node';
 import path from 'path';
 import { getBoundedOnnxSessionOptions } from '../../../utils/onnxThreadConfig';
-import { computeMelFrame, CHUNK_SAMPLES, N_MELS, N_FRAMES } from './melFrontend';
+import { computeMelFrame, CHUNK_SAMPLES, N_MELS, N_FRAMES, LOOKBACK_SAMPLES } from './melFrontend';
 import { createZeroCacheState, nextCacheState, type NemotronCacheState } from './cacheState';
 import { greedyDecodeFrame, BLANK_ID, MAX_SYMBOLS_PER_STEP, type DecoderState } from './rnntDecoder';
 import { loadNemotronTokenizer, type NemotronTokenizer } from './tokenizer';
 
-// English default (<en-US> in the export's vocabulary) until Task 12 wires
-// real per-session selection — see design doc / Task 7 interfaces note for how
-// this was resolved from tokenizer.json's model.vocab, not guessed.
-const DEFAULT_LANG_ID = 2947;
+// Task 11 fix1 round: DEFAULT_LANG_ID = 0, empirically verified against real
+// audio with Part A's real cross-chunk pre-cache history fix in place — NOT
+// derived from the vocab and NOT assumed transferred from the FP16 sibling
+// export's language_mask scheme (that mechanism is structurally different,
+// a one-hot [1,128] mask vs. this export's scalar lang_id input — see
+// task-11-debug3-report.md §1c). 0 was tried first because it's the FP16
+// export's own confirmed en-US index (task-11-debug3-report.md §1c) and the
+// most concrete real number available; task-11-debug1-report.md §4's earlier
+// 0-127 sweep found id=0 behaviorally distinct (constant `▁` runner-up
+// cluster) but did NOT flip any frame non-blank — that sweep ran BEFORE
+// Part A's pre-cache fix existed. Retested here, on top of Part A: lang_id=0
+// produces real, recognizable transcribed text ("Quick brown fox jump s over
+// the la zy dog", 77.8% word overlap vs the known fixture phrase) where the
+// previous value (2947, a vocab-token id mistakenly used as a conditioning
+// index — task-11-debug1-report.md §4) still produces empty output even
+// with Part A's fix applied. Also retested id=7 (highest min-margin in the
+// original 0-127 sweep) — still empty — and id=102 (lowest min-margin) —
+// partial (44.4% overlap, worse than 0). See task-11-fix1-report.md's Part B
+// section for the full sweep and per-value results.
+//
+// Previous value, kept here as a comment for traceability: 2947 (<en-US> in
+// the export's TEXT VOCABULARY, not a language-conditioning index — confirmed
+// wrong in task-11-debug1-report.md §4).
+const DEFAULT_LANG_ID = 0;
 
 // Decoder LSTM: 2 layers, hidden_size 640, batch 1 — verified via Task 1's
 // recorded decoder.onnx inputMetadata (h_in/c_in shape [2, "batch", 640]),
@@ -60,6 +80,14 @@ export class NemotronEngine {
   private pendingBuffer = new Float32Array(CHUNK_SAMPLES);
   private pendingLength = 0;
   private langId = DEFAULT_LANG_ID;
+  // Task 11 fix1 round: real raw-PCM cross-chunk history, replacing the old
+  // synthetic-zero-padding approach — see melFrontend.ts's computeMelFrame
+  // doc comment and LOOKBACK_SAMPLES' comment for the full measured
+  // methodology. Empty (no real history) until the first chunk is processed;
+  // reset() (segment boundary) clears it back to empty, matching the FP16
+  // reference export's own chunk-0 all-zero pre_cache behavior
+  // (task-11-debug3-report.md §1d).
+  private lookbackBuffer = new Float32Array(0);
 
   private constructor(
     encoderSession: InferenceSession,
@@ -92,6 +120,7 @@ export class NemotronEngine {
     this.cacheState = createZeroCacheState(this.encoderSession);
     this.decoderState = zeroDecoderState();
     this.pendingLength = 0;
+    this.lookbackBuffer = new Float32Array(0);
   }
 
   async pushAudio(pcm: Float32Array): Promise<ChunkTranscript[]> {
@@ -126,10 +155,20 @@ export class NemotronEngine {
    * once. A second failure is a real problem and propagates.
    */
   private async runEncoder(chunk: Float32Array): Promise<Record<string, Tensor>> {
-    const melFeatures = await computeMelFrame(chunk);
+    // Task 11 fix1 round: pass the current real cross-chunk lookback (empty
+    // only on the very first chunk of a segment) so computeMelFrame's
+    // leading PRE_ENCODE_CACHE_SIZE frames are real history, not synthetic
+    // padding. `chunk` is always exactly CHUNK_SAMPLES long here (both
+    // pushAudio's pendingBuffer and flush()'s zero-padded remainder), so its
+    // own tail is always >= LOOKBACK_SAMPLES long — `.slice()` (not
+    // `.subarray()`) copies, so this is safe even though `chunk` may be the
+    // reused pendingBuffer scratch array that gets overwritten by the next
+    // pushAudio() call.
+    const melFeatures = await computeMelFrame(chunk, this.lookbackBuffer);
+    this.lookbackBuffer = chunk.slice(chunk.length - LOOKBACK_SAMPLES);
     // [1, N_FRAMES, N_MELS] — time-major, matching the encoder's real
     // audio_signal shape [1, 65, 128] (Task 1's recorded inputMetadata).
-    // computeMelFrame's transpose:true + fixed min/max_num_frames already
+    // computeMelFrame's transpose:true + real-history assembly already
     // produce data in this exact layout — no reshaping needed here.
     const audioSignal = new Tensor('float32', melFeatures, [1, N_FRAMES, N_MELS]);
     const length = new Tensor('int64', new BigInt64Array([BigInt(N_FRAMES)]), [1]);

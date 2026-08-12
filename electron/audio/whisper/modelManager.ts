@@ -38,11 +38,18 @@ export const MODEL_CATALOG: WhisperModelInfo[] = [
   //     exposed). Flat repo layout (no onnx/ subdir, no dtype suffix) — its
   //     cache check is a dedicated branch below, not expectedOnnxFiles().
   //
-  //     hidden: true — real-model testing found it transcribes speech as an
-  //     empty string (complete functional failure, root cause unresolved).
-  //     See .superpowers/sdd/2026-08-10-nemotron-local-stt/task-11-report.md
-  //     and task-11-debug1-report.md. All engineering below stays intact;
-  //     only user-facing picker visibility is gated.
+  //     Previously hidden: true — real-model testing (task-11-report.md,
+  //     task-11-debug1-report.md, task-11-debug2-report.md) found this
+  //     export transcribed speech as an empty string (complete functional
+  //     failure). Root cause (task-11-fix1-report.md): the driving code
+  //     baked synthetic zero-padding into the encoder's leading 9
+  //     "pre_encode_cache" frames instead of real cross-chunk mel history
+  //     (melFrontend.ts/nemotronEngine.ts), plus a wrong `lang_id` value
+  //     (2947 — a vocab-token id, not a conditioning index). Both fixed:
+  //     NemotronEngine now carries a real raw-PCM lookback buffer across
+  //     chunk boundaries, and DEFAULT_LANG_ID is 0 (empirically verified).
+  //     The real go/no-go integration test now passes (77.8% word overlap
+  //     vs. the required 50%) — unhidden as a real, shippable fix.
   {
     id: 'onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4',
     name: 'Nemotron 3.5 ASR Streaming',
@@ -53,7 +60,6 @@ export const MODEL_CATALOG: WhisperModelInfo[] = [
     status: 'missing',
     streaming: true,
     sessionLayout: 'nemotron-rnnt',
-    hidden: true,
   },
 
   // ── Distil-Whisper — same architecture as Whisper, distilled to 1/2 layers,
