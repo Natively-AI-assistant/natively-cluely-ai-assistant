@@ -163,7 +163,9 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  /* Content stacks from the top; the caption is pushed down by its own
+     `margin-top: auto` so it still sits on the floor without space-between
+     stranding the figure in the middle. */
   padding: 26px 22px;
   border-right: 1px solid rgba(214, 178, 106, 0.13);
   background: linear-gradient(168deg, #131110 0%, #080706 100%);
@@ -175,14 +177,22 @@
   letter-spacing: 0.22em;
   line-height: 1.4;
 }
+/* Anchored just under the eyebrow, NOT stretched. With `flex: 1 1 auto` the
+   figure absorbed all the slack and space-between pushed the caption to the
+   floor, leaving a large dead void mid-plate — visible immediately once this
+   was actually rendered rather than reasoned about. */
 .review-plate-figure {
   display: flex;
-  flex: 1 1 auto;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-start;
-  min-height: 92px;
+  margin-top: 18px;
 }
+/* Sits directly under the figure, not pinned to the plate floor. Anchoring it
+   at the bottom left a dead band through the plate's middle at every step —
+   only visible once rendered. Eyebrow → figure → caption now read as one
+   block, and the plate's height is free to follow the right column. */
 .review-plate-caption {
+  margin-top: 10px;
   color: rgba(255, 255, 255, 0.42);
   font-size: 10.5px;
   font-variant-numeric: tabular-nums;
@@ -200,12 +210,15 @@
   text-shadow: 0 0 46px rgba(214, 178, 106, 0.26);
 }
 
+/* Georgia FIRST, not CelebMF. CelebMF's “ is two narrow ticks — at 108px it
+   read as a pair of stray marks rather than a quotation mark. Georgia has a
+   true ball-terminal open-quote and ships on macOS and Windows alike. */
 .review-quote {
   display: block;
-  margin-top: -26px;
-  color: rgba(214, 178, 106, 0.4);
-  font-family: CelebMF, Georgia, serif;
-  font-size: 108px;
+  margin-top: -34px;
+  color: rgba(214, 178, 106, 0.42);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 118px;
   line-height: 1;
 }
 
