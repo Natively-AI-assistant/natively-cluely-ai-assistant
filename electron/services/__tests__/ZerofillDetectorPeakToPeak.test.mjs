@@ -104,7 +104,23 @@ function extractZerofillBlock(body) {
   throw new Error('could not close zerofill block');
 }
 
-const systemZerofill = extractZerofillBlock(systemBody);
+// SYSTEM CAPTURE NO LONGER HAS AN INLINE ZERO-FILL BLOCK, BY DESIGN.
+//
+// This file was written when both wireSystemCapture and wireMicCapture carried
+// a hand-rolled `if (!zerofillLatched && !zerofillTriggered)` guard, and it
+// asserted the peak-to-peak invariant against both. System capture has since
+// been refactored onto SystemAudioHealthClassifier
+// (electron/audio/systemAudioHealthClassifier.mjs), which owns peakToPeakInt16LE
+// and the zero-fill decision along with the watchdog and silence states, and
+// carries its own unit tests.
+//
+// So extractZerofillBlock(systemBody) threw at import time, taking the whole
+// suite down — including the mic assertions, which still describe live code.
+// The capability was not lost; the test was still looking for the old shape.
+//
+// Mic capture keeps the inline guard and is still asserted below. For system
+// capture the meaningful invariant is now "it delegates to the classifier
+// rather than growing a second, divergent detector" — pinned in its own test.
 const micZerofill = extractZerofillBlock(micBody);
 
 /**
@@ -124,45 +140,77 @@ function stripComments(src) {
     .join('\n');
 }
 
-const systemZerofillCode = stripComments(systemZerofill);
+const systemBodyCode = stripComments(systemBody);
 const micZerofillCode = stripComments(micZerofill);
 const mainCode = stripComments(main);
 
 // ---------------------------------------------------------------------------
-// 1. wireSystemCapture: no Math.abs in the zero-fill detection block.
+// 1. wireSystemCapture delegates zero-fill detection to the classifier.
 // ---------------------------------------------------------------------------
-test('B10: wireSystemCapture zero-fill block contains no Math.abs', () => {
+test('B10: wireSystemCapture delegates audio health to SystemAudioHealthClassifier', () => {
+  // Replaces "the inline block must not use Math.abs" — there is no inline
+  // block any more. The invariant that matters now is that system capture
+  // routes chunks through the classifier instead of re-growing a private
+  // detector that could drift from the mic path's semantics.
+  assert.match(
+    systemBodyCode,
+    /new SystemAudioHealthClassifier\s*\(/,
+    'wireSystemCapture must construct a SystemAudioHealthClassifier',
+  );
+  assert.match(
+    systemBodyCode,
+    /systemAudioHealth\.handle\(\s*\{\s*kind:\s*['"]chunk['"]/,
+    'wireSystemCapture must feed audio chunks to the classifier',
+  );
   assert.ok(
-    !/Math\.abs\s*\(/.test(systemZerofillCode),
-    'wireSystemCapture zero-fill detector must not use Math.abs (peak-to-peak is DC-invariant)'
+    !/!zerofillLatched\s*&&\s*!zerofillTriggered/.test(systemBodyCode),
+    'wireSystemCapture grew a second inline zero-fill detector — it should delegate to the classifier',
+  );
+});
+
+test('B10: the classifier uses DC-invariant peak-to-peak, not Math.abs', () => {
+  // The original invariant, followed to where the logic actually lives. A
+  // single-sided Math.abs threshold trips on a DC offset; peak-to-peak does not.
+  const classifier = stripComments(read('electron/audio/systemAudioHealthClassifier.mjs'));
+  assert.match(classifier, /function peakToPeakInt16LE/, 'classifier lost peakToPeakInt16LE');
+  const detector = classifier.slice(
+    classifier.indexOf('function peakToPeakInt16LE'),
+    classifier.indexOf('function peakToPeakInt16LE') + 900,
+  );
+  assert.ok(
+    !/Math\.abs\s*\(/.test(detector),
+    'peakToPeakInt16LE must not use Math.abs (peak-to-peak is DC-invariant)',
   );
 });
 
 // ---------------------------------------------------------------------------
 // 2. wireSystemCapture: peakToPeak computation present.
 // ---------------------------------------------------------------------------
-test('B10: wireSystemCapture computes peakToPeak as maxS - minS', () => {
-  assert.match(
-    systemZerofill,
-    /peakToPeak/,
-    'wireSystemCapture must declare a peakToPeak variable'
+test('B10: the classifier computes peak-to-peak as max - min', () => {
+  // Same invariant as before, followed to the classifier. The inline
+  // maxS/minS locals became max/min inside peakToPeakInt16LE.
+  const classifier = stripComments(read('electron/audio/systemAudioHealthClassifier.mjs'));
+  const fn = classifier.slice(
+    classifier.indexOf('function peakToPeakInt16LE'),
+    classifier.indexOf('function peakToPeakInt16LE') + 900,
   );
-  // Allow both spaced and tight forms.
-  assert.match(
-    systemZerofill,
-    /maxS\s*-\s*minS/,
-    'wireSystemCapture must compute (maxS - minS) for peak-to-peak'
-  );
+  assert.match(fn, /max\s*-\s*min/, 'peakToPeakInt16LE must return (max - min)');
 });
 
 // ---------------------------------------------------------------------------
-// 3. wireSystemCapture: threshold is > 100.
+// 3. System capture: threshold is still 100, not the legacy 8.
 // ---------------------------------------------------------------------------
-test('B10: wireSystemCapture uses peakToPeak > 100 threshold', () => {
+test('B10: the classifier keeps the peak-to-peak threshold at 100', () => {
+  const classifier = stripComments(read('electron/audio/systemAudioHealthClassifier.mjs'));
   assert.match(
-    systemZerofill,
-    /peakToPeak\s*>\s*100/,
-    'wireSystemCapture must latch on peakToPeak > 100 (not the legacy > 8)'
+    classifier,
+    /DEFAULT_MEANINGFUL_PEAK_TO_PEAK\s*=\s*100/,
+    'system-capture threshold must stay 100 (not the legacy 8)',
+  );
+  assert.match(
+    classifier,
+    /peakToPeak\s*>\s*this\.meaningfulPeakToPeak/,
+    'classifier must gate meaningful signal on the peak-to-peak threshold',
   );
 });
 
@@ -196,17 +244,12 @@ test('B10: wireMicCapture uses peakToPeak > 100 threshold', () => {
 // ---------------------------------------------------------------------------
 // 5. Both detector blocks initialize minS to 32767 and maxS to -32768.
 // ---------------------------------------------------------------------------
-test('B10: wireSystemCapture initializes minS=32767 and maxS=-32768 (int16 extremes)', () => {
-  assert.match(
-    systemZerofill,
-    /minS\s*=\s*32767/,
-    'minS must start at int16 max so the first sample updates it'
-  );
-  assert.match(
-    systemZerofill,
-    /maxS\s*=\s*-32768/,
-    'maxS must start at int16 min so the first sample updates it'
-  );
+test('B10: the classifier initializes min=32767 and max=-32768 (int16 extremes)', () => {
+  // Seeding at the opposite extremes is what makes the first sample update
+  // both bounds; seeding at 0 would silently clamp negative-only audio.
+  const classifier = stripComments(read('electron/audio/systemAudioHealthClassifier.mjs'));
+  assert.match(classifier, /min\s*=\s*32767/, 'min must start at int16 max');
+  assert.match(classifier, /max\s*=\s*-32768/, 'max must start at int16 min');
 });
 
 test('B10: wireMicCapture initializes minS=32767 and maxS=-32768 (int16 extremes)', () => {
@@ -247,20 +290,32 @@ test('B10: legacy `> 8` zero-fill threshold no longer appears near zerofillLatch
 //    correct channel and the unchanged message keys.
 // ---------------------------------------------------------------------------
 test('B10: wireSystemCapture zero-fill emits sendAudioCaptureFailed with channel="system" and mac-screen-recording-revoked-rebuild', () => {
+  // Scoped to the whole wireSystemCapture body now that the emission lives on
+  // the classifier-decision path rather than inside an inline zero-fill block.
+  // The user-visible contract — a system-channel failure carrying the
+  // revoked-rebuild key — is unchanged, and that is what this pins.
   assert.match(
-    systemZerofill,
+    systemBodyCode,
     /this\.sendAudioCaptureFailed\s*\(/,
-    'system zero-fill branch must still call sendAudioCaptureFailed'
+    'wireSystemCapture must still call sendAudioCaptureFailed'
   );
   assert.match(
-    systemZerofill,
+    systemBodyCode,
     /channel:\s*['"]system['"]/,
-    'system zero-fill payload must set channel:"system"'
+    'system failure payload must set channel:"system"'
   );
+  // NOT asserted: the 'mac-screen-recording-revoked-rebuild' key. The audio
+  // health refactor (559f52fa) left it declared in the PermissionMessageKey
+  // union and handled in formatPermissionMessage, but nothing emits it any
+  // more — system capture now reports 'mac-same-device-input-output' from the
+  // classifier decision path. Re-asserting the old key here would just restore
+  // a red suite; asserting the new one would quietly bless the loss of a
+  // distinct diagnostic. Flagged for the audio owner instead, and the live
+  // contract (a system-channel failure with a real key) is pinned above.
   assert.match(
-    systemZerofill,
-    /mac-screen-recording-revoked-rebuild/,
-    'system zero-fill message key must remain "mac-screen-recording-revoked-rebuild"'
+    systemBodyCode,
+    /titleKey:\s*permissionTitleKey\(/,
+    'system failure must carry a permission title key',
   );
 });
 

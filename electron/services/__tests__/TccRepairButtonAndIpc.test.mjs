@@ -115,39 +115,53 @@ test('electron.d.ts declares repairTccPermissions with ok:boolean and message:st
   assert.match(decl, /message\s*:\s*string/, "expected 'message: string' in repairTccPermissions return type");
 });
 
-test('NativelyInterface.tsx renders a Repair Permissions button gated by isMac', () => {
+// THE BUTTON IS GONE ON PURPOSE, AND THAT IS WHAT THESE NOW ASSERT.
+//
+// Two tests here used to require a "Repair Permissions" button in the
+// audio-warning banner, gated by isMac and calling repairTccPermissions.
+// b4ea6040 ("single-action warning banner") deliberately removed it: three
+// same-weight buttons crowded the strip, and a tccutil reset is a last-resort
+// recovery rather than the step a user takes next. That commit landed AFTER
+// this file was written and did not update it, so the suite has failed on main
+// ever since — which is worse than either outcome, because a permanently red
+// guard stops being read.
+//
+// Restoring the button to satisfy the old assertions would revert a considered
+// UX decision. So the contract is re-pinned to what the code now promises: the
+// IPC survives, deliberately, for a future entry point. Everything below the
+// renderer boundary (handler, preload bridge, isMac guard in main, the
+// ok/message return shape) is still asserted by the tests above — that is the
+// part a refactor could silently break.
+
+test('the repair-tcc IPC stays wired even with no UI entry point', () => {
+  // The banner button was removed but the capability was kept on purpose. If
+  // someone garbage-collects the "unused" IPC, the next UI that wants it comes
+  // back to a missing bridge — so pin the surface, not the button.
   assert.match(
-    interfaceTsx,
-    /Repair Permissions/,
-    "expected literal 'Repair Permissions' button label in NativelyInterface.tsx",
+    preload,
+    /repairTccPermissions\s*:\s*\(\)\s*=>\s*ipcRenderer\.invoke\(\s*['"]repair-tcc-permissions['"]/,
+    'preload no longer bridges repairTccPermissions',
   );
-  // Locate the *button label* literal (quoted string-literal rendered into
-  // JSX), not earlier occurrences in code comments. Earlier matches may
-  // exist in comments documenting the button (e.g. "Repair Permissions"
-  // in JSDoc). Use the LAST occurrence — the actual rendered label sits
-  // deep in the JSX tree, far below any comment.
-  const allMatches = [...interfaceTsx.matchAll(/Repair Permissions/g)];
-  assert.ok(allMatches.length > 0, "expected a 'Repair Permissions' literal");
-  const labelIdx = allMatches[allMatches.length - 1].index;
-  // Walk back a generously sized window — the surrounding JSX block is
-  // verbose (handler, className, title attrs all inline). 5000 chars is
-  // enough to capture the enclosing {isMac && ( ... )} guard while still
-  // failing if a contributor moves the button out of the macOS branch.
-  const before = interfaceTsx.slice(Math.max(0, labelIdx - 5000), labelIdx);
   assert.match(
-    before,
-    /\{\s*isMac\s*&&/,
-    "Repair Permissions button must be wrapped in an isMac guard",
+    ipcHandlers,
+    /safeHandle\(\s*['"]repair-tcc-permissions['"]/,
+    'main no longer handles repair-tcc-permissions',
   );
 });
 
-test('renderer button calls window.electronAPI?.repairTccPermissions', () => {
-  // Allow optional chaining variants on either side.
-  assert.match(
-    interfaceTsx,
-    /window\.electronAPI\??\.\s*repairTccPermissions/,
-    "expected window.electronAPI?.repairTccPermissions(...) call in renderer",
-  );
+test('no renderer calls repairTccPermissions without an isMac guard', () => {
+  // tccutil is macOS-only. There is no call site today; if one is added back,
+  // it must sit inside an isMac branch or this fails. Written as a guard on
+  // FUTURE code rather than a requirement that the button exist.
+  const calls = [...interfaceTsx.matchAll(/window\.electronAPI\??\.\s*repairTccPermissions/g)];
+  for (const call of calls) {
+    const before = interfaceTsx.slice(Math.max(0, call.index - 5000), call.index);
+    assert.match(
+      before,
+      /\{\s*isMac\s*&&/,
+      'a repairTccPermissions call site is not wrapped in an isMac guard',
+    );
+  }
 });
 
 test('NEGATIVE: ipcHandlers.ts has no lowercase tccutil service names near tccutil', () => {
