@@ -3195,7 +3195,17 @@ export class IntelligenceEngine extends EventEmitter {
                         // runs on validation failure regardless of governance —
                         // that is a deliberate second attempt at repair, not a
                         // duplicate of the first-pass retrieval.
-                        const _governedPack = wtaContextOsGeneration?.evidencePack;
+                        // Code-review 2026-08-12: keyed on pack PRESENCE, but a
+                        // pack rides along even when it does NOT govern
+                        // (packGovernsGeneration false — the layer-1
+                        // fall-through). Such a pack has no items, so this
+                        // validator checked the answer against an EMPTY
+                        // evidence block for a turn the legacy retrieval path
+                        // actually answered, and refused it. Match
+                        // WhatToAnswerLLM's gate: govern, not presence.
+                        const _governedPack = wtaContextOsGeneration?.govern
+                            ? wtaContextOsGeneration.evidencePack
+                            : undefined;
                         let docContextBlock = (_governedPack && _governedPack.items.length > 0)
                             ? _governedPack.items.map((it) => `[Section: ${it.pointer?.section || it.sourceId}]\n${it.text}`).join('\n\n')
                             : await buildDocContext(false);

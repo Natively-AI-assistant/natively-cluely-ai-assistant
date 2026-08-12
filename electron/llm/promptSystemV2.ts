@@ -238,7 +238,8 @@ For spoken output, use short plain paragraphs, broken at natural breath points e
 Glance layer — for the reader's eye only, never changing the words to say:
 1. After writing the answer, wrap the two or three words that carry it in **double asterisks**: the name, the number, the term the user must not fumble. At most three marks, each at most four words, and never reshape a sentence to showcase a mark — mark the sentence you already wrote. Marked words render as highlights on screen and are spoken like any other word.
 2. When the question itself is enumerable — steps, "three ways", pros and cons, a comparison — answer as a short numbered list, each item one speakable sentence, five items at most. Never use a list for a question that is not enumerable, and never hyphen bullets.
-3. When the spoken answer runs past about forty words, add one final line: [[GIST]] followed by the five-to-eight-word essence. It sits at the very bottom, renders as a summary chip, is never spoken, and does not count toward the answer's length.
+3. When the spoken answer runs past about forty words, add one final line: [[GIST]] followed on that SAME line by the five-to-eight-word essence — never a line break between the marker and the essence. It sits at the very bottom, renders as a summary chip, is never spoken, and does not count toward the answer's length.
+   WRONG: the marker alone on its line with the essence underneath. RIGHT: [[GIST]] sort then subtract
 
 The em dash is the strongest AI tell. Never use — or – in spoken prose; use a comma, or split into two sentences.
 WRONG: "I led the migration — it took about six months."
@@ -794,18 +795,41 @@ export function recommendedGenerationProfile(action: PromptSystemV2Action): Gene
 /** Marker for the bottom gist line — rendered as a summary chip, never spoken. */
 export const GIST_MARKER = '[[GIST]]';
 
-/** Split a response into its speakable body and the optional bottom gist. */
-export function splitGistLine(text: string): { body: string; gist: string | null } {
+/**
+ * Split a response into its speakable body and the optional bottom gist.
+ *
+ * The marker is honored only when it STARTS a line — mid-line it is prose and
+ * stays visible so the lint can flag it. A marker that starts its line is
+ * display chrome either way: even with no essence after it, the marker never
+ * reaches the body (stripDisplayMarkup feeds TTS, which would say it aloud).
+ *
+ * Canonically the essence follows on that same line; a model that breaks the
+ * line after the marker used to leak a literal `[[GIST]]` to screen
+ * (2026-08-12), so a marker alone on its line is RECOVERED when exactly one
+ * short non-empty line follows. Two rejections keep the recovery from eating
+ * real prose: more than one following line, and a following line longer than
+ * a gist can contractually be (the prompt asks for five to eight words; past
+ * RECOVERY_MAX_WORDS it is likelier a real closing sentence written under a
+ * misplaced marker, and demoting it to the chip would silently drop a spoken
+ * sentence). Rejected shapes keep the marker visible and lint-flagged.
+ *
+ * Renderer twin: src/lib/displayMarkup.ts. Keep the two in lockstep.
+ */
+const GIST_RECOVERY_MAX_WORDS = 10;
+
+export function splitGistLine(text: string): { body: string; gist: string | null; recovered?: boolean } {
     const t = (text || '').replace(/\s+$/, '');
     const idx = t.lastIndexOf(GIST_MARKER);
     if (idx < 0) return { body: t, gist: null };
-    // Only honor the marker when it starts the LAST non-empty line — anywhere
-    // else it is malformed output and stays visible so the lint can flag it.
-    const tail = t.slice(idx);
-    if (tail.includes('\n')) return { body: t, gist: null };
     const lineStart = t.lastIndexOf('\n', idx);
     if (t.slice(lineStart + 1, idx).trim() !== '') return { body: t, gist: null };
-    return { body: t.slice(0, lineStart < 0 ? 0 : lineStart).replace(/\s+$/, ''), gist: tail.slice(GIST_MARKER.length).trim() || null };
+    const body = t.slice(0, lineStart < 0 ? 0 : lineStart).replace(/\s+$/, '');
+    const tail = t.slice(idx + GIST_MARKER.length);
+    if (!tail.includes('\n')) return { body, gist: tail.trim() || null };
+    const rest = tail.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (rest.length !== 1) return { body: t, gist: null };
+    if (rest[0].split(/\s+/).length > GIST_RECOVERY_MAX_WORDS) return { body: t, gist: null };
+    return { body, gist: rest[0], recovered: true };
 }
 
 /** Reduce a response to the pure spoken word-stream: hot-word marks removed,
@@ -860,10 +884,13 @@ export function spokenFormatViolations(text: string): SpokenFormatViolation[] {
     if (looksLikeStructuredOutput(text)) return violations;
 
     // The gist line is display chrome, not prose: split it off before linting.
-    // A marker anywhere other than the last line is malformed output.
+    // A marker anywhere other than the last line is malformed output — and so
+    // is a marker whose essence the model pushed onto the next line, even
+    // though the split now recovers that shape for display. The recovery is
+    // containment; this violation is how the drift stays measurable.
     const gistIdx = text.indexOf(GIST_MARKER);
-    const { body: gistBody, gist } = splitGistLine(text);
-    if (gistIdx >= 0 && gist === null) {
+    const { body: gistBody, gist, recovered } = splitGistLine(text);
+    if (gistIdx >= 0 && (gist === null || recovered)) {
         violations.push({ rule: 'gist_misplaced', excerpt: text.slice(gistIdx, gistIdx + 60) });
     }
 

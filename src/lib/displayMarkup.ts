@@ -10,21 +10,48 @@ export const GIST_MARKER = '[[GIST]]';
 export interface GistSplit {
   body: string;
   gist: string | null;
+  /** True when the marker was recovered from a malformed shape (the model broke
+   *  the line after the marker). The chip renders normally; the lint still
+   *  reports it so prompt drift stays visible. Absent on clean output.
+   *  No renderer consumer reads this — it exists so the main-process twin's
+   *  spokenFormatViolations() has a field to key off and the two copies stay
+   *  literally identical. Do not delete it as unused. */
+  recovered?: boolean;
 }
 
-/** Split a response into its speakable body and the optional bottom gist. */
+/**
+ * Split a response into its speakable body and the optional bottom gist.
+ *
+ * The marker is honored only when it STARTS a line — mid-line it is prose.
+ * A marker that starts its line is display chrome either way: even with no
+ * essence after it, the marker itself never reaches the body (it would be
+ * rendered AND spoken by every stripDisplayMarkup consumer).
+ *
+ * Canonically the essence follows on that same line. Models break that line
+ * often enough that the marker used to leak to screen as literal `[[GIST]]`
+ * text (2026-08-12), so a marker alone on its line is recovered when exactly
+ * one short non-empty line follows. Two rejections keep the recovery from
+ * eating real prose: more than one following line, and a following line
+ * longer than a gist can contractually be (the prompt asks for five to eight
+ * words; past RECOVERY_MAX_WORDS it is likelier a real closing sentence the
+ * model wrote under a misplaced marker, and losing it would silently drop a
+ * spoken sentence). Rejected shapes keep the marker visible and lint-flagged.
+ */
+const RECOVERY_MAX_WORDS = 10;
+
 export function splitGistLine(text: string): GistSplit {
   const t = (text || '').replace(/\s+$/, '');
   const idx = t.lastIndexOf(GIST_MARKER);
   if (idx < 0) return { body: t, gist: null };
-  const tail = t.slice(idx);
-  if (tail.includes('\n')) return { body: t, gist: null };
   const lineStart = t.lastIndexOf('\n', idx);
   if (t.slice(lineStart + 1, idx).trim() !== '') return { body: t, gist: null };
-  return {
-    body: t.slice(0, lineStart < 0 ? 0 : lineStart).replace(/\s+$/, ''),
-    gist: tail.slice(GIST_MARKER.length).trim() || null,
-  };
+  const body = t.slice(0, lineStart < 0 ? 0 : lineStart).replace(/\s+$/, '');
+  const tail = t.slice(idx + GIST_MARKER.length);
+  if (!tail.includes('\n')) return { body, gist: tail.trim() || null };
+  const rest = tail.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (rest.length !== 1) return { body: t, gist: null };
+  if (rest[0].split(/\s+/).length > RECOVERY_MAX_WORDS) return { body: t, gist: null };
+  return { body, gist: rest[0], recovered: true };
 }
 
 /**
@@ -33,11 +60,16 @@ export function splitGistLine(text: string): GistSplit {
  * partial prefix of the marker is hidden so the marker never flashes as
  * literal text; once complete, the normal split applies (the gist text
  * itself streams into the chip).
+ *
+ * The prefix test runs on the END-TRIMMED text on purpose: after a COMPLETE
+ * marker followed by a newline the raw last line is empty, and testing that
+ * raw line let the frame between "[[GIST]]\n" and the first essence token
+ * paint the marker as literal text.
  */
 export function splitGistLineStreaming(text: string): GistSplit {
   const full = splitGistLine(text);
   if (full.gist !== null) return full;
-  const t = text || '';
+  const t = (text || '').replace(/\s+$/, '');
   const lineStart = t.lastIndexOf('\n');
   const lastLine = t.slice(lineStart + 1).trimStart();
   if (lastLine && GIST_MARKER.startsWith(lastLine)) {

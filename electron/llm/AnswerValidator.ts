@@ -44,6 +44,16 @@ const SECTION_ALIASES: Record<string, RegExp[]> = {
 const hasSection = (answer: string, section: string): boolean =>
   SECTION_ALIASES[section]?.some(pattern => pattern.test(answer)) ?? false;
 
+// `sectionHeader` accepts zero hashes on purpose, so `hasSection` recognizes a
+// model's own `**Approach**` as the Approach section for completeness checks.
+// That makes it useless for asking "did the model use OUR heading style?" —
+// which is a different question with a different consumer (the non-destructive
+// exemption). This is the markdown-heading-only test.
+const CANONICAL_HEADING_RE = /^[ \t]*#{1,3}[ \t]+\S/m;
+const stripFencedCode = (answer: string): string => answer.replace(/```[\s\S]*?```/g, ' ');
+const usesCanonicalMarkdownHeadings = (answer: string): boolean =>
+  CANONICAL_HEADING_RE.test(stripFencedCode(answer));
+
 const hasCodeBlock = (answer: string): boolean => /```[a-zA-Z0-9+#-]*\n[\s\S]+?```/.test(answer);
 const hasLanguageTaggedCodeBlock = (answer: string): boolean => /```[a-zA-Z0-9+#-]+\n[\s\S]+?```/.test(answer);
 // Big-O may be wrapped in LaTeX ($O(n)$ / \(O(n)\)), backticks (`O(n)`), or bare.
@@ -408,9 +418,16 @@ export const repairCodingMarkdown = (rawResponse: string, question?: string, lan
   // O(?) placeholder. Search the preamble first (most common position), then
   // the rest of the model's own text, before ever falling back to the marker.
   // Never fabricate a bound; only lift one the model actually wrote.
+  // Code-review 2026-08-12: the last fallback scanned `trimmed` — the whole
+  // answer, fences included — so an answer whose only Big-O sat in a comment
+  // about a DISCARDED approach ("# brute force is O(n^2), too slow") had that
+  // bound lifted out of the fence and published as the shipped code's official
+  // Complexity section. The validation gate strips fences for exactly this
+  // reason (see `proseOnly` in validateCodingMarkdown); the repairer, which
+  // actually writes the user-visible line, must do the same.
   const complexity = complexitySection
-    || extractComplexityText(parsed.preamble) // bound stated inline in prose
-    || extractComplexityText(trimmed)         // bound stated anywhere else
+    || extractComplexityText(parsed.preamble)          // bound stated inline in prose
+    || extractComplexityText(stripFencedCode(trimmed)) // bound stated anywhere else in PROSE
     || MISSING_COMPLEXITY_MARKER;
 
   // Follow-ups: parsed section (as lines) or the standard two prompts.
@@ -475,7 +492,7 @@ export const validateCodingMarkdown = (response: string): AnswerValidationResult
   // COMMENT ("# brute force is O(n^2), too slow") satisfied this check and
   // suppressed the repair for an answer that never stated a bound TO THE USER.
   // Strip fenced blocks before asking whether the model stated its complexity.
-  const proseOnly = answer.replace(/```[\s\S]*?```/g, ' ');
+  const proseOnly = stripFencedCode(answer);
   const statesComplexity = complexity || Boolean(extractComplexityText(proseOnly));
   // Narrow exemption: it applies only when the model used its OWN format and
   // wrote everything. An answer that already uses the canonical `##` headings
@@ -492,7 +509,17 @@ export const validateCodingMarkdown = (response: string): AnswerValidationResult
   // exempting exactly the half-finished answers the contract exists to repair.
   // ANY canonical heading means the model was using our format, so the
   // exemption (which is only for a model using its OWN format) must not apply.
-  const usesCanonicalHeadings = missingSections.length < CODING_SECTIONS.length;
+  //
+  // Code-review 2026-08-12 (round 2): `missingSections` alone cannot express
+  // that, because `sectionHeader` deliberately matches a bold `**Approach**`
+  // too — so the widened test caught the model's OWN format and fed complete
+  // bold-heading answers back into the lossy repair, re-opening the 2026-08-10
+  // regression this exemption exists to close. Both halves are required: the
+  // answer must carry a real `##` markdown heading AND at least one heading we
+  // recognize as canonical. A model using `## Solution` (its own words, our
+  // syntax) recognizes as neither and stays exempt when complete.
+  const usesCanonicalHeadings = missingSections.length < CODING_SECTIONS.length
+    && usesCanonicalMarkdownHeadings(answer);
   const substantivelyComplete = codeBlock
     && hasTaggedBlock
     && statesComplexity
