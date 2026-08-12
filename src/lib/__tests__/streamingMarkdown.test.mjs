@@ -407,3 +407,57 @@ describe('shell and Make variables are prose, not inline math', () => {
     });
   }
 });
+
+describe('the FINALIZED path must survive remark-math, not just this module', () => {
+  // Live report 2026-08-12, second round. The first fix taught the STREAMING
+  // tokenizer the adjacency rule, and this suite went green — while the UI was
+  // still broken. The user's question echo renders through
+  //   normalizeFinalizedMarkdownMath -> ReactMarkdown(remark-math, rehype-katex)
+  // (NativelyInterface.tsx, "Standard Text Messages"), and remark-math does its
+  // OWN `$…$` pairing. Deciding "not math" here was not enough: the old code
+  // emitted a BARE `$`, handing the decision straight back to the plugin.
+  //
+  // So these assertions drive the real unified pipeline. Asserting on this
+  // module's return value alone is what let the bug ship twice.
+  const build = async () => {
+    const { unified } = await import('unified');
+    const remarkParse = (await import('remark-parse')).default;
+    const remarkMath = (await import('remark-math')).default;
+    const remarkRehype = (await import('remark-rehype')).default;
+    const rehypeKatex = (await import('rehype-katex')).default;
+    return unified().use(remarkParse).use(remarkMath).use(remarkRehype)
+      .use(rehypeKatex, { throwOnError: false, strict: false });
+  };
+  const rendersMath = async (input) => {
+    const proc = await build();
+    const tree = await proc.run(proc.parse(normalizeFinalizedMarkdownMath(input)));
+    return JSON.stringify(tree).includes('katex');
+  };
+
+  const PROSE = [
+    ['Make automatic variables (reported)', 'Show a Makefile rule using $@ and $<.'],
+    ['shell specials (reported)', "In bash, explain $?, $#, and IFS=$'\\n' with a one-line example each."],
+    ['make var mid-sentence', 'Use $@ in a rule and $? for the exit code.'],
+    ['other sigils', 'The variables $! and $* are special.'],
+    ['awk fields', 'Use $1 and $2 to select fields.'],
+    ['currency', 'It costs $100 for $200 total.'],
+  ];
+  for (const [name, input] of PROSE) {
+    test(`${name} does not reach KaTeX`, async () => {
+      assert.equal(await rendersMath(input), false, `rendered as math: ${input}`);
+    });
+  }
+
+  const MATH = [
+    ['inline assignment', 'Let $x = 5$ be given.'],
+    ['single symbol', 'The constant $c$ is the speed of light.'],
+    ['spaces inside the expression', 'We know $a + b = c$ holds.'],
+    ['single digit', 'Given $5$ apples.'],
+    ['display math', 'Put the formula on its own line as $$E=mc^2$$.'],
+  ];
+  for (const [name, input] of MATH) {
+    test(`${name} still reaches KaTeX`, async () => {
+      assert.equal(await rendersMath(input), true, `did NOT render as math: ${input}`);
+    });
+  }
+});
