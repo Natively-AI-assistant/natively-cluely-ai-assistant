@@ -181,10 +181,23 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
 
     // Move focus to the first star button when the modal opens (after the
     // entrance settles) so keyboard users land in the right place.
+    //
+    // Code-review 2026-08-12: each star's `onFocus` paints a hover preview, so
+    // this programmatic focus opened the modal already showing a 1-star "Poor"
+    // verdict the user never chose — with Send disabled (it keys on `rating`,
+    // not `hoverRating`) and no way to clear it without a mouse. Landing focus
+    // is a placement, not an opinion: the flag below suppresses exactly the one
+    // synthetic focus this effect causes. `.focus()` dispatches its event
+    // synchronously, so the flag is set and cleared around that single call and
+    // can never swallow a later, genuine focus.
+    const suppressStarFocusPreview = useRef(false)
     useEffect(() => {
         if (!isOpen) return
         const t = window.setTimeout(() => {
-            document.querySelector<HTMLButtonElement>('[data-review-star="1"]')?.focus()
+            const first = document.querySelector<HTMLButtonElement>('[data-review-star="1"]')
+            if (!first) return
+            suppressStarFocusPreview.current = true
+            try { first.focus() } finally { suppressStarFocusPreview.current = false }
         }, 260)
         return () => window.clearTimeout(t)
     }, [isOpen])
@@ -326,13 +339,19 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
         [shownRating],
     )
 
-    if (!isOpen) return null
-
     const titleId = `review-modal-title-${step}`
     const busy = submitting || testimonialBusy
 
+    // Code-review 2026-08-12: this was `if (!isOpen) return null` ABOVE the
+    // AnimatePresence. Closing the modal unmounted the AnimatePresence together
+    // with its children on the very next render, and AnimatePresence can only
+    // animate children it outlives — it cannot animate its own unmount. Both
+    // `exit` variants below were therefore dead code and the modal hard-cut.
+    // The presence boundary now stays mounted (the parent renders this
+    // component unconditionally) and the CHILDREN are what come and go.
     return (
         <AnimatePresence>
+            {isOpen && (
             <motion.div
                 key="backdrop"
                 initial={{ opacity: 0 }}
@@ -342,6 +361,8 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
                 onClick={() => !busy && dismissLaterAndClose()}
                 className="review-modal-backdrop"
             />
+            )}
+            {isOpen && (
             <motion.div
                 key="container"
                 initial={{ opacity: 0, transform: reduced ? "none" : "translateY(10px) scale(0.985)" }}
@@ -389,6 +410,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
                                     onDismissLater={dismissLaterAndClose}
                                     onDismissForever={dismissForeverAndClose}
                                     textareaRef={textareaRef}
+                                    suppressStarFocusPreview={suppressStarFocusPreview}
                                     reduced={reduced}
                                 />
                             )}
@@ -427,6 +449,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
                     </div>
                 </motion.div>
             </motion.div>
+            )}
         </AnimatePresence>
     )
 }
@@ -503,13 +526,17 @@ interface StepReviewProps {
     onDismissLater: () => void
     onDismissForever: () => void
     textareaRef: React.RefObject<HTMLTextAreaElement | null>
+    /** True while the open-effect's synthetic `.focus()` is in flight, so
+     *  landing focus on star 1 does not paint a rating the user never chose. */
+    suppressStarFocusPreview: React.RefObject<boolean>
     reduced: boolean
 }
 
 const StepReview: React.FC<StepReviewProps> = ({
     rating, shownRating, ratingWord, setRating, setHoverRating,
     text, setText, maxChars, submitting, error,
-    onSubmit, onDismissLater, onDismissForever, textareaRef, reduced,
+    onSubmit, onDismissLater, onDismissForever, textareaRef,
+    suppressStarFocusPreview, reduced,
 }) => {
     const remaining = maxChars - text.length
     const showCounter = remaining <= 60
@@ -573,7 +600,10 @@ const StepReview: React.FC<StepReviewProps> = ({
                             transition={{ ...(reduced ? { duration: 0 } : SPRING_BOUNCY), delay: reduced ? 0 : i * 0.03 }}
                             whileTap={reduced || submitting ? undefined : { scale: 0.9 }}
                             onMouseEnter={() => !submitting && setHoverRating(n)}
-                            onFocus={() => !submitting && setHoverRating(n)}
+                            onFocus={() => {
+                                if (suppressStarFocusPreview.current) return
+                                if (!submitting) setHoverRating(n)
+                            }}
                             onClick={() => setRating(n)}
                             onKeyDown={(e) => handleStarKey(e, n)}
                             disabled={submitting}
