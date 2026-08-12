@@ -367,3 +367,43 @@ describe('normalizeFinalizedMarkdownMath — fenced code is never spliced into m
     assert.ok(/\$\$\nE=mc\^2\n\$\$/.test(out), `expected block math, got:\n${out}`);
   });
 });
+
+describe('shell and Make variables are prose, not inline math', () => {
+  // Live report 2026-08-12. The user asked "Show a Makefile rule using $@ and
+  // $<." and the question echo rendered as KaTeX: `$@ and $` was accepted as
+  // inline math because isInlineMathBody only rejected bodies that START with
+  // a digit, and `@ and ` starts with `@`.
+  //
+  // The fix is the standard pandoc/remark-math adjacency rule: no whitespace
+  // immediately inside either delimiter. These pin the shapes that actually
+  // occur in interview answers about build systems and shells.
+  const mathish = (s) => /katex/.test(renderStreamingMarkdown(s));
+
+  const PROSE = [
+    ['Make automatic variables', 'Show a Makefile rule using $@ and $<.'],
+    ['Make vars in a sentence', 'The $@ expands to the target and $< to the prereq.'],
+    ['awk fields', 'Use $1 and $2 to select fields.'],
+    ['shell exit status', 'Check $? and $# after the call.'],
+    ['ANSI-C quoting', "a bash line using IFS=$'\\n' here"],
+    ['currency pair', 'It costs $100 for $200 total.'],
+  ];
+  for (const [name, input] of PROSE) {
+    test(`${name} stays literal text`, () => {
+      assert.equal(mathish(input), false, `rendered as math: ${input}`);
+    });
+  }
+
+  // Guard against over-correction: real inline math must still render. If the
+  // adjacency rule ever tightens into "reject anything with a space", these
+  // fail rather than silently disabling inline math.
+  const MATH = [
+    ['simple assignment', 'Let $x = 5$ be given.'],
+    ['single symbol', 'The constant $c$ is the speed of light.'],
+    ['expression with spaces inside', 'We know $a + b = c$ holds.'],
+  ];
+  for (const [name, input] of MATH) {
+    test(`${name} still renders as math`, () => {
+      assert.equal(mathish(input), true, `did NOT render as math: ${input}`);
+    });
+  }
+});

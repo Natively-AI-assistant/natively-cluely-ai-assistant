@@ -137,6 +137,24 @@ const INCOMPLETE_INLINE_RE = /^\$(?!\$)([^\n$]+)$/;
 /** Shared streaming/finalized policy for deciding whether `$body$` is math. */
 function isInlineMathBody(body: string): boolean {
   if (!body) return false;
+  // Adjacency rule (pandoc / remark-math): the opening `$` must not be followed
+  // by whitespace and the closing `$` must not be preceded by whitespace.
+  //
+  // Live report 2026-08-12: "Show a Makefile rule using $@ and $<." rendered
+  // `$@ and $` as MATH, because the currency rule below only asks whether the
+  // body starts with a digit — `@ and ` starts with `@`, so it was accepted.
+  // Shell and Make variables (`$@`, `$<`, `$1`, `$?`) are ordinary prose in an
+  // interview answer about Makefiles or bash, and turning them into KaTeX
+  // mangles the text beyond recognition.
+  //
+  // Adjacency is the standard discriminator and subsumes the special cases
+  // without a blacklist that would need a new entry per sigil:
+  //   `$@ and $<`      closer preceded by a space  -> text
+  //   `Let $x = 5$`    closer preceded by `5`      -> math
+  //   `$100 for $200`  closer preceded by a space  -> text
+  // Real math is written tight against its delimiters; incidental `$` pairs in
+  // prose almost never are.
+  if (/^\s/.test(body) || /\s$/.test(body)) return false;
   if (!/^\d/.test(body)) return true;
   return /^\d$/.test(body) || /[=+\-*/^]/.test(body);
 }
