@@ -270,7 +270,13 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     // (LLMHelper:5448); this surface was not, so WTA ran the
                     // strict doc pipeline for every template-seeded mode with
                     // zero files — the root of the 2026-08-11 denial reports.
-                    const forceDocumentGrounding = activeModeGroundingInfo?.strictDocumentGroundedActive === true;
+                    const strictDocGroundedActive = activeModeGroundingInfo?.strictDocumentGroundedActive === true;
+                    // R1 (2026-08-12): enforcement = explicit strict contract OR a
+                    // doc-grounded mode with at least one real file. Strict-only
+                    // here dropped forced doc retrieval for template-seeded modes
+                    // the user actually uploaded documents into.
+                    const forceDocumentGrounding = strictDocGroundedActive
+                        || (documentGroundedCustomModeActive && activeModeGroundingInfo?.hasReferenceFiles === true);
                     const retrievalOptions = forceDocumentGrounding
                         ? { forceDocumentGrounding: true, followUpReferentHint: temporalContext?.previousResponses?.slice(-1)?.[0] }
                         : undefined;
@@ -301,10 +307,17 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     if (answerPlan && !isLayerAllowed(answerPlan, 'reference_files')) {
                         referenceFilesAllowed = false;
                     }
-                    if (documentGroundedCustomModeActive) {
+                    // R2 (2026-08-12, review finding): this override used the BROAD
+                    // flag, so a template-seeded mode silently overrode the user's
+                    // EXPLICIT providerDataScopes reference_files=false denial and
+                    // shipped file chunks to the cloud provider. The retrievalRequired
+                    // rationale only holds when the mode's contract is genuinely
+                    // strict ("answer only from the files") — everywhere else the
+                    // user's denial wins and the reference layer is simply omitted.
+                    if (strictDocGroundedActive) {
                         if (!referenceFilesAllowed) {
-                            console.warn('[WhatToAnswerLLM] Generic/reference layer exclusion overridden: document-grounded custom mode active', {
-                                genericBypassDisabledReason: 'document_grounded_custom_mode',
+                            console.warn('[WhatToAnswerLLM] Generic/reference layer exclusion overridden: strict document-grounded mode active', {
+                                genericBypassDisabledReason: 'strict_document_grounded_mode',
                                 retrievalRequired: true,
                             });
                         }

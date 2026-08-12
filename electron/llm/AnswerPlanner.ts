@@ -184,8 +184,18 @@ export interface AnswerPlan {
   answerStyle: AnswerStyle;
   /** Soft spoken-length target in seconds (0 = no explicit constraint). */
   answerStyleTargetSeconds: number;
-  /** True when a user-created custom mode requires uploaded/reference files as source of truth. */
+  /** BROAD doc-grounded flag — true for every template-seeded doc mode, files
+   *  or not. Isolation consumers (contextRoute layer suppression,
+   *  conversationHistoryPolicy, candidate-profile drop) key on THIS, per the
+   *  ModesManager Defect C doctrine: isolation is cheap and stays wide.
+   *  R9 (2026-08-12): #446 briefly repurposed this field to strict-preferred,
+   *  silently turning plan-level isolation OFF for broad-not-strict modes. */
   documentGroundedCustomModeActive?: boolean;
+  /** STRICT-preferred doc grounding (explicit strictness when the snapshot
+   *  carries it; broad fallback for legacy callers). Prompt-refusal semantics
+   *  (the grounding policyLine) key on THIS — a refusal instruction is only
+   *  honest for a genuinely bounded universe. */
+  strictDocumentGroundedActive?: boolean;
 }
 
 export interface PlanAnswerInput {
@@ -1470,6 +1480,8 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   // pipeline for stock template-seeded modes with zero files.
   const documentGroundedCustomModeActive =
     (input.activeMode?.strictDocumentGroundedActive ?? input.activeMode?.documentGroundedCustomModeActive) === true;
+  // R9: the raw broad flag, for the PLAN FIELD isolation consumers read.
+  const broadDocumentGroundedActive = input.activeMode?.documentGroundedCustomModeActive === true;
   const explicitDocumentModeCodingAsk = /\b(write|implement|code|coding interview|dsa|dry run|time complexity|space complexity|big[-\s]?o|algorithm(?:ic)?|solution code|source code)\b/i.test(text);
   const explicitDocumentModeProfileAsk = /\b(resume|cv|profile|job description|\bjd\b|career|work experience|candidate profile|my background|your background|my projects?|your projects?|my skills?|your skills?)\b/i.test(text);
 
@@ -2057,7 +2069,8 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     confidence: Math.max(input.intentResult?.confidence || input.extractedQuestion?.confidence || 0.7, 0),
     answerStyle: detectAnswerStyle(question).style,
     answerStyleTargetSeconds: detectAnswerStyle(question).targetSeconds,
-    documentGroundedCustomModeActive,
+    documentGroundedCustomModeActive: broadDocumentGroundedActive,
+    strictDocumentGroundedActive: documentGroundedCustomModeActive,
   };
 };
 
@@ -2149,7 +2162,11 @@ export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationS
         // sales sessions (manual regression 2026-06-12).
         ? 'Speak in the FIRST PERSON as the product\'s seller/representative ("our product", "we"). Never identify as an AI assistant.'
         : 'Answer in a neutral, explanatory voice. Do not roleplay as the candidate.';
-  const policyLine = plan.documentGroundedCustomModeActive
+  // R9: the grounding/refusal instruction keys on STRICT-preferred — telling
+  // the model to refuse outside "the uploaded material" is only honest when a
+  // bounded universe exists; the broad flag put that line into every
+  // template-seeded fileless mode's prompt.
+  const policyLine = (plan.strictDocumentGroundedActive ?? plan.documentGroundedCustomModeActive)
     ? 'Ground every concrete claim in the uploaded/reference files for this custom mode. If the answer is not supported by the uploaded material, say plainly that the requested information is not in the uploaded material. Do not reconstruct it from general knowledge, prior assistant answers, profile, resume, JD, or persona context.'
     : plan.profileContextPolicy === 'required'
       ? 'Ground every concrete claim in the provided profile facts. Never invent names, numbers, metrics, companies, or technologies that are not in those facts.'

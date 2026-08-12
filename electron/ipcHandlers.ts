@@ -4374,7 +4374,13 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // pack exists. A governed `answer`-policy pack that merely
                   // produced a weak answer is still repaired below — only an
                   // explicit governed REFUSAL is trusted here.
-                  const governedRefusal = manualContextOsGeneration?.evidencePack?.answerPolicy === 'refuse_insufficient_evidence';
+                  // R10 (2026-08-12, review finding): keying on pack PRESENCE
+                  // contradicted the docblock ("only an explicit GOVERNED refusal
+                  // is trusted here") — an ungoverned refuse pack from a fileless
+                  // doc-flavored mode could block the false-refusal repair while
+                  // strong document evidence existed. Same class as #446's F3.
+                  const governedRefusal = manualContextOsGeneration?.govern === true
+                    && manualContextOsGeneration?.evidencePack?.answerPolicy === 'refuse_insufficient_evidence';
                   // Both the system's own refusal phrase and a model-phrased
                   // refusal clear the same bar (the question is about a real
                   // document topic). Off-topic questions match neither a whole
@@ -4958,7 +4964,14 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // Phase 9 (exact-pack identity): when the typed pack GOVERNED
                   // this generation (H1), reuse that EXACT pack — same packId end
                   // to end. Otherwise build a verify-pack from the captured block.
-                  const verifyPack: import('./intelligence/context-os').EvidencePack = manualContextOsGeneration?.evidencePack ?? ((): import('./intelligence/context-os').EvidencePack => {
+                  // R3 (2026-08-12, review finding): PR #446 created the
+                  // pack-exists-with-govern:false state, and this consumer kept
+                  // keying on PRESENCE — so a legacy-path answer (the very turn
+                  // the fix un-gagged) was verified against the DISCARDED empty
+                  // refuse pack instead of the capturedEvidenceBlock it was
+                  // actually grounded in, persisting claims under the wrong
+                  // packId/answerPolicy/sourceOwner identity.
+                  const verifyPack: import('./intelligence/context-os').EvidencePack = (manualContextOsGeneration?.govern ? manualContextOsGeneration?.evidencePack : null) ?? ((): import('./intelligence/context-os').EvidencePack => {
                     const evItems = (() => {
                       if (!capturedEvidenceBlock.trim()) return [];
                       const snippets = parseModeSnippets(capturedEvidenceBlock);
