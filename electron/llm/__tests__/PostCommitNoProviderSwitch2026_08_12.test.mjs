@@ -138,19 +138,23 @@ describe('every text-path fall-through site consults the commit flag', () => {
   test('no bare `yield* this.streamWith...` remains inside a catch-and-continue block', () => {
     // Every delegation that is followed by a catch which does NOT return must
     // be wrapped. Assert on the guarded sites' count instead of trying to parse
-    // control flow: each of the 5 known fall-through sites is wrapped.
+    // control flow. Eight sites found by sweeping every `yield*` for an
+    // enclosing catch that neither returns nor rethrows: fast-mode
+    // Codex/Groq/Natively, selected-Groq (multimodal + text share one catch),
+    // the streaming rotation loop, the TTFT race (the primary text path), and
+    // the Natively and Custom last-resorts.
     const wrapped = (src.match(/yield\* this\.trackCommit\(/g) || []).length;
     assert.ok(
-      wrapped >= 5,
-      `expected all 5 text-path fall-through sites wrapped in trackCommit, found ${wrapped}`,
+      wrapped >= 8,
+      `expected all 8 text-path fall-through sites wrapped in trackCommit, found ${wrapped}`,
     );
   });
 
   test('each guarded catch returns instead of falling through', () => {
     const guards = (src.match(/if \(commit\.emitted\) \{/g) || []).length;
     assert.ok(
-      guards >= 5,
-      `expected a commit guard in each of the 5 fall-through catch blocks, found ${guards}`,
+      guards >= 7,
+      `expected a commit guard in each fall-through catch block, found ${guards}`,
     );
     // And the guard must END the stream, not merely log. Scan a bounded window
     // rather than to the next `}` — the warn lines interpolate `${provider.name}`

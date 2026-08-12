@@ -6665,9 +6665,21 @@ let isMultimodal = !!(imagePaths?.length);
             },
           }));
           try {
-            yield* runStreamingTextFallback(instrumented, this.textHealth, DEFAULT_TEXT_FALLBACK_CONFIG, {}, abortSignal);
+            yield* this.trackCommit(runStreamingTextFallback(instrumented, this.textHealth, DEFAULT_TEXT_FALLBACK_CONFIG, {}, abortSignal), commit);
             return;
           } catch (raceErr: any) {
+            // runStreamingTextFallback is commit-point-safe INTERNALLY (it never
+            // switches rungs after a rung's first token). That guarantee stops
+            // duplication inside the engine — it does not stop it here: if the
+            // committed rung dies mid-stream the engine throws, and the old
+            // unconditional fall-through handed the turn to the Gemini block,
+            // which would append a second complete answer to what the user had
+            // already read. This is the primary text path, so it is the site
+            // where that would happen most often.
+            if (commit.emitted) {
+              console.warn('[LLMHelper] Text TTFT race failed AFTER first token — ending stream rather than appending a second answer:', raceErr?.message);
+              return;
+            }
             console.warn('[LLMHelper] Text TTFT race exhausted, falling through to Gemini:', raceErr?.message);
             telemetryService.track({ name: 'provider_error', durationMs: Date.now() - raceStart, properties: { path: 'text', stage: 'race_exhausted' } });
             // Fall through to the Gemini block below as the final safety net.
@@ -6705,6 +6717,9 @@ let isMultimodal = !!(imagePaths?.length);
       try {
         for await (const chunk of this.streamGeminiTextCascade(userContent, imagePaths, finalSystemPrompt, abortSignal, thinkingBudget)) {
           geminiYielded = true;
+          // Mirror into the generator-wide commit state so the last-resort
+          // providers below observe the same fact this block already tracks.
+          if (typeof chunk === 'string' && chunk.trim().length > 0) commit.emitted = true;
           yield chunk;
         }
         return;
@@ -6721,9 +6736,13 @@ let isMultimodal = !!(imagePaths?.length);
     // to a different one rather than failing the answer.
     if (this.hasNatively()) {
       try {
-        yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, abortSignal);
+        yield* this.trackCommit(this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, abortSignal), commit);
         return;
       } catch (e: any) {
+        if (commit.emitted) {
+          console.warn('[LLMHelper] Natively last-resort failed AFTER first token — ending stream rather than appending a second answer:', e.message);
+          return;
+        }
         console.warn('[LLMHelper] Natively last-resort fallback failed:', e.message);
       }
     }
@@ -6758,9 +6777,15 @@ let isMultimodal = !!(imagePaths?.length);
         console.log(`[LLMHelper] Falling back to configured custom provider "${configuredCustom.name}" — currentModelId is ${this.currentModelId} and no cloud provider answered.`);
       }
       try {
-        yield* this.streamWithCustom(message, context, undefined, finalSystemPrompt, abortSignal);
+        yield* this.trackCommit(this.streamWithCustom(message, context, undefined, finalSystemPrompt, abortSignal), commit);
         return;
       } catch (e: any) {
+        if (commit.emitted) {
+          // Nothing left to fall through to — but throwing here would surface a
+          // provider error over an answer the user has already partly read.
+          console.warn(`[LLMHelper] Configured custom last-resort failed AFTER first token — ending stream: ${e?.message || e}`);
+          return;
+        }
         console.warn(`[LLMHelper] Configured custom last-resort failed: ${e?.message || e}`);
       } finally {
         // Restore — never leave a non-active customProvider on the instance,
