@@ -176,7 +176,29 @@ describe('a clarify short-circuit must be ACTIONABLE (live report #2, 2026-08-11
   });
 
   test('unknown authority fails toward answering the user, not gagging them', () => {
-    assert.equal(clarificationIsActionable({ sourceAuthority: 'legacy', hasReferenceFiles: false }), true);
+    // R8 (2026-08-12): this test's TITLE always stated the right invariant but
+    // its assertion baked the inversion in — `true` here means the clarify
+    // short-circuit MAY fire, i.e. the user IS gagged on an authority nobody
+    // can classify. Unknown/legacy/future values must answer instead.
+    assert.equal(clarificationIsActionable({ sourceAuthority: 'legacy', hasReferenceFiles: false }), false);
+    assert.equal(clarificationIsActionable({ sourceAuthority: 'some_future_authority', hasReferenceFiles: true }), false);
+    // null/undefined stay permissive: a missing field is "no contract at all",
+    // which predates the authority system and keeps legacy flows untouched.
+    assert.equal(clarificationIsActionable({ sourceAuthority: null, hasReferenceFiles: false }), true);
+  });
+
+  test('R8 drift guard: every ModeSourceAuthority the contract module can produce is classified', () => {
+    // Mirrors the ModeSourceAuthority union (modeSourceContract.ts). If a new
+    // authority is added there, clarificationIsActionable must learn it —
+    // otherwise every mode carrying it is silently barred from clarifying.
+    const allAuthorities = [
+      'reference_files_only', 'reference_files_primary', 'reference_files_plus_transcript',
+      'profile_only', 'profile_plus_transcript', 'transcript_only', 'general_mixed', 'ask_if_ambiguous',
+    ];
+    for (const sourceAuthority of allAuthorities) {
+      const verdictWithFiles = clarificationIsActionable({ sourceAuthority, hasReferenceFiles: true });
+      assert.equal(verdictWithFiles, true, `${sourceAuthority} with files must remain clarifiable`);
+    }
   });
 });
 
@@ -230,10 +252,12 @@ describe('a developer diagnostic is never user-visible prose (live report #3, 20
     const src = fs.readFileSync(path.resolve(process.cwd(), 'electron/IntelligenceEngine.ts'), 'utf8');
     // documentGroundedCustomModeActive was proven TRUE with zero files —
     // the govern gate must pair it with a hasReferenceFiles check.
-    // 2026-08-12: the gate got stricter still — it now keys on the EXPLICIT
-    // strictness flag (Defect C split) AND keeps the files requirement as
-    // belt-and-braces (reference_files_only can be strict with zero files).
-    const gate = /strictDocumentGroundedActive\s*\n[^]{0,700}?hasReferenceFiles[^]{0,200}?contextOsEvidencePackEnabled/;
+    // 2026-08-12: the gate keys on docGroundedEnforcementActive (R1: explicit
+    // strict contract OR broad-with-files — restores parity with manual chat
+    // for seeded modes the user actually uploaded documents into) AND keeps
+    // the explicit files requirement as belt-and-braces (reference_files_only
+    // can be strict with zero files).
+    const gate = /docGroundedEnforcementActive\s*\n[^]{0,700}?hasReferenceFiles[^]{0,200}?contextOsEvidencePackEnabled/;
     assert.ok(gate.test(src), 'site-2 govern must key on strictDocumentGroundedActive AND require hasReferenceFiles');
   });
 });
