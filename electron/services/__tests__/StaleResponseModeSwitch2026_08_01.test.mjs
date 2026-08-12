@@ -139,8 +139,14 @@ describe('Defect G contract: mode-identity check precedes the user-visible done 
   });
 
   test('V3 block: liveModeIdAtEmit comparison occurs BEFORE the V3 gemini-stream-done emit', () => {
-    // The V3 done emit is the only one shaped exactly `{ finalText, streamId: myStreamId }`.
-    const v3DoneIdx = handlerBody.indexOf("send('gemini-stream-done', { finalText, streamId: myStreamId })");
+    // The V3 done emit is the only one whose payload opens `finalText,
+    // streamId: myStreamId`. Matched by regex rather than an exact one-line
+    // string: the payload gained an `incomplete` flag (2026-08-12) and was
+    // reformatted across lines, which silently broke the old indexOf locator —
+    // the ORDERING invariant below still held, but the test could no longer
+    // find the emit to check it against. Tolerate whitespace and extra fields.
+    const v3DoneMatch = /send\('gemini-stream-done',\s*\{\s*finalText,\s*streamId: myStreamId/.exec(handlerBody);
+    const v3DoneIdx = v3DoneMatch ? v3DoneMatch.index : -1;
     assert.ok(v3DoneIdx >= 0, 'V3 done emit must exist');
 
     const emitGuardIdx = handlerBody.indexOf('liveModeIdAtEmit');

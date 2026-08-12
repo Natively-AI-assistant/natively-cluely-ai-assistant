@@ -161,7 +161,7 @@ describe('every text-path fall-through site consults the commit flag', () => {
     // and `${err.message}`, whose closing braces would truncate a naive scan.
     const guardBlocks = src.split(/if \(commit\.emitted\) \{/).slice(1);
     for (const [i, block] of guardBlocks.entries()) {
-      const body = block.slice(0, 400);
+      const body = block.slice(0, 900);
       assert.match(
         body,
         /return;/,
@@ -191,6 +191,6 @@ describe('every text-path fall-through site consults the commit flag', () => {
     );
     const loop = streamingLoops[0];
     assert.match(loop, /yield\* this\.trackCommit\(provider\.execute\(\)/);
-    assert.match(loop, /if \(commit\.emitted\)[\s\S]{0,300}?return;/);
+    assert.match(loop, /if \(commit\.emitted\)[\s\S]{0,900}?return;/);
   });
 });

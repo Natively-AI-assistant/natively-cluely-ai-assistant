@@ -1230,7 +1230,12 @@ export function initializeIpcHandlers(appState: AppState): void {
 
             let finalText = '';
             let v3SawFirstToken = false;
-            const v3Stream = llmHelper.streamChat(
+            // streamChatWithOutcome, not streamChat: a turn that stops early (a
+            // provider failing after its first token, or the runaway output cap)
+            // ends by returning, so the loop below cannot tell a truncated answer
+            // from a complete one. Storing a truncated answer as history makes it
+            // the antecedent for the NEXT turn's referent resolution.
+            const v3Stream = llmHelper.streamChatWithOutcome(
               composed.user,
               imagePaths,
               undefined,
@@ -1253,10 +1258,10 @@ export function initializeIpcHandlers(appState: AppState): void {
               // retrieval and injected it around V3's filtered evidence, and
               // shapeDocumentGroundedSystemPrompt mutated V3's system prompt.
               { v3Owned: true },
-            ) as AsyncGenerator<string>;
+            );
 
             try {
-              for await (const tok of v3Stream) {
+              for await (const tok of v3Stream.stream) {
                 if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
                   finishDebug(finalText, false, 'superseded_by_newer_stream');
                   return null;
@@ -1312,8 +1317,25 @@ export function initializeIpcHandlers(appState: AppState): void {
                 return null;
               }
             }
-            event.sender.send('gemini-stream-done', { finalText, streamId: myStreamId });
-            finishDebug(finalText, true, null);
+            // A turn that stopped early is INCOMPLETE. Tell the renderer (the
+            // payload is already an object, so this is additive and older
+            // renderers simply ignore it) and record it in the debug trace as a
+            // non-success, which is what it is.
+            const v3Truncated = v3Stream.outcome.truncated === true;
+            if (v3Truncated) {
+              console.warn('[IPC] manual chat answer is INCOMPLETE — not storing it as conversation history', {
+                streamId: myStreamId,
+                reason: v3Stream.outcome.reason,
+                chars: finalText.length,
+              });
+            }
+            event.sender.send('gemini-stream-done', {
+              finalText,
+              streamId: myStreamId,
+              incomplete: v3Truncated,
+              incompleteReason: v3Truncated ? v3Stream.outcome.reason : undefined,
+            });
+            finishDebug(finalText, !v3Truncated, v3Truncated ? 'stream_truncated' : null);
 
             // ── Record the turn (V3 previously recorded NOTHING) ────────────
             // The short-circuit skipped every store the legacy path writes, so
@@ -1331,6 +1353,15 @@ export function initializeIpcHandlers(appState: AppState): void {
             let liveModeIdAtRecord: string | null = null;
             try { liveModeIdAtRecord = mm.getActiveMode()?.id ?? null; } catch { /* record-guard only */ }
             if (liveModeIdAtRecord === (manualActiveMode?.id ?? null)) {
+              // A truncated answer must NOT enter conversation state, memory, or
+              // the session transcript. It would become the antecedent for the
+              // next turn's referent resolution and be replayed as if it were a
+              // complete answer — the same class of defect as the
+              // "(referring to: Makefile)" contamination. The user still SEES
+              // the partial text; it just does not become history.
+              if (v3Truncated) {
+                console.warn('[IPC] skipping history/memory sinks for a truncated answer', { streamId: myStreamId });
+              } else {
               try {
                 const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
                 recordAnswerSummary(String(senderId), finalText);
@@ -1360,6 +1391,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), String(message || ''));
                 PhoneMirrorService.getInstance().publishAssistantMessage(String(myStreamId), finalText, 'Chat');
               } catch { /* mirror only */ }
+              } // end !v3Truncated
             }
 
             return null;
@@ -3018,6 +3050,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               govern: packGovernsGeneration({
                 answerPolicy: coordinatorResult.pack.answerPolicy,
                 sourceAuthority: manualSourceContract?.sourceAuthority ?? null,
+                hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
               }),
             };
             coordinatorGovernedProfileEvidence = manualContextOsGeneration.govern;
@@ -4079,7 +4112,17 @@ export function initializeIpcHandlers(appState: AppState): void {
               // resolver failure), the legacy re-retrieval below remains the only
               // source, unchanged.
               let docContextBlock = '';
-              const _governedPack = manualContextOsGeneration?.evidencePack;
+              // Code-review 2026-08-12: keyed on pack PRESENCE, but a pack is
+              // now attached even when it does NOT govern (packGovernsGeneration
+              // false — the layer-1 fall-through for unbounded authorities). An
+              // ungoverned refusal pack has zero items, so `_governedPack` was
+              // truthy, the `!_governedPack` branches below were skipped, and
+              // the validator ran against an empty block for a turn the legacy
+              // path actually answered. `govern` is what the comment above
+              // means by "governed this turn".
+              const _governedPack = manualContextOsGeneration?.govern
+                ? manualContextOsGeneration.evidencePack
+                : undefined;
               // Root-cause fix (2026-07-23): prefer the RAW block the actual
               // generation call retrieved (surfaced via
               // ContextOsGenerationContext.retrievedBlockRaw, written

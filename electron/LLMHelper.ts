@@ -264,6 +264,14 @@ const IMAGE_ANALYSIS_PROMPT = `Analyze concisely. Be direct. No markdown formatt
 
 ${IMAGE_TRUST_TRAILER}`
 
+/** Out-of-band result of one streamChat call. See streamChatWithOutcome. */
+export interface StreamOutcome {
+  /** True when the turn stopped early and the text is INCOMPLETE. */
+  truncated: boolean;
+  /** Which guard ended it — telemetry and log wording only. */
+  reason?: 'provider_failed_after_first_token' | 'output_cap_reached';
+}
+
 export class LLMHelper {
   // ── Provider clients ────────────────────────────────────────────────────
   //
@@ -4870,6 +4878,9 @@ let isMultimodal = !!(imagePaths?.length);
         } catch (err: any) {
           if (commit.emitted) {
             console.warn(`[LLMHelper] ⚠️ ${provider.name} failed AFTER first token — ending stream rather than appending a second answer: ${err.message}`);
+            // NOTE: no truncation sentinel here. This generator is consumed directly by
+            // RAGManager (not via streamChat), so a sentinel would leak into its output.
+            // Truncation signalling is scoped to the streamChat path.
             return;
           }
           console.warn(`[LLMHelper] ⚠️ ${provider.name} failed: ${err.message}`);
@@ -5076,6 +5087,40 @@ let isMultimodal = !!(imagePaths?.length);
   public async * streamChat(
     ...args: Parameters<LLMHelper['_streamChatInner']>
   ): AsyncGenerator<string, void, unknown> {
+    // Callers that need to know whether the turn completed use
+    // streamChatWithOutcome; this overload discards the outcome so the nine
+    // existing call sites are untouched.
+    yield* this._streamChatTracked({ truncated: false }, ...args);
+  }
+
+  /**
+   * streamChat plus an out-of-band completion outcome.
+   *
+   * A stream that stops early (a provider failing after its first token, or the
+   * runaway output cap) ends by RETURNING, so `for await` sees an ordinary
+   * completion — deliberately, because throwing would make every consumer's
+   * existing catch reclassify a partial answer as a failed generation.
+   *
+   * The cost of that choice was silent: the 2026-08-12 fix left a truncated
+   * answer indistinguishable from a complete one, so consumers stored it as
+   * conversation history. It then became the antecedent for the NEXT turn's
+   * referent resolution and went into the memory/summary sinks — the same class
+   * of bug as "(referring to: Makefile)", bad state poisoning a later turn.
+   *
+   * Read `outcome.truncated` AFTER the stream finishes. It is populated by the
+   * time the generator completes, never before.
+   */
+  public streamChatWithOutcome(
+    ...args: Parameters<LLMHelper['_streamChatInner']>
+  ): { stream: AsyncGenerator<string, void, unknown>; outcome: StreamOutcome } {
+    const outcome: StreamOutcome = { truncated: false };
+    return { stream: this._streamChatTracked(outcome, ...args), outcome };
+  }
+
+  private async * _streamChatTracked(
+    outcome: StreamOutcome,
+    ...args: Parameters<LLMHelper['_streamChatInner']>
+  ): AsyncGenerator<string, void, unknown> {
     const { StreamingDashReducer } = await import('./llm/postProcessor');
     // Per-stream stateful reducer: tracks fenced-code (```) state ACROSS chunks
     // so a code block streamed over many chunks is never dash-mangled (the old
@@ -5099,9 +5144,18 @@ let isMultimodal = !!(imagePaths?.length);
     let emittedChars = 0;
     for await (const chunk of this._streamChatInner(...args)) {
       if (abortSignal?.aborted) return;
+      // Strip the internal truncation marker before anything downstream sees
+      // it. This is the ONLY place it is consumed; see TRUNCATION_SENTINEL.
+      if (chunk === LLMHelper.TRUNCATION_SENTINEL) {
+        outcome.truncated = true;
+        outcome.reason = 'provider_failed_after_first_token';
+        return;
+      }
       yield dashReducer.reduce(chunk);
       emittedChars += typeof chunk === 'string' ? chunk.length : 0;
       if (emittedChars > MAX_STREAM_OUTPUT_CHARS) {
+        outcome.truncated = true;
+        outcome.reason = 'output_cap_reached';
         // End the stream the same way a post-commit provider failure now does —
         // return, never throw — so the consumer sees one consistent shape for
         // "this stream stopped early".
@@ -5112,6 +5166,30 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
   }
+
+  /**
+   * Internal end-of-stream marker meaning "this turn stopped early".
+   *
+   * `_streamChatInner` has EIGHT places where a post-commit provider failure
+   * ends the turn by returning (see trackCommit). From outside, an early return
+   * and a normal completion are indistinguishable — which is exactly the hole
+   * the 2026-08-12 fix left: the consumer stored a truncated answer as
+   * conversation history with no idea it was incomplete, and that answer then
+   * became the antecedent for the NEXT turn's referent resolution.
+   *
+   * A sentinel chunk is used rather than a signature change because
+   * `_streamChatInner` has exactly ONE caller — `streamChat`, below — which
+   * strips it. It can never reach a consumer. The alternatives were worse:
+   * threading an outcome object needs `Parameters<_streamChatInner>` surgery
+   * across every call site, an instance field races between concurrent streams
+   * (WTA and manual chat run together), and switching back to throwing would
+   * make all nine consumers' existing catch blocks reclassify a partial answer
+   * as a failed generation.
+   *
+   * U+E010/U+E011 are private-use codepoints: no provider emits them, and the
+   * placeholder system already relies on this property (U+E002/U+E003).
+   */
+  private static readonly TRUNCATION_SENTINEL = '\uE010__NATIVELY_STREAM_TRUNCATED__\uE011';
 
   /**
    * Commit-point tracking for provider fall-through.
@@ -6392,6 +6470,7 @@ let isMultimodal = !!(imagePaths?.length);
         } catch (e: any) {
           if (commit.emitted) {
             console.warn("[LLMHelper] Codex CLI Fast Text failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            yield LLMHelper.TRUNCATION_SENTINEL;
             return;
           }
           console.warn("[LLMHelper] Codex CLI Fast Text streaming failed, falling back:", e.message);
@@ -6418,6 +6497,7 @@ let isMultimodal = !!(imagePaths?.length);
           }
           if (commit.emitted) {
             console.warn("[LLMHelper] Groq Fast Text failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            yield LLMHelper.TRUNCATION_SENTINEL;
             return;
           }
           console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
@@ -6437,6 +6517,7 @@ let isMultimodal = !!(imagePaths?.length);
           // already read.
           if (commit.emitted) {
             console.warn("[LLMHelper] Natively fast-mode failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            yield LLMHelper.TRUNCATION_SENTINEL;
             return;
           }
           console.warn("[LLMHelper] Natively fast-mode failed, falling back:", e.message);
@@ -6561,6 +6642,7 @@ let isMultimodal = !!(imagePaths?.length);
         // applies; only the fall-through is suppressed.
         if (commit.emitted) {
           console.warn('[LLMHelper] Groq failed AFTER first token — ending stream rather than appending a second answer:', msg.slice(0, 120));
+          yield LLMHelper.TRUNCATION_SENTINEL;
           return;
         }
         // Fall through to Natively at line ~5435
@@ -6695,6 +6777,7 @@ let isMultimodal = !!(imagePaths?.length);
             // where that would happen most often.
             if (commit.emitted) {
               console.warn('[LLMHelper] Text TTFT race failed AFTER first token — ending stream rather than appending a second answer:', raceErr?.message);
+              yield LLMHelper.TRUNCATION_SENTINEL;
               return;
             }
             console.warn('[LLMHelper] Text TTFT race exhausted, falling through to Gemini:', raceErr?.message);
@@ -6758,6 +6841,7 @@ let isMultimodal = !!(imagePaths?.length);
       } catch (e: any) {
         if (commit.emitted) {
           console.warn('[LLMHelper] Natively last-resort failed AFTER first token — ending stream rather than appending a second answer:', e.message);
+          yield LLMHelper.TRUNCATION_SENTINEL;
           return;
         }
         console.warn('[LLMHelper] Natively last-resort fallback failed:', e.message);
@@ -6801,6 +6885,7 @@ let isMultimodal = !!(imagePaths?.length);
           // Nothing left to fall through to — but throwing here would surface a
           // provider error over an answer the user has already partly read.
           console.warn(`[LLMHelper] Configured custom last-resort failed AFTER first token — ending stream: ${e?.message || e}`);
+          yield LLMHelper.TRUNCATION_SENTINEL;
           return;
         }
         console.warn(`[LLMHelper] Configured custom last-resort failed: ${e?.message || e}`);
