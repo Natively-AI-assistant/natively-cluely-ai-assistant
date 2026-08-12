@@ -71,7 +71,22 @@ describe('the fail-open profile-repair gate stays defended upstream', () => {
     // This is WHY the `catch { return true; }` fail-open is safe. If these
     // clears ever disappear, the fail-open becomes a real profile leak and this
     // test must fail loudly rather than let it pass silently.
-    const clears = source.match(/^\s*candidateProfile\s*=\s*''\s*;/gm) || [];
-    assert.ok(clears.length >= 2, `expected the contract-denial clears to remain, found ${clears.length}`);
+    //
+    // Sharpened 2026-08-11 (was a bare `>= 2` count of `candidateProfile = ''`
+    // lines): the two clears have DIFFERENT contracts and the count conflated
+    // them. The DENIAL clear (context_os_profile_suppressed) is the actual
+    // leak defense and must stay UNCONDITIONAL. The coordinator's
+    // de-duplication clear ("typed pack is the sole factual injection") is
+    // deliberately gated on `.govern` — an ungoverned turn (refusal pack in a
+    // non-bounded mode) runs the legacy path, where the JIT profile XML is the
+    // correct legacy behaviour, and the denial clear upstream still protects
+    // doc-grounded/transcript-owned turns.
+    const denialClear =
+      /if \(!contractAllowsProfileWta && candidateProfile\) \{[\s\S]{0,400}?^\s*candidateProfile\s*=\s*''\s*;/m;
+    assert.ok(denialClear.test(source),
+      'the contract-denial clear (the leak defense) must remain, and must remain unconditional');
+    const dedupClear = /if \(wtaContextOsGeneration\.govern\) candidateProfile\s*=\s*''\s*;/;
+    assert.ok(dedupClear.test(source),
+      'the coordinator de-dup clear must remain, gated on govern (see refusalPolicy.ts, 2026-08-11)');
   });
 });
