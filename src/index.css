@@ -8089,20 +8089,14 @@ html[data-platform="linux"] body {
    factors produced, so the shape/ratio guarantee is unchanged; only the
    mechanism is safer. */
 :root {
-    /* Hardcoded on purpose: every caller's own track token (bg-accent-primary,
-       --pi-accent, --aip-accent, Phone Mirror's amber LAN switch, …) is
-       intentionally overridden here so every switch in the app reads
-       identically regardless of theme or panel. --toggle-on/-focus-ring are
-       the exception — they follow the app's real periwinkle accent instead
-       of the reference's arbitrary blue, so the toggle matches the rest of
-       the UI. --toggle-on uses --accent-strong (periwinkle-500 on dark,
-       periwinkle-700 on light) rather than the softer --accent-primary
-       (periwinkle-300/600) — closer to the reference blue's punch while
-       staying periwinkle. */
+    /* Hardcoded on purpose, same as --toggle-off/-thumb: every toggle in the
+       app reads identically regardless of theme or panel, ignoring each
+       caller's own track token (bg-accent-primary, --pi-accent, --aip-accent,
+       Phone Mirror's amber LAN switch, …) and the app's periwinkle accent. */
     --toggle-off: #474949;
-    --toggle-on: var(--accent-strong);
+    --toggle-on: #6688F5;
     --toggle-thumb: #e1ebfe;
-    --toggle-focus-ring: var(--accent-focus);
+    --toggle-focus-ring: rgba(102, 136, 245, 0.22);
 }
 .t-toggle {
     position: relative;
