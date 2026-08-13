@@ -54,7 +54,7 @@ Fix: (1) ownership revalidation in all three flows — after the awaits, a non-n
 E2E verification: repro re-run → exit 0 (aliveCount 1, orphanCount 0, field owns the survivor). Regression pin: electron/services/__tests__/CaptureOwnershipGuards2026_08_14.test.mjs. Adjacent tests green (ZerofillDetectorPeakToPeak, AudioCaptureFailedBroadcastBothSurfaces); typecheck clean; F-103 repro re-run PASS on top of these changes (same handler touched).
 Regression check: normal single-flow rebuilds unaffected (field is null when they construct); the identity guards drop only chunks from a capture that already lost ownership (≤ms of teardown-window audio, previously interleaved garbage).
 Cross-platform: pure JS state-machine fix, platform-neutral; macOS live-verified, Windows reviewed but not executed.
-Commit: (pending — backfilled next update)
+Commit: 0d0740fe
 Hypothesis: data-path writes are the only consumers NOT gated on instance identity (main.ts:3487 `this.googleSTT?.write(chunk)`, :3666 mic equivalent; guarded siblings at :3424/:3475/:3518/:3571). A capture that loses ownership of the field without being destroyed keeps pumping PCM into the live STT socket. Reachable when `restartCapturesAfterResume` (no own mutex; clears both recovery mutexes at :3916/:3923) races `handleDefaultOutputChanged` (:4856-4871) — both destroy the same old capture, construct fresh, assign; loser never destroyed.
 Trigger: wake-from-sleep coinciding with an output route change (AirPods reconnect on lid open).
 Disproof: show endMeeting/abort reaches non-field-referenced captures, or the watcher can't tick between resume and :3986.
@@ -81,7 +81,15 @@ Confidence: high.
 
 ## F-104 [P1] Unawaited destroy() races fresh native monitor for HAL lock
 Phase: 1 | Area: main.ts recovery + route-change flows
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Step 1 confirmation: resolveMacScreenCaptureCapability's cache-hit (:862-868), dev-bypass (:874-879) and status!=='denied' (:896-901) paths all resolve without leaving the microtask queue; SystemAudioCapture.stop() defers the blocking native monitor.stop() via setImmediate (SystemAudioCapture.ts:248) and destroy() awaits stop (:273-280), so destroy's promise IS the "HAL released" signal — the flows just never awaited it. Native acquisition is lazy (start(), per :234-239), and microtasks drain before the check phase → fresh.start() always precedes the dying monitor's stop on warm-cache paths. The stale comment at the recovery site claimed "no race".
+Repro: scripts/audit/F-104-repro.mjs — deterministic ordering assertion through the REAL route-change flow (real wrapper instances; native starts suppressed by the wire interceptor; the old capture's REAL stop() runs the REAL setImmediate deferral against a fake monitor that marks the release moment). PRE-FIX marks: fresh.start → old.nativeStop → exit 1.
+Root cause: `oldCapture?.destroy()` fire-and-forget at the recovery flow and route-change flow (every other teardown site awaits — resume :3954/:3982, reconfigure :4363, endMeeting via _pendingTeardown).
+Fix: both flows now null the field first (so watcher ticks/other flows observe the teardown) then `await oldCapture?.destroy()`; stale "no race" comment replaced with the actual invariant. Composes with F-102's ownership guards (a flow that loses the field while awaiting defers to the new owner).
+E2E verification: repro → exit 0 (old.nativeStop precedes the measured fresh.start). F-102 and F-103 repros re-run PASS on the combined changes (same flows). Pin: electron/services/__tests__/DestroyAwaitedBeforeFreshCapture2026_08_14.test.mjs (1/1). typecheck clean.
+Regression check: awaiting adds ≤~300ms (Windows worst case) before a rebuild — inside mutex-held recovery paths where resume/endMeeting already accept the same latency; recovery counter/timer semantics unchanged.
+Cross-platform: same deferral exists for WASAPI teardown; fix platform-neutral. macOS live-verified; Windows reviewed but not executed.
+Commit: (pending — backfilled next update)
 Hypothesis: `oldCapture?.destroy()` unawaited at main.ts:4717 and :4879; native `monitor.stop()` runs on setImmediate (SystemAudioCapture.ts:248) while the only intervening await (`resolveMacScreenCaptureCapability`, cache-hit path main.ts:862-901, TTL 3s always warm mid-meeting) resolves in microtasks — so `fresh.start()` (:4743/:4911) constructs the new RustAudioCapture while the dying one holds the CoreAudio tap. Repo documents this exact failure at SystemAudioCapture.ts:170-180 and main.ts:5760-5763 ("0 chunks in 8s" / HAL property-listener deadlock). All other teardown sites await (:4363, :3954, :3982, endMeeting :5776-5783).
 Disproof: capability resolver always crosses a macrotask boundary on cache hit; or Rust constructor acquires no HAL resource until start().
 Confidence: medium-high.

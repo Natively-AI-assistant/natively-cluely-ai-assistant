@@ -4736,13 +4736,18 @@ export class AppState {
         //   - The deferred stop also leaves the SCK/CoreAudio Tap holding device
         //     resources, so even if start() succeeded the BG thread couldn't
         //     re-acquire them.
-        // destroy() (called via the new instance shadow) synchronously removes
-        // listeners; the old monitor's stop/join still completes in setImmediate.
-        // The new instance has its own fresh state so there's no race.
+        // The destroy MUST be awaited: destroy() resolves only after the
+        // deferred monitor.stop() has released the CoreAudio/WASAPI handles.
+        // Firing it without awaiting let the fresh capture's start() race the
+        // dying monitor for the HAL property-listener lock ("0 chunks in 8s")
+        // — the warm-TCC-cache capability await below resolves in microtasks,
+        // which drain before the deferred stop's setImmediate (F-104,
+        // live-reproduced in scripts/audit/F-104-repro.mjs). Null the field
+        // first so watcher ticks and other flows observe the teardown.
         const oldCapture = this.systemAudioCapture;
-        oldCapture?.destroy();
         this.systemAudioCapture = null;
         this._sysSttRateApplied = false;
+        await oldCapture?.destroy();
 
         const screenCapability = await resolveMacScreenCaptureCapability('system audio recovery');
         if (!isRecoveryCurrentMeeting()) {
@@ -4921,11 +4926,14 @@ export class AppState {
       // start. Reset the recovery counter so a subsequent unrelated failure
       // gets its full 3-attempt budget.
       const oldCapture = this.systemAudioCapture;
-      oldCapture?.destroy();
       this.systemAudioCapture = null;
       this._sysSttRateApplied = false;
       this._systemAudioRecoveryAttempts = 0;
       this._systemAudioConsecutiveFailures = 0;
+      // Awaited for the same reason as the recovery flow (F-104): the fresh
+      // capture must not start while the dying monitor still holds the HAL
+      // property-listener lock.
+      await oldCapture?.destroy();
 
       const screenCapability = await resolveMacScreenCaptureCapability('default output route change');
       if (this._isQuitting) return;
