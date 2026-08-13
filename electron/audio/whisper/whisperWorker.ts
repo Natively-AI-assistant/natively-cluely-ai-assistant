@@ -227,7 +227,17 @@ parentPort.on('message', async (msg: any) => {
         // Defensive: every real caller (sharedWorkerRegistry.ts) always sets
         // this. Fail loud rather than silently keying state off `undefined`,
         // which would let a second real channel collide with a malformed one.
-        parentPort!.postMessage({ type: 'error', message: 'Failed to load model: init.channelId is required for sessionLayout "nemotron-rnnt"' });
+        // `channelId: msg.channelId` is included for shape-consistency with
+        // every other error this worker posts in the nemotron-rnnt init path
+        // (see initNemotronChannel's catch) — it's `undefined` here by
+        // definition of this branch, so it does NOT by itself make
+        // sharedWorkerRegistry.ts's own listener (which only reacts when
+        // `msg.channelId` is truthy) treat this as a rejection; that
+        // listener still won't see this message. This case remains
+        // unreachable in real production traffic (see above), so it's
+        // acceptable for it to surface only via the caller-side promise
+        // machinery rather than a registry-side reject.
+        parentPort!.postMessage({ type: 'error', channelId: msg.channelId, message: 'Failed to load model: init.channelId is required for sessionLayout "nemotron-rnnt"' });
         return;
       }
       // Chained (not awaited here — the outer message handler doesn't await

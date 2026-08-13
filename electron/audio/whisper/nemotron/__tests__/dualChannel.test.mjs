@@ -1,6 +1,7 @@
 // Real-model, real-worker integration test for dual-channel Nemotron (the
 // "one shared worker, two isolated channels" fix — see
-// .superpowers/sdd/2026-08-10-nemotron-local-stt/dual-channel-fix-brief.md).
+// .superpowers/sdd/2026-08-10-nemotron-local-stt/dual-channel-fix-brief.md
+// and, for the teardown bug this round fixed, dual-channel-fix2-brief.md).
 //
 // Unlike integration.test.mjs (which drives NemotronEngine.create() directly
 // and never touches the worker/registry), this file drives the REAL
@@ -9,6 +10,26 @@
 // instances (mic + system-audio) go through in production. Gated the same
 // way integration.test.mjs is: skipped when the real model/fixtures/build
 // aren't present, never a hard CI requirement.
+//
+// IMPORTANT (fix2 round): teardown now goes through REAL LocalWhisperSTT
+// instances' `stop()` — which is what actually calls the (previously buggy)
+// `beginWorkerTermination()` — instead of calling the registry's `release()`
+// directly. That structural divergence (raw release() bypassing
+// beginWorkerTermination() entirely) is exactly why the original version of
+// this file never caught the Critical listener-stripping bug an independent
+// review later found and measured (see dual-channel-fix2-brief.md /
+// progress.md's "INDEPENDENT REVIEW" entry). `LocalWhisperSTT` is loaded from
+// the compiled dist-electron output (same technique as
+// integration.test.mjs), and its private fields/methods (`worker`,
+// `nemotronChannelId`, `nemotronWorkerRelease`, `workerReady`,
+// `attachWorkerListeners()`, `stop()`) are reached directly — TypeScript
+// `private` has no runtime enforcement, and this harness deliberately skips
+// only `spawnWorker()`'s catalog/electron-`app`-dependent bootstrapping
+// (`buildWorkerInitMessage()`/`getModelsDir()`, which throw under this
+// `ELECTRON_RUN_AS_NODE=1` test harness — see integration.test.mjs's own
+// comment on `require('electron').app` being undefined here), wiring the
+// instance to an already-acquired shared worker exactly the way
+// `spawnWorker()`'s Nemotron branch leaves it afterward.
 //
 // What this proves, with real evidence, not just "no error was thrown":
 //   1. Two channels joining back-to-back result in exactly ONE weight:3 ONNX
@@ -19,14 +40,25 @@
 //      transcript — fed two genuinely different real phrases (English +
 //      German, reusing the multi-language verification's own already-proven
 //      real de-DE fixture/lang_id/expected-output rather than fabricating a
-//      new one), so any cross-wiring between the two channels' engines or
-//      chains would show up as either channel's text bleeding into the
-//      other's, or being replaced by it.
-//   3. Refcount correctness: one channel releasing does NOT kill the worker
-//      or the ONNX slot while the other is still live; the other channel
-//      keeps working correctly afterward. Releasing the LAST channel DOES
-//      terminate the worker and DOES free the slot — verified by directly
-//      reading the shared semaphore's counters AND by a subsequent real
+//      new one) — AND each channel's language is set via a REAL
+//      `setRecognitionLanguage()` → `setLanguage` worker message BEFORE
+//      either transcribes, so this is now real per-channel language-isolation
+//      coverage, not just routing/text-isolation coverage. Any cross-wiring
+//      between the two channels' engines, chains, or language state would
+//      show up as either channel's text bleeding into the other's, being
+//      replaced by it, or decoding at the WRONG lang_id (German scoring like
+//      the lang_id=0 default instead of lang_id=9).
+//   3. `LocalWhisperSTT.stop()` → `beginWorkerTermination()` on ONE channel,
+//      the REAL production teardown path, does NOT kill the worker or the
+//      ONNX slot while the other channel is still live, does NOT strip the
+//      surviving channel's OWN worker listeners (proven by listener-count
+//      measurement, matching the independent review's own technique) or
+//      sharedWorkerRegistry.ts's own listener (proven by a fresh join to the
+//      still-live worker resolving promptly instead of hanging), and the
+//      surviving channel keeps transcribing correctly afterward. Releasing
+//      the LAST channel (also via the real `stop()` path) DOES terminate the
+//      worker and DOES free the slot — verified by directly reading the
+//      shared semaphore's counters AND by a subsequent real
 //      acquireOnnxSlot('high', 3) call resolving promptly.
 //   4. A worker crash while both channels are live is visible to a listener
 //      attached directly on the shared worker object (proving Node's
@@ -53,10 +85,12 @@ const distElectronRoot = path.resolve(__dirname, '../../../../../dist-electron/e
 const registryJsPath = path.join(distElectronRoot, 'audio/whisper/nemotron/sharedWorkerRegistry.js');
 const workerJsPath = path.join(distElectronRoot, 'audio/whisper/whisperWorker.js');
 const onnxConfigJsPath = path.join(distElectronRoot, 'utils/onnxThreadConfig.js');
+const localWhisperSttJsPath = path.join(distElectronRoot, 'audio/LocalWhisperSTT.js');
 
 const registryPresent = fs.existsSync(registryJsPath);
 const workerPresent = fs.existsSync(workerJsPath);
 const onnxConfigPresent = fs.existsSync(onnxConfigJsPath);
+const localWhisperSttPresent = fs.existsSync(localWhisperSttJsPath);
 
 // ── MODEL_DIR resolution — same convention as integration.test.mjs ────────
 function defaultAppUserDataDir() {
@@ -186,17 +220,45 @@ function readOnnxSemaphore() {
   return g.__nativelyOnnxSemaphoreV1__ || { inFlightNormal: 0, inFlightHigh: 0 };
 }
 
+/**
+ * Wires a REAL `LocalWhisperSTT` instance to an already-acquired shared
+ * worker exactly the way `spawnWorker()`'s Nemotron branch leaves one after
+ * `acquireSharedNemotronWorker` resolves (worker/nemotronChannelId/
+ * nemotronWorkerRelease/workerReady set, `attachWorkerListeners()` called) —
+ * see this file's own top-of-file comment for why `spawnWorker()` itself
+ * isn't called here. `isActive = true` so the instance behaves like a real
+ * in-progress recording (attachWorkerListeners' message handler otherwise
+ * drops 'result'/'partial' for an inactive instance, independent of
+ * anything under test). Returns the stt instance; its `stop()` is what
+ * fix2's whole verification round exercises.
+ */
+function wireRealChannel(LocalWhisperSTT, modelId, channelId, registryHandle) {
+  const stt = new LocalWhisperSTT(modelId);
+  stt.on('error', (e) => console.warn(`[dualChannel test] stt(${channelId}) error event:`, e.message));
+  stt.setChannel(channelId);
+  stt.worker = registryHandle.worker;
+  stt.nemotronChannelId = channelId;
+  stt.nemotronWorkerRelease = registryHandle.release;
+  stt.workerReady = true;
+  stt.isActive = true;
+  stt.attachWorkerListeners();
+  return stt;
+}
+
 describe('Dual-channel Nemotron: real worker + real registry', {
-  skip: !modelPresent || !fixturesPresent || !registryPresent || !workerPresent || !onnxConfigPresent,
+  skip: !modelPresent || !fixturesPresent || !registryPresent || !workerPresent || !onnxConfigPresent || !localWhisperSttPresent,
 }, () => {
   /** @type {{ acquireSharedNemotronWorker: Function, __resetSharedNemotronWorkerForTests: Function }} */
   let registry;
   /** @type {{ __resetOnnxGateForTests: Function, acquireOnnxSlot: Function }} */
   let onnxConfig;
+  /** @type {Function} the real LocalWhisperSTT class, compiled */
+  let LocalWhisperSTT;
 
   before(async () => {
     registry = await import(pathToFileURL(registryJsPath).href);
     onnxConfig = await import(pathToFileURL(onnxConfigJsPath).href);
+    ({ LocalWhisperSTT } = await import(pathToFileURL(localWhisperSttJsPath).href));
     onnxConfig.__resetOnnxGateForTests();
     registry.__resetSharedNemotronWorkerForTests();
   });
@@ -212,6 +274,8 @@ describe('Dual-channel Nemotron: real worker + real registry', {
   // one real load — not an artifact of the test being cheap to fake.
   let channelA; // { worker, channelId, release }
   let channelB;
+  let sttA; // real LocalWhisperSTT instances wired to channelA/channelB
+  let sttB;
 
   test('two channels acquired back-to-back share exactly one ONNX slot acquisition', async () => {
     // Fired WITHOUT awaiting the first before starting the second — the
@@ -231,9 +295,42 @@ describe('Dual-channel Nemotron: real worker + real registry', {
     const sem = readOnnxSemaphore();
     assert.equal(sem.inFlightHigh, 3, 'exactly one weight:3 acquisition must be in flight, not two (which would read 6)');
     assert.equal(sem.inFlightNormal, 0);
+
+    // Real LocalWhisperSTT instances, wired to these same registry handles —
+    // used from here on so teardown (later tests) goes through the REAL
+    // production beginWorkerTermination() path instead of raw release().
+    sttA = wireRealChannel(LocalWhisperSTT, TEST_MODEL_ID, 'test-mic', channelA);
+    sttB = wireRealChannel(LocalWhisperSTT, TEST_MODEL_ID, 'test-system', channelB);
+
+    // Registry's own listener (1) + sttA's + sttB's own attachWorkerListeners()
+    // (1 each) = 3 on every event. This is the SAME baseline the independent
+    // review measured before finding the teardown bug — see the listener-count
+    // assertions in the next-but-one test below.
+    assert.equal(channelA.worker.listenerCount('message'), 3);
+    assert.equal(channelA.worker.listenerCount('error'), 3);
+    assert.equal(channelA.worker.listenerCount('exit'), 3);
   });
 
-  test('both channels transcribe concurrently and each gets back its OWN correct transcript', async () => {
+  test('both channels transcribe concurrently and each gets back its OWN correct transcript, with real per-channel setLanguage isolation', async () => {
+    // Real per-channel language isolation, via LocalWhisperSTT's REAL
+    // setRecognitionLanguage() -> resolveAndApplyNemotronLanguage() ->
+    // maybePushNemotronLangToWorker() chain — NOT a hand-crafted postMessage.
+    // The independent review found the ORIGINAL version of this test never
+    // actually called setLanguage for the German channel (both channels ran
+    // at the default lang_id=0), so the most likely real cross-channel leak
+    // vector — one channel's language setting clobbering the other's — was
+    // never exercised. 'english-us' -> bcp47 'en-US' -> lang_id=0 (already
+    // sttA's default, but sent explicitly here for symmetry/coverage);
+    // 'german' -> bcp47 'de-DE' -> lang_id=9 (languageTable.ts). Message
+    // order across a single MessagePort is guaranteed, and the worker's own
+    // per-channel chain (nemotronChains, whisperWorker.ts) serializes
+    // setLanguage strictly before the transcribe queued after it — so it's
+    // safe to not await these before posting transcribe below.
+    sttA.setRecognitionLanguage('english-us');
+    sttB.setRecognitionLanguage('german');
+    assert.equal(sttA.nemotronLangId, 0);
+    assert.equal(sttB.nemotronLangId, 9);
+
     const pcmEn = readPcm16Mono(FIXTURE_EN);
     const pcmDe = readPcm16Mono(FIXTURE_DE);
 
@@ -260,11 +357,20 @@ describe('Dual-channel Nemotron: real worker + real registry', {
 
     assert.ok(
       overlapEn >= 0.5,
-      `test-mic (English, lang_id defaults to 0) must recognizably transcribe its OWN English audio, got: "${lowerEn}"`,
+      `test-mic (English, lang_id=0 explicitly set) must recognizably transcribe its OWN English audio, got: "${lowerEn}"`,
     );
+    // The independent review proved (sequentially, zero concurrency) that
+    // lang_id=9 gives ~0.75 overlap on this exact DE fixture, while
+    // lang_id=0 gives only ~0.5 — the ORIGINAL 0.75->0.5 gap reported for
+    // this test was actually an artifact of setLanguage never being called
+    // at all, not "decode-boundary sensitivity" (that explanation was
+    // wrong). 0.7 sits strictly between the two, so this assertion actually
+    // discriminates: it fails if lang_id=9 silently isn't applied (leak from
+    // channel A, or setLanguage being dropped/misrouted) and passes with
+    // margin when it correctly is.
     assert.ok(
-      overlapDe >= 0.4,
-      `test-system (German — needs lang_id=9 applied via setLanguage, see below) must recognizably transcribe its OWN German audio, got: "${lowerDe}"`,
+      overlapDe >= 0.7,
+      `test-system (German, lang_id=9 explicitly set via a real setLanguage message) must transcribe at ~0.75 overlap, not the ~0.5 a missing/leaked lang_id=9 would produce — got: "${lowerDe}"`,
     );
 
     // Direct cross-contamination check, not just "both individually passed
@@ -275,41 +381,103 @@ describe('Dual-channel Nemotron: real worker + real registry', {
     // if each channel's OWN overlap score happened to still clear its bar.
     assert.ok(!lowerEn.includes('anna') && !lowerEn.includes('heiße'), 'English channel output must not contain German-fixture words');
     assert.ok(!lowerDe.includes('fox') && !lowerDe.includes('lazy'), 'German channel output must not contain English-fixture words');
+
+    // Indirect proof that neither channel's langId was affected by the
+    // other's setLanguage call: each engine instance is per-channel
+    // (nemotronChannels Map in whisperWorker.ts, keyed by channelId), so a
+    // leak would have to route through the wrong channelId — which the
+    // quality/cross-contamination assertions above already rule out. Also
+    // assert the HOST-side state (what LocalWhisperSTT itself believes it
+    // last pushed) is still exactly what each instance set, unclobbered by
+    // the other's call.
+    assert.equal(sttA.nemotronLangId, 0, "channel A's own langId must be unaffected by channel B's setLanguage call");
+    assert.equal(sttB.nemotronLangId, 9, "channel B's own langId must be unaffected by channel A's setLanguage call");
   });
 
-  test('refcount: releasing one channel does not kill the worker while the other is still live', async () => {
+  test('beginWorkerTermination via the REAL stop() path: channel A releasing removes ONLY its own listeners, not channel B\'s or the registry\'s (C1 fix reproduction + proof)', async () => {
     const worker = channelA.worker;
-    channelA.release();
-    // release() is synchronous about registry bookkeeping (postMessage +
-    // refcount decrement), but does NOT synchronously prove the worker is
-    // still alive — confirm via a real functional check, not just "no
-    // 'exit' event fired yet".
+
+    // Baseline — registry (1) + channel A's own (1) + channel B's own (1) =
+    // 3 per event. This is the SAME number the independent review measured
+    // before finding the teardown bug.
+    const before = {
+      message: worker.listenerCount('message'),
+      error: worker.listenerCount('error'),
+      exit: worker.listenerCount('exit'),
+    };
+    assert.deepEqual(before, { message: 3, error: 3, exit: 3 }, 'registry + channel A + channel B, before teardown');
+
+    // The REAL public production teardown entry point — stop() falls through
+    // to beginWorkerTermination() for an active instance with no pending
+    // finals (see LocalWhisperSTT.stop()). NOT a direct private-method call
+    // and NOT the registry's raw release() — this is exactly the structural
+    // gap (test teardown diverging from production's real call path) the
+    // independent review identified as why the original version of this
+    // file never caught the bug.
+    sttA.stop();
+
+    assert.equal(sttA.worker, null, 'beginWorkerTermination() must null out this instance\'s own worker reference');
+    assert.equal(sttA.nemotronWorkerRelease, null);
+
+    // THE headline assertion this whole fix round exists for. The buggy
+    // removeAllListeners() version collapsed this to { message: 0, error: 0,
+    // exit: 0 } — measured directly, see dual-channel-fix2-report.md. The
+    // fix must remove ONLY channel A's own three listeners, leaving the
+    // registry's and channel B's own intact.
+    const after = {
+      message: worker.listenerCount('message'),
+      error: worker.listenerCount('error'),
+      exit: worker.listenerCount('exit'),
+    };
+    assert.deepEqual(after, { message: 2, error: 2, exit: 2 }, "channel A's own teardown must remove ONLY its own listeners, not the shared worker's other listeners");
+
+    // Refcount correctness (subsumes the pre-fix2 version of this test, which
+    // drove this same scenario via the registry's raw release()): the worker
+    // must NOT have been terminated, and the ONNX slot must NOT have been
+    // freed, while channel B is still live.
     const sem = readOnnxSemaphore();
     assert.equal(sem.inFlightHigh, 3, 'the ONNX slot must NOT be released while channel B is still using the shared worker');
     assert.equal(channelB.worker, worker, 'channel B must still be pointed at the SAME live worker');
 
+    // The surviving channel must NOT have been silently killed — prove it
+    // still receives real, correct results after channel A's teardown, not
+    // merely "listenerCount is nonzero".
     const pcmEn = readPcm16Mono(FIXTURE_EN);
-    const text = await transcribeAndWait(channelB.worker, 'test-system', 'post-release-task', pcmEn);
-    // Channel B's own engine still has lang_id=0 default cache-state from
-    // its earlier German run's `reset()` — feed it English audio and expect
-    // it to work (proves the worker + channel B's engine are still
-    // genuinely alive and responsive, not merely "didn't throw").
-    console.log('Post-release channel B transcribed:', JSON.stringify(text));
-    assert.ok(text.trim().length > 0, 'channel B must still produce real, non-empty output after channel A released');
+    const text = await transcribeAndWait(channelB.worker, 'test-system', 'post-teardown-task', pcmEn);
+    console.log('Post-teardown channel B transcribed:', JSON.stringify(text));
+    assert.ok(text.trim().length > 0, 'channel B must still produce real, non-empty output after channel A tore down');
+
+    // A fresh channel joining the SAME still-live worker must resolve
+    // promptly, not hang — proves sharedWorkerRegistry.ts's own 'message'
+    // listener (which resolves a joining channel's `ready` wait) survived
+    // channel A's teardown. The independent review measured this exact call
+    // hanging for 12s+ on the buggy version.
+    const probe = await Promise.race([
+      registry.acquireSharedNemotronWorker(TEST_MODEL_ID, 'test-mic-2', ['cpu'], TEST_CACHE_DIR, workerJsPath),
+      new Promise((_, reject) => setTimeout(
+        () => reject(new Error("re-join to the still-live shared worker did not resolve promptly — the registry's own listener may have been stripped")),
+        5000,
+      )),
+    ]);
+    assert.equal(probe.worker, worker, 'the probe channel must join the SAME live worker, not cold-start a new one');
+    // Release immediately so the refcount invariant the next test relies on
+    // (only channel B left holding the worker) is restored.
+    probe.release();
   });
 
-  test('refcount: releasing the LAST channel actually terminates the worker and frees the ONNX slot', async () => {
+  test('refcount: releasing the LAST channel (via the real stop() path) actually terminates the worker and frees the ONNX slot', async () => {
     const worker = channelB.worker;
     let exited = false;
     worker.once('exit', () => { exited = true; });
 
-    channelB.release();
+    sttB.stop(); // real production teardown path, same as channel A above
 
     await new Promise((resolve) => {
       const check = () => (exited ? resolve() : setImmediate(check));
       check();
     });
     assert.ok(exited, 'the shared worker must actually exit once the last channel releases it');
+    assert.equal(sttB.worker, null);
 
     const sem = readOnnxSemaphore();
     assert.equal(sem.inFlightHigh, 0, 'the ONNX slot must be fully released once the worker is gone');
@@ -393,7 +561,7 @@ if (!fixturesPresent) {
     console.log(`[dualChannel.test.mjs] ${FIXTURE_EN} / ${FIXTURE_DE} — one or both missing.`);
   });
 }
-if (!registryPresent || !workerPresent || !onnxConfigPresent) {
+if (!registryPresent || !workerPresent || !onnxConfigPresent || !localWhisperSttPresent) {
   test('Dual-channel Nemotron test skipped: dist-electron build not found', () => {
     console.log('[dualChannel.test.mjs] run `npm run build:electron` first.');
   });

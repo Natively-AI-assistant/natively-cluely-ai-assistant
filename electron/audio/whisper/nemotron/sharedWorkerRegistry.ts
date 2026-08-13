@@ -33,6 +33,14 @@ interface SharedNemotronWorkerState {
   refCount: number;
   slotRelease: (() => void) | null;
   pendingReady: Map<string, PendingReady>;
+  // Serializes acquireSharedNemotronWorker's cold-start-vs-join decision (see
+  // that function's own doc comment). Lives on globalThis alongside the rest
+  // of this state — NOT as a standalone module-scope `let` — for the exact
+  // reason this file's top-of-file comment already gives for `worker`/
+  // `refCount`/etc: esbuild inlines this module into multiple dist bundles,
+  // and a per-bundle copy of a plain module-scope lock would let two
+  // different bundles each believe they hold (or don't hold) the same lock.
+  acquireLock: Promise<void>;
 }
 
 function getState(): SharedNemotronWorkerState {
@@ -44,7 +52,14 @@ function getState(): SharedNemotronWorkerState {
       refCount: 0,
       slotRelease: null,
       pendingReady: new Map(),
+      acquireLock: Promise.resolve(),
     };
+  }
+  // Defensive: a state object created by an older bundle generation (before
+  // this field existed) would otherwise leave `acquireLock` undefined here —
+  // the same multi-bundle skew the doc comment above exists to survive.
+  if (!g.__nativelySharedNemotronWorkerV1__.acquireLock) {
+    g.__nativelySharedNemotronWorkerV1__.acquireLock = Promise.resolve();
   }
   return g.__nativelySharedNemotronWorkerV1__;
 }
@@ -133,8 +148,18 @@ function attachRegistryListeners(state: SharedNemotronWorkerState, worker: Worke
 // channel A's entire model load — see the brief's explicit note that a
 // joining channel's wait "must wait for the REAL ready event for THIS
 // channelId, not just 'the worker object exists'".
-let acquireLock: Promise<void> = Promise.resolve();
-
+//
+// Lives on getState().acquireLock (globalThis), not a module-scope `let` —
+// see SharedNemotronWorkerState's own doc comment on the field. Deliberately
+// NOT reset by resetState(): resetState() can run from the registry's own
+// 'error'/'exit' listeners WHILE another acquireSharedNemotronWorker call is
+// still inside this critical section (hasn't reached `releaseTurn()` yet —
+// e.g. a crash racing a concurrent join). Resetting the lock there would let
+// the next caller chain off a fresh resolved promise and enter the critical
+// section concurrently with the in-flight one, reintroducing the exact
+// double-cold-start race this lock exists to prevent. Only
+// __resetSharedNemotronWorkerForTests() (an explicit, test-only, between-
+// tests reset) touches it.
 /**
  * Acquires (cold-starting if necessary) or joins the shared Nemotron worker
  * for `modelId`, registers `channelId` on it, and resolves once THAT
@@ -153,9 +178,9 @@ export async function acquireSharedNemotronWorker(
   const state = getState();
 
   let capturedWorker!: Worker;
-  const myTurn = acquireLock;
+  const myTurn = state.acquireLock;
   let releaseTurn!: () => void;
-  acquireLock = myTurn.then(() => new Promise<void>((resolve) => { releaseTurn = resolve; }));
+  state.acquireLock = myTurn.then(() => new Promise<void>((resolve) => { releaseTurn = resolve; }));
   await myTurn;
   try {
     if (state.worker && state.modelId !== modelId) {
@@ -256,5 +281,9 @@ function releaseChannel(state: SharedNemotronWorkerState, capturedWorker: Worker
 export function __resetSharedNemotronWorkerForTests(): void {
   const state = getState();
   resetState(state);
-  acquireLock = Promise.resolve();
+  // NOT done by resetState() itself — see acquireLock's own doc comment
+  // above (a concurrent in-flight acquire must not have its lock reset out
+  // from under it). This test-only helper runs strictly BETWEEN tests, with
+  // no acquire in flight, so resetting it here is safe.
+  state.acquireLock = Promise.resolve();
 }

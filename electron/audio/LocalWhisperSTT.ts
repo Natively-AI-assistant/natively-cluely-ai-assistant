@@ -136,6 +136,18 @@ export class LocalWhisperSTT extends EventEmitter {
     // never call acquireSharedNemotronWorker at all).
     private nemotronWorkerRelease: (() => void) | null = null;
 
+    // Dual-channel Nemotron only. The EXACT handler function references this
+    // instance attached to the (possibly SHARED) worker via attachWorkerListeners(),
+    // so beginWorkerTermination() can remove ONLY this instance's own listeners
+    // via worker.off(event, handler) — never removeAllListeners(), which would
+    // also strip the other channel's listeners and sharedWorkerRegistry.ts's
+    // own listener off the same shared Worker object. Null for every
+    // non-Nemotron model (those workers are never shared, so removeAllListeners
+    // remains correct and simpler for them).
+    private nemotronMessageHandler: ((msg: WorkerOutMessage) => void) | null = null;
+    private nemotronErrorHandler: ((err: Error) => void) | null = null;
+    private nemotronExitHandler: ((code: number) => void) | null = null;
+
     // nemotron-rnnt only: resolved NVIDIA PROMPT_DICTIONARY lang_id (see
     // ./whisper/nemotron/languageTable.ts), derived from `this.language` via
     // resolveAndApplyNemotronLanguage(). Defaults to 0 — the same value
@@ -897,7 +909,7 @@ export class LocalWhisperSTT extends EventEmitter {
     private attachWorkerListeners(): void {
         if (!this.worker) return;
 
-        this.worker.on('message', (msg: WorkerOutMessage) => {
+        const messageHandler = (msg: WorkerOutMessage) => {
             // Dual-channel Nemotron: this worker may be SHARED with another
             // LocalWhisperSTT instance (the other audio channel). Every
             // Nemotron-relevant message carries a channelId (see
@@ -1015,9 +1027,10 @@ export class LocalWhisperSTT extends EventEmitter {
                     ));
                 }
             }
-        });
+        };
+        this.worker.on('message', messageHandler);
 
-        this.worker.on('error', (err) => {
+        const errorHandler = (err: Error) => {
             // Reset all in-flight streaming state so a dead worker can never
             // permanently pin streamingTaskInFlight=true (which would freeze
             // the loop — symptom: transcription stops after 3-4 questions).
@@ -1053,13 +1066,14 @@ export class LocalWhisperSTT extends EventEmitter {
             } else {
                 this.emit('error', err);
             }
-        });
+        };
+        this.worker.on('error', errorHandler);
 
         // 'exit' fires whenever the worker terminates (voluntarily or not),
         // including the 'error' path above. If the worker is gone, the
         // streaming loop must be unblocked — otherwise streamingTaskInFlight
         // stays true and the next tick silently stalls forever.
-        this.worker.on('exit', (code) => {
+        const exitHandler = (code: number) => {
             if (code === 0) {
                 clearLoadSentinel(this.modelId);
                 return; // clean shutdown
@@ -1079,7 +1093,21 @@ export class LocalWhisperSTT extends EventEmitter {
                     `Local Whisper worker exited unexpectedly (code=${code}) — transcription stream has been unblocked.`
                 ));
             }
-        });
+        };
+        this.worker.on('exit', exitHandler);
+
+        // Dual-channel Nemotron only: stash the exact function references so
+        // beginWorkerTermination() can remove ONLY these three via
+        // worker.off(), never removeAllListeners() — this worker may be
+        // SHARED with another LocalWhisperSTT instance and
+        // sharedWorkerRegistry.ts's own listener, all attached to the same
+        // object. Non-Nemotron workers are never shared, so they don't need
+        // this bookkeeping.
+        if (this.isNemotronModel) {
+            this.nemotronMessageHandler = messageHandler;
+            this.nemotronErrorHandler = errorHandler;
+            this.nemotronExitHandler = exitHandler;
+        }
     }
 
     private flushPending(): void {
@@ -1111,34 +1139,42 @@ export class LocalWhisperSTT extends EventEmitter {
         // NemotronEngine starts at its own DEFAULT_LANG_ID (0/English), not
         // whatever this instance last resolved — must re-push on next ready.
         this.nemotronLangIdSentToWorker = null;
-        w.removeAllListeners('message');
-        w.removeAllListeners('error');
 
         if (this.isNemotronModel) {
             // The shared worker may OUTLIVE this instance — the other channel
             // can still be actively using it (see sharedWorkerRegistry.ts's
-            // refcount). Remove ALL of this instance's listeners, including
-            // 'exit' (not just 'message'/'error' above): leaving 'error'/
-            // 'exit' attached would mean a FUTURE crash of the shared worker
-            // — which can happen long after this instance has been torn down
-            // and its caller has dropped every reference to it — still fires
-            // this dead instance's handler, including `this.emit('error', ...)`
-            // on an EventEmitter that may by then have zero listeners, which
-            // throws and can crash the whole process. The registry's own
-            // listener (attached once, independently, at cold-start) is what
-            // notifies every STILL-LIVE channel of a real crash; this
-            // instance is done the moment it releases its channel below.
+            // refcount), and sharedWorkerRegistry.ts's OWN listener is also
+            // attached directly to this same Worker object. removeAllListeners
+            // is indiscriminate — it would strip the SURVIVING channel's
+            // handlers (silently killing its transcription) AND the
+            // registry's own 'message' listener (hanging every future
+            // acquireSharedNemotronWorker join on this worker, since nothing
+            // is left to resolve its `ready` wait) AND leave zero 'error'
+            // listeners on the Worker object for a future real crash, which
+            // Node's EventEmitter contract turns into an unhandled throw.
+            // So: remove ONLY the exact handler references THIS instance
+            // itself attached in attachWorkerListeners(), via worker.off()
+            // (== removeListener), never removeAllListeners(), for this
+            // shared-worker case.
+            if (this.nemotronMessageHandler) { w.off('message', this.nemotronMessageHandler); this.nemotronMessageHandler = null; }
+            if (this.nemotronErrorHandler) { w.off('error', this.nemotronErrorHandler); this.nemotronErrorHandler = null; }
+            if (this.nemotronExitHandler) { w.off('exit', this.nemotronExitHandler); this.nemotronExitHandler = null; }
             //
             // No terminate()-after-a-timer here, unlike the non-Nemotron path
             // below: release() itself decides synchronously whether the
             // underlying worker actually terminates (refcount reaches 0) or
             // just loses this one channel — there's nothing to defer.
-            w.removeAllListeners('exit');
             if (this.nemotronWorkerRelease) { this.nemotronWorkerRelease(); this.nemotronWorkerRelease = null; }
             this.nemotronChannelId = null;
             return;
         }
 
+        // Non-Nemotron: this worker is never shared with another
+        // LocalWhisperSTT instance or the registry, so indiscriminate
+        // removal is correct and simplest here — unchanged from before this
+        // fix.
+        w.removeAllListeners('message');
+        w.removeAllListeners('error');
         if (this.workerTerminateTimer) clearTimeout(this.workerTerminateTimer);
         const t = setTimeout(() => {
             this.workerTerminateTimer = null;
