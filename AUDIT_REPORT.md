@@ -22,6 +22,52 @@ Live LLM testing: DeepSeek `deepseek-chat` via `DEEPSEEK_API_KEY` in `.env` (ver
 
 ---
 
+# Phase 2 — STT pipeline (exploration complete 2026-08-14; findings in severity order)
+
+## ⚠ MERGE ADVISORY (F-202) — read before shipping this branch
+This branch (forked at c2ad3133) does NOT contain main's commit 21c4e22f ("fix(lifecycle): stop rapid meeting start/stop from silently killing the database"): the NativelyProSTT selective-listener-removal fix, its 285-line regression test (NativelyProSTTConnectingCancellation2026_08_07.test.mjs), MeetingLifecycleQueue, and FatalMainProcessCoordinator (incl. terminateAfterFatalError) all exist only on main. Merging/shipping this branch without a forward-merge of main resurrects a found-fixed-and-tested P0 in its WORSE form (no terminate → app runs on with a dead SQLite handle). The audit does not perform that merge (integration decision for the branch owner, conflicts with in-flight work); F-201's fix below patches the vulnerable sites minimally on this branch, but the merge is still required for the coordinator/queue infrastructure.
+
+## F-201 [P0] removeAllListeners() before close() on a CONNECTING ws → uncaughtException → irreversible DB shutdown
+Phase: 2 | Area: OpenAIStreamingSTT / ElevenLabsStreamingSTT / NativelyProSTT
+Status: FOUND
+Hypothesis (explorer, ws-level emit empirically demonstrated): ws@8.21.0 close() on CONNECTING routes to abortHandshake → unconditional nextTick emit('error'); four sites strip ALL listeners then close: OpenAIStreamingSTT.ts:400-409 (10s connection timer — GUARANTEED CONNECTING since dnsHelpers caps handshake at 15s), :766-767 (_closeWs, reachable from setRecognitionLanguage/setApiKey/stop mid-handshake), ElevenLabsStreamingSTT.ts:97-101 (stop; setRecognitionLanguage does stop+start), NativelyProSTT.ts:1036-1048 (closeUpstream — HEAD-only, main has 21c4e22f). Listener-less 'error' → process uncaughtException → main.ts emergencyCloseDatabase (no reopen; on this branch the handler falls through and the process KEEPS RUNNING → silent permanent persistence loss).
+Trigger: OpenAI STT + any 10s handshake stall (captive portal/proxy/TLS interception); ElevenLabs/NativelyPro: stop or language change within the handshake window.
+Disproof: an 'error' listener surviving at close() time; readyState never CONNECTING at those lines; uncaughtException handler no longer closing the DB.
+Confidence: high.
+Status update: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Step 1 (own re-read): all five sites confirmed (incl. OpenAI's post-open 5s session timer — OPEN-state strip-then-close still leaks close-handshake socket errors); this branch's uncaughtException handler (main.ts:170-224) closes the DB at :179 and RETURNS for non-arch errors — process keeps running with dead persistence. NativelyProSTT's try/catch around close() does not help: the emit is async (nextTick), not thrown.
+Repro: scripts/audit/F-201-repro.mjs — real OpenAIStreamingSTT from the dist bundle; esbuild INLINES ws so the hook intercepts the builtin `https` (which the inlined ws uses for its handshake) and redirects to a local TCP server that never sends a ServerHello → genuine CONNECTING stall → the provider's own 10s timer fires. PRE-FIX: 2 uncaughtExceptions ("WebSocket was closed before the connection was established" — timer path + stop-path) → exit 1. (First harness attempt connected to the REAL OpenAI API with a fake key — auth-failed harmlessly; documented so nobody repeats it.)
+Root cause: strip-then-close with no error sink across the async abort emit, at five sites.
+Fix: new electron/audio/wsSafeTeardown.ts `safeDetachAndClose()` (strip → attach no-op error sink → close, each guarded) applied at all five sites; NativelyProSTT site carries an explicit note deferring to main's fuller 21c4e22f teardown at merge time.
+E2E verification: repro → exit 0 (0 uncaught). Pin: WsTeardownKeepsErrorSink2026_08_14.test.mjs (3/3 — no bare strip-then-close in any provider incl. Soniox/Deepgram, helper usage present, sink ordering inside the helper). Adjacent STT tests green (11/11 combined run). typecheck clean.
+Cross-platform: pure JS; both platforms.
+Commit: (pending)
+
+## F-202 [P0] Branch regresses main's shipped fix + lifecycle infrastructure
+Status: FOUND → CONFIRMED (git-graph evidence above) → ADVISORY (no code fix possible within audit scope; forward-merge required)
+
+## F-203 [P1] Google/Soniox/Deepgram lack the stale-connection identity guard
+Phase: 2 | Area: GoogleSTT / SonioxStreamingSTT / DeepgramStreamingSTT
+Status: FOUND
+Hypothesis: NativelyProSTT installs `if (ws !== this.ws) return;` guards on every handler (documented CRITICAL, :497-511); the other three don't. GoogleSTT: proactive 270s restart + every set* does synchronous stop+start; the destroyed stream's 'close' fires one tick later and nulls the FRESH stream (:422-427) → orphaned gRPC stream + third stream via lazy reconnect; fires at meeting start (setSampleRate on first chunk) and every 270s. Soniox: old socket's close handler clobbers this.ws (:368), kills the new keepalive (:371), and on code 1000 sets isActive=false → every chunk dropped, no error, no banner — total silent death. Deepgram: old handlers set wrong-connection state, register a SECOND Transcript listener (doubled finals into handleTranscript + RAG), clearTimers kills the live keepalive; buffer discarded on restart (Soniox preserves it).
+Trigger: any mid-stream setSampleRate/setAudioChannelCount/setRecognitionLanguage; Google additionally every 270s.
+Confidence: high (Google/Soniox) / medium (Deepgram SDK timing).
+
+## F-204 [P2] NativelyProSTT setSampleRate gate diverges from its own comment
+Status: FOUND — gate at :258 uses isActive&&isConnected but the auth frame commits the OLD rate at ws 'open' (:521-522), one round-trip BEFORE isConnected (:582); in the OPEN-but-not-connected window a rate change is skipped → server transcodes at the wrong rate (the exact garbled-transcript failure the comment warns about). Window = relay connect latency; setSampleRate fires on first system chunk (~5-7s after start). Confidence: medium.
+
+## F-205 [P2] LocalWhisperSTT drain leak holds the shared ONNX slot forever
+Status: FOUND — stop() keeps the worker for draining finals (:278-283) with NO drain timeout; all release paths are worker-reply-driven; dispatchFinal DISARMS the streaming watchdog (:581). A hung inference leaks the worker AND the acquireOnnxSlot('high') semaphore slot (no timeout, onnxThreadConfig:165-191) → next meeting's spawnWorker awaits forever, no error emitted, no banner; embedder/reranker/intent behind the same gate. Confidence: medium-high.
+
+## F-206 [P2/P3] OpenAI turn-coalescer event-order assumption + 2.5s final dedupe
+Status: FOUND — finals may lag one utterance if the GA Realtime session emits speech_stopped BEFORE the transcription .completed (the coalescer only finalizes on speech_stopped/next speech_started; unit test encodes the assumed order so can't catch it). Needs one live event-log capture to settle (LOW-MEDIUM). P3 rider: _emitTranscript drops identical finals within 2500ms — real back-channel repetitions ("Yes." "Yes.") discarded.
+
+Explorer-clean areas: relaySession (auth/fallback/expiry/probes), dnsHelpers, NativelyProSTT timer discipline, main.ts drain semantics, RestSTT isActive gating. No platform-branch bugs in provider files. Residual surface not covered: whisper/** internals, RestSTT upload path, GoogleSTT credential resolution, renderer stt-status banner logic, IntelligenceManager duplicate-final behavior.
+
+Phase 2 processing queue: F-201 (P0, fix here) → F-202 (advisory, done) → F-203 (P1) → F-204, F-205 (P2) → F-206 (needs live capture; DeepSeek not applicable — OpenAI Realtime event order; defer with instructions).
+
+---
+
 # Phase 1 — Core runtime & IPC
 
 Read-only audit pass: 3 parallel explorations dispatched 2026-08-14 —

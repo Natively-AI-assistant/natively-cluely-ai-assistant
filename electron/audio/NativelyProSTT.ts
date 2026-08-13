@@ -3,6 +3,7 @@ import WebSocket from 'ws';
 import { RECOGNITION_LANGUAGES, EnglishVariant } from '../config/languages';
 import { TRIAL_SENTINEL_KEY } from '../config/constants';
 import { streamingStttWsOptions } from './dnsHelpers';
+import { safeDetachAndClose } from './wsSafeTeardown';
 import {
     resolveRelaySession as defaultResolveRelaySession,
     buildFallbackChain,
@@ -1043,8 +1044,16 @@ export class NativelyProSTT extends EventEmitter {
             // the new connection. The handler-side `guard(ws === this.ws)`
             // makes this safe even if removeAllListeners() somehow misses
             // anything, but doing both is the production-grade pattern.
-            try { dying.removeAllListeners(); } catch {}
-            try { dying.close(); } catch {}
+            //
+            // safeDetachAndClose (F-201): additionally keeps a no-op error
+            // sink attached across the close — on a CONNECTING socket, ws@8
+            // emits the abort error on the next tick, and a listener-less
+            // emit becomes an uncaughtException → irreversible
+            // emergencyCloseDatabase. NOTE: main's 21c4e22f fixes this site
+            // with fuller state-aware teardown + lifecycle coordination —
+            // this is the branch-local mitigation until that merge lands
+            // (see AUDIT_REPORT.md merge advisory).
+            safeDetachAndClose(dying);
         }
     }
 }
