@@ -45,8 +45,16 @@ Disproof criteria: `Resampler::new` total over all cpal rates; or a mic-DSP writ
 Confidence: high.
 
 ## F-102 [P1] Orphaned capture instance keeps writing into live STT
-Phase: 1 | Area: main.ts wireSystemCapture/wireMicCapture
-Status: FOUND
+Phase: 1 | Area: main.ts wireSystemCapture/wireMicCapture + rebuild flows
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Step 1 confirmation refined the reachability: recovery and route-change DO guard each other (recovery defers at :4662, route-change at :4868 — the explorer's proposed pairing is actually mutually excluded at entry). The unguarded third party is restartCapturesAfterResume: no mutex, clears both flags (:3916/:3923), and NONE of the three flows re-validate field ownership after their awaits before assigning. The mic-recovery finally block (:5027-5034) already applies exactly this ownership-revalidation pattern to the paused system capture — the flows' own assignments never did.
+Repro: scripts/audit/F-102-repro.mjs — live AppState, fake meeting flags, STT stubs (no network), recovery saturated; handleDefaultOutputChanged + restartCapturesAfterResume fired in ONE synchronous turn (both suspend on the capability await; deterministic interleave). PRE-FIX: '(RouteChanged)' fresh constructed/assigned/wired/started, then '(Resume)' assignment overwrote it → orphanCount 1, both instances alive → exit 1.
+Root cause: (a) rebuild flows assign into this.systemAudioCapture after awaits without re-checking the null they left (route-change :4880→:4909; recovery :4718→:4741; resume :3986→:4003); (b) the data write :3487 (mic :3666) has no instance-identity guard, unlike siblings :3424/:3475, so the orphan keeps feeding the live STT socket.
+Fix: (1) ownership revalidation in all three flows — after the awaits, a non-null field means another flow rebuilt mid-await; keep theirs and return. (2) Instance-identity guards on the data/sample_rate_changed/speech_ended consumers in wireSystemCapture AND wireMicCapture.
+E2E verification: repro re-run → exit 0 (aliveCount 1, orphanCount 0, field owns the survivor). Regression pin: electron/services/__tests__/CaptureOwnershipGuards2026_08_14.test.mjs. Adjacent tests green (ZerofillDetectorPeakToPeak, AudioCaptureFailedBroadcastBothSurfaces); typecheck clean; F-103 repro re-run PASS on top of these changes (same handler touched).
+Regression check: normal single-flow rebuilds unaffected (field is null when they construct); the identity guards drop only chunks from a capture that already lost ownership (≤ms of teardown-window audio, previously interleaved garbage).
+Cross-platform: pure JS state-machine fix, platform-neutral; macOS live-verified, Windows reviewed but not executed.
+Commit: (pending — backfilled next update)
 Hypothesis: data-path writes are the only consumers NOT gated on instance identity (main.ts:3487 `this.googleSTT?.write(chunk)`, :3666 mic equivalent; guarded siblings at :3424/:3475/:3518/:3571). A capture that loses ownership of the field without being destroyed keeps pumping PCM into the live STT socket. Reachable when `restartCapturesAfterResume` (no own mutex; clears both recovery mutexes at :3916/:3923) races `handleDefaultOutputChanged` (:4856-4871) — both destroy the same old capture, construct fresh, assign; loser never destroyed.
 Trigger: wake-from-sleep coinciding with an output route change (AirPods reconnect on lid open).
 Disproof: show endMeeting/abort reaches non-field-referenced captures, or the watcher can't tick between resume and :3986.
@@ -62,7 +70,7 @@ Fix: watcher no longer advances the observation; `handleDefaultOutputChanged(cur
 E2E verification: repro re-run → exit 0 (recovery held: observation NOT consumed; recovery cleared: handler re-fired on subsequent ticks). Regression pin: electron/services/__tests__/RouteChangeNotSwallowed2026_08_14.test.mjs (watcher must not assign after change detection; handler must commit after the recovery gate). 11/11 audit pins + adjacent audio test green; typecheck clean.
 Regression check: mid-flight bails after the commit (quit/meeting-gen change at :4886-4888) correctly consume the observation (change moot once the meeting is gone); explicit-device path unaffected (:4815 tick guard precedes everything).
 Cross-platform: watcher runs on Windows too (native getDefaultOutputDeviceId exists on both — verified in audit pass); fix is platform-neutral. macOS live-verified; Windows reviewed but not executed.
-Commit: (pending)
+Commit: d41af23d
 
 ### Repro-infrastructure notes (Phase 1)
 Bare-file Playwright launches (`electron dist-electron/electron/main.js`) run with app.getAppPath()=dist-electron/electron and userData=~/Library/Application Support/Electron — an ISOLATED scratch profile (user's real data and stored STT/LLM keys are never touched by these repros). Side effect: nativeModuleLoader's dev candidates miss repo/native-module (silent null — F-107's mechanism, observed live); repro scripts that need native audio ensure a gitignored symlink dist-electron/electron/native-module → ../../native-module. AppState singleton is reachable via Module._cache right after boot (the entry is pruned from the cache within seconds — Playwright's electron loader — so stash exports on globalThis immediately).
@@ -138,7 +146,7 @@ Fix: both handler bodies now gate emergencyCloseDatabase (and stopAppManagedHind
 E2E verification: re-ran repro → exit 0 (GPU killed+relaunched, DB still answers 8 modes). Regression pin: electron/services/__tests__/ChildProcessGoneKeepsDbOpen2026_08_14.test.mjs (asserts isQuitting gate precedes the close call in both handlers). typecheck:electron clean. F-108 pin re-run green (4/4).
 Regression check: render-process-gone path untouched; quit path unaffected (before-quit/will-quit still checkpoint+close; the gated close also still fires if a child dies mid-quit).
 Cross-platform: platform-neutral policy change; macOS live-verified; Windows reviewed but not executed (same Chromium child-process model applies). FOLLOW-UP logged: SIGHUP handler (main.ts:317-325) closes the DB without exiting — same class, lower reachability; not fixed here (separate finding candidate for Phase 7 signal-handling review).
-Commit: (pending)
+Commit: e5d72c33
 Hypothesis: main.ts:8132-8142 calls emergencyCloseDatabase unconditionally on child-process-gone and gpu-process-crashed, inspecting neither details.type nor details.reason. child-process-gone fires for recoverable/clean child exits (GPU, Utility, clean-exit...); Chromium restarts the child, the main process survives, but closeWithoutCheckpoint (DatabaseManager.ts:196-204) sets db=null with NO reopen path (getInstance returns same instance; all methods `if (!this.db) return;`). Every save/transcript persist silently no-ops thereafter. Repo documents this exact class at main.ts:226-251 and carefully gates render-process-gone (:8046-8061) + unhandledRejection (:269-278) — these two handlers were left ungated. Same class: SIGHUP handler (main.ts:317-325) closes DB but doesn't exit.
 Trigger: GPU process restart (driver reset, display sleep/wake, monitor hotplug), any utility-process exit, either platform.
 Disproof: child-process-gone never fires in healthy sessions for this app's process set AND gpu crashes always take down main too.

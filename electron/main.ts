@@ -3484,14 +3484,26 @@ export class AppState {
       }
 
 
-      this.googleSTT?.write(chunk);
+      // Instance-identity guard, mirroring the watchdog (capture-replaced
+      // check above) and the rate lock: a capture that lost ownership of
+      // this.systemAudioCapture mid-rebuild (recovery / route-change / resume
+      // interleaving) must not keep pumping PCM into the live STT socket —
+      // interleaved with the owner's audio it garbles the interviewer
+      // transcript (F-102).
+      if (this.systemAudioCapture === capture) {
+        this.googleSTT?.write(chunk);
+      }
     });
     capture.on('sample_rate_changed', (rate: number) => {
       console.log(`${prefix}SystemAudioCapture rate updated dynamically to ${rate}Hz`);
-      this.googleSTT?.setSampleRate(rate);
+      if (this.systemAudioCapture === capture) {
+        this.googleSTT?.setSampleRate(rate);
+      }
     });
     capture.on('speech_ended', () => {
-      this.googleSTT?.notifySpeechEnded?.();
+      if (this.systemAudioCapture === capture) {
+        this.googleSTT?.notifySpeechEnded?.();
+      }
     });
     // setupAudioRecoveryHandler registers its own 'error' listener — do not
     // add a duplicate logger here or the same error reports twice.
@@ -3663,14 +3675,23 @@ export class AppState {
         }
       }
 
-      this.googleSTT_User?.write(chunk);
+      // Instance-identity guard — same rationale as the system-audio data
+      // path (F-102): only the capture that owns this.microphoneCapture may
+      // feed the user STT socket.
+      if (this.microphoneCapture === capture) {
+        this.googleSTT_User?.write(chunk);
+      }
     });
     capture.on('sample_rate_changed', (rate: number) => {
       console.log(`${prefix}MicrophoneCapture rate updated dynamically to ${rate}Hz`);
-      this.googleSTT_User?.setSampleRate(rate);
+      if (this.microphoneCapture === capture) {
+        this.googleSTT_User?.setSampleRate(rate);
+      }
     });
     capture.on('speech_ended', () => {
-      this.googleSTT_User?.notifySpeechEnded?.();
+      if (this.microphoneCapture === capture) {
+        this.googleSTT_User?.notifySpeechEnded?.();
+      }
     });
     // setupMicRecoveryHandler registers its own 'error' listener.
     this.setupMicRecoveryHandler();
@@ -3999,6 +4020,11 @@ export class AppState {
           fellBack: true,
           reason: 'screen-recording-permission-denied',
         });
+      } else if (this.systemAudioCapture) {
+        // Ownership revalidation — same rationale as the route-change and
+        // recovery flows (F-102): another rebuild assigned the field while we
+        // awaited the capability check; keep theirs instead of orphaning it.
+        console.warn('[Main] Resume: capture rebuilt by another flow mid-await — keeping theirs.');
       } else {
         this.systemAudioCapture = new SystemAudioCapture(this._lastRequestedOutputDeviceId);
         this._sysSttRateApplied = false;
@@ -4737,6 +4763,13 @@ export class AppState {
           return;
         }
 
+        // Ownership revalidation — same rationale as the route-change flow
+        // (F-102): if another rebuild assigned the field while we awaited,
+        // constructing ours would orphan one of the two captures.
+        if (this.systemAudioCapture) {
+          console.warn('[AudioRecovery] Capture rebuilt by another flow mid-await — keeping theirs.');
+          return;
+        }
         const fresh = new SystemAudioCapture(this._lastRequestedOutputDeviceId);
         this.systemAudioCapture = fresh;
         this.wireSystemCapture(fresh, '(Recovery)');
@@ -4914,6 +4947,16 @@ export class AppState {
         return;
       }
 
+      // Ownership revalidation: we nulled the field before awaiting. If it is
+      // non-null now, another rebuild flow (restartCapturesAfterResume takes
+      // no mutex) assigned while we awaited — it owns the capture, and
+      // constructing ours would orphan one of the two: started, wired, never
+      // destroyed, double-writing the live STT socket (F-102, live-reproduced
+      // in scripts/audit/F-102-repro.mjs).
+      if (this.systemAudioCapture) {
+        console.warn('[DefaultOutputWatcher] Capture rebuilt by another flow mid-await — keeping theirs.');
+        return;
+      }
       // Pass undefined (not the new device id) so CoreAudio picks up the new
       // default at construction time. This is intentional: binding to a
       // stable id would defeat the whole point of "follow the user's route".
