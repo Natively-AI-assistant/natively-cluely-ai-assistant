@@ -2797,17 +2797,37 @@ if (!shouldSkipModeInjection) {
         docRetrievalQuery = expandQueryWithHints(message);
       } catch { docRetrievalQuery = message; }
     }
-    if (forceDocumentGrounding && typeof modesMgr.buildRetrievedActiveModeContextBlockHybrid === 'function') {
-      try {
-        const groundedContext = await modesMgr.buildRetrievedActiveModeContextBlockHybrid(
-          docRetrievalQuery, context, undefined, modeAnswerType(routeOptions), true,
-        );
-        if (groundedContext && groundedContext.trim()) {
-          modeContextBlock = groundedContext;
-          usedRerankPath = true;
+    // Phase 2 (semantic-retrieval repair, 2026-08-13): eligibility + argument
+    // mapping unified with streamChat via modeHybridEligibility. Two fixes over
+    // the previous inline call: (1) eligibility now includes the ragLocalRerank
+    // rollout flag (prod behavior unchanged — the flag defaults OFF there);
+    // (2) retrievalOptions.forceDocumentGrounding is finally threaded, so the
+    // wrapper's doc-grounded hybrid branch (fine chunking + identity-block
+    // merge) actually fires here — the old 5-arg call left retrievalOptions
+    // undefined and silently ran the generic path. budgetMs: null is
+    // deliberate — this site is not on the streaming deadline; see the module
+    // doc for the documented race-budget asymmetry with streamChat.
+    {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { shouldUseHybridRetrieval, runHybridModeRetrieval } = require('./llm/modeHybridEligibility');
+      if (shouldUseHybridRetrieval({ forceDocumentGrounding })) {
+        try {
+          const { block } = await runHybridModeRetrieval(modesMgr, {
+            query: docRetrievalQuery,
+            context,
+            answerType: modeAnswerType(routeOptions),
+            forceDocumentGrounding,
+            pinnedModeId: routeOptions?.pinnedModeId ?? undefined,
+            followUpReferentHint: routeOptions?.followUpReferentHint,
+            budgetMs: null,
+          });
+          if (block && block.trim()) {
+            modeContextBlock = block;
+            usedRerankPath = true;
+          }
+        } catch (groundedErr: any) {
+          console.warn('[LLMHelper.chatWithGemini] Doc-grounded hybrid retrieval failed, using sync lexical:', groundedErr?.message);
         }
-      } catch (groundedErr: any) {
-        console.warn('[LLMHelper.chatWithGemini] Doc-grounded hybrid retrieval failed, using sync lexical:', groundedErr?.message);
       }
     }
     if (!usedRerankPath) {
@@ -5807,58 +5827,41 @@ let isMultimodal = !!(imagePaths?.length);
           // this turn's evidence above, skip the entire legacy hybrid/lexical
           // retrieval block — modeContextBlock + usedRerankPath are already set.
           if (resolvedViaEvidenceResolver) { /* no-op: fall through to pinned instructions below */ } else {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const { isRagLocalRerankEnabled } = require('./intelligence/intelligenceFlags');
           // Document-grounded custom mode (audit 2026-06-27, real-path fix):
           // previously the `!forceDocumentGrounding` term SKIPPED the hybrid
           // (semantic + cross-encoder) retriever for document-grounded modes,
-          // forcing the sync lexical path — so the round-3 hybrid-first +
-          // identity-block logic in buildRetrievedActiveModeContextBlockHybrid
-          // was dead on the live manual stream, and a weak model got imprecise
-          // lexical-only context (the observed "facts missed" failure). Now
-          // document-grounded modes ALSO use the hybrid path. To avoid a
-          // cold/slow embedder stalling the hot path past the first-useful
-          // deadline (which would abort to the canned fallback), the hybrid
-          // call is raced against a budget; on timeout we fall through to the
-          // sync lexical retriever — same fallback the manual flow always had.
-          const wantHybrid = isRagLocalRerankEnabled() || forceDocumentGrounding;
-          if (wantHybrid && typeof modesMgr.buildRetrievedActiveModeContextBlockHybrid === 'function') {
-            // For doc-grounded modes with large PDFs (50-200 pages) we need
-            // more time to embed + rank. Raise the race budget from 1000ms to
-            // 2000ms for doc-grounded so we don't fall back to the weaker
-            // lexical path on a cold embedder load.
-            const HYBRID_BUDGET_MS = forceDocumentGrounding ? 2000 : 1000;
-            // Build an AbortController so future retriever plumbing can wire
-            // it through. Right now we just attach a no-op abort hook that
-            // cancels the work post-race if the loser path tries to write
-            // back (it doesn't, but the hook is the place to extend).
-            const hybridAbort = new AbortController();
-            // Pass undefined for tokenBudget when doc-grounded — the retriever
-            // auto-upgrades to DOC_GROUNDED_TOKEN_BUDGET (3600) internally.
-            const hybridPromise = modesMgr.buildRetrievedActiveModeContextBlockHybrid(
-              message, context, forceDocumentGrounding ? undefined : 1800, modeAnswerType(routeOptions), true, routeOptions?.pinnedModeId ?? undefined, /* allowRerank */ true,
-              { forceDocumentGrounding, followUpReferentHint: routeOptions?.followUpReferentHint },
-            );
-            const raced = await Promise.race([
-              hybridPromise.then((value: string) => ({ value, timedOut: false })),
-              new Promise<{ value: string; timedOut: boolean }>((resolve) =>
-                setTimeout(() => {
-                  hybridAbort.abort();
-                  resolve({ value: '', timedOut: true });
-                }, HYBRID_BUDGET_MS),
-              ),
-            ]);
-            if (!raced.timedOut) {
-              modeContextBlock = raced.value;
+          // forcing the sync lexical path. Now document-grounded modes ALSO
+          // use the hybrid path. To avoid a cold/slow embedder stalling the
+          // hot path past the first-useful deadline (which would abort to the
+          // canned fallback), the hybrid call is raced against a budget; on
+          // timeout we fall through to the sync lexical retriever — same
+          // fallback the manual flow always had.
+          //
+          // Phase 2 (semantic-retrieval repair, 2026-08-13): eligibility,
+          // argument mapping, and the race live in modeHybridEligibility —
+          // SHARED with chatWithGemini so the two entry points can no longer
+          // drift (this site's semantics were adopted as canonical). This is
+          // the streaming site, so it passes the race budget; see the module
+          // doc for the documented budget asymmetry.
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { shouldUseHybridRetrieval, runHybridModeRetrieval, hybridRetrievalBudgetMs } = require('./llm/modeHybridEligibility');
+          if (shouldUseHybridRetrieval({ forceDocumentGrounding })) {
+            const budgetMs = hybridRetrievalBudgetMs(forceDocumentGrounding);
+            const { block, timedOut } = await runHybridModeRetrieval(modesMgr, {
+              query: message,
+              context,
+              answerType: modeAnswerType(routeOptions),
+              forceDocumentGrounding,
+              pinnedModeId: routeOptions?.pinnedModeId ?? undefined,
+              followUpReferentHint: routeOptions?.followUpReferentHint,
+              budgetMs,
+            });
+            if (!timedOut && block != null) {
+              modeContextBlock = block;
               usedRerankPath = true;
-            } else {
-              console.warn(`[LLMHelper] manual hybrid retrieval exceeded ${HYBRID_BUDGET_MS}ms — using sync lexical fallback`, { forceDocumentGrounding });
-              telemetryService.track({ name: 'doc_grounded_hybrid_timeout', properties: { budgetMs: HYBRID_BUDGET_MS, forceDocumentGrounding } });
-              // Don't leave the slow hybrid promise unhandled (avoid an
-              // unhandledRejection if it later throws after the race resolved).
-              // .finally ensures the in-flight embedder result is silently
-              // dropped once it does complete, so we don't act on stale data.
-              hybridPromise.finally(() => { /* raced timed out — drop result */ }).catch(() => {});
+            } else if (timedOut) {
+              console.warn(`[LLMHelper] manual hybrid retrieval exceeded ${budgetMs}ms — using sync lexical fallback`, { forceDocumentGrounding });
+              telemetryService.track({ name: 'doc_grounded_hybrid_timeout', properties: { budgetMs, forceDocumentGrounding } });
             }
           }
           }
