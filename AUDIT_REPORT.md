@@ -320,7 +320,12 @@ Confidence: high.
 
 ## F-120 [P3] Orphan broadcast channels (settings sync + embedding degradation invisible)
 Phase: 1 | Area: bridge drift
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → FIXED-VERIFIED (embedding half); FOLLOW-UP (settings-sync half)
+Repro: scripts/audit/F-120-repro.mjs — PRE-FIX: onEmbeddingDegraded undefined at the live bridge → exit 1. POST-FIX: both channels ('embedding:fallback-activated', 'embedding:space-persist-failed') reach a renderer subscriber with payloads intact → exit 0.
+Fix (embedding half): preload onEmbeddingDegraded (one subscribe method, discriminated kind, unified unsubscribe — sibling pattern of onIncompatibleProviderWarning); App.tsx surfaces both via the generic status banner (fallback → "Semantic search degraded: switched to fallback embeddings (…)"; persist-failed → "may need a re-index"); electron.d.ts entry.
+E2E verification: repro pre/post; renderer `tsc --noEmit` clean; `vite build` (direct — NOT `npm run build`) clean; electron typecheck clean. Pin: EmbeddingDegradationSurfaced2026_08_14.test.mjs (2/2).
+FOLLOW-UP (settings-sync half, deliberate non-fix): `code-verification-changed` (ipcHandlers) still has no consumer — wiring it requires a Settings-window cross-window state-sync design decision (which surface re-reads the toggle); logged for the Settings phase (Phase 7).
+Commit: (pending — F-121 = 2d37a99f)
 `code-verification-changed` (ipcHandlers.ts:5473), `embedding:fallback-activated` (EmbeddingPipeline.ts:512), `embedding:space-persist-failed` (EmbeddingPipeline.ts:655) — one producer each, zero consumers. Settings toggle never propagates to other windows; silent embedding degradation invisible despite a working banner pattern for sibling channels (preload.ts:2314-2342).
 Confidence: high.
 

@@ -2330,6 +2330,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('embedding:incompatible-provider-warning', subscription);
     };
   },
+  // Silent-degradation notices (F-120): EmbeddingPipeline has always
+  // broadcast these; nothing consumed them, so a fallback embedding provider
+  // (semantic-search quality drop) and a failed space persist (vectors stuck
+  // "pending" until re-index) were invisible to the user.
+  onEmbeddingDegraded: (
+    callback: (data: { kind: 'fallback' | 'persist-failed'; fallbackProvider?: string; reason?: string }) => void,
+  ) => {
+    const onFallback = (_: any, data: any) => callback({ kind: 'fallback', ...data });
+    const onPersistFailed = (_: any, data: any) => callback({ kind: 'persist-failed', ...data });
+    ipcRenderer.on('embedding:fallback-activated', onFallback);
+    ipcRenderer.on('embedding:space-persist-failed', onPersistFailed);
+    return () => {
+      ipcRenderer.removeListener('embedding:fallback-activated', onFallback);
+      ipcRenderer.removeListener('embedding:space-persist-failed', onPersistFailed);
+    };
+  },
   // Automatic background re-index progress (fired when the embedding space changes,
   // e.g. after a Gemini embedding-model upgrade). started → progress* → complete.
   onReindexProgress: (

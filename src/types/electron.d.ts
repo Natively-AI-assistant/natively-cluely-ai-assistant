@@ -480,6 +480,7 @@ export interface ElectronAPI {
 
   // Provider Compatibility
   onIncompatibleProviderWarning: (callback: (data: { count: number, oldProvider: string, newProvider: string }) => void) => () => void;
+  onEmbeddingDegraded: (callback: (data: { kind: 'fallback' | 'persist-failed'; fallbackProvider?: string; reason?: string }) => void) => () => void;
   onReindexProgress: (callback: (phase: 'started' | 'progress' | 'complete', data: { count?: number, done?: number, total?: number, space?: string, partial?: boolean }) => void) => () => void;
   reindexIncompatibleMeetings: () => Promise<void>;
 

@@ -705,6 +705,22 @@ const App: React.FC = () => {
       });
     }
 
+    // Embedding degradation notices (F-120): a fallback embedding provider or
+    // a failed space persist silently degrades semantic search. Surface via
+    // the same generic status banner the Ollama failure path uses.
+    let removeEmbeddingDegraded: (() => void) | undefined;
+    if (window.electronAPI?.onEmbeddingDegraded) {
+      removeEmbeddingDegraded = window.electronAPI.onEmbeddingDegraded((data) => {
+        setOllamaPullStatus('failed');
+        setOllamaPullMessage(
+          data.kind === 'fallback'
+            ? `Semantic search degraded: switched to fallback embeddings (${data.fallbackProvider ?? 'local'}).`
+            : 'Semantic search may need a re-index: embedding space could not be saved.'
+        );
+        setTimeout(() => setOllamaPullStatus('idle'), 8000);
+      });
+    }
+
     let removeReindexProgress: (() => void) | undefined;
     if (window.electronAPI?.onReindexProgress) {
       removeReindexProgress = window.electronAPI.onReindexProgress((phase, data) => {
@@ -737,6 +753,7 @@ const App: React.FC = () => {
       if (removeComplete) removeComplete();
       if (removeOllamaError) removeOllamaError();
       if (removeWarning) removeWarning();
+      if (removeEmbeddingDegraded) removeEmbeddingDegraded();
       if (removeReindexProgress) removeReindexProgress();
       if (removeLicenseListener) removeLicenseListener();
       if (trialPollId) clearInterval(trialPollId);
