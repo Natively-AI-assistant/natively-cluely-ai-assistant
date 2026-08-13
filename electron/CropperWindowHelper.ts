@@ -648,8 +648,15 @@ export class CropperWindowHelper {
         ipcMain.removeListener('cropper-cancelled', this.cancelledListener);
         console.log('[CropperWindowHelper] IPC listeners removed');
 
-        // Close window
-        this.closeWindow();
+        // Close window. Direct — NOT via closeWindow(): its guard includes
+        // `!this.isDisposed`, and isDisposed was set to true above, so the
+        // old `this.closeWindow()` call here was a guaranteed no-op and the
+        // live BrowserWindow was orphaned by the null on the next line
+        // (F-112). destroy() is deliberate for this forced-cleanup path: it
+        // skips close events entirely.
+        if (this.cropperWindow && !this.cropperWindow.isDestroyed()) {
+            this.cropperWindow.destroy();
+        }
         this.cropperWindow = null;
         console.log('[CropperWindowHelper] Window closed');
 

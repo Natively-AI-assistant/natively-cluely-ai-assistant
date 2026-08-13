@@ -215,7 +215,13 @@ Confidence: high.
 
 ## F-112 [P3] CropperWindowHelper.dispose() never closes its window
 Phase: 1 | Area: CropperWindowHelper
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-112-repro.mjs (fake-electron harness against the dist bundle, fake window in the private field). PRE-FIX: dispose() → 0 close/destroy calls → orphaned window → exit 1.
+Root cause: dispose() sets isDisposed=true (:624) then calls closeWindow() (:652) whose guard requires !isDisposed (:606) — guaranteed no-op before the reference drop.
+Fix: dispose() destroys the window directly (destroy(), not close() — forced-cleanup path, skips close events; cropper has no close interceptor). Suite test: CropperDisposeClosesWindow2026_08_14.test.mjs (1/1).
+Regression handled: the pre-existing CropperWindowHelper.bounds.test.mjs fake window lacked the standard destroy() method — fake completed (6/6 after; it was 5-fail against the fix, caused by the incomplete fake, not the code). typecheck clean.
+Cross-platform: platform-neutral.
+Commit: (pending — F-117 = 5bd61d39)
 Hypothesis: dispose() sets isDisposed=true (:624) then calls closeWindow() (:652) whose guard requires !isDisposed (:606) → guaranteed no-op; window orphaned by `this.cropperWindow = null` (:653). Bounded impact (process exiting) but pollutes window-all-closed accounting during shutdown (interacts with F-108/F-114).
 Confidence: high (pure control-flow read).
 

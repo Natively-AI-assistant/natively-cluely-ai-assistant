@@ -71,6 +71,9 @@ function makeFakeElectron(displays) {
 function makeFakeCropperWindow(bounds) {
   return {
     isDestroyed: () => false,
+    // dispose() destroys the window directly since the F-112 fix (the old
+    // closeWindow() call no-op'd on its own isDisposed guard).
+    destroy: () => {},
     getBounds: () => bounds,
     getNativeWindowHandle: () => ({}),
     setContentProtection: () => {},
