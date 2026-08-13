@@ -660,6 +660,17 @@ export function createWhisperDownloadProvider(): LocalModelDownloadProvider {
  * required files via downloadFiles.ts before constructing ONNX sessions),
  * so "download" and "load" stay a single worker lifecycle exactly like
  * every other model family.
+ *
+ * This worker is entirely one-shot and never shared (spawnWorker() above
+ * makes a fresh dedicated Worker per download, torn down on completion/error
+ * by terminateWorker()) — it never joins sharedWorkerRegistry.ts's
+ * multi-channel lifecycle, so its channelId never needs to coordinate with
+ * anything else. It exists purely to satisfy whisperWorker.ts's
+ * nemotron-rnnt init branch, which (as of the dual-channel fix) requires a
+ * channelId on every init for that sessionLayout — omitting it here made
+ * every Nemotron "Download"/"Install" click in Settings fail immediately
+ * with "init.channelId is required", since this provider predates that
+ * requirement and was never updated for it.
  */
 export function createNemotronDownloadProvider(): LocalModelDownloadProvider {
   return {
@@ -690,7 +701,13 @@ export function createNemotronDownloadProvider(): LocalModelDownloadProvider {
     },
     buildInitMessage(modelId: string): unknown {
       const { buildWorkerInitMessage } = require('../audio/whisper/inferenceConfig') as typeof import('../audio/whisper/inferenceConfig');
-      return buildWorkerInitMessage(modelId);
+      // channelId: this worker is a dedicated, one-shot download/verify
+      // instance (never shared — see the class doc comment above), so a
+      // fixed synthetic id is correct, not a real per-session channel.
+      // whisperWorker.ts's nemotron-rnnt init branch requires SOME channelId
+      // to be present; onWorkerMessage() above doesn't inspect it at all, so
+      // any stable string is fine.
+      return { ...(buildWorkerInitMessage(modelId) as object), channelId: 'download' };
     },
   };
 }

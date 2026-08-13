@@ -54,7 +54,7 @@ const electronStub = {
 // NOW import the service. Its top-level `var import_electron = require("electron")`
 // hits our resolver, gets 'electron-stub', and caches our stub in `import_electron`.
 const mod = await import(pathToFileURL(compiledPath).href);
-const { LocalModelDownloadService, createWhisperDownloadProvider } = mod;
+const { LocalModelDownloadService, createWhisperDownloadProvider, createNemotronDownloadProvider } = mod;
 
 let tmpUserData;
 
@@ -494,4 +494,28 @@ test('REGRESSION: whisper worker path resolves correctly under BOTH bundling lay
     !fs.existsSync(brokenPath),
     `Broken path must not exist (otherwise the regression is back): ${brokenPath}`,
   );
+});
+
+test('nemotron provider factory builds a valid provider', () => {
+  const p = createNemotronDownloadProvider();
+  assert.equal(p.name, 'nemotron');
+  assert.equal(typeof p.isModelCached, 'function');
+  assert.equal(typeof p.deletePartial, 'function');
+  assert.equal(typeof p.preflightCheck, 'function');
+  assert.equal(typeof p.spawnWorker, 'function');
+  assert.equal(typeof p.buildInitMessage, 'function');
+});
+
+test('REGRESSION: nemotron init message includes a channelId — every "Download" click in Settings failed without this', () => {
+  // whisperWorker.ts's nemotron-rnnt init branch (added by the dual-channel
+  // fix) rejects any init lacking a channelId with "Failed to load model:
+  // init.channelId is required for sessionLayout \"nemotron-rnnt\"". This
+  // provider predates that requirement and was never updated for it, so
+  // clicking "Download"/"Install" on the Nemotron catalog entry in Settings
+  // failed immediately, every time, with that exact message.
+  const p = createNemotronDownloadProvider();
+  const msg = p.buildInitMessage('onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4');
+  assert.equal(msg.sessionLayout, 'nemotron-rnnt');
+  assert.ok(msg.channelId, `buildInitMessage() must include a truthy channelId — got ${JSON.stringify(msg.channelId)}`);
+  assert.equal(typeof msg.channelId, 'string');
 });
