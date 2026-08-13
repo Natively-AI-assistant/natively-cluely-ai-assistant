@@ -2,6 +2,16 @@ name: Build Smoke
 
 on:
   pull_request:
+  # Main had NO per-commit signal: this workflow ran on pull_request only, so a
+  # PR whose Build Smoke failed could be merged and main itself was never
+  # re-checked. That is exactly how c2ad3133 landed a TS7005 that broke the
+  # FIRST build step — `Typecheck Electron main process` — and went unnoticed
+  # for three days while every subsequent PR inherited a red check it did not
+  # cause. With this trigger, a break is attributable to the commit that
+  # introduced it instead of to whoever opens the next PR.
+  push:
+    branches:
+      - main
   workflow_dispatch:
   # MUST live here, not on the job. `schedule` is not a valid job key, and an
   # unknown key makes GitHub reject the whole workflow at parse time — every run
@@ -182,7 +192,21 @@ jobs:
         continue-on-error: ${{ runner.os == 'Windows' }}
         run: npm test
 
+      # The four test steps here are INDEPENDENT suites over disjoint globs, so
+      # each of the three below carries `!cancelled()`. Without it a failed step
+      # skips every later one, and on the macOS leg — the only enforcing leg —
+      # that meant one red suite suppressed the other three: `test:intelligence`
+      # had never once been measured in CI, because `npm test` failed on every
+      # run that ever reached it. (Windows was unaffected only because
+      # `continue-on-error` keeps its steps' conclusion green.)
+      #
+      # `!cancelled()` rather than `always()`: both keep a later suite running
+      # after an earlier one fails, but `always()` ALSO forces the step to run
+      # while the job is being cancelled, turning a cancel into a multi-minute
+      # wait. The job still fails if any suite fails — this only stops one
+      # failure from hiding the others' results.
       - name: Run intelligence unit tests
+        if: ${{ !cancelled() }}
         continue-on-error: ${{ runner.os == 'Windows' }}
         run: npm run test:intelligence
 
@@ -194,6 +218,7 @@ jobs:
       # mirror), so a real production-catalog regression fails CI, not just the
       # hand-maintained mirror.
       - name: Run src/lib unit tests
+        if: ${{ !cancelled() }}
         run: npm run test:lib
 
       # Runs on BOTH legs by design. scripts/package-app.js and
@@ -203,6 +228,7 @@ jobs:
       # resolver / signal-table as parameters, so each leg exercises both
       # platform shapes rather than only its own.
       - name: Run build-script unit tests
+        if: ${{ !cancelled() }}
         run: npm run test:scripts
 
   api-smoke:
