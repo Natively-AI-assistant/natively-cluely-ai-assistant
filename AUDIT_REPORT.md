@@ -227,7 +227,14 @@ Confidence: high (pure control-flow read).
 
 ## F-113 [P2] Cropper bounds frozen at creation; display changes break area capture
 Phase: 1 | Area: CropperWindowHelper
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Step 1 confirmation: createWindow computes getCombinedDisplayBounds() once; showCropper's reuse branch recomputed only the HUD position; no display-change listeners repo-wide; the confirm listener reads getBounds() FRESH (so a show-time re-fit fully corrects the mapping — no listener architecture needed).
+Repro: scripts/audit/F-113-repro.mjs — fake-electron harness; window carries the old single-display bounds, a monitor appears left of primary, showCropper() runs the reuse branch. PRE-FIX: bounds stay (0,0,1440,900) vs expected (-1920,0,3360,1080) → exit 1.
+Root cause: creation-time-only bounds computation on an eternally-reused window.
+Fix: showCropper's reuse branch re-fits the window (setBounds) to the fresh combined bounds when they differ, before arming the selection. Minimal: no display-event listeners (checked at the only moment that matters).
+E2E verification: repro → exit 0 (re-fit exact). Suite test: CropperRefitsOnShow2026_08_14.test.mjs (1/1); both existing cropper suites 7/7; typecheck clean.
+Cross-platform: setBounds path platform-neutral; Windows opacity-shield path unchanged (its no-maximize note still holds — bounds come from the re-fit now).
+Commit: (pending — F-112 = 6fb8fdcf)
 Hypothesis: createWindow() computes getCombinedDisplayBounds() once (:423); window preloaded at startup (main.ts:1484-1486) and reused forever (hideOrClose only hides; showCropper recomputes only HUD position). No display-added/removed/metrics-changed listeners anywhere in electron/. After monitor/DPI change: uncovered regions unselectable; stale origin makes confirmedListener (:132-136) map coords with stale x/y while validateBounds (:206) checks fresh bounds → :214 rejects → silent no-op on area capture.
 Trigger: dock/undock, plug external display, change scaling, then use area screenshot.
 Disproof: OS auto-resizes transparent/enableLargerThanScreen windows on reconfiguration (empirical check), or a recreation path exists (none found).

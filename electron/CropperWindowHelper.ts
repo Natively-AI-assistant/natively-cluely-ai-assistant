@@ -337,6 +337,27 @@ export class CropperWindowHelper {
             };
 
             if (this.cropperWindow && !this.cropperWindow.isDestroyed()) {
+                // F-113: the window was sized to the combined display bounds
+                // at CREATION (app startup) and reused forever — no display
+                // change listener exists anywhere. After a monitor plug/unplug
+                // or DPI change the stale bounds leave new screen regions
+                // unselectable, and the local→global mapping (stale origin)
+                // disagrees with validateBounds' FRESH combined bounds, so
+                // valid selections were silently rejected. Re-fit on every
+                // show; the confirm listener reads getBounds() fresh, so the
+                // mapping is correct once the window matches reality.
+                const combinedNow = getCombinedDisplayBounds();
+                const current = this.cropperWindow.getBounds();
+                if (
+                    current.x !== combinedNow.x ||
+                    current.y !== combinedNow.y ||
+                    current.width !== combinedNow.width ||
+                    current.height !== combinedNow.height
+                ) {
+                    console.log('[CropperWindowHelper] Display arrangement changed — refitting cropper to', combinedNow);
+                    this.cropperWindow.setBounds(combinedNow);
+                }
+
                 // Get cursor position and display info at the moment cropper is shown
                 const cursorPosition = screen.getCursorScreenPoint();
                 const displays = screen.getAllDisplays();
