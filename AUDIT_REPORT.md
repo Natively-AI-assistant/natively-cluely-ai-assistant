@@ -8,7 +8,7 @@ Live LLM testing: DeepSeek `deepseek-chat` via `DEEPSEEK_API_KEY` in `.env` (ver
 
 | Phase | Area | Status |
 |-------|------|--------|
-| 1 | Core runtime & IPC (main/renderer/preload, windows, overlay, audio bridge) | AUDIT PASS IN PROGRESS |
+| 1 | Core runtime & IPC (main/renderer/preload, windows, overlay, audio bridge) | COMPLETE — 18 fixes landed (see phase summary) |
 | 2 | STT pipeline | pending |
 | 3 | LLM routing & Answer Policy | pending |
 | 4 | Knowledge / RAG / OKF | pending |
@@ -342,7 +342,8 @@ Confidence: high.
 
 ## F-122 [P3] rag:stream-* discriminator populated at every send site, read at none
 Phase: 1 | Area: RAG streaming IPC contract
-Status: FOUND
+Status: FOUND → CONFIRMED (contract defect) → NOT-REPRODUCED (no user-visible harm path) → FOLLOW-UP
+Disposition: the discriminator drift is real (three payload shapes on one channel; preload type omits `live`; all three consumers destructure {chunk} only), and MeetingChatOverlay/GlobalChatOverlay are mount-simultaneous siblings — but no user path forcing overlapping different-class in-flight queries was established (both surfaces clean their listeners in finally, and abortPriorRAGQueriesOfClass supersedes within each class). Per campaign rules (no fixes without reproduction), logged as FOLLOW-UP: consumers should filter by their own scope discriminator, and preload's union should gain `live`. Note: F-118's fix removed the live error emission, shrinking the cross-talk surface further.
 Main emits {meetingId,chunk} / {live:true,chunk} / {global:true,chunk} on one channel (ipcHandlers.ts:10137/:10212/:10258); preload type omits `live` (preload.ts:2345); all three consumers destructure {chunk} only (NativelyInterface.tsx:5601, GlobalChatOverlay.tsx:246, MeetingChatOverlay.tsx:342). MeetingChatOverlay and GlobalChatOverlay are siblings in the same Launcher renderer and abortPriorRAGQueriesOfClass supersedes only within a class → cross-class cross-talk possible; no user path forcing overlap established (honest: contract defect, not demonstrated cross-talk).
 Confidence: high (contract) / low (user-visible harm).
 
@@ -357,6 +358,27 @@ Confidence: high (contract) / low (user-visible harm).
 ## Phase 1 read-only audit pass — COMPLETE (2026-08-14)
 
 22 candidate findings: 2 P0, 5 P1, 9 P2, 5 P3, 1 already INVALID (F-101).
+
+## PHASE 1 SUMMARY (2026-08-14)
+
+22 candidate findings → all processed through the per-finding lifecycle.
+
+| Outcome | Count | Findings |
+|---|---|---|
+| FIXED-VERIFIED (live repro + fix + pin + commit) | 16 full + 2 partial | P0: F-108, F-109 · P1: F-102, F-103, F-104, F-105, F-110 · P2: F-106, F-107, F-111, F-113, F-116, F-117, F-118, F-119 · P3: F-112, F-120 (embedding half), F-121 (hazard half) |
+| INVALID (disproved in Step 1) | 1 | F-101 (rubato 0.16.2 error branch unreachable) |
+| RESOLVED-BY-OTHER-FIX | 1 | F-115 (only trigger was F-108's quit-cancellation state) |
+| BLOCKED-ON-PLATFORM | 1 | F-114 (win32-only branch; fix proposed, needs Windows session) |
+| FOLLOW-UP only (no repro of user harm) | 1 | F-122 (discriminator drift; surface shrunk by F-118) |
+
+Commit ledger (branch audit/autopilot-2026-08-14, oldest first):
+a9d7ea42 F-108 · e5d72c33 F-109 · d41af23d F-103 · 0d0740fe F-102 · 0d72316a F-104 · f71dc4c8 F-105 · 7317b459 F-110 · d93ff582 F-106 · e7d41f4b F-111 · 4d2726bf F-116 · 37acd593 F-119 · 3ae78552 F-118 · 5ce9cd87 F-107 · 5bd61d39 F-117 · 6fb8fdcf F-112 · 73bc4f03 F-113 · 2d37a99f F-121 · a335fe06 F-120
+
+Open FOLLOW-UPs from Phase 1 (carried forward): F-101 store-back hardening (rust); F-109 SIGHUP-closes-DB-without-exit; F-107 boot arch gate for native-module (Phase 7); F-111 startup sweep of screenshot leftovers; F-115 aux-guard identity keying; F-120 code-verification-changed settings sync (Phase 7); F-121 dead curl-provider handler cluster; F-122 scope filters + preload union.
+
+Validation posture (per CLAUDE.md categories): every fix Tested physically on macOS via its repro script against the real app or the repo's harnesses; Covered by automated tests via per-finding pins/suite tests (18 new test files); Reviewed but not executed on Windows — all fixes are platform-neutral orchestration/bridge changes; no Windows-only branch was modified (F-114, the one win32-only finding, was deliberately left unfixed). Requires physical Windows verification: full quit flow (F-108), capture rebuild flows under WASAPI (F-102/104/105/106/107), F-114's proposed fix.
+
+Full-suite regression (clean run, 2026-08-14, worktree = HEAD + foreign in-flight work): 7433 tests, 7244 pass, 127 fail, 62 skipped. All 18 audit test files PASS inside the suite. The 127 failures cluster in areas untouched by the audit (Codex CLI service, credentials/keyring, SettingsOverlay source-regex, Modes migrations, KnowledgeOrchestrator, Hindsight, pdf-parse handlers) and match the historically red baseline (~120 fails as of 2026-08-11). The one suspicious-looking name ("B5: dev-mode TCC bypass" — main.ts machinery) was verified: its extractFunctionBody helper returns an identical 23-char truncated body on the PRE-AUDIT commit (c2ad3133) and the current tree — a pre-existing test-harness defect, not an audit regression (candidate finding for a later cleanup pass: the test's function-body extractor matches the wrong occurrence).
 
 Processing queue (severity order):
 1. F-108 [P0] overlay close cancels quit — Step 1 CONFIRMED, Step 2 in progress
