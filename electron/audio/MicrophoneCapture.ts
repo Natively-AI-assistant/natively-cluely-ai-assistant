@@ -162,6 +162,26 @@ export class MicrophoneCapture extends EventEmitter {
             console.error('[MicrophoneCapture] Failed to start:', error);
             this.isRecording = false;
             this.preWarmEnabled = false;
+            // ORPHAN-HANDLE FIX (F-106) — mirror of SystemAudioCapture's:
+            // construction already opened the cpal input stream (macOS orange
+            // mic indicator, Windows device handle), and with isRecording
+            // false every later stop()/destroy() early-returns — the open
+            // device would be held until the GC finalizer runs, blocking
+            // immediate retries (Settings > Audio test) and keeping the
+            // indicator lit. Stop the dying instance on the next tick so the
+            // device releases deterministically; the next start() takes the
+            // lazy-init branch and constructs fresh.
+            const dying = this.monitor;
+            this.monitor = null;
+            if (dying) {
+                setImmediate(() => {
+                    try {
+                        dying.stop();
+                    } catch (e) {
+                        console.error('[MicrophoneCapture] Error stopping orphaned monitor after failed start:', e);
+                    }
+                });
+            }
             this.emit('error', error);
             throw error;
         }

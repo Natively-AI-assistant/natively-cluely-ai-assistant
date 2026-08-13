@@ -112,7 +112,15 @@ Confidence: high.
 
 ## F-106 [P2] MicrophoneCapture leaks an open native handle on start() failure
 Phase: 1 | Area: MicrophoneCapture.ts / microphone.rs
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Step 1 confirmation: start()'s catch (MicrophoneCapture.ts:161-167) rethrows leaving this.monitor set; stop() early-returns on !isRecording (:186-188); destroy() awaits that no-op stop then nulls the monitor — the constructed cpal stream (device opened at construction per the wrapper's own lazy-init comment) is dropped without stop. SystemAudioCapture's ORPHAN-HANDLE FIX (:170-199) covers exactly this on the system side; mic never got the mirror.
+Repro: scripts/audit/F-106-repro.mjs — the repo's established fake-native-module harness (Module._load hook) against the dist bundle; fake mic native whose start() throws. PRE-FIX: after failed start + stop() + destroy(), native stopCalls === 0 → orphaned open device → exit 1.
+Root cause: missing orphan-handle teardown in the mic start-catch; asymmetry with the system wrapper.
+Fix: mirrored ORPHAN-HANDLE FIX — the catch nulls this.monitor and stops the dying instance on setImmediate; next start() reconstructs via the lazy-init branch.
+E2E verification: repro → exit 0 (stopCalls 1). Suite test added: electron/audio/__tests__/MicFailedStartReleasesHandle2026_08_14.test.mjs (runs under npm test's audio glob; 1/1). Adjacent wrapper tests 10/10 (CaptureStopAwaitable, CaptureRestartRegression, MicRecoveryUsesCanonicalWiring). typecheck clean.
+Regression check: retry semantics now match the system wrapper (reconstruct-fresh instead of retry-same-monitor); recovery flows and the audio test already construct new wrappers.
+Cross-platform: releases WASAPI device handles deterministically on Windows (exclusive-mode retry unblocked) and clears the macOS orange indicator; platform-neutral JS. macOS-side harness verified; Windows reviewed but not executed.
+Commit: (pending — F-110 = 7317b459)
 Hypothesis: `MicrophoneStream::new` opens the cpal device at construct (microphone.rs:248). `start()`'s catch (MicrophoneCapture.ts:161-167) rethrows leaving `this.monitor` constructed-but-never-stopped; `destroy()` (:279-290) early-returns from stop() when `!isRecording` then nulls the monitor. SystemAudioCapture has an explicit "ORPHAN-HANDLE FIX" (SystemAudioCapture.ts:189-199); mic has no equivalent. Concrete reachable site: audio test main.ts:5191-5206 — throw after construct → handle unreachable and unstopped (macOS orange dot stays lit; Windows device held against the retry at :5204).
 Disproof: napi finalizer runs deterministically at unreachability (it doesn't), or Rust Drop releases device promptly without stop().
 Confidence: high.
