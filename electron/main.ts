@@ -8115,13 +8115,27 @@ if (process.env.THINKING_MATRIX === '1') {
   app.on('child-process-gone', (_event, details) => {
     logCrashConsole('child-process-gone', { details });
     console.warn('[main] child-process-gone:', details);
-    stopAppManagedHindsight('child-process-gone');
-    emergencyCloseDatabase('child-process-gone');
+    // A Chromium child (GPU / Utility / etc.) dying is NOT terminal for the
+    // main process — Chromium relaunches those services and the app keeps
+    // running (live-verified: SIGKILLed GPU is respawned within seconds).
+    // emergencyCloseDatabase() is irreversible (nulls the singleton with no
+    // reopen path — see the render-process-gone note above), so closing here
+    // turned every recoverable child restart into silent, session-wide
+    // persistence loss. Only close on an actual teardown, where the child
+    // exodus is part of the quit.
+    if (appState.isQuitting?.()) {
+      stopAppManagedHindsight('child-process-gone');
+      emergencyCloseDatabase('child-process-gone');
+    }
   });
 
   app.on('gpu-process-crashed', (_event, killed: boolean) => {
     logCrashConsole('gpu-process-crashed', { killed });
-    emergencyCloseDatabase('gpu-process-crashed');
+    // Deprecated alias of child-process-gone {type:'GPU'} — same policy:
+    // a GPU restart is recoverable; never destroy the DB for it.
+    if (appState.isQuitting?.()) {
+      emergencyCloseDatabase('gpu-process-crashed');
+    }
   });
 
   app.on('gpu-info-update', () => {
