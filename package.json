@@ -342,7 +342,8 @@
   "optionalDependencies": {
     "@vectorize-io/hindsight-client": "^0.8.2",
     "sqlite-vec-darwin-arm64": "^0.1.7-alpha.2",
-    "sqlite-vec-darwin-x64": "^0.1.7-alpha.2"
+    "sqlite-vec-darwin-x64": "^0.1.7-alpha.2",
+    "sqlite-vec-windows-x64": "^0.1.7-alpha.2"
   },
   "overrides": {
     "onnxruntime-node": "1.22.0",

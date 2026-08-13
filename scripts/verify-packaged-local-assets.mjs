@@ -13,8 +13,12 @@
 //   node scripts/verify-packaged-local-assets.mjs --app <path-to-.app|unpacked>
 //     verifies the GENERATED package contents.
 //
-// Exit code 1 on any missing required asset. The bge reranker is OPTIONAL
-// (lazy-downloaded) and intentionally NOT checked here.
+// Exit code 1 on any missing required asset — including the bge reranker:
+// REQUIRED_MODEL_FILES below lists all four of its files, so a package missing
+// the reranker FAILS this gate. (Stale-comment fix 2026-08-13: this header
+// previously claimed the reranker was "OPTIONAL … intentionally NOT checked
+// here", contradicting the list 20 lines down; the rerankerDownloadProvider
+// lazy-download path exists only as a dev/self-heal fallback.)
 
 import fs from 'node:fs';
 import path from 'node:path';
