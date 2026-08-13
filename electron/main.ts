@@ -4827,8 +4827,12 @@ export class AppState {
       if (currentId === this._lastObservedDefaultOutputId) return;
 
       console.warn(`[DefaultOutputWatcher] Default output changed: ${this._lastObservedDefaultOutputId} → ${currentId}. Rebinding CoreAudio Tap.`);
-      this._lastObservedDefaultOutputId = currentId;
-      this.handleDefaultOutputChanged().catch(err => {
+      // The observation is committed INSIDE handleDefaultOutputChanged, after
+      // its bail-outs. Advancing it here made any bail (in practice: the
+      // recovery mutex) swallow the route change permanently — this equality
+      // check then skipped every subsequent tick, and the tap stayed bound to
+      // the abandoned device for the rest of the meeting (F-103).
+      this.handleDefaultOutputChanged(currentId).catch(err => {
         console.error('[DefaultOutputWatcher] Failed to rebind tap:', err);
       });
     }, 4000);
@@ -4850,7 +4854,7 @@ export class AppState {
     this.stopDefaultOutputWatcher();
   }
 
-  private async handleDefaultOutputChanged(): Promise<void> {
+  private async handleDefaultOutputChanged(currentId?: string): Promise<void> {
     const meetingGeneration = this._meetingGeneration;
     const isCurrentMeeting = () => this.isMeetingActive && this._meetingGeneration === meetingGeneration;
     if (this._isQuitting) return;
@@ -4868,6 +4872,14 @@ export class AppState {
     if (this._systemAudioRecoveryInProgress) {
       console.log('[DefaultOutputWatcher] Recovery in progress — deferring route-change rebuild.');
       return;
+    }
+    // Commit the observation only now that this cycle will actually attempt
+    // the rebuild. This is what makes the deferral above safe: the watcher's
+    // next tick still sees a changed id and re-fires this handler once
+    // recovery's instance is in place (live-reproduced in
+    // scripts/audit/F-103-repro.mjs).
+    if (currentId !== undefined) {
+      this._lastObservedDefaultOutputId = currentId;
     }
     this._defaultOutputSwitchInProgress = true;
     try {

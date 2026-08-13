@@ -54,7 +54,18 @@ Confidence: high (guard asymmetry) / medium (orphan reachability).
 
 ## F-103 [P1] Route change permanently lost when handler bails
 Phase: 1 | Area: main.ts default-output watcher
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Step 1 confirmation sharpened the finding: of the handler's four bails, three (quitting / isCurrentMeeting / switchInProgress) re-check conditions the watcher tick verified synchronously in the same turn and cannot differ — the ONLY reachable swallow path is the recovery mutex at main.ts:4868. The comment above it ("the watcher's setInterval will re-fire and pick up the route change") described intended semantics the code did not have. Only writers of _lastObservedDefaultOutputId: :4804/:4806 (start), :4830 (advance-before-handle), :4842 (stop) — no recovery writer exists.
+Repro: scripts/audit/F-103-repro.mjs — drives the LIVE AppState singleton via the main-process module cache (no real devices, no audio, no meeting: fake meeting flags + a spy that lets only the first handler call through, which bails on the held recovery mutex before touching capture state). PRE-FIX: calls=1, observation already advanced at the watcher → route change never retried → exit 1.
+Root cause: main.ts:4830 — `_lastObservedDefaultOutputId = currentId` committed BEFORE the fire-and-forget handler ran its bails; nothing rolls it back.
+Fix: watcher no longer advances the observation; `handleDefaultOutputChanged(currentId)` receives the observed id and commits it only after passing the recovery-mutex gate (i.e. when the rebuild cycle actually runs). Deferred cycles now re-fire on the next 4s tick, matching the comment's promised semantics.
+E2E verification: repro re-run → exit 0 (recovery held: observation NOT consumed; recovery cleared: handler re-fired on subsequent ticks). Regression pin: electron/services/__tests__/RouteChangeNotSwallowed2026_08_14.test.mjs (watcher must not assign after change detection; handler must commit after the recovery gate). 11/11 audit pins + adjacent audio test green; typecheck clean.
+Regression check: mid-flight bails after the commit (quit/meeting-gen change at :4886-4888) correctly consume the observation (change moot once the meeting is gone); explicit-device path unaffected (:4815 tick guard precedes everything).
+Cross-platform: watcher runs on Windows too (native getDefaultOutputDeviceId exists on both — verified in audit pass); fix is platform-neutral. macOS live-verified; Windows reviewed but not executed.
+Commit: (pending)
+
+### Repro-infrastructure notes (Phase 1)
+Bare-file Playwright launches (`electron dist-electron/electron/main.js`) run with app.getAppPath()=dist-electron/electron and userData=~/Library/Application Support/Electron — an ISOLATED scratch profile (user's real data and stored STT/LLM keys are never touched by these repros). Side effect: nativeModuleLoader's dev candidates miss repo/native-module (silent null — F-107's mechanism, observed live); repro scripts that need native audio ensure a gitignored symlink dist-electron/electron/native-module → ../../native-module. AppState singleton is reachable via Module._cache right after boot (the entry is pruned from the cache within seconds — Playwright's electron loader — so stash exports on globalThis immediately).
 Hypothesis: watcher advances `_lastObservedDefaultOutputId` (main.ts:4830) BEFORE calling `handleDefaultOutputChanged`, which has four no-work bail-outs (:4856-4868). On bail, the change is swallowed forever by the :4827 equality check; comment at :4866 assumes the watcher will re-fire, but it can't. Loopback stays bound to abandoned device; interviewer transcript dead, no banner (stuck watchdog needs chunkCount===0).
 Trigger: output device swap during in-flight system-audio recovery.
 Disproof: another writer re-reads the default id into the field after a deferred cycle.
