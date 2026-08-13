@@ -20,7 +20,7 @@ import { _electron as electron } from '@playwright/test';
 
 const app = await electron.launch({
   args: ['dist-electron/electron/main.js'],
-  env: { ...process.env, NODE_ENV: 'production', NATIVELY_DEV_BYPASS_SCREEN_TCC: '1' },
+  env: { ...process.env, NODE_ENV: 'production', NATIVELY_DEV_BYPASS_SCREEN_TCC: '1', NATIVELY_E2E: '1' },
   timeout: 60_000,
 });
 await app.firstWindow({ timeout: 30_000 }).catch(() => null);

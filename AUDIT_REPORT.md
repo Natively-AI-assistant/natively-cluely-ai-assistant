@@ -261,7 +261,13 @@ Confidence: high.
 
 ## F-117 [P2] e2eInvoke is an ungated passthrough to all ~349 production channels
 Phase: 1 | Area: preload bridge containment
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-117-repro.mjs — two launches. PRE-FIX without NATIVELY_E2E: e2eInvoke exposed AND successfully invoked a production channel (get-meeting-active) → exit 1.
+Root cause: the exposure comment assumed NATIVELY_E2E gated the surface; it gates only the __e2e__:* handler REGISTRATION — the channel argument reaches any production handler.
+Fix: e2eInvoke now exposed via a conditional spread only when `process.env.NATIVELY_E2E === '1'` (preload reads env); interface made optional; F-118's repro updated to set the env (only consumers are test probes, which already set it — zero shipped-code consumers, verified).
+E2E verification: repro → exit 0 (undefined without env; functional with env — probes preserved). F-118 repro re-run PASS under the gate. typecheck clean. Pin: E2eInvokeGated2026_08_14.test.mjs (1/1).
+Cross-platform: platform-neutral.
+Commit: (pending — F-107 = 5ce9cd87)
 Hypothesis: preload.ts:2643-2644 exposes `e2eInvoke(channel, ...args) → ipcRenderer.invoke(channel, ...)` unconditionally; comment claims "no-op in shipped app" but NATIVELY_E2E gates only the `__e2e__:*` HANDLERS (ipcHandlers.ts:12832), not the channel argument. Any renderer code can invoke `quit-app`, `set-openai-api-key`, `delete-meeting`... defeating the curated bridge. No injection vector established (react-markdown; the one innerHTML sink is DOMPurify'd) — containment break, not demonstrated exploit.
 Disproof: build-time strip via esbuild define, or main-side channel/sender allow-list — neither found.
 Confidence: high.
