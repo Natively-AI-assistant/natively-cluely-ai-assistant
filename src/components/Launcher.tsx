@@ -787,7 +787,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                     >
                                                         <path
                                                             d="M12 2C7.58172 2 4 5.58172 4 10V22L7 19L9.5 21.5L12 19L14.5 21.5L17 19L20 22V10C20 5.58172 16.4183 2 12 2Z"
-                                                            fill={isLight ? '#48484A' : 'white'}
+                                                            fill={isLight ? '#586878' : 'white'}
                                                         />
                                                         <circle cx="9" cy="10" r="1.5" fill={isLight ? 'white' : 'black'} />
                                                         <circle cx="15" cy="10" r="1.5" fill={isLight ? 'white' : 'black'} />

@@ -111,7 +111,7 @@ export const FeatureSpotlight: React.FC = () => {
 
     return (
         <div
-            className="relative h-full w-full overflow-hidden rounded-xl flex flex-col group select-none bg-gradient-to-br from-[#1C1C1E] to-[#151516]"
+            className="feature-spotlight-card relative h-full w-full overflow-hidden rounded-xl flex flex-col group select-none bg-gradient-to-br from-[#1C1C1E] to-[#151516]"
             onMouseEnter={() => setIsPaused(true)}
             onMouseLeave={() => setIsPaused(false)}
             style={{ isolation: 'isolate' }}
@@ -178,7 +178,7 @@ export const FeatureSpotlight: React.FC = () => {
 
                                 {/* Title */}
                                 <h2
-                                    className={`drop-shadow-sm tracking-tight mb-0 transition-all duration-300 group-hover:brightness-105 ${isSupport ? 'translate-y-1.5' : ''}`}
+                                    className={`feature-spotlight-headline drop-shadow-sm tracking-tight mb-0 transition-all duration-300 group-hover:brightness-105 ${isSupport ? 'translate-y-1.5' : ''}`}
                                     style={{
                                         fontFamily: 'var(--font-system)',
                                         fontSize: (isPremium || isSupport) ? '30px' : '26px',
@@ -212,7 +212,7 @@ export const FeatureSpotlight: React.FC = () => {
                                         {currentFeature.bullets.map((bullet, idx) => (
                                             <div key={idx} className={`flex items-center justify-center group/item transition-transform duration-200 px-2`}>
                                                 <span
-                                                    className={`${isSupport ? 'text-[12px] leading-relaxed font-medium opacity-100' : 'text-[12.5px] leading-snug font-medium'}`}
+                                                    className={`feature-spotlight-bullet ${isSupport ? 'text-[12px] leading-relaxed font-medium opacity-100' : 'text-[12.5px] leading-snug font-medium'}`}
                                                     style={{ letterSpacing: isSupport ? '0.01em' : '-0.01em', color: '#E6C46A' }}
                                                 >
                                                     {bullet}
@@ -252,7 +252,7 @@ export const FeatureSpotlight: React.FC = () => {
                                             active:scale-[0.98]
                                             overflow-hidden
                                             ${isSupport
-                                                ? 'mt-2 translate-y-5 px-6 py-2 text-[13px] font-medium text-[#1C1C1E]'
+                                                ? 'feature-spotlight-cta mt-2 translate-y-5 px-6 py-2 text-[13px] font-medium text-[#1C1C1E]'
                                                 : `px-10 py-2.5 text-[13px] font-medium text-[#F5F7FA]`
                                             }
                                         `}
@@ -307,7 +307,7 @@ export const FeatureSpotlight: React.FC = () => {
                                                         ? 'Interested'
                                                         : (isSupport ? (
                                                             <span className="flex items-center gap-2">
-                                                                <Rocket size={14} className="text-[#1C1C1E]" strokeWidth={2.5} />
+                                                                <Rocket size={14} className="feature-spotlight-cta-icon text-[#1C1C1E]" strokeWidth={2.5} />
                                                                 Fund development
                                                             </span>
                                                         ) : (currentFeature.actionLabel || 'Mark interest'))
@@ -329,7 +329,7 @@ export const FeatureSpotlight: React.FC = () => {
                                                     {isSupport ? (
                                                         <ArrowRight
                                                             size={14}
-                                                            className="text-[#1C1C1E] transition-colors duration-300"
+                                                            className="feature-spotlight-cta-icon text-[#1C1C1E] transition-colors duration-300"
                                                             strokeWidth={2}
                                                         />
                                                     ) : (

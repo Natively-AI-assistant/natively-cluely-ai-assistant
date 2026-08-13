@@ -277,7 +277,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                             <div
                                 className={`
                                     relative overflow-hidden
-                                    ${isLight ? 'bg-[#F2F2F7]/90' : 'bg-[#161618]/90'}
+                                    ${isLight ? 'bg-[#FAFAFA]/90' : 'bg-[#161618]/90'}
                                     backdrop-blur-xl backdrop-saturate-150
                                     rounded-2xl
                                     shadow-sm

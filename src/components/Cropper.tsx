@@ -246,7 +246,7 @@ const Cropper: React.FC = () => {
                         <span
                             className="text-sm font-medium"
                             style={{
-                                color: isLightTheme ? '#000000' : '#ffffff',
+                                color: isLightTheme ? '#304058' : '#ffffff',
                                 fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
                             }}
                         >

@@ -103,10 +103,10 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
                 {/* Accent tint mask — only when connected, washes the calendar image into the brand accent */}
                 {isConnected && (
                     <>
-                        <div className="absolute inset-0 bg-[#6b4574]/55 mix-blend-multiply" />
-                        <div className="absolute inset-0 bg-gradient-to-b from-[#9a5fa8]/25 via-[#7a4f8a]/20 to-[#3d2245]/35" />
+                        <div className="calendar-card-tint-mask absolute inset-0 bg-[#6b4574]/55 mix-blend-multiply" />
+                        <div className="calendar-card-tint-wash absolute inset-0 bg-gradient-to-b from-[#9a5fa8]/25 via-[#7a4f8a]/20 to-[#3d2245]/35" />
                         {/* Soft top-glow */}
-                        <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-[260px] h-[200px] bg-[#e0b3e6]/20 blur-[80px] pointer-events-none" />
+                        <div className="calendar-card-tint-glow absolute -top-16 left-1/2 -translate-x-1/2 w-[260px] h-[200px] bg-[#e0b3e6]/20 blur-[80px] pointer-events-none" />
                     </>
                 )}
                 {/* Subtle grain */}

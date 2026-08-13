@@ -293,7 +293,7 @@ const ModelSelectorWindow = () => {
     const isDarkBg = interfaceTheme === 'liquid-glass' || interfaceTheme === 'modern' || !isLight;
     const panelClass = isDarkBg
         ? 'bg-[#1E1E1E]/80 border-white/10 shadow-black/40'
-        : 'bg-[#F3F4F6]/92 border-black/10 shadow-black/10';
+        : 'bg-[#FAFAFA]/92 border-black/10 shadow-black/10';
 
     return (
         <div className="w-fit h-fit bg-transparent flex flex-col">

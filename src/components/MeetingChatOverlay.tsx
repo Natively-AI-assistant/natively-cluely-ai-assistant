@@ -217,7 +217,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
     // Match the modes manager's `--mm-bg` exactly so the expanded chat
     // card looks like the same dark grey surface.
     const isLightTheme = useResolvedTheme() === 'light';
-    const chatWindowBg = isLightTheme ? '#f9f9f9' : '#111111';
+    const chatWindowBg = isLightTheme ? '#FAFAFA' : '#111111';
 
     // Submit initial query when overlay opens
     useEffect(() => {

@@ -312,7 +312,7 @@ const SettingsPopup = () => {
 
     const popupPanelClass = isDarkBg
         ? 'bg-[#1E1E1E]/80 border-white/10 shadow-black/40'
-        : 'bg-[#F3F4F6]/92 border-black/10 shadow-black/10';
+        : 'bg-[#FAFAFA]/92 border-black/10 shadow-black/10';
     const itemHoverClass = isDarkBg ? 'hover:bg-white/5' : 'hover:bg-black/[0.04]';
     const glassRowClass = 'glass-popup-row';
     const labelColorClass = isDarkBg ? 'text-white' : 'text-slate-900';
@@ -371,7 +371,7 @@ const SettingsPopup = () => {
                             className={`w-4 h-4 transition-colors ${isUndetectable ? (isDarkBg ? 'text-white' : 'text-slate-900') : inactiveIconColorClass}`}
                             fill={isUndetectable ? "currentColor" : "none"}
                             stroke={isUndetectable ? "none" : "currentColor"}
-                            eyeColor={isUndetectable ? (isDarkBg ? "black" : "white") : (isDarkBg ? "white" : "#334155")}
+                            eyeColor={isUndetectable ? (isDarkBg ? "black" : "white") : (isDarkBg ? "white" : "#304058")}
                         />
                         <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>{isUndetectable ? 'Undetectable' : 'Detectable'}</span>
                     </div>

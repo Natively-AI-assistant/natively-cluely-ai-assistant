@@ -77,43 +77,41 @@ const PI_CSS = `
         --pi-r-pill: 9999px;
     }
     .pi-root[data-theme='light'] {
-        --pi-bg: #ffffff;
-        --pi-sidebar-bg: #f5f5f5;
-        --pi-border: rgba(0,0,0,0.08);
-        --pi-hero: #111827;
-        --pi-primary: #374151;
-        --pi-secondary: #6b7280;
-        --pi-tertiary: #9ca3af;
-        --pi-btn-bg: rgba(0,0,0,0.04);
-        --pi-btn-bg-hover: rgba(0,0,0,0.08);
-        --pi-btn-border: rgba(0,0,0,0.05);
-        --pi-item-hover: rgba(0,0,0,0.03);
-        --pi-item-active: rgba(0,0,0,0.06);
-        --pi-input-border: rgba(0,0,0,0.10);
-        --pi-accent: var(--periwinkle-600);
-        --pi-on-accent: var(--periwinkle-on-accent-light);
-        --pi-accent-subtle: color-mix(in srgb, var(--periwinkle-600) 8%, transparent);
+        --pi-bg: #F8F8F8;
+        --pi-sidebar-bg: #F0F0F0;
+        --pi-border: rgba(32,47,64,0.08);
+        --pi-hero: #304058;
+        --pi-primary: #304058;
+        --pi-secondary: #586878;
+        --pi-tertiary: #788898;
+        --pi-btn-bg: rgba(32,47,64,0.04);
+        --pi-btn-bg-hover: rgba(32,47,64,0.08);
+        --pi-btn-border: rgba(32,47,64,0.05);
+        --pi-item-hover: rgba(32,47,64,0.03);
+        --pi-item-active: rgba(32,47,64,0.06);
+        --pi-input-border: rgba(32,47,64,0.10);
+        --pi-accent: #384860;
+        --pi-on-accent: #FFFFFF;
+        --pi-accent-subtle: color-mix(in srgb, #384860 8%, transparent);
         /* NO black scrim here. Dark mode's 25% smoke, applied over white, lands
-           on rgb(187,185,192) — a muddy grey slab, which is what it looked like
-           when it shipped. A light theme expresses "deeper surface" by taking
-           the tint up, not the luminance down, so this deepens the periwinkle
-           wash from 8% to 14%: rgb(237,230,249), ~18 levels under the page, and
-           still unmistakably lavender rather than grey. */
-        --pi-letter-bg: color-mix(in srgb, var(--periwinkle-600) 14%, transparent);
-        --pi-accent-border: color-mix(in srgb, var(--periwinkle-600) 16%, transparent);
-        --pi-accent-icon: var(--periwinkle-700);
+           on a muddy grey slab, which is what it looked like when it shipped.
+           A light theme expresses "deeper surface" by taking the tint up, not
+           the luminance down, so this deepens the slate wash from 8% to 14%. */
+        --pi-letter-bg: color-mix(in srgb, #384860 14%, transparent);
+        --pi-accent-border: color-mix(in srgb, #384860 16%, transparent);
+        --pi-accent-icon: #283848;
         --pi-badge-text: var(--pi-accent);
         --pi-badge-border: var(--pi-accent-border);
-        --pi-cta-accent-text: var(--periwinkle-700);
-        --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
-        --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
-        --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-600) 4%, transparent);
-        --pi-cta-bg: #000000;
+        --pi-cta-accent-text: #283848;
+        --pi-cta-accent-border: color-mix(in srgb, #384860 24%, transparent);
+        --pi-input-border-focus: color-mix(in srgb, #384860 40%, transparent);
+        --pi-input-bg-focus: color-mix(in srgb, #384860 4%, transparent);
+        --pi-cta-bg: #304058;
         --pi-cta-text: #ffffff;
         --pi-cta-ring: rgba(255,255,255,0.10);
-        --pi-close-bg: rgba(0,0,0,0.05);
-        --pi-close-hover: rgba(0,0,0,0.10);
-        --pi-card-bg: rgba(0,0,0,0.015);
+        --pi-close-bg: rgba(32,47,64,0.05);
+        --pi-close-hover: rgba(32,47,64,0.10);
+        --pi-card-bg: rgba(32,47,64,0.02);
     }
 
     /* ── Keyframes ── */
