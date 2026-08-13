@@ -782,6 +782,12 @@ interface ElectronAPI {
    *  enabled — the tap captures below the IME and breaks composition, so
    *  the renderer falls back to plain DOM focus on click. */
   stealthTapShouldAutoEngage: () => Promise<boolean>;
+  /** Re-probe the IME list mid-session (renderer calls this on window focus)
+   *  so a Pinyin/Hangul source added AFTER mount updates the auto-engage
+   *  decision. Was missing from the bridge — the renderer's optional call
+   *  silently no-op'd and the stale mount-time value swallowed CJK
+   *  composition keystrokes (F-116). */
+  stealthTapRefreshIme: () => Promise<boolean>;
   onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => () => void;
   onStealthKeyCaptured: (
     cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void,
@@ -2414,6 +2420,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stealthTapStop: () => ipcRenderer.invoke('stealth-tap:stop'),
   stealthTapStart: () => ipcRenderer.invoke('stealth-tap:start'),
   stealthTapShouldAutoEngage: () => ipcRenderer.invoke('stealth-tap:should-auto-engage'),
+  stealthTapRefreshIme: () => ipcRenderer.invoke('stealth-tap:refresh-ime'),
   onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => {
     const sub = (_: any, state: { active: boolean; reason?: string }) => cb(state);
     ipcRenderer.on('stealth-tap-state', sub);

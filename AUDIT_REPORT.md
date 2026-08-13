@@ -240,7 +240,14 @@ sendToWindow guards every send (main.ts:2126-2135) — no unguarded webContents.
 
 ## F-116 [P2] stealthTapRefreshIme missing from preload — IME re-probe silently dead
 Phase: 1 | Area: preload bridge / stealth tap
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Step 1 confirmation: main registers 'stealth-tap:refresh-ime' on all three platform branches (main.ts:1717/:1735/:1747); renderer calls `window.electronAPI?.stealthTapRefreshIme?.()` (NativelyInterface.tsx:7317); electron.d.ts:549 declares it; preload exposes only the other five stealthTap* methods.
+Repro: scripts/audit/F-116-repro.mjs — live bridge probe. PRE-FIX: typeof undefined at the real window → exit 1.
+Root cause: missing preload link in a three-surface contract; the two existing source-regex tests each pin only one end.
+Fix: `stealthTapRefreshIme: () => ipcRenderer.invoke('stealth-tap:refresh-ime')` added to preload impl + interface (with rationale comment).
+E2E verification: repro → exit 0 (function, invoked:true against the LIVE darwin handler, returned its real IME decision). Adjacent suites 29/29 (StealthBlockInputFocusGuards, ImeDetectorCache). Pin: PreloadStealthTapBridgeComplete2026_08_14.test.mjs — generic: EVERY renderer-invoked stealthTap* must exist in preload (kills the whole drift class) + channel wiring assert. typecheck clean.
+Cross-platform: channel registered on darwin/win32/other — bridge fix serves all.
+Commit: (pending — F-111 = e7d41f4b)
 Hypothesis: three-way drift — main handler registered on all platform branches (main.ts:1717/:1735/:1747), renderer calls `window.electronAPI?.stealthTapRefreshIme?.()` (NativelyInterface.tsx:7317), declared in electron.d.ts:549, but preload.ts exposes only the other five stealthTap* methods (:2412-2416, interface :777-784) — the `?.()` swallows undefined silently. CJK IME users who add an input source mid-session keep the stale mount-time auto-engage value → tap swallows keystrokes before IME composition (the exact failure main.ts:1704-1719 documents preventing). Two source-regex tests each verify one END (ImeDetectorCache :172 main side; StealthBlockInputFocusGuards :349 renderer side); neither asserts the preload link.
 Disproof: alternate spelling/second preload — greps negative.
 Confidence: high.
