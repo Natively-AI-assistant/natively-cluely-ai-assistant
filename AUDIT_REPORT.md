@@ -193,7 +193,14 @@ Confidence: high.
 
 ## F-111 [P2] Quit-time screenshot cleanup is a no-op (privacy/disk leak)
 Phase: 1 | Area: main.ts before-quit / ScreenshotHelper
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-111-repro.mjs — live app, marker PNG written into the LIVE helper's screenshotDir and pushed onto its queue, then a normal quit. PRE-FIX: marker survived the quit → exit 1.
+Root cause: before-quit constructed a fresh ScreenshotHelper (empty in-memory queues; constructor never scans the dir) and cleared THAT, logging success; the live AppState.screenshotHelper was never touched.
+Fix: before-quit now calls `appState.getScreenshotHelper()?.clearQueues()` on the live instance.
+E2E verification: repro → exit 0 (queued screenshot deleted during quit). Pin: QuitScreenshotCleanupLiveInstance2026_08_14.test.mjs (1/1). typecheck clean.
+FOLLOW-UP: cleanup still deletes only QUEUED files — leftovers from crashed sessions are never swept; a startup directory sweep of userData/screenshots would complete the privacy intent (deferred: redesign beyond minimal fix).
+Cross-platform: platform-neutral. macOS live-verified; Windows reviewed but not executed.
+Commit: (pending — F-106 = d93ff582)
 Hypothesis: before-quit (main.ts:8305-8313) constructs a BRAND-NEW ScreenshotHelper and calls clearQueues(), which deletes only files in the in-memory queue arrays — empty on a fresh instance (constructor never scans the dir, ScreenshotHelper.ts:449-466, 816-839). The real populated instance is AppState.screenshotHelper (main.ts:1476), never cleared. Screenshots of the user's meeting screen accumulate forever in userData/screenshots while the log claims cleared. Constructor also mkdirSync's during shutdown.
 Trigger: every clean quit, both platforms.
 Disproof: another path (IPC clearQueues :6358, startup sweep) deletes those dirs — none found (no readdirSync in ScreenshotHelper).

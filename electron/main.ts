@@ -8403,12 +8403,15 @@ if (process.env.THINKING_MATRIX === '1') {
       console.error('[Main] Failed to scrub credentials on quit:', e);
     }
 
-    // Clean up screenshot queues to prevent residual PNG files on disk
+    // Clean up screenshot queues to prevent residual PNG files on disk.
+    // Must run on the LIVE AppState helper: clearQueues() only deletes the
+    // files listed in the instance's in-memory queues, and a fresh
+    // `new ScreenshotHelper()` starts with empty queues (the constructor
+    // never scans the directory) — so the old code deleted nothing while
+    // logging success, and captured meeting screenshots accumulated forever
+    // (F-111, live-reproduced in scripts/audit/F-111-repro.mjs).
     try {
-      const { ScreenshotHelper } = require('./ScreenshotHelper');
-      // Clear screenshot queues - this deletes all queued screenshot files
-      const screenshotHelper = new ScreenshotHelper();
-      screenshotHelper.clearQueues();
+      appState.getScreenshotHelper()?.clearQueues();
       console.log('[Main] Screenshot queues cleared on quit');
     } catch (e) {
       console.error('[Main] Failed to clear screenshot queues on quit:', e);
