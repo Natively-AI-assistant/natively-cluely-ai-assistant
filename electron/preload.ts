@@ -638,7 +638,6 @@ interface ElectronAPI {
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void;
   onEnsureExpanded: (callback: () => void) => () => void;
   onToggleExpand: (callback: () => void) => () => void;
-  toggleAdvancedSettings: () => Promise<void>;
   openSettingsTab: (tab: string) => Promise<void>;
   onOpenSettingsTab: (callback: (tab: string) => void) => () => void;
   setOverlayMousePassthrough: (enabled: boolean) => Promise<{ success: boolean }>;
@@ -1340,7 +1339,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('ensure-expanded', subscription);
     };
   },
-  toggleAdvancedSettings: () => ipcRenderer.invoke('toggle-advanced-settings'),
+  // toggleAdvancedSettings was removed (F-121): it invoked
+  // 'toggle-advanced-settings', a channel no handler ever registered — any
+  // caller got a silent "No handler registered" rejection. Zero call sites.
   openSettingsTab: (tab: string) => ipcRenderer.invoke('settings:open-tab', tab),
   onOpenSettingsTab: (callback: (tab: string) => void) => {
     const subscription = (_: any, tab: string) => callback(tab);

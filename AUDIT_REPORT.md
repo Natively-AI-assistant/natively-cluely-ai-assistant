@@ -242,13 +242,17 @@ Confidence: medium-high.
 
 ## F-114 [P3] Dev-mode launcher close leaves the zombie it claims to prevent
 Phase: 1 | Area: WindowHelper dev close path
-Status: FOUND
+Status: FOUND → CONFIRMED → BLOCKED-ON-PLATFORM (no fix this pass)
+Step 1 confirmation: the dev exception (WindowHelper.ts:1069-1074) sets setQuitting(true) and lets the close proceed, relying on window-all-closed → app.quit(); but hidden preloaded windows (settings + model-selector main.ts:7798-7799 region, cropper, popoverCatcher) are never closed, so window-all-closed cannot fire. Mechanism solid.
+Step 2: NOT live-reproducible on this machine — the handler registers only under `process.platform !== 'darwin'` (:1068), and the campaign forbids fixing without reproduction. Proposed fix for the Windows session that picks this up: in the isDev branch, schedule `app.quit()` explicitly (setImmediate, after the close proceeds) instead of relying on window-all-closed; with setQuitting already true and F-108's overlay guard in place the sweep completes. Requires physical Windows verification.
 Hypothesis: dev exception (WindowHelper.ts:1069-1074) relies on window-all-closed → app.quit(), but hidden preloaded windows (settings + model selector, main.ts:7798-7799; cropper :1484-1486; popoverCatcher WindowHelper.ts:1464-1510) are never closed, so window-all-closed never fires → dev zombie holding lock, port 5180, DB handles (the exact state the comment says it prevents).
 Confidence: high. Dev-only.
 
 ## F-115 [P2] Overlay-aux guard loses group listeners on overlay recreate (latent)
 Phase: 1 | Area: WindowHelper overlay aux windows
-Status: FOUND
+Status: FOUND → RESOLVED-BY-F-108 (re-analysis 2026-08-14; no code change)
+Re-analysis: the inconsistent state (overlayWindow nulled while pill/toggle stay alive) requires the overlay close being PREVENTED while its reference is dropped. The overlay's 'closed' handler (WindowHelper.ts:1680-1685) nulls pill/toggle whenever the overlay is actually destroyed, keeping the :1528 guard consistent; every currently-reachable launcher-destruction path (quit post-F-108; macOS Cmd+W between meetings with overlay hidden → close proceeds) destroys the overlay for real. The one concrete trigger — the quit-cancellation sequence — was F-108, now fixed (overlay close proceeds during quit). showOverlay (the only show-without-hiding-launcher path) remains unused by src/.
+FOLLOW-UP (hardening): key createOverlayAuxWindows' short-circuit on overlay identity rather than aux existence, so any FUTURE overlay-recreation path re-registers group listeners. Not fixed now per no-hypothetical-fixes rule.
 Hypothesis: all group listeners registered only in createOverlayAuxWindows(), which bails at :1528 `if (this.pillWindow || this.toggleWindow) return` — keyed on aux state, not overlay identity. Launcher 'closed' handler (:1125-1128) closes overlay (preventDefault'ed if visible) then nulls the reference regardless → overlay survives unreferenced, aux windows stay alive → next createWindow() builds a new overlay that short-circuits at :1528: no pill/toggle/move-resize sync; stale aux remain AppKit children of the dead overlay.
 Trigger: launcher destroyed while overlay visible (macOS launcher has NO close interception — :1068 gates off-darwin; concrete instance today is the F-108 quit sequence).
 Disproof: "launcher destroyed while overlay visible" unreachable (showOverlay in ipcHandlers:762 currently unused by src/) — reachability medium.
@@ -322,7 +326,12 @@ Confidence: high.
 
 ## F-121 [P3] Dead bridge surface (drift generator)
 Phase: 1 | Area: preload/ipcHandlers
-Status: FOUND
+Status: FOUND → CONFIRMED → FIXED-VERIFIED (hazard half); FOLLOW-UP (inert half)
+Reproduction evidence: the repo's own SkillsIpcWiring.test.mjs already enforces "every preload invoke channel has a handler" and had to GRANDFATHER 'toggle-advanced-settings' in a KNOWN_STALE set explicitly labeled "renderer invokes silently reject — pre-existing tech debt, separate cleanup". This is that cleanup.
+Fix: deleted the dead toggleAdvancedSettings preload method (impl + interface) and its electron.d.ts entry (zero call sites, verified); emptied KNOWN_STALE so the bridge invoke↔handler contract test is now exemption-free and absolute.
+E2E verification: SkillsIpcWiring 21/21 with the empty exemption set (also re-validates F-116's addition and every other channel pairing); typecheck clean.
+FOLLOW-UP (inert half, deliberate non-fix): the dead curl-provider CRUD handler cluster (ipcHandlers.ts:7299-7365 — save/get/delete-curl-provider, switch-to-curl-provider, switch-to-custom-provider; no preload invoker) is handlers-without-callers — no silent-failure hazard, and ipcHandlers.ts carries foreign in-flight provider work; deletion deferred to avoid collision.
+Commit: (pending — F-113 = 73bc4f03)
 `toggle-advanced-settings` invoked by preload (preload.ts:1334) with no main handler (silent "No handler registered" for future callers). 20 handlers with no preload invoker, incl. the dead duplicated curl-provider CRUD set (`save/get/delete-curl-provider`, `switch-to-curl-provider`, `switch-to-custom-provider`) alongside the live custom-provider set (preload.ts:2142-2144).
 Confidence: high.
 
