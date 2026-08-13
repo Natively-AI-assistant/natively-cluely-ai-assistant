@@ -861,7 +861,18 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // throwing. Production always takes the first branch — pinned by a
             // test asserting the real LLMHelper exposes the method, so this
             // fallback can never quietly become the live path.
-            const _wtaArgs = [_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, _wtaRoute] as const;
+            //
+            // The annotation is load-bearing, not decoration. electron/tsconfig.json
+            // runs with `noImplicitAny` but WITHOUT `strictNullChecks`, so a bare
+            // `undefined` in an unannotated array literal widens to an IMPLICIT any
+            // and tsc rejects the whole declaration:
+            //   TS7005: Variable '_wtaArgs' implicitly has an 'readonly [any, ...]' type
+            // At the previous direct call site the same `undefined` was contextually
+            // typed by the parameter, so extracting the arguments into a variable is
+            // what exposed it. Typing the tuple as the callee's own parameter list
+            // fixes that and additionally checks arity and order against the real
+            // signature — which an `as const` tuple silently did not.
+            const _wtaArgs: Parameters<LLMHelper['streamChat']> = [_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, _wtaRoute];
             const _wtaStream = typeof (this.llmHelper as any).streamChatWithOutcome === 'function'
                 ? (this.llmHelper as any).streamChatWithOutcome(..._wtaArgs)
                 : { stream: (this.llmHelper as any).streamChat(..._wtaArgs), outcome: { truncated: false } };
