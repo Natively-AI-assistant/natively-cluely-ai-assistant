@@ -91,7 +91,11 @@ export class MicrophoneCapture extends EventEmitter {
 
         if (!RustMicCapture) {
             console.error('[MicrophoneCapture] Cannot start: Rust module missing');
-            return;
+            // F-107: see SystemAudioCapture.start() — a silent return here hid
+            // a missing/wrong-arch native module entirely. Throwing matches
+            // this wrapper's existing construction-failure contract and lets
+            // every call site surface a terminal channel banner.
+            throw new Error('Native audio engine unavailable — the audio capture module failed to load. Reinstall the app (dev: npm run build:native).');
         }
 
         // PRIMARY construction site (lazy init). The wrapper does NOT construct

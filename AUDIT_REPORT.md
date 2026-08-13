@@ -127,7 +127,14 @@ Confidence: high.
 
 ## F-107 [P2] Absent/wrong-arch native module boots into a silent no-op meeting
 Phase: 1 | Area: nativeModuleLoader / SystemAudioCapture / MicrophoneCapture constructors
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-107-repro.mjs — bare-file launch WITHOUT the native-module symlink (the loader's silent-null state observed live during F-103's investigation), real startMeeting(), banner spy. PRE-FIX: zero native-related banners — only unrelated STT-config banners (in a real profile with valid keys there would be NOTHING); watcher unarmed; meeting reports success → exit 1.
+Root cause: both wrappers' start() bare-return on missing native class — no 'error', no 'start' (watchdog arms on 'start'), so the degradation had zero surface.
+Fix: both start() methods now THROW ('Native audio engine unavailable — …') — matching the mic wrapper's existing construction-failure contract; every call site catches (startCaptureChannels [F-105], recovery, resume, audio test) and surfaces terminal channel banners. Constructors unchanged.
+E2E verification: repro → exit 0 (both channels' terminal native banners observed — F-105's helper composing as designed). Adjacent wrapper tests 8/8; typecheck clean. Pin: NativeModuleAbsenceSurfaced2026_08_14.test.mjs (2/2).
+FOLLOW-UP: extend the boot arch gate (nativeArch.cjs TARGETS) to verify native-module/index.*.node presence+arch at startup for packaged builds — deferred (packaging-surface change; Phase 7 candidate).
+Cross-platform: throw path platform-neutral; the loader's failure modes covered on both (missing binary / wrong arch / asar-unpack regression).
+Commit: (pending — F-118 = 3ae78552)
 Hypothesis: when `loadNativeModule()` returns null (missing binary, wrong arch, or early-boot `require('electron')` failure which caches null permanently — nativeModuleLoader.ts:180, :220-224, :275-277), both constructors only console.error; both start() methods return without emit('error')/emit('start') → watchdog never arms, device lists empty, meeting reports started (main.ts:5617), zero transcript, zero UI surface. Boot arch gate covers only better-sqlite3 + keytar (nativeArch.cjs:28-31) — native-module/index.*.node unverified.
 Trigger: fresh clone without build:native; packaging regression; x64 binary on arm64; early-boot import poisoning the loader cache.
 Disproof: a "native available" predicate checked before meeting start that surfaces a banner; or nativeArch.verifyAll covering native-module.
