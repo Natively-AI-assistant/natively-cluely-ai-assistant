@@ -188,16 +188,18 @@ class ModelPreloader {
         }
         // Acquire the shared ONNX slot BEFORE spawning the worker. The release
         // function is wired into the worker's error/exit handlers below — the
-        // slot stays held for the lifetime of the worker's session. Nemotron
-        // opens 3 concurrent ONNX sessions per worker (encoder/decoder/joint)
-        // vs. every other model's 1 — weight the acquisition accordingly so
-        // the gate's crash-avoidance guarantee holds for a preloaded worker
-        // too, not just a cold-started one (see onnxThreadConfig.ts).
+        // slot stays held for the lifetime of the worker's session. Always
+        // weight 1: Nemotron never reaches this line (the early-return guard
+        // at the top of preload() routes it through sharedWorkerRegistry.ts
+        // instead), and every other model is one worker = one gate unit —
+        // the previous `includes('nemotron') ? 3 : 1` here was dead code.
+        // A weight-1 acquisition never rejects (only weight > cap does, per
+        // acquireOnnxSlot's contract), so the empty .catch() is genuinely
+        // unreachable, kept purely as a chain guard.
         let slotRelease: (() => void) | null = null;
-        const onnxWeight = modelId.toLowerCase().includes('nemotron') ? 3 : 1;
-        acquireOnnxSlot('high', onnxWeight).then((release) => {
+        acquireOnnxSlot('high', 1).then((release) => {
             slotRelease = release;
-        }).catch(() => { /* should never reject */ });
+        }).catch(() => { /* unreachable for weight 1 — chain guard only */ });
 
         writeLoadSentinel(modelId);
         const w = new Worker(workerPath);

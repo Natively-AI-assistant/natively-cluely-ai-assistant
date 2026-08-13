@@ -293,7 +293,7 @@ describe('Dual-channel Nemotron: real worker + real registry', {
     assert.equal(channelB.channelId, 'test-system');
 
     const sem = readOnnxSemaphore();
-    assert.equal(sem.inFlightHigh, 3, 'exactly one weight:3 acquisition must be in flight, not two (which would read 6)');
+    assert.equal(sem.inFlightHigh, 1, 'exactly one weight:1 acquisition must be in flight for the SHARED worker, not two (which would read 2) — the registry counts one worker, not per-session units (see sharedWorkerRegistry.ts, 2026-08-14)');
     assert.equal(sem.inFlightNormal, 0);
 
     // Real LocalWhisperSTT instances, wired to these same registry handles —
@@ -436,7 +436,7 @@ describe('Dual-channel Nemotron: real worker + real registry', {
     // must NOT have been terminated, and the ONNX slot must NOT have been
     // freed, while channel B is still live.
     const sem = readOnnxSemaphore();
-    assert.equal(sem.inFlightHigh, 3, 'the ONNX slot must NOT be released while channel B is still using the shared worker');
+    assert.equal(sem.inFlightHigh, 1, 'the ONNX slot must NOT be released while channel B is still using the shared worker');
     assert.equal(channelB.worker, worker, 'channel B must still be pointed at the SAME live worker');
 
     // The surviving channel must NOT have been silently killed — prove it

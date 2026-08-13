@@ -76,6 +76,30 @@ function setNemotronChain(channelId: string, p: Promise<void>): void {
   nemotronChains.set(channelId, p);
 }
 
+// Per-channel SEGMENT-level token accumulator (2026-08-14 code review,
+// CONFIRMED finding). The host's transcript contract — inherited from how
+// every other model in this catalog behaves — is that a `partial` carries
+// the full segment text SO FAR and the final `result` carries the WHOLE
+// segment's text: SessionTracker only commits finals (non-final segments are
+// dropped at SessionTracker.addTranscript), so the `result` text IS the
+// meeting transcript. Nemotron's delta-dispatch design breaks that contract
+// without this accumulator: each streaming message carries only ~560ms of
+// NEW audio, so a per-message decode yields only that delta's words — and
+// the final message carries only the segment's last sub-560ms tail. Without
+// accumulation, a 6-second sentence commits as its last word (or '') and
+// the committed transcript, RAG feed, and suggestion triggers lose nearly
+// everything, even though the live interim display looked plausible.
+//
+// Accumulating TOKEN IDS (not text) and decoding the whole sequence in one
+// decodeTokens() call also fixes the chunk-boundary word-splitting artifact
+// ('jump s', 'la zy'): SentencePiece pieces that straddle a chunk boundary
+// only merge into one word when decoded together (see
+// ChunkTranscript.tokenIds in nemotronEngine.ts).
+//
+// Lifecycle: cleared on nemotronReset (segment start), after every final
+// `result` (segment closed), and on closeChannel.
+const nemotronSegmentTokens = new Map<string, number[]>();
+
 // Serializes the INIT sequence itself, separately from the per-channel
 // transcribe/setLanguage chains above. Without this, two `init` messages
 // arriving close together (the realistic case — main.ts starts both
@@ -394,6 +418,7 @@ parentPort.on('message', async (msg: any) => {
     if (msg.channelId) {
       nemotronChannels.delete(msg.channelId);
       nemotronChains.delete(msg.channelId);
+      nemotronSegmentTokens.delete(msg.channelId);
     }
     return;
   } else if (msg.type === 'setPrompt') {
@@ -430,7 +455,14 @@ parentPort.on('message', async (msg: any) => {
     if (engine) {
       setNemotronChain(channelId!, getNemotronChain(channelId!).then(async () => {
         try {
-          if (msg.nemotronReset) engine.reset();
+          if (msg.nemotronReset) {
+            engine.reset();
+            // Segment boundary: the accumulated tokens belong to the PREVIOUS
+            // segment (whose final already decoded-and-cleared them, or which
+            // was abandoned via a host-side cursor rewind) — never let them
+            // leak into this segment's transcript.
+            nemotronSegmentTokens.delete(channelId!);
+          }
           const results = await engine.pushAudio(msg.audio);
           if (!msg.streaming) {
             // Final pass: decode whatever's left in the < CHUNK_SAMPLES tail
@@ -440,12 +472,28 @@ parentPort.on('message', async (msg: any) => {
             const tail = await engine.flush();
             if (tail) results.push(tail);
           }
-          const text = results.map(r => r.text).join(' ').trim();
-          parentPort!.postMessage(
-            msg.streaming
-              ? { type: 'partial', taskId: msg.taskId, channelId, text }
-              : { type: 'result', taskId: msg.taskId, channelId, text },
-          );
+          // Accumulate this message's token ids onto the SEGMENT accumulator
+          // and decode the whole segment in one pass — see
+          // nemotronSegmentTokens' doc comment for why per-message text (the
+          // old `results.map(r => r.text).join(' ')`) silently lost almost
+          // the entire committed transcript, and why ids (not text) must be
+          // what accumulates.
+          const acc = nemotronSegmentTokens.get(channelId!) ?? [];
+          for (const r of results) acc.push(...r.tokenIds);
+          const text = engine.decodeTokens(acc).trim();
+          if (msg.streaming) {
+            // Partial: full segment text SO FAR — matching every other
+            // model's partial semantics (the host displays it as the live
+            // interim line and dedupes unchanged repeats).
+            nemotronSegmentTokens.set(channelId!, acc);
+            parentPort!.postMessage({ type: 'partial', taskId: msg.taskId, channelId, text });
+          } else {
+            // Final: the WHOLE segment's text. Segment is closed — clear the
+            // accumulator so the next segment starts clean even if its first
+            // message somehow arrives without nemotronReset.
+            nemotronSegmentTokens.delete(channelId!);
+            parentPort!.postMessage({ type: 'result', taskId: msg.taskId, channelId, text });
+          }
         } catch (e: any) {
           parentPort!.postMessage({ type: 'error', taskId: msg.taskId, channelId, message: e?.message ?? String(e) });
         }

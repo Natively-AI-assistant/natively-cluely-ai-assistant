@@ -46,6 +46,15 @@ const zeroDecoderState = (): DecoderState => ({
 
 export interface ChunkTranscript {
   text: string;
+  // The raw RNNT token ids this chunk emitted, in order. Callers that
+  // assemble a SEGMENT-level transcript must accumulate these and decode
+  // them in ONE decodeTokens() call at the end, NOT join the per-chunk
+  // `text` strings: a word whose SentencePiece pieces straddle a 560ms
+  // chunk boundary ('▁la' in chunk N, 'zy' in chunk N+1) decodes correctly
+  // only when both pieces are in the same decode call — text-joining
+  // produces 'la zy'. (2026-08-14 code review, finding on whisperWorker's
+  // old `results.map(r => r.text).join(' ')`.)
+  tokenIds: number[];
   isFinal: false; // per-chunk output is always a partial; segment-close emits the final separately
 }
 
@@ -352,6 +361,19 @@ export class NemotronEngine {
     // was caught by a real multi-chunk run against the downloaded model; a
     // single sub-chunk smoke test never exercises it.
     const text = allTokenIds.length > 0 ? this.tokenizer.decode(allTokenIds) : '';
-    return { text, isFinal: false };
+    return { text, tokenIds: allTokenIds, isFinal: false };
+  }
+
+  /**
+   * Decodes an arbitrary accumulated token-id sequence with the loaded
+   * tokenizer. This is how a caller assembling a SEGMENT transcript from
+   * multiple ChunkTranscript.tokenIds arrays must produce text — one decode
+   * over the whole sequence, so words straddling chunk boundaries come out
+   * whole (see ChunkTranscript.tokenIds). Empty input short-circuits to ''
+   * (AutoTokenizer.decode throws on an empty array — same guard runChunk
+   * already carries).
+   */
+  decodeTokens(ids: number[]): string {
+    return ids.length > 0 ? this.tokenizer.decode(ids) : '';
   }
 }

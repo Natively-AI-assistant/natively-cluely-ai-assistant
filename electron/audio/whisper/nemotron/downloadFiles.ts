@@ -85,7 +85,15 @@ export async function downloadNemotronFiles(
       const { done, value } = await reader.read();
       if (done) break;
       fileBytes += value.byteLength;
-      fileStream.write(value);
+      // Honor WriteStream backpressure: write() returning false means the
+      // internal buffer is over its highWaterMark — await 'drain' before
+      // reading more, or a fast network + slow disk accumulates hundreds of
+      // MB of queued Buffers in this worker's heap on the 690MB encoder
+      // weights (the memory preflight ran BEFORE this download, and 3 real
+      // ONNX sessions get created right after it). (2026-08-14 code review.)
+      if (!fileStream.write(value)) {
+        await new Promise<void>((resolve) => fileStream.once('drain', resolve));
+      }
       const pct = Math.min(99, Math.round(((downloadedSoFar + fileBytes) / TOTAL_APPROX_BYTES) * 100));
       report(pct);
     }

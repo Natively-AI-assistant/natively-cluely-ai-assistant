@@ -852,13 +852,62 @@ export class LocalWhisperSTT extends EventEmitter {
             const workerPath = resolveWhisperWorkerPath();
             console.log(`[LocalWhisperSTT] Acquiring shared Nemotron worker for channel "${channelId}"`);
             writeLoadSentinel(this.modelId);
-            const { worker, release } = await acquireSharedNemotronWorker(
-                this.modelId,
-                channelId,
-                initMsg.executionProviders ?? ['cpu'],
-                initMsg.cacheDir,
-                workerPath,
-            );
+            let worker: Worker;
+            let release: () => void;
+            try {
+                ({ worker, release } = await acquireSharedNemotronWorker(
+                    this.modelId,
+                    channelId,
+                    initMsg.executionProviders ?? ['cpu'],
+                    initMsg.cacheDir,
+                    workerPath,
+                ));
+            } catch (err: any) {
+                // (2026-08-14 code review, two CONFIRMED findings.)
+                //
+                // 1. Clear the crash sentinel on ANY JS-level rejection. The
+                //    sentinel exists to catch NATIVE aborts that kill the
+                //    whole process before any catch can run — in that case
+                //    nothing executes here and the sentinel correctly
+                //    survives for next launch's poisoned-load recovery. But
+                //    if this catch IS running, the app is alive and handling
+                //    the failure gracefully (slot timeout, model mismatch,
+                //    download/init error) — leaving the sentinel behind made
+                //    the NEXT launch silently reset the user's model choice
+                //    to tiny.en and show a false "recovered from a crash"
+                //    notice, precisely when a user restarts after seeing a
+                //    soft STT failure.
+                clearLoadSentinel(this.modelId);
+                // 2. The corrupt-model purge lived only in this instance's
+                //    worker 'message' handler — which is attached AFTER this
+                //    await. A Nemotron init failure travels through the
+                //    registry's own listener as a pendingReady rejection and
+                //    lands HERE instead, so the purge was unreachable: a
+                //    corrupt-but-nonzero download stayed "installed" forever
+                //    (isNemotronModelCached only checks size > 0) and every
+                //    meeting start failed identically. Mirror the
+                //    message-handler path's FULL structure — including the
+                //    symbol-error guard: a macOS-12 dylib symbol failure is
+                //    an environment problem, not corrupt files, and must
+                //    never delete a perfectly good download.
+                const message = err?.message ?? String(err);
+                if (message.includes('Failed to load model')) {
+                    const isOnnxSymbolError = message.includes('Symbol not found')
+                        || message.includes('__ZNSt3__18to_charsEPcS0_d')
+                        || message.includes('libonnxruntime');
+                    if (!isOnnxSymbolError) {
+                        try {
+                            const { isCorruptModelError, purgeCorruptModel } = require('./whisper/modelManager');
+                            if (isCorruptModelError(message)) {
+                                purgeCorruptModel(this.modelId, message);
+                            }
+                        } catch (purgeErr) {
+                            console.error('[LocalWhisperSTT] Corrupt-model purge failed:', purgeErr);
+                        }
+                    }
+                }
+                throw err;
+            }
             clearLoadSentinel(this.modelId);
             this.worker = worker;
             this.nemotronWorkerRelease = release;
@@ -1037,6 +1086,12 @@ export class LocalWhisperSTT extends EventEmitter {
             this.clearStreamingWatchdog();
             this.streamingTaskInFlight = false;
             this.streamingTaskId = null;
+            // nemotron-rnnt only: same delta-cursor rewind as the watchdog
+            // force-clear and streaming-task-error paths. Audio dispatched to
+            // a now-dead worker never reached the engine — a stale cursor
+            // would make the segment's eventual final dispatch a mis-sliced
+            // tail-only delta with nemotronReset:false. (2026-08-14 review.)
+            if (this.isNemotronModel) this.nemotronSentSamples = 0;
             // Free the shared ONNX gate slot — Whisper's session is gone.
             if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
             // Dual-channel Nemotron: the registry's OWN 'error' listener
@@ -1088,6 +1143,10 @@ export class LocalWhisperSTT extends EventEmitter {
             this.streamingTaskInFlight = false;
             this.streamingTaskId = null;
             this.workerReady = false;
+            // Same delta-cursor rewind as the 'error' handler above — a
+            // dead worker means dispatched-but-unprocessed audio, and a
+            // stale cursor mis-slices the segment's final dispatch.
+            if (this.isNemotronModel) this.nemotronSentSamples = 0;
             if (hadInFlight) {
                 this.emit('error', new Error(
                     `Local Whisper worker exited unexpectedly (code=${code}) — transcription stream has been unblocked.`

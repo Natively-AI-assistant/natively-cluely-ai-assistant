@@ -149,9 +149,18 @@ function makeFakeEngine(callCount) {
       await state.gates[idx].promise;
       state.concurrency--;
       state.callLog.push(`end${idx}`);
-      return [{ text: `chunk${idx}`, isFinal: false }];
+      // tokenIds: the worker's segment accumulator (2026-08-14 transcript
+      // fix) collects these across messages and decodes the accumulated
+      // sequence via decodeTokens() below — one synthetic id per fake chunk.
+      return [{ text: `chunk${idx}`, tokenIds: [idx], isFinal: false }];
     },
     async flush() { return null; },
+    // Mirrors the real NemotronEngine.decodeTokens contract: one decode over
+    // the WHOLE accumulated id sequence. `[0] -> 'chunk0'`,
+    // `[0,1] -> 'chunk0 chunk1'` — so the partial-text assertions below
+    // directly verify the worker accumulates across messages instead of
+    // decoding each delta in isolation (the transcript-loss bug).
+    decodeTokens(ids) { return ids.map((i) => `chunk${i}`).join(' '); },
   };
   return { engine, state };
 }
@@ -317,8 +326,13 @@ describe('Nemotron worker message serialization (final-review-fix2, proves c69c8
       const partials = posted.filter((m) => m.type === 'partial');
       assert.equal(partials.length, 2);
       assert.deepEqual(partials.map((p) => p.taskId), ['t1', 't2']);
+      // REGRESSION (2026-08-14 transcript-loss fix): each partial must carry
+      // the FULL segment text so far — accumulated token ids decoded
+      // together — not just that message's own delta. Pre-fix, partial #2
+      // read 'chunk1' (delta-only) and the segment's committed final lost
+      // every earlier word.
       assert.equal(partials[0].text, 'chunk0');
-      assert.equal(partials[1].text, 'chunk1');
+      assert.equal(partials[1].text, 'chunk0 chunk1');
       assert.deepEqual(partials.map((p) => p.channelId), ['ch1', 'ch1'], 'partial results must echo their channelId');
     } finally {
       cleanup();

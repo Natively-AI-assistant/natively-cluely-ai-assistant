@@ -194,10 +194,36 @@ export async function acquireSharedNemotronWorker(
       capturedWorker = state.worker;
       state.refCount++;
     } else {
-      // Cold start — this registry now owns the ONE weight:3 ONNX slot
-      // acquisition for Nemotron; LocalWhisperSTT no longer calls
-      // acquireOnnxSlot directly for it.
-      const slotRelease = await acquireOnnxSlot('high', 3);
+      // Cold start — this registry owns the ONE ONNX slot acquisition for
+      // Nemotron; LocalWhisperSTT no longer calls acquireOnnxSlot directly
+      // for it.
+      //
+      // WEIGHT 1, NOT 3 (2026-08-14 code review, two CONFIRMED production
+      // deadlocks). An earlier round weighted this acquisition 3 (one unit
+      // per ONNX session the engine opens). Against the default cap of 2
+      // that forces the semaphore's exclusive mode — admitted only when the
+      // gate is COMPLETELY idle, held for the entire meeting — which breaks
+      // coexistence in BOTH directions: (a) if any weight-1 consumer
+      // (LocalEmbeddingProvider / LocalReranker / IntentClassifier, each of
+      // which holds its slot for its worker's whole lifetime) is loaded
+      // first, this acquisition can never be admitted — it times out after
+      // 15s and Nemotron STT fails to start for the whole meeting; (b) if
+      // Nemotron wins the gate first (3 > cap 2), every later weight-1
+      // acquisition waits with NO deadline — embeddings, reranking, and
+      // intent classification silently hang until the meeting ends.
+      //
+      // The gate's actual historical unit is WORKERS, not sessions: every
+      // other consumer acquires exactly one slot per worker regardless of
+      // what that worker loads (the transformers.js path loads encoder +
+      // decoder sessions per model under one slot too). This shared worker
+      // is ONE worker — dual-channel means both audio channels share these
+      // same 3 sessions, which all run with getBoundedOnnxSessionOptions()
+      // (intra/inter-op threads pinned to 1, CPU memory arena DISABLED — the
+      // arena growth being the documented mechanism of the original crash
+      // reports the gate exists to prevent). Weight 1 restores the same
+      // coexistence contract the pre-Nemotron catalog always had: local STT
+      // plus one background ONNX consumer, capped at 2 workers.
+      const slotRelease = await acquireOnnxSlot('high', 1);
       capturedWorker = new Worker(workerPath);
       state.worker = capturedWorker;
       state.modelId = modelId;
