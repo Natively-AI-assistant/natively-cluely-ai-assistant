@@ -49,6 +49,32 @@ export interface ChunkTranscript {
   isFinal: false; // per-chunk output is always a partial; segment-close emits the final separately
 }
 
+/**
+ * Dual-channel support (2026-08-13): the 3 loaded ONNX sessions + tokenizer,
+ * extracted from one NemotronEngine instance so a SECOND instance can be
+ * constructed against the exact same objects instead of loading its own
+ * fresh copies from disk. Safe because ONNX Runtime sessions are stateless
+ * compute graphs — `InferenceSession.run()` carries all state via its own
+ * input/output tensors, never on the session object itself — so concurrent
+ * `.run()` calls from two different NemotronEngine instances against the
+ * same shared session are a supported ORT pattern. This app's
+ * getBoundedOnnxSessionOptions() already pins intra/inter-op threads to 1,
+ * so concurrent calls serialize inside the session rather than truly
+ * parallelize — correct either way, just not faster; that's an existing,
+ * deliberate constraint elsewhere in this codebase, not something to "fix"
+ * here. The tokenizer is likewise safe to share: loadNemotronTokenizer's
+ * returned `decode()` (see tokenizer.ts) only reads from the loaded
+ * vocab/model — convert_ids_to_tokens() is a pure id-array -> token-array
+ * lookup with no mutable per-call instance state — confirmed by direct
+ * inspection, not assumed.
+ */
+export interface NemotronSharedResources {
+  encoderSession: InferenceSession;
+  decoderSession: InferenceSession;
+  jointSession: InferenceSession;
+  tokenizer: NemotronTokenizer;
+}
+
 async function createSessionWithFallback(
   filePath: string,
   executionProviders: string[],
@@ -102,7 +128,27 @@ export class NemotronEngine {
     this.cacheState = createZeroCacheState(encoderSession);
   }
 
-  static async create(modelDir: string, executionProviders: string[]): Promise<NemotronEngine> {
+  /**
+   * `shared`, when provided, skips the load-from-disk path entirely and
+   * constructs this instance directly against another instance's already-
+   * loaded sessions/tokenizer (see NemotronSharedResources's doc comment for
+   * why that's safe). `modelDir` is unused in that branch — kept in the
+   * signature for symmetry/logging, not read.
+   *
+   * Every existing caller that doesn't pass `shared` (integration.test.mjs,
+   * every other *.test.mjs in this directory, and whisperWorker.ts's own
+   * first-channel-of-a-worker path) keeps hitting the exact original
+   * fresh-load Promise.all(...) path below, byte-for-byte unchanged — zero
+   * blast radius on the already-verified single-channel accuracy fix.
+   */
+  static async create(
+    modelDir: string,
+    executionProviders: string[],
+    shared?: NemotronSharedResources,
+  ): Promise<NemotronEngine> {
+    if (shared) {
+      return new NemotronEngine(shared.encoderSession, shared.decoderSession, shared.jointSession, shared.tokenizer);
+    }
     const [encoderSession, decoderSession, jointSession] = await Promise.all([
       createSessionWithFallback(path.join(modelDir, 'encoder.onnx'), executionProviders),
       createSessionWithFallback(path.join(modelDir, 'decoder.onnx'), executionProviders),
@@ -110,6 +156,23 @@ export class NemotronEngine {
     ]);
     const tokenizer = await loadNemotronTokenizer(modelDir);
     return new NemotronEngine(encoderSession, decoderSession, jointSession, tokenizer);
+  }
+
+  /**
+   * Extracts this instance's loaded sessions/tokenizer so a SECOND
+   * NemotronEngine (a second channel, e.g. system-audio joining after mic
+   * already loaded the model) can be constructed against them via
+   * `create(..., shared)` instead of loading its own fresh copies. Does not
+   * expose `this.cacheState`/`this.decoderState`/etc — only the stateless,
+   * safely-shareable resources.
+   */
+  getSharedResources(): NemotronSharedResources {
+    return {
+      encoderSession: this.encoderSession,
+      decoderSession: this.decoderSession,
+      jointSession: this.jointSession,
+      tokenizer: this.tokenizer,
+    };
   }
 
   setLanguage(langId: number): void {

@@ -134,6 +134,12 @@ function makeFakeEngine(callCount) {
   const engine = {
     reset() { state.callLog.push('reset'); },
     setLanguage(langId) { state.callLog.push(`setLanguage:${langId}`); },
+    // Dual-channel round: whisperWorker.ts's real 'first channel' init path
+    // calls this on whatever NemotronEngine.create() returns, to populate
+    // nemotronSharedResources for any later-joining channel. Returning a
+    // plain marker object is enough for this test — it never inspects the
+    // contents, only that init succeeds (posts 'ready', not 'error').
+    getSharedResources() { return { fake: true }; },
     async pushAudio(_audio) {
       const idx = state.callIndex++;
       state.concurrency++;
@@ -182,7 +188,7 @@ function loadWorkerWithFakes(workerJsPathRaw, { fakeEngineFactory }) {
       if (request === './nemotron/nemotronEngine') {
         return {
           NemotronEngine: {
-            create: async (_modelDir, _providers) => {
+            create: async (_modelDir, _providers, _shared) => {
               createdEngineHandle = fakeEngineFactory();
               return createdEngineHandle.engine;
             },
@@ -236,13 +242,15 @@ describe('Nemotron worker message serialization (final-review-fix2, proves c69c8
 
     try {
       // init → nemotron-rnnt path → NemotronEngine.create() is mocked to
-      // return our fake engine.
+      // return our fake engine. channelId is required as of the dual-channel
+      // round (whisperWorker.ts now keys everything per-channel).
       fakeParentPort.emit('message', {
         type: 'init',
         sessionLayout: 'nemotron-rnnt',
         modelId: 'fake-org/fake-nemotron',
         cacheDir: '/fake/cache',
         executionProviders: ['cpu'],
+        channelId: 'ch1',
       });
       await new Promise((resolve) => {
         const check = () => {
@@ -252,13 +260,18 @@ describe('Nemotron worker message serialization (final-review-fix2, proves c69c8
         check();
       });
       assert.ok(fakeEngineHandle, 'NemotronEngine.create must have been invoked and its result captured');
+      assert.deepEqual(
+        posted.filter((m) => m.type === 'ready').map((m) => m.channelId),
+        ['ch1'],
+        'ready must echo the channelId it was created for',
+      );
       const { state } = fakeEngineHandle;
 
       // Fire two transcribe messages back-to-back with NO await between them
       // — the exact shape that, pre-c69c8379, could interleave inside
       // NemotronEngine.pushAudio().
-      fakeParentPort.emit('message', { type: 'transcribe', taskId: 't1', audio: new Float32Array(4), streaming: true, nemotronReset: false });
-      fakeParentPort.emit('message', { type: 'transcribe', taskId: 't2', audio: new Float32Array(4), streaming: true, nemotronReset: false });
+      fakeParentPort.emit('message', { type: 'transcribe', taskId: 't1', audio: new Float32Array(4), streaming: true, nemotronReset: false, channelId: 'ch1' });
+      fakeParentPort.emit('message', { type: 'transcribe', taskId: 't2', audio: new Float32Array(4), streaming: true, nemotronReset: false, channelId: 'ch1' });
 
       // Immediately after both emits (still perfectly synchronous — zero
       // awaits have happened anywhere yet), nothing may have started: if this
@@ -306,6 +319,7 @@ describe('Nemotron worker message serialization (final-review-fix2, proves c69c8
       assert.deepEqual(partials.map((p) => p.taskId), ['t1', 't2']);
       assert.equal(partials[0].text, 'chunk0');
       assert.equal(partials[1].text, 'chunk1');
+      assert.deepEqual(partials.map((p) => p.channelId), ['ch1', 'ch1'], 'partial results must echo their channelId');
     } finally {
       cleanup();
     }
@@ -330,6 +344,7 @@ describe('Nemotron worker message serialization (final-review-fix2, proves c69c8
         modelId: 'fake-org/fake-nemotron',
         cacheDir: '/fake/cache',
         executionProviders: ['cpu'],
+        channelId: 'ch1',
       });
       await new Promise((resolve) => {
         const check = () => (posted.some((m) => m.type === 'ready') ? resolve() : setImmediate(check));
@@ -337,8 +352,8 @@ describe('Nemotron worker message serialization (final-review-fix2, proves c69c8
       });
       const { state } = fakeEngineHandle;
 
-      fakeParentPort.emit('message', { type: 'transcribe', taskId: 't1', audio: new Float32Array(4), streaming: true, nemotronReset: false });
-      fakeParentPort.emit('message', { type: 'setLanguage', langId: 7 });
+      fakeParentPort.emit('message', { type: 'transcribe', taskId: 't1', audio: new Float32Array(4), streaming: true, nemotronReset: false, channelId: 'ch1' });
+      fakeParentPort.emit('message', { type: 'setLanguage', langId: 7, channelId: 'ch1' });
 
       await state.starts[0].promise;
       // setLanguage must not have run yet — it's chained behind the

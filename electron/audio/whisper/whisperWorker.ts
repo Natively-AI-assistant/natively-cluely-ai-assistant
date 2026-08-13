@@ -38,20 +38,55 @@ const LANG_MAP: Record<string, string | null> = {
 
 let pipe: any = null;
 let loadedModelId = '';
-// Set only when sessionLayout === 'nemotron-rnnt' — routes transcribe messages
-// to the raw-ONNX engine instead of the transformers.js pipe() above. The two
-// are mutually exclusive per worker instance (one model loaded at a time).
-let nemotronEngine: import('./nemotron/nemotronEngine').NemotronEngine | null = null;
 
-// Serializes every message that touches nemotronEngine's mutable state
-// (pendingBuffer/cacheState/decoderState/lookbackBuffer). The worker's
+// ── Dual-channel Nemotron (2026-08-13) ──────────────────────────────────
+//
+// One worker can now serve TWO channels (mic + system-audio) sharing ONE
+// loaded model (one set of 3 ONNX sessions) — see
+// electron/audio/whisper/nemotron/sharedWorkerRegistry.ts (main-process
+// side) for how two LocalWhisperSTT instances end up pointed at the same
+// worker. Worker-side, each channel gets its OWN NemotronEngine instance
+// (own pendingBuffer/cacheState/decoderState/lookbackBuffer — exactly the
+// per-channel isolation NemotronEngine already provided pre-dual-channel,
+// unchanged), keyed by the channelId the host sends on every nemotron-rnnt
+// init/transcribe/setLanguage message. Set only when sessionLayout ===
+// 'nemotron-rnnt' — mutually exclusive with `pipe` above (one model loaded
+// per worker).
+let nemotronSharedResources: import('./nemotron/nemotronEngine').NemotronSharedResources | null = null;
+const nemotronChannels = new Map<string, import('./nemotron/nemotronEngine').NemotronEngine>();
+
+// Serializes every message that touches ONE channel's NemotronEngine mutable
+// state (pendingBuffer/cacheState/decoderState/lookbackBuffer). The worker's
 // `parentPort.on('message', async ...)` handler does NOT serialize
 // concurrent invocations — a second message can fire while the first is
-// still awaiting inside NemotronEngine.pushAudio(). Two overlapping calls
-// can process the same buffered audio twice, corrupting cache state for
-// the rest of the segment. Every nemotron-engine-touching branch below
-// chains onto this instead of running inline.
-let nemotronChain: Promise<void> = Promise.resolve();
+// still awaiting inside NemotronEngine.pushAudio(). Two overlapping calls for
+// the SAME channel can process the same buffered audio twice, corrupting
+// that channel's cache state for the rest of the segment. Keyed per
+// channelId (not one module-level chain) so channel A's messages can never
+// interleave with each other, but channel A's messages no longer wait behind
+// channel B's — they're independent conversations sharing only the
+// underlying compute, exactly like the two NemotronEngine instances
+// themselves. This is the same serialization pattern the original
+// single-worker fix (c69c8379) established, now keyed per channel.
+const nemotronChains = new Map<string, Promise<void>>();
+function getNemotronChain(channelId: string): Promise<void> {
+  return nemotronChains.get(channelId) ?? Promise.resolve();
+}
+function setNemotronChain(channelId: string, p: Promise<void>): void {
+  nemotronChains.set(channelId, p);
+}
+
+// Serializes the INIT sequence itself, separately from the per-channel
+// transcribe/setLanguage chains above. Without this, two `init` messages
+// arriving close together (the realistic case — main.ts starts both
+// LocalWhisperSTT channels back-to-back at meeting start) could BOTH observe
+// `nemotronSharedResources === null` and both run the full download +
+// session-creation path concurrently — defeating the entire point of this
+// change (one shared set of sessions) and wasting a real download+load. This
+// chain guarantees the first init to arrive fully finishes (populating
+// nemotronSharedResources) before a second init's body ever runs, so the
+// second one reliably takes the fast, no-I/O "reuse shared sessions" path.
+let nemotronInitChain: Promise<void> = Promise.resolve();
 
 // Tokenized prompt cache — populated by `setPrompt` messages, reused by
 // every subsequent transcribe. Cleared on model swap.
@@ -144,30 +179,71 @@ async function loadTransformers(): Promise<{ pipeline: any; env: any }> {
   return (new Function('return import("@huggingface/transformers")')()) as any;
 }
 
+/**
+ * Loads (first channel) or joins (every later channel) the shared Nemotron
+ * model for one channelId. Never throws — always resolves, posting either a
+ * `ready` or an `error` message itself, so nemotronInitChain (its only
+ * caller) never sees a rejection from normal failure paths.
+ */
+async function initNemotronChannel(msg: any, channelId: string): Promise<void> {
+  try {
+    const { NemotronEngine } = require('./nemotron/nemotronEngine');
+    let engine;
+    if (nemotronSharedResources) {
+      // A later channel joining an already-loaded worker: no I/O, no ONNX
+      // session creation — just a fresh per-channel decode-state instance
+      // pointed at the sessions the FIRST channel already loaded.
+      engine = await NemotronEngine.create(msg.cacheDir, msg.executionProviders ?? ['cpu'], nemotronSharedResources);
+    } else {
+      const { downloadNemotronFiles } = require('./nemotron/downloadFiles');
+      const path = require('path');
+      const modelDir = path.join(msg.cacheDir, ...String(msg.modelId).split('/'));
+      await downloadNemotronFiles(modelDir, (pct: number) => {
+        parentPort!.postMessage({ type: 'progress', modelId: msg.modelId, progress: pct, channelId });
+      });
+      engine = await NemotronEngine.create(modelDir, msg.executionProviders ?? ['cpu']);
+      nemotronSharedResources = engine.getSharedResources();
+    }
+    nemotronChannels.set(channelId, engine);
+    parentPort!.postMessage({ type: 'ready', channelId });
+  } catch (e: any) {
+    // Must carry the same 'Failed to load model' prefix the transformers.js
+    // init path below already uses — LocalWhisperSTT's `msg.type === 'error'`
+    // handler only calls emit('error')/runs the corrupt-model purge when the
+    // message string-matches that prefix. Without it, a Nemotron init
+    // failure (including a truncated download caught by
+    // downloadNemotronFiles' integrity check) silently never surfaces: no
+    // emit('error'), no purge, workerReady stays false forever with zero
+    // user-facing diagnostic.
+    parentPort!.postMessage({ type: 'error', channelId, message: `Failed to load model: ${e?.message ?? String(e)}` });
+  }
+}
+
 parentPort.on('message', async (msg: any) => {
   if (msg.type === 'init') {
     if (msg.sessionLayout === 'nemotron-rnnt') {
-      try {
-        const { downloadNemotronFiles } = require('./nemotron/downloadFiles');
-        const { NemotronEngine } = require('./nemotron/nemotronEngine');
-        const path = require('path');
-        const modelDir = path.join(msg.cacheDir, ...String(msg.modelId).split('/'));
-        await downloadNemotronFiles(modelDir, (pct: number) => {
-          parentPort!.postMessage({ type: 'progress', modelId: msg.modelId, progress: pct });
-        });
-        nemotronEngine = await NemotronEngine.create(modelDir, msg.executionProviders ?? ['cpu']);
-        parentPort!.postMessage({ type: 'ready' });
-      } catch (e: any) {
-        // Must carry the same 'Failed to load model' prefix the
-        // transformers.js init path below already uses — LocalWhisperSTT's
-        // `msg.type === 'error'` handler only calls emit('error')/runs the
-        // corrupt-model purge when the message string-matches that prefix.
-        // Without it, a Nemotron init failure (including a truncated
-        // download caught by downloadNemotronFiles' integrity check below)
-        // silently never surfaces: no emit('error'), no purge, workerReady
-        // stays false forever with zero user-facing diagnostic.
-        parentPort!.postMessage({ type: 'error', message: `Failed to load model: ${e?.message ?? String(e)}` });
+      const channelId: string | undefined = msg.channelId;
+      if (!channelId) {
+        // Defensive: every real caller (sharedWorkerRegistry.ts) always sets
+        // this. Fail loud rather than silently keying state off `undefined`,
+        // which would let a second real channel collide with a malformed one.
+        parentPort!.postMessage({ type: 'error', message: 'Failed to load model: init.channelId is required for sessionLayout "nemotron-rnnt"' });
+        return;
       }
+      // Chained (not awaited here — the outer message handler doesn't await
+      // its own return value either way, matching the existing
+      // transcribe/setLanguage chaining convention below) so a second init
+      // arriving while the first is still mid-download/mid-session-creation
+      // reliably waits for `nemotronSharedResources` to actually be populated
+      // before deciding which path to take. See nemotronInitChain's own doc
+      // comment above for why this race is real, not hypothetical.
+      nemotronInitChain = nemotronInitChain.then(() => initNemotronChannel(msg, channelId)).catch((chainErr) => {
+        // Unreachable in practice — initNemotronChannel has its own
+        // try/catch and never rethrows — but guards the chain itself so one
+        // truly unexpected throw can't permanently wedge every future
+        // channel's init behind a rejected promise.
+        console.error('[WhisperWorker] nemotron init chain error (should be unreachable):', chainErr);
+      });
       return; // do not fall through to the transformers.js pipeline() path below
     }
     // Validate required fields BEFORE entering the try/catch so the error
@@ -295,37 +371,54 @@ parentPort.on('message', async (msg: any) => {
         message: `Failed to load model: ${e.message}`,
       });
     }
+  } else if (msg.type === 'closeChannel') {
+    // Dual-channel Nemotron only. Drop this channel's engine + serialization
+    // chain from the worker's bookkeeping. Deliberately NOT chained onto
+    // nemotronChains — a transcribe already in flight for this channel keeps
+    // its own captured `engine` reference (see below) and finishes normally;
+    // this just stops the worker from tracking the channel going forward.
+    // Whether the underlying worker process itself terminates is a
+    // main-side (sharedWorkerRegistry.ts) refcount decision, not this
+    // worker's — the shared ONNX sessions and any OTHER live channel are
+    // completely unaffected.
+    if (msg.channelId) {
+      nemotronChannels.delete(msg.channelId);
+      nemotronChains.delete(msg.channelId);
+    }
+    return;
   } else if (msg.type === 'setPrompt') {
     await updatePromptCache(msg.prompt);
   } else if (msg.type === 'setLanguage') {
     // nemotron-rnnt only — silently ignored (no-op) for the transformers.js
-    // pipeline() path, same convention as `nemotronReset` on 'transcribe'.
-    // langId is already resolved + fail-closed-checked host-side (see
+    // pipeline() path (and for an unrecognized/absent channelId), same
+    // convention as `nemotronReset` on 'transcribe'. langId is already
+    // resolved + fail-closed-checked host-side (see
     // LocalWhisperSTT.resolveAndApplyNemotronLanguage / languageTable.ts) —
     // the worker just forwards it.
     //
-    // Chained onto nemotronChain (cheap and correct to order it through the
-    // same queue) so a language change can never apply mid-way through an
-    // in-flight chunk's processing — it always lands strictly between two
-    // transcribe messages, never inside one.
-    if (nemotronEngine) {
-      const engine = nemotronEngine;
-      nemotronChain = nemotronChain.then(() => {
+    // Chained onto THIS channel's own chain (cheap and correct to order it
+    // through the same queue) so a language change can never apply mid-way
+    // through an in-flight chunk's processing for that channel — it always
+    // lands strictly between two of that channel's own transcribe messages,
+    // never inside one, and never waits behind the OTHER channel's chunks.
+    const channelId: string | undefined = msg.channelId;
+    const engine = channelId ? nemotronChannels.get(channelId) : undefined;
+    if (engine) {
+      setNemotronChain(channelId!, getNemotronChain(channelId!).then(() => {
         engine.setLanguage(msg.langId);
       }).catch((chainErr) => {
         // A rejection escaping the .then() above (should not happen — this
         // closure can't throw) must not permanently wedge every future
         // message behind a rejected promise — log and let the chain continue.
         console.error('[WhisperWorker] nemotron chain error (should be unreachable):', chainErr);
-      });
+      }));
     }
     return;
   } else if (msg.type === 'transcribe') {
-    if (nemotronEngine) {
-      const engine = nemotronEngine; // capture now; a 'ready' from a later
-                                      // init could theoretically reassign
-                                      // the outer variable before this runs
-      nemotronChain = nemotronChain.then(async () => {
+    const channelId: string | undefined = msg.channelId;
+    const engine = channelId ? nemotronChannels.get(channelId) : undefined;
+    if (engine) {
+      setNemotronChain(channelId!, getNemotronChain(channelId!).then(async () => {
         try {
           if (msg.nemotronReset) engine.reset();
           const results = await engine.pushAudio(msg.audio);
@@ -340,11 +433,11 @@ parentPort.on('message', async (msg: any) => {
           const text = results.map(r => r.text).join(' ').trim();
           parentPort!.postMessage(
             msg.streaming
-              ? { type: 'partial', taskId: msg.taskId, text }
-              : { type: 'result', taskId: msg.taskId, text },
+              ? { type: 'partial', taskId: msg.taskId, channelId, text }
+              : { type: 'result', taskId: msg.taskId, channelId, text },
           );
         } catch (e: any) {
-          parentPort!.postMessage({ type: 'error', taskId: msg.taskId, message: e?.message ?? String(e) });
+          parentPort!.postMessage({ type: 'error', taskId: msg.taskId, channelId, message: e?.message ?? String(e) });
         }
       }).catch((chainErr) => {
         // A rejection escaping the .then() above (should not happen given
@@ -352,7 +445,7 @@ parentPort.on('message', async (msg: any) => {
         // permanently wedge every future message behind a rejected
         // promise — log and let the chain continue.
         console.error('[WhisperWorker] nemotron chain error (should be unreachable):', chainErr);
-      });
+      }));
       return;
     }
     if (!pipe) {

@@ -116,6 +116,22 @@ class ModelPreloader {
      * Cancels an in-progress load if a different model is requested.
      */
     preload(modelId: string): void {
+        // Dual-channel Nemotron (2026-08-13): Nemotron routes worker
+        // acquisition entirely through sharedWorkerRegistry.ts instead of
+        // this class's single-warm-worker model. Layering this preloader's
+        // "one warm worker, hand it to whichever channel asks first" scheme
+        // on top of the registry's own refcounted cold-start/join lifecycle
+        // would create a second, competing concept of "who owns this
+        // worker" — not worth the complexity for what was already found to
+        // be a barely-exercised optimization path for Nemotron specifically
+        // (the local-whisper-preload IPC channel has zero real renderer call
+        // sites; this is only reached via the one-time app-launch preload
+        // call). LocalWhisperSTT.spawnWorker's Nemotron branch pays its own
+        // real cold-start cost on first use instead — see that method.
+        if (modelId.toLowerCase().includes('nemotron')) {
+            console.log(`[ModelPreloader] Skipping preload for ${modelId} — Nemotron routes through sharedWorkerRegistry.ts instead`);
+            return;
+        }
         if (this.warmModelId === modelId && this.warmWorker) return;
         if (this.pendingModelId === modelId && this.loading) return;
 

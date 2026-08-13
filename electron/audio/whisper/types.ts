@@ -113,6 +113,16 @@ export interface WorkerInitMessage {
   // 'encoder-decoder' / 'single') and the raw-ONNX Nemotron engine
   // ('nemotron-rnnt'). See WhisperModelInfo.sessionLayout for the source of truth.
   sessionLayout?: 'encoder-decoder' | 'single' | 'nemotron-rnnt';
+  // Dual-channel Nemotron only (sessionLayout === 'nemotron-rnnt'; ignored by
+  // every other model): identifies which channel (mic/system, or whatever
+  // LocalWhisperSTT.channelLabel resolves to) this init is for. Two channels
+  // can now share ONE worker + one set of loaded ONNX sessions — see
+  // ./nemotron/sharedWorkerRegistry.ts. The worker keeps a per-channelId
+  // NemotronEngine instance (see whisperWorker.ts's nemotronChannels map),
+  // each with fully isolated decode state, so this field is required (not
+  // optional) whenever sessionLayout is 'nemotron-rnnt' — the worker rejects
+  // an init with sessionLayout: 'nemotron-rnnt' and no channelId.
+  channelId?: string;
 }
 export interface WorkerTranscribeMessage {
   type: 'transcribe';
@@ -131,6 +141,10 @@ export interface WorkerTranscribeMessage {
   // fresh LocalWhisperSTT instance's sent-sample cursor always starts at 0,
   // so its first chunk always sets this true.
   nemotronReset?: boolean;
+  // Dual-channel Nemotron only — see WorkerInitMessage.channelId. Selects
+  // which channel's NemotronEngine instance (and serialization chain) this
+  // transcribe message belongs to. Absent/ignored for every other model.
+  channelId?: string;
 }
 /**
  * Out-of-band prompt update. Sent only when the host's context string
@@ -158,18 +172,35 @@ export interface WorkerSetPromptMessage {
 export interface WorkerSetLanguageMessage {
   type: 'setLanguage';
   langId: number;
+  // Dual-channel Nemotron only — see WorkerInitMessage.channelId.
+  channelId?: string;
+}
+/**
+ * Dual-channel Nemotron only. Sent when one channel's LocalWhisperSTT
+ * instance is done with the shared worker (stop() / worker teardown) — the
+ * worker drops that channelId's NemotronEngine instance + serialization
+ * chain from its per-channel maps without affecting the other channel or
+ * the shared ONNX sessions. Whether the underlying worker process itself
+ * terminates is decided main-side by sharedWorkerRegistry.ts's refcount,
+ * not by this message — the worker just cleans up its own bookkeeping for
+ * one channel when told to.
+ */
+export interface WorkerCloseChannelMessage {
+  type: 'closeChannel';
+  channelId: string;
 }
 export type WorkerInMessage =
   | WorkerInitMessage
   | WorkerTranscribeMessage
   | WorkerSetPromptMessage
-  | WorkerSetLanguageMessage;
+  | WorkerSetLanguageMessage
+  | WorkerCloseChannelMessage;
 
-export interface WorkerReadyResponse { type: 'ready'; }
-export interface WorkerResultResponse { type: 'result'; taskId: string; text: string; }
-export interface WorkerPartialResponse { type: 'partial'; taskId: string; text: string; }
-export interface WorkerErrorResponse { type: 'error'; taskId?: string; message: string; }
-export interface WorkerProgressResponse { type: 'progress'; modelId: string; progress: number; }
+export interface WorkerReadyResponse { type: 'ready'; channelId?: string; }
+export interface WorkerResultResponse { type: 'result'; taskId: string; text: string; channelId?: string; }
+export interface WorkerPartialResponse { type: 'partial'; taskId: string; text: string; channelId?: string; }
+export interface WorkerErrorResponse { type: 'error'; taskId?: string; message: string; channelId?: string; }
+export interface WorkerProgressResponse { type: 'progress'; modelId: string; progress: number; channelId?: string; }
 export type WorkerOutMessage =
   | WorkerReadyResponse
   | WorkerResultResponse

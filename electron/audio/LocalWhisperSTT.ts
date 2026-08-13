@@ -51,6 +51,7 @@ import { resolveWhisperWorkerPath } from './whisper/workerPathResolver';
 import type { WorkerOutMessage } from './whisper/types';
 import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../utils/onnxThreadConfig';
 import { resolveNemotronLangId } from './whisper/nemotron/languageTable';
+import { acquireSharedNemotronWorker } from './whisper/nemotron/sharedWorkerRegistry';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 
 export class LocalWhisperSTT extends EventEmitter {
@@ -116,6 +117,24 @@ export class LocalWhisperSTT extends EventEmitter {
     // buffer every tick, as before.
     private nemotronSentSamples = 0;
     private readonly isNemotronModel: boolean;
+
+    // Dual-channel Nemotron only. The channel identity this instance
+    // registered with the shared worker (see
+    // ./whisper/nemotron/sharedWorkerRegistry.ts) — reuses `channelLabel`
+    // ('mic'/'system', set via setChannel() by main.ts right after
+    // construction for every STT provider including Nemotron). Falls back to
+    // a generated id if channelLabel is ever empty (defensive — real app
+    // flow always sets it before start(), confirmed via main.ts's
+    // createSTTProvider()). Used both to route worker messages to the
+    // correct engine/chain and to filter incoming worker messages that
+    // belong to the OTHER channel sharing this same worker (see
+    // attachWorkerListeners below).
+    private nemotronChannelId: string | null = null;
+    // The registry's release() for this channel — decrements its refcount on
+    // the shared worker; the worker itself only actually terminates once
+    // every channel has released. Null for every non-Nemotron model (those
+    // never call acquireSharedNemotronWorker at all).
+    private nemotronWorkerRelease: (() => void) | null = null;
 
     // nemotron-rnnt only: resolved NVIDIA PROMPT_DICTIONARY lang_id (see
     // ./whisper/nemotron/languageTable.ts), derived from `this.language` via
@@ -348,7 +367,7 @@ export class LocalWhisperSTT extends EventEmitter {
     private maybePushNemotronLangToWorker(): void {
         if (!this.worker || !this.workerReady) return; // pushed in flushPending after ready
         if (this.nemotronLangId === this.nemotronLangIdSentToWorker) return;
-        this.worker.postMessage({ type: 'setLanguage', langId: this.nemotronLangId });
+        this.worker.postMessage({ type: 'setLanguage', langId: this.nemotronLangId, channelId: this.nemotronChannelId });
         this.nemotronLangIdSentToWorker = this.nemotronLangId;
     }
 
@@ -580,7 +599,7 @@ export class LocalWhisperSTT extends EventEmitter {
         }
         this.armStreamingWatchdog();
         this.worker.postMessage(
-            { type: 'transcribe', taskId, audio: copy, language: this.language, streaming: true, nemotronReset },
+            { type: 'transcribe', taskId, audio: copy, language: this.language, streaming: true, nemotronReset, channelId: this.nemotronChannelId },
             [copy.buffer]
         );
     }
@@ -791,7 +810,7 @@ export class LocalWhisperSTT extends EventEmitter {
         const taskId = `${streaming ? 's' : 't'}${++this.taskCounter}`;
         const copy = audio.slice();
         this.worker.postMessage(
-            { type: 'transcribe', taskId, audio: copy, language: this.language, streaming, nemotronReset },
+            { type: 'transcribe', taskId, audio: copy, language: this.language, streaming, nemotronReset, channelId: this.nemotronChannelId },
             [copy.buffer]
         );
     }
@@ -799,6 +818,48 @@ export class LocalWhisperSTT extends EventEmitter {
     /* ──────────────── Worker lifecycle ──────────────── */
 
     private async spawnWorker(): Promise<void> {
+        if (this.isNemotronModel) {
+            // Dual-channel Nemotron: route through the shared-worker registry
+            // instead of the warm-preload / cold-spawn / direct acquireOnnxSlot
+            // path below. The registry decides cold-start vs join and owns
+            // the ONE weight:3 ONNX slot acquisition for however many
+            // channels end up sharing this model — LocalWhisperSTT no longer
+            // calls acquireOnnxSlot directly for Nemotron. modelPreloader's
+            // warm-worker path is also skipped entirely for Nemotron (see
+            // modelPreloader.preload's own Nemotron guard) so there is never
+            // a warm worker to take here in the first place.
+            if (!hasEnoughMemoryForOnnxSession()) {
+                const heapGB = (process.memoryUsage().heapUsed / 1024 ** 3).toFixed(1);
+                throw new Error(
+                    `[LocalWhisperSTT] insufficient available memory (<${getMinFreeGBForOnnxSession()}GB) — Whisper init refused (heaped=${heapGB}GB)`,
+                );
+            }
+            const channelId = this.channelLabel || `nemotron-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            this.nemotronChannelId = channelId;
+            const initMsg = buildWorkerInitMessage(this.modelId);
+            const workerPath = resolveWhisperWorkerPath();
+            console.log(`[LocalWhisperSTT] Acquiring shared Nemotron worker for channel "${channelId}"`);
+            writeLoadSentinel(this.modelId);
+            const { worker, release } = await acquireSharedNemotronWorker(
+                this.modelId,
+                channelId,
+                initMsg.executionProviders ?? ['cpu'],
+                initMsg.cacheDir,
+                workerPath,
+            );
+            clearLoadSentinel(this.modelId);
+            this.worker = worker;
+            this.nemotronWorkerRelease = release;
+            // acquireSharedNemotronWorker only resolves once THIS channel's
+            // own real `ready` has arrived (whether via a fresh cold-start or
+            // by joining an already-loaded worker) — safe to mark ready
+            // immediately, same as the warm-worker path below.
+            this.workerReady = true;
+            this.attachWorkerListeners();
+            this.flushPending();
+            return;
+        }
+
         const warm = modelPreloader.takeWarmWorker(this.modelId);
         if (warm) {
             console.log(`[LocalWhisperSTT] Using preloaded warm worker for ${this.modelId}`);
@@ -823,7 +884,7 @@ export class LocalWhisperSTT extends EventEmitter {
             );
         }
 
-        this.slotRelease = await acquireOnnxSlot('high', this.isNemotronModel ? 3 : 1);
+        this.slotRelease = await acquireOnnxSlot('high', 1);
 
         console.log(`[LocalWhisperSTT] Cold-starting worker for ${this.modelId}`);
         const workerPath = resolveWhisperWorkerPath();
@@ -837,6 +898,23 @@ export class LocalWhisperSTT extends EventEmitter {
         if (!this.worker) return;
 
         this.worker.on('message', (msg: WorkerOutMessage) => {
+            // Dual-channel Nemotron: this worker may be SHARED with another
+            // LocalWhisperSTT instance (the other audio channel). Every
+            // Nemotron-relevant message carries a channelId (see
+            // whisperWorker.ts) — filter out anything that doesn't match
+            // THIS instance's channel before any further processing, so the
+            // two instances never react to each other's ready/progress/
+            // partial/result/error. This is an ADDITIONAL, earlier layer on
+            // top of the existing taskId-based filtering below (which stays,
+            // unchanged, as its own correct check) — not a replacement for
+            // it. Messages with no channelId at all (every non-Nemotron
+            // model's messages) pass through untouched.
+            if (this.isNemotronModel) {
+                const msgChannelId = (msg as any).channelId;
+                if (msgChannelId !== undefined && msgChannelId !== this.nemotronChannelId) {
+                    return;
+                }
+            }
             if (msg.type === 'ready') {
                 clearLoadSentinel(this.modelId);
                 this.workerReady = true;
@@ -948,6 +1026,15 @@ export class LocalWhisperSTT extends EventEmitter {
             this.streamingTaskId = null;
             // Free the shared ONNX gate slot — Whisper's session is gone.
             if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
+            // Dual-channel Nemotron: the registry's OWN 'error' listener
+            // (attached once, when the shared worker was cold-started) is
+            // what actually resets registry state + releases the real ONNX
+            // slot on a genuine crash — it fires independently of this
+            // listener (Node supports multiple listeners per event). Null
+            // this out purely so a later stop()/beginWorkerTermination on
+            // this now-dead instance doesn't try to act on a stale release
+            // reference; releaseChannel() is idempotent/stale-safe regardless.
+            this.nemotronWorkerRelease = null;
             this.workerReady = false;
             // Symmetric with the exit handler below: a worker `error` is
             // followed by a non-zero `exit` in node:worker_threads, so the
@@ -980,6 +1067,9 @@ export class LocalWhisperSTT extends EventEmitter {
             modelPreloader.recordLoadFailure(this.modelId);
             this.clearStreamingWatchdog();
             if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
+            // See the matching comment in the 'error' handler above — the
+            // registry's own 'exit' listener handles the real cleanup.
+            this.nemotronWorkerRelease = null;
             const hadInFlight = this.streamingTaskInFlight;
             this.streamingTaskInFlight = false;
             this.streamingTaskId = null;
@@ -1023,6 +1113,32 @@ export class LocalWhisperSTT extends EventEmitter {
         this.nemotronLangIdSentToWorker = null;
         w.removeAllListeners('message');
         w.removeAllListeners('error');
+
+        if (this.isNemotronModel) {
+            // The shared worker may OUTLIVE this instance — the other channel
+            // can still be actively using it (see sharedWorkerRegistry.ts's
+            // refcount). Remove ALL of this instance's listeners, including
+            // 'exit' (not just 'message'/'error' above): leaving 'error'/
+            // 'exit' attached would mean a FUTURE crash of the shared worker
+            // — which can happen long after this instance has been torn down
+            // and its caller has dropped every reference to it — still fires
+            // this dead instance's handler, including `this.emit('error', ...)`
+            // on an EventEmitter that may by then have zero listeners, which
+            // throws and can crash the whole process. The registry's own
+            // listener (attached once, independently, at cold-start) is what
+            // notifies every STILL-LIVE channel of a real crash; this
+            // instance is done the moment it releases its channel below.
+            //
+            // No terminate()-after-a-timer here, unlike the non-Nemotron path
+            // below: release() itself decides synchronously whether the
+            // underlying worker actually terminates (refcount reaches 0) or
+            // just loses this one channel — there's nothing to defer.
+            w.removeAllListeners('exit');
+            if (this.nemotronWorkerRelease) { this.nemotronWorkerRelease(); this.nemotronWorkerRelease = null; }
+            this.nemotronChannelId = null;
+            return;
+        }
+
         if (this.workerTerminateTimer) clearTimeout(this.workerTerminateTimer);
         const t = setTimeout(() => {
             this.workerTerminateTimer = null;
