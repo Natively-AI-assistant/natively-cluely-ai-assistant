@@ -7533,6 +7533,15 @@ async function initializeApp() {
   // Initialize IPC handlers before window creation
   initializeIpcHandlers(appState)
 
+  // Deterministic fault injection for the init-failure contract (F-110):
+  // inert unless the env var is set. Sits inside initializeApp's unguarded
+  // stretch so scripts/audit/F-110-repro.mjs can prove that a mid-init throw
+  // terminates the process instead of leaving a windowless zombie that holds
+  // the single-instance lock.
+  if (process.env.NATIVELY_TEST_INIT_FAULT === '1') {
+    throw new Error('NATIVELY_TEST_INIT_FAULT injected init failure');
+  }
+
   // Start the in-app review session ledger. This is intentionally main-process
   // owned so renderer reloads don't double-count app sessions. Also sync the
   // backend prompt-state once so cross-install dismissals/reviews are honored.
@@ -8439,4 +8448,13 @@ initializeApp().catch((err) => {
     skippedReport: isNativeArchGateCrash(err) ? 'native-arch-gate' : undefined,
   });
   console.error(err);
+  // F-110: a half-initialized process must not keep running. It holds the
+  // single-instance lock with no user-visible window (and on macOS may still
+  // be an 'accessory' app with no dock tile), so every relaunch signals the
+  // zombie and shows nothing — the app looks unlaunchable until the PID is
+  // killed. Mirror assertVerificationFlagsOrThrow's explicit exit; app.exit
+  // (not app.quit) is deliberate: the DB is already closed above, and
+  // half-initialized before-quit handlers must not run against missing
+  // singletons. Live-reproduced in scripts/audit/F-110-repro.mjs.
+  app.exit(1);
 })

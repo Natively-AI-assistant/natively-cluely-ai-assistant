@@ -170,7 +170,14 @@ Confidence: high.
 
 ## F-110 [P1] Init failure leaves a lock-holding windowless zombie
 Phase: 1 | Area: main.ts initializeApp
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Step 1 confirmation: initializeApp().catch closes DB, writes report, logs — never exits (re-read verbatim). Repo names the hazard itself at the verification-flags assert. Injection attempts with realistic external faults documented: corrupted natively-preferences-secure.json SELF-HEALS (CredentialsManager falls through to app-managed fallback with saves disabled — good engineering, noted); read-only userData dir kills Chromium before app code runs (clean exit, not this bug). Neither reaches the catch → added a deterministic env-gated fault hook `NATIVELY_TEST_INIT_FAULT` (inert unless set; same pattern as NATIVELY_E2E / NATIVELY_DEV_BYPASS_SCREEN_TCC hooks) inside the unguarded stretch.
+Repro: scripts/audit/F-110-repro.mjs — launch with the fault env. PRE-FIX: process STILL ALIVE 15s after the injected failure with only a hidden helper window (no launcher, no dock tile, single-instance lock held) → exit 1.
+Root cause: missing termination in initializeApp's top-level catch; the one guarded fatal path (assertVerificationFlagsOrThrow) exits explicitly and comments why, the generic catch never did.
+Fix: catch now ends in app.exit(1) (app.exit, not app.quit — DB already closed, and half-initialized before-quit handlers must not run against missing singletons) + the permanent test hook.
+E2E verification: repro → exit 0 (process exits code 1). Healthy-boot regression: F-108 repro (full boot + overlay + quit cycle) re-run PASS. Pin: InitFailureExits2026_08_14.test.mjs (2/2). typecheck clean.
+Cross-platform: platform-neutral; the macOS accessory-policy wrinkle makes the zombie invisible there, Windows zombie holds the lock identically. macOS live-verified; Windows reviewed but not executed.
+Commit: (pending — backfilled next update; F-105 = f71dc4c8)
 Hypothesis: single-instance lock acquired at main.ts:7235; activation policy 'accessory' at :7358 reverted only at :7756. In between, unguarded calls (CredentialsManager.init :7418, AppState.getInstance :7423, initializeIpcHandlers :7438, applyInitialDisguise :7479, createWindow :7690...) unwind to initializeApp().catch (:8334) which logs but never app.exit(). Result: alive process, no window, no dock tile, holds the lock; relaunch hits second-instance → centerAndShowWindow → launcherWindow===null → nothing shows. Repo names this hazard verbatim at :7326-7330 (assertVerificationFlagsOrThrow exits explicitly).
 Trigger: any throw in the unguarded init stretch (corrupt credentials store, native load failure in IPC module, disk-full).
 Disproof: all those call sites internally exception-proof (missing app.exit in catch is unconditionally true regardless).
