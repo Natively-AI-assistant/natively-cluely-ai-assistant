@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Check, Loader2 } from 'lucide-react';
-import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, getCodexCliModelDisplayName, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
+import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, getCodexCliModelDisplayName, isModelAllowed, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
@@ -96,8 +96,14 @@ const ModelSelectorWindow = () => {
     // was redundant and high-frequency when toggling launcher ↔ overlay.
     useEffect(() => {
         let cancelled = false;
+        // Only the NEWEST run may commit. A cold LiteLLM discovery can take up
+        // to 5s, so without this an in-flight load started before a credential
+        // change could land after the reload it triggered and overwrite the
+        // fresher list with the stale one.
+        let runToken = 0;
 
         const loadModels = async () => {
+            const myToken = ++runToken;
             try {
                 // If we already have models, don't show loading to avoid flicker
                 if (availableModels.length === 0) {
@@ -190,16 +196,38 @@ const ModelSelectorWindow = () => {
                 try {
                     const litellmModels = await window.electronAPI?.getAvailableLiteLLMModels?.() || [];
                     litellmModels.forEach((m: string) => {
-                        models.push({ id: `litellm/${m}`, name: `${m} (LiteLLM)`, type: 'cloud', provider: 'litellm' });
+                        // Label is the bare model name — `m` still carries the proxy's
+                        // own `<upstream>/` prefix (see litellmModelLabel).
+                        models.push({ id: `litellm/${m}`, name: `${litellmModelLabel(m)} (LiteLLM)`, type: 'cloud', provider: 'litellm' });
                     });
                 } catch {
                     // LiteLLM proxy may not be running — ignore.
                 }
 
-                if (cancelled) return;
+                if (cancelled || myToken !== runToken) return;
 
-                localStorage.setItem('cached-models', JSON.stringify(models));
-                setAvailableModels(models);
+                // Settings → AI Providers is where the user curates this list, and
+                // until now NOTHING here honoured it: a provider switched off and a
+                // model un-ticked both still showed up in the meeting overlay. That
+                // is load-bearing for a gateway like LiteLLM, whose catalogue can run
+                // to 300+ models — its allow-list is opt-in (empty = none), so
+                // without this gate the picker would list every model on the proxy.
+                //
+                // `family` mirrors providerFamily() in ipcHandlers.ts. Codex presets
+                // and custom providers have no allow-list UI, so their empty list
+                // means "no filter" and isModelAllowed lets them through unchanged.
+                const disabled = new Set(creds?.disabledProviders || []);
+                const allowLists: Record<string, string[]> = creds?.cloudEnabledModels || {};
+                const visibleModels = models.filter(m => {
+                    const family = m.provider
+                        ?? (m.type === 'ollama' ? 'ollama' : m.type === 'custom' ? 'custom' : null);
+                    if (!family) return true;
+                    if (disabled.has(family)) return false;
+                    return isModelAllowed(family, m.id, allowLists[family] || []);
+                });
+
+                localStorage.setItem('cached-models', JSON.stringify(visibleModels));
+                setAvailableModels(visibleModels);
 
                 // 4. Get Current Active Model
                 const config = await window.electronAPI?.getCurrentLlmConfig?.(); // Get runtime model
@@ -214,7 +242,7 @@ const ModelSelectorWindow = () => {
             } catch (err) {
                 console.error("Failed to load models:", err);
             } finally {
-                if (!cancelled) setIsLoading(false);
+                if (!cancelled && myToken === runToken) setIsLoading(false);
             }
         };
 
@@ -224,9 +252,26 @@ const ModelSelectorWindow = () => {
         const unsubscribe = window.electronAPI?.onModelChanged?.((modelId: string) => {
             setCurrentModel(modelId);
         });
+        // This window is REUSED, never destroyed: ModelSelectorWindowHelper
+        // pre-warms it offscreen and thereafter only hide()s and show()s it. So
+        // the effect above runs ONCE per app lifetime, and without this the list
+        // is frozen at its startup snapshot — a provider configured afterwards
+        // (an API key, a LiteLLM proxy, a Codex sign-in) never appears until the
+        // app is restarted.
+        //
+        // It failed SILENTLY, which is why it went unnoticed: availableModels
+        // seeds from localStorage and isLoading stays false whenever that cache
+        // is non-empty, so a stale list renders with no spinner and no error.
+        //
+        // onModelChanged above is NOT a substitute — it only moves the
+        // checkmark; it never rebuilds the list.
+        const unsubCredentials = window.electronAPI?.onCredentialsChanged?.(() => {
+            loadModels();
+        });
         return () => {
             cancelled = true;
             unsubscribe?.();
+            unsubCredentials?.();
         };
     }, []);
 

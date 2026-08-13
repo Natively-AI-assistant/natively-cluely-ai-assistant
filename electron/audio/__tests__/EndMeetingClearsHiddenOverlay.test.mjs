@@ -55,7 +55,7 @@ function extractMethodBody(methodName) {
   return mainSource.slice(start, i - 1);
 }
 
-const endMeetingBody = extractMethodBody('endMeeting');
+const endMeetingBody = extractMethodBody('endMeetingTransition');
 
 test('endMeeting sends session-reset to the overlay so its hidden tree is cleared before the next meeting', () => {
   assert.ok(

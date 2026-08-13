@@ -417,9 +417,39 @@ export class RAGManager {
     }
 
     /**
+     * Whether this instance's connection can still serve statements. Mirrors
+     * VectorStore.isDatabaseUsable() — see that method for the full rationale.
+     */
+    private isDatabaseUsable(): boolean {
+        try {
+            return (this.db as any)?.open === true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
      * Delete RAG data for a meeting
      */
     deleteMeetingData(meetingId: string): void {
+        // Shutdown guard: RAGManager holds a RAW better-sqlite3 handle
+        // (`this.db = config.db`), so after the fatal path's
+        // closeWithoutCheckpoint() this reference is a closed connection and
+        // every prepare() below would throw out of the driver. This method is
+        // called from the background meeting-teardown block, where a throw is
+        // caught but aborts the remaining teardown steps. Return one controlled,
+        // logged result instead of three separate driver failures.
+        //
+        // Defense in depth for the shutdown window only — nothing here reopens
+        // the database.
+        if (!this.isDatabaseUsable()) {
+            console.warn(
+                `[RAGManager] deleteMeetingData(${meetingId}): database is closed — skipping RAG cleanup. ` +
+                'Expected during fatal shutdown.'
+            );
+            return;
+        }
+
         // 1. Delete from vector store (chunks and summaries)
         this.vectorStore.deleteChunksForMeeting(meetingId);
         

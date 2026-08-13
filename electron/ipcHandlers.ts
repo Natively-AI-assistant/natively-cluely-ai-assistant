@@ -193,8 +193,20 @@ export function initializeIpcHandlers(appState: AppState): void {
         // A populated allow-list means the model must be in it. Empty means no
         // filter — see StoredCredentials.cloudEnabledModels. There is deliberately
         // no "none" sentinel: hiding a provider outright is disabledProviders' job.
+        //
+        // EXCEPT for opt-in providers (LiteLLM), where empty means NOTHING is
+        // selected. A gateway exposes the upstream's entire catalogue, so "empty
+        // = all" would put hundreds of unchosen models into routing.
+        //
+        // MIRRORS isModelAllowed() in src/utils/modelUtils.ts — that one decides
+        // what the user can pick, this one decides what routing accepts. If they
+        // diverge the picker offers models the router rejects. A drift guard test
+        // pins the two together.
+        const optInFamily = family === 'litellm';
         const enabledForFamily = cm.getCloudEnabledModels?.(family) || [];
-        if (enabledForFamily.length > 0 && !enabledForFamily.includes(modelId)) return false;
+        if (optInFamily) {
+          if (!enabledForFamily.includes(modelId)) return false;
+        } else if (enabledForFamily.length > 0 && !enabledForFamily.includes(modelId)) return false;
 
         if (modelId === 'natively') return has(cm.getNativelyApiKey());
         if (modelId.startsWith('codex-cli')) return codexConfig.enabled === true && codexSignedIn;
@@ -226,8 +238,15 @@ export function initializeIpcHandlers(appState: AppState): void {
           const resp = await fetch(`${baseURL}/models`, { method: 'GET', headers, signal: AbortSignal.timeout(2500) });
           if (resp.ok) {
             const data: any = await resp.json();
-            const firstModel = (data?.data || []).map((m: any) => m?.id).find(Boolean);
-            if (firstModel) litellmFallbackModel = `litellm/${firstModel}`;
+            const ids: string[] = (data?.data || []).map((m: any) => m?.id).filter(Boolean);
+            // The user's chosen LiteLLM default wins over "whatever the proxy listed
+            // first" — but only if the proxy still offers it. Confirming it against
+            // the live list is what keeps a default that was set against an earlier
+            // catalogue from being installed as a model that no longer resolves.
+            const preferred = cm.getPreferredModel?.('litellm');
+            const preferredBare = preferred?.startsWith('litellm/') ? preferred.slice('litellm/'.length) : preferred;
+            const chosen = (preferredBare && ids.includes(preferredBare)) ? preferredBare : ids[0];
+            if (chosen) litellmFallbackModel = `litellm/${chosen}`;
           }
         } catch { /* LiteLLM fallback discovery best-effort */ }
       }
@@ -4385,7 +4404,13 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // pack exists. A governed `answer`-policy pack that merely
                   // produced a weak answer is still repaired below — only an
                   // explicit governed REFUSAL is trusted here.
-                  const governedRefusal = manualContextOsGeneration?.evidencePack?.answerPolicy === 'refuse_insufficient_evidence';
+                  // R10 (2026-08-12, review finding): keying on pack PRESENCE
+                  // contradicted the docblock ("only an explicit GOVERNED refusal
+                  // is trusted here") — an ungoverned refuse pack from a fileless
+                  // doc-flavored mode could block the false-refusal repair while
+                  // strong document evidence existed. Same class as #446's F3.
+                  const governedRefusal = manualContextOsGeneration?.govern === true
+                    && manualContextOsGeneration?.evidencePack?.answerPolicy === 'refuse_insufficient_evidence';
                   // Both the system's own refusal phrase and a model-phrased
                   // refusal clear the same bar (the question is about a real
                   // document topic). Off-topic questions match neither a whole
@@ -4969,7 +4994,14 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // Phase 9 (exact-pack identity): when the typed pack GOVERNED
                   // this generation (H1), reuse that EXACT pack — same packId end
                   // to end. Otherwise build a verify-pack from the captured block.
-                  const verifyPack: import('./intelligence/context-os').EvidencePack = manualContextOsGeneration?.evidencePack ?? ((): import('./intelligence/context-os').EvidencePack => {
+                  // R3 (2026-08-12, review finding): PR #446 created the
+                  // pack-exists-with-govern:false state, and this consumer kept
+                  // keying on PRESENCE — so a legacy-path answer (the very turn
+                  // the fix un-gagged) was verified against the DISCARDED empty
+                  // refuse pack instead of the capturedEvidenceBlock it was
+                  // actually grounded in, persisting claims under the wrong
+                  // packId/answerPolicy/sourceOwner identity.
+                  const verifyPack: import('./intelligence/context-os').EvidencePack = (manualContextOsGeneration?.govern ? manualContextOsGeneration?.evidencePack : null) ?? ((): import('./intelligence/context-os').EvidencePack => {
                     const evItems = (() => {
                       if (!capturedEvidenceBlock.trim()) return [];
                       const snippets = parseModeSnippets(capturedEvidenceBlock);
@@ -7398,6 +7430,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         openaiPreferredModel: creds.openaiPreferredModel || undefined,
         claudePreferredModel: creds.claudePreferredModel || undefined,
         deepseekPreferredModel: creds.deepseekPreferredModel || undefined,
+        // Stored prefixed (`litellm/<model>`) — see StoredCredentials.litellmPreferredModel.
+        litellmPreferredModel: creds.litellmPreferredModel || undefined,
         disabledProviders: creds.disabledProviders || [],
         cloudEnabledModels: creds.cloudEnabledModels || {},
       };
@@ -7492,7 +7526,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'set-provider-preferred-model',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', modelId: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'litellm', modelId: string) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);

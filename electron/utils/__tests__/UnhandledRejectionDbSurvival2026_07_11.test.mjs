@@ -78,20 +78,28 @@ describe('unhandledRejection no longer unconditionally kills the database', () =
     }
     const body = source.slice(start, i - 1);
 
-    // emergencyCloseDatabase MUST appear only inside a conditional (the
+    // The DB-closing call MUST appear only inside a conditional (the
     // escalation branch), never as a bare top-level statement.
+    //
+    // UPDATED 2026-08-07: the escalation branch now routes through
+    // terminateAfterFatalError(), which closes the database AND exits as one
+    // atomic step (previously it closed the DB and left the process running on
+    // a dead handle). Either spelling satisfies this invariant; what matters is
+    // that the call is gated behind the threshold.
     assert.match(
       body,
-      /if\s*\([^)]*unhandledRejectionHistory[^)]*>=\s*UNHANDLED_REJECTION_MAX[^)]*\)\s*\{[\s\S]*emergencyCloseDatabase/,
-      'emergencyCloseDatabase must only be called inside the escalation-threshold branch',
+      /if\s*\([^)]*unhandledRejectionHistory[^)]*>=\s*UNHANDLED_REJECTION_MAX[^)]*\)\s*\{[\s\S]*(?:emergencyCloseDatabase|terminateAfterFatalError)/,
+      'the DB-closing/terminal call must only happen inside the escalation-threshold branch',
     );
     // Regression guard: the bug shape was an unconditional call right after
     // the logToFile line, with no guarding `if`. Assert that shape is gone —
     // there must be tracking/counting logic between the log line and any
-    // emergencyCloseDatabase call.
+    // DB-closing call.
     const logIdx = body.indexOf('[CRITICAL] Unhandled Rejection');
-    const closeIdx = body.indexOf('emergencyCloseDatabase');
-    assert.ok(logIdx >= 0 && closeIdx > logIdx, 'log line must precede the (now-conditional) close call');
+    const closeMatch = body.match(/emergencyCloseDatabase|terminateAfterFatalError/);
+    assert.ok(closeMatch, 'the escalation branch must still have a terminal DB path');
+    const closeIdx = closeMatch.index;
+    assert.ok(logIdx >= 0 && closeIdx > logIdx, 'log line must precede the (now-conditional) terminal call');
     const between = body.slice(logIdx, closeIdx);
     assert.match(
       between,
@@ -108,11 +116,67 @@ describe('unhandledRejection no longer unconditionally kills the database', () =
     );
   });
 
-  test('sibling terminal crash paths (SIGTERM/SIGINT/render-process-gone-loop-giveup) are unaffected — still call emergencyCloseDatabase directly', () => {
+  test('sibling terminal crash paths (SIGTERM/SIGINT/render-process-gone-loop-giveup) still close the database', () => {
     // This fix must be scoped to unhandledRejection specifically. Sanity-check
-    // the other genuinely-terminal paths still close the DB unconditionally
-    // (they either exit the process or are already gated to a give-up branch).
+    // the other genuinely-terminal paths still close the DB (they either exit
+    // the process directly or route through the terminal coordinator).
     assert.match(source, /for \(const sig of \['SIGTERM', 'SIGINT'\]/);
-    assert.match(source, /emergencyCloseDatabase\('render-process-gone-loop-giveup'\)/);
+    assert.match(source, /terminateAfterFatalError\('render-process-gone-loop-giveup', 1\)/);
+  });
+
+  // ── Added 2026-08-07 ──────────────────────────────────────────────────────
+  // The original bug — "the DB is closed but the process keeps running" — was
+  // never unique to unhandledRejection. Six paths had that shape. These pin the
+  // general invariant so it cannot come back through a different door.
+
+  test('every path that closes the database also ends the process', () => {
+    // terminateAfterFatalError() is the ONLY sanctioned way to close the DB
+    // from a handler that would otherwise keep running. Direct
+    // emergencyCloseDatabase() callers must be paths that exit on their own.
+    const sanctionedDirectCallers = [
+      "emergencyCloseDatabase('uncaughtException')",        // handler ends in terminateAfterFatalError
+      'emergencyCloseDatabase(sig)',                        // SIGTERM/SIGINT — exits immediately after
+      "emergencyCloseDatabase('render-process-gone')",      // guarded by isQuitting() — app is going away
+      "emergencyCloseDatabase('initializeApp-failed')",     // followed by terminateAfterFatalError
+      'emergencyCloseDatabase(why)',                        // the coordinator's own injected close
+    ];
+    // Strip comments first — main.ts discusses emergencyCloseDatabase() at
+    // length in prose, and those mentions are not call sites.
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n')
+      .map(line => line.replace(/\/\/.*$/, ''))
+      .join('\n');
+
+    const callSites = [...code.matchAll(/emergencyCloseDatabase\([^)]*\)/g)]
+      .map(m => m[0])
+      // Skip the declaration itself.
+      .filter(s => s !== 'emergencyCloseDatabase(reason: string)');
+
+    assert.ok(callSites.length > 0, 'the scan must actually find call sites (guards against a vacuous pass)');
+
+    for (const site of callSites) {
+      assert.ok(
+        sanctionedDirectCallers.includes(site),
+        `Unreviewed direct emergencyCloseDatabase call: ${site}\n` +
+        'Closing the database is irreversible (it nulls the singleton with no reopen ' +
+        'path). A handler that closes it and then keeps running leaves an interactive ' +
+        'app whose every write silently no-ops. Either route through ' +
+        'terminateAfterFatalError() or do not close the database on this path.',
+      );
+    }
+  });
+
+  test('recoverable process events must not destroy the database', () => {
+    // These three handlers do NOT exit, so they must never close the DB.
+    // gpu-process-crashed in particular fires on routine Windows TDR driver
+    // resets; child-process-gone fires for any dead helper process.
+    for (const reason of ['SIGHUP', 'child-process-gone', 'gpu-process-crashed']) {
+      assert.ok(
+        !source.includes(`emergencyCloseDatabase('${reason}')`),
+        `${reason} is a recoverable event whose handler keeps the process alive — ` +
+        'it must not close the database.',
+      );
+    }
   });
 });
