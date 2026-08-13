@@ -54,7 +54,7 @@ const electronStub = {
 // NOW import the service. Its top-level `var import_electron = require("electron")`
 // hits our resolver, gets 'electron-stub', and caches our stub in `import_electron`.
 const mod = await import(pathToFileURL(compiledPath).href);
-const { LocalModelDownloadService, createWhisperDownloadProvider, createNemotronDownloadProvider } = mod;
+const { LocalModelDownloadService, createWhisperDownloadProvider, createNemotronDownloadProvider, resolveLocalModelProviderName } = mod;
 
 let tmpUserData;
 
@@ -518,4 +518,34 @@ test('REGRESSION: nemotron init message includes a channelId — every "Download
   assert.equal(msg.sessionLayout, 'nemotron-rnnt');
   assert.ok(msg.channelId, `buildInitMessage() must include a truthy channelId — got ${JSON.stringify(msg.channelId)}`);
   assert.equal(typeof msg.channelId, 'string');
+});
+
+test('REGRESSION: resolveLocalModelProviderName routes the Nemotron catalog entry to "nemotron", not "whisper"', () => {
+  // The real bug this fixes: every real download call site
+  // (ipcHandlers.ts's local-whisper-start-download/cancel-download/
+  // get-download-state handlers, and main.ts's background auto-download
+  // loop) hardcoded 'whisper' as the provider name for every model,
+  // including Nemotron. createNemotronDownloadProvider() (Task 9) was
+  // registered but NEVER actually invoked for a real download as a
+  // result — every real "Download" click for Nemotron routed through the
+  // whisper provider's buildInitMessage() (which has no channelId logic
+  // at all), reproducing "Failed to load model: init.channelId is
+  // required for sessionLayout \"nemotron-rnnt\"" regardless of the
+  // separate provider-level fix above. Confirmed live: the persisted
+  // local-model-download-state.json entry for a failed real attempt
+  // recorded `"provider": "whisper"` for the Nemotron modelId.
+  assert.equal(
+    resolveLocalModelProviderName('onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4'),
+    'nemotron',
+  );
+});
+
+test('REGRESSION: resolveLocalModelProviderName routes every non-Nemotron catalog entry to "whisper" (unchanged)', () => {
+  assert.equal(resolveLocalModelProviderName('Xenova/whisper-tiny.en'), 'whisper');
+  assert.equal(resolveLocalModelProviderName('onnx-community/parakeet-ctc-0.6b-ONNX'), 'whisper');
+  assert.equal(resolveLocalModelProviderName('onnx-community/moonshine-tiny-ONNX'), 'whisper');
+});
+
+test('REGRESSION: an unknown modelId falls back to "whisper" (fail into the existing generic path, not a crash)', () => {
+  assert.equal(resolveLocalModelProviderName('not-a-real-model-id'), 'whisper');
 });

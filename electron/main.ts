@@ -1632,7 +1632,7 @@ export class AppState {
           ].filter(Boolean);
           const primaryPreloadId = preloadPriority.find(id => isModelCached(id, dtype)) ?? '';
 
-          const { LocalModelDownloadService } = require('./services/LocalModelDownloadService');
+          const { LocalModelDownloadService, resolveLocalModelProviderName } = require('./services/LocalModelDownloadService');
           for (const id of modelIds) {
             if (isModelCached(id, dtype)) {
               if (id === primaryPreloadId) {
@@ -1644,7 +1644,7 @@ export class AppState {
               // so the user doesn't have to open Settings and click Download.
               console.log(`[AppState] Local Whisper model "${id}" not cached — starting background download`);
               try {
-                const result = LocalModelDownloadService.getInstance().start('whisper', id);
+                const result = LocalModelDownloadService.getInstance().start(resolveLocalModelProviderName(id), id);
                 if (!result.success && !result.alreadyDownloading) {
                   console.warn(`[AppState] Auto-download for "${id}" rejected:`, result.error);
                 }

@@ -489,7 +489,19 @@ export class LocalModelDownloadService {
         // subscribe to the old per-modelId channel. Emit BOTH so the legacy
         // UI keeps working during migration AND any new generic listener
         // gets the unified shape.
-        if (entry.provider === 'whisper') {
+        //
+        // LocalWhisperModelPanel.tsx renders the WHOLE local-whisper-family
+        // catalog (getAvailableModels()), which includes the Nemotron entry
+        // — so the legacy channel must fire for 'nemotron' too, not just
+        // 'whisper'. This was hardcoded to 'whisper' only, meaning even
+        // after fixing which provider a Nemotron download routes through
+        // (resolveLocalModelProviderName), the panel would see zero
+        // progress/complete/error events for it — the download would
+        // succeed in the backend while the UI showed nothing happening.
+        // Providers with their own dedicated UI (e.g. 'reranker') correctly
+        // do NOT need this legacy channel — they only ever use the unified
+        // `local-model:${provider}:download-state` channel below.
+        if (entry.provider === 'whisper' || entry.provider === 'nemotron') {
           if (entry.status === 'complete') {
             try { wc.send('local-whisper-download-complete', { modelId: entry.modelId }); } catch { /* ignore */ }
           } else if (entry.status === 'error') {
@@ -603,6 +615,33 @@ export class LocalModelDownloadService {
       });
     }
   }
+}
+
+/**
+ * Resolves which registered provider ('whisper' or 'nemotron') owns a given
+ * local-whisper-catalog modelId, by its real `sessionLayout` in
+ * MODEL_CATALOG — not a naive string check, so this stays correct even if
+ * catalog entries change.
+ *
+ * BUG THIS FIXES (2026-08-13): every call site that starts/cancels a local
+ * model download (`ipcHandlers.ts`'s `local-whisper-start-download` /
+ * `local-whisper-cancel-download` handlers, and `main.ts`'s background
+ * auto-download loop) hardcoded the provider name as `'whisper'` — even
+ * though `createNemotronDownloadProvider()` was registered back in Task 9
+ * specifically to handle the Nemotron catalog entry. Nemotron downloads
+ * were therefore ALWAYS routed through the whisper provider's
+ * `buildInitMessage()` (which never learned about the dual-channel fix's
+ * new `channelId` requirement), producing "Failed to load model:
+ * init.channelId is required for sessionLayout \"nemotron-rnnt\"" on every
+ * single attempt — the nemotron provider I'd separately fixed for this
+ * exact error was registered but never actually invoked. This helper
+ * makes the routing correct; both call sites now use it instead of a
+ * literal `'whisper'`.
+ */
+export function resolveLocalModelProviderName(modelId: string): string {
+  const { MODEL_CATALOG } = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
+  const entry = MODEL_CATALOG.find((m) => m.id === modelId);
+  return entry?.sessionLayout === 'nemotron-rnnt' ? 'nemotron' : 'whisper';
 }
 
 /**
