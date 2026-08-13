@@ -264,6 +264,14 @@ const IMAGE_ANALYSIS_PROMPT = `Analyze concisely. Be direct. No markdown formatt
 
 ${IMAGE_TRUST_TRAILER}`
 
+/** Out-of-band result of one streamChat call. See streamChatWithOutcome. */
+export interface StreamOutcome {
+  /** True when the turn stopped early and the text is INCOMPLETE. */
+  truncated: boolean;
+  /** Which guard ended it — telemetry and log wording only. */
+  reason?: 'provider_failed_after_first_token' | 'output_cap_reached';
+}
+
 export class LLMHelper {
   // ── Provider clients ────────────────────────────────────────────────────
   //
@@ -4862,6 +4870,15 @@ let isMultimodal = !!(imagePaths?.length);
       abortSignal?.addEventListener('abort', onAbort, { once: true });
     });
 
+    // Commit tracking: identical rule to _streamChatInner and the vision path.
+    // The rotation loop below retries the WHOLE provider list up to 3 times, so
+    // without this an error after the first token could append as many as
+    // 3 x providers.length complete answers to the partial the user already saw.
+    const commit = { emitted: false };
+    // Total-output budget, shared across every rotation so a looping provider
+    // cannot get a fresh 16k on each retry. See capOutput.
+    const outputBudget = { chars: 0 };
+
     for (let rotation = 0; rotation < MAX_FULL_ROTATIONS; rotation++) {
       if (abortSignal?.aborted) return;
       if (rotation > 0) {
@@ -4876,10 +4893,17 @@ let isMultimodal = !!(imagePaths?.length);
         const provider = providers[i];
         try {
           console.log(`[LLMHelper] ${rotation === 0 ? '🚀' : '🔁'} Attempting ${provider.name}...`);
-          yield* (provider.execute() as any);
+          yield* this.capOutput(this.trackCommit(provider.execute() as any, commit), outputBudget, provider.name);
           console.log(`[LLMHelper] ✅ ${provider.name} stream completed successfully`);
           return; // SUCCESS — exit immediately
         } catch (err: any) {
+          if (commit.emitted) {
+            console.warn(`[LLMHelper] ⚠️ ${provider.name} failed AFTER first token — ending stream rather than appending a second answer: ${err.message}`);
+            // NOTE: no truncation sentinel here. This generator is consumed directly by
+            // RAGManager (not via streamChat), so a sentinel would leak into its output.
+            // Truncation signalling is scoped to the streamChat path.
+            return;
+          }
           console.warn(`[LLMHelper] ⚠️ ${provider.name} failed: ${err.message}`);
           // Continue to next provider
         }
@@ -5084,6 +5108,40 @@ let isMultimodal = !!(imagePaths?.length);
   public async * streamChat(
     ...args: Parameters<LLMHelper['_streamChatInner']>
   ): AsyncGenerator<string, void, unknown> {
+    // Callers that need to know whether the turn completed use
+    // streamChatWithOutcome; this overload discards the outcome so the nine
+    // existing call sites are untouched.
+    yield* this._streamChatTracked({ truncated: false }, ...args);
+  }
+
+  /**
+   * streamChat plus an out-of-band completion outcome.
+   *
+   * A stream that stops early (a provider failing after its first token, or the
+   * runaway output cap) ends by RETURNING, so `for await` sees an ordinary
+   * completion — deliberately, because throwing would make every consumer's
+   * existing catch reclassify a partial answer as a failed generation.
+   *
+   * The cost of that choice was silent: the 2026-08-12 fix left a truncated
+   * answer indistinguishable from a complete one, so consumers stored it as
+   * conversation history. It then became the antecedent for the NEXT turn's
+   * referent resolution and went into the memory/summary sinks — the same class
+   * of bug as "(referring to: Makefile)", bad state poisoning a later turn.
+   *
+   * Read `outcome.truncated` AFTER the stream finishes. It is populated by the
+   * time the generator completes, never before.
+   */
+  public streamChatWithOutcome(
+    ...args: Parameters<LLMHelper['_streamChatInner']>
+  ): { stream: AsyncGenerator<string, void, unknown>; outcome: StreamOutcome } {
+    const outcome: StreamOutcome = { truncated: false };
+    return { stream: this._streamChatTracked(outcome, ...args), outcome };
+  }
+
+  private async * _streamChatTracked(
+    outcome: StreamOutcome,
+    ...args: Parameters<LLMHelper['_streamChatInner']>
+  ): AsyncGenerator<string, void, unknown> {
     const { StreamingDashReducer } = await import('./llm/postProcessor');
     // Per-stream stateful reducer: tracks fenced-code (```) state ACROSS chunks
     // so a code block streamed over many chunks is never dash-mangled (the old
@@ -5098,9 +5156,128 @@ let isMultimodal = !!(imagePaths?.length);
     // Find the AbortSignal anywhere in args (position-independent) so adding a
     // trailing `thinkingBudget` arg below doesn't hide it from the abort check.
     const abortSignal = args.find((a): a is AbortSignal => a instanceof AbortSignal);
+    // Runaway bound. Applied HERE, at the single public entry point, so it
+    // covers every provider — the wrapped fall-through sites and the ones that
+    // return unconditionally (Ollama, OpenAI, Claude, DeepSeek, LiteLLM) alike.
+    // See MAX_STREAM_OUTPUT_CHARS for why this is a character cap and not a
+    // wall-clock one, and why it is defence in depth rather than the real fix.
+    const { MAX_STREAM_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
+    let emittedChars = 0;
     for await (const chunk of this._streamChatInner(...args)) {
       if (abortSignal?.aborted) return;
+      // Strip the internal truncation marker before anything downstream sees
+      // it. This is the ONLY place it is consumed; see TRUNCATION_SENTINEL.
+      if (chunk === LLMHelper.TRUNCATION_SENTINEL) {
+        outcome.truncated = true;
+        outcome.reason = 'provider_failed_after_first_token';
+        return;
+      }
       yield dashReducer.reduce(chunk);
+      emittedChars += typeof chunk === 'string' ? chunk.length : 0;
+      if (emittedChars > MAX_STREAM_OUTPUT_CHARS) {
+        outcome.truncated = true;
+        outcome.reason = 'output_cap_reached';
+        // End the stream the same way a post-commit provider failure now does —
+        // return, never throw — so the consumer sees one consistent shape for
+        // "this stream stopped early".
+        console.warn(
+          `[LLMHelper] Stream exceeded MAX_STREAM_OUTPUT_CHARS (${emittedChars} > ${MAX_STREAM_OUTPUT_CHARS}) — ending the turn. The model is not converging.`,
+        );
+        return;
+      }
+    }
+  }
+
+  /**
+   * Internal end-of-stream marker meaning "this turn stopped early".
+   *
+   * `_streamChatInner` has EIGHT places where a post-commit provider failure
+   * ends the turn by returning (see trackCommit). From outside, an early return
+   * and a normal completion are indistinguishable — which is exactly the hole
+   * the 2026-08-12 fix left: the consumer stored a truncated answer as
+   * conversation history with no idea it was incomplete, and that answer then
+   * became the antecedent for the NEXT turn's referent resolution.
+   *
+   * A sentinel chunk is used rather than a signature change because
+   * `_streamChatInner` has exactly ONE caller — `streamChat`, below — which
+   * strips it. It can never reach a consumer. The alternatives were worse:
+   * threading an outcome object needs `Parameters<_streamChatInner>` surgery
+   * across every call site, an instance field races between concurrent streams
+   * (WTA and manual chat run together), and switching back to throwing would
+   * make all nine consumers' existing catch blocks reclassify a partial answer
+   * as a failed generation.
+   *
+   * U+E010/U+E011 are private-use codepoints: no provider emits them, and the
+   * placeholder system already relies on this property (U+E002/U+E003).
+   */
+  private static readonly TRUNCATION_SENTINEL = '\uE010__NATIVELY_STREAM_TRUNCATED__\uE011';
+
+  /**
+   * Commit-point tracking for provider fall-through.
+   *
+   * `yield*` cannot be undone. Once a delegated provider stream has yielded a
+   * non-empty chunk, the consumer has already painted it, so a LATER failure in
+   * that same provider must NOT fall through to another provider — the next one
+   * starts from scratch and its answer is appended to the partial, producing one
+   * truncated answer immediately followed by a second, different, complete one.
+   *
+   * Live capture 2026-08-12 (what_to_answer, Natively fast-mode):
+   *   stream 1  tokens 8047  chars 22871  -> ai_unavailable during_stream
+   *   stream 2                chars  2342  (fell through, fresh answer)
+   *   stored assistant message           25210  ≈ 22871 + 2342 − trim
+   *
+   * The vision path already documents and implements this rule (see the
+   * "commit point" note above streamVisionWithFallback and `committedProvider`):
+   * a failure after commit ends the stream gracefully rather than switching.
+   * The text path had the rule written down but never applied at its
+   * catch-and-continue sites. This helper is how those sites observe it.
+   *
+   * The emptiness predicate is deliberately identical to the vision path's
+   * (`typeof tok === 'string' && tok.trim().length > 0`) so the two cannot drift:
+   * whitespace-only preamble does not commit, real text does.
+   */
+  /**
+   * Total-output bound, shared by every public streaming entry point.
+   *
+   * Code review 2026-08-12: the original cap lived inline in `streamChat` and
+   * its comment claimed "streamChat is the single point every chunk passes
+   * through". That was FALSE — `streamChatWithGemini` is a second public
+   * generator that never touches `streamChat`, and RAGManager consumes it
+   * directly (RAGManager.ts:281,312) guarded only by RAG_STREAM_STALL_MS. Like
+   * every other time-based guard, a stall deadline cannot catch a runaway,
+   * which is fast by definition — so the doc-grounded/RAG generation path was
+   * completely unbounded by the very fix meant to bound it.
+   *
+   * `state` is caller-owned so a retry loop accumulates across attempts rather
+   * than resetting the budget on every rung.
+   */
+  private async * capOutput(
+    inner: AsyncGenerator<string, void, unknown>,
+    state: { chars: number },
+    label: string,
+  ): AsyncGenerator<string, void, unknown> {
+    const { MAX_STREAM_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
+    for await (const chunk of inner) {
+      yield chunk;
+      state.chars += typeof chunk === 'string' ? chunk.length : 0;
+      if (state.chars > MAX_STREAM_OUTPUT_CHARS) {
+        console.warn(
+          `[LLMHelper] ${label} exceeded MAX_STREAM_OUTPUT_CHARS (${state.chars} > ${MAX_STREAM_OUTPUT_CHARS}) — ending the turn. The model is not converging.`,
+        );
+        return;
+      }
+    }
+  }
+
+  private async * trackCommit(
+    inner: AsyncGenerator<string, void, unknown>,
+    state: { emitted: boolean },
+  ): AsyncGenerator<string, void, unknown> {
+    for await (const tok of inner) {
+      if (!state.emitted && typeof tok === 'string' && tok.trim().length > 0) {
+        state.emitted = true;
+      }
+      yield tok;
     }
   }
 
@@ -6328,6 +6505,11 @@ let isMultimodal = !!(imagePaths?.length);
     // Gate: only short-circuit to fast paths when the user's picked model is one of
     // the providers fast-mode actually routes to. Otherwise picking Gemini/Claude/OpenAI
     // in the UI is silently ignored because fast-mode returns before model routing runs.
+    // Tracks whether ANY provider below has already yielded real text to the
+    // consumer. Every catch-and-continue site in this generator must consult it
+    // before falling through — see trackCommit.
+    const commit = { emitted: false };
+
     const fastModeApplies = this.groqFastTextMode && !isMultimodal && (
       this.isCodexAvailable() ||
       this.isGroqModel(this.currentModelId) ||
@@ -6337,9 +6519,14 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isCodexAvailable()) {
         console.log(`[LLMHelper] ⚡️ Fast Text Mode Active (Streaming). Routing to Codex CLI...`);
         try {
-          yield* this.streamWithCodexCli(userContent, finalSystemPrompt, true, undefined, abortSignal);
+          yield* this.trackCommit(this.streamWithCodexCli(userContent, finalSystemPrompt, true, undefined, abortSignal), commit);
           return;
         } catch (e: any) {
+          if (commit.emitted) {
+            console.warn("[LLMHelper] Codex CLI Fast Text failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            yield LLMHelper.TRUNCATION_SENTINEL;
+            return;
+          }
           console.warn("[LLMHelper] Codex CLI Fast Text streaming failed, falling back:", e.message);
         }
       }
@@ -6352,14 +6539,22 @@ let isMultimodal = !!(imagePaths?.length);
           // we'd send 'natively' or a Gemini ID as the Groq model name → 400.
           const groqModelId = this.isGroqModel(this.currentModelId) ? this.currentModelId : GROQ_MODEL;
           // CACHE: pass system separately so Groq prefix-cache hits across turns.
-          yield* this.streamWithGroq(userContent, groqModelId, finalGroqSystem, abortSignal);
+          yield* this.trackCommit(this.streamWithGroq(userContent, groqModelId, finalGroqSystem, abortSignal), commit);
           return;
         } catch (e: any) {
-          console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
+          // A 401 still disables local Groq for the session even post-commit —
+          // that is provider bookkeeping, not output, so it runs before the
+          // commit guard returns.
           if (typeof e?.message === 'string' && /401|invalid[_\s-]api[_\s-]key/i.test(e.message)) {
             this._groqLocalDisabled = true;
             console.warn("[LLMHelper] Local Groq key rejected (401) — disabling local Groq for the rest of this session. Re-enable by saving a new key in Settings.");
           }
+          if (commit.emitted) {
+            console.warn("[LLMHelper] Groq Fast Text failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            yield LLMHelper.TRUNCATION_SENTINEL;
+            return;
+          }
+          console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
         }
         // Local Groq failed — fall through to Natively if available
       }
@@ -6367,9 +6562,18 @@ let isMultimodal = !!(imagePaths?.length);
         // streamWithNatively → generateWithNatively → sends fast_mode:true → server Groq pool
         console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active (Streaming). Routing to Natively server Groq pool...`);
         try {
-          yield* this.streamWithNatively(userContent, finalSystemPrompt, undefined, abortSignal);
+          yield* this.trackCommit(this.streamWithNatively(userContent, finalSystemPrompt, undefined, abortSignal), commit);
           return;
         } catch (e: any) {
+          // This is the site the 2026-08-12 live capture hit: the server aborted
+          // at 61s AFTER streaming 8047 tokens, and the old unconditional
+          // fall-through appended a whole second answer to what the user had
+          // already read.
+          if (commit.emitted) {
+            console.warn("[LLMHelper] Natively fast-mode failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            yield LLMHelper.TRUNCATION_SENTINEL;
+            return;
+          }
           console.warn("[LLMHelper] Natively fast-mode failed, falling back:", e.message);
         }
       }
@@ -6458,14 +6662,14 @@ let isMultimodal = !!(imagePaths?.length);
           // Route multimodal to Groq Llama 4 Scout (vision-capable)
           const groqSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
           const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
-          yield* this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem, abortSignal);
+          yield* this.trackCommit(this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem, abortSignal), commit);
           return;
         }
         // Text-only Groq
         const groqSystem = systemPromptOverride ? baseSystemPrompt : GROQ_SYSTEM_PROMPT;
         const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
         // CACHE: pass system separately so Groq prefix-cache hits across turns.
-        yield* this.streamWithGroq(userContent, this.currentModelId, finalGroqSystem, abortSignal);
+        yield* this.trackCommit(this.streamWithGroq(userContent, this.currentModelId, finalGroqSystem, abortSignal), commit);
         return;
       } catch (e: any) {
         // 413 / 429 / 5xx on Groq → fall through to Natively / Gemini cascade
@@ -6485,6 +6689,15 @@ let isMultimodal = !!(imagePaths?.length);
         } else {
           // Unknown error — log and fall through anyway so the user still gets an answer
           console.warn('[LLMHelper] Groq streaming failed, falling through:', msg.slice(0, 120));
+        }
+        // A post-commit failure must NOT fall through: the providers below
+        // would append a second, complete answer to the partial the user has
+        // already read. Provider bookkeeping (the 401 disable above) still
+        // applies; only the fall-through is suppressed.
+        if (commit.emitted) {
+          console.warn('[LLMHelper] Groq failed AFTER first token — ending stream rather than appending a second answer:', msg.slice(0, 120));
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
         }
         // Fall through to Natively at line ~5435
       }
@@ -6605,9 +6818,22 @@ let isMultimodal = !!(imagePaths?.length);
             },
           }));
           try {
-            yield* runStreamingTextFallback(instrumented, this.textHealth, DEFAULT_TEXT_FALLBACK_CONFIG, {}, abortSignal);
+            yield* this.trackCommit(runStreamingTextFallback(instrumented, this.textHealth, DEFAULT_TEXT_FALLBACK_CONFIG, {}, abortSignal), commit);
             return;
           } catch (raceErr: any) {
+            // runStreamingTextFallback is commit-point-safe INTERNALLY (it never
+            // switches rungs after a rung's first token). That guarantee stops
+            // duplication inside the engine — it does not stop it here: if the
+            // committed rung dies mid-stream the engine throws, and the old
+            // unconditional fall-through handed the turn to the Gemini block,
+            // which would append a second complete answer to what the user had
+            // already read. This is the primary text path, so it is the site
+            // where that would happen most often.
+            if (commit.emitted) {
+              console.warn('[LLMHelper] Text TTFT race failed AFTER first token — ending stream rather than appending a second answer:', raceErr?.message);
+              yield LLMHelper.TRUNCATION_SENTINEL;
+              return;
+            }
             console.warn('[LLMHelper] Text TTFT race exhausted, falling through to Gemini:', raceErr?.message);
             telemetryService.track({ name: 'provider_error', durationMs: Date.now() - raceStart, properties: { path: 'text', stage: 'race_exhausted' } });
             // Fall through to the Gemini block below as the final safety net.
@@ -6645,6 +6871,9 @@ let isMultimodal = !!(imagePaths?.length);
       try {
         for await (const chunk of this.streamGeminiTextCascade(userContent, imagePaths, finalSystemPrompt, abortSignal, thinkingBudget)) {
           geminiYielded = true;
+          // Mirror into the generator-wide commit state so the last-resort
+          // providers below observe the same fact this block already tracks.
+          if (typeof chunk === 'string' && chunk.trim().length > 0) commit.emitted = true;
           yield chunk;
         }
         return;
@@ -6661,9 +6890,14 @@ let isMultimodal = !!(imagePaths?.length);
     // to a different one rather than failing the answer.
     if (this.hasNatively()) {
       try {
-        yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, abortSignal);
+        yield* this.trackCommit(this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, abortSignal), commit);
         return;
       } catch (e: any) {
+        if (commit.emitted) {
+          console.warn('[LLMHelper] Natively last-resort failed AFTER first token — ending stream rather than appending a second answer:', e.message);
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
+        }
         console.warn('[LLMHelper] Natively last-resort fallback failed:', e.message);
       }
     }
@@ -6698,9 +6932,16 @@ let isMultimodal = !!(imagePaths?.length);
         console.log(`[LLMHelper] Falling back to configured custom provider "${configuredCustom.name}" — currentModelId is ${this.currentModelId} and no cloud provider answered.`);
       }
       try {
-        yield* this.streamWithCustom(message, context, undefined, finalSystemPrompt, abortSignal);
+        yield* this.trackCommit(this.streamWithCustom(message, context, undefined, finalSystemPrompt, abortSignal), commit);
         return;
       } catch (e: any) {
+        if (commit.emitted) {
+          // Nothing left to fall through to — but throwing here would surface a
+          // provider error over an answer the user has already partly read.
+          console.warn(`[LLMHelper] Configured custom last-resort failed AFTER first token — ending stream: ${e?.message || e}`);
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
+        }
         console.warn(`[LLMHelper] Configured custom last-resort failed: ${e?.message || e}`);
       } finally {
         // Restore — never leave a non-active customProvider on the instance,
@@ -8391,6 +8632,24 @@ let isMultimodal = !!(imagePaths?.length);
    * @param config - Optional temperature and max tokens
    */
   public async * streamWithGroqOrGemini(
+    groqMessage: string,
+    geminiMessage: string,
+    config?: { temperature?: number; maxTokens?: number }
+  ): AsyncGenerator<string, void, unknown> {
+    // Bounded like every other PUBLIC streaming entry point (code review
+    // 2026-08-12). The Groq branch already sets max_tokens, but the Gemini
+    // fallback delegates to streamWithGeminiModel with no output bound at all.
+    // This method currently has no callers — the doc comment above claiming
+    // RecapLLM/FollowUpLLM/WhatToAnswerLLM use it is stale — but it is public,
+    // so it is bounded rather than left as a trap for the next caller.
+    yield* this.capOutput(
+      this._streamWithGroqOrGeminiInner(groqMessage, geminiMessage, config),
+      { chars: 0 },
+      'streamWithGroqOrGemini',
+    );
+  }
+
+  private async * _streamWithGroqOrGeminiInner(
     groqMessage: string,
     geminiMessage: string,
     config?: { temperature?: number; maxTokens?: number }

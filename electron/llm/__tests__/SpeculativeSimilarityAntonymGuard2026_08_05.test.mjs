@@ -87,3 +87,39 @@ describe('degenerate inputs keep the pre-fix behavior', () => {
         assert.ok(score >= THRESHOLD, `expected >= ${THRESHOLD}, got ${score.toFixed(3)}`);
     });
 });
+
+describe('long-sentence antonym pairs (100-pair sweep, 2026-08-11)', () => {
+    // The content-word guard compared SET similarity, so a longer question
+    // dilutes a single flipped word: "Describe a moment when you made your
+    // best decision" vs "...worst decision" shares 4 of 5 content words,
+    // clears CONTENT_AGREEMENT_MIN, and the raw blend (0.800) false-accepts.
+    // One flipped content word flips the ANSWER — dilution must not save it.
+    test('"made your best decision" vs "made your worst decision" rejects', () => {
+        const s = speculativeQuestionSimilarity(
+            'Describe a moment when you made your best decision',
+            'Describe a moment when you made your worst decision',
+        );
+        assert.ok(s < THRESHOLD, `expected < ${THRESHOLD}, got ${s.toFixed(3)}`);
+    });
+
+    test('"Describe a moment when you succeeded" vs failed rejects', () => {
+        const s = speculativeQuestionSimilarity(
+            'Describe a moment when you succeeded',
+            'Describe a moment when you failed',
+        );
+        assert.ok(s < THRESHOLD, `expected < ${THRESHOLD}, got ${s.toFixed(3)}`);
+    });
+
+    test('a long prefix completion still accepts (no collateral damage)', () => {
+        const s = speculativeQuestionSimilarity(
+            'Describe a moment when you made your best',
+            'Describe a moment when you made your best decision under pressure',
+        );
+        assert.ok(s >= THRESHOLD, `expected >= ${THRESHOLD}, got ${s.toFixed(3)}`);
+    });
+
+    test('identical long questions still score 1', () => {
+        const q = 'Describe a moment when you made your best decision under pressure';
+        assert.equal(speculativeQuestionSimilarity(q, q), 1);
+    });
+});

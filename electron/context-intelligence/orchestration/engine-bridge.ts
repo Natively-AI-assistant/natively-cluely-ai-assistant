@@ -112,6 +112,28 @@ export interface BridgeInput {
    * byte-identical to before this field existed.
    */
   personaBase?: (ctx: { codingTask: boolean }) => string | null;
+  /**
+   * The CALLER's routed coding verdict (AnswerPlanner's `isCodingAnswerType`).
+   *
+   * personaBase's `codingTask` was derived here from V3's own CODING_TASK_RE, a
+   * hand-maintained keyword list (turn-classifier.ts). Measured 2026-08-11 by
+   * dumping the composed system prompt: "Implement an LRU cache…" matched and
+   * received the coding contract (17157 chars); "Write a BFS shortest-path
+   * function…" did NOT match and shipped without it (14430 chars) — the phrase
+   * "write a function" is split by "BFS shortest-path". "Given a binary tree,
+   * return its level order traversal" misses too. Both are ordinary interview
+   * questions, and both route to a coding answerType via AnswerPlanner.
+   *
+   * A miss means the model is never told to produce Complexity or a Dry Run,
+   * and the downstream repair then paints "O(?) — state the actual time bound"
+   * into sections it was never asked for.
+   *
+   * So the routed decision wins when the caller supplies one; the regex remains
+   * only as the fallback for callers that don't. This is what this module's own
+   * comment already specified — detection "stays with the existing
+   * deterministic router (AnswerPlanner), never re-derived here from text".
+   */
+  codingTask?: boolean;
 }
 
 export interface BridgeResult {
@@ -238,7 +260,10 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     let personaBase: string | undefined;
     try {
       personaBase = input.personaBase?.({
-        codingTask: (result.decision.questionTypes as readonly string[]).includes('CODING_TASK'),
+        // Routed verdict first (see BridgeInput.codingTask); the keyword check
+        // is the fallback for callers that supply none.
+        codingTask: input.codingTask
+          ?? (result.decision.questionTypes as readonly string[]).includes('CODING_TASK'),
       }) ?? undefined;
     } catch { personaBase = undefined; }
 

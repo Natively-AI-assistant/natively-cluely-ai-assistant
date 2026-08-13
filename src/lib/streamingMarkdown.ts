@@ -137,6 +137,38 @@ const INCOMPLETE_INLINE_RE = /^\$(?!\$)([^\n$]+)$/;
 /** Shared streaming/finalized policy for deciding whether `$body$` is math. */
 function isInlineMathBody(body: string): boolean {
   if (!body) return false;
+  // Adjacency rule (pandoc / remark-math): the opening `$` must not be followed
+  // by whitespace and the closing `$` must not be preceded by whitespace.
+  //
+  // Live report 2026-08-12: "Show a Makefile rule using $@ and $<." rendered
+  // `$@ and $` as MATH, because the currency rule below only asks whether the
+  // body starts with a digit — `@ and ` starts with `@`, so it was accepted.
+  // Shell and Make variables (`$@`, `$<`, `$1`, `$?`) are ordinary prose in an
+  // interview answer about Makefiles or bash, and turning them into KaTeX
+  // mangles the text beyond recognition.
+  //
+  // Adjacency is the standard discriminator and subsumes the special cases
+  // without a blacklist that would need a new entry per sigil:
+  //   `$@ and $<`      closer preceded by a space  -> text
+  //   `Let $x = 5$`    closer preceded by `5`      -> math
+  //   `$100 for $200`  closer preceded by a space  -> text
+  // Real math is written tight against its delimiters; incidental `$` pairs in
+  // prose almost never are.
+  if (/^\s/.test(body) || /\s$/.test(body)) return false;
+
+  // Shell / Make variable sigils. `$@ $< $? $# $! $* $_ $'` are variable
+  // references, and inline math essentially never opens with one of these
+  // characters. Digits and `-` are deliberately EXCLUDED: `$5$` is valid digit
+  // math and `$-5$` a negative quantity, both already governed by the currency
+  // rule below.
+  //
+  // Adjacency alone does not cover these. Live report 2026-08-12:
+  //   "In bash, explain $?, $#, and IFS=$'\n' ..."
+  // pairs `$#` with the `$` of `IFS=$`, giving the body `#, and IFS=` — no
+  // leading or trailing space, so the adjacency rule accepts it and the whole
+  // sentence fragment renders as KaTeX.
+  if (/^[@<>?#!*'_]/.test(body)) return false;
+
   if (!/^\d/.test(body)) return true;
   return /^\d$/.test(body) || /[=+\-*/^]/.test(body);
 }
@@ -297,8 +329,21 @@ export function normalizeFinalizedMarkdownMath(markdown: string): string {
     }
 
     if (/^\s*\\\[\s*(?:\n)?$/.test(line)) {
+      // Stop the search at the first code fence. Code review 2026-08-12: this
+      // scan ran outside the fence state machine above, so a lone `\]` line
+      // INSIDE a fenced block could close a display-math opener that started
+      // before it — splicing the fence delimiters and the code between them
+      // into a `$$…$$` block. Reproduced: a `\[` opener followed by a python
+      // fence containing a `\]` line emitted "$$\n```python\nx = 1\n$$\n```",
+      // corrupting the code and breaking this module's stated guarantee that
+      // fenced content is preserved byte-for-byte. Display math never spans a
+      // code fence, so refusing to look past one loses nothing.
+      const fenceAhead = lines.findIndex((candidate, candidateIndex) =>
+        candidateIndex > index && /^( {0,3})(`{3,}|~{3,})/.test(candidate),
+      );
+      const searchLimit = fenceAhead >= 0 ? fenceAhead : lines.length;
       const closingIndex = lines.findIndex((candidate, candidateIndex) =>
-        candidateIndex > index && /^\s*\\\]\s*(?:\n)?$/.test(candidate),
+        candidateIndex > index && candidateIndex < searchLimit && /^\s*\\\]\s*(?:\n)?$/.test(candidate),
       );
       if (closingIndex >= 0) {
         const body = lines.slice(index + 1, closingIndex).join('').trim();
@@ -385,6 +430,29 @@ function normalizeProse(source: string): string {
           cursor = closer + 1;
           continue;
         }
+        // NOT math — ESCAPE the opener rather than passing it through.
+        //
+        // Live report 2026-08-12 (second round). Deciding "not math" is not
+        // enough on this path: the output goes to ReactMarkdown with
+        // remark-math, which does its OWN `$…$` pairing and happily claims a
+        // pair this function declined. Emitting a bare `$` therefore delegates
+        // the decision straight back to the plugin we are trying to overrule.
+        //
+        //   "Show a Makefile rule using $@ and $<."
+        //     -> isInlineMathBody('@ and ') === false   (adjacency rule)
+        //     -> old: bare `$` passed through
+        //     -> remark-math paired them anyway and rendered `@and` as KaTeX
+        //
+        // Verified against the real unified/remark-math/rehype-katex pipeline,
+        // not just this function's return value — the earlier fix only taught
+        // the STREAMING tokenizer the rule, so the streamed answer was correct
+        // while the finalized user-message echo was still mangled.
+        //
+        // The currency branch a few lines above already escapes for exactly
+        // this reason; this branch simply never did.
+        output += '\\$';
+        cursor += 1;
+        continue;
       }
     }
 

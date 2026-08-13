@@ -2560,6 +2560,40 @@ export class IntelligenceEngine extends EventEmitter {
                         // though the answer was said out loud a minute ago.
                         conversationSummary: _ctx.conversationWindow(90),
                         retrieval: _ctx.port as any,
+                        // Hand the bridge THIS turn's routed verdict rather than
+                        // letting it re-derive one from keywords — see
+                        // BridgeInput.codingTask. AnswerPlanner already
+                        // classified the turn; a keyword list disagreeing with it
+                        // silently drops the coding contract.
+                        codingTask: isCodingAnswerType(answerPlan.answerType),
+                        // CODING CONTRACT ON THE V3 PATH (live regression, 2026-08-11).
+                        // `_v3.system` REPLACES the v2 base prompt below
+                        // (WhatToAnswerLLM.ts:813), and the V3 composer has no coding
+                        // contract of its own — so a V3-owned coding turn lost the six
+                        // mandatory headings entirely. Measured live: the model emitted
+                        // ZERO `##` headings and opened with a raw ```python fence, so
+                        // it wrote no Complexity and no Dry Run, and the downstream
+                        // repair painted "O(?) — state the actual time bound" into the
+                        // sections the model was never asked for. The model never
+                        // disobeyed the contract; it never received it.
+                        //
+                        // This is the hook the bridge already exposes for exactly this
+                        // (BridgeInput.personaBase), and it mirrors the manual-chat call
+                        // site in ipcHandlers. Resolved through resolveV2SystemPrompt so
+                        // the contract text has ONE source and cannot drift. Param
+                        // annotated inline because buildV3Prompt arrives via a lazy
+                        // require (any), so the literal gets no contextual type.
+                        personaBase: ({ codingTask }: { codingTask: boolean }) => {
+                            try {
+                                const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+                                return resolveV2SystemPrompt({
+                                    action: 'answer',
+                                    tier: v2TierForPromptTier(this.llmHelper.getPromptTier?.()),
+                                    activeMode: snapshotModeInfo ?? undefined,
+                                    codingTask,
+                                });
+                            } catch { return null; } // no persona ⇒ composition unchanged
+                        },
                     });
                     if (_v3) {
                         wtaTrace.lifecycle('planned', {
@@ -2611,7 +2645,14 @@ export class IntelligenceEngine extends EventEmitter {
             }).lifecycle('provider_dispatched', {
                 providerAttempts: 1,
             });
-            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined, answerPlan, modeContextPromise, requestSnapshot, whatToAnswerCancellationToken.signal);
+            // Code review 2026-08-12: the truncation fix (9b78621b) wired manual
+            // chat only — while the live capture that motivated it was a
+            // what_to_answer turn. A WTA answer cut short by a post-commit
+            // provider failure or the runaway cap was still written to the
+            // session transcript and usage, and fed to the NEXT turn as
+            // prior_assistant_responses evidence.
+            const wtaTruncation = { truncated: false };
+            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined, answerPlan, modeContextPromise, requestSnapshot, whatToAnswerCancellationToken.signal, wtaTruncation);
             let streamAborted = false;
             let emittedStreamingToken = false;
             let streamingTokenBuffer = '';
@@ -2716,6 +2757,17 @@ export class IntelligenceEngine extends EventEmitter {
             // Full-JIT policy forbids deterministic profile fallback here; ship a
             // transparent non-authoritative line instead of guessing from cached/AOT prose.
             let wtaWriteDecision = decideSessionWritePolicy({ finalGenerationMode: 'jit_llm', validationOk: true, sourceContractHonored: true });
+            // An INCOMPLETE answer must not become session history. It would be
+            // replayed to the next turn as prior_assistant_responses evidence
+            // and stand in for a complete answer that was never produced. The
+            // user still SEES the partial text; it just is not stored.
+            if (wtaTruncation.truncated) {
+                wtaWriteDecision = decideSessionWritePolicy({
+                    finalGenerationMode: 'provider_error_no_answer',
+                    validationOk: false,
+                    criticalViolations: ['stream_truncated'],
+                });
+            }
             if (liveDeadlineFired && !emittedStreamingToken && !isSpeculative
                 && this.currentGenerationId === generationId) {
                 streamingTokenBuffer = '';

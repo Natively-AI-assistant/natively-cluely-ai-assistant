@@ -24,6 +24,7 @@ import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/s
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
+import { stripPriorAssistantTurns } from './llm/conversationHistoryPolicy';
 import { mintTurnId } from './llm/turnIdentity';
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
 import { buildProfileJitPrompt } from './llm/ProfileJitPromptBuilder';
@@ -102,37 +103,6 @@ const GATE_GENERIC_TOKENS = new Set<string>([
   'implementation', 'component', 'components', 'structure', 'technique', 'techniques',
 ]);
 
-/**
- * Strip prior ASSISTANT turns from a SessionTracker formatted-context snapshot
- * (audit 2026-06-27, document-grounded real-path fix). The snapshot format is
- * line-prefixed blocks: `[ME]: ...`, `[INTERVIEWER]: ...`,
- * `[ASSISTANT (PREVIOUS SUGGESTION)]: ...` joined by '\n' (see
- * SessionTracker.formatContextItems). An assistant block's text may itself span
- * multiple lines, so once we see the ASSISTANT label we drop every following
- * line until the next `[ME]:` / `[INTERVIEWER]:` label (or end of input).
- *
- * Keeping `[ME]:` / `[INTERVIEWER]:` turns preserves follow-up pronoun
- * resolution; dropping the assistant turns prevents a previously-emitted answer
- * from anchoring the next document-grounded answer (the observed topic collapse).
- */
-function stripPriorAssistantTurns(snapshot: string): string {
-  const lines = snapshot.split('\n');
-  const kept: string[] = [];
-  let skipping = false;
-  for (const line of lines) {
-    if (/^\[ASSISTANT \(PREVIOUS SUGGESTION\)\]:/.test(line)) {
-      skipping = true;
-      continue;
-    }
-    if (/^\[(ME|INTERVIEWER)\]:/.test(line)) {
-      skipping = false;
-      kept.push(line);
-      continue;
-    }
-    if (!skipping) kept.push(line);
-  }
-  return kept.join('\n').trim();
-}
 
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (
@@ -1189,6 +1159,24 @@ export function initializeIpcHandlers(appState: AppState): void {
               surface: 'manual-chat',
               pathTag: 'ipc',
               question: String(message || ''),
+              // Routed coding verdict, same as the WTA path (see
+              // BridgeInput.codingTask). Without it the bridge falls back to its
+              // keyword regex, which misses ordinary phrasings like "Write a BFS
+              // shortest-path function" and silently drops the six-section
+              // coding contract — the same defect fixed for the live path in
+              // 06d88fba, left open here. planAnswer is pure and the real plan
+              // is not built until much later in this handler, so this computes
+              // the verdict directly from the message + active mode.
+              codingTask: (() => {
+                try {
+                  return isCodingAnswerType(planAnswer({
+                    question: String(message || ''),
+                    source: 'manual_input',
+                    speakerPerspective: 'user',
+                    activeMode: modeInfo ?? undefined,
+                  }).answerType);
+                } catch { return undefined; } // fall back to the bridge's own check
+              })(),
               modeTemplateType: rawMode,
               modeUniqueId: modeInfo?.id ?? null,
               modeName: (modeInfo as any)?.name ?? null,
@@ -1261,7 +1249,12 @@ export function initializeIpcHandlers(appState: AppState): void {
 
             let finalText = '';
             let v3SawFirstToken = false;
-            const v3Stream = llmHelper.streamChat(
+            // streamChatWithOutcome, not streamChat: a turn that stops early (a
+            // provider failing after its first token, or the runaway output cap)
+            // ends by returning, so the loop below cannot tell a truncated answer
+            // from a complete one. Storing a truncated answer as history makes it
+            // the antecedent for the NEXT turn's referent resolution.
+            const v3Stream = llmHelper.streamChatWithOutcome(
               composed.user,
               imagePaths,
               undefined,
@@ -1284,10 +1277,10 @@ export function initializeIpcHandlers(appState: AppState): void {
               // retrieval and injected it around V3's filtered evidence, and
               // shapeDocumentGroundedSystemPrompt mutated V3's system prompt.
               { v3Owned: true },
-            ) as AsyncGenerator<string>;
+            );
 
             try {
-              for await (const tok of v3Stream) {
+              for await (const tok of v3Stream.stream) {
                 if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
                   finishDebug(finalText, false, 'superseded_by_newer_stream');
                   return null;
@@ -1343,8 +1336,25 @@ export function initializeIpcHandlers(appState: AppState): void {
                 return null;
               }
             }
-            event.sender.send('gemini-stream-done', { finalText, streamId: myStreamId });
-            finishDebug(finalText, true, null);
+            // A turn that stopped early is INCOMPLETE. Tell the renderer (the
+            // payload is already an object, so this is additive and older
+            // renderers simply ignore it) and record it in the debug trace as a
+            // non-success, which is what it is.
+            const v3Truncated = v3Stream.outcome.truncated === true;
+            if (v3Truncated) {
+              console.warn('[IPC] manual chat answer is INCOMPLETE — not storing it as conversation history', {
+                streamId: myStreamId,
+                reason: v3Stream.outcome.reason,
+                chars: finalText.length,
+              });
+            }
+            event.sender.send('gemini-stream-done', {
+              finalText,
+              streamId: myStreamId,
+              incomplete: v3Truncated,
+              incompleteReason: v3Truncated ? v3Stream.outcome.reason : undefined,
+            });
+            finishDebug(finalText, !v3Truncated, v3Truncated ? 'stream_truncated' : null);
 
             // ── Record the turn (V3 previously recorded NOTHING) ────────────
             // The short-circuit skipped every store the legacy path writes, so
@@ -1362,6 +1372,15 @@ export function initializeIpcHandlers(appState: AppState): void {
             let liveModeIdAtRecord: string | null = null;
             try { liveModeIdAtRecord = mm.getActiveMode()?.id ?? null; } catch { /* record-guard only */ }
             if (liveModeIdAtRecord === (manualActiveMode?.id ?? null)) {
+              // A truncated answer must NOT enter conversation state, memory, or
+              // the session transcript. It would become the antecedent for the
+              // next turn's referent resolution and be replayed as if it were a
+              // complete answer — the same class of defect as the
+              // "(referring to: Makefile)" contamination. The user still SEES
+              // the partial text; it just does not become history.
+              if (v3Truncated) {
+                console.warn('[IPC] skipping history/memory sinks for a truncated answer', { streamId: myStreamId });
+              } else {
               try {
                 const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
                 recordAnswerSummary(String(senderId), finalText);
@@ -1391,6 +1410,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), String(message || ''));
                 PhoneMirrorService.getInstance().publishAssistantMessage(String(myStreamId), finalText, 'Chat');
               } catch { /* mirror only */ }
+              } // end !v3Truncated
             }
 
             return null;

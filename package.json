@@ -89,7 +89,9 @@
     "release-gate": "node scripts/release-gate.mjs",
     "verify:memory-context": "npm run build:electron && node tests/intelligence/memory-context/run-verification.mjs",
     "verify:humanized-answers": "npm run build:electron && node scripts/verify-humanized-answers.mjs",
-    "verify:spoken-quality": "npm run build:electron && node scripts/verify-spoken-quality.mjs"
+    "verify:spoken-quality": "npm run build:electron && node scripts/verify-spoken-quality.mjs",
+    "test:node-runner": "npm run build:electron && node --test \"electron/services/__tests__/**/*.test.mjs\" \"electron/lib/__tests__/**/*.test.mjs\" \"electron/llm/__tests__/**/*.test.mjs\" \"electron/llm/codeVerification/__tests__/**/*.test.mjs\" \"electron/audio/__tests__/**/*.test.mjs\" \"electron/rag/__tests__/**/*.test.mjs\" \"electron/utils/__tests__/**/*.test.mjs\" \"electron/update/**/*.test.mjs\"",
+    "test:api-smoke": "npm run build:electron && node scripts/run-with-env.mjs --default-tmpdir NATIVELY_TEST_USERDATA=natively-test-userdata --set ELECTRON_RUN_AS_NODE=1 -- electron --test electron/services/__tests__/NativelyApiE2E.test.mjs"
   },
   "build": {
     "generateUpdatesFilesForAllChannels": true,
