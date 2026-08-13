@@ -684,6 +684,20 @@ const App: React.FC = () => {
       });
     }
 
+    // Ollama runtime errors (unreachable / no models installed, after the
+    // fallback also failed). Main has always broadcast these on
+    // 'ollama-error'; nothing consumed them, so the user saw a silent hang
+    // (F-119). Reuses the pull-status banner's 'failed' state — declared in
+    // the union since day one but never set.
+    let removeOllamaError: (() => void) | undefined;
+    if (window.electronAPI?.onOllamaError) {
+      removeOllamaError = window.electronAPI.onOllamaError((data) => {
+        setOllamaPullStatus('failed');
+        setOllamaPullMessage(data.message || 'Local AI (Ollama) is unavailable.');
+        setTimeout(() => setOllamaPullStatus('idle'), 8000);
+      });
+    }
+
     let removeWarning: (() => void) | undefined;
     if (window.electronAPI?.onIncompatibleProviderWarning) {
       removeWarning = window.electronAPI.onIncompatibleProviderWarning((data) => {
@@ -721,6 +735,7 @@ const App: React.FC = () => {
       if (removeMeetingsListener) removeMeetingsListener();
       if (removeProgress) removeProgress();
       if (removeComplete) removeComplete();
+      if (removeOllamaError) removeOllamaError();
       if (removeWarning) removeWarning();
       if (removeReindexProgress) removeReindexProgress();
       if (removeLicenseListener) removeLicenseListener();

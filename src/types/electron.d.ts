@@ -475,6 +475,7 @@ export interface ElectronAPI {
 
   onOllamaPullProgress: (callback: (data: { status: string; percent: number }) => void) => () => void;
   onOllamaPullComplete: (callback: () => void) => () => void;
+  onOllamaError: (callback: (data: { message: string }) => void) => () => void;
 
   onMeetingsUpdated: (callback: () => void) => () => void
 

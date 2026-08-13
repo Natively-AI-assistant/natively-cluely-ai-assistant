@@ -269,7 +269,14 @@ Confidence: high.
 
 ## F-119 [P2] ollama-error broadcast has zero listeners
 Phase: 1 | Area: LLMHelper → renderer error surface
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Step 1 confirmation: LLMHelper.notifyRendererOllamaError (:1832-1837) broadcasts 'ollama-error' from three failure sites (:1791, :1823, :1827); repo-wide the producer was the only reference. The Launcher's pull-status banner union has had a 'failed' state since day one that nothing ever set — the intended surface existed, unwired.
+Repro: scripts/audit/F-119-repro.mjs — PRE-FIX (stale bundle): typeof onOllamaError === 'undefined' at the live bridge → exit 1. POST-FIX: bridge exposes it AND a real main-side 'ollama-error' broadcast reaches a renderer subscriber with payload intact → exit 0.
+Root cause: producer-only channel; missing preload link + missing renderer consumer.
+Fix: preload `onOllamaError` (subscribe/unsubscribe sibling pattern) + interface + electron.d.ts entry; App.tsx consumes it into the existing banner's 'failed' state (8s auto-dismiss), registered/cleaned alongside the pull listeners. LLMHelper untouched (its foreign in-flight diff also untouched).
+E2E verification: repro pre/post as above; vite renderer build clean; typecheck:electron clean. Pin: OllamaErrorReachesRenderer2026_08_14.test.mjs (2/2 — preload wiring + App.tsx consumption).
+Cross-platform: platform-neutral.
+Commit: (pending — F-116 = 4d2726bf)
 Hypothesis: LLMHelper.ts:1837 (notifyRendererOllamaError, from fallback-failure path :1827) broadcasts 'ollama-error' to every window; no ipcRenderer.on('ollama-error') in preload, no onOllamaError anywhere in src/. When Ollama is down AND fallback fails, the deliberate user-facing notification goes nowhere — user sees a hang. Pre-existing (not from in-flight diff).
 Disproof: dynamic-channel listener — preload's only variable-channel on() is PROCESSING_EVENTS.*, which lacks ollama-error.
 Confidence: high.
