@@ -582,6 +582,28 @@ export class LocalModelDownloadService {
     if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.entries)) return;
     for (const e of parsed.entries) {
       if (!e || !e.provider || !e.modelId) continue;
+      // MIGRATION (2026-08-14): drop entries persisted under the WRONG
+      // provider for their modelId. Before resolveLocalModelProviderName()
+      // existed, every download call site hardcoded 'whisper' — so a failed
+      // Nemotron attempt persisted as `whisper:<nemotron-id>` with a stale
+      // "init.channelId is required" error. Left in place, that ghost entry
+      // re-marks the Nemotron catalog row as errored in the Settings panel
+      // on EVERY app launch (the panel merges download-state entries onto
+      // models by modelId alone, ignoring provider) — even after the real
+      // routing bug was fixed and even when the model is fully installed.
+      // Manual state-file surgery doesn't stick either: the running app
+      // re-persists its in-memory copy over any external edit. Dropping the
+      // mis-keyed entry here, at rehydrate, is the only durable fix. Scoped
+      // narrowly to the whisper/nemotron pair (both resolve through
+      // resolveLocalModelProviderName); other providers ('reranker', …) have
+      // their own id spaces this helper knows nothing about.
+      if (
+        (e.provider === 'whisper' || e.provider === 'nemotron') &&
+        resolveLocalModelProviderName(e.modelId) !== e.provider
+      ) {
+        console.log(`[LocalModelDownloadService] rehydrate: dropping stale wrong-provider entry ${e.provider}:${e.modelId} (real provider: ${resolveLocalModelProviderName(e.modelId)})`);
+        continue;
+      }
       const key = this.keyOf(e.provider, e.modelId);
       // A previously-'downloading' or 'verifying' entry has no live worker
       // (process restarted). Flip to 'interrupted' so the UI can show a

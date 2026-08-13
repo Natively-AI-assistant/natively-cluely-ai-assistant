@@ -351,6 +351,33 @@ test('rehydrate: downloading → interrupted (no live worker after restart)', ()
   assert.equal(e.status, 'interrupted');
 });
 
+test('REGRESSION: rehydrate drops a stale wrong-provider entry (whisper:<nemotron-id> ghost error)', () => {
+  // Before resolveLocalModelProviderName existed, every download call site
+  // hardcoded provider 'whisper' — so a failed real Nemotron attempt
+  // persisted as `whisper:<nemotron modelId>` carrying the stale
+  // "init.channelId is required" error. That ghost entry re-marked the
+  // Nemotron row as errored in Settings on EVERY launch, even after the
+  // routing fix, and manual state-file edits were overwritten by the
+  // running app's own re-persist. rehydrate() must drop it.
+  const NEMOTRON_ID = 'onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4';
+  const statePath = path.join(tmpUserData, 'state.json');
+  fs.writeFileSync(statePath, JSON.stringify({
+    v: 1,
+    entries: [
+      // The mis-keyed ghost — must be dropped:
+      { provider: 'whisper', modelId: NEMOTRON_ID, status: 'error', progress: 0, startedAt: 1, updatedAt: 2, error: 'Failed to load model: init.channelId is required for sessionLayout "nemotron-rnnt"' },
+      // A correctly-keyed nemotron entry — must survive:
+      { provider: 'nemotron', modelId: NEMOTRON_ID, status: 'cancelled', progress: 0, startedAt: 3, updatedAt: 4 },
+      // A correctly-keyed whisper entry — must survive:
+      { provider: 'whisper', modelId: 'Xenova/whisper-tiny.en', status: 'complete', progress: 100, startedAt: 5, updatedAt: 6 },
+    ],
+  }));
+  const svc = new LocalModelDownloadService({ persistencePath: statePath, providers: new Map([['whisper', FakeProvider.create()]]) });
+  assert.equal(svc.getState('whisper', NEMOTRON_ID), null, 'mis-keyed whisper:<nemotron-id> ghost must be dropped at rehydrate');
+  assert.equal(svc.getState('nemotron', NEMOTRON_ID)?.status, 'cancelled', 'correctly-keyed nemotron entry must survive');
+  assert.equal(svc.getState('whisper', 'Xenova/whisper-tiny.en')?.status, 'complete', 'correctly-keyed whisper entry must survive');
+});
+
 test('rehydrate: interrupted + isModelCached=true → complete', () => {
   const statePath = path.join(tmpUserData, 'state.json');
   fs.writeFileSync(statePath, JSON.stringify({
