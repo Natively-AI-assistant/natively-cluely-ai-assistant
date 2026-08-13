@@ -52,3 +52,44 @@ export const isProfileGroundingV2Enabled = (): boolean => {
 
 /** Test-only: reset the cached env read (env can't change mid-process otherwise). */
 export const __resetProfileGroundingV2Cache = (): void => { cachedEnv = null; };
+
+/**
+ * Phase 0.5 of the semantic-retrieval repair (2026-08-13, audit
+ * reports/cosine-similarity-relevance-audit-2026-08-13.md): extend V2's
+ * "grounding covers this answer type" set with the fit family
+ * (`jd_fit_answer` + `resume_jd_fit_answer`, both required-layers
+ * [resume, jd]), skipping the redundant vector retrieval for JD-fit turns.
+ *
+ * Why jd_fit qualifies: getRelevantNodes is called with
+ * sourceTypes [RESUME, JD], so the ONLY things it can return are (a) the
+ * structured resume/JD fact nodes — the same data buildGroundingBlock already
+ * injects on every jd_fit turn (profileGroundingPlan grants jd_fit both
+ * resume AND JD) — and (b) STAR-story nodes. The dossier and salary blocks
+ * are assembled by separate code paths and never flow through the node
+ * scorer. Cost of the skip: STAR-story nodes no longer appear in jd_fit
+ * prompts (they remain in behavioral prompts, their primary consumer).
+ *
+ * Why negotiation does NOT qualify (measured 2026-08-13, do not add it):
+ * applyFullProfileGrounding is intent-gated with
+ * `intent !== IntentType.NEGOTIATION`, so negotiation turns never receive
+ * the grounding block — skipping retrieval there would drop resume facts
+ * from the prompt with no replacement.
+ *
+ * OPT-IN (default OFF), the inverse of this file's kill-switch default:
+ *   - env  PROFILE_GROUNDING_V2_JDFIT_COVERAGE = 'on' | 'true' | '1'  → enabled
+ *   - settings  profileGroundingV2JdFitCoverage === true              → enabled
+ * Deliberately uncached (read per call): it sits on a per-question path, the
+ * read is a string compare, and caching is what makes env-flag tests race
+ * (see the P2 gotcha notes in this file's history).
+ */
+export const isProfileGroundingV2JdFitCoverageEnabled = (): boolean => {
+  try {
+    const v = (process.env.PROFILE_GROUNDING_V2_JDFIT_COVERAGE || '').trim().toLowerCase();
+    if (v === 'on' || v === 'true' || v === '1') return true;
+  } catch { /* fall through to settings */ }
+  try {
+    const { SettingsManager } = require('../services/SettingsManager');
+    if (SettingsManager.getInstance().get('profileGroundingV2JdFitCoverage') === true) return true;
+  } catch { /* settings unavailable → default OFF */ }
+  return false;
+};
