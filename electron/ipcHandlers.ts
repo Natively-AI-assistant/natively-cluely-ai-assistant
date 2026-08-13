@@ -10184,7 +10184,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           return { fallback: true };
         }
         console.error('[RAG] Live query error:', error);
-        event.sender.send('rag:stream-error', { live: true, error: msg });
+        // No rag:stream-error here (F-118): the {success:false} return below
+        // makes the renderer fall through to regular live chat, so a terminal
+        // error event would DOUBLE-SIGNAL — the error handler stapled
+        // "[RAG Error: …]" into the bubble and cleared streaming state, and
+        // the fallback then streamed fresh tokens into that torn-down row.
+        // For the live class the fallback owns the UX; the meeting/global
+        // handlers keep their terminal events because nothing falls back.
+        // Live-reproduced in scripts/audit/F-118-repro.mjs.
       }
       return { success: false, error: error.message };
     } finally {

@@ -261,7 +261,14 @@ Confidence: high.
 
 ## F-118 [P2] Live-RAG failure double-signals: error event + fallback → torn UI row
 Phase: 1 | Area: ipcHandlers rag:query-live / NativelyInterface
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-118-repro.mjs — fake live-ready RAG manager on the real AppState whose queryMeeting throws a non-fallback error; real handler invoked from a bridge window with an onRAGStreamError subscriber. PRE-FIX: {success:false} return AND {live:true} error event both observed → exit 1.
+Root cause: the live catch emitted a terminal error event AND returned the fallback-triggering result; the renderer executes both UI actions (staple error + clear streaming; then stream fallback tokens into the torn row).
+Fix: live handler no longer emits rag:stream-error (console.error + comment retained); the {success:false} fallback return owns the UX. Meeting/global handlers unchanged (no fallback exists for those classes — their terminal events are correct).
+E2E verification: repro → exit 0 (events:[], fallback return only). Pin: LiveRagSingleSignal2026_08_14.test.mjs (2/2 — live emits none; meeting/global keep theirs). typecheck clean.
+Cross-platform: platform-neutral.
+Commit: (pending — F-119 = 37acd593)
+NOTE (campaign incident, resolved): running bare `npm run build` for F-119's renderer validation triggered `npm run clean`, which deletes dist-electron/ — broke subsequent repro launches until `npm run build:electron` + the native-module symlink were restored. Rule for the rest of the campaign: NEVER run bare `npm run build`; use `vite build` directly if renderer output is needed.
 Hypothesis: ipcHandlers.ts:10231-10233 sends terminal `rag:stream-error` {live:true} AND returns {success:false}; renderer error handler (NativelyInterface.tsx:5649-5668) staples `[RAG Error: …]` into the last bubble and clears streaming state, while :5969-5977 reads success:false as "fall through to normal chat" and starts streamGeminiChat into the same torn-down row. Only one signal should fire.
 Trigger: live meeting + JIT RAG + provider failure mid-generation (429/network/5xx).
 Disproof: a discriminator check dropping {live:true} in onRAGStreamError — none (:5649 destructures only {error}).
