@@ -89,14 +89,22 @@ Fix: both flows now null the field first (so watcher ticks/other flows observe t
 E2E verification: repro → exit 0 (old.nativeStop precedes the measured fresh.start). F-102 and F-103 repros re-run PASS on the combined changes (same flows). Pin: electron/services/__tests__/DestroyAwaitedBeforeFreshCapture2026_08_14.test.mjs (1/1). typecheck clean.
 Regression check: awaiting adds ≤~300ms (Windows worst case) before a rebuild — inside mutex-held recovery paths where resume/endMeeting already accept the same latency; recovery counter/timer semantics unchanged.
 Cross-platform: same deferral exists for WASAPI teardown; fix platform-neutral. macOS live-verified; Windows reviewed but not executed.
-Commit: (pending — backfilled next update)
+Commit: 0d72316a
 Hypothesis: `oldCapture?.destroy()` unawaited at main.ts:4717 and :4879; native `monitor.stop()` runs on setImmediate (SystemAudioCapture.ts:248) while the only intervening await (`resolveMacScreenCaptureCapability`, cache-hit path main.ts:862-901, TTL 3s always warm mid-meeting) resolves in microtasks — so `fresh.start()` (:4743/:4911) constructs the new RustAudioCapture while the dying one holds the CoreAudio tap. Repo documents this exact failure at SystemAudioCapture.ts:170-180 and main.ts:5760-5763 ("0 chunks in 8s" / HAL property-listener deadlock). All other teardown sites await (:4363, :3954, :3982, endMeeting :5776-5783).
 Disproof: capability resolver always crosses a macrotask boundary on cache hit; or Rust constructor acquires no HAL resource until start().
 Confidence: medium-high.
 
 ## F-105 [P1] Mic start() throw kills the system-audio channel too
 Phase: 1 | Area: main.ts meeting start / reconfigureAudio / HFP auto-switch
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Step 1 confirmation: three bare four-start sequences (meeting start audio block; reconfigureAudio; _doReconfigureSttProvider), each mic-first with user STT / system capture / system STT behind it; MicrophoneCapture.start() rethrows by design (lazy native open). HFP auto-switch (:3624-3626) additionally swallows the reconfigure rejection into console.warn on a LIVE meeting.
+Repro: scripts/audit/F-105-repro.mjs — REAL startMeeting() in the isolated scratch app; wire interceptor forces the mic start to throw and records (without running) the system start; spies on sendAudioCaptureFailed/broadcast. PRE-FIX: systemStartCalls=0, watcherArmed=false, genericAudioError=true → exit 1 (both channels dead behind one generic banner; the wired-never-started system capture emits no 'start' so the stuck watchdog never arms).
+Root cause: unhandled rethrow crossing channel boundaries in all three bare sequences; the meeting-start catch treats it as a whole-pipeline failure.
+Fix: new private startCaptureChannels(context) helper — per-channel try/catch, mic first (HAL ordering preserved), failing channel surfaces a terminal channel-specific sendAudioCaptureFailed banner and the other channel + downstream steps (live indexing, route watcher) proceed. All three sites now call it; the HFP path's swallow is defused because reconfigureAudio no longer rejects on a channel start failure (channel banner surfaces instead).
+E2E verification: repro → exit 0 (systemStartCalls=1, watcherArmed=true, specific "Microphone failed to start (AUDIT-FORCED-MIC-FAIL)" banner, no generic broadcast). Pins: CaptureChannelIsolation2026_08_14.test.mjs; all 13 audit pins green; typecheck clean; F-102 and F-104 repros re-run PASS.
+Regression check: healthy-path behavior unchanged (both try blocks succeed → identical start order); startedByInit bookkeeping now reflects per-channel outcomes.
+Cross-platform: platform-neutral orchestration; macOS live-verified via real startMeeting; Windows reviewed but not executed (WASAPI exclusive-steal is the canonical Windows trigger this fixes).
+Commit: (pending — backfilled next update)
 Hypothesis: `MicrophoneCapture.start()` rethrows by design (MicrophoneCapture.ts:114, :166), but callers run bare sequences: a throw at main.ts:5579 skips system-audio start at :5584-5586, live indexing :5592, and the output watcher :5607 → wired-but-never-started capture emits no 'start', watchdog never arms, both channels dead behind one generic error. Same shape at :4513-4516; HFP auto-switch (:4610-4616) swallows the rejection into console.warn, silently killing a live meeting.
 Trigger: mic open failure (USB device gone, WASAPI exclusive steal, cpal no-supported-format, HFP target unavailable).
 Disproof: show start() cannot throw once construction guard at :3762-3776 passed (it can — native open is lazy, happens in start()).

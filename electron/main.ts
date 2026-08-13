@@ -4534,12 +4534,8 @@ export class AppState {
     }
 
     if (this.isMeetingActive) {
-      // Mic first: lazy mic start constructs the cpal input stream; do it
-      // before starting the CoreAudio system tap to avoid HAL contention.
-      this.microphoneCapture?.start();
-      this.googleSTT_User?.start();
-      this.systemAudioCapture?.start();
-      this.googleSTT?.start();
+      // Per-channel isolated start (F-105); mic first for HAL ordering.
+      this.startCaptureChannels('reconfigureAudio');
     }
   }
 
@@ -4637,12 +4633,8 @@ export class AppState {
     // macOS and immediately triggers the orange mic indicator even without .play()).
     if (this.isMeetingActive) {
       await this.setupSystemAudioPipeline();
-      // Mic first: lazy mic start constructs the cpal input stream; do it
-      // before starting the CoreAudio system tap to avoid HAL contention.
-      this.microphoneCapture?.start();
-      this.googleSTT_User?.start();
-      this.systemAudioCapture?.start();
-      this.googleSTT?.start();
+      // Per-channel isolated start (F-105); mic first for HAL ordering.
+      this.startCaptureChannels('reconfigureSttProvider');
     }
 
     console.log('[Main] STT Provider reconfigured');
@@ -5397,6 +5389,55 @@ export class AppState {
     }
   }
 
+  /**
+   * Start the mic and system capture channels with per-channel failure
+   * isolation (F-105). MicrophoneCapture.start() rethrows by design (the
+   * native open is lazy and happens inside start()); running the four starts
+   * as one bare sequence meant a mic throw skipped the system channel AND
+   * every downstream step (live indexing, route watcher), leaving a
+   * wired-but-never-started capture that emits no 'start' — so the stuck
+   * watchdog never armed and the whole meeting sat dead behind one generic
+   * banner. Live-reproduced in scripts/audit/F-105-repro.mjs.
+   *
+   * Mic first — the lazy mic start constructs the cpal input stream; doing it
+   * before the CoreAudio tap avoids HAL contention (same ordering invariant
+   * as every call site this replaces).
+   */
+  private startCaptureChannels(context: string): { mic: boolean; system: boolean } {
+    const started = { mic: false, system: false };
+    try {
+      this.microphoneCapture?.start();
+      this.googleSTT_User?.start();
+      started.mic = true;
+    } catch (err) {
+      console.error(`[Main] ${context}: mic channel failed to start:`, err);
+      this.sendAudioCaptureFailed({
+        channel: 'mic',
+        message: `Microphone failed to start (${(err as Error)?.message || 'unknown error'}). Check that no other app holds the mic — the meeting continues with system audio only.`,
+        attempt: 0,
+        maxAttempts: 0,
+        terminal: true,
+        stuck: false,
+      });
+    }
+    try {
+      this.systemAudioCapture?.start();
+      this.googleSTT?.start();
+      started.system = true;
+    } catch (err) {
+      console.error(`[Main] ${context}: system channel failed to start:`, err);
+      this.sendAudioCaptureFailed({
+        channel: 'system',
+        message: `System audio failed to start (${(err as Error)?.message || 'unknown error'}). The meeting continues with microphone only.`,
+        attempt: 0,
+        maxAttempts: 0,
+        terminal: true,
+        stuck: false,
+      });
+    }
+    return started;
+  }
+
   public async startMeeting(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
 
@@ -5633,20 +5674,12 @@ export class AppState {
           userSttOwnedByInit = this.googleSTT_User;
           ragManagerOwnedByInit = this.ragManager;
 
-          // Start Microphone FIRST. MicrophoneCapture is lazy-init: start()
-          // constructs the cpal input stream. If we start the CoreAudio system
-          // tap first, cpal can hang inside build_input_stream while the aggregate
-          // device IO proc is already active (observed: logs stop after
-          // `[Microphone] Device: ...`). Keep launch-time mic discipline by
-          // staying lazy, but restore the pre-fix HAL ordering inside meetings.
-          this.microphoneCapture?.start();
-          this.googleSTT_User?.start();
-          userSttStartedByInit = true;
-
-          // Start System Audio after the mic stream has been constructed.
-          this.systemAudioCapture?.start();
-          this.googleSTT?.start();
-          systemSttStartedByInit = true;
+          // Per-channel isolated start (F-105) — mic first for the HAL
+          // ordering invariant; a mic failure no longer prevents the system
+          // channel, live indexing, or the route watcher from starting.
+          const channelsStarted = this.startCaptureChannels('startMeeting');
+          userSttStartedByInit = channelsStarted.mic;
+          systemSttStartedByInit = channelsStarted.system;
         } else {
           console.log('[Main] Ambient AI Chat enabled — skipping mic/system audio capture and STT for this session.');
         }
