@@ -2288,6 +2288,36 @@ export class AppState {
     });
   }
 
+  /**
+   * Send `model-changed` to the windows that actually listen for it.
+   *
+   * Two of them: the overlay (NativelyInterface renders the active model) and
+   * the model selector (it highlights the current row before it closes).
+   * Everything else on screen ignores the channel, and `broadcast()` reached all
+   * of them — the revert path's own comment calls this out, that the
+   * "'model-changed' broadcast re-renders all open windows" and had to be pushed
+   * into the background so it would not stutter the Stop click. Addressing the
+   * two real listeners removes the cost instead of hiding it.
+   *
+   * Deduped by window id: the overlay and the model selector are distinct
+   * windows today, but the helpers are free to return the same one (or the same
+   * window twice through different accessors), and a double send makes the
+   * renderer re-render twice for one change.
+   */
+  public sendModelChanged(modelId: string): void {
+    const targets = [
+      this.getWindowHelper().getOverlayWindow(),
+      this.modelSelectorWindowHelper.getWindow(),
+    ];
+    const seen = new Set<number>();
+    for (const win of targets) {
+      if (!win || win.isDestroyed()) continue;
+      if (seen.has(win.id)) continue;
+      seen.add(win.id);
+      this.sendToWindow(win, 'model-changed', modelId);
+    }
+  }
+
   public getIsMeetingActive(): boolean {
     return this.isMeetingActive;
   }
@@ -5924,9 +5954,7 @@ export class AppState {
           const all = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])];
           console.log(`[Main] Reverting model to default: ${defaultModel}`);
           this.processingHelper.getLLMHelper().setModel(defaultModel, all);
-          BrowserWindow.getAllWindows().forEach(win => {
-            this.sendToWindow(win, 'model-changed', defaultModel);
-          });
+          this.sendModelChanged(defaultModel);
         } catch (e) {
           console.error('[Main] Failed to revert model:', e);
         }

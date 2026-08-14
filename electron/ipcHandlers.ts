@@ -273,7 +273,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       cm.setDefaultModel(next);
       llmHelper.setModel(next, allProviders);
-      appState.broadcast('model-changed', next);
+      // Same two listeners as every other model change. Converted alongside the
+      // rest rather than left as the one surviving broadcast — an untargeted
+      // straggler is how this class of fix keeps coming back.
+      appState.sendModelChanged(next);
       return next;
     } catch (error: any) {
       console.warn('[IPC] default model availability refresh failed:', error?.message || error);
@@ -6598,7 +6601,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const defaultModel = cm.getDefaultModel();
       const providers = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])];
       llmHelper.setModel(defaultModel, providers);
-      appState.broadcast('model-changed', defaultModel);
+      appState.sendModelChanged(defaultModel);
 
       // If setNativelyApiKey auto-promoted the STT provider to 'natively', reconfigure
       // the audio pipeline immediately — without this, the in-memory pipeline still uses
@@ -8670,7 +8673,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         llmHelper.prewarmPromptCache().catch((_e: any): void => {});
       }
 
-      appState.broadcast('model-changed', modelId);
+      appState.sendModelChanged(modelId);
 
       // Close the selector window if open
       appState.modelSelectorWindowHelper.hideWindow();
@@ -8702,7 +8705,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         llmHelper.prewarmPromptCache().catch((_e: any): void => {});
       }
 
-      appState.broadcast('model-changed', modelId);
+      appState.sendModelChanged(modelId);
 
       // Close the selector window if open
       appState.modelSelectorWindowHelper.hideWindow();
