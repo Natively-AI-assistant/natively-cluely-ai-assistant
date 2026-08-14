@@ -2838,12 +2838,18 @@ if (!shouldSkipModeInjection) {
     // (2) retrievalOptions.forceDocumentGrounding is finally threaded, so the
     // wrapper's doc-grounded hybrid branch (fine chunking + identity-block
     // merge) actually fires here — the old 5-arg call left retrievalOptions
-    // undefined and silently ran the generic path. budgetMs: null is
-    // deliberate — this site is not on the streaming deadline; see the module
-    // doc for the documented race-budget asymmetry with streamChat.
+    // undefined and silently ran the generic path.
+    //
+    // BUDGET: doc-grounded keeps budgetMs: null — this site is not on the
+    // streaming deadline and the answer depends on the documents the user
+    // uploaded. The RERANK-ONLY path, newly reachable here since eligibility
+    // widened to include the ragLocalRerank flag, is an optional quality boost
+    // and must not be able to block a manual answer on a cold embedder +
+    // cross-encoder load, so it gets a generous ceiling instead of no race at
+    // all. See the module doc for the race-budget asymmetry with streamChat.
     {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { shouldUseHybridRetrieval, runHybridModeRetrieval } = require('./llm/modeHybridEligibility');
+      const { shouldUseHybridRetrieval, runHybridModeRetrieval, MANUAL_HYBRID_RERANK_BUDGET_MS } = require('./llm/modeHybridEligibility');
       if (shouldUseHybridRetrieval({ forceDocumentGrounding })) {
         try {
           const { block } = await runHybridModeRetrieval(modesMgr, {
@@ -2853,7 +2859,7 @@ if (!shouldSkipModeInjection) {
             forceDocumentGrounding,
             pinnedModeId: routeOptions?.pinnedModeId ?? undefined,
             followUpReferentHint: routeOptions?.followUpReferentHint,
-            budgetMs: null,
+            budgetMs: forceDocumentGrounding ? null : MANUAL_HYBRID_RERANK_BUDGET_MS,
           });
           if (block && block.trim()) {
             modeContextBlock = block;

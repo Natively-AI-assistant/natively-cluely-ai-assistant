@@ -1432,11 +1432,46 @@ export class DatabaseManager {
             const maxRows = opts?.maxRows ?? 10_000;
             const total = (this.db.prepare(`SELECT COUNT(*) AS n FROM usage_outbox`).get() as any)?.n ?? 0;
             if (total >= maxRows) {
-                const victim = this.db.prepare(
-                    `SELECT event_id FROM usage_outbox WHERE status != 'delivered' ORDER BY created_at ASC LIMIT 1`
-                ).get() as any;
-                if (!victim) return 'dropped';
-                this.db.prepare(`DELETE FROM usage_outbox WHERE event_id = ?`).run(victim.event_id);
+                // Make room for exactly one new row.
+                //
+                // ORDER MATTERS. `total` counts EVERY row, but delivered rows are
+                // deliberately retained for a 7-day support window and compaction
+                // only runs on a 6-hour timer — so in a normal desktop session the
+                // table fills with delivered rows. Evicting only `status != 'delivered'`
+                // (the previous behaviour) meant a table of 9,999 delivered rows
+                // destroyed the one live event on every insert, and once EVERY row
+                // was delivered there was no victim at all and the incoming event was
+                // dropped before the INSERT — permanently, for every later event.
+                // Both are the exact loss this file's header forbids.
+                //
+                // Delivered rows are already safely upstream, so reclaiming them
+                // costs nothing. An undelivered event is sacrificed only when no
+                // delivered row remains to give up.
+                const surplus = total - maxRows + 1;
+                const freed = this.db.prepare(`
+                    DELETE FROM usage_outbox WHERE event_id IN (
+                        SELECT event_id FROM usage_outbox
+                         WHERE status = 'delivered'
+                         ORDER BY created_at ASC LIMIT ?
+                    )
+                `).run(surplus).changes ?? 0;
+                if (freed < surplus) {
+                    const sacrificed = this.db.prepare(`
+                        DELETE FROM usage_outbox WHERE event_id IN (
+                            SELECT event_id FROM usage_outbox
+                             WHERE status != 'delivered'
+                             ORDER BY created_at ASC LIMIT ?
+                        )
+                    `).run(surplus - freed).changes ?? 0;
+                    // Losing an undelivered event IS the loss this queue exists to
+                    // prevent. It must never be silent — the previous code evicted
+                    // one and still returned 'queued', so nothing counted it.
+                    if (sacrificed > 0) {
+                        console.warn(`[DatabaseManager] usage_outbox at cap (${maxRows}) — discarded ${sacrificed} UNDELIVERED event(s) to enqueue a new one`);
+                    }
+                }
+                // Deliberately fall through to the INSERT even if nothing could be
+                // freed: bounding the table is worth less than the incoming event.
             }
             const res = this.db.prepare(`
                 INSERT OR IGNORE INTO usage_outbox (event_id, layer, payload_json, status, created_at, next_retry_at)

@@ -51,10 +51,28 @@ export function shouldUseHybridRetrieval(ctx: HybridEligibilityCtx): boolean {
 }
 
 /** streamChat's race budget: doc-grounded gets 2000ms (cold embedder + large
- *  PDFs), everything else 1000ms. chatWithGemini passes budgetMs: null. */
+ *  PDFs), everything else 1000ms. */
 export function hybridRetrievalBudgetMs(forceDocumentGrounding: boolean): number {
   return forceDocumentGrounding ? 2000 : 1000;
 }
+
+/**
+ * chatWithGemini's ceiling for the RERANK-ONLY path.
+ *
+ * That site is not on the streaming deadline, so doc-grounded still awaits to
+ * completion (budgetMs: null) — the user uploaded those documents and the answer
+ * depends on them; truncating that is worse than waiting.
+ *
+ * The rerank-only path is different in kind: it became reachable here when
+ * eligibility widened to `isRagLocalRerankEnabled() || forceDocumentGrounding`,
+ * and it is an OPTIONAL quality boost, not a correctness requirement. Awaiting it
+ * unbounded lets a cold embedder + cross-encoder load block a manual answer for
+ * as long as the load takes. The ceiling is deliberately generous rather than
+ * streamChat's 1000ms: it exists to stop a pathological hang, not to change the
+ * normal result, so benchmark runs (where ragLocalRerank is actually on) still
+ * complete on the rerank path rather than silently dropping to lexical.
+ */
+export const MANUAL_HYBRID_RERANK_BUDGET_MS = 8000;
 
 export interface HybridRetrievalArgs {
   query: string;

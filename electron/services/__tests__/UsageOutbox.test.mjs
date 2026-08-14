@@ -53,6 +53,57 @@ describe('usage outbox (v27)', { skip: HAVE_BUILD ? false : 'run `npm run build:
     } catch { /* ignore */ }
   });
 
+  // ── Row cap: the cap must never destroy undelivered events ────────────────
+  //
+  // REGRESSION (code review, 2026-08-14). `total` counts EVERY row, but the
+  // eviction only ever targeted `status != 'delivered'`. Delivered rows are
+  // retained for a 7-day support window and compaction runs on a 6-hour timer,
+  // so in a normal session the table fills with delivered rows — and the cap
+  // then destroyed the live events while every delivered row survived. Once
+  // ALL rows were delivered there was no victim at all and the incoming event
+  // was dropped BEFORE the INSERT, permanently, for every later event.
+  describe('row cap eviction order', () => {
+    test('a table full of DELIVERED rows never costs an undelivered event', () => {
+      const MAX = 10;
+      // 9 delivered + 1 pending == MAX. The next enqueue must reclaim a
+      // delivered row and keep BOTH undelivered events.
+      const delivered = [];
+      for (let i = 0; i < 9; i++) {
+        const id = `cap-delivered-${i}`;
+        assert.equal(db.enqueueUsageEvent(id, 'telemetry', { i }, { maxRows: MAX }), 'queued');
+        delivered.push(id);
+      }
+      db.markUsageEventsDelivered(delivered);
+      assert.equal(db.enqueueUsageEvent('cap-live-1', 'ledger', { keep: 1 }, { maxRows: MAX }), 'queued');
+
+      const before = db.getUsageOutboxStats();
+      assert.equal(before.pending, 1, 'the live event should be queued');
+
+      assert.equal(db.enqueueUsageEvent('cap-live-2', 'ledger', { keep: 2 }, { maxRows: MAX }), 'queued');
+
+      const pending = db.claimUsageOutboxBatch(1000, Date.now() + 10 ** 12).map((r) => r.event_id);
+      assert.ok(pending.includes('cap-live-1'), 'the earlier undelivered event must survive — a delivered row should have been evicted instead');
+      assert.ok(pending.includes('cap-live-2'), 'the incoming undelivered event must be stored');
+      assert.ok(db.getUsageOutboxStats().total <= MAX, 'the cap must still bound the table');
+    });
+
+    test('a table of ONLY delivered rows still accepts the incoming event', () => {
+      const MAX = 5;
+      const ids = [];
+      for (let i = 0; i < MAX; i++) {
+        const id = `cap-all-delivered-${i}`;
+        assert.equal(db.enqueueUsageEvent(id, 'telemetry', { i }, { maxRows: MAX }), 'queued');
+        ids.push(id);
+      }
+      db.markUsageEventsDelivered(ids);
+      // Previously: victim query found nothing (every row delivered) and the
+      // method returned 'dropped' before the INSERT — the event was gone.
+      assert.equal(db.enqueueUsageEvent('cap-after-full', 'ledger', { keep: true }, { maxRows: MAX }), 'queued');
+      const pending = db.claimUsageOutboxBatch(1000, Date.now() + 10 ** 12).map((r) => r.event_id);
+      assert.ok(pending.includes('cap-after-full'), 'the incoming event must not be dropped when only delivered rows occupy the cap');
+    });
+  });
+
   test('the v27 migration ran and the table exists', () => {
     assert.equal(db.isAvailable(), true, db.getInitError()?.message ?? 'db unavailable');
     const stats = db.getUsageOutboxStats();

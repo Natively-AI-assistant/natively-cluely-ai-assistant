@@ -155,6 +155,11 @@ export class UsageOutbox {
             if (this.timer) return;
             this.timer = setInterval(() => { void this.dispatchOnce(); }, DISPATCH_INTERVAL_MS);
             this.timer.unref?.();
+            // Compact ONCE at startup, not only every COMPACT_EVERY_MS. A desktop
+            // session shorter than the interval otherwise never compacts at all,
+            // so delivered rows accumulate across sessions until they fill the
+            // enqueue cap — which is a real event-loss path, not just disk use.
+            try { DatabaseManager.getInstance().compactUsageOutbox(); } catch { /* best effort */ }
             this.compactTimer = setInterval(() => {
                 try { DatabaseManager.getInstance().compactUsageOutbox(); } catch { /* best effort */ }
             }, COMPACT_EVERY_MS);
