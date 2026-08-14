@@ -166,7 +166,13 @@ describe('FIX: manual-chat and WTA short-circuits prefer the specific legacy mes
     // decision before falling through to the kernel's generic builder.
     const shortCircuitStart = ipcSource.indexOf("turnContract.sourceOwner === 'clarify'");
     assert.ok(shortCircuitStart >= 0, 'clarification short-circuit not found');
-    const shortCircuitBlock = ipcSource.slice(shortCircuitStart, shortCircuitStart + 2500);
+    // 6000, not 2500. The expression asserted below now begins at offset ~2418
+    // from the anchor — the comment above it grew while documenting WHY the
+    // legacy resolver's specific message beats the kernel's generic one — so a
+    // 2500-char window sliced through the middle of the very ternary it was
+    // matching and the assertion could never pass. Sized with headroom so the
+    // next paragraph of rationale does not silently break it again.
+    const shortCircuitBlock = ipcSource.slice(shortCircuitStart, shortCircuitStart + 6000);
     assert.match(
       shortCircuitBlock,
       /manualOwnership\?\.shouldClarifyInsteadOfProfile\s*\?\s*require\('\.\/llm\/sourceOwnership'\)\.buildSourceSwitchClarification\(manualOwnership\.owner\)\s*:\s*buildSourceClarification/,

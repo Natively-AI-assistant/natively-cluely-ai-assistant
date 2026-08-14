@@ -490,11 +490,22 @@ describe('Context OS — multi-family coordinator admission predicate (2026-07-1
     }
   });
 
-  test('coordinator throw → legacy path resets coordinatorGovernedProfileEvidence and manualContextOsGeneration', async () => {
-    // Drive the real TurnEvidenceCoordinator with a resolver that throws, then
-    // assert the contract documented at ipcHandlers.ts:2325-2332 — the catch
-    // must reset both `coordinatorGovernedProfileEvidence` to `false` and
-    // `manualContextOsGeneration` to `null`, and must NOT crash the handler.
+  test('coordinator fails CLOSED when reference retrieval throws — refusal pack, no partial evidence', async () => {
+    // REWRITTEN. This asserted that `resolve()` THROWS and that the handler's
+    // catch resets the governed flag — but it only ever set two local variables
+    // inside its own try/catch, so it passed or failed on the test's own control
+    // flow and never touched production behaviour.
+    //
+    // The coordinator no longer throws here, deliberately: it moved from
+    // Promise.all to Promise.allSettled so a failing REFERENCE retriever cannot
+    // discard evidence the PROFILE retriever already returned — the file header's
+    // contract that "either retriever has no authority over the other source
+    // family", which Promise.all violated on the failure path.
+    //
+    // It is still fail-closed, just expressed as a refusal pack instead of an
+    // exception. That is the contract worth pinning, and this now checks the real
+    // returned value: no items may leak through, and the policy must be a refusal
+    // so the caller cannot treat the turn as governed-with-evidence.
     const co = cjsRequire(path.resolve(repoRoot, 'dist-electron/electron/intelligence/context-os/index.js'));
     const contract = co.buildTurnContractForSurface({
       surface: 'manual_chat',
@@ -514,28 +525,31 @@ describe('Context OS — multi-family coordinator admission predicate (2026-07-1
       requiredEvidenceKinds: ['reference_files', 'profile_resume', 'projects', 'profile_jd'],
       allowedEvidenceKinds: ['reference_files', 'profile_resume', 'projects', 'profile_jd'],
     };
-    // Mirror the catch-block invariants: a thrown retrieval resets both the
-    // "coordinator governed this turn" flag and the populated pack.
-    let coordinatorGovernedProfileEvidence = false;
-    let manualContextOsGeneration = null;
-    try {
-      const { TurnEvidenceCoordinator } = co;
-      const coordinator = new TurnEvidenceCoordinator();
-      await coordinator.resolve({
-        decision,
-        contract,
-        retrieveReferenceEvidence: async () => { throw new Error('INJECTED_RETRIEVAL_THROW'); },
-        retrieveProfileEvidence: async () => ({ packId: 'p', turnId: contract.turnId, sourceOwner: contract.sourceOwner, requestedProperty: contract.requestedProperty, items: [], rejected: [], coverage: { hasDirectEvidence: false, propertySatisfied: false, entityMatched: false, sourceOwnerSatisfied: true, confidence: 0 }, conflicts: [], answerPolicy: 'answer' }),
-      });
-      // Should not reach here — coordinator is fail-closed on retrieval error.
-      manualContextOsGeneration = { contract, evidencePack: { items: [] }, govern: true };
-      coordinatorGovernedProfileEvidence = true;
-    } catch (_err) {
-      // Legacy fallback mirrors ipcHandlers.ts:2325-2332.
-      coordinatorGovernedProfileEvidence = false;
-      manualContextOsGeneration = null;
-    }
-    assert.equal(coordinatorGovernedProfileEvidence, false, 'a thrown retrieval must reset the governed flag');
-    assert.equal(manualContextOsGeneration, null, 'a thrown retrieval must reset the populated pack');
+    const { TurnEvidenceCoordinator } = co;
+    const coordinator = new TurnEvidenceCoordinator();
+    const result = await coordinator.resolve({
+      decision,
+      contract,
+      retrieveReferenceEvidence: async () => { throw new Error('INJECTED_RETRIEVAL_THROW'); },
+      retrieveProfileEvidence: async () => ({
+        packId: 'p', turnId: contract.turnId, sourceOwner: contract.sourceOwner,
+        requestedProperty: contract.requestedProperty, items: [], rejected: [],
+        coverage: { hasDirectEvidence: false, propertySatisfied: false, entityMatched: false, sourceOwnerSatisfied: true, confidence: 0 },
+        conflicts: [], answerPolicy: 'answer',
+      }),
+    });
+
+    assert.equal(
+      result.pack.answerPolicy, 'refuse_insufficient_evidence',
+      'a thrown retrieval must produce a REFUSAL pack — anything else lets the turn answer ungrounded',
+    );
+    assert.equal(result.pack.items.length, 0, 'no partial evidence may survive a failed retrieval');
+    assert.ok(
+      result.failures.some((f) => f.family === 'reference_files'),
+      'the failing family must be reported so the caller can fall back to the legacy path',
+    );
+    // The caller's own contract (ipcHandlers): a refusal pack must NOT be treated
+    // as a governed generation context.
+    assert.notEqual(result.pack.answerPolicy, 'answer');
   });
 });
