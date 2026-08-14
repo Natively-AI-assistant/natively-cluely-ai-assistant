@@ -2,8 +2,9 @@
 
 **Date:** 2026-08-14
 **Branch:** `chore/ts7-upgrade`
-**Status:** **Phases 1–3 complete. TypeScript 7.0.2 is the primary type-checker.**
-One gate deliberately not executed: `npm run dist` — see §14.
+**Status:** **Migration complete to the limit TypeScript 7.0 allows.** Check, build and emit all run
+TS 7.0.2. `typescript` 5.x remains installed for API-consuming tooling only — an external blocker
+proven in §16, not a choice. One gate deliberately not executed: `npm run dist` — see §14.
 **Companion:** `docs/ts7-upgrade-audit.md` (Phase 0)
 
 ---
@@ -21,7 +22,14 @@ Two things did not go to plan and are documented rather than smoothed over:
 Phase 1 halted on a conflict I created (four tests use tsc *for emit*; §5), and the two "deferred"
 findings turned out to **break `npm run dist`**, so they had to be resolved rather than parked (§7).
 
+**Every TypeScript path in this repo now runs TS 7.0.2** — type-checking (`npm run build`,
+`typecheck:electron`) and the one place tsc still emits (§5). Nothing in the build pipeline uses TS 5.x.
+
 **TS 7 is not faster here** — 0.477 s vs 0.461 s on 1317 files. Measured, §12.
+
+**The last step — replacing `typescript` itself — is externally blocked, and §16 proves it rather than
+asserting it:** `require('typescript@7.0.2')` returns `{ version, versionMajorMinor }`. Two keys.
+TS 5.9.3 returns 2244. TS 7.0's main entry exposes *only the version string*.
 
 ---
 
@@ -422,20 +430,46 @@ print, so it was checked two further ways:
 
 The negative control is the one that matters — it proves the TS 7 step can still fail the build.
 
+### 11.1 The emit path moved to TS 7 too
+
+`electron/tsconfig.emit.json` now uses `moduleResolution: "bundler"` and the four isolated-tree tests
+invoke `node_modules/typescript7/bin/tsc`. This closed follow-up (f) earlier than planned because a
+probe, not an assumption, showed it was possible: **`module: "CommonJS"` + `moduleResolution: "bundler"`
+is accepted by TS 7.0.2 and rejected by TS 5.9.3 (`TS5095`)** — TS 7 relaxed that rule. So the emit
+config no longer depends on `node10`, which TS 7 removed.
+
+Verified: TS 7 emits requireable CommonJS (`"use strict"`, no `import`), and the four tests return
+**identical** results to the TS 5.x emit they used before (2/5, 18/6, 7/0, 14/1) — a clean A/B proving
+the residual failures there are the pre-existing / other-task ones already classified, not a consequence
+of changing emitters.
+
 ---
 
 ## 12. Follow-ups
 
-| | Item |
+| | Item | State |
+|---|---|---|
+| a | `natively-premium` strict migration — 20 findings | **Open** — separate private repo, cannot be done from here |
+| b | Remove the dead `gpu-process-crashed` listeners after runtime verification on both platforms | **Open by instruction** — decision 2 said keep them; removal is a behaviour change |
+| c | Replace `typescript` itself with 7.x and drop the `typescript7` alias | **Blocked externally — see §16** |
+| d | `renderer/` is vestigial | **Open by instruction** — decision 5 said do not touch. Confirmed dead: 0 references in package scripts, vite config or workflows. It is the ONLY tsconfig in the repo that is not TS7-legal (`target: es5`, `moduleResolution: node`) |
+| e | Type `getKnowledgeOrchestrator()` properly | **Open, deliberately out of scope** — it is `: any` backed by `private knowledgeOrchestrator: any`, with 10+ call sites across `ipcHandlers`/`main`/`LLMHelper` freely reading arbitrary members. That is a codebase-wide typing project, not a compiler-migration step. Nothing was added to this debt: the `Record<string, any>` in §1 *narrows* the existing `any` |
+| f | Emit config `moduleResolution` → `"bundler"` | ✅ **Done** (§5, §11.1) |
+| g | Retire `typecheck:ts5*` and the CI insurance step | **Intentionally deferred** — the brief asked for one release cycle of overlap |
+| h | `LLMHelper.streamWithNatively`'s fragile `response` invariant (§7.1) | **Open** — documented at the declaration |
+
+---
+
+## 12.1 Which TypeScript runs what, after this work
+
+| Path | Compiler |
 |---|---|
-| a | `natively-premium` strict migration — 20 findings, separate repo (audit §7.2) |
-| b | Remove the `gpu-process-crashed` listeners after runtime verification on **both** platforms — the event is dead on Electron 43 (audit §4.4) |
-| c | Drop the `typescript7` alias and move `typescript` itself to 7.x once `react-doctor`, `typescript-eslint` and `tap` support it (TS 7.1 API era) |
-| d | `renderer/` is vestigial — clean up or delete (audit §6.3) |
-| e | Type `getKnowledgeOrchestrator()` properly, then drop the `PromptAssemblyResult` type-import and the `Record<string, any>` in the orchestrator annotation |
-| f | Once the emit path runs on TS 7, change `electron/tsconfig.emit.json`'s `moduleResolution` to `"bundler"` — **measured** as legal on TS 7.0.2, rejected on 5.9.3 (§5) |
-| g | Retire `typecheck:ts5*` and the CI insurance step next cycle |
-| h | `LLMHelper.streamWithNatively`'s fragile `response` invariant (§7.1) |
+| `npm run build` (renderer type-check) | **TS 7.0.2** |
+| `npm run typecheck:electron` | **TS 7.0.2** |
+| `electron/tsconfig.emit.json` (the 4 isolated-tree tests) | **TS 7.0.2** |
+| `dist` / `dist-electron` emit | esbuild + vite (unchanged, never tsc) |
+| `typecheck:ts5*` | TS 5.9.3 — deliberate fallback, follow-up (g) |
+| `react-doctor`, `typescript-eslint`, `@tapjs/test` | TS 5.9.3 — **forced**, §16 |
 
 ---
 
@@ -495,7 +529,71 @@ npm run test:scripts          node --test <individual guard test files>
 ./node_modules/.bin/tsc -p electron/tsconfig.json --noEmit  (iteratively, ~12x)
 ./node_modules/.bin/esbuild --loader=ts  (syntax-checking reconstructed blobs)
 node scripts/build-electron.js --watch   (smoke)
+
+# phases 2-4
+npm i -D typescript7@npm:typescript@7.0.2 --ignore-scripts
+npm run typecheck:ts7 / typecheck:ts7:electron / typecheck:ts5:electron
+node node_modules/typescript7/bin/tsc -p <every in-repo tsconfig> --noEmit
+node node_modules/typescript7/bin/tsc -p tsconfig.json --noEmit --listFiles   (482 files)
+node node_modules/typescript7/bin/tsc -p electron/tsconfig.emit.json --outDir <tmp>  (CJS emit proof)
+node -e "Object.keys(require('typescript7'))"   (API-absence proof, §16.1)
+npm view react-doctor|typescript-eslint|tap version + peerDependencies.typescript   (§16.2)
 ```
 
 Not run, and not claimed: `npm run dist`, `npm run test:intelligence`, any Windows execution,
 any packaged-app smoke test.
+
+---
+
+## 16. Why `typescript` itself cannot go to 7.x yet
+
+This is the only part of the migration left, and it is blocked outside this repo. Two independent
+measurements, not inference:
+
+### 16.1 TypeScript 7.0 ships no stable programmatic API
+
+```
+node -e "const ts=require('typescript7'); console.log(Object.keys(ts))"
+  ->  [ 'version', 'versionMajorMinor' ]
+
+node -e "const ts=require('typescript');  console.log(Object.keys(ts).length)"
+  ->  2244
+```
+
+TS 7.0's `exports` map points `"."` at `./lib/version.cjs` — **the main entry is the version string and
+nothing else.** The real surface is namespaced `./unstable/sync`, `./unstable/ast`, … and is labelled
+unstable on purpose; the stable API is slated for 7.1.
+
+Any tool that calls `require('typescript').createProgram(...)` does not degrade under TS 7 — it breaks
+outright. `createProgram` and `createSourceFile` are both `undefined`.
+
+### 16.2 No consumer in this repo supports TS 7 yet — checked against *latest*, not installed
+
+| Package | Latest on npm | TypeScript range |
+|---|---|---|
+| `react-doctor` | 0.9.12 | dependency `>=5.0.4 <6` |
+| `typescript-eslint` | 8.67.0 | peer `>=4.8.4 <6.1.0` |
+| `@typescript-eslint/parser` | 8.67.0 | peer `>=4.8.4 <6.1.0` |
+| `@typescript-eslint/eslint-plugin` | 8.67.0 | peer `>=4.8.4 <6.1.0` |
+
+Upgrading them does not help — even the newest releases cap below TS 6, let alone 7, which follows
+directly from 16.1.
+
+`react-doctor` is the sharp edge: it runs in `.husky/pre-commit`, so breaking it breaks **every commit
+by everyone in this repo**, not just this branch.
+
+### 16.3 Therefore
+
+**The `typescript7` alias is the complete migration for TS 7.0.** It is the pattern TypeScript itself
+recommends for this window: TS 7 does the checking, the bundler does the emit, and the TS 5.x package
+survives purely to feed tools that read the compiler API.
+
+**The remaining step, when TS 7.1 ships the stable API and the tools adopt it:**
+
+1. `npm i -D typescript@7` (drop the `typescript7` alias)
+2. Point `typecheck:*` and `build` at plain `tsc`
+3. Delete `typecheck:ts5*` and the CI insurance step (follow-up g)
+4. Re-run this report's gate table
+
+Nothing else in the repo needs to change — every tsconfig on a build path is already TS7-legal, and
+the emit config already uses a pairing only TS 7 accepts.
