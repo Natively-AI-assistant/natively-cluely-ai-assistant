@@ -1,0 +1,515 @@
+/* src/components/ReviewModal.css
+   Obsidian editorial — the in-app review modal.
+
+   Co-located with the component and imported from it rather than living in
+   index.css. index.css is edited concurrently by other work in this repo and
+   these rules were twice reverted out from under the component, which renders
+   the modal invisible (every class resolves to nothing). Keeping them next to
+   their only consumer removes that whole class of failure, and Vite bundles a
+   component-level CSS import identically.
+
+   The composition is a two-column plate, not a stacked card: a near-black left
+   plate carries the step's "cover" (a display numeral tracking the live
+   rating, a pull-quote mark, a seal); the right column carries the editorial
+   copy and the controls. No header bar — the close glyph floats over the
+   plate. Every selector is namespaced .review-* so nothing leaks. */
+
+.review-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: radial-gradient(ellipse 90% 70% at 50% 42%, rgba(28, 22, 12, 0.82) 0%, rgba(0, 0, 0, 0.9) 100%);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+}
+
+.review-modal-viewport {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  pointer-events: none;
+}
+
+/* Numeric-height endpoints only — `auto` is not an animatable value, so the
+   component measures the active step and feeds pixels in. */
+.review-modal-shell {
+  position: relative;
+  width: 100%;
+  max-width: 616px;
+  overflow: hidden;
+  border: 1px solid rgba(214, 178, 106, 0.15);
+  /* Generous shell curve. `overflow: hidden` clips the left plate to match, so
+     the plate needs no radius of its own on either breakpoint. */
+  border-radius: 26px;
+  background: #0b0a09;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 44px 120px -34px rgba(0, 0, 0, 0.94),
+    0 8px 28px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+  transition: height 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Grain. Above the plate fills, below the content. */
+.review-modal-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px;
+}
+
+.review-modal-ambient {
+  position: absolute;
+  top: -40%;
+  left: -10%;
+  z-index: 0;
+  width: 60%;
+  height: 180%;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(214, 178, 106, 0.13) 0%, transparent 68%);
+  animation: review-ambient 9s ease-in-out infinite;
+}
+
+.review-modal-measure {
+  position: relative;
+  z-index: 2;
+}
+
+.review-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 4;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.32);
+  background: transparent;
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+.review-close:hover:not(:disabled) { background: rgba(248, 113, 113, 0.1); }
+.review-close:hover:not(:disabled) { color: #f87171; }
+.review-close:focus-visible { outline: 1px solid rgba(214, 178, 106, 0.6); outline-offset: 2px; }
+.review-close:disabled { opacity: 0.3; cursor: default; }
+
+/* ── The two-column grid. Each step sets its own left-plate width. ─────── */
+.review-grid { display: grid; align-items: stretch; }
+.review-grid-review { grid-template-columns: 186px 1fr; }
+.review-grid-credit { grid-template-columns: 186px 1fr; }
+
+/* The receipt is a centred single column, not the plate grid — see StepThanks.
+   A terminal state has one short message; the plate left a lone seal adrift in
+   an empty half. This is also the third distinct silhouette in the flow. */
+.review-receipt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 52px 32px 46px;
+  text-align: center;
+}
+.review-receipt-headline {
+  margin: 22px 0 0;
+  color: #f2ede4;
+  font-family: CelebMF, var(--font-system);
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+.review-receipt-note {
+  margin: 20px 0 0;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+/* Shown instead of the byline when attribution never ran — see StepThanks. */
+.review-receipt-only {
+  max-width: 340px;
+  margin: 14px 0 0;
+  color: rgba(255, 255, 255, 0.44);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* The byline is the payload: show the exact string that will be published. */
+.review-byline {
+  max-width: 380px;
+  margin: 9px 0 0;
+  color: #d6b26a;
+  font-family: CelebMF, var(--font-system);
+  font-size: 19px;
+  letter-spacing: -0.012em;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+/* ── Left plate ────────────────────────────────────────────────────────── */
+.review-plate {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* Content stacks from the top; the caption is pushed down by its own
+     `margin-top: auto` so it still sits on the floor without space-between
+     stranding the figure in the middle. */
+  padding: 26px 22px;
+  border-right: 1px solid rgba(214, 178, 106, 0.13);
+  background: linear-gradient(168deg, #131110 0%, #080706 100%);
+}
+.review-plate-eyebrow {
+  color: rgba(214, 178, 106, 0.62);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  line-height: 1.4;
+}
+/* Anchored just under the eyebrow, NOT stretched. With `flex: 1 1 auto` the
+   figure absorbed all the slack and space-between pushed the caption to the
+   floor, leaving a large dead void mid-plate — visible immediately once this
+   was actually rendered rather than reasoned about. */
+.review-plate-figure {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  margin-top: 18px;
+}
+/* Sits directly under the figure, not pinned to the plate floor. Anchoring it
+   at the bottom left a dead band through the plate's middle at every step —
+   only visible once rendered. Eyebrow → figure → caption now read as one
+   block, and the plate's height is free to follow the right column. */
+.review-plate-caption {
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.055em;
+}
+
+.review-numeral {
+  display: block;
+  color: #e8dcc4;
+  font-family: CelebMF, var(--font-system);
+  font-size: 92px;
+  font-weight: 500;
+  letter-spacing: -0.06em;
+  line-height: 0.82;
+  text-shadow: 0 0 46px rgba(214, 178, 106, 0.26);
+}
+
+/* Georgia FIRST, not CelebMF. CelebMF's “ is two narrow ticks — at 108px it
+   read as a pair of stray marks rather than a quotation mark. Georgia has a
+   true ball-terminal open-quote and ships on macOS and Windows alike. */
+.review-quote {
+  display: block;
+  margin-top: -34px;
+  color: rgba(214, 178, 106, 0.42);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 118px;
+  line-height: 1;
+}
+
+/* Sole hero of the receipt, so it carries more presence than a plate figure:
+   a double ring (border + spread shadow) reads as a wax seal / stamp. */
+.review-seal {
+  display: grid;
+  width: 62px;
+  height: 62px;
+  place-items: center;
+  border: 1px solid rgba(214, 178, 106, 0.45);
+  border-radius: 50%;
+  color: #e8dcc4;
+  background: radial-gradient(circle at 50% 34%, rgba(214, 178, 106, 0.22), rgba(214, 178, 106, 0.07));
+  box-shadow:
+    0 0 0 7px rgba(214, 178, 106, 0.06),
+    0 0 44px -8px rgba(214, 178, 106, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+/* ── Right column ──────────────────────────────────────────────────────── */
+.review-column {
+  display: flex;
+  flex-direction: column;
+  padding: 30px 30px 26px;
+}
+
+.review-headline {
+  margin: 0;
+  color: #f2ede4;
+  font-family: CelebMF, var(--font-system);
+  font-size: 27px;
+  font-weight: 500;
+  letter-spacing: -0.032em;
+  line-height: 1.12;
+}
+.review-standfirst {
+  margin: 10px 0 0;
+  max-width: 340px;
+  color: rgba(255, 255, 255, 0.44);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* Stars sit on a hairline rule, aligned left with the headline. */
+.review-rating-rail {
+  display: flex;
+  gap: 2px;
+  margin: 22px 0 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.review-star {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.17);
+  background: transparent;
+  cursor: pointer;
+  transition: color 130ms ease, background-color 130ms ease;
+}
+.review-star[data-filled] { color: #d6b26a; }
+.review-star[data-filled] svg { fill: currentColor; }
+.review-star:hover:not(:disabled) { background: rgba(214, 178, 106, 0.08); }
+.review-star:focus-visible { outline: 1px solid rgba(214, 178, 106, 0.65); outline-offset: -2px; }
+.review-star:disabled { cursor: default; }
+
+.review-note { position: relative; margin-top: 16px; }
+.review-note-input {
+  width: 100%;
+  padding: 0 30px 0 0;
+  border: 0;
+  color: #eae5dc;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: none;
+}
+.review-note-input::placeholder { color: rgba(255, 255, 255, 0.24); }
+.review-note-input:focus { outline: none; }
+.review-counter {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+.review-counter.is-close { color: #d6b26a; }
+
+/* Signature line — an input on a rule, not a boxed field. */
+.review-signature { position: relative; margin: 26px 0 0; }
+.review-signature-input {
+  width: 100%;
+  padding: 0 0 10px;
+  border: 0;
+  color: #f2ede4;
+  background: transparent;
+  font-family: CelebMF, var(--font-system);
+  font-size: 21px;
+  letter-spacing: -0.015em;
+}
+.review-signature-input::placeholder { color: rgba(255, 255, 255, 0.2); }
+.review-signature-input:focus { outline: none; }
+.review-signature-rule {
+  display: block;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: background-color 180ms ease;
+}
+.review-signature-input:focus + .review-signature-rule { background: rgba(214, 178, 106, 0.65); }
+
+.review-prefill {
+  align-self: flex-start;
+  margin-top: 12px;
+  padding: 0;
+  border: 0;
+  color: rgba(255, 255, 255, 0.36);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  transition: color 130ms ease;
+}
+.review-prefill strong { color: #d6b26a; font-weight: 550; }
+.review-prefill:hover { color: rgba(255, 255, 255, 0.6); }
+
+.review-error {
+  margin: 14px 0 0;
+  padding: 9px 13px;
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: 14px;
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.07);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* Actions pinned to the bottom of the column. */
+.review-actions { margin-top: auto; padding-top: 24px; }
+.review-choice { display: flex; gap: 8px; }
+
+.review-cta,
+.review-ghost {
+  display: inline-flex;
+  min-height: 40px;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  /* Pill. Half of min-height (40px) so the caps stay optically centred. */
+  border-radius: 999px;
+  padding: 0 22px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.review-cta {
+  color: #12100c;
+  background: #d6b26a;
+  box-shadow: 0 10px 30px -16px rgba(214, 178, 106, 0.9);
+}
+.review-cta:hover:not(:disabled) { background: #e6c884; }
+.review-cta:disabled {
+  cursor: not-allowed;
+  color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: none;
+}
+.review-ghost {
+  color: rgba(255, 255, 255, 0.72);
+  border-color: rgba(255, 255, 255, 0.15);
+  background: transparent;
+}
+.review-ghost:hover:not(:disabled) { color: #fff; border-color: rgba(255, 255, 255, 0.32); }
+.review-ghost:disabled { opacity: 0.45; cursor: default; }
+.review-cta:focus-visible,
+.review-ghost:focus-visible { outline: 1px solid rgba(214, 178, 106, 0.75); outline-offset: 2px; }
+
+.review-quiet-row { display: flex; gap: 18px; margin-top: 14px; }
+.review-quiet {
+  padding: 0;
+  border: 0;
+  color: rgba(255, 255, 255, 0.4);
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  transition: color 130ms ease;
+}
+.review-quiet.is-faint { color: rgba(255, 255, 255, 0.24); }
+.review-quiet:hover:not(:disabled) { color: rgba(255, 255, 255, 0.78); }
+.review-quiet:disabled { opacity: 0.4; cursor: default; }
+.review-quiet:focus-visible { outline: none; text-decoration: underline; }
+
+.review-fineprint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 0;
+  color: rgba(255, 255, 255, 0.26);
+  font-size: 10px;
+  letter-spacing: 0.01em;
+}
+
+/* F1: the explicit decline path — quiet, but a real focusable control, not
+   fine print. Sits between the send buttons and the privacy promise. */
+.review-decline {
+  margin: 10px 0 0;
+  padding: 2px 0;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.review-decline:hover:not(:disabled) { color: rgba(255, 255, 255, 0.7); }
+.review-decline:disabled { opacity: 0.4; cursor: default; }
+
+.review-spinner {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid;
+}
+.review-spinner-ink { border-color: rgba(0, 0, 0, 0.25); border-top-color: #12100c; }
+.review-spinner-ivory { border-color: rgba(255, 255, 255, 0.2); border-top-color: rgba(255, 255, 255, 0.85); }
+
+.review-thanks-timer {
+  width: 68px;
+  height: 2px;
+  margin-top: 30px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+}
+.review-thanks-countdown {
+  display: block;
+  height: 100%;
+  background: #d6b26a;
+  transform-origin: left center;
+  animation: review-countdown 5s linear forwards;
+}
+
+@keyframes review-ambient {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+@keyframes review-countdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-modal-shell { transition: none; }
+  .review-modal-ambient { animation: none; opacity: 0.75; }
+  .review-thanks-countdown { animation: none; transform: scaleX(1); }
+}
+
+@media (max-width: 620px) {
+  .review-grid-review,
+  .review-grid-credit { grid-template-columns: 1fr; }
+  .review-plate {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 22px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(214, 178, 106, 0.13);
+  }
+  .review-plate-figure { min-height: 0; justify-content: center; }
+  .review-numeral { font-size: 46px; }
+  .review-quote { margin-top: -14px; font-size: 54px; }
+  .review-column { padding: 24px 22px 22px; }
+  .review-headline { font-size: 23px; }
+  .review-choice { flex-direction: column; }
+  .review-receipt { padding: 44px 24px 38px; }
+  .review-receipt-headline { font-size: 26px; }
+  .review-byline { font-size: 17px; }
+}
