@@ -90,13 +90,7 @@ export const __resetProfileGroundingV2Cache = (): void => { cachedEnv = null; };
  * (see the P2 gotcha notes in this file's history).
  */
 export const isProfileGroundingV2JdFitCoverageEnabled = (): boolean => {
-  try {
-    const v = (process.env.PROFILE_GROUNDING_V2_JDFIT_COVERAGE || '').trim().toLowerCase();
-    if (v === 'off' || v === 'false' || v === '0' || v === 'disabled') return false;
-  } catch { /* fall through to settings */ }
-  try {
-    const { SettingsManager } = require('../services/SettingsManager');
-    if (SettingsManager.getInstance().get('profileGroundingV2JdFitCoverage') === false) return false;
-  } catch { /* settings unavailable → default ON */ }
-  return true;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { isKillSwitchFlagEnabled } = require('./runtimeKillSwitch');
+  return isKillSwitchFlagEnabled('PROFILE_GROUNDING_V2_JDFIT_COVERAGE', 'profileGroundingV2JdFitCoverage');
 };

@@ -24,11 +24,15 @@
 // back to legacy admission — enforcing an uncalibrated floor is worse than
 // not enforcing one.
 //
-// Flag: `semanticAdmissionGate`, DEFAULT OFF (opt-in).
-//   - env  NATIVELY_SEMANTIC_ADMISSION_GATE = 'on' | 'true' | '1' → enabled
-//   - settings  semanticAdmissionGate === true                    → enabled
+// Flag: `semanticAdmissionGate`, DEFAULT ON since 2026-08-14 (kill-switch
+// model — the calibrated-floor flip; see isSemanticAdmissionGateEnabled's doc
+// for the full contract):
+//   - env  NATIVELY_SEMANTIC_ADMISSION_GATE = 'off' | 'false' | '0' | 'disabled' → disabled
+//   - settings  semanticAdmissionGate === false                                  → disabled
 // Uncached by design (per-call string compare; caching is what makes env-flag
 // tests race — see the profileGroundingV2 P2 notes).
+
+import { isKillSwitchFlagEnabled } from './runtimeKillSwitch';
 
 /**
  * CALIBRATED floors (scripts/calibrate-semantic-floors.js, real embeddings,
@@ -64,17 +68,8 @@ const DEFAULT_SEMANTIC_FLOORS: Record<string, number> = {
  * legacy admission, so flipping this ON cannot over-reject on uncalibrated
  * corpora by construction.
  */
-export const isSemanticAdmissionGateEnabled = (): boolean => {
-  try {
-    const v = (process.env.NATIVELY_SEMANTIC_ADMISSION_GATE || '').trim().toLowerCase();
-    if (v === 'off' || v === 'false' || v === '0' || v === 'disabled') return false;
-  } catch { /* fall through to settings */ }
-  try {
-    const { SettingsManager } = require('../services/SettingsManager');
-    if (SettingsManager.getInstance().get('semanticAdmissionGate') === false) return false;
-  } catch { /* settings unavailable → default ON */ }
-  return true;
-};
+export const isSemanticAdmissionGateEnabled = (): boolean =>
+  isKillSwitchFlagEnabled('NATIVELY_SEMANTIC_ADMISSION_GATE', 'semanticAdmissionGate');
 
 /**
  * Resolve the cosine admission floor for an embedding space.
@@ -85,18 +80,33 @@ export const isSemanticAdmissionGateEnabled = (): boolean => {
  * over the defaults (rollback/tuning lever without a redeploy, mirroring
  * NATIVELY_GEMINI_EMBED_MODEL's role in EmbeddingProviderResolver).
  */
-export const resolveSemanticFloor = (spaceKey?: string | null): number | null => {
-  if (!spaceKey) return null;
-  let floors: Record<string, number> = DEFAULT_SEMANTIC_FLOORS;
+export const resolveSemanticFloor = (spaceKey?: string | null): number | null =>
+  resolveSpaceKeyedValue('NATIVELY_SEMANTIC_FLOORS', DEFAULT_SEMANTIC_FLOORS, spaceKey) ?? null;
+
+/**
+ * Shared env→JSON→merge resolver for space-keyed numeric config (code-review
+ * R4, 2026-08-14 — resolveSemanticFloor and resolveMinSimilarity had grown
+ * identical shapes). Returns undefined when the space has no value; each
+ * caller applies ITS OWN fallback — that difference is the contract:
+ * floors fall back to null (never enforce uncalibrated), minSimilarity falls
+ * back to the legacy 0.25 (vector search always had a threshold).
+ */
+const resolveSpaceKeyedValue = (
+  envVar: string,
+  defaults: Record<string, number>,
+  spaceKey?: string | null,
+): number | undefined => {
+  if (!spaceKey) return undefined;
+  let map: Record<string, number> = defaults;
   try {
-    const raw = (process.env.NATIVELY_SEMANTIC_FLOORS || '').trim();
+    const raw = (process.env[envVar] || '').trim();
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') floors = { ...DEFAULT_SEMANTIC_FLOORS, ...parsed };
+      if (parsed && typeof parsed === 'object') map = { ...defaults, ...parsed };
     }
   } catch { /* malformed override → defaults */ }
-  const floor = floors[spaceKey];
-  return typeof floor === 'number' && Number.isFinite(floor) ? floor : null;
+  const v = map[spaceKey];
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 };
 
 // ── Phase 3: space-aware minSimilarity for the meeting-RAG vector search ────
@@ -124,15 +134,6 @@ const MIN_SIMILARITY_BY_SPACE: Record<string, number> = {};
  * Config override: NATIVELY_MIN_SIMILARITY_BY_SPACE='{"<spaceKey>":0.2}'
  * merges over the defaults.
  */
-export const resolveMinSimilarity = (spaceKey?: string | null): number => {
-  let map: Record<string, number> = MIN_SIMILARITY_BY_SPACE;
-  try {
-    const raw = (process.env.NATIVELY_MIN_SIMILARITY_BY_SPACE || '').trim();
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') map = { ...MIN_SIMILARITY_BY_SPACE, ...parsed };
-    }
-  } catch { /* malformed override → defaults */ }
-  const v = spaceKey ? map[spaceKey] : undefined;
-  return typeof v === 'number' && Number.isFinite(v) ? v : DEFAULT_MIN_SIMILARITY;
-};
+export const resolveMinSimilarity = (spaceKey?: string | null): number =>
+  resolveSpaceKeyedValue('NATIVELY_MIN_SIMILARITY_BY_SPACE', MIN_SIMILARITY_BY_SPACE, spaceKey)
+    ?? DEFAULT_MIN_SIMILARITY;
