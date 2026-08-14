@@ -20,7 +20,7 @@ export type { TranscriptSegment, SuggestionTrigger, ContextItem } from './Sessio
 export type { IntelligenceMode, IntelligenceModeEvents } from './IntelligenceEngine';
 export type { DynamicAction } from './services/dynamic-actions/DynamicAction';
 
-export const GEMINI_FLASH_MODEL = "gemini-3.6-flash";
+export const GEMINI_FLASH_MODEL = "gemini-3.7-flash";
 export const GEMINI_FLASH_LITE_MODEL = "gemini-3.1-flash-lite";
 
 /**
@@ -155,6 +155,23 @@ export class IntelligenceManager extends EventEmitter {
 
     logUsage(type: string, question: string, answer: string): void {
         this.session.logUsage(type, question, answer);
+    }
+
+    /**
+     * Raw usage-entry passthrough, for callers that must set fields `logUsage`
+     * does not expose — today only `synthetic`, which excludes an entry from
+     * `SessionTracker.getRecentManualTurn` (and therefore from
+     * `buildRecentManualContext`'s prompt injection) while still persisting it
+     * to the Meeting Notes usage panel.
+     *
+     * Added 2026-08-14: a truncated manual-chat turn needs exactly that split —
+     * the call was made and must be billed/shown, but its partial answer must
+     * never be replayed into the next prompt as context. Without this proxy the
+     * call site's `im?.pushUsage?.(…)` optional-chained into a silent no-op and
+     * dropped the usage row altogether.
+     */
+    pushUsage(entry: any): void {
+        this.session.pushUsage(entry);
     }
 
     // ============================================

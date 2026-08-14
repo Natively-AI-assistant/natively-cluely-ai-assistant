@@ -8631,6 +8631,9 @@ Provide only the answer, nothing else.`;
                           if (currentModelDisplayName && currentModelDisplayName !== m) {
                             return currentModelDisplayName;
                           }
+                          if (m === 'gemini-3.7-flash') return 'Gemini 3.7 Flash';
+                          // Legacy id, still valid and still selectable from
+                          // persisted state — name it instead of showing the slug.
                           if (m === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
                           if (m === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
                           if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
