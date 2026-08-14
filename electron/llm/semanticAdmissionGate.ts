@@ -31,31 +31,49 @@
 // tests race — see the profileGroundingV2 P2 notes).
 
 /**
- * Provisional floors. TODO(Phase 3): calibrate from the observe-only
- * telemetry ([SemanticAdmission] lines) — these values are starting points,
- * not measurements.
+ * CALIBRATED floors (scripts/calibrate-semantic-floors.js, real embeddings,
+ * 2026-08-14 — 8 labeled queries × 12 profile-style nodes = 43 pairs, with
+ * boost-bait irrelevant nodes mirroring the audit-§5 failure shape):
  *
- * gemini-768: 0.55 — chosen so the floor sits where the old blended threshold
- * *pretended* to sit (a real cosine bar instead of a blended-scale constant).
- * local-384 (Xenova/all-MiniLM-L6-v2): TBD — deliberately ABSENT until
- * calibrated; MiniLM cosine distributions are wider than Gemini's and a
- * copied 0.55 would over-reject. Absent ⇒ resolveSemanticFloor → null ⇒
- * legacy admission even with the flag ON.
+ * gemini-768: 0.69 — the two distributions did not overlap AT ALL on the
+ *   calibration corpus (relevant [0.6977, 0.8353], irrelevant
+ *   [0.5967, 0.6847]); 0.69 sits inside the empty gap → measured 0%
+ *   false-admit, 0% false-reject. The earlier provisional 0.55 was vacuous
+ *   on real gemini vectors (every candidate cleared it).
+ * local-384 (Xenova/all-MiniLM-L6-v2): deliberately ABSENT — measured
+ *   overlap 0.13 (relevant p10 = 0.089 BELOW irrelevant p90 = 0.170); any
+ *   floor costs either ~45% false-admits or ~17% false-rejects, and a false
+ *   reject manufactures an "I don't have that" answer. Keyless installs
+ *   therefore keep legacy admission (resolveSemanticFloor → null) until a
+ *   stronger local embedder ships. Re-run the calibration script before
+ *   ever adding a local floor.
  */
 const DEFAULT_SEMANTIC_FLOORS: Record<string, number> = {
-  'gemini:gemini-embedding-2:768': 0.55,
+  'gemini:gemini-embedding-2:768': 0.69,
 };
 
+/**
+ * DEFAULT ON (kill-switch model, mirroring profileGroundingV2): calibrated
+ * floors + live E2E (22/22, scripts/e2e-semantic-repair-deepseek.js) gated
+ * the production flip. Disableable at runtime WITHOUT a redeploy:
+ *   - env  NATIVELY_SEMANTIC_ADMISSION_GATE = 'off' | 'false' | '0' | 'disabled' → disabled
+ *   - settings  semanticAdmissionGate === false                                  → disabled
+ * ('on'/'true'/'1' still accepted for explicitness / older configs.)
+ * Enforcement additionally requires a calibrated floor for the ACTIVE
+ * embedding space — unknown spaces and failed embeds always fall back to
+ * legacy admission, so flipping this ON cannot over-reject on uncalibrated
+ * corpora by construction.
+ */
 export const isSemanticAdmissionGateEnabled = (): boolean => {
   try {
     const v = (process.env.NATIVELY_SEMANTIC_ADMISSION_GATE || '').trim().toLowerCase();
-    if (v === 'on' || v === 'true' || v === '1') return true;
+    if (v === 'off' || v === 'false' || v === '0' || v === 'disabled') return false;
   } catch { /* fall through to settings */ }
   try {
     const { SettingsManager } = require('../services/SettingsManager');
-    if (SettingsManager.getInstance().get('semanticAdmissionGate') === true) return true;
-  } catch { /* settings unavailable → default OFF */ }
-  return false;
+    if (SettingsManager.getInstance().get('semanticAdmissionGate') === false) return false;
+  } catch { /* settings unavailable → default ON */ }
+  return true;
 };
 
 /**

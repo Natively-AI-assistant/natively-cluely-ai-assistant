@@ -75,9 +75,16 @@ export const __resetProfileGroundingV2Cache = (): void => { cachedEnv = null; };
  * the grounding block — skipping retrieval there would drop resume facts
  * from the prompt with no replacement.
  *
- * OPT-IN (default OFF), the inverse of this file's kill-switch default:
- *   - env  PROFILE_GROUNDING_V2_JDFIT_COVERAGE = 'on' | 'true' | '1'  → enabled
- *   - settings  profileGroundingV2JdFitCoverage === true              → enabled
+ * DEFAULT ON (kill-switch model, matching this file's main flag) since
+ * 2026-08-14: gated on the live E2E (scripts/e2e-semantic-repair-deepseek.js
+ * S5 — retrieval skipped, DeepSeek answered the fit question correctly from
+ * the grounding block alone) plus the corpus measurement showing the fit
+ * family's retrieval pool duplicates the grounding block. Disableable at
+ * runtime WITHOUT a redeploy:
+ *   - env  PROFILE_GROUNDING_V2_JDFIT_COVERAGE = 'off' | 'false' | '0' | 'disabled' → disabled
+ *   - settings  profileGroundingV2JdFitCoverage === false                           → disabled
+ * Note the containing check already requires isProfileGroundingV2Enabled() —
+ * killing V2 kills this with it.
  * Deliberately uncached (read per call): it sits on a per-question path, the
  * read is a string compare, and caching is what makes env-flag tests race
  * (see the P2 gotcha notes in this file's history).
@@ -85,11 +92,11 @@ export const __resetProfileGroundingV2Cache = (): void => { cachedEnv = null; };
 export const isProfileGroundingV2JdFitCoverageEnabled = (): boolean => {
   try {
     const v = (process.env.PROFILE_GROUNDING_V2_JDFIT_COVERAGE || '').trim().toLowerCase();
-    if (v === 'on' || v === 'true' || v === '1') return true;
+    if (v === 'off' || v === 'false' || v === '0' || v === 'disabled') return false;
   } catch { /* fall through to settings */ }
   try {
     const { SettingsManager } = require('../services/SettingsManager');
-    if (SettingsManager.getInstance().get('profileGroundingV2JdFitCoverage') === true) return true;
-  } catch { /* settings unavailable → default OFF */ }
-  return false;
+    if (SettingsManager.getInstance().get('profileGroundingV2JdFitCoverage') === false) return false;
+  } catch { /* settings unavailable → default ON */ }
+  return true;
 };

@@ -1355,7 +1355,200 @@ export class DatabaseManager {
             this.db.pragma('user_version = 26');
         }
 
+        // Version 26 → 27: usage_outbox — durable queue for client-reported
+        // usage events (2026-08-14, Usage Ledger campaign 2).
+        //
+        // WHY A DURABLE QUEUE AND NOT fetch-and-forget.
+        //
+        // The events this carries are the ONLY evidence that a BYOK feature ran.
+        // When a customer uses their own provider key, the backend executes
+        // nothing and meters nothing, so an event dropped because the laptop was
+        // on a plane is not a gap in telemetry — it is the entire record of that
+        // session, gone. A fetch() that fails during a network blip loses it
+        // silently and forever.
+        //
+        // WHY IT LIVES HERE rather than in a JSON file or electron-store: this
+        // is where the app already keeps durable local state, it is already
+        // migrated, already WAL-checkpointed on shutdown, and already survives
+        // crash/sleep/restart. A second persistence engine would have to earn
+        // all of that again.
+        //
+        // NOTE ON `status`: 'delivered' rows are kept briefly rather than
+        // deleted on ACK, so a duplicate enqueue of the same event_id inside the
+        // compaction window is caught by the UNIQUE constraint instead of being
+        // re-sent. compactOutbox() removes them after 7 days.
+        if (version < 27) {
+            console.log('[DatabaseManager] Applying migration v26 → v27: usage_outbox');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS usage_outbox (
+                    event_id        TEXT PRIMARY KEY,
+                    layer           TEXT NOT NULL DEFAULT 'ledger',
+                    payload_json    TEXT NOT NULL,
+                    status          TEXT NOT NULL DEFAULT 'pending',
+                    attempt_count   INTEGER NOT NULL DEFAULT 0,
+                    next_retry_at   INTEGER NOT NULL DEFAULT 0,
+                    last_error      TEXT,
+                    created_at      INTEGER NOT NULL,
+                    delivered_at    INTEGER
+                );
+                CREATE INDEX IF NOT EXISTS usage_outbox_due_idx
+                    ON usage_outbox (status, next_retry_at);
+                CREATE INDEX IF NOT EXISTS usage_outbox_created_idx
+                    ON usage_outbox (created_at);
+            `);
+            this.db.pragma('user_version = 27');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
+    }
+
+    // ============================================
+    // Usage outbox (v27) — durable queue for client-reported usage events
+    // ============================================
+    //
+    // Every method here is guarded and returns a neutral value when the database
+    // is unavailable. This queue must never be able to break the feature it is
+    // observing: a customer whose disk is full still gets to run a meeting.
+
+    /**
+     * Queue one event for delivery.
+     *
+     * INSERT OR IGNORE, not INSERT: enqueuing the same event_id twice is a
+     * no-op, so a retry loop in a caller cannot produce two rows for one logical
+     * event. That is the local half of the replay protection the server enforces
+     * with UNIQUE(event_id).
+     *
+     * Returns 'queued' | 'duplicate' | 'dropped' | 'unavailable'.
+     */
+    public enqueueUsageEvent(eventId: string, layer: 'ledger' | 'telemetry', payload: unknown, opts?: { maxRows?: number }): string {
+        if (!this.db) return 'unavailable';
+        try {
+            // Hard cap. An app that has been offline for a month, or whose
+            // licence has lapsed so every delivery 401s, must not grow this
+            // table without bound. Dropping the OLDEST undelivered event is the
+            // least-bad choice: recent activity is what a dispute is usually
+            // about, and the drop is counted so the loss is visible rather than
+            // silent.
+            const maxRows = opts?.maxRows ?? 10_000;
+            const total = (this.db.prepare(`SELECT COUNT(*) AS n FROM usage_outbox`).get() as any)?.n ?? 0;
+            if (total >= maxRows) {
+                const victim = this.db.prepare(
+                    `SELECT event_id FROM usage_outbox WHERE status != 'delivered' ORDER BY created_at ASC LIMIT 1`
+                ).get() as any;
+                if (!victim) return 'dropped';
+                this.db.prepare(`DELETE FROM usage_outbox WHERE event_id = ?`).run(victim.event_id);
+            }
+            const res = this.db.prepare(`
+                INSERT OR IGNORE INTO usage_outbox (event_id, layer, payload_json, status, created_at, next_retry_at)
+                VALUES (?, ?, ?, 'pending', ?, 0)
+            `).run(eventId, layer, JSON.stringify(payload), Date.now());
+            return res.changes > 0 ? 'queued' : 'duplicate';
+        } catch (e: any) {
+            console.warn('[DatabaseManager] enqueueUsageEvent failed:', e?.message || e);
+            return 'unavailable';
+        }
+    }
+
+    /** Events due for delivery now, oldest first. */
+    public claimUsageOutboxBatch(limit = 100, now = Date.now()): Array<{ event_id: string; layer: string; payload: any; attempt_count: number }> {
+        if (!this.db) return [];
+        try {
+            const rows = this.db.prepare(`
+                SELECT event_id, layer, payload_json, attempt_count
+                  FROM usage_outbox
+                 WHERE status = 'pending' AND next_retry_at <= ?
+                 ORDER BY created_at ASC
+                 LIMIT ?
+            `).all(now, limit) as any[];
+            return rows.map((r) => ({
+                event_id: r.event_id,
+                layer: r.layer,
+                attempt_count: r.attempt_count,
+                payload: JSON.parse(r.payload_json),
+            }));
+        } catch (e: any) {
+            console.warn('[DatabaseManager] claimUsageOutboxBatch failed:', e?.message || e);
+            return [];
+        }
+    }
+
+    /** Mark delivered. Rows linger until compaction so a duplicate enqueue is caught. */
+    public markUsageEventsDelivered(eventIds: string[], now = Date.now()): void {
+        if (!this.db || eventIds.length === 0) return;
+        try {
+            const stmt = this.db.prepare(`UPDATE usage_outbox SET status = 'delivered', delivered_at = ?, last_error = NULL WHERE event_id = ?`);
+            const tx = this.db.transaction((ids: string[]) => { for (const id of ids) stmt.run(now, id); });
+            tx(eventIds);
+        } catch (e: any) {
+            console.warn('[DatabaseManager] markUsageEventsDelivered failed:', e?.message || e);
+        }
+    }
+
+    /**
+     * Server said these are permanently unacceptable (schema rejection).
+     * Deleted rather than retried: a payload this server build refuses will be
+     * refused identically forever, and retrying it is how a queue wedges.
+     */
+    public dropUsageEvents(eventIds: string[]): void {
+        if (!this.db || eventIds.length === 0) return;
+        try {
+            const stmt = this.db.prepare(`DELETE FROM usage_outbox WHERE event_id = ?`);
+            const tx = this.db.transaction((ids: string[]) => { for (const id of ids) stmt.run(id); });
+            tx(eventIds);
+        } catch (e: any) {
+            console.warn('[DatabaseManager] dropUsageEvents failed:', e?.message || e);
+        }
+    }
+
+    /** Record a failed attempt and schedule the next one. */
+    public markUsageEventsFailed(eventIds: string[], nextRetryAt: number, error: string): void {
+        if (!this.db || eventIds.length === 0) return;
+        try {
+            const msg = String(error || '').slice(0, 200);
+            const stmt = this.db.prepare(`
+                UPDATE usage_outbox
+                   SET attempt_count = attempt_count + 1, next_retry_at = ?, last_error = ?
+                 WHERE event_id = ?
+            `);
+            const tx = this.db.transaction((ids: string[]) => { for (const id of ids) stmt.run(nextRetryAt, msg, id); });
+            tx(eventIds);
+        } catch (e: any) {
+            console.warn('[DatabaseManager] markUsageEventsFailed failed:', e?.message || e);
+        }
+    }
+
+    /** Remove delivered rows older than the retention window (default 7 days). */
+    public compactUsageOutbox(olderThanMs = 7 * 24 * 60 * 60 * 1000, now = Date.now()): number {
+        if (!this.db) return 0;
+        try {
+            const res = this.db.prepare(
+                `DELETE FROM usage_outbox WHERE status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at < ?`
+            ).run(now - olderThanMs);
+            return res.changes ?? 0;
+        } catch (e: any) {
+            console.warn('[DatabaseManager] compactUsageOutbox failed:', e?.message || e);
+            return 0;
+        }
+    }
+
+    /** Queue depth by status — the §20 `event_queue_depth` health metric. */
+    public getUsageOutboxStats(): { pending: number; delivered: number; total: number; oldestPendingAgeMs: number | null } {
+        if (!this.db) return { pending: 0, delivered: 0, total: 0, oldestPendingAgeMs: null };
+        try {
+            const rows = this.db.prepare(`SELECT status, COUNT(*) AS n FROM usage_outbox GROUP BY status`).all() as any[];
+            const byStatus = Object.fromEntries(rows.map((r) => [r.status, r.n]));
+            const oldest = this.db.prepare(
+                `SELECT MIN(created_at) AS t FROM usage_outbox WHERE status = 'pending'`
+            ).get() as any;
+            return {
+                pending: byStatus.pending ?? 0,
+                delivered: byStatus.delivered ?? 0,
+                total: rows.reduce((s, r) => s + r.n, 0),
+                oldestPendingAgeMs: oldest?.t ? Date.now() - oldest.t : null,
+            };
+        } catch {
+            return { pending: 0, delivered: 0, total: 0, oldestPendingAgeMs: null };
+        }
     }
 
     // ============================================

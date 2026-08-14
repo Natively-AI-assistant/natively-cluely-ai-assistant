@@ -848,7 +848,13 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // throwing. Production always takes the first branch — pinned by a
             // test asserting the real LLMHelper exposes the method, so this
             // fallback can never quietly become the live path.
-            const _wtaArgs = [_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, _wtaRoute] as const;
+            // Explicitly annotated. Without it TS7005: the inferred tuple type
+            // references `_wtaRoute`, whose own type is resolved through the
+            // same expression, and TS gives up on the circularity rather than
+            // widening. Both consumers below call through `as any`, so the
+            // precise tuple shape buys nothing at the call site — only the
+            // circular inference, which is what breaks the build.
+            const _wtaArgs: readonly unknown[] = [_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, _wtaRoute];
             const _wtaStream = typeof (this.llmHelper as any).streamChatWithOutcome === 'function'
                 ? (this.llmHelper as any).streamChatWithOutcome(..._wtaArgs)
                 : { stream: (this.llmHelper as any).streamChat(..._wtaArgs), outcome: { truncated: false } };

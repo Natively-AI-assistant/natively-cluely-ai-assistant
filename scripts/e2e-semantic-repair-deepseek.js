@@ -10,9 +10,9 @@
 //   S3  Same mode through chatWithGemini — the Phase 2 site-1 path whose
 //       doc-grounded hybrid branch fires for the first time.
 //   S4  semanticAdmissionGate on REAL embeddings: embed resume-like nodes +
-//       queries with the live embedding provider, run getRelevantNodes flag
-//       OFF vs ON, capture [SemanticAdmission] telemetry, and check the
-//       provisional floor's behavior on real cosine distributions.
+//       queries with the live embedding provider, compare the kill-switch
+//       (legacy) run against the DEFAULT-ON run with the calibrated 0.69
+//       gemini floor, capturing [SemanticAdmission] telemetry.
 //   S5  jd_fit coverage flag live: retrieval skipped under the flag, then the
 //       grounding-block-only context is answered by DeepSeek — proving the
 //       grounding block alone carries the facts the skip removes.
@@ -193,10 +193,9 @@ async function main() {
     const { LocalEmbeddingProvider } = require(path.join(distRoot, 'rag/providers/LocalEmbeddingProvider.js'));
     provider = new LocalEmbeddingProvider();
     spaceKey = provider.space;
-    // local-384 has no calibrated floor by design — override for this run so
-    // the gate is still exercised on real vectors.
-    process.env.NATIVELY_SEMANTIC_FLOORS = JSON.stringify({ [spaceKey]: 0.35 });
-    console.log('[e2e][S4] using local MiniLM embedder with run-scoped floor 0.35');
+    // local-384 deliberately has NO floor (calibration 2026-08-14 measured
+    // overlapping distributions) — the default-ON gate must behave legacy here.
+    console.log('[e2e][S4] using local MiniLM embedder (no floor by design)');
   }
   console.log(`[e2e][S4] embedding space: ${spaceKey}`);
 
@@ -226,28 +225,25 @@ async function main() {
   const telemetry = [];
   const origLog = console.log;
   console.log = (...args) => { const s = args.join(' '); if (s.startsWith('[SemanticAdmission] ')) telemetry.push(JSON.parse(s.slice('[SemanticAdmission] '.length))); origLog(...args); };
-  let legacyOut, gatedOut, gatedCalibratedOut;
+  let legacyOut, defaultOut;
   try {
-    delete process.env.NATIVELY_SEMANTIC_ADMISSION_GATE;
+    // Kill switch — the ONLY way to observe legacy admission now that the
+    // gate defaults ON (2026-08-14).
+    process.env.NATIVELY_SEMANTIC_ADMISSION_GATE = 'off';
     legacyOut = await getRelevantNodes(QUERY, NODES, embedFn, { embeddingSpaceKey: spaceKey });
-    process.env.NATIVELY_SEMANTIC_ADMISSION_GATE = 'on';
-    gatedOut = await getRelevantNodes(QUERY, NODES, embedFn, { embeddingSpaceKey: spaceKey });
-    // Data-informed floor for gemini-768 (measured live 2026-08-14: relevant
-    // nodes 0.695-0.749, irrelevant 0.637 on this query set — the default
-    // 0.55 is vacuous there, which is SAFE (over-admits, never over-rejects)
-    // but does not yet separate. 0.65 separates on the measured distribution.
-    const prevFloors = process.env.NATIVELY_SEMANTIC_FLOORS;
-    process.env.NATIVELY_SEMANTIC_FLOORS = JSON.stringify({ ...(prevFloors ? JSON.parse(prevFloors) : {}), [spaceKey]: 0.65 });
-    gatedCalibratedOut = await getRelevantNodes(QUERY, NODES, embedFn, { embeddingSpaceKey: spaceKey });
-    if (prevFloors) process.env.NATIVELY_SEMANTIC_FLOORS = prevFloors; else delete process.env.NATIVELY_SEMANTIC_FLOORS;
+    // DEFAULT posture: env unset → gate ON with the calibrated floor
+    // (gemini-768: 0.69; local-384: no floor → this run behaves legacy).
+    delete process.env.NATIVELY_SEMANTIC_ADMISSION_GATE;
+    defaultOut = await getRelevantNodes(QUERY, NODES, embedFn, { embeddingSpaceKey: spaceKey });
   } finally {
     console.log = origLog;
     delete process.env.NATIVELY_SEMANTIC_ADMISSION_GATE;
   }
-  record('S4-admission-gate', 'telemetry emitted for all three runs', telemetry.length === 3, `${telemetry.length} lines`);
-  const [obs, enf, enfCal] = telemetry;
-  if (obs && enf && enfCal) {
-    record('S4-admission-gate', 'observe run not enforced / gated runs enforced', obs.enforced === false && enf.enforced === true && enfCal.enforced === true);
+  record('S4-admission-gate', 'telemetry emitted for both runs', telemetry.length === 2, `${telemetry.length} lines`);
+  const [obs, enf] = telemetry;
+  if (obs && enf) {
+    record('S4-admission-gate', 'kill-switch run not enforced / default run enforced',
+      obs.enforced === false && enf.enforced === (spaceKey.startsWith('gemini') ? true : false));
     console.log('[e2e][S4] real cosine distribution:', enf.candidates.map((c, i) => `${NODES[i].id}=${c.cosine}`).join(' '));
     // THE P0, LIVE: under the legacy blended threshold the ONLY retrieved node
     // should be the boost-carrying irrelevant one (its +0.2 query-independent
@@ -255,13 +251,16 @@ async function main() {
     record('S4-admission-gate', 'LIVE P0 confirmation: legacy admits ONLY the boost-carrying irrelevant node',
       legacyOut.length === 1 && legacyOut[0].node.id === 'recent-irrelevant',
       `legacy=[${legacyOut.map((s) => s.node.id).join(',')}]`);
-    record('S4-admission-gate', 'default floor (0.55): relevant nodes now admitted (over-admits, never over-rejects)',
-      gatedOut.some((s) => s.node.id === 'relevant-project') && gatedOut.some((s) => s.node.id === 'relevant-skill'),
-      `gated=[${gatedOut.map((s) => s.node.id).join(',')}]`);
-    record('S4-admission-gate', 'calibrated floor (0.65): P0 node excluded, relevant nodes kept',
-      !gatedCalibratedOut.some((s) => s.node.id === 'recent-irrelevant')
-        && gatedCalibratedOut.some((s) => s.node.id === 'relevant-project'),
-      `gated@0.65=[${gatedCalibratedOut.map((s) => s.node.id).join(',')}]`);
+    if (spaceKey.startsWith('gemini')) {
+      record('S4-admission-gate', 'DEFAULT posture (calibrated 0.69): P0 node excluded, relevant nodes kept',
+        !defaultOut.some((s) => s.node.id === 'recent-irrelevant')
+          && defaultOut.some((s) => s.node.id === 'relevant-project'),
+        `default=[${defaultOut.map((s) => s.node.id).join(',')}]`);
+    } else {
+      record('S4-admission-gate', 'DEFAULT posture (local space, no calibrated floor): legacy admission preserved',
+        JSON.stringify(defaultOut.map((s) => s.node.id)) === JSON.stringify(legacyOut.map((s) => s.node.id)),
+        `default=[${defaultOut.map((s) => s.node.id).join(',')}]`);
+    }
   }
 
   // ── S5: jd_fit coverage flag live (skip retrieval → DeepSeek answers from grounding) ──
@@ -315,7 +314,11 @@ async function main() {
         FIT_Q, undefined, groundingBlock, 'You are helping the candidate answer questions about their own fit for a job, grounded ONLY in the provided profile context.', false, false, [], controller.signal));
     } catch (e) { console.error('[e2e][S5] stream error:', e && e.message); }
     clearTimeout(t);
-    checkAnswer('S5-jdfit-live', FIT_Q, a, [/go|kafka|postgres/i]);
+    // Grounding anchor, not vocabulary: the answer must cite the profile's
+    // facts (employer / pipeline / throughput) OR its technologies. DeepSeek
+    // sometimes says "the stack I work with" without naming Go/Kafka — that
+    // is still a correctly grounded answer.
+    checkAnswer('S5-jdfit-live', FIT_Q, a, [/go|kafka|postgres|drift systems|billing pipeline|40[,.]?000|40k/i]);
   }
 
   // ── Summary ──────────────────────────────────────────────────────────────
