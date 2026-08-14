@@ -9,7 +9,8 @@
 //
 // Behaviour is unchanged from the form it replaces:
 //   Step 1 ("review")      — rating 1-5 + optional 300-char note
-//   Step 2 ("testimonial") — Save with name (requires a name) OR Keep anonymous
+//   Step 2 ("testimonial") — Save with name (requires a name), Send
+//                            anonymously, or decline ("Don't share my words")
 //   Step 3 ("thanks")      — confirmation, auto-dismisses after 5s
 //
 // All motion is gated on `useReducedMotion()`.
@@ -135,8 +136,9 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
     const [submitting, setSubmitting] = useState(false)
     const [submitError, setSubmitError] = useState<string | null>(null)
 
-    // Public use is assumed for both attribution outcomes — the only thing the
-    // user chooses is the byline. `displayNamePublicly` is not a form control;
+    // The two SEND buttons both grant public use — between them the user only
+    // chooses the byline. The third path ("Don't share my words") declines
+    // publication entirely (F1). `displayNamePublicly` is not a form control;
     // it records which button was pressed so the confirmation can say the
     // right thing.
     const [displayNamePublicly, setDisplayNamePublicly] = useState(false)
@@ -332,6 +334,14 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
 
     const handleSaveTestimonial = () => submitTestimonial(true)
     const handleKeepAnonymous = () => submitTestimonial(false)
+    // F1 (code-review 2026-08-14): explicit decline. No PATCH is sent, so
+    // can_use_publicly stays false server-side and the review is never
+    // publishable. Reuses the attribution-skipped receipt ("Your rating was
+    // recorded.") — which is exactly what happened.
+    const handleDeclineTestimonial = () => {
+        setAttributionSkipped(true)
+        setStep("thanks")
+    }
 
     const shownRating = hoverRating || rating
     const ratingWord = useMemo(
@@ -433,6 +443,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
                                     error={testimonialError}
                                     onSave={handleSaveTestimonial}
                                     onKeepAnonymous={handleKeepAnonymous}
+                                    onDecline={handleDeclineTestimonial}
                                     reduced={reduced}
                                 />
                             )}
@@ -681,12 +692,14 @@ interface StepTestimonialProps {
     error: string | null
     onSave: () => void
     onKeepAnonymous: () => void
+    /** F1: explicit decline — review stays private, no publish call is made. */
+    onDecline: () => void
     reduced: boolean
 }
 
 const StepTestimonial: React.FC<StepTestimonialProps> = ({
     rating, name, setName, prefillName = "", namePrefillSuggested, onAcceptNamePrefill,
-    busy, action, error, onSave, onKeepAnonymous, reduced,
+    busy, action, error, onSave, onKeepAnonymous, onDecline, reduced,
 }) => {
     // Save credits the review under `name` — a blank name has nothing to
     // credit, so it stays disabled until one is entered. Keep anonymous never
@@ -759,9 +772,25 @@ const StepTestimonial: React.FC<StepTestimonialProps> = ({
                             transition={SPRING_SNAPPY}
                             className="review-ghost"
                         >
-                            {action === "anonymous" ? <><Spinner tone="ivory" reduced={reduced} />Sending</> : "Keep anonymous"}
+                            {action === "anonymous" ? <><Spinner tone="ivory" reduced={reduced} />Sending</> : "Send anonymously"}
                         </motion.button>
                     </div>
+                    {/* Code-review F1 (2026-08-14): both CTAs above GRANT publish
+                        permission (can_use_publicly:true), and the fine print
+                        promises "never without permission" — so a decline
+                        affordance must exist on THIS step, not just modal
+                        dismissal. The old label "Keep anonymous" historically
+                        meant decline; it now reads "Send anonymously" so the
+                        consent is unmistakable, and this quiet path keeps the
+                        review private (no publish call is ever made). */}
+                    <button
+                        type="button"
+                        onClick={onDecline}
+                        disabled={busy}
+                        className="review-decline"
+                    >
+                        Don&rsquo;t share my words
+                    </button>
                     <p className="review-fineprint">
                         <Lock size={11} strokeWidth={1.7} aria-hidden />
                         Never published without permission. Removal on request.

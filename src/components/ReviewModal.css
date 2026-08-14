@@ -433,6 +433,23 @@
   letter-spacing: 0.01em;
 }
 
+/* F1: the explicit decline path — quiet, but a real focusable control, not
+   fine print. Sits between the send buttons and the privacy promise. */
+.review-decline {
+  margin: 10px 0 0;
+  padding: 2px 0;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.review-decline:hover:not(:disabled) { color: rgba(255, 255, 255, 0.7); }
+.review-decline:disabled { opacity: 0.4; cursor: default; }
+
 .review-spinner {
   display: block;
   width: 12px;

@@ -255,7 +255,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // so a provider the user switched off (or a model they filtered out) is never
       // installed as the fallback.
       const next = modelAvailable('natively') ? 'natively'
-        : modelAvailable('gemini-3.6-flash') ? 'gemini-3.6-flash'
+        : modelAvailable('gemini-3.7-flash') ? 'gemini-3.7-flash'
         : modelAvailable('gpt-5.4') ? 'gpt-5.4'
         : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
         : modelAvailable('llama-3.3-70b-versatile') ? 'llama-3.3-70b-versatile'
@@ -1372,45 +1372,84 @@ export function initializeIpcHandlers(appState: AppState): void {
             let liveModeIdAtRecord: string | null = null;
             try { liveModeIdAtRecord = mm.getActiveMode()?.id ?? null; } catch { /* record-guard only */ }
             if (liveModeIdAtRecord === (manualActiveMode?.id ?? null)) {
-              // A truncated answer must NOT enter conversation state, memory, or
-              // the session transcript. It would become the antecedent for the
-              // next turn's referent resolution and be replayed as if it were a
-              // complete answer — the same class of defect as the
-              // "(referring to: Makefile)" contamination. The user still SEES
-              // the partial text; it just does not become history.
+              // A truncated ANSWER must NOT enter conversation state or memory.
+              // It would become the antecedent for the next turn's referent
+              // resolution and be replayed as if it were a complete answer —
+              // the same class of defect as the "(referring to: Makefile)"
+              // contamination. The user still SEES the partial text; it just
+              // does not become history.
+              //
+              // Code-review 2026-08-13: the guard originally wrapped ALL FOUR
+              // blocks, so a truncated turn also dropped the sinks that record
+              // the USER's side — the question they actually asked. That is
+              // never in doubt just because the answer stopped early, and
+              // suppressing it lost the meeting transcript row, the usage row
+              // (a regression of the very bug the logUsage comment below
+              // documents), and the phone-mirror question. Split by SIDE:
+              // answer-side sinks honor the truncation guard, user-side sinks
+              // always run.
               if (v3Truncated) {
-                console.warn('[IPC] skipping history/memory sinks for a truncated answer', { streamId: myStreamId });
-              } else {
-              try {
-                const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
-                recordAnswerSummary(String(senderId), finalText);
-              } catch { /* continuity only */ }
-              try {
-                _manualConversationMemory.record({
-                  sessionId: String(senderId),
-                  userMessage: String(message || ''),
-                  assistantAnswer: finalText,
-                  mode: (modeInfo as any)?.templateType,
-                  timestamp: Date.now(),
-                });
-              } catch { /* memory only */ }
+                console.warn('[IPC] truncated answer — recording the user turn but skipping answer-side history/memory sinks', { streamId: myStreamId });
+              }
+              // ── ANSWER-SIDE SINKS (skipped when truncated) ──────────────
+              if (!v3Truncated) {
+                try {
+                  const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
+                  recordAnswerSummary(String(senderId), finalText);
+                } catch { /* continuity only */ }
+                try {
+                  // The user/answer PAIR is the antecedent unit for follow-up
+                  // referent resolution, so a truncated answer suppresses the
+                  // whole pair — the user turn is still preserved in the
+                  // session transcript below.
+                  _manualConversationMemory.record({
+                    sessionId: String(senderId),
+                    userMessage: String(message || ''),
+                    assistantAnswer: finalText,
+                    mode: (modeInfo as any)?.templateType,
+                    timestamp: Date.now(),
+                  });
+                } catch { /* memory only */ }
+              } // end answer-side sinks
               try {
                 const im = appState.getIntelligenceManager();
                 im?.addTranscript?.({ text: String(message || ''), speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
-                im?.addAssistantMessage?.(finalText, undefined, 'manual_chat');
+                if (!v3Truncated) im?.addAssistantMessage?.(finalText, undefined, 'manual_chat');
                 // Usage too: ai_interactions ("usage" in Meeting Notes) is
                 // populated solely from SessionTracker's usage log at
                 // saveMeeting time. Every legacy exit logs it; without this,
                 // a V3-answered chat during a meeting left the meeting's
                 // usage panel empty (confirmed in the live DB: V3 meetings
-                // had transcript rows but zero usage rows).
-                im?.logUsage?.('chat', String(message || ''), finalText);
+                // had transcript rows but zero usage rows). A truncated turn
+                // still consumed the call, so it is still usage.
+                //
+                // But the usage log is NOT write-only (code-review 2026-08-14):
+                // SessionTracker.getRecentManualTurn reads fullUsage and
+                // IntelligenceEngine.buildRecentManualContext injects the pair
+                // into the NEXT prompt as <previous_assistant_answer_excerpt>.
+                // Plain logUsage would therefore feed the truncated answer back
+                // as conversation context — defeating the answer-side guard
+                // above through a second door. `synthetic: true` is the existing
+                // opt-out: getRecentManualTurn skips those entries (line ~688)
+                // while every persistence path still returns them, so the
+                // Meeting Notes row survives and the replay does not.
+                if (v3Truncated) {
+                  im?.pushUsage?.({
+                    type: 'chat',
+                    timestamp: Date.now(),
+                    question: String(message || ''),
+                    answer: finalText,
+                    source: 'manual_chat',
+                    synthetic: true,
+                  });
+                } else {
+                  im?.logUsage?.('chat', String(message || ''), finalText);
+                }
               } catch { /* session transcript only */ }
               try {
                 PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), String(message || ''));
-                PhoneMirrorService.getInstance().publishAssistantMessage(String(myStreamId), finalText, 'Chat');
+                if (!v3Truncated) PhoneMirrorService.getInstance().publishAssistantMessage(String(myStreamId), finalText, 'Chat');
               } catch { /* mirror only */ }
-              } // end !v3Truncated
             }
 
             return null;
@@ -1606,7 +1645,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   `Skill "/${skill.id}" is disabled. Enable it in Settings → Skills.`,
                   { streamId: myStreamId },
                 );
-                return;
+                return null;  // sibling error paths return null; handler is typed `| null`
               }
               skillPromptBlock = SkillsManager.getInstance().buildPromptBlock(skill);
               const strippedQuery = skillPrefixMatch[2].trim();
@@ -1622,12 +1661,12 @@ export function initializeIpcHandlers(appState: AppState): void {
                 `Skill "/${candidateId}" not found. Available: ${available}`,
                 { streamId: myStreamId },
               );
-              return;
+              return null;  // sibling error paths return null; handler is typed `| null`
             }
           } catch (skillErr: any) {
             console.warn('[IPC] Skill lookup failed:', skillErr?.message || skillErr);
             event.sender.send('gemini-stream-error', `Skill lookup failed: ${skillErr?.message || 'unknown error'}`, { streamId: myStreamId });
-            return;
+            return null;  // sibling error paths return null; handler is typed `| null`
           }
         }
 
@@ -1775,13 +1814,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             hasProfileFacts: _hasProfileFacts,
             turnSourceDecision: manualTurnSourceDecision,
           });
-          if (isIntelligenceFlagEnabled('trace')) {
+          if (isIntelligenceFlagEnabled('trace')) {  // manualOwnership! below: assigned unconditionally at 1790-1797
             console.log('[SOURCE-OWNERSHIP]', JSON.stringify({
-              owner: manualOwnership.owner,
-              profileAllowed: manualOwnership.profileAllowed,
-              explicitProfileAsk: manualOwnership.explicitProfileAsk,
-              shouldClarifyInsteadOfProfile: manualOwnership.shouldClarifyInsteadOfProfile,
-              reason: manualOwnership.reason,
+              owner: manualOwnership!.owner,
+              profileAllowed: manualOwnership!.profileAllowed,
+              explicitProfileAsk: manualOwnership!.explicitProfileAsk,
+              shouldClarifyInsteadOfProfile: manualOwnership!.shouldClarifyInsteadOfProfile,
+              reason: manualOwnership!.reason,
               answerType: answerPlan.answerType,
             }));
           }
@@ -8338,7 +8377,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         let response;
 
         if (provider === 'gemini') {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent`;
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent`;
           response = await axios.post(
             url,
             {
@@ -8722,7 +8761,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { model: cm.getDefaultModel() };
     } catch (error: any) {
       console.error('Error getting default model:', error);
-      return { model: 'gemini-3.6-flash' };
+      return { model: 'gemini-3.7-flash' };
     }
   });
 
@@ -9267,6 +9306,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       imagePaths?: string[],
       options?: { promptInstruction?: string; domContext?: string; domContextEnvelope?: unknown },
     ) => {
+      // Usage ledger (phase 4). The feature is resolved from the ACTIVE MODE and
+      // only named when that mode is a built-in — a custom mode a user renamed
+      // "Technical Interview" reports the honest `mode_execution` instead (§31).
+      // Wrapped because instrumentation must never fail the answer it measures.
+      let _usage: import('./services/usageInstrumentation').FeatureTracker | null = null;
+      try {
+        const { trackFeature, featureForMode } = require('./services/usageInstrumentation');
+        // ModesManager is require()d locally, matching every other call site in
+        // this file — it is deliberately not a top-level import here.
+        const { ModesManager: _MMUsage } = require('./services/ModesManager');
+        _usage = trackFeature(featureForMode(_MMUsage.getInstance().getActiveMode()));
+      } catch { /* instrumentation is never load-bearing */ }
+
       try {
         let screenContext: any;
         let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
@@ -9287,6 +9339,9 @@ export function initializeIpcHandlers(appState: AppState): void {
             )
           ) {
             console.warn('[IPC] generate-what-to-say: malformed image path payload rejected');
+            // An early return with answer:null is a FAILED execution. Left to the
+            // `finally` below it would be recorded as completed.
+            try { _usage?.failed(new Error('invalid image path payload')); } catch { /* ignore */ }
             return {
               answer: null,
               question: question || 'unknown',
@@ -9305,6 +9360,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               console.warn(
                 `[IPC] generate-what-to-say: invalid image path rejected: ${validation.reason}`,
               );
+              try { _usage?.failed(new Error('invalid image path')); } catch { /* ignore */ }
               return {
                 answer: null,
                 question: question || 'unknown',
@@ -9445,6 +9501,15 @@ export function initializeIpcHandlers(appState: AppState): void {
               'What to Answer',
             );
           } catch (_) {}
+        } else {
+          // F8 (code-review 2026-08-14): runWhatShouldISay returns null on its
+          // superseded / non-answer / empty-answer paths — the user got
+          // NOTHING, so the finally's `completed()` must not stamp this run as
+          // delivered service (§6: a dispute report must never imply service
+          // was delivered when it was not). `cancelled` is the honest terminal:
+          // no service, no fabricated error. First terminal wins, so the
+          // finally below becomes a no-op.
+          try { _usage?.cancelled({ metadata: { no_answer: true } }); } catch { /* ignore */ }
         }
         return {
           answer,
@@ -9459,11 +9524,21 @@ export function initializeIpcHandlers(appState: AppState): void {
         };
       } catch (error: any) {
         console.error('[IPC] generate-what-to-say error:', error);
+        // `failed`, not `completed`. This handler RETURNS an error object rather
+        // than throwing, so without this the execution would look successful to
+        // the ledger — and a dispute report must never imply service was
+        // delivered when it was not (§6).
+        try { _usage?.failed(error); } catch { /* ignore */ }
         return {
           answer: null,
           question: question || 'unknown',
           error: error?.message || 'unknown_error',
         };
+      } finally {
+        // Idempotent inside the tracker: if the catch above already emitted
+        // `failed`, this is a no-op. Otherwise the execution reached its return
+        // statement and genuinely completed.
+        try { _usage?.completed(); } catch { /* ignore */ }
       }
     },
   );
@@ -10218,7 +10293,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           return { fallback: true };
         }
         console.error('[RAG] Live query error:', error);
-        event.sender.send('rag:stream-error', { live: true, error: msg });
+        // No rag:stream-error here (F-118): the {success:false} return below
+        // makes the renderer fall through to regular live chat, so a terminal
+        // error event would DOUBLE-SIGNAL — the error handler stapled
+        // "[RAG Error: …]" into the bubble and cleared streaming state, and
+        // the fallback then streamed fresh tokens into that torn-down row.
+        // For the live class the fallback owns the UX; the meeting/global
+        // handlers keep their terminal events because nothing falls back.
+        // Live-reproduced in scripts/audit/F-118-repro.mjs.
       }
       return { success: false, error: error.message };
     } finally {
@@ -11822,7 +11904,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { ingestModeReferenceFile } = require('./services/ModeReferenceFileIngestion') as typeof import('./services/ModeReferenceFileIngestion');
       const file = await ingestModeReferenceFile({
         modeId,
-        filePath: selectedPath,
+        filePath: selectedPath!,  // guarded + assigned on the straight line above
         onIndexStatus: (status, fileId) => {
           BrowserWindow.getAllWindows().forEach((win) => {
             if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId, fileId, phase: status });
@@ -12313,7 +12395,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // confirmation; only flip the toggle if the user picks "Allow".
       if (e?.name === 'LANBindConfirmationRequired') {
         const win = appState.getMainWindow() ?? undefined;
-        const response = dialog.showMessageBoxSync(win as BrowserWindow | undefined, {
+        const lanBindDialogOptions: Electron.MessageBoxSyncOptions = {
           type: 'warning',
           message: 'Allow LAN access?',
           detail:
@@ -12321,7 +12403,12 @@ export function initializeIpcHandlers(appState: AppState): void {
           buttons: ['Cancel', 'Allow LAN access'],
           defaultId: 0,
           cancelId: 0,
-        });
+        };
+        // Electron types (options) and (parent, options) but not (undefined, options);
+        // picking the overload by parent presence leaves the runtime call unchanged.
+        const response = win
+          ? dialog.showMessageBoxSync(win, lanBindDialogOptions)
+          : dialog.showMessageBoxSync(lanBindDialogOptions);
         if (response !== 1) {
           return { ok: false, declined: true };
         }

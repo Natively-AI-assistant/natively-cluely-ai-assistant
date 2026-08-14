@@ -141,9 +141,37 @@ jobs:
         if: runner.os == 'macOS'
         run: node scripts/verify-native-arch.js
 
-      - name: Typecheck Electron main process
+      # TypeScript 7 is now the PRIMARY type-checker: `typecheck:electron` runs
+      # node_modules/typescript7/bin/tsc. Emit is untouched — esbuild owns
+      # dist-electron and vite owns dist; TS 7 only checks.
+      #
+      # This runs on BOTH legs on purpose. TS 7 is a native Go binary shipped as
+      # per-platform optional dependencies (@typescript/typescript-darwin-arm64,
+      # -win32-x64, ...), so the Windows leg is the ONLY thing that proves the
+      # win32 binary resolves and runs — a macOS-only check would say nothing
+      # about it.
+      #
+      # ⚠️ EXPECTED RED until the two deferred findings are resolved
+      # (docs/ts7-upgrade-report.md §7): IntelligenceEngine's queryOkfCards vs
+      # EvidenceResolver's DI port, and ModeHybridRetriever's genuinely-nullable
+      # reranker. Deliberately left BLOCKING rather than downgraded to
+      # continue-on-error — muting a real gate to hide two known type errors is
+      # exactly the loosening this migration is not allowed to do. TS 5.9.3 and
+      # TS 7.0.2 report byte-identical error lists here, so this is a deferral
+      # backlog, NOT a TS 7 incompatibility.
+      - name: Typecheck Electron main process (TypeScript 7)
         run: npm run typecheck:electron
 
+      # Insurance for one release cycle: if TS 7 ever diverges from the compiler
+      # this repo shipped on, this step is what tells us. Non-blocking because
+      # TS 7 is the source of truth now. `typescript` 5.x stays installed
+      # regardless — react-doctor (.husky/pre-commit, every commit by everyone),
+      # typescript-eslint and tap all cap below TS 7.
+      - name: Typecheck Electron main process with TypeScript 5 (non-blocking insurance)
+        continue-on-error: true
+        run: npm run typecheck:ts5:electron
+
+      # `npm run build` now type-checks the renderer with TS 7 before vite emits.
       - name: Build renderer
         run: npm run build
 

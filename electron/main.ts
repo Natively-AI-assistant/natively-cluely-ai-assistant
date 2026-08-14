@@ -3457,6 +3457,36 @@ export class AppState {
       if (decision.type === 'log') {
         const logger = decision.level === 'info' ? console.log : console.warn;
         logger(`${prefix}${decision.message}`);
+        // F10 (code-review 2026-08-14): sustained zero-fill is the signature
+        // of a mid-meeting Screen Recording revocation on macOS — the tap
+        // keeps "running" but every IO callback yields zero frames. The
+        // 'mac-screen-recording-revoked-rebuild' diagnostic existed in the
+        // PermissionReason machinery but NOTHING emitted it, so revoked users
+        // were told to change devices (or nothing) instead of re-granting the
+        // TCC permission. Probe the actual grant (bypassCache — the revocation
+        // just happened, a cached 'granted' would defeat the check) and emit
+        // the correct banner when the silence is explained by a lost grant.
+        // Probe failure or a healthy grant keeps the log-only behavior.
+        if (decision.reason === 'sustained-zero-valued-silence' && process.platform === 'darwin') {
+          void resolveMacScreenCaptureCapability('sustained zero-fill diagnosis', { bypassCache: true })
+            .then((cap) => {
+              if (!cap.effectiveDenied) return;
+              if (this.systemAudioCapture !== capture) return; // capture replaced mid-probe
+              if (!this.isMeetingActive) return;
+              const msg = formatPermissionMessage('mac-screen-recording-revoked-rebuild');
+              console.warn(`${prefix}SystemAudioCapture ${msg}`);
+              this.sendAudioCaptureFailed({
+                channel: 'system',
+                message: msg,
+                titleKey: permissionTitleKey('mac-screen-recording-revoked-rebuild'),
+                attempt: 0,
+                maxAttempts: 3,
+                terminal: false,
+                stuck: true,
+              });
+            })
+            .catch(() => { /* probe failed — keep log-only behavior */ });
+        }
         return;
       }
       if (decision.type === 'warn-user' && decision.reason === 'same-device-input-output') {
@@ -3541,14 +3571,26 @@ export class AppState {
       }
 
 
-      this.googleSTT?.write(chunk);
+      // Instance-identity guard, mirroring the watchdog (capture-replaced
+      // check above) and the rate lock: a capture that lost ownership of
+      // this.systemAudioCapture mid-rebuild (recovery / route-change / resume
+      // interleaving) must not keep pumping PCM into the live STT socket —
+      // interleaved with the owner's audio it garbles the interviewer
+      // transcript (F-102).
+      if (this.systemAudioCapture === capture) {
+        this.googleSTT?.write(chunk);
+      }
     });
     capture.on('sample_rate_changed', (rate: number) => {
       console.log(`${prefix}SystemAudioCapture rate updated dynamically to ${rate}Hz`);
-      this.googleSTT?.setSampleRate(rate);
+      if (this.systemAudioCapture === capture) {
+        this.googleSTT?.setSampleRate(rate);
+      }
     });
     capture.on('speech_ended', () => {
-      this.googleSTT?.notifySpeechEnded?.();
+      if (this.systemAudioCapture === capture) {
+        this.googleSTT?.notifySpeechEnded?.();
+      }
     });
     // setupAudioRecoveryHandler registers its own 'error' listener — do not
     // add a duplicate logger here or the same error reports twice.
@@ -3720,14 +3762,23 @@ export class AppState {
         }
       }
 
-      this.googleSTT_User?.write(chunk);
+      // Instance-identity guard — same rationale as the system-audio data
+      // path (F-102): only the capture that owns this.microphoneCapture may
+      // feed the user STT socket.
+      if (this.microphoneCapture === capture) {
+        this.googleSTT_User?.write(chunk);
+      }
     });
     capture.on('sample_rate_changed', (rate: number) => {
       console.log(`${prefix}MicrophoneCapture rate updated dynamically to ${rate}Hz`);
-      this.googleSTT_User?.setSampleRate(rate);
+      if (this.microphoneCapture === capture) {
+        this.googleSTT_User?.setSampleRate(rate);
+      }
     });
     capture.on('speech_ended', () => {
-      this.googleSTT_User?.notifySpeechEnded?.();
+      if (this.microphoneCapture === capture) {
+        this.googleSTT_User?.notifySpeechEnded?.();
+      }
     });
     // setupMicRecoveryHandler registers its own 'error' listener.
     this.setupMicRecoveryHandler();
@@ -4056,6 +4107,11 @@ export class AppState {
           fellBack: true,
           reason: 'screen-recording-permission-denied',
         });
+      } else if (this.systemAudioCapture) {
+        // Ownership revalidation — same rationale as the route-change and
+        // recovery flows (F-102): another rebuild assigned the field while we
+        // awaited the capability check; keep theirs instead of orphaning it.
+        console.warn('[Main] Resume: capture rebuilt by another flow mid-await — keeping theirs.');
       } else {
         this.systemAudioCapture = new SystemAudioCapture(this._lastRequestedOutputDeviceId);
         this._sysSttRateApplied = false;
@@ -4565,12 +4621,8 @@ export class AppState {
     }
 
     if (this.isMeetingActive) {
-      // Mic first: lazy mic start constructs the cpal input stream; do it
-      // before starting the CoreAudio system tap to avoid HAL contention.
-      this.microphoneCapture?.start();
-      this.googleSTT_User?.start();
-      this.systemAudioCapture?.start();
-      this.googleSTT?.start();
+      // Per-channel isolated start (F-105); mic first for HAL ordering.
+      this.startCaptureChannels('reconfigureAudio');
     }
   }
 
@@ -4668,12 +4720,8 @@ export class AppState {
     // macOS and immediately triggers the orange mic indicator even without .play()).
     if (this.isMeetingActive) {
       await this.setupSystemAudioPipeline();
-      // Mic first: lazy mic start constructs the cpal input stream; do it
-      // before starting the CoreAudio system tap to avoid HAL contention.
-      this.microphoneCapture?.start();
-      this.googleSTT_User?.start();
-      this.systemAudioCapture?.start();
-      this.googleSTT?.start();
+      // Per-channel isolated start (F-105); mic first for HAL ordering.
+      this.startCaptureChannels('reconfigureSttProvider');
     }
 
     console.log('[Main] STT Provider reconfigured');
@@ -4767,13 +4815,18 @@ export class AppState {
         //   - The deferred stop also leaves the SCK/CoreAudio Tap holding device
         //     resources, so even if start() succeeded the BG thread couldn't
         //     re-acquire them.
-        // destroy() (called via the new instance shadow) synchronously removes
-        // listeners; the old monitor's stop/join still completes in setImmediate.
-        // The new instance has its own fresh state so there's no race.
+        // The destroy MUST be awaited: destroy() resolves only after the
+        // deferred monitor.stop() has released the CoreAudio/WASAPI handles.
+        // Firing it without awaiting let the fresh capture's start() race the
+        // dying monitor for the HAL property-listener lock ("0 chunks in 8s")
+        // — the warm-TCC-cache capability await below resolves in microtasks,
+        // which drain before the deferred stop's setImmediate (F-104,
+        // live-reproduced in scripts/audit/F-104-repro.mjs). Null the field
+        // first so watcher ticks and other flows observe the teardown.
         const oldCapture = this.systemAudioCapture;
-        oldCapture?.destroy();
         this.systemAudioCapture = null;
         this._sysSttRateApplied = false;
+        await oldCapture?.destroy();
 
         const screenCapability = await resolveMacScreenCaptureCapability('system audio recovery');
         if (!isRecoveryCurrentMeeting()) {
@@ -4794,6 +4847,13 @@ export class AppState {
           return;
         }
 
+        // Ownership revalidation — same rationale as the route-change flow
+        // (F-102): if another rebuild assigned the field while we awaited,
+        // constructing ours would orphan one of the two captures.
+        if (this.systemAudioCapture) {
+          console.warn('[AudioRecovery] Capture rebuilt by another flow mid-await — keeping theirs.');
+          return;
+        }
         const fresh = new SystemAudioCapture(this._lastRequestedOutputDeviceId);
         this.systemAudioCapture = fresh;
         this.wireSystemCapture(fresh, '(Recovery)');
@@ -4846,6 +4906,12 @@ export class AppState {
    */
   private _defaultOutputWatcherInterval: NodeJS.Timeout | null = null;
   private _lastObservedDefaultOutputId: string | null = null;
+  // F2 (code-review 2026-08-14): rebuild-failure budget for the route-change
+  // handler. A throw mid-rebuild rolls back the observation so the next tick
+  // retries — but a DETERMINISTIC failure (e.g. native module missing, F-107)
+  // must not retry-log every 4s forever, so retries are capped like the
+  // recovery flow's 3-attempt budget. Reset on any successful rebuild.
+  private _routeChangeRebuildFailures = 0;
   private _defaultOutputSwitchInProgress = false;
 
   private startDefaultOutputWatcher(): void {
@@ -4884,8 +4950,12 @@ export class AppState {
       if (currentId === this._lastObservedDefaultOutputId) return;
 
       console.warn(`[DefaultOutputWatcher] Default output changed: ${this._lastObservedDefaultOutputId} → ${currentId}. Rebinding CoreAudio Tap.`);
-      this._lastObservedDefaultOutputId = currentId;
-      this.handleDefaultOutputChanged().catch(err => {
+      // The observation is committed INSIDE handleDefaultOutputChanged, after
+      // its bail-outs. Advancing it here made any bail (in practice: the
+      // recovery mutex) swallow the route change permanently — this equality
+      // check then skipped every subsequent tick, and the tap stayed bound to
+      // the abandoned device for the rest of the meeting (F-103).
+      this.handleDefaultOutputChanged(currentId).catch(err => {
         console.error('[DefaultOutputWatcher] Failed to rebind tap:', err);
       });
     }, 4000);
@@ -4907,7 +4977,7 @@ export class AppState {
     this.stopDefaultOutputWatcher();
   }
 
-  private async handleDefaultOutputChanged(): Promise<void> {
+  private async handleDefaultOutputChanged(currentId?: string): Promise<void> {
     const meetingGeneration = this._meetingGeneration;
     const isCurrentMeeting = () => this.isMeetingActive && this._meetingGeneration === meetingGeneration;
     if (this._isQuitting) return;
@@ -4926,6 +4996,16 @@ export class AppState {
       console.log('[DefaultOutputWatcher] Recovery in progress — deferring route-change rebuild.');
       return;
     }
+    // Commit the observation only now that this cycle will actually attempt
+    // the rebuild. This is what makes the deferral above safe: the watcher's
+    // next tick still sees a changed id and re-fires this handler once
+    // recovery's instance is in place (live-reproduced in
+    // scripts/audit/F-103-repro.mjs).
+    // Kept so the ownership bail below can UNDO this commit — see there.
+    const previousObservedOutputId = this._lastObservedDefaultOutputId;
+    if (currentId !== undefined) {
+      this._lastObservedDefaultOutputId = currentId;
+    }
     this._defaultOutputSwitchInProgress = true;
     try {
       // Same destroy+recreate pattern as setupAudioRecoveryHandler — never
@@ -4933,11 +5013,14 @@ export class AppState {
       // start. Reset the recovery counter so a subsequent unrelated failure
       // gets its full 3-attempt budget.
       const oldCapture = this.systemAudioCapture;
-      oldCapture?.destroy();
       this.systemAudioCapture = null;
       this._sysSttRateApplied = false;
       this._systemAudioRecoveryAttempts = 0;
       this._systemAudioConsecutiveFailures = 0;
+      // Awaited for the same reason as the recovery flow (F-104): the fresh
+      // capture must not start while the dying monitor still holds the HAL
+      // property-listener lock.
+      await oldCapture?.destroy();
 
       const screenCapability = await resolveMacScreenCaptureCapability('default output route change');
       if (this._isQuitting) return;
@@ -4959,6 +5042,28 @@ export class AppState {
         return;
       }
 
+      // Ownership revalidation: we nulled the field before awaiting. If it is
+      // non-null now, another rebuild flow (restartCapturesAfterResume takes
+      // no mutex) assigned while we awaited — it owns the capture, and
+      // constructing ours would orphan one of the two: started, wired, never
+      // destroyed, double-writing the live STT socket (F-102, live-reproduced
+      // in scripts/audit/F-102-repro.mjs).
+      if (this.systemAudioCapture) {
+        console.warn('[DefaultOutputWatcher] Capture rebuilt by another flow mid-await — keeping theirs.');
+        // ROLL BACK the observation. Their instance is NOT necessarily bound to
+        // the new default: restartCapturesAfterResume constructs
+        // `new SystemAudioCapture(this._lastRequestedOutputDeviceId)` — the OLD
+        // device — and holds the field non-null across its own `await destroy()`,
+        // so it wins this race on a wake+route-switch. Leaving the new id
+        // committed made the watcher's `currentId !== _lastObservedDefaultOutputId`
+        // check false forever, so the tap was never rebound for the rest of the
+        // meeting: the F-103 failure reached straight through the F-102 guard.
+        // Restoring the previous id lets the next watcher tick retry, which is
+        // safe here precisely because their capture is non-null (the tick's own
+        // `if (!this.systemAudioCapture) return` guard cannot spin on it).
+        this._lastObservedDefaultOutputId = previousObservedOutputId;
+        return;
+      }
       // Pass undefined (not the new device id) so CoreAudio picks up the new
       // default at construction time. This is intentional: binding to a
       // stable id would defeat the whole point of "follow the user's route".
@@ -4976,6 +5081,32 @@ export class AppState {
         reason: 'output-route-changed',
       });
       console.log('[DefaultOutputWatcher] CoreAudio Tap rebound to new default output.');
+      this._routeChangeRebuildFailures = 0;
+    } catch (err) {
+      // F2 (code-review 2026-08-14): the observation was committed BEFORE the
+      // fallible span (destroy → capability probe → construct → start), so a
+      // throw here used to leave the new id committed with no capture built —
+      // every subsequent tick saw currentId === committed and the route change
+      // was permanently re-swallowed (the exact F-103 failure, back on the
+      // error path). Roll the observation back so the next 4s tick retries,
+      // bounded so a deterministic throw cannot retry-log forever.
+      this._routeChangeRebuildFailures += 1;
+      if (this._routeChangeRebuildFailures <= 3) {
+        this._lastObservedDefaultOutputId = previousObservedOutputId;
+        console.error(`[DefaultOutputWatcher] Route-change rebuild failed (attempt ${this._routeChangeRebuildFailures}/3) — will retry on next tick:`, err);
+      } else {
+        // Budget exhausted: keep the commit (stop retrying) and tell the
+        // renderer the tap is not following the route, mirroring the
+        // permission-denied broadcast shape so banners can react.
+        console.error('[DefaultOutputWatcher] Route-change rebuild failed after 3 attempts — giving up until the next route change:', err);
+        this.broadcastDeviceSelection({
+          kind: 'output',
+          requested: null,
+          actual: null,
+          fellBack: true,
+          reason: 'output-route-rebuild-failed',
+        });
+      }
     } finally {
       this._defaultOutputSwitchInProgress = false;
     }
@@ -5392,6 +5523,55 @@ export class AppState {
   }
 
   /**
+   * Start the mic and system capture channels with per-channel failure
+   * isolation (F-105). MicrophoneCapture.start() rethrows by design (the
+   * native open is lazy and happens inside start()); running the four starts
+   * as one bare sequence meant a mic throw skipped the system channel AND
+   * every downstream step (live indexing, route watcher), leaving a
+   * wired-but-never-started capture that emits no 'start' — so the stuck
+   * watchdog never armed and the whole meeting sat dead behind one generic
+   * banner. Live-reproduced in scripts/audit/F-105-repro.mjs.
+   *
+   * Mic first — the lazy mic start constructs the cpal input stream; doing it
+   * before the CoreAudio tap avoids HAL contention (same ordering invariant
+   * as every call site this replaces).
+   */
+  private startCaptureChannels(context: string): { mic: boolean; system: boolean } {
+    const started = { mic: false, system: false };
+    try {
+      this.microphoneCapture?.start();
+      this.googleSTT_User?.start();
+      started.mic = true;
+    } catch (err) {
+      console.error(`[Main] ${context}: mic channel failed to start:`, err);
+      this.sendAudioCaptureFailed({
+        channel: 'mic',
+        message: `Microphone failed to start (${(err as Error)?.message || 'unknown error'}). Check that no other app holds the mic — the meeting continues with system audio only.`,
+        attempt: 0,
+        maxAttempts: 0,
+        terminal: true,
+        stuck: false,
+      });
+    }
+    try {
+      this.systemAudioCapture?.start();
+      this.googleSTT?.start();
+      started.system = true;
+    } catch (err) {
+      console.error(`[Main] ${context}: system channel failed to start:`, err);
+      this.sendAudioCaptureFailed({
+        channel: 'system',
+        message: `System audio failed to start (${(err as Error)?.message || 'unknown error'}). The meeting continues with microphone only.`,
+        attempt: 0,
+        maxAttempts: 0,
+        terminal: true,
+        stuck: false,
+      });
+    }
+    return started;
+  }
+
+  /**
    * Public meeting-start entry point. Reachable concurrently from renderer IPC,
    * calendar auto-start, global shortcuts and the tray, so every request goes
    * through the transition queue: duplicate starts coalesce, and a start
@@ -5659,20 +5839,12 @@ export class AppState {
           userSttOwnedByInit = this.googleSTT_User;
           ragManagerOwnedByInit = this.ragManager;
 
-          // Start Microphone FIRST. MicrophoneCapture is lazy-init: start()
-          // constructs the cpal input stream. If we start the CoreAudio system
-          // tap first, cpal can hang inside build_input_stream while the aggregate
-          // device IO proc is already active (observed: logs stop after
-          // `[Microphone] Device: ...`). Keep launch-time mic discipline by
-          // staying lazy, but restore the pre-fix HAL ordering inside meetings.
-          this.microphoneCapture?.start();
-          this.googleSTT_User?.start();
-          userSttStartedByInit = true;
-
-          // Start System Audio after the mic stream has been constructed.
-          this.systemAudioCapture?.start();
-          this.googleSTT?.start();
-          systemSttStartedByInit = true;
+          // Per-channel isolated start (F-105) — mic first for the HAL
+          // ordering invariant; a mic failure no longer prevents the system
+          // channel, live indexing, or the route watcher from starting.
+          const channelsStarted = this.startCaptureChannels('startMeeting');
+          userSttStartedByInit = channelsStarted.mic;
+          systemSttStartedByInit = channelsStarted.system;
         } else {
           console.log('[Main] Ambient AI Chat enabled — skipping mic/system audio capture and STT for this session.');
         }
@@ -6600,7 +6772,7 @@ export class AppState {
     // win.focus() can cause macOS to re-activate the app. Re-hide the dock
     // if we are in undetectable mode.
     if (process.platform === 'darwin' && this.isUndetectable) {
-      app.dock.hide();
+      if (app.dock) app.dock.hide();  // app.dock is macOS-only (undefined elsewhere); darwin+isUndetectable gated at 6599
     }
     const mainWindow = this.getMainWindow();
     this.sendToWindow(mainWindow, 'capture-and-process', {
@@ -6614,7 +6786,10 @@ export class AppState {
       let captureArea: Electron.Rectangle | undefined;
 
       if (process.platform === 'win32' || process.platform === 'darwin') {
-        captureArea = await this.cropperWindowHelper.showCropper();
+        // showCropper() reports "cancelled" as null; captureArea is declared
+        // `| undefined`. Both are falsy, so the `if (!captureArea)` throw below
+        // behaves identically — this only reconciles the two sentinels.
+        captureArea = (await this.cropperWindowHelper.showCropper()) ?? undefined;
 
         if (!captureArea) {
           throw new Error("Selection cancelled");
@@ -6942,7 +7117,7 @@ export class AppState {
     // app.dock.isVisible() is the OS ground truth. decideDockTransition tells us
     // whether the dock needs changing given the desired state and what's
     // currently applied (currentlyHidden = !visible).
-    const currentlyHidden = !app.dock.isVisible();
+    const currentlyHidden = !app.dock!.isVisible();  // app.dock is macOS-only (undefined elsewhere); non-darwin early-returns at 6933
     const { shouldApply } = decideDockTransition(wantUndetectable, currentlyHidden);
 
     if (shouldApply) {
@@ -6953,7 +7128,7 @@ export class AppState {
           targetFocusWindow.isFocused();
 
         console.log(`[Stealth] app.dock.hide() (enforce attempt ${attempt})`);
-        app.dock.hide();
+        if (app.dock) app.dock.hide();  // app.dock is macOS-only (undefined elsewhere); non-darwin early-returns at 6933
         this.hideTray();
 
         // Re-assert content protection: the activation-policy flip can reset
@@ -6967,7 +7142,7 @@ export class AppState {
         }
       } else {
         console.log(`[Stealth] app.dock.show() (enforce attempt ${attempt})`);
-        app.dock.show();
+        if (app.dock) app.dock.show();  // app.dock is macOS-only (undefined elsewhere); non-darwin early-returns at 6933
         this.showTray();
         // Do NOT call focus() — let the user's current app retain focus.
       }
@@ -7247,7 +7422,7 @@ export class AppState {
       if (isMac) {
         // Skip dock icon update when dock is hidden to avoid potential flicker
         if (!this.isUndetectable) {
-          app.dock.setIcon(image);
+          if (app.dock) app.dock.setIcon(image);  // app.dock is macOS-only (undefined elsewhere); isMac gated at 7244
         }
       } else {
         // Windows/Linux: Update all window icons
@@ -7449,7 +7624,7 @@ async function initializeApp() {
     // SettingsManager is already statically imported — no require() needed.
     const isUndetectableOnStartup = SettingsManager.getInstance().get('isUndetectable') ?? false;
     if (isUndetectableOnStartup) {
-      app.dock.hide();
+      if (app.dock) app.dock.hide();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 7445
     } else {
       // Non-stealth: clamp to accessory (dock-tile-less) until the disguised
       // name/icon is painted and the window exists. Do NOT promote to 'regular'
@@ -7536,6 +7711,15 @@ async function initializeApp() {
   // Initialize IPC handlers before window creation
   initializeIpcHandlers(appState)
 
+  // Deterministic fault injection for the init-failure contract (F-110):
+  // inert unless the env var is set. Sits inside initializeApp's unguarded
+  // stretch so scripts/audit/F-110-repro.mjs can prove that a mid-init throw
+  // terminates the process instead of leaving a windowless zombie that holds
+  // the single-instance lock.
+  if (process.env.NATIVELY_TEST_INIT_FAULT === '1') {
+    throw new Error('NATIVELY_TEST_INIT_FAULT injected init failure');
+  }
+
   // Start the in-app review session ledger. This is intentionally main-process
   // owned so renderer reloads don't double-count app sessions. Also sync the
   // backend prompt-state once so cross-install dismissals/reviews are honored.
@@ -7609,6 +7793,23 @@ async function initializeApp() {
   // See electron/services/InstallPingManager.ts for privacy details
   const { sendAnonymousInstallPing } = require('./services/InstallPingManager');
   sendAnonymousInstallPing();
+
+  // Usage outbox — durable delivery of client-reported (BYOK) usage events.
+  //
+  // Started AFTER credentials are loaded, but the key is passed as a GETTER
+  // rather than a value: a user who pastes their Natively key ten minutes from
+  // now must not need a restart before their queued events can drain. Inert
+  // unless NATIVELY_USAGE_OUTBOX_ENABLED is set, so shipping this changes
+  // nothing until the flag is switched on.
+  try {
+    const { usageOutbox } = require('./services/UsageOutbox');
+    usageOutbox.start(() => CredentialsManager.getInstance().getNativelyApiKey());
+    // Drain anything queued while the app was closed, without waiting a full
+    // dispatch interval. Deliberately not awaited — startup must not block on it.
+    setTimeout(() => { void usageOutbox.dispatchOnce(); }, 5000);
+  } catch (err: any) {
+    console.warn('[UsageOutbox] startup failed (non-fatal):', err?.message || err);
+  }
 
   // Load the Google Service Account key for Speech-to-Text: the persisted path
   // first, then GOOGLE_APPLICATION_CREDENTIALS (set in a terminal but not for a
@@ -7704,7 +7905,7 @@ async function initializeApp() {
   }
 
   // DEV-ONLY: thinking MATRIX (budgets × levels) on a focused problem subset.
-  //   THINKING_MATRIX=1 THINKING_BENCH_MODEL=gemini-3.6-flash THINKING_BENCH_DATASET=$(pwd)/electron/services/dev/cf10.json npm run electron:build
+  //   THINKING_MATRIX=1 THINKING_BENCH_MODEL=gemini-3.7-flash THINKING_BENCH_DATASET=$(pwd)/electron/services/dev/cf10.json npm run electron:build
 if (process.env.THINKING_MATRIX === '1') {
     (async () => {
       try {
@@ -8058,7 +8259,7 @@ if (process.env.THINKING_MATRIX === '1') {
       // Do NOT call dock.show() while a meeting is running — the dock icon
       // appearing mid-meeting is a critical stealth failure.
       if (!appState.getUndetectable() && !appState.getIsMeetingActive()) {
-        app.dock.show();
+        if (app.dock) app.dock.show();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 8080
       }
     }
 
@@ -8228,22 +8429,31 @@ if (process.env.THINKING_MATRIX === '1') {
   app.on('child-process-gone', (_event, details) => {
     logCrashConsole('child-process-gone', { details });
     console.warn('[main] child-process-gone:', details);
-    stopAppManagedHindsight('child-process-gone');
-    // REGRESSION FIX (2026-08-07): do NOT close the database here. This event
-    // fires for ANY dead utility/helper child process, most of which the app
-    // recovers from transparently, and this handler does not exit. Closing the
-    // singleton was therefore killing meeting persistence for the rest of the
-    // session over a recoverable event. Main owns the database synchronously —
-    // a child process dying cannot corrupt it.
+    // A Chromium child (GPU / Utility / etc.) dying is NOT terminal for the
+    // main process — Chromium relaunches those services and the app keeps
+    // running (live-verified: SIGKILLed GPU is respawned within seconds).
+    // emergencyCloseDatabase() is irreversible (nulls the singleton with no
+    // reopen path — see the render-process-gone note above), so closing here
+    // turned every recoverable child restart into silent, session-wide
+    // persistence loss. Only close on an actual teardown, where the child
+    // exodus is part of the quit.
+    if (appState.isQuitting?.()) {
+      stopAppManagedHindsight('child-process-gone');
+      emergencyCloseDatabase('child-process-gone');
+    }
   });
 
-  app.on('gpu-process-crashed', (_event, killed: boolean) => {
+  // TODO(electron43): dead event on Electron 43; remove after verifying child-process-gone covers GPU crashes on macOS+Windows
+  // The `as any` is type-only: Electron 43 dropped 'gpu-process-crashed' from its
+  // typings, so no overload matches. The listener is deliberately KEPT registered
+  // (removing it would be a behaviour change) — see docs/ts7-upgrade-audit.md §4.4.
+  app.on('gpu-process-crashed' as any, (_event: Electron.Event, killed: boolean) => {
     logCrashConsole('gpu-process-crashed', { killed });
-    // REGRESSION FIX (2026-08-07): do NOT close the database here either. GPU
-    // process crashes are routine and recoverable — Windows TDR driver resets
-    // raise this event during normal operation — and Electron re-spawns the GPU
-    // process on its own. This handler does not exit, so closing the database
-    // meant a single driver reset silently discarded every meeting afterwards.
+    // Deprecated alias of child-process-gone {type:'GPU'} — same policy:
+    // a GPU restart is recoverable; never destroy the DB for it.
+    if (appState.isQuitting?.()) {
+      emergencyCloseDatabase('gpu-process-crashed');
+    }
   });
 
   app.on('gpu-info-update', () => {
@@ -8406,12 +8616,15 @@ if (process.env.THINKING_MATRIX === '1') {
       console.error('[Main] Failed to scrub credentials on quit:', e);
     }
 
-    // Clean up screenshot queues to prevent residual PNG files on disk
+    // Clean up screenshot queues to prevent residual PNG files on disk.
+    // Must run on the LIVE AppState helper: clearQueues() only deletes the
+    // files listed in the instance's in-memory queues, and a fresh
+    // `new ScreenshotHelper()` starts with empty queues (the constructor
+    // never scans the directory) — so the old code deleted nothing while
+    // logging success, and captured meeting screenshots accumulated forever
+    // (F-111, live-reproduced in scripts/audit/F-111-repro.mjs).
     try {
-      const { ScreenshotHelper } = require('./ScreenshotHelper');
-      // Clear screenshot queues - this deletes all queued screenshot files
-      const screenshotHelper = new ScreenshotHelper();
-      screenshotHelper.clearQueues();
+      appState.getScreenshotHelper()?.clearQueues();
       console.log('[Main] Screenshot queues cleared on quit');
     } catch (e) {
       console.error('[Main] Failed to clear screenshot queues on quit:', e);

@@ -1,0 +1,30 @@
+// tsc-for-EMIT only. Nothing in the app build uses this — esbuild
+// (scripts/build-electron.js) produces dist-electron.
+//
+// It exists for four tests that build an isolated CommonJS tree and then
+// `createRequire()` the result:
+//   electron/llm/__tests__/EvidenceResolverWiringIdentity2026_07_12.test.mjs
+//   electron/services/__tests__/LLMHelperNegotiationCoachingGate.test.mjs
+//   electron/services/__tests__/PhoneChatRouteOptions.test.mjs
+//   electron/intelligence/__tests__/ContextOsProductionDefaultRollout2026_07_18.test.mjs
+//
+// The main project (./tsconfig.json) is type-check only and TS7-legal, which
+// forces module:"Preserve" (moduleResolution:"bundler" permits nothing else on
+// TS 5.x). "Preserve" emits `import`/`export` verbatim, which those tests cannot
+// require(). So the emit path gets its own config instead of bending the
+// check path back to a pre-TS7 shape.
+//
+// module:"CommonJS" + moduleResolution:"bundler" is accepted by TS 7 and REJECTED
+// by TS 5.9.3 (TS5095) — TS 7 relaxed that rule. The four tests therefore invoke
+// this config through node_modules/typescript7/bin/tsc, NOT the TS 5.x binary.
+// Verified: TS 7.0.2 emits requireable CommonJS ("use strict", no `import`).
+// This keeps the whole check+emit pipeline on TS 7; the TS 5.x package survives
+// only for tools that consume the compiler API (see docs/ts7-upgrade-report.md).
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "CommonJS",
+    "moduleResolution": "bundler"
+  }
+}

@@ -222,7 +222,7 @@ describe('Context OS — production-default contract build behavior (2026-07-18)
         process.platform === 'win32' ? 'junction' : 'dir',
       );
       try {
-        execSync(`node node_modules/.bin/tsc -p electron/tsconfig.json --outDir ${target}`, {
+        execSync(`node node_modules/typescript7/bin/tsc -p electron/tsconfig.emit.json --outDir ${target}`, {
           cwd: repoRoot,
           stdio: 'pipe',
         });

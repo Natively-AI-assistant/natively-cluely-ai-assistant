@@ -1,26 +1,46 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "module": "CommonJS",
+    // Was "CommonJS". esbuild (scripts/build-electron.js) owns all emit for the
+    // main process and already produces CJS; this project is type-check only, so
+    // "Preserve" is both TS7-legal and the honest model of what the bundler does.
+    // "Preserve" also implies moduleResolution "bundler".
+    "module": "Preserve",
     "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "noImplicitAny": true,
+    // Was "noImplicitAny": true — now redundant, "strict" subsumes it.
+    // See docs/ts7-upgrade-audit.md §7.2 (option D).
+    "strict": true,
     "sourceMap": true,
     "jsx": "react-jsx",
-    "baseUrl": ".",
+    // "baseUrl": "." removed — TS7 deletes the option (TS5102) and it was not
+    // load-bearing here: no source file resolves a bare specifier through it.
+    // No "paths" replacement is needed. See docs/ts7-upgrade-audit.md §6.
     "rootDir": "..",
     "outDir": "../dist-electron",
-    "moduleResolution": "node",
-    "resolveJsonModule": true
+    // Was "node" (node10) — removed in TS7 (TS5108).
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    // TS7 requires the @types set to be explicit (see root tsconfig.json).
+    "types": ["node"],
+    // This project is a type-check gate only (npm run typecheck:electron).
+    // esbuild produces dist-electron; tsc must never write there.
+    "noEmit": true
   },
   "include": [
     "**/*.ts",
-    "**/*.js",
-    "../premium/electron/**/*.ts"
+    "**/*.js"
+    // "../premium/electron/**/*.ts" removed from the ROOT FILE SET so that
+    // `strict` applies to this repository's own sources. premium/ is a separate
+    // private submodule and is still fully type-checked as a *dependency* of the
+    // files that import it (verified: 0 x TS2307) — only its internal strict
+    // findings stop being reported here. Making premium strict is a separate
+    // change in natively-premium. See docs/ts7-upgrade-audit.md §7.2.
   ],
   "exclude": [
     "db/seedDemo.ts",
-    "db/test-db.ts"
+    "db/test-db.ts",
+    "../premium/**"
   ]
 }

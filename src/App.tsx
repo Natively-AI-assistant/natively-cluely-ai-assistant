@@ -684,10 +684,52 @@ const App: React.FC = () => {
       });
     }
 
+    // Ollama runtime errors (unreachable / no models installed, after the
+    // fallback also failed). Main has always broadcast these on
+    // 'ollama-error'; nothing consumed them, so the user saw a silent hang
+    // (F-119). Reuses the pull-status banner's 'failed' state — declared in
+    // the union since day one but never set.
+    // Shared reset timer for the two transient failure notices below. Held in
+    // the effect scope so it can be cleared on unmount and re-armed on a second
+    // notice, rather than leaking one uncancellable timer per event.
+    let bannerResetTimer: ReturnType<typeof setTimeout> | undefined;
+    const showTransientBannerFailure = (message: string) => {
+      setOllamaPullStatus('failed');
+      setOllamaPullMessage(message);
+      if (bannerResetTimer) clearTimeout(bannerResetTimer);
+      bannerResetTimer = setTimeout(() => {
+        // Stand down ONLY if the banner is still showing this failure. A real
+        // model pull may have started in the meantime and now owns the banner —
+        // forcing 'idle' would wipe its progress while the download continues.
+        setOllamaPullStatus(prev => (prev === 'failed' ? 'idle' : prev));
+      }, 8000);
+    };
+
+    let removeOllamaError: (() => void) | undefined;
+    if (window.electronAPI?.onOllamaError) {
+      removeOllamaError = window.electronAPI.onOllamaError((data) => {
+        showTransientBannerFailure(data.message || 'Local AI (Ollama) is unavailable.');
+      });
+    }
+
     let removeWarning: (() => void) | undefined;
     if (window.electronAPI?.onIncompatibleProviderWarning) {
       removeWarning = window.electronAPI.onIncompatibleProviderWarning((data) => {
         setIncompatibleWarning(data);
+      });
+    }
+
+    // Embedding degradation notices (F-120): a fallback embedding provider or
+    // a failed space persist silently degrades semantic search. Surface via
+    // the same generic status banner the Ollama failure path uses.
+    let removeEmbeddingDegraded: (() => void) | undefined;
+    if (window.electronAPI?.onEmbeddingDegraded) {
+      removeEmbeddingDegraded = window.electronAPI.onEmbeddingDegraded((data) => {
+        showTransientBannerFailure(
+          data.kind === 'fallback'
+            ? `Semantic search degraded: switched to fallback embeddings (${data.fallbackProvider ?? 'local'}).`
+            : 'Semantic search may need a re-index: embedding space could not be saved.'
+        );
       });
     }
 
@@ -721,7 +763,12 @@ const App: React.FC = () => {
       if (removeMeetingsListener) removeMeetingsListener();
       if (removeProgress) removeProgress();
       if (removeComplete) removeComplete();
+      if (removeOllamaError) removeOllamaError();
       if (removeWarning) removeWarning();
+      if (removeEmbeddingDegraded) removeEmbeddingDegraded();
+      // Without this the pending reset can fire after unmount/remount and
+      // clobber the banner state of the next mount.
+      if (bannerResetTimer) clearTimeout(bannerResetTimer);
       if (removeReindexProgress) removeReindexProgress();
       if (removeLicenseListener) removeLicenseListener();
       if (trialPollId) clearInterval(trialPollId);

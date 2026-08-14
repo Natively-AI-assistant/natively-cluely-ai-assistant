@@ -336,3 +336,29 @@ test('B10: wireMicCapture zero-fill emits sendAudioCaptureFailed with channel="m
     'mic zero-fill message key must remain "mic-zero-fill"'
   );
 });
+
+// ── F10 (code-review 2026-08-14): the revoked-Screen-Recording diagnostic ──
+//
+// The 2026-08 rewrite of this suite deleted the assertion pinning the
+// 'mac-screen-recording-revoked-rebuild' message key, and at that point NO
+// production path emitted it — the distinct revoked-grant diagnostic was dead
+// code, and a macOS user who revoked Screen Recording mid-meeting was told to
+// change devices ('mac-same-device-input-output') instead of re-granting the
+// permission. The emitter now lives on the sustained-zero-fill decision path
+// in main.ts (probe the TCC grant; if effectively denied, the silence is
+// explained and the revoked banner — not a generic silence log — is what the
+// user needs). This test pins that wire so deleting it goes red again.
+test('F10: sustained zero-fill on macOS probes the Screen Recording grant and can emit mac-screen-recording-revoked-rebuild', () => {
+  const mainSrcF10 = read('electron/main.ts');
+  const zeroFillBranch = mainSrcF10.split("sustained-zero-valued-silence' && process.platform === 'darwin'")[1]?.slice(0, 2200) ?? '';
+  assert.ok(zeroFillBranch.length > 0,
+    'main.ts must branch on the sustained-zero-valued-silence reason (darwin-gated)');
+  assert.match(zeroFillBranch, /resolveMacScreenCaptureCapability/,
+    'the branch must PROBE the actual grant rather than assume revocation');
+  assert.match(zeroFillBranch, /bypassCache:\s*true/,
+    'the probe must bypass the capability cache — the revocation just happened');
+  assert.match(zeroFillBranch, /mac-screen-recording-revoked-rebuild/,
+    'the revoked-rebuild diagnostic must be emitted from this branch (it is otherwise dead code)');
+  assert.match(zeroFillBranch, /sendAudioCaptureFailed/,
+    'the diagnosis must reach the renderer as a banner, not just a log line');
+});

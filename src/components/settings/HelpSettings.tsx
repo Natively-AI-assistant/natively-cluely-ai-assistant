@@ -1142,7 +1142,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         </span>
                                         <button onClick={() => { (window as any).electronAPI?.openExternal('https://aistudio.google.com/app/apikey') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
                                     </h5>
-                                    <p className="text-[11px] opacity-80 mb-2">Immense contextual window. Default model: <strong>gemini-3.1-pro</strong>.</p>
+                                    <p className="text-[11px] opacity-80 mb-2">Immense contextual window. Default models: <strong>gemini-3.1-flash-lite</strong>, and <strong>gemini-3.7-flash</strong> for interviews and screenshots.</p>
                                     <span className={kbdClass}>AIzaSy...</span>
                                 </div>
                             </div>

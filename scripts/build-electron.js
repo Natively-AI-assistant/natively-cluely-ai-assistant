@@ -5,7 +5,13 @@
  * Run `npm run typecheck:electron` separately for type safety.
  */
 
-const { build } = require('esbuild');
+const { build, context } = require('esbuild');
+
+// `--watch` replaces the old `tsc -p electron/tsconfig.json --watch` script. That
+// script emitted via tsc, which is incompatible with module:"Preserve" (the
+// TS7-legal setting) — and tsc has not been the emitter for dist-electron for a
+// long time anyway. Type-checking in watch mode is `tsc --noEmit --watch`.
+const WATCH = process.argv.includes('--watch');
 const path = require('path');
 const fs = require('fs');
 
@@ -38,7 +44,7 @@ if (fs.existsSync(premiumDir)) {
 
 const start = Date.now();
 
-build({
+const buildOptions = {
   entryPoints,
   bundle: true,           // resolve all static + dynamic imports so postProcessor
                          // is inlined and the path rewrite works (vs bundle:false
@@ -93,9 +99,23 @@ build({
     js: `try{if(process.env.NATIVELY_UI_EVAL==='1'&&!globalThis.__nativelyDnsPinned){globalThis.__nativelyDnsPinned=1;var __dns=require('dns');var __ol=__dns.lookup.bind(__dns);__dns.lookup=function(h,o,cb){if(typeof o==='function'){cb=o;o={};}if(h==='api.natively.software'){return __dns.resolve4(h,function(e,a){if(e||!a||!a.length)return __ol(h,o,cb);if(o&&o.all)return cb(null,[{address:a[0],family:4}]);return cb(null,a[0],4);});}return __ol(h,o,cb);};console.log('[eval] dns.lookup→resolve4 pinned for api.natively.software');}}catch(__e){try{console.warn('[eval] dns pin banner failed:',__e&&__e.message);}catch(_){}}`,
   },
   logLevel: 'warning',
-}).then(() => {
-  console.log(`[build-electron] Done in ${Date.now() - start}ms`);
-}).catch((err) => {
+};
+
+const onFailure = (err) => {
   console.error('[build-electron] Build failed:', err.message);
   process.exit(1);
-});
+};
+
+if (WATCH) {
+  context(buildOptions).then(async (ctx) => {
+    await ctx.watch();
+    // Deliberately no timing here: ctx.watch() returns once the watcher is armed,
+    // and esbuild runs the first build asynchronously after that — printing an
+    // elapsed time would report context setup, not a completed build.
+    console.log('[build-electron] watching for changes...');
+  }).catch(onFailure);
+} else {
+  build(buildOptions).then(() => {
+    console.log(`[build-electron] Done in ${Date.now() - start}ms`);
+  }).catch(onFailure);
+}
