@@ -53,9 +53,16 @@ describe('processQuestionGated\'s third parameter is a REAL compile-time require
       let stdout = '';
       let threw = false;
       try {
+        // `node <entry>` rather than the `node_modules/.bin/tsc` shim: on
+        // Windows npm writes `tsc.cmd`, which execFileSync (no shell) cannot
+        // launch, so this failed on Windows only. Pinning `typescript`
+        // explicitly also makes the expected diagnostic deterministic — the
+        // repo also carries `typescript7`, whose newer CLI reports TS5112 for
+        // a file passed on the command line instead of the TS2554 asserted here.
         stdout = execFileSync(
-          'node_modules/.bin/tsc',
-          ['--noEmit', '--strict', 'false', '--esModuleInterop', '--skipLibCheck',
+          process.execPath,
+          [path.join('node_modules', 'typescript', 'bin', 'tsc'),
+            '--noEmit', '--strict', 'false', '--esModuleInterop', '--skipLibCheck',
             '--module', 'commonjs', '--moduleResolution', 'node', '--target', 'ESNext',
             '--jsx', 'react-jsx', tempTsFile],
           { cwd: repoRoot, stdio: 'pipe', encoding: 'utf8' },
