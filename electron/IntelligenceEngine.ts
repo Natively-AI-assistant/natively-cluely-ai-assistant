@@ -1516,7 +1516,16 @@ export class IntelligenceEngine extends EventEmitter {
             // its own gated channel. Fully dynamic; resume-derived.
             let candidateProfile = '';
             try {
-                const orchestrator = this.llmHelper.getKnowledgeOrchestrator?.();
+                // Typed HERE, at the declaration, rather than as a type argument on the
+                // withTimeout(...) call below. getKnowledgeOrchestrator() is declared
+                // `: any`, which made inference collapse the grounding result to `{}`.
+                // Annotating the call site would have worked too, but
+                // WtaParallelPrestream.test.mjs asserts on the literal source text
+                // `await withTimeout(orchestrator.processQuestion(` — so the fix belongs
+                // on the binding, leaving every call site spelled exactly as before.
+                const orchestrator: (Record<string, any> & {
+                    processQuestion(question: string): Promise<PromptAssemblyResult | null>;
+                }) | undefined = this.llmHelper.getKnowledgeOrchestrator?.();
                 if (orchestrator?.isKnowledgeMode?.() && !strictDocumentGroundedActive
                     && wtaDecisionAllowsCandidateProfile) {
                     const extracted = extractedQuestion;
@@ -1610,7 +1619,7 @@ export class IntelligenceEngine extends EventEmitter {
                         const GROUNDING_BUDGET_MS = 2000;
                         const groundStart = Date.now();
                         const { value: knowledge, timedOut: groundingTimedOut } =
-                            await withTimeout<PromptAssemblyResult | null>(orchestrator.processQuestion(lookupQ), GROUNDING_BUDGET_MS, null);
+                            await withTimeout(orchestrator.processQuestion(lookupQ), GROUNDING_BUDGET_MS, null);
                         if (groundingTimedOut) {
                             trace.mark('degraded_context', { reason: 'grounding_timeout', budgetMs: GROUNDING_BUDGET_MS });
                             console.warn(`[IntelligenceEngine] Profile grounding exceeded ${GROUNDING_BUDGET_MS}ms — proceeding without it`);

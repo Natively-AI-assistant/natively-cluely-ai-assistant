@@ -4908,6 +4908,8 @@ export class AppState {
     // next tick still sees a changed id and re-fires this handler once
     // recovery's instance is in place (live-reproduced in
     // scripts/audit/F-103-repro.mjs).
+    // Kept so the ownership bail below can UNDO this commit — see there.
+    const previousObservedOutputId = this._lastObservedDefaultOutputId;
     if (currentId !== undefined) {
       this._lastObservedDefaultOutputId = currentId;
     }
@@ -4955,6 +4957,18 @@ export class AppState {
       // in scripts/audit/F-102-repro.mjs).
       if (this.systemAudioCapture) {
         console.warn('[DefaultOutputWatcher] Capture rebuilt by another flow mid-await — keeping theirs.');
+        // ROLL BACK the observation. Their instance is NOT necessarily bound to
+        // the new default: restartCapturesAfterResume constructs
+        // `new SystemAudioCapture(this._lastRequestedOutputDeviceId)` — the OLD
+        // device — and holds the field non-null across its own `await destroy()`,
+        // so it wins this race on a wake+route-switch. Leaving the new id
+        // committed made the watcher's `currentId !== _lastObservedDefaultOutputId`
+        // check false forever, so the tap was never rebound for the rest of the
+        // meeting: the F-103 failure reached straight through the F-102 guard.
+        // Restoring the previous id lets the next watcher tick retry, which is
+        // safe here precisely because their capture is non-null (the tick's own
+        // `if (!this.systemAudioCapture) return` guard cannot spin on it).
+        this._lastObservedDefaultOutputId = previousObservedOutputId;
         return;
       }
       // Pass undefined (not the new device id) so CoreAudio picks up the new
@@ -6597,7 +6611,7 @@ export class AppState {
     // win.focus() can cause macOS to re-activate the app. Re-hide the dock
     // if we are in undetectable mode.
     if (process.platform === 'darwin' && this.isUndetectable) {
-      app.dock!.hide();  // app.dock is macOS-only (undefined elsewhere); darwin+isUndetectable gated at 6599
+      if (app.dock) app.dock.hide();  // app.dock is macOS-only (undefined elsewhere); darwin+isUndetectable gated at 6599
     }
     const mainWindow = this.getMainWindow();
     this.sendToWindow(mainWindow, 'capture-and-process', {
@@ -6953,7 +6967,7 @@ export class AppState {
           targetFocusWindow.isFocused();
 
         console.log(`[Stealth] app.dock.hide() (enforce attempt ${attempt})`);
-        app.dock!.hide();  // app.dock is macOS-only (undefined elsewhere); non-darwin early-returns at 6933
+        if (app.dock) app.dock.hide();  // app.dock is macOS-only (undefined elsewhere); non-darwin early-returns at 6933
         this.hideTray();
 
         // Re-assert content protection: the activation-policy flip can reset
@@ -6967,7 +6981,7 @@ export class AppState {
         }
       } else {
         console.log(`[Stealth] app.dock.show() (enforce attempt ${attempt})`);
-        app.dock!.show();  // app.dock is macOS-only (undefined elsewhere); non-darwin early-returns at 6933
+        if (app.dock) app.dock.show();  // app.dock is macOS-only (undefined elsewhere); non-darwin early-returns at 6933
         this.showTray();
         // Do NOT call focus() — let the user's current app retain focus.
       }
@@ -7247,7 +7261,7 @@ export class AppState {
       if (isMac) {
         // Skip dock icon update when dock is hidden to avoid potential flicker
         if (!this.isUndetectable) {
-          app.dock!.setIcon(image);  // app.dock is macOS-only (undefined elsewhere); isMac gated at 7244
+          if (app.dock) app.dock.setIcon(image);  // app.dock is macOS-only (undefined elsewhere); isMac gated at 7244
         }
       } else {
         // Windows/Linux: Update all window icons
@@ -7449,7 +7463,7 @@ async function initializeApp() {
     // SettingsManager is already statically imported — no require() needed.
     const isUndetectableOnStartup = SettingsManager.getInstance().get('isUndetectable') ?? false;
     if (isUndetectableOnStartup) {
-      app.dock!.hide();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 7445
+      if (app.dock) app.dock.hide();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 7445
     } else {
       // Non-stealth: clamp to accessory (dock-tile-less) until the disguised
       // name/icon is painted and the window exists. Do NOT promote to 'regular'
@@ -8084,7 +8098,7 @@ if (process.env.THINKING_MATRIX === '1') {
       // Do NOT call dock.show() while a meeting is running — the dock icon
       // appearing mid-meeting is a critical stealth failure.
       if (!appState.getUndetectable() && !appState.getIsMeetingActive()) {
-        app.dock!.show();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 8080
+        if (app.dock) app.dock.show();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 8080
       }
     }
 
