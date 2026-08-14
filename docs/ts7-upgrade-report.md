@@ -469,7 +469,15 @@ of changing emitters.
 | `electron/tsconfig.emit.json` (the 4 isolated-tree tests) | **TS 7.0.2** |
 | `dist` / `dist-electron` emit | esbuild + vite (unchanged, never tsc) |
 | `typecheck:ts5*` | TS 5.9.3 — deliberate fallback, follow-up (g) |
-| `react-doctor`, `typescript-eslint`, `@tapjs/test` | TS 5.9.3 — **forced**, §16 |
+| `react-doctor`, `typescript-eslint`, `@tapjs/test` | TS 5.9.3 — **forced**, §16.1–16.2 |
+| **Editor / IDE (VS Code tsserver)** | **TS 5.9.3 — forced, and not currently pointable at TS 7. See §16.3** |
+
+"On by default?" — **yes on the command line and in CI, no in the editor.** Every normal command runs
+TS 7 with no flag or opt-in: `build`, `typecheck:electron`, and everything chaining them (`app:build`,
+`app:build:signed`, `dist`, `test:ci`, `electron:dev`), plus the blocking CI step on both matrix legs.
+A fresh clone gets it automatically — `typescript7` is a devDependency, so `npm ci` installs it.
+TS 5.9.3 runs only if someone explicitly types `typecheck:ts5*`. The editor is the one surface that
+does not follow, and cannot yet (§16.3).
 
 ---
 
@@ -582,7 +590,30 @@ directly from 16.1.
 `react-doctor` is the sharp edge: it runs in `.husky/pre-commit`, so breaking it breaks **every commit
 by everyone in this repo**, not just this branch.
 
-### 16.3 Therefore
+### 16.3 TypeScript 7.0 ships no language server, so editors cannot use it
+
+Independent of the API question, and a second reason `typescript` 5.x must stay installed:
+
+```
+node_modules/typescript/lib/tsserver.js    PRESENT
+node_modules/typescript7/lib/tsserver.js   absent
+```
+
+`typescript7/lib/` contains only `tsc.js`, `getExePath.js` and `version.cjs`. TS 7.0 ships a compiler
+binary, not a language server. There is also no `typescript.tsdk` setting in `.vscode/settings.json`
+(it contains nothing TypeScript-related at all), so VS Code resolves the workspace TypeScript to
+`node_modules/typescript` → **5.9.3**.
+
+This is not an oversight in this migration — there is nothing to point an editor at. It does mean the
+in-editor experience is deliberately one compiler behind the build.
+
+**Why that divergence is safe here, measured rather than assumed:** the sorted error lists from both
+compilers were diffed on both projects and came back **byte-identical** (§10) — 0/0 on the root project
+and the same 2 errors on electron before those were resolved. The two agree today. If they ever stop
+agreeing, the non-blocking `typecheck:ts5:electron` CI step is precisely the tripwire that surfaces it,
+which is a further reason not to retire it early (follow-up g).
+
+### 16.4 Therefore
 
 **The `typescript7` alias is the complete migration for TS 7.0.** It is the pattern TypeScript itself
 recommends for this window: TS 7 does the checking, the bundler does the emit, and the TS 5.x package
@@ -594,6 +625,9 @@ survives purely to feed tools that read the compiler API.
 2. Point `typecheck:*` and `build` at plain `tsc`
 3. Delete `typecheck:ts5*` and the CI insurance step (follow-up g)
 4. Re-run this report's gate table
+
+At that point the editor follows automatically: a single `typescript` in `node_modules` is what
+VS Code resolves, so no `typescript.tsdk` setting is needed then either.
 
 Nothing else in the repo needs to change — every tsconfig on a build path is already TS7-legal, and
 the emit config already uses a pairing only TS 7 accepts.
