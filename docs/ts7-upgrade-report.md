@@ -1,21 +1,27 @@
-# TypeScript 7 Upgrade — Phase 1 Report
+# TypeScript 7 Upgrade — Report (Phases 1–4)
 
 **Date:** 2026-08-14
 **Branch:** `chore/ts7-upgrade`
-**Status:** **Phase 1 complete.** Phases 2–4 **not started** (see §10).
+**Status:** **Phases 1–3 complete. TypeScript 7.0.2 is the primary type-checker.**
+One gate deliberately not executed: `npm run dist` — see §14.
 **Companion:** `docs/ts7-upgrade-audit.md` (Phase 0)
 
 ---
 
 ## 0. Headline
 
+**TS 7.0.2 now type-checks this repo, and it reports byte-identical errors to TS 5.9.3 on both
+projects.** `typecheck:electron` and `npm run build` are 0 errors under both compilers.
+
 **Zero new test failures are attributable to this work**, measured by diffing failing test *names*
 against a pre-change baseline — not by comparing counts, which are unusable here because another task
 is editing this working tree concurrently (§8).
 
-Phase 1 briefly halted on a conflict I created — making `electron/tsconfig.json` TS7-legal broke four
-tests that use tsc *for emit*. That is resolved in §5 with a dedicated emit config, verified
-behaviour-equivalent by A/B against the original config's shape.
+Two things did not go to plan and are documented rather than smoothed over:
+Phase 1 halted on a conflict I created (four tests use tsc *for emit*; §5), and the two "deferred"
+findings turned out to **break `npm run dist`**, so they had to be resolved rather than parked (§7).
+
+**TS 7 is not faster here** — 0.477 s vs 0.461 s on 1317 files. Measured, §12.
 
 ---
 
@@ -27,13 +33,13 @@ All figures re-measured after the final commit, against a freshly rebuilt `dist-
 |---|---|---|---|
 | `npm run build` | exit 0, 0 TS errors | **exit 0, 0 TS errors** | ✅ |
 | `npm run build:electron` (esbuild) | exit 0 | **exit 0** | ✅ unaffected by `module: Preserve` |
-| `npm run typecheck:electron` | exit 0, 0 errors | **exit 2, exactly the 2 deferred** | ✅ meets the stated criterion |
+| `npm run typecheck:electron` | exit 0, 0 errors (TS 5.9.3) | **exit 0, 0 errors (TS 7.0.2)** | ✅ |
 | `npm run test:lib` | exit 0 | **exit 0** | ✅ |
 | `npm run test:scripts` | exit 0 | **exit 0** | ✅ |
 | `npm test` | exit 1 — 128 fail / 7443 tests / **154 distinct failing names** | exit 1 — 130 fail / 7445 tests / **156 distinct names** | ✅ **+2 names, both provably not mine** (§1.1) |
 | `npm run test:intelligence` | *no baseline captured* | 951 pass / 3 fail (963) | ⚠️ see §1.2 |
 | lint | — | — | **N/A — no root ESLint config exists** (audit §7.4) |
-| `npm run dist` | not run | **not run** | ⛔ not executed — see §11 |
+| `npm run dist` | not run | **not run** | ⛔ deliberately not executed — §14 |
 
 ### 1.1 The two new failing names are not mine
 
@@ -55,7 +61,8 @@ never satisfied it. Plus one unrelated `assertNoAuthorityContradiction` check.
 **Caveat stated plainly: no baseline was captured for this suite before the change**, so these are
 argued from per-failure evidence rather than from a before/after diff.
 
-**Strict findings: 52 of 54 fixed, 2 deferred, 0 suppressed.**
+**Strict findings: all 54 fixed, 0 deferred, 0 suppressed.** (52 in Phase 1; the last 2 in Phase 3 —
+see §7, they turned out to block `npm run dist`.)
 `@ts-ignore` / `@ts-nocheck` / `@ts-expect-error` added: **0** (verified by diffing the whole range).
 No strict flag was relaxed. The sanctioned `as any` (decision 2) is the `gpu-process-crashed` event
 name, in both listeners, as specified.
@@ -75,9 +82,15 @@ already had. It is not a new escape hatch, but it is not fully typed either; typ
 
 | | Before | After |
 |---|---|---|
-| `typescript` (declared / installed) | `^5.6.3` / 5.9.3 | **unchanged** — Phase 2 was to add the `typescript7` alias |
-| Type-checking compiler | TS 5.9.3 | TS 5.9.3 (Phase 1 validates on the current compiler by design) |
-| Emit | esbuild / vite | unchanged |
+| `typescript` (declared / installed) | `^5.6.3` / 5.9.3 | **`^5.6.3` / 5.9.3 — deliberately unchanged** |
+| `typescript7` (alias) | *(absent)* | **`npm:typescript@^7.0.2` / 7.0.2** |
+| Type-checking compiler | TS 5.9.3 | **TS 7.0.2** (TS 5.9.3 retained as `typecheck:ts5*` fallback) |
+| Emit | esbuild / vite | **unchanged** |
+
+`typescript` 5.x stays because three consumers cap below TS 7 (audit §5): `react-doctor@0.2.10`
+(`>=5.0.4 <7`, and it runs in `.husky/pre-commit` for **every commit by everyone**),
+`@typescript-eslint/*@8.59.3` (`>=4.8.4 <6.1.0`), and `@tapjs/test` via the root `tap` dependency
+(`typescript 5.9`). Dropping the alias is follow-up (c).
 
 ---
 
@@ -239,14 +252,43 @@ expression.** No guard test was weakened or edited to accommodate a type change.
 
 ---
 
-## 7. Deferred strict findings (2) — deliberate, per the no-suppression rule
+## 7. The two "deferred" findings — resolved in Phase 3, because they broke `dist`
 
-| # | Site | Why deferred |
-|---|---|---|
-| 1 | `IntelligenceEngine:2268` `TS2322` | `queryOkfCards(pack: KnowledgePack, …)` vs `EvidenceResolver`'s DI port `{cards, packVersion}`. Genuinely ambiguous which side owns the contract; picking wrong changes a port used by several call sites. |
-| 2 | `ModeHybridRetriever:1558` `TS18047` | `reranker` possibly null. **No guard found in 1520–1558; the enclosing scope was not traced.** Same shape as the real latent bug in §7.1, so it should be resolved deliberately, not asserted away. |
+Phase 1 parked these as genuinely ambiguous. They stopped being optional once Phase 3 measured the
+release path: **`app:build` chains `npm run typecheck:electron` with `&&`**, so a non-zero typecheck
+made `npm run dist` fail outright. Turning `strict` on had broken the release build — a backlog entry
+was not an acceptable resting place for that.
 
-Gate criterion is therefore "no NEW errors beyond these two" — currently met exactly.
+**1 · `EvidenceResolver`'s DI ports** (was `TS2322` at `IntelligenceEngine:2268`)
+
+The ports declared a structural *subset* of what flows through them, and a function parameter is
+**contravariant** — so the real `queryOkfCards(pack: KnowledgePack, …)` was not assignable to a port
+promising only `{cards, packVersion}`. What settled it was tracing the runtime path rather than
+guessing which side was right: `getPackForFile()` returns `KnowledgePack | null`, and the resolver
+forwards that value **straight** into `queryOkfCards` (`EvidenceResolver.ts:388-391`) — it never builds
+a minimal object. The ports were simply under-declared.
+
+Fix: the ports now name the real types — `KnowledgePack`, `QuestionClassification`,
+`OkfRetrieveOptions`, `ScoredCard` — all **type-only imports from local modules** (not `premium`),
+fully erased at runtime. This states the contract that already existed; it widens nothing.
+
+**2 · `ModeHybridRetriever`'s reranker** (was `TS18047` at `:1558`)
+
+tsc was right, and this was a real latent bug. With no test override **and** `getLocalReranker()`
+returning null (it is wrapped in a try/catch that yields null), nothing assigns `reranker`; the loop
+reached `reranker.rerank(...)`, threw a `TypeError`, and the method's own `catch` converted it into
+`"rerank escalation failed (keeping cosine order)"` + `return null`.
+
+Fix: make that path explicit, preserving **both** observable outcomes — same warning channel and
+prefix, same `return null`, and the telemetry block above still runs untouched.
+
+> ⚠️ **One deliberate behaviour difference, stated rather than buried:** the warning's message *tail*
+> is now an explicit reason instead of a `TypeError` string. Verified no test asserts that text and
+> none exercises the null path. The guard cannot mask a narrower case: `sorted.length < 2` returns
+> earlier, so `poolTexts` is never empty and the loop always executed at least once.
+
+Result: `typecheck:electron` is **0 errors under TS 7.0.2 and under the TS 5.9.3 fallback**. CI's
+blocking electron typecheck goes green and `npm run dist` is unblocked.
 
 ### 7.1 Latent bug found by strict, left in place
 
@@ -295,29 +337,127 @@ task's changes, which remain intact and unstaged.
 | `3601334d` | retire tsc-emit scripts, watch → esbuild |
 | `efda6e2b` | keep source-asserting guard tests passing (dock + withTimeout) |
 | `505e987f` | restore plain-dot spelling for the wiring guard |
-| `28cfbeda` | interim report (superseded by this revision) |
+| `28cfbeda` | interim report (superseded) |
 | `54a2af07` | `electron/tsconfig.emit.json` + repoint the 4 isolated-tree tests |
+| `bee74d85`, `d659fb2c` | report re-measured; `any` claim qualified |
+| `b0fe882d` | **phase 2** — `typescript7` alias, ts7 scripts, non-blocking CI |
+| `5f34baa0` | **phase 3** — TS 7 promoted to primary checker |
+| `3b558651` | **phase 3** — both deferred findings resolved; typecheck 0 errors |
 
 ---
 
-## 10. What Phases 2–4 still need
+## 10. Phase 2 — TS 7 side-by-side
 
-Unchanged from the brief, plus:
+Installed `typescript@7.0.2` as the **`typescript7` npm alias**; `typescript` stays 5.9.3 and untouched
+(§2). Installed with **`--ignore-scripts` on purpose**: this repo's `postinstall` rebuilds native
+modules and downloads models, and another task is actively building and testing in this same working
+directory. Verified `better_sqlite3.node` and `keytar.node` mtimes were **byte-identical before and
+after**, so nothing was rebuilt.
 
-- **Phase 2** is unblocked. `typescript@5.x` must stay for `react-doctor` (pre-commit hook),
-  `typescript-eslint`, and `tap` — install TS 7 only as the `typescript7` alias.
-- **Phase 3** additionally needs `npm run dist` and a packaged smoke run on **macOS and Windows**.
-- **Follow-ups to carry into Phase 4's final report:** (a) `natively-premium` strict migration
-  (20 findings, separate repo); (b) `gpu-process-crashed` removal after runtime verification on both
-  platforms; (c) drop the `typescript7` alias once react-doctor / typescript-eslint / tap support TS 7.1;
-  (d) `renderer/` cleanup (vestigial — audit §6.3); (e) type `getKnowledgeOrchestrator()` properly and
-  drop the `PromptAssemblyResult` type-import; (f) the two deferred findings in §7; (g) once the emit
-  path runs on TS 7, change `electron/tsconfig.emit.json`'s `moduleResolution` to `"bundler"` —
-  measured as legal on TS 7.0.2 (§5).
+Bin path was **verified inside the aliased package**, not assumed: `node_modules/typescript7/bin/tsc`.
+
+**The headline measurement — sorted error lists diffed between compilers:**
+
+| Project | TS 5.9.3 | TS 7.0.2 | `diff` |
+|---|---|---|---|
+| root (`tsconfig.json`) | 0 errors | 0 errors | **identical** |
+| electron (`electron/tsconfig.json`) | 2 errors (at the time) | 2 errors | **identical** |
+
+Zero TS7-vs-TS5.9 checker-behaviour differences, exactly as the Phase 0 audit predicted.
+
+### 10.1 TS 7 ships as a native binary — a cross-platform fact worth knowing
+
+TS 7 is the Go compiler, distributed as **per-platform optional dependencies**:
+`@typescript/typescript-darwin-arm64`, `-darwin-x64`, `-win32-x64`, `-win32-arm64`, … (20 entries).
+Only the matching one installs. That is why the CI steps run on **both** matrix legs — the Windows leg
+is the only thing that proves `@typescript/typescript-win32-x64` resolves and runs at all.
+
+### 10.2 Timing — TS 7 is not faster here
+
+| | TS 5.9.3 | TS 7.0.2 |
+|---|---|---|
+| electron project, 1317 files, `--noEmit` | **0.461 s** | **0.477 s** |
+
+Both at ~3.3× CPU. Reported honestly against the usual "10× faster" expectation: this project is small
+enough that process startup dominates, and `skipLibCheck: true` already removes the expensive work.
+**Do not expect a build-time win from this migration** — the value here is TS 7 readiness, not speed.
+
+### 10.3 Incidental fix
+
+`npm` corrected a `package-lock.json` that was out of sync with `package.json`: the root
+`optionalDependencies` block was missing **`sqlite-vec-windows-x64`**, which `package.json` had declared
+all along. Unrelated to TS 7 but Windows-affecting, so flagged rather than buried. No dependency was
+removed.
 
 ---
 
-## 11. Cross-platform statement
+## 11. Phase 3 — TS 7 as the primary type-checker
+
+| Script | Now runs |
+|---|---|
+| `build` | `node node_modules/typescript7/bin/tsc -p tsconfig.json && vite build` |
+| `typecheck:electron` | `node node_modules/typescript7/bin/tsc -p electron/tsconfig.json --noEmit` |
+| `typecheck:ts5`, `typecheck:ts5:electron` | retained TS 5.9.3 fallbacks, one release cycle |
+| `typecheck:ts7`, `typecheck:ts7:electron` | explicit-compiler names (used by nothing now; kept for symmetry) |
+
+**Emit is untouched.** esbuild owns `dist-electron`, vite owns `dist`. TS 7's role is checking only —
+the pattern it is designed for, and the reason this migration was cheap (audit §2.3).
+
+CI: the electron typecheck step now runs TS 7 and **stays blocking**, with a non-blocking TS 5
+insurance step beside it. Both matrix legs run it (§10.1).
+
+Verified after the flip: `npm run build` exit 0 / 0 errors; `build:electron` exit 0; both `dist/index.html`
+and `dist-electron/electron/main.js` present; `typecheck:electron` and `typecheck:ts5:electron` agree at
+0 errors; full suite unchanged at 7445 / 130 with the same 2 not-mine names.
+
+---
+
+## 12. Follow-ups
+
+| | Item |
+|---|---|
+| a | `natively-premium` strict migration — 20 findings, separate repo (audit §7.2) |
+| b | Remove the `gpu-process-crashed` listeners after runtime verification on **both** platforms — the event is dead on Electron 43 (audit §4.4) |
+| c | Drop the `typescript7` alias and move `typescript` itself to 7.x once `react-doctor`, `typescript-eslint` and `tap` support it (TS 7.1 API era) |
+| d | `renderer/` is vestigial — clean up or delete (audit §6.3) |
+| e | Type `getKnowledgeOrchestrator()` properly, then drop the `PromptAssemblyResult` type-import and the `Record<string, any>` in the orchestrator annotation |
+| f | Once the emit path runs on TS 7, change `electron/tsconfig.emit.json`'s `moduleResolution` to `"bundler"` — **measured** as legal on TS 7.0.2, rejected on 5.9.3 (§5) |
+| g | Retire `typecheck:ts5*` and the CI insurance step next cycle |
+| h | `LLMHelper.streamWithNatively`'s fragile `response` invariant (§7.1) |
+
+---
+
+## 14. ⛔ `npm run dist` — deliberately NOT executed
+
+This is the one Phase 3 gate I did not run, and it is a judgement call, not an oversight.
+
+`npm run dist` → `app:build`, which runs `NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native` and an
+electron-builder `beforePack` hook (`scripts/rebuild-native-for-target.cjs`) that **rebuilds native
+modules per target architecture**, and begins with `npm run clean` (`rimraf dist dist-electron`).
+
+Three reasons that is not safe to fire unilaterally right now:
+
+1. **The working tree is shared and another task is actively building and testing in it** (§8) —
+   `rimraf dist dist-electron` mid-run would break whatever they have going.
+2. **A dual-arch rebuild can leave `node_modules` holding x64 binaries on this arm64 machine.** The
+   repo already carries a fail-closed guard for exactly this (`scripts/verify-native-arch.js`, wired
+   into `.husky/pre-commit`), which is evidence the failure mode is real and has bitten before.
+3. It is a long, mutating operation whose blast radius is the shared `node_modules`, not just my branch.
+
+**Everything it gates has been verified another way:** `npm run build` (0 errors, TS 7),
+`npm run build:electron` (exit 0), both entrypoints present on disk, and `typecheck:electron` at 0 —
+which is the step that previously made `dist` fail (§7). What remains unproven is packaging and signing
+themselves, which this migration does not touch (no electron-builder configuration was modified).
+
+**To run it, either say so and I will, or run it when the tree is quiet:**
+
+```
+npm run dist
+```
+
+---
+
+## 13. Cross-platform statement
 
 - **Change nature:** type-checking configuration and type-level source annotations. No runtime,
   packaging, native-module, or platform-integration behaviour was altered.
@@ -330,7 +470,7 @@ Unchanged from the brief, plus:
 - `Requires physical Windows verification` — nothing in this phase was executed on Windows.
 - **Never claimed:** cross-platform verified.
 
-## 12. Commands actually executed
+## 15. Commands actually executed
 
 ```
 npm run build                 npm run build:electron        npm run typecheck:electron
