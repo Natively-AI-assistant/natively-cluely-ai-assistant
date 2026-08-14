@@ -121,9 +121,10 @@ runs `node scripts/build-electron.js --watch`; the esbuild script gained `--watc
 
 ---
 
-## 4. Strict fixes (52)
+## 4. Strict fixes (54)
 
-Every fix is type-level or a guard that provably cannot change behaviour. Grouped by technique:
+52 landed in Phase 1; the final 2 in Phase 3 (§7). Every fix is type-level or a guard that provably
+cannot change behaviour, with one named exception documented in §7. Grouped by technique:
 
 **Fixed at the declaration so call sites keep their exact source text** *(see §6 — this repo has tests
 that assert on literal source)*
@@ -410,6 +411,17 @@ Verified after the flip: `npm run build` exit 0 / 0 errors; `build:electron` exi
 and `dist-electron/electron/main.js` present; `typecheck:electron` and `typecheck:ts5:electron` agree at
 0 errors; full suite unchanged at 7445 / 130 with the same 2 not-mine names.
 
+**Proof the flip is real, not cosmetic.** "exit 0" is also what a config resolving zero files would
+print, so it was checked two further ways:
+
+| Check | Result |
+|---|---|
+| `--listFiles` on the root project | **482 files under TS 7.0.2, 482 under TS 5.9.3** — same program, 151 of them under `src/` |
+| `--listFiles` on the electron project | **1317 files under both** |
+| Negative control: inject `const x: number = "…"` into `src/` | TS 7 reports `TS2322` and **exits 1**; removing it returns to exit 0 |
+
+The negative control is the one that matters — it proves the TS 7 step can still fail the build.
+
 ---
 
 ## 12. Follow-ups
@@ -448,14 +460,18 @@ This is the one Phase 3 gate I did not run, and it is a judgement call, not an o
 electron-builder `beforePack` hook (`scripts/rebuild-native-for-target.cjs`) that **rebuilds native
 modules per target architecture**, and begins with `npm run clean` (`rimraf dist dist-electron`).
 
-Three reasons that is not safe to fire unilaterally right now:
+The reason that actually holds, and is independently verified:
 
-1. **The working tree is shared and another task is actively building and testing in it** (§8) —
-   `rimraf dist dist-electron` mid-run would break whatever they have going.
-2. **A dual-arch rebuild can leave `node_modules` holding x64 binaries on this arm64 machine.** The
-   repo already carries a fail-closed guard for exactly this (`scripts/verify-native-arch.js`, wired
-   into `.husky/pre-commit`), which is evidence the failure mode is real and has bitten before.
-3. It is a long, mutating operation whose blast radius is the shared `node_modules`, not just my branch.
+1. **The working tree is shared and another task is actively building and testing in it** — 42 modified
+   files as of this writing (§8). `npm run clean` (`rimraf dist dist-electron`) mid-run would break
+   whatever they have in flight, and the rebuild's blast radius is the shared `node_modules`, not just
+   my branch.
+
+Secondary, and stated as *suspected* rather than measured: a dual-arch rebuild may leave `node_modules`
+holding x64 binaries on this arm64 machine. I did not verify that — I infer the failure mode is real
+only from the fact that the repo carries a fail-closed guard for it (`scripts/verify-native-arch.js`,
+wired into `.husky/pre-commit`). Note that guard would *catch* such poisoning at the next commit rather
+than let it ship, so this is a disruption risk, not a correctness one. Reason 1 is sufficient on its own.
 
 **Everything it gates has been verified another way:** `npm run build` (0 errors, TS 7),
 `npm run build:electron` (exit 0), both entrypoints present on disk, and `typecheck:electron` at 0 —
