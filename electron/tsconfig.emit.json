@@ -14,18 +14,17 @@
 // require(). So the emit path gets its own config instead of bending the
 // check path back to a pre-TS7 shape.
 //
-// moduleResolution "node" (node10) is REMOVED in TS 7 — that is fine here and
-// only here: this file is never type-checked, and the tests invoke it through
-// the TS 5.x `typescript` package, which Phase 2/3 keeps installed anyway for
-// react-doctor / typescript-eslint / tap.
-//   Once the emit path moves to TS 7, switch this to "bundler": TS 7 accepts
-//   module:"CommonJS" + moduleResolution:"bundler" (measured — TS 5.9.3 rejects
-//   that pairing with TS5095, which is why it cannot be used today).
+// module:"CommonJS" + moduleResolution:"bundler" is accepted by TS 7 and REJECTED
+// by TS 5.9.3 (TS5095) — TS 7 relaxed that rule. The four tests therefore invoke
+// this config through node_modules/typescript7/bin/tsc, NOT the TS 5.x binary.
+// Verified: TS 7.0.2 emits requireable CommonJS ("use strict", no `import`).
+// This keeps the whole check+emit pipeline on TS 7; the TS 5.x package survives
+// only for tools that consume the compiler API (see docs/ts7-upgrade-report.md).
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": false,
     "module": "CommonJS",
-    "moduleResolution": "node"
+    "moduleResolution": "bundler"
   }
 }
