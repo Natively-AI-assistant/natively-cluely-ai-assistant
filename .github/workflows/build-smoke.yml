@@ -141,6 +141,20 @@ jobs:
         if: runner.os == 'macOS'
         run: node scripts/verify-native-arch.js
 
+      # Real-execution proof that this platform's sqlite-vec binary loads and
+      # answers a vector query (2026-08-15). The Windows leg is the ONLY
+      # automated Windows this repo has, and vec0.dll had never been executed
+      # anywhere — the Windows pin (sqlite-vec-windows-x64) was verified from
+      # macOS as fetch + loader-name mapping only. BLOCKING on BOTH legs by
+      # design: VectorStore degrades to a JS-cosine fallback when the native
+      # extension is missing, which is exactly how a broken platform binary
+      # would otherwise ship green. Runs under Electron's ABI because
+      # postinstall builds better-sqlite3 for Electron, not system Node.
+      - name: Verify sqlite-vec native extension loads (vec0)
+        env:
+          ELECTRON_RUN_AS_NODE: "1"
+        run: npx --no-install electron scripts/verify-sqlite-vec-load.mjs
+
       # TypeScript 7 is now the PRIMARY type-checker: `typecheck:electron` runs
       # node_modules/typescript7/bin/tsc. Emit is untouched — esbuild owns
       # dist-electron and vite owns dist; TS 7 only checks.
