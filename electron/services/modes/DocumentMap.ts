@@ -424,12 +424,38 @@ export function sentenceAwareWindows(text: string, targetWords: number, overlapW
     if (!clean) return [];
     const wordCount = (s: string) => (s.match(/\S+/g) || []).length;
     if (wordCount(clean) <= targetWords) return [clean];
+    // Hard word-cap fallback for text the sentence splitter cannot divide.
+    //
+    // This used to `return [clean]` whenever the split produced one piece, which
+    // handed back the WHOLE body as a single window no matter how long it was —
+    // `targetWords` was silently ignored. Any text without terminal punctuation
+    // hits that path, and that is not an edge case here: realtime STT emits
+    // unpunctuated transcripts (Soniox in particular), and so do OCR dumps,
+    // table/CSV extractions and minified content. A 5600-word document then
+    // became ONE chunk: retrieval granularity is gone, and the embedder silently
+    // truncates at its token limit, so most of the document is never searchable.
+    //
+    // Sentence boundaries are still preferred; this only guarantees the cap when
+    // they are absent or when a single sentence is itself longer than a window.
+    // Windows step by `targetWords - overlapWords` to keep the same overlap the
+    // sentence-packing path below produces.
+    const wordWindows = (s: string): string[] => {
+        const w = s.match(/\S+/g) || [];
+        if (w.length <= targetWords) return [s];
+        const step = Math.max(1, targetWords - overlapWords);
+        const out: string[] = [];
+        for (let i = 0; i < w.length; i += step) {
+            out.push(w.slice(i, i + targetWords).join(' '));
+            if (i + targetWords >= w.length) break;
+        }
+        return out;
+    };
     const sentences: string[] = [];
     for (const part of clean.split(/(?<=[.!?][")\]]?)\s+(?=[A-Z0-9"[(])/)) {
         const p = part.trim();
-        if (p) sentences.push(p);
+        if (p) sentences.push(...wordWindows(p));
     }
-    if (sentences.length <= 1) return [clean];
+    if (sentences.length <= 1) return sentences.length === 1 ? [sentences[0]] : [clean];
     const windows: string[] = [];
     let cur: string[] = [];
     let curWords = 0;
