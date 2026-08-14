@@ -375,51 +375,96 @@ function buildInjectionOrchestratorStub() {
   };
 }
 
-test('streamChat: intro shortcut FIRES in looking-for-work mode (regression guard)', async () => {
+// ─── Identity recall under the FULL-JIT LAW ─────────────────────────────────
+//
+// These three asserted that the AOT-precomputed intro was emitted VERBATIM as
+// the answer (`chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL')`). That is no
+// longer how it works, by design: `jitFinalAnswerEnforced` (default TRUE)
+// demotes the precomputed intro from ANSWER to EVIDENCE — it is wrapped in a
+// <candidate_identity_fact> block, prepended to the prompt, and the provider
+// writes the answer just-in-time. The precompute still saves the retrieval
+// round-trip; only the verbatim emit was removed.
+//
+// So the invariant worth pinning is unchanged in spirit — identity recall must
+// reach the answer regardless of mode — but its observable moved from the
+// output stream to the dispatched prompt. Verified against the real compiled
+// LLMHelper before rewriting: the spy receives the identity-fact block with the
+// sentinel inside it, and the stream carries the provider's text instead.
+//
+// Asserting on the dispatch is also STRICTER than the old form: emitting the
+// canned string verbatim would now be a regression (it bypasses the JIT law),
+// and these tests would catch it, whereas the old ones required it.
+
+const introDispatchSpy = (helper) => {
+  helper.customProvider = { id: 'spy-provider', name: 'spy', curlCommand: 'noop' };
+  const calls = [];
+  helper.streamWithCustom = async function* (message, context) {
+    calls.push({ message: String(message ?? ''), context: String(context ?? '') });
+    yield 'PROVIDER_GENERATED';
+  };
+  return calls;
+};
+
+const assertIdentityFactReachedProvider = (calls, where) => {
+  assert.equal(calls.length, 1, `expected exactly one provider dispatch (${where})`);
+  const seen = `${calls[0].message}\n${calls[0].context}`;
+  assert.match(
+    seen,
+    /<candidate_identity_fact source="aot_precomputed_intro"/,
+    `identity recall must reach the provider as a grounded evidence block (${where})`,
+  );
+  assert.ok(
+    seen.includes('CANNED_INTRO_RESPONSE_SENTINEL'),
+    `the precomputed identity text must be inside that block (${where})`,
+  );
+};
+
+test('streamChat: identity recall reaches the provider as evidence in looking-for-work mode', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+  const calls = introDispatchSpy(helper);
 
   installActiveMode('looking-for-work');
   const chunks = await drainStream(helper.streamChat('Tell me about yourself.'));
 
-  assert.ok(
-    chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL'),
-    'intro shortcut must still fire in modes where it is appropriate',
-  );
+  assert.deepEqual(chunks, ['PROVIDER_GENERATED'],
+    'under the full-JIT law the provider writes the answer — the canned intro must NOT be emitted verbatim');
+  assertIdentityFactReachedProvider(calls, 'looking-for-work');
 });
 
-// NOTE: These tests previously checked that the intro shortcut was SUPPRESSED in
+// NOTE: these previously checked that the intro shortcut was SUPPRESSED in
 // technical-interview / lecture modes (issue #272). That behaviour was revised:
-// identity recall (isIntroQuestion + introResponse) now always passes through
-// regardless of mode compatibility, because it is factual retrieval (candidate name,
-// current role, years of experience), NOT persona injection. Suppressing it in any
-// mode meant the user could never ask "what is my name?" in a technical interview.
-// The mode gate still blocks negotiation coaching and premium context/prompt injection.
-test('streamChat: intro shortcut PASSES THROUGH even in technical-interview mode', async () => {
+// identity recall is factual retrieval (candidate name, current role, years of
+// experience), NOT persona injection, so suppressing it by mode meant the user
+// could never ask "what is my name?" in a technical interview. The mode gate
+// still blocks negotiation coaching and premium context/prompt injection.
+test('streamChat: identity recall is not mode-suppressed in technical-interview mode', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+  const calls = introDispatchSpy(helper);
 
   installActiveMode('technical-interview');
-  const chunks = await drainStream(helper.streamChat('What is my name?'));
+  await drainStream(helper.streamChat('What is my name?'));
 
-  assert.ok(
-    chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL'),
-    'identity recall (intro shortcut) must fire even in technical-interview mode',
-  );
+  assertIdentityFactReachedProvider(calls, 'technical-interview');
 });
 
-test('chatWithGemini: intro shortcut PASSES THROUGH even in lecture mode', async () => {
+test('chatWithGemini: identity recall is not mode-suppressed in lecture mode', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+  const calls = [];
+  helper.customProvider = { id: 'spy-provider', name: 'spy', curlCommand: 'noop' };
+  helper.executeCustomProvider = async (message, context) => {
+    calls.push({ message: String(message ?? ''), context: String(context ?? '') });
+    return 'PROVIDER_GENERATED';
+  };
 
   installActiveMode('lecture');
   const result = await callChat(helper, 'What is my name?');
 
-  assert.strictEqual(
-    result,
-    'CANNED_INTRO_RESPONSE_SENTINEL',
-    'identity recall (intro shortcut) must fire even in lecture mode',
-  );
+  assert.strictEqual(result, 'PROVIDER_GENERATED',
+    'the non-streaming path must also let the provider write the answer, not return the canned intro');
+  assertIdentityFactReachedProvider(calls, 'lecture (non-streaming)');
 });
 
 // Helper to wire a fake customProvider + spy on the dispatch so we can read
