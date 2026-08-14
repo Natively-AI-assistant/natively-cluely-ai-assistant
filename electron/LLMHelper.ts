@@ -5640,7 +5640,30 @@ let isMultimodal = !!(imagePaths?.length);
     // Reference-file INJECTION above (:documentGroundedCustomModeActive) is
     // unchanged: surfacing attached documents is correct for default modes;
     // refusing to answer beyond them is not.
-    const forceDocumentGrounding = !v3OwnedTurn && activeModeGroundingInfo?.strictDocumentGroundedActive === true;
+    // FILES-AWARE, matching the two sibling gates. R6 (577d2329) made
+    // `generateSuggestion` and `chatWithGemini` files-aware and R2 did the same
+    // for WhatToAnswerLLM — this third copy was simply not on that list, so the
+    // streaming path kept enforcing strict-only while both of its siblings had
+    // moved on. R1 of that same campaign names the resulting shape exactly:
+    // "strict-only had dropped doc enforcement for seeded modes users uploaded
+    // real files into, while manual chat kept it (new asymmetry, inverse
+    // polarity)". The same answer therefore arrived doc-grounded or not
+    // depending on which entry point served it.
+    //
+    // The concern in the comment above is UNCHANGED by this, and is in fact what
+    // the extra term exists for: a stock Team Meet/Lecture with zero files and
+    // zero custom prompt fails `hasReferenceFiles`, so it is still not treated
+    // as document-grounded and still keeps its general-knowledge fallback. Only
+    // a seeded mode the user actually uploaded documents into now enforces —
+    // which is the behaviour the 2026-08-11 denial reports asked for.
+    //
+    // `!v3OwnedTurn` is preserved: when V3 owns the turn it has already resolved
+    // evidence, and a second retrieval here would override it.
+    const forceDocumentGrounding = !v3OwnedTurn && (
+      activeModeGroundingInfo?.strictDocumentGroundedActive === true
+      || (activeModeGroundingInfo?.documentGroundedCustomModeActive === true
+        && activeModeGroundingInfo?.hasReferenceFiles === true)
+    );
     // Hoisted to function scope (round-6) so the document-grounded userContent
     // shaping below can read the actual retrieval output as `retrievedBlock`.
     // It is assigned inside the mode-injection block; '' when retrieval didn't

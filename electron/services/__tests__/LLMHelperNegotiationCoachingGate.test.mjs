@@ -172,7 +172,16 @@ function installCustomDocumentMode({ documentGrounded = true } = {}) {
   manager.buildRetrievedActiveModeContextBlock = (_query, _ctx, _budget, _answerType, _exclude, _pinned, options) => {
     return options?.forceDocumentGrounding ? 'REFERENCE_FILE_CONTEXT_SENTINEL' : '';
   };
-  manager.buildRetrievedActiveModeContextBlockHybrid = async () => '';
+  // Must mirror the sync retriever above. A doc-grounded turn PREFERS the hybrid
+  // path (`wantHybrid = isRagLocalRerankEnabled() || forceDocumentGrounding`) and
+  // only falls back to the sync lexical retriever on TIMEOUT — never on an empty
+  // result, which production reads as "retrieval found nothing". So a stub that
+  // always returned '' here modelled a mode with no matching content, and the
+  // reference block could never reach dispatch once doc-grounded retrieval
+  // started routing through hybrid. Options is the 8th argument on this call.
+  manager.buildRetrievedActiveModeContextBlockHybrid = async (
+    _query, _ctx, _budget, _answerType, _exclude, _pinned, _allowRerank, options,
+  ) => (options?.forceDocumentGrounding ? 'REFERENCE_FILE_CONTEXT_SENTINEL' : '');
   manager.buildActiveModeContextBlock = () => '';
 }
 
@@ -587,6 +596,14 @@ test('WhatToAnswerLLM: document-grounded custom mode fails closed when reference
         modeId: 'custom-doc-mode',
         modeName: 'Custom doc mode',
         hasCustomPrompt: true,
+        // Same partial-payload gap the sibling stub above already documents, missed
+        // on this inline one. `documentGroundedCustomModeActive` is DERIVED
+        // (custom && hasCustomPrompt && documentGrounded && hasReferenceFiles) — all
+        // four of which this stub sets — so omitting it described a mode that cannot
+        // exist. Without it `forceDocumentGrounding` is false, and the fail-closed
+        // refusal at WhatToAnswerLLM.ts:446 is gated on exactly that, so the turn
+        // dispatched to the provider instead of refusing.
+        documentGroundedCustomModeActive: true,
       }),
       buildRetrievedActiveModeContextBlock: () => 'REFERENCE_FILE_CONTEXT_SENTINEL',
       getActiveModePinnedInstructions: () => '',
