@@ -56,8 +56,18 @@ never satisfied it. Plus one unrelated `assertNoAuthorityContradiction` check.
 argued from per-failure evidence rather than from a before/after diff.
 
 **Strict findings: 52 of 54 fixed, 2 deferred, 0 suppressed.**
-No `any` added, no `@ts-ignore`, no strict flag relaxed. The one sanctioned `as any` (decision 2) is the
-`gpu-process-crashed` event name, in both listeners, as specified.
+`@ts-ignore` / `@ts-nocheck` / `@ts-expect-error` added: **0** (verified by diffing the whole range).
+No strict flag was relaxed. The sanctioned `as any` (decision 2) is the `gpu-process-crashed` event
+name, in both listeners, as specified.
+
+**One `any` qualification, stated rather than glossed:** the orchestrator annotation is
+`(Record<string, any> & { processQuestion(...): Promise<PromptAssemblyResult | null> }) | undefined`.
+`getKnowledgeOrchestrator()` is declared `: any` today, so this is a *narrowing* of an existing `any` —
+`processQuestion` becomes strongly typed, and the members I did not name keep exactly the checking they
+already had. It is not a new escape hatch, but it is not fully typed either; typing
+`getKnowledgeOrchestrator()` properly is follow-up (e) in §10. Every other `any` on a line I touched
+(`_wtaOrchForAvail as any`, `usage: any[]`) was already there — I added only `| undefined` /
+`: boolean | undefined` to those lines.
 
 ---
 
