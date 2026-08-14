@@ -10500,7 +10500,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
       const { DocType } = require('../premium/electron/knowledge/types');
-      orchestrator.deleteDocumentsByType(DocType.RESUME);
+      // Both tiers in ONE transaction. Deleting only Tier 1 here left Tier 2's
+      // PII-bearing knowledge_cards orphaned — the user asked for their résumé
+      // to be removed and half of it stayed on disk. Tier 1 (premium
+      // KnowledgeDatabaseManager) and Tier 2 (this repo's DatabaseManager) wrap
+      // the SAME better-sqlite3 connection, so runInTransaction() is a genuine
+      // cross-tier rollback rather than call sequencing.
+      const { deleteProfileTransactional } = require('./services/knowledge/deleteProfileTransactional') as typeof import('./services/knowledge/deleteProfileTransactional');
+      deleteProfileTransactional(orchestrator, DocType.RESUME, 'resume');
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -10626,7 +10633,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
       const { DocType } = require('../premium/electron/knowledge/types');
-      orchestrator.deleteDocumentsByType(DocType.JD);
+      // Same cross-tier transaction as profile:delete above — see the comment
+      // there for why a Tier-1-only delete is a partial delete.
+      const { deleteProfileTransactional } = require('./services/knowledge/deleteProfileTransactional') as typeof import('./services/knowledge/deleteProfileTransactional');
+      deleteProfileTransactional(orchestrator, DocType.JD, 'jd');
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
