@@ -424,24 +424,41 @@ export function sentenceAwareWindows(text: string, targetWords: number, overlapW
     if (!clean) return [];
     const wordCount = (s: string) => (s.match(/\S+/g) || []).length;
     if (wordCount(clean) <= targetWords) return [clean];
-    // Hard word-cap fallback for text the sentence splitter cannot divide.
+    // Hard word-cap fallback for text the sentence splitter cannot DIVIDE —
+    // deliberately NOT for a sentence that is merely long.
     //
-    // This used to `return [clean]` whenever the split produced one piece, which
-    // handed back the WHOLE body as a single window no matter how long it was —
-    // `targetWords` was silently ignored. Any text without terminal punctuation
-    // hits that path, and that is not an edge case here: realtime STT emits
-    // unpunctuated transcripts (Soniox in particular), and so do OCR dumps,
-    // table/CSV extractions and minified content. A 5600-word document then
-    // became ONE chunk: retrieval granularity is gone, and the embedder silently
-    // truncates at its token limit, so most of the document is never searchable.
+    // Two different situations reach the one-piece case, and they want opposite
+    // treatment:
     //
-    // Sentence boundaries are still preferred; this only guarantees the cap when
-    // they are absent or when a single sentence is itself longer than a window.
-    // Windows step by `targetWords - overlapWords` to keep the same overlap the
-    // sentence-packing path below produces.
+    //   (a) A genuine, over-long sentence. Splitting it is actively harmful: the
+    //       RFC 8259 case this file's test is built on split "Implementations
+    //       MUST NOT add a byte order mark" so that a chunk carried "byte order
+    //       mark" WITHOUT "MUST NOT" — a retrieved fragment that states the
+    //       opposite of the source. Semantic integrity beats the word cap here,
+    //       and `SentenceAwareChunking` pins that.
+    //
+    //   (b) A body with no sentence structure at all. This used to hit the same
+    //       `return [clean]` and hand back the WHOLE text as one window, with
+    //       `targetWords` silently ignored. That is not an edge case here:
+    //       realtime STT emits unpunctuated transcripts (Soniox sends none at
+    //       all), as do OCR dumps, table/CSV extractions and minified content. A
+    //       5600-word document became ONE chunk — retrieval granularity gone, and
+    //       the embedder truncates at its token limit, so most of the document
+    //       was never searchable.
+    //
+    // A length ceiling separates them. Real sentences, even legal or normative
+    // ones, do not run to hundreds of words; text claiming to be a single
+    // sentence several times the window size is unpunctuated prose, not a clause
+    // worth protecting. Below the ceiling we keep it whole and accept one
+    // oversized chunk; above it we window by words.
+    //
+    // 3x is chosen to sit clearly above any plausible sentence (the pinned
+    // over-long case is ~1.4x) and far below the unpunctuated-transcript case
+    // (~40x), so neither contract is decided by a near-miss.
+    const MAX_UNSPLIT_SENTENCE_WORDS = targetWords * 3;
     const wordWindows = (s: string): string[] => {
         const w = s.match(/\S+/g) || [];
-        if (w.length <= targetWords) return [s];
+        if (w.length <= MAX_UNSPLIT_SENTENCE_WORDS) return [s];
         const step = Math.max(1, targetWords - overlapWords);
         const out: string[] = [];
         for (let i = 0; i < w.length; i += step) {
