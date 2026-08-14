@@ -31,7 +31,7 @@ const distDir = (() => {
   if (!isBundled) return path.resolve(repoRoot, 'dist-electron');
   const target = fs.mkdtempSync(path.join(os.tmpdir(), 'phonechat-ro-dist-'));
   fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(target, 'node_modules'), 'dir');
-  try { execSync(`node node_modules/.bin/tsc -p electron/tsconfig.json --outDir ${target}`, { cwd: repoRoot, stdio: 'pipe' }); } catch { /* expected */ }
+  try { execSync(`node node_modules/.bin/tsc -p electron/tsconfig.emit.json --outDir ${target}`, { cwd: repoRoot, stdio: 'pipe' }); } catch { /* expected */ }
   if (!fs.existsSync(path.join(target, 'electron/llm/index.js'))) {
     throw new Error('tsc emission failed — LLMHelper.js missing from isolated tree');
   }

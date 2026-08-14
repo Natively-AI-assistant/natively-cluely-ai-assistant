@@ -1,0 +1,31 @@
+// tsc-for-EMIT only. Nothing in the app build uses this — esbuild
+// (scripts/build-electron.js) produces dist-electron.
+//
+// It exists for four tests that build an isolated CommonJS tree and then
+// `createRequire()` the result:
+//   electron/llm/__tests__/EvidenceResolverWiringIdentity2026_07_12.test.mjs
+//   electron/services/__tests__/LLMHelperNegotiationCoachingGate.test.mjs
+//   electron/services/__tests__/PhoneChatRouteOptions.test.mjs
+//   electron/intelligence/__tests__/ContextOsProductionDefaultRollout2026_07_18.test.mjs
+//
+// The main project (./tsconfig.json) is type-check only and TS7-legal, which
+// forces module:"Preserve" (moduleResolution:"bundler" permits nothing else on
+// TS 5.x). "Preserve" emits `import`/`export` verbatim, which those tests cannot
+// require(). So the emit path gets its own config instead of bending the
+// check path back to a pre-TS7 shape.
+//
+// moduleResolution "node" (node10) is REMOVED in TS 7 — that is fine here and
+// only here: this file is never type-checked, and the tests invoke it through
+// the TS 5.x `typescript` package, which Phase 2/3 keeps installed anyway for
+// react-doctor / typescript-eslint / tap.
+//   Once the emit path moves to TS 7, switch this to "bundler": TS 7 accepts
+//   module:"CommonJS" + moduleResolution:"bundler" (measured — TS 5.9.3 rejects
+//   that pairing with TS5095, which is why it cannot be used today).
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "CommonJS",
+    "moduleResolution": "node"
+  }
+}
