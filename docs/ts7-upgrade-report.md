@@ -427,6 +427,19 @@ and `dist-electron/electron/main.js` present; `typecheck:electron` and `typechec
 
 ---
 
+## 13. Cross-platform statement
+
+- **Change nature:** type-checking configuration and type-level source annotations. No runtime,
+  packaging, native-module, or platform-integration behaviour was altered.
+- `Covered by automated macOS branch tests` / `Covered by automated Windows branch tests` — the
+  `app.dock` work is guarded by `WindowsPlatformParity.test.mjs` and `ActivationPolicyOrdering.test.mjs`,
+  which assert the macOS dock path and the Windows tray path independently; both pass.
+- **All 7 `app.dock` sites were verified darwin-gated before being touched**, so Windows behaviour is
+  provably unchanged — `!`/`if (app.dock)` preserve it where `?.` would have silently altered it.
+- `Reviewed but not executed on macOS` — no packaged build was produced (`npm run dist` not run).
+- `Requires physical Windows verification` — nothing in this phase was executed on Windows.
+- **Never claimed:** cross-platform verified.
+
 ## 14. ⛔ `npm run dist` — deliberately NOT executed
 
 This is the one Phase 3 gate I did not run, and it is a judgement call, not an oversight.
@@ -456,19 +469,6 @@ npm run dist
 ```
 
 ---
-
-## 13. Cross-platform statement
-
-- **Change nature:** type-checking configuration and type-level source annotations. No runtime,
-  packaging, native-module, or platform-integration behaviour was altered.
-- `Covered by automated macOS branch tests` / `Covered by automated Windows branch tests` — the
-  `app.dock` work is guarded by `WindowsPlatformParity.test.mjs` and `ActivationPolicyOrdering.test.mjs`,
-  which assert the macOS dock path and the Windows tray path independently; both pass.
-- **All 7 `app.dock` sites were verified darwin-gated before being touched**, so Windows behaviour is
-  provably unchanged — `!`/`if (app.dock)` preserve it where `?.` would have silently altered it.
-- `Reviewed but not executed on macOS` — no packaged build was produced (`npm run dist` not run).
-- `Requires physical Windows verification` — nothing in this phase was executed on Windows.
-- **Never claimed:** cross-platform verified.
 
 ## 15. Commands actually executed
 
